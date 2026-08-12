@@ -46,6 +46,7 @@ type ParamsStep struct {
 
 	memField          *components.InputField
 	cpuField          *components.InputField
+	diskField         *components.InputField
 	countField        *components.InputField
 	timeoutField      *components.InputField
 	drainModeField    *components.SelectField
@@ -84,7 +85,7 @@ func (s *ParamsStep) ensureForm() {
 
 func (s *ParamsStep) buildForm() {
 	s.builtFor = s.st.Op
-	s.memField, s.cpuField, s.countField, s.timeoutField = nil, nil, nil, nil
+	s.memField, s.cpuField, s.diskField, s.countField, s.timeoutField = nil, nil, nil, nil, nil
 	s.drainModeField, s.forceStorageField = nil, nil
 
 	var sections []wizard.FormSection
@@ -119,9 +120,13 @@ func (s *ParamsStep) buildForm() {
 		s.cpuField.Help = fmt.Sprintf("per-node cpu cores — current: %d, 0 keeps current", current.CPU)
 		s.cpuField.SetValue("0")
 		s.cpuField.Validator = validateNonNegativeInt
+		s.diskField = components.NewInputField("os disk (gb)", strconv.Itoa(current.DiskGB))
+		s.diskField.Help = fmt.Sprintf("per-node os disk — current: %d, grow-only, 0 keeps current; disk-only resizes are live (no power-cycle)", current.DiskGB)
+		s.diskField.SetValue("0")
+		s.diskField.Validator = validateNonNegativeInt
 		sections = append(sections, wizard.FormSection{
 			Title: "sizing",
-			Group: components.NewInputGroup(s.memField, s.cpuField),
+			Group: components.NewInputGroup(s.memField, s.cpuField, s.diskField),
 		})
 		s.buildDisruptionFields()
 		sections = append(sections, wizard.FormSection{
@@ -171,16 +176,38 @@ func (s *ParamsStep) Validate() error {
 		}
 	}
 	if s.st.Op == node.OpResize {
-		if intValue(s.memField) <= 0 && intValue(s.cpuField) <= 0 {
-			return &errtypes.UsageError{Msg: "resize requires at least one of memory or vcpus"}
+		if intValue(s.memField) <= 0 && intValue(s.cpuField) <= 0 && intValue(s.diskField) <= 0 {
+			return &errtypes.UsageError{Msg: "resize requires at least one of memory, vcpus, or os disk"}
+		}
+		if d := intValue(s.diskField); d > 0 {
+			if d <= s.currentDiskGB() {
+				return &errtypes.UsageError{Msg: fmt.Sprintf("os disk is grow-only: %d must exceed the current %d GiB", d, s.currentDiskGB())}
+			}
+			// Mirrors the runner-level refusal in node.Resize: disk sizing
+			// persists role-wide, but a single-node grow leaves same-role
+			// siblings unable to ever catch up (CoreOS grows the filesystem
+			// on firstboot only), so it is caught here too rather than only
+			// surfacing after the wizard's dry-run preview runs.
+			if s.st.Scope.Node != "" {
+				return &errtypes.UsageError{Msg: "os disk is role-scoped: pick 'masters' or 'workers' as the target, not a single node"}
+			}
 		}
 	}
 	return nil
 }
 
+// currentDiskGB resolves the resize-scoped role's current os disk size,
+// mirroring the "current" lookup buildForm uses for the field defaults.
+func (s *ParamsStep) currentDiskGB() int {
+	if s.resizeRole() == nodetypes.RoleMaster {
+		return s.st.Cfg.Topology.ControlPlane.DiskGB
+	}
+	return s.st.Cfg.Topology.Workers.DiskGB
+}
+
 func (s *ParamsStep) fields() []components.FormField {
 	var out []components.FormField
-	for _, f := range []components.FormField{s.memField, s.cpuField, s.countField, s.timeoutField, s.drainModeField, s.forceStorageField} {
+	for _, f := range []components.FormField{s.memField, s.cpuField, s.diskField, s.countField, s.timeoutField, s.drainModeField, s.forceStorageField} {
 		switch v := f.(type) {
 		case *components.InputField:
 			if v != nil {
@@ -242,6 +269,7 @@ func (s *ParamsStep) Apply(_ *config.Config) error {
 	default:
 		s.st.MemoryMB = intValue(s.memField)
 		s.st.CPU = intValue(s.cpuField)
+		s.st.OSDiskGB = intValue(s.diskField)
 		s.st.SkipDrain = s.drainModeField.Value() == drainModeSkip
 		s.st.DrainTimeout = s.timeoutField.Value()
 	}

@@ -2,6 +2,7 @@ package node
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 
@@ -85,6 +86,46 @@ func TestReporterInvokedDuringMasterResize(t *testing.T) {
 	}
 	if rr.maxActive > 1 {
 		t.Errorf("reporter spans must be serial, never nested: maxActive=%d", rr.maxActive)
+	}
+}
+
+func TestReporterInvokedDuringDiskOnlyResize(t *testing.T) {
+	fc := &fakeCluster{
+		nodes:       []cluster.NodeDetail{{Name: "master0", Role: nodetypes.RoleMaster, Ready: true}},
+		etcdHealthy: true,
+	}
+	ftf := &fakeTF{action: terraform.PlanActionUpdate}
+	fg := &fakeDiskGrower{}
+	cfg := config.DefaultConfig()
+	cfg.Topology.ControlPlane.DiskGB = 50
+
+	r, _, _ := seedRunner(t, fc, ftf, cfg)
+	r.DryRun = false
+	r.Disk = fg
+	rr := &recordingReporter{}
+	r.Reporter = rr.reporter()
+
+	if err := r.Resize(context.Background(), ResizeScope{Role: nodetypes.RoleMaster}, ResizeOptions{OSDiskGB: 100}); err != nil {
+		t.Fatalf("disk-only resize: %v", err)
+	}
+
+	// etcd gate (pre), targeted apply, grow os disk, etcd gate (post) — a
+	// disk-only resize never cordons/drains/power-cycles/uncordons.
+	const want = 4
+	if got := rr.starCount(); got != want {
+		t.Errorf("want %d reporter starts, got %d: %v", want, got, rr.starts)
+	}
+	found := false
+	for _, d := range rr.starts {
+		if strings.HasPrefix(d, "growing os disk on master0") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("no reporter span for the disk grow step: %v", rr.starts)
+	}
+	if rr.stops != rr.starCount() {
+		t.Errorf("every started span must stop: starts=%d stops=%d", rr.starCount(), rr.stops)
 	}
 }
 

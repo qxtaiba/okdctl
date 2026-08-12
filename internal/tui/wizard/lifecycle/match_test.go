@@ -1,6 +1,7 @@
 package lifecycle
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/node"
@@ -8,7 +9,7 @@ import (
 )
 
 func TestMatchRowMapsStepAndReporterEvents(t *testing.T) {
-	rows := GateRows(node.OpResize, nodetypes.RoleMaster, false)
+	rows := GateRows(node.OpResize, nodetypes.RoleMaster, false, DiskNone)
 	cases := []struct {
 		ev   *ExecEvent
 		want string
@@ -37,8 +38,28 @@ func TestMatchRowMapsStepAndReporterEvents(t *testing.T) {
 	}
 }
 
+func TestMatchRowDiskGrowStep(t *testing.T) {
+	rows := GateRows(node.OpResize, nodetypes.RoleMaster, false, DiskOnly)
+	idx := matchRow(rows, &ExecEvent{Step: node.StepDiskGrow})
+	if idx < 0 || !strings.Contains(rows[idx], "grow os disk") {
+		t.Fatalf("StepDiskGrow matched row %d of %q", idx, rows)
+	}
+}
+
+// TestMatchRowDiskGrowDesc guards the Reporter-span fallback for the disk
+// grow step: growNodeDisk's "growing os disk on <node>" startProgress
+// description must resolve to the same row StepDiskGrow does, so the
+// execution feed doesn't fall through to the "extra" list on that span.
+func TestMatchRowDiskGrowDesc(t *testing.T) {
+	rows := GateRows(node.OpResize, nodetypes.RoleMaster, false, DiskOnly)
+	idx := matchRow(rows, &ExecEvent{Desc: "growing os disk on master0"})
+	if idx < 0 || !strings.Contains(rows[idx], "grow os disk") {
+		t.Fatalf("disk-grow desc matched row %d of %q", idx, rows)
+	}
+}
+
 func TestMatchRowRemoveAndAdd(t *testing.T) {
-	removeRows := GateRows(node.OpRemove, nodetypes.RoleWorker, false)
+	removeRows := GateRows(node.OpRemove, nodetypes.RoleWorker, false, DiskNone)
 	if idx := matchRow(removeRows, &ExecEvent{Step: node.StepDeleteK8s}); idx < 0 || removeRows[idx] != "delete kubernetes node" {
 		t.Errorf("delete-node step must match its row, got %d", idx)
 	}
@@ -46,7 +67,7 @@ func TestMatchRowRemoveAndAdd(t *testing.T) {
 		t.Errorf("ceph desc must match the standalone ceph row, got %d", idx)
 	}
 
-	addRows := GateRows(node.OpAdd, nodetypes.RoleWorker, false)
+	addRows := GateRows(node.OpAdd, nodetypes.RoleWorker, false, DiskNone)
 	for step, want := range map[node.Step]string{
 		node.StepBuildISO:  "build iso",
 		node.StepUploadISO: "upload iso",

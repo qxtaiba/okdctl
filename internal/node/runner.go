@@ -71,6 +71,15 @@ type vmPowerCycler interface {
 	StartVM(ctx context.Context, node string, vmid int) error
 }
 
+// diskGrower grows a node's OS filesystem into a freshly-grown virtual disk
+// (SCSI rescan → growpart → xfs_growfs), in-guest via `oc debug`. An
+// interface so a resize test records the call without a cluster. nil means
+// no grower is wired — a disk resize then refuses up front rather than
+// applying a Proxmox-level grow the guest never realizes.
+type diskGrower interface {
+	GrowOSDisk(ctx context.Context, node string) error
+}
+
 // snapshotClient mirrors package hostssh's pvesh-backed snapshot primitives
 // as an interface so a test can substitute a call-recording fake without a
 // live Proxmox host, the same role vmPowerCycler plays for the REST API.
@@ -166,6 +175,10 @@ type Runner struct {
 	// Power performs the post-resize hypervisor power-cycle. nil when no
 	// Proxmox credentials are available; a resize then fails safe.
 	Power vmPowerCycler
+
+	// Disk realizes an OS-disk grow inside the guest. nil fails disk
+	// resizes safe, mirroring Power for memory/cpu.
+	Disk diskGrower
 
 	// Proxmox carries the pvesh-over-SSH connection params snapshot ops use.
 	// nil when no Proxmox SSH access is wired — snapshot ops then fail closed

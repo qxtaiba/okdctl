@@ -187,18 +187,35 @@ func fileOnlySlog() *slog.Logger {
 func runLifecycleOp(ctx context.Context, rc *nodeRunnerCtx, st *lifecycle.State) error {
 	switch st.Op {
 	case node.OpResize:
-		opts := lifecycle.ResizeOptionsFrom(st)
-		opts.HostTotalMiB, opts.HostAllocatedMiB = rc.HostTotalMiB, rc.HostAllocatedMiB
-		return rc.runner.Resize(ctx, st.Scope, opts)
+		return rc.runner.Resize(ctx, st.Scope, resizeOptsFromWizard(rc, st))
 	case node.OpAdd:
-		opts := lifecycle.AddOptionsFrom(st)
-		opts.HostTotalMiB, opts.HostAllocatedMiB = rc.HostTotalMiB, rc.HostAllocatedMiB
-		return rc.runner.AddWorkers(ctx, opts)
+		return rc.runner.AddWorkers(ctx, addOptsFromWizard(rc, st))
 	case node.OpRemove:
 		return rc.runner.RemoveWorker(ctx, st.Target, lifecycle.RemoveOptionsFrom(st))
 	default:
 		return &errtypes.UsageError{Msg: fmt.Sprintf("unsupported lifecycle op %q", st.Op)}
 	}
+}
+
+// resizeOptsFromWizard merges the wizard-collected resize dimensions with the
+// read-only Proxmox probe results the flag verb (runNodeResize) also feeds
+// Resize, so the memory and datastore guards are armed the same way
+// regardless of entry point. A dropped merge here would leave the guard it
+// backs disarmed for every TUI-driven resize while the flag verb stayed
+// protected.
+func resizeOptsFromWizard(rc *nodeRunnerCtx, st *lifecycle.State) node.ResizeOptions {
+	opts := lifecycle.ResizeOptionsFrom(st)
+	opts.HostTotalMiB, opts.HostAllocatedMiB = rc.HostTotalMiB, rc.HostAllocatedMiB
+	opts.DatastoreAvailGB = rc.DatastoreAvailGB
+	return opts
+}
+
+// addOptsFromWizard mirrors resizeOptsFromWizard for node add, which only
+// carries the memory-budget probe (add never resizes a disk).
+func addOptsFromWizard(rc *nodeRunnerCtx, st *lifecycle.State) node.AddOptions {
+	opts := lifecycle.AddOptionsFrom(st)
+	opts.HostTotalMiB, opts.HostAllocatedMiB = rc.HostTotalMiB, rc.HostAllocatedMiB
+	return opts
 }
 
 // lifecycleChrome keeps the shared brand tagline but swaps the context

@@ -17,6 +17,7 @@ var stepRowHints = map[node.Step]string{
 	node.StepDrain:      rowCordonDrain,
 	node.StepTFApply:    "terraform apply",
 	node.StepPowerCycle: "power-cycle",
+	node.StepDiskGrow:   "grow os disk",
 	node.StepUncordon:   "uncordon",
 	node.StepDeleteK8s:  "delete kubernetes node",
 	node.StepBuildISO:   "build iso",
@@ -37,6 +38,7 @@ var descRowHints = []struct{ prefix, row string }{
 	{"cordoning and draining", rowCordonDrain},
 	{"applying terraform change", "terraform apply"},
 	{"power-cycling vm", "power-cycle"},
+	{"growing os disk", "grow os disk"},
 	{"waiting for ", "wait for join"},
 }
 

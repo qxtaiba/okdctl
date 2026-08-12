@@ -61,6 +61,7 @@ const (
 	StepDrain      Step = "drain"
 	StepTFApply    Step = "tf-apply"
 	StepPowerCycle Step = "power-cycle"
+	StepDiskGrow   Step = "disk-grow"
 	StepDeleteK8s  Step = "delete-node"
 	StepUncordon   Step = "uncordon"
 	StepShutdown   Step = "shutdown"

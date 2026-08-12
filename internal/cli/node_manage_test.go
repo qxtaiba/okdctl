@@ -88,3 +88,41 @@ func TestReportLifecycleOutcomeNoConsentMeansNoChanges(t *testing.T) {
 		t.Errorf("no completion box pre-consent, got %q", out.String())
 	}
 }
+
+// TestResizeOptsFromWizardMergesHostAndDatastoreBudget guards the wizard
+// dispatch path (runLifecycleOp) merging the read-only Proxmox probe results
+// onto the wizard-collected resize options the same way the flag verb
+// (runNodeResize) does — a dropped merge here arms the memory guard but
+// leaves the datastore guard disarmed for every TUI-driven disk resize.
+func TestResizeOptsFromWizardMergesHostAndDatastoreBudget(t *testing.T) {
+	rc := &nodeRunnerCtx{HostTotalMiB: 65536, HostAllocatedMiB: 32768, DatastoreAvailGB: 500}
+	st := &lifecycle.State{MemoryMB: 16384, OSDiskGB: 100}
+
+	opts := resizeOptsFromWizard(rc, st)
+
+	if opts.HostTotalMiB != 65536 || opts.HostAllocatedMiB != 32768 {
+		t.Errorf("host memory budget not merged onto wizard resize options: %+v", opts)
+	}
+	if opts.DatastoreAvailGB != 500 {
+		t.Errorf("datastore budget not merged onto wizard resize options: %+v", opts)
+	}
+	if opts.MemoryMB != 16384 || opts.OSDiskGB != 100 {
+		t.Errorf("wizard-collected dimensions lost in the merge: %+v", opts)
+	}
+}
+
+// TestAddOptsFromWizardMergesHostBudget mirrors the resize case for node
+// add, whose wizard path merges the same memory-budget probe.
+func TestAddOptsFromWizardMergesHostBudget(t *testing.T) {
+	rc := &nodeRunnerCtx{HostTotalMiB: 65536, HostAllocatedMiB: 32768}
+	st := &lifecycle.State{Count: 2}
+
+	opts := addOptsFromWizard(rc, st)
+
+	if opts.HostTotalMiB != 65536 || opts.HostAllocatedMiB != 32768 {
+		t.Errorf("host memory budget not merged onto wizard add options: %+v", opts)
+	}
+	if opts.Count != 2 {
+		t.Errorf("wizard-collected count lost in the merge: %+v", opts)
+	}
+}

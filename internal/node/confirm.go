@@ -38,6 +38,7 @@ type OpPlan struct {
 	DrainTimeout       string
 	MemoryMB           int
 	CPU                int
+	OSDiskGB           int
 	GrowMasterMemoryMB int
 	IngressReplicas    int
 }

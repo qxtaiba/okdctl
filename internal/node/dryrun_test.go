@@ -332,6 +332,19 @@ func (f *fakePower) StartVM(_ context.Context, node string, vmid int) error {
 	return f.startErr
 }
 
+// fakeDiskGrower records GrowOSDisk calls so a disk-only resize can be
+// asserted to realize the grow in-guest without a power-cycle. err simulates
+// an in-guest grow failure (SCSI rescan/growpart/xfs_growfs via oc debug).
+type fakeDiskGrower struct {
+	grown []string
+	err   error
+}
+
+func (f *fakeDiskGrower) GrowOSDisk(_ context.Context, node string) error {
+	f.grown = append(f.grown, node)
+	return f.err
+}
+
 func seedRunner(t *testing.T, fc *fakeCluster, ftf *fakeTF, cfg *config.Config) (r *Runner, tfvarsPath, cfgPath string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -472,7 +485,7 @@ func TestResizeOneNodePowerCyclesAndRealizes(t *testing.T) {
 	r.DryRun = false
 	r.Power = fp
 
-	if err := r.resizeOneNode(context.Background(), resizeTarget{name: "worker0", index: 0}, nodetypes.RoleWorker, map[string]string{"worker_memory_mb": "16384"}, nil, false); err != nil {
+	if err := r.resizeOneNode(context.Background(), resizeTarget{name: "worker0", index: 0}, nodetypes.RoleWorker, map[string]string{"worker_memory_mb": "16384"}, nil, ResizeOptions{}, false); err != nil {
 		t.Fatalf("resizeOneNode: %v", err)
 	}
 	if fp.calls != 1 {
@@ -507,7 +520,7 @@ func TestResizeOneNodeSkipDrainAvoidsCordon(t *testing.T) {
 	r.DryRun = false
 	r.Power = fp
 
-	if err := r.resizeOneNode(context.Background(), resizeTarget{name: "worker0", index: 0}, nodetypes.RoleWorker, map[string]string{"worker_memory_mb": "16384"}, nil, true); err != nil {
+	if err := r.resizeOneNode(context.Background(), resizeTarget{name: "worker0", index: 0}, nodetypes.RoleWorker, map[string]string{"worker_memory_mb": "16384"}, nil, ResizeOptions{SkipDrain: true}, false); err != nil {
 		t.Fatalf("resizeOneNode(skipDrain): %v", err)
 	}
 	if fp.calls != 1 {
@@ -537,7 +550,7 @@ func TestResizeOneNodePowerCycleFailureLeavesCordoned(t *testing.T) {
 	r.DryRun = false
 	r.Power = fp
 
-	err := r.resizeOneNode(context.Background(), resizeTarget{name: "worker0", index: 0}, nodetypes.RoleWorker, map[string]string{"worker_memory_mb": "16384"}, nil, false)
+	err := r.resizeOneNode(context.Background(), resizeTarget{name: "worker0", index: 0}, nodetypes.RoleWorker, map[string]string{"worker_memory_mb": "16384"}, nil, ResizeOptions{}, false)
 	if err == nil {
 		t.Fatal("expected error when power-cycle fails")
 	}
@@ -608,7 +621,7 @@ func TestResizeCPUOnlyKeepsMemoryUnchanged(t *testing.T) {
 	assertUnchanged(t, cfgPath, "SENTINEL_CONFIG\n")
 }
 
-func TestResizeRequiresMemoryOrCPU(t *testing.T) {
+func TestResizeRequiresAtLeastOneDimension(t *testing.T) {
 	fc := &fakeCluster{
 		nodes:       []cluster.NodeDetail{{Name: "master0", Role: nodetypes.RoleMaster}},
 		etcdHealthy: true,
@@ -625,6 +638,131 @@ func TestResizeRequiresMemoryOrCPU(t *testing.T) {
 	}
 	if ftf.planCalls != 0 || fc.cordon != 0 {
 		t.Errorf("usage error must precede any plan or mutation: planCalls=%d cordon=%d", ftf.planCalls, fc.cordon)
+	}
+}
+
+// threeMasters is the fixture shared by the disk-grow tests below: three
+// Ready masters, matching config.DefaultConfig's ControlPlane.Count so a
+// role-scoped resize rolls every one of them.
+func threeMasters() []cluster.NodeDetail {
+	return []cluster.NodeDetail{
+		{Name: "master0", Role: nodetypes.RoleMaster, Ready: true},
+		{Name: "master1", Role: nodetypes.RoleMaster, Ready: true},
+		{Name: "master2", Role: nodetypes.RoleMaster, Ready: true},
+	}
+}
+
+// TestResizeDiskOnlySkipsDisruption locks the disk-only live path: growing
+// the OS disk alone must never cordon, drain, or uncordon the node — it is
+// realized entirely in-guest via the wired diskGrower — yet the terraform
+// apply and the in-guest grow must both still run for every target. This also
+// closes the Task-1 coverage gap for disk-only with DryRun=false and no
+// power-cycler wired: it must succeed rather than hit the power-cycler
+// refusal, since a disk-only resize is exempt from that requirement.
+func TestResizeDiskOnlySkipsDisruption(t *testing.T) {
+	fc := &fakeCluster{
+		nodes:       threeMasters(),
+		etcdHealthy: true,
+	}
+	ftf := &fakeTF{action: terraform.PlanActionUpdate}
+	fg := &fakeDiskGrower{}
+	cfg := config.DefaultConfig()
+
+	r, _, _ := seedRunner(t, fc, ftf, cfg)
+	r.DryRun = false
+	r.Disk = fg
+	r.Power = nil // disk-only must not require a power-cycler
+	r.Cfg.Topology.ControlPlane.DiskGB = 50
+
+	err := r.Resize(context.Background(), ResizeScope{Role: nodetypes.RoleMaster}, ResizeOptions{OSDiskGB: 100})
+	if err != nil {
+		t.Fatalf("disk-only resize failed: %v", err)
+	}
+	if fc.cordon != 0 || fc.drain != 0 || fc.uncordon != 0 {
+		t.Fatalf("disk-only resize disrupted the node: cordon=%d drain=%d uncordon=%d",
+			fc.cordon, fc.drain, fc.uncordon)
+	}
+	if want := len(threeMasters()); len(fg.grown) != want {
+		t.Fatalf("grower called %d times, want %d", len(fg.grown), want)
+	}
+	if ftf.applyCalls == 0 {
+		t.Fatal("terraform apply never ran")
+	}
+}
+
+// TestResizeCombinedGrowsAfterPowerCycle covers a combined memory+disk resize:
+// the disk grow is not disk-only (memory also changed), so the ordinary
+// power-cycle path still runs, and the in-guest grow must run for every node
+// the power-cycler cycled.
+func TestResizeCombinedGrowsAfterPowerCycle(t *testing.T) {
+	fc := &fakeCluster{
+		nodes:          threeMasters(),
+		etcdHealthy:    true,
+		cephApplicable: true,
+		cephHealthy:    true,
+	}
+	ftf := &fakeTF{action: terraform.PlanActionUpdate}
+	fg := &fakeDiskGrower{}
+	fp := &fakePower{}
+	cfg := config.DefaultConfig()
+
+	r, _, _ := seedRunner(t, fc, ftf, cfg)
+	r.DryRun = false
+	r.Disk = fg
+	r.Power = fp
+	r.Cfg.Topology.ControlPlane.DiskGB = 50
+
+	err := r.Resize(context.Background(), ResizeScope{Role: nodetypes.RoleMaster},
+		ResizeOptions{MemoryMB: 20480, OSDiskGB: 100, SkipDrain: true})
+	if err != nil {
+		t.Fatalf("combined resize failed: %v", err)
+	}
+	if len(fp.cycledVMIDs) == 0 || len(fg.grown) != len(fp.cycledVMIDs) {
+		t.Fatalf("cycle/grow mismatch: cycles=%d grows=%d", len(fp.cycledVMIDs), len(fg.grown))
+	}
+}
+
+// TestResizeDiskDryRunNeverGrows locks the dry-run contract for the disk
+// dimension specifically: a preview must call neither the grower nor mutate
+// any on-disk file, mirroring TestResizeDryRunMakesNoMutation for the
+// memory/cpu dimensions.
+func TestResizeDiskDryRunNeverGrows(t *testing.T) {
+	fc := &fakeCluster{nodes: threeMasters(), etcdHealthy: true}
+	ftf := &fakeTF{action: terraform.PlanActionUpdate}
+	fg := &fakeDiskGrower{}
+	cfg := config.DefaultConfig()
+
+	r, tfvars, cfgPath := seedRunner(t, fc, ftf, cfg) // seedRunner leaves DryRun: true
+	r.Disk = fg
+	r.Cfg.Topology.ControlPlane.DiskGB = 50
+
+	if err := r.Resize(context.Background(), ResizeScope{Role: nodetypes.RoleMaster}, ResizeOptions{OSDiskGB: 100}); err != nil {
+		t.Fatalf("dry-run failed: %v", err)
+	}
+	if len(fg.grown) != 0 {
+		t.Fatal("dry-run called the grower")
+	}
+	assertUnchanged(t, tfvars, "SENTINEL_TFVARS\n")
+	assertUnchanged(t, cfgPath, "SENTINEL_CONFIG\n")
+}
+
+// TestResizeDiskRefusesWithoutGrower locks the fail-safe refusal: without a
+// wired diskGrower, a live disk resize must be refused up front (mirroring
+// the power-cycler refusal for memory/cpu) rather than applying a
+// Proxmox-level disk grow the guest never realizes.
+func TestResizeDiskRefusesWithoutGrower(t *testing.T) {
+	fc := &fakeCluster{nodes: threeMasters(), etcdHealthy: true}
+	ftf := &fakeTF{action: terraform.PlanActionUpdate}
+	cfg := config.DefaultConfig()
+
+	r, _, _ := seedRunner(t, fc, ftf, cfg)
+	r.DryRun = false
+	r.Disk = nil
+	r.Cfg.Topology.ControlPlane.DiskGB = 50
+
+	err := r.Resize(context.Background(), ResizeScope{Role: nodetypes.RoleMaster}, ResizeOptions{OSDiskGB: 100})
+	if err == nil {
+		t.Fatal("disk resize without grower not refused")
 	}
 }
 

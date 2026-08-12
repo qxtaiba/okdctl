@@ -43,23 +43,27 @@ func TestValidateAddFlags(t *testing.T) {
 
 func TestValidateResizeFlags(t *testing.T) {
 	cases := []struct {
-		name          string
-		memoryMB, cpu int
-		wantErr       bool
+		name                    string
+		memoryMB, cpu, osDiskGB int
+		wantErr                 bool
 	}{
-		{"memory only", 16384, 0, false},
-		{"cpu only", 0, 8, false},
-		{"both set", 16384, 8, false},
-		{"neither set", 0, 0, true},
-		{"negative values treated as unset", -1, -1, true},
+		{"memory only", 16384, 0, 0, false},
+		{"cpu only", 0, 8, 0, false},
+		{"os disk only", 0, 0, 100, false},
+		{"all set", 16384, 8, 100, false},
+		{"neither set", 0, 0, 0, true},
+		{"negative values treated as unset", -1, -1, -1, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := validateResizeFlags(tc.memoryMB, tc.cpu)
+			err := validateResizeFlags(tc.memoryMB, tc.cpu, tc.osDiskGB)
 			if tc.wantErr {
 				var usageErr *errtypes.UsageError
 				if !errors.As(err, &usageErr) {
 					t.Fatalf("want *errtypes.UsageError, got %v", err)
+				}
+				if !strings.Contains(usageErr.Msg, "--memory-mb") || !strings.Contains(usageErr.Msg, "--cpu") || !strings.Contains(usageErr.Msg, "--os-disk-gb") {
+					t.Fatalf("refusal message missing a flag name: %q", usageErr.Msg)
 				}
 				return
 			}

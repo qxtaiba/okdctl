@@ -192,8 +192,8 @@ func TestReadTerraformVarsSizing_RoundTripsWrittenVars(t *testing.T) {
 		Cluster:  config.ClusterConfig{Name: "sizingcluster"},
 		Provider: config.ProviderConfig{Proxmox: &config.ProxmoxConfig{ISOStorage: "iso-store"}},
 		Topology: config.TopologyConfig{
-			ControlPlane: config.NodeConfig{Count: 3, CPU: 4, MemoryMB: 8192},
-			Workers:      config.NodeConfig{Count: 2, CPU: 8, MemoryMB: 16384},
+			ControlPlane: config.NodeConfig{Count: 3, CPU: 4, MemoryMB: 8192, DiskGB: 100},
+			Workers:      config.NodeConfig{Count: 2, CPU: 8, MemoryMB: 16384, DiskGB: 200},
 		},
 	}
 	envDir := t.TempDir()
@@ -208,9 +208,43 @@ func TestReadTerraformVarsSizing_RoundTripsWrittenVars(t *testing.T) {
 	if !found {
 		t.Fatal("found = false, want true")
 	}
-	want := TerraformVarsSizing{MasterCPU: 4, MasterMemoryMB: 8192, WorkerCPU: 8, WorkerMemoryMB: 16384}
+	want := TerraformVarsSizing{
+		MasterCPU: 4, MasterMemoryMB: 8192, MasterOSDiskGB: 100,
+		WorkerCPU: 8, WorkerMemoryMB: 16384, WorkerOSDiskGB: 200,
+	}
 	if got != want {
 		t.Errorf("ReadTerraformVarsSizing() = %+v, want %+v", got, want)
+	}
+}
+
+// TestReadTerraformVarsSizing_WorkerDiskInheritsControlPlane locks the same
+// worker-disk-falls-back-to-cp-disk inheritance rule getDiskSizes applies at
+// write time: when Workers.DiskGB is unset, WriteTerraformVars renders
+// worker_os_disk_size_gb equal to the control-plane disk, and the reader
+// must round-trip that.
+func TestReadTerraformVarsSizing_WorkerDiskInheritsControlPlane(t *testing.T) {
+	cfg := &config.Config{
+		Cluster:  config.ClusterConfig{Name: "inheritcluster"},
+		Provider: config.ProviderConfig{Proxmox: &config.ProxmoxConfig{ISOStorage: "iso-store"}},
+		Topology: config.TopologyConfig{
+			ControlPlane: config.NodeConfig{Count: 3, CPU: 4, MemoryMB: 8192, DiskGB: 100},
+			Workers:      config.NodeConfig{Count: 2, CPU: 8, MemoryMB: 16384, DiskGB: 0},
+		},
+	}
+	envDir := t.TempDir()
+	if err := WriteTerraformVars(cfg, envDir); err != nil {
+		t.Fatalf("WriteTerraformVars: %v", err)
+	}
+
+	got, found, err := ReadTerraformVarsSizing(envDir)
+	if err != nil {
+		t.Fatalf("ReadTerraformVarsSizing: %v", err)
+	}
+	if !found {
+		t.Fatal("found = false, want true")
+	}
+	if got.WorkerOSDiskGB != 100 {
+		t.Errorf("WorkerOSDiskGB = %d, want 100 (inherited from cp disk)", got.WorkerOSDiskGB)
 	}
 }
 

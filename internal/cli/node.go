@@ -42,6 +42,7 @@ var (
 	nodeDrainTimeout           string
 	nodeResizeMemoryMB         int
 	nodeResizeCPU              int
+	nodeResizeOSDiskGB         int
 	nodeAcknowledgeInterrupted bool
 	nodeAddCount               int
 )
@@ -78,26 +79,38 @@ or node instead of refusing.`,
 
 var nodeResizeCmd = &cobra.Command{
 	Use:   "resize (masters|workers|<name>)",
-	Short: "Resize node CPU/memory per role, rolled out one node at a time",
+	Short: "Resize node CPU/memory/OS-disk per role, rolled out one node at a time",
 	Long: `Change per-role node resources and roll the change out one node at a
 time. Masters are etcd-health-gated before and after every node and applied
 with an in-place-update plan gate (a VM replace is refused). Workers roll
 without the etcd gate.
 
-Sizing is per-role: the role's memory/cpu knob is updated in config and tfvars,
-but each targeted apply mutates only the current node; other same-role nodes
-pick up the pending change on the next full deploy. Run 'okdctl plan' after a
-resize to see exactly which same-role siblings still have the change pending.
+Sizing is per-role: the role's memory/cpu/disk knob is updated in config and
+tfvars, but each targeted apply mutates only the current node; other same-role
+nodes pick up the pending change on the next full deploy. Run 'okdctl plan'
+after a resize to see exactly which same-role siblings still have the change
+pending.
 
-At least one of --memory-mb or --cpu is required; an omitted dimension keeps
-the role's current value.
+At least one of --memory-mb, --cpu, or --os-disk-gb is required; an omitted
+dimension keeps the role's current value. --os-disk-gb is grow-only (shrink is
+refused) and, unlike memory/cpu, is realized live: the Proxmox disk is grown
+and the in-guest filesystem grown into it via 'oc debug' without a
+power-cycle. A resize that combines --os-disk-gb with --memory-mb/--cpu still
+grows the disk live before the power-cycle that realizes the other dimensions.
+--os-disk-gb is role-scoped only ('masters'/'workers', not a single node
+name): a same-role sibling can always catch up on a memory/cpu change at its
+next full deploy, but CoreOS only grows the filesystem on firstboot, so a
+sibling left behind by a single-node disk grow could never catch up, and a
+later same-size role-wide resize would then be refused by the grow-only check
+above.
 
 --skip-drain power-cycles the node without cordoning/draining it. The resize is
 realized by a hypervisor stop→start that kills the node's pods regardless;
 skipping the drain lets them restart in place on the now-roomier node instead of
 evicting them cluster-wide. Prefer it when the cluster is memory-saturated, where
 a drain's evicted pods cannot reschedule and the drain times out. The etcd and
-Ceph health gates around the power-cycle still run.
+Ceph health gates around the power-cycle still run. --skip-drain has no effect
+on a disk-only resize, which never power-cycles.
 
 An interrupted role roll records an op marker and resumes automatically on the
 next 'okdctl node resize' of the same role or node, skipping already-completed
@@ -105,7 +118,8 @@ nodes and steps. --acknowledge-interrupted-op overrides a marker left by a
 different op or node instead of refusing.`,
 	Example: `  okdctl node resize masters --memory-mb 24576 --yes --confirm-cluster grappleberry
   okdctl node resize workers --memory-mb 16384 --dry-run
-  okdctl node resize grappleberry-master0 --memory-mb 30720 --skip-drain --yes --confirm-cluster grappleberry`,
+  okdctl node resize grappleberry-master0 --memory-mb 30720 --skip-drain --yes --confirm-cluster grappleberry
+  okdctl node resize masters --os-disk-gb 100`,
 	Args: cobra.ExactArgs(1),
 	RunE: runNodeResize,
 }
@@ -156,6 +170,7 @@ func init() {
 	nodeResizeCmd.Flags().BoolVar(&nodeDryRun, flagDryRun, false, "run gates and the plan gate without mutating anything")
 	nodeResizeCmd.Flags().IntVar(&nodeResizeMemoryMB, "memory-mb", 0, "new per-node memory in MiB (0 keeps current)")
 	nodeResizeCmd.Flags().IntVar(&nodeResizeCPU, "cpu", 0, "new per-node cpu cores (0 keeps current)")
+	nodeResizeCmd.Flags().IntVar(&nodeResizeOSDiskGB, "os-disk-gb", 0, "grow the role's OS disk to this size in GiB (grow-only, role-scoped only — 'masters'/'workers', not a single node; disk-only resizes are live, no power-cycle)")
 	nodeResizeCmd.Flags().BoolVar(&nodeSkipDrain, "skip-drain", false, "power-cycle without cordon/drain so pods restart in place (use when a drain can't reschedule under memory pressure); etcd/Ceph gates still run")
 	nodeResizeCmd.Flags().BoolVar(&nodeAcknowledgeInterrupted, "acknowledge-interrupted-op", false, "override a stranded marker left by a different op or node and proceed fresh")
 
@@ -200,15 +215,17 @@ func destroyGradeVerb(verb string) bool {
 }
 
 // nodeRunnerCtx bundles the disposable resources a node op holds so RunE
-// bodies can defer a single cleanup. HostTotalMiB/HostAllocatedMiB are the
-// read-only Proxmox memory-budget probe results (zero when the probe was
-// skipped or failed — the guard then warns instead of enforcing). captured is
-// the plan the confirm/preview hook observed, reused for the completion box.
+// bodies can defer a single cleanup. HostTotalMiB/HostAllocatedMiB/
+// DatastoreAvailGB are the read-only Proxmox memory- and datastore-budget
+// probe results (zero when the probe was skipped or failed — the guards then
+// warn instead of enforcing). captured is the plan the confirm/preview hook
+// observed, reused for the completion box.
 type nodeRunnerCtx struct {
 	runner           *node.Runner
 	release          func()
 	HostTotalMiB     int
 	HostAllocatedMiB int
+	DatastoreAvailGB int
 	captured         *node.OpPlan
 	dryRun           bool
 }
@@ -238,6 +255,7 @@ type nodeOpsEnv struct {
 	tfEnv            string
 	hostTotalMiB     int
 	hostAllocatedMiB int
+	datastoreAvailGB int
 }
 
 // close zeroizes the owned credentials and restores invoking-user ownership
@@ -274,9 +292,9 @@ func prepareNodeOpsEnv(ctx context.Context, cfg *config.Config, probeHost bool) 
 		return nil, err
 	}
 
-	var hostTotalMiB, hostAllocatedMiB int
+	var hostTotalMiB, hostAllocatedMiB, datastoreAvailGB int
 	if probeHost && creds.IsValid() {
-		hostTotalMiB, hostAllocatedMiB = runHostBudgetProbe(ctx, cfg, creds)
+		hostTotalMiB, hostAllocatedMiB, datastoreAvailGB = runHostBudgetProbe(ctx, cfg, creds)
 	}
 
 	return &nodeOpsEnv{
@@ -285,6 +303,7 @@ func prepareNodeOpsEnv(ctx context.Context, cfg *config.Config, probeHost bool) 
 		tfEnv:            cfg.TerraformEnvName(),
 		hostTotalMiB:     hostTotalMiB,
 		hostAllocatedMiB: hostAllocatedMiB,
+		datastoreAvailGB: datastoreAvailGB,
 	}, nil
 }
 
@@ -346,6 +365,7 @@ func (e *nodeOpsEnv) newRunner(cmd *cobra.Command, cfg *config.Config, verb stri
 		node.WithLogger(log))
 	runner.DryRun = consent.dryRun
 	runner.Reporter = func(desc string) func() { return tui.StartSpinner(ctx, desc) }
+	runner.Disk = &node.DebugNodeGrower{Runner: cl}
 
 	// Wired unconditionally: construction is cheap (no I/O) and only node add
 	// dereferences ISO/Ignition/Provision, so every other verb simply ignores them.
@@ -376,6 +396,7 @@ func (e *nodeOpsEnv) newRunner(cmd *cobra.Command, cfg *config.Config, verb stri
 		runner:           runner,
 		HostTotalMiB:     e.hostTotalMiB,
 		HostAllocatedMiB: e.hostAllocatedMiB,
+		DatastoreAvailGB: e.datastoreAvailGB,
 		dryRun:           consent.dryRun,
 		release: func() {
 			lock.Release()
@@ -425,14 +446,16 @@ func runNodeGate(ctx context.Context, twoStage bool, clusterName string) (bool, 
 }
 
 // runHostBudgetProbe reads host memory and datastore headroom from the Proxmox
-// API (read-only) so the memory-budget guard can enforce numerically. It
-// degrades gracefully: a probe failure or missing provider config logs a
-// warning and returns zeros, leaving the guard in warn-only mode rather than
-// blocking a resize on an unreachable probe.
-func runHostBudgetProbe(ctx context.Context, cfg *config.Config, creds *credentials.ProxmoxCredentials) (totalMiB, allocatedMiB int) {
+// API (read-only) so the memory-budget and datastore-budget guards can
+// enforce numerically. It degrades gracefully: a probe failure or missing
+// provider config logs a warning and returns zeros, leaving both guards in
+// warn-only mode rather than blocking a resize on an unreachable probe.
+// datastoreAvailGB is the os-storage datastore's free space (matched by name
+// against px.Storage), the same store --os-disk-gb grows into.
+func runHostBudgetProbe(ctx context.Context, cfg *config.Config, creds *credentials.ProxmoxCredentials) (totalMiB, allocatedMiB, datastoreAvailGB int) {
 	px := cfg.Provider.Proxmox
 	if px == nil {
-		return 0, 0
+		return 0, 0, 0
 	}
 	probe, err := proxmox.ProbeHost(ctx, &proxmox.ProbeOptions{
 		Endpoint:   creds.Endpoint,
@@ -445,7 +468,7 @@ func runHostBudgetProbe(ctx context.Context, cfg *config.Config, creds *credenti
 	})
 	if err != nil {
 		logutil.Warn("host memory-budget probe failed; memory guard will warn instead of enforce", logutil.LF("err", err))
-		return 0, 0
+		return 0, 0, 0
 	}
 	logutil.Info("host memory budget",
 		logutil.LF("host_node", probe.Node),
@@ -456,8 +479,11 @@ func runHostBudgetProbe(ctx context.Context, cfg *config.Config, creds *credenti
 			logutil.LF("name", d.Name),
 			logutil.LF("free_gib", d.AvailBytes/(1024*1024*1024)),
 			logutil.LF("total_gib", d.TotalBytes/(1024*1024*1024)))
+		if d.Name == px.Storage {
+			datastoreAvailGB = int(d.AvailBytes / (1024 * 1024 * 1024)) //nolint:gosec // G115: GiB-scale value fits int
+		}
 	}
-	return probe.HostMemTotalMiB(), probe.GuestAllocatedMiB()
+	return probe.HostMemTotalMiB(), probe.GuestAllocatedMiB(), datastoreAvailGB
 }
 
 // ensureTerraformWorkspace fails fast with a targeted error when the
@@ -517,7 +543,7 @@ func runNodeResize(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := validateResizeFlags(nodeResizeMemoryMB, nodeResizeCPU); err != nil {
+	if err := validateResizeFlags(nodeResizeMemoryMB, nodeResizeCPU, nodeResizeOSDiskGB); err != nil {
 		return err
 	}
 
@@ -536,8 +562,10 @@ func runNodeResize(cmd *cobra.Command, args []string) error {
 	if err := rc.runner.Resize(cmd.Context(), scope, node.ResizeOptions{
 		MemoryMB:         nodeResizeMemoryMB,
 		CPU:              nodeResizeCPU,
+		OSDiskGB:         nodeResizeOSDiskGB,
 		HostTotalMiB:     rc.HostTotalMiB,
 		HostAllocatedMiB: rc.HostAllocatedMiB,
+		DatastoreAvailGB: rc.DatastoreAvailGB,
 		Acknowledge:      nodeAcknowledgeInterrupted,
 		SkipDrain:        nodeSkipDrain,
 	}); err != nil {
@@ -595,10 +623,11 @@ func validateAddFlags(count int) error {
 }
 
 // validateResizeFlags requires at least one resize dimension: an omitted
-// --memory-mb or --cpu keeps the role's current value rather than erroring.
-func validateResizeFlags(memoryMB, cpu int) error {
-	if memoryMB <= 0 && cpu <= 0 {
-		return &errtypes.UsageError{Msg: "resize requires at least one of --memory-mb or --cpu"}
+// --memory-mb, --cpu, or --os-disk-gb keeps the role's current value rather
+// than erroring.
+func validateResizeFlags(memoryMB, cpu, osDiskGB int) error {
+	if memoryMB <= 0 && cpu <= 0 && osDiskGB <= 0 {
+		return &errtypes.UsageError{Msg: "resize requires at least one of --memory-mb, --cpu, or --os-disk-gb"}
 	}
 	return nil
 }

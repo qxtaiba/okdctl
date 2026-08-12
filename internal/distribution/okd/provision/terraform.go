@@ -193,13 +193,15 @@ func WriteTerraformVars(cfg *config.Config, envDir string) error {
 	return nil
 }
 
-// TerraformVarsSizing is the per-role cpu/memory pair last rendered into
-// terraform.tfvars.
+// TerraformVarsSizing is the per-role cpu/memory/os-disk triple last rendered
+// into terraform.tfvars.
 type TerraformVarsSizing struct {
 	MasterCPU      int
 	MasterMemoryMB int
+	MasterOSDiskGB int
 	WorkerCPU      int
 	WorkerMemoryMB int
+	WorkerOSDiskGB int
 }
 
 // tfvarsIntAssignment matches okdctl's own generated "key = 1234" lines. It is
@@ -209,7 +211,7 @@ type TerraformVarsSizing struct {
 // keys will not match and ReadTerraformVarsSizing reports it as missing.
 var tfvarsIntAssignment = regexp.MustCompile(`(?m)^(\w+)\s*=\s*(-?\d+)\s*$`)
 
-// ReadTerraformVarsSizing parses the four scalar sizing fields WriteTerraformVars
+// ReadTerraformVarsSizing parses the six scalar sizing fields WriteTerraformVars
 // renders out of envDir's terraform.tfvars, so `okdctl node list` can detect
 // drift between the live config and the sizing last materialized to disk.
 // found=false (with a nil error) means terraform.tfvars has not been rendered
@@ -232,10 +234,12 @@ func ReadTerraformVarsSizing(envDir string) (sizing TerraformVarsSizing, found b
 	}
 
 	fields := map[string]*int{
-		"master_cpu_cores": &sizing.MasterCPU,
-		"master_memory_mb": &sizing.MasterMemoryMB,
-		"worker_cpu_cores": &sizing.WorkerCPU,
-		"worker_memory_mb": &sizing.WorkerMemoryMB,
+		"master_cpu_cores":       &sizing.MasterCPU,
+		"master_memory_mb":       &sizing.MasterMemoryMB,
+		"master_os_disk_size_gb": &sizing.MasterOSDiskGB,
+		"worker_cpu_cores":       &sizing.WorkerCPU,
+		"worker_memory_mb":       &sizing.WorkerMemoryMB,
+		"worker_os_disk_size_gb": &sizing.WorkerOSDiskGB,
 	}
 	var missing []string
 	for key, dst := range fields {

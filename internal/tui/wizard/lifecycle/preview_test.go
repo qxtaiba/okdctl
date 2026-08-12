@@ -91,6 +91,27 @@ func TestPreviewBackReturnsToParameters(t *testing.T) {
 	}
 }
 
+func TestPreviewDiskOnlyEntries(t *testing.T) {
+	st := &State{
+		Cfg: config.DefaultConfig(), Op: node.OpResize, OSDiskGB: 100,
+		Scope: node.ResizeScope{Role: nodetypes.RoleMaster},
+	}
+	plan := &node.OpPlan{
+		Op: node.OpResize, Cluster: "homelab", OSDiskGB: 100,
+		Nodes: []node.PlanNode{{
+			Name: "homelab-master0", Role: nodetypes.RoleMaster,
+			TFAddress: "m.master[0]", Action: terraform.PlanActionUpdate,
+		}},
+	}
+	s := previewWith(t, st, plan, nil)
+	out := s.View(90, 60)
+	for _, want := range []string{"target os disk", "live resize — no drain, no power-cycle"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("preview missing %q:\n%s", want, out)
+		}
+	}
+}
+
 func TestPreviewRendersPlanGatesAndWarnings(t *testing.T) {
 	st := &State{Cfg: config.DefaultConfig(), Op: node.OpRemove, Target: "homelab-worker2"}
 	plan := &node.OpPlan{

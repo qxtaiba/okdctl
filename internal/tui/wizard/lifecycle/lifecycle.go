@@ -41,6 +41,7 @@ type State struct {
 
 	MemoryMB     int
 	CPU          int
+	OSDiskGB     int
 	Count        int
 	SkipDrain    bool
 	ForceStorage bool
@@ -59,6 +60,12 @@ type State struct {
 
 	Result  error
 	Elapsed time.Duration
+}
+
+// DiskOnly reports whether the collected resize params grow only the os
+// disk — the live path with no cordon/drain/power-cycle.
+func (st *State) DiskOnly() bool {
+	return st.Op == node.OpResize && st.OSDiskGB > 0 && st.MemoryMB <= 0 && st.CPU <= 0
 }
 
 // ExecEvent is one progress event on the execution screen's feed: either a

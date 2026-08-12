@@ -32,6 +32,6 @@ Proxmox VMs (via Terraform), Terraform state, and the Kubernetes lifecycle
 * [okdctl node list](okdctl_node_list.md)	 - List cluster nodes with role, readiness, and sizing drift
 * [okdctl node manage](okdctl_node_manage.md)	 - Interactively manage node lifecycle (resize / add / remove)
 * [okdctl node remove](okdctl_node_remove.md)	 - Remove a worker node from the cluster
-* [okdctl node resize](okdctl_node_resize.md)	 - Resize node CPU/memory per role, rolled out one node at a time
+* [okdctl node resize](okdctl_node_resize.md)	 - Resize node CPU/memory/OS-disk per role, rolled out one node at a time
 * [okdctl node snapshot](okdctl_node_snapshot.md)	 - Manual, single-node Proxmox VM snapshots
 

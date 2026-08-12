@@ -21,30 +21,46 @@ func intPtr(i int) *int { return &i }
 func TestRoleSizingDrift(t *testing.T) {
 	cfg := &config.Config{
 		Topology: config.TopologyConfig{
-			ControlPlane: config.NodeConfig{CPU: 4, MemoryMB: 8192},
-			Workers:      config.NodeConfig{CPU: 8, MemoryMB: 16384},
+			ControlPlane: config.NodeConfig{CPU: 4, MemoryMB: 8192, DiskGB: 50},
+			Workers:      config.NodeConfig{CPU: 8, MemoryMB: 16384, DiskGB: 50},
 		},
 	}
-	inSync := provision.TerraformVarsSizing{MasterCPU: 4, MasterMemoryMB: 8192, WorkerCPU: 8, WorkerMemoryMB: 16384}
-	stale := provision.TerraformVarsSizing{MasterCPU: 4, MasterMemoryMB: 8192, WorkerCPU: 8, WorkerMemoryMB: 8192}
+	inSync := provision.TerraformVarsSizing{MasterCPU: 4, MasterMemoryMB: 8192, MasterOSDiskGB: 50, WorkerCPU: 8, WorkerMemoryMB: 16384, WorkerOSDiskGB: 50}
+	stale := provision.TerraformVarsSizing{MasterCPU: 4, MasterMemoryMB: 8192, MasterOSDiskGB: 50, WorkerCPU: 8, WorkerMemoryMB: 8192, WorkerOSDiskGB: 50}
 
 	cases := []struct {
 		name       string
 		role       nodetypes.NodeRole
+		cfgMod     func(*config.Config)
 		sizing     provision.TerraformVarsSizing
 		found      bool
 		wantStatus string
 		wantDetail bool
 	}{
-		{"not rendered yet", nodetypes.RoleMaster, provision.TerraformVarsSizing{}, false, driftUnknown, false},
-		{"master in sync", nodetypes.RoleMaster, inSync, true, driftNone, false},
-		{"worker in sync", nodetypes.RoleWorker, inSync, true, driftNone, false},
-		{"worker drifted", nodetypes.RoleWorker, stale, true, driftPending, true},
-		{"unknown role", nodetypes.RoleUnknown, inSync, true, driftUnknown, false},
+		{name: "not rendered yet", role: nodetypes.RoleMaster, sizing: provision.TerraformVarsSizing{}, found: false, wantStatus: driftUnknown, wantDetail: false},
+		{name: "master in sync", role: nodetypes.RoleMaster, sizing: inSync, found: true, wantStatus: driftNone, wantDetail: false},
+		{name: "worker in sync", role: nodetypes.RoleWorker, sizing: inSync, found: true, wantStatus: driftNone, wantDetail: false},
+		{name: "worker drifted", role: nodetypes.RoleWorker, sizing: stale, found: true, wantStatus: driftPending, wantDetail: true},
+		{name: "unknown role", role: nodetypes.RoleUnknown, sizing: inSync, found: true, wantStatus: driftUnknown, wantDetail: false},
+		{
+			name:       "disk drift only",
+			role:       nodetypes.RoleMaster,
+			cfgMod:     func(c *config.Config) { c.Topology.ControlPlane.DiskGB = 100 },
+			sizing:     provision.TerraformVarsSizing{MasterCPU: 4, MasterMemoryMB: 8192, MasterOSDiskGB: 50},
+			found:      true,
+			wantStatus: driftPending,
+			wantDetail: true,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			status, detail := roleSizingDrift(cfg, tc.role, tc.sizing, tc.found)
+			runCfg := cfg
+			if tc.cfgMod != nil {
+				clone := *cfg
+				tc.cfgMod(&clone)
+				runCfg = &clone
+			}
+			status, detail := roleSizingDrift(runCfg, tc.role, tc.sizing, tc.found)
 			if status != tc.wantStatus {
 				t.Errorf("status = %q, want %q", status, tc.wantStatus)
 			}
@@ -53,6 +69,11 @@ func TestRoleSizingDrift(t *testing.T) {
 			}
 			if !tc.wantDetail && detail != "" {
 				t.Errorf("want empty detail, got %q", detail)
+			}
+			if tc.name == "disk drift only" {
+				if !strings.Contains(detail, "50GiB") || !strings.Contains(detail, "100GiB") {
+					t.Errorf("detail %q must mention both disk values (50GiB and 100GiB)", detail)
+				}
 			}
 		})
 	}
@@ -146,7 +167,7 @@ func TestPrintNodeListAlignsColumnsWithLongNames(t *testing.T) {
 		{Name: "m0", Role: nodetypes.RoleMaster, Ready: true, TFIndex: intPtr(0), Drift: driftNone},
 		{
 			Name: "worker-extraordinarily-long-hostname-12", Role: nodetypes.RoleWorker, Ready: false,
-			TFIndex: intPtr(12), Drift: driftPending, DriftDetail: "config 8192MiB/4cpu vs tfvars 4096MiB/4cpu",
+			TFIndex: intPtr(12), Drift: driftPending, DriftDetail: "config 8192MiB/4cpu/50GiB vs tfvars 4096MiB/4cpu/50GiB",
 			InFlightOp: "resize (tf-apply)",
 		},
 	}
