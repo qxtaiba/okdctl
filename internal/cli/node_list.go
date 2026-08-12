@@ -38,12 +38,12 @@ var nodeListCmd = &cobra.Command{
 	Long: `List every cluster node with its role, readiness, terraform count
 index, sizing-drift indicator, and any in-flight node op.
 
-The drift indicator compares the config file's per-role cpu/memory to what
-was last rendered into terraform.tfvars — it is not a live VM query (okdctl
-fetches no per-guest Proxmox sizing anywhere today), so "pending" means a
-sizing change is staged in the workspace, not that a specific node's guest
-has actually been resized yet. "unknown" means terraform.tfvars has not been
-rendered at all.`,
+The drift indicator compares the config file's per-role cpu/memory/os-disk
+size to what was last rendered into terraform.tfvars — it is not a live VM
+query (okdctl fetches no per-guest Proxmox sizing anywhere today), so
+"pending" means a sizing change is staged in the workspace, not that a
+specific node's guest has actually been resized yet. "unknown" means
+terraform.tfvars has not been rendered at all.`,
 	Example: "  okdctl node list\n  okdctl node list --output json",
 	Args:    cobra.NoArgs,
 	RunE:    runNodeList,
@@ -165,21 +165,21 @@ func roleSizingDrift(cfg *config.Config, role nodetypes.NodeRole, sizing provisi
 	if !found {
 		return driftUnknown, ""
 	}
-	var cfgCPU, cfgMem, tfCPU, tfMem int
+	var cfgCPU, cfgMem, cfgDisk, tfCPU, tfMem, tfDisk int
 	switch role {
 	case nodetypes.RoleMaster:
-		cfgCPU, cfgMem = cfg.Topology.ControlPlane.CPU, cfg.Topology.ControlPlane.MemoryMB
-		tfCPU, tfMem = sizing.MasterCPU, sizing.MasterMemoryMB
+		cfgCPU, cfgMem, cfgDisk = cfg.Topology.ControlPlane.CPU, cfg.Topology.ControlPlane.MemoryMB, cfg.Topology.ControlPlane.DiskGB
+		tfCPU, tfMem, tfDisk = sizing.MasterCPU, sizing.MasterMemoryMB, sizing.MasterOSDiskGB
 	case nodetypes.RoleWorker:
-		cfgCPU, cfgMem = cfg.Topology.Workers.CPU, cfg.Topology.Workers.MemoryMB
-		tfCPU, tfMem = sizing.WorkerCPU, sizing.WorkerMemoryMB
+		cfgCPU, cfgMem, cfgDisk = cfg.Topology.Workers.CPU, cfg.Topology.Workers.MemoryMB, cfg.Topology.Workers.DiskGB
+		tfCPU, tfMem, tfDisk = sizing.WorkerCPU, sizing.WorkerMemoryMB, sizing.WorkerOSDiskGB
 	default:
 		return driftUnknown, ""
 	}
-	if cfgCPU == tfCPU && cfgMem == tfMem {
+	if cfgCPU == tfCPU && cfgMem == tfMem && cfgDisk == tfDisk {
 		return driftNone, ""
 	}
-	return driftPending, fmt.Sprintf("config %dMiB/%dcpu vs tfvars %dMiB/%dcpu", cfgMem, cfgCPU, tfMem, tfCPU)
+	return driftPending, fmt.Sprintf("config %dMiB/%dcpu/%dGiB vs tfvars %dMiB/%dcpu/%dGiB", cfgMem, cfgCPU, cfgDisk, tfMem, tfCPU, tfDisk)
 }
 
 // printNodeList renders the text table through the shared tui.Table look

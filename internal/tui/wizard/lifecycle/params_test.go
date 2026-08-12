@@ -37,6 +37,82 @@ func TestParamsStepResizeApplyAndValidation(t *testing.T) {
 	}
 }
 
+func TestParamsStepResizeDiskField(t *testing.T) {
+	cfg := config.DefaultConfig() // master DiskGB = 50
+	st := &State{Cfg: cfg, Op: node.OpResize, Scope: node.ResizeScope{Role: nodetypes.RoleMaster}}
+	s := NewParamsStep(st)
+	_ = s.Init()
+
+	if s.diskField == nil {
+		t.Fatal("resize form must have an os disk field")
+	}
+
+	// Cross-field rule: only disk set (memory and cpu stay at zero) must
+	// still pass — disk is a valid resize dimension on its own.
+	s.memField.SetValue("0")
+	s.cpuField.SetValue("0")
+	s.diskField.SetValue("100")
+	if err := s.Validate(); err != nil {
+		t.Fatalf("disk-only resize must validate: %v", err)
+	}
+	if err := s.Apply(nil); err != nil {
+		t.Fatal(err)
+	}
+	if st.OSDiskGB != 100 {
+		t.Errorf("OSDiskGB = %d, want 100", st.OSDiskGB)
+	}
+	if !st.DiskOnly() {
+		t.Error("state must report DiskOnly after a disk-only apply")
+	}
+}
+
+func TestParamsStepDiskGrowOnlyRefusesShrinkOrEqual(t *testing.T) {
+	cfg := config.DefaultConfig() // master DiskGB = 50
+	st := &State{Cfg: cfg, Op: node.OpResize, Scope: node.ResizeScope{Role: nodetypes.RoleMaster}}
+	s := NewParamsStep(st)
+	_ = s.Init()
+
+	s.memField.SetValue("0")
+	s.cpuField.SetValue("0")
+	s.diskField.SetValue("50") // equal to current — grow-only refuses it
+	if err := s.Validate(); err == nil {
+		t.Error("disk value equal to current must fail validation")
+	}
+	s.diskField.SetValue("40") // below current — grow-only refuses it
+	if err := s.Validate(); err == nil {
+		t.Error("disk value below current must fail validation")
+	}
+	s.diskField.SetValue("60") // above current — allowed
+	if err := s.Validate(); err != nil {
+		t.Errorf("disk value above current must validate: %v", err)
+	}
+}
+
+func TestParamsStepRefusesOSDiskGBOnSingleNodeTarget(t *testing.T) {
+	cfg := config.DefaultConfig() // master DiskGB = 50
+	st := &State{Cfg: cfg, Op: node.OpResize, Scope: node.ResizeScope{Node: "master0"}}
+	s := NewParamsStep(st)
+	_ = s.Init()
+
+	s.memField.SetValue("0")
+	s.cpuField.SetValue("0")
+	s.diskField.SetValue("100")
+	err := s.Validate()
+	if err == nil {
+		t.Fatal("disk grow against a single-node target must fail validation")
+	}
+	if !strings.Contains(err.Error(), "role-scoped") {
+		t.Errorf("error must explain disk resizes are role-scoped, got %v", err)
+	}
+
+	// memory/cpu against the same single-node target is unaffected.
+	s.diskField.SetValue("0")
+	s.memField.SetValue("24576")
+	if err := s.Validate(); err != nil {
+		t.Errorf("single-node memory resize must validate: %v", err)
+	}
+}
+
 func TestParamsStepSkipDrainSelection(t *testing.T) {
 	st := &State{Cfg: config.DefaultConfig(), Op: node.OpResize, Scope: node.ResizeScope{Role: nodetypes.RoleWorker}}
 	s := NewParamsStep(st)

@@ -79,7 +79,7 @@ Flat array, one entry per cluster node.
   {"name": "master-0", "role": "master", "ready": true, "tf_index": 0, "drift": "none"},
   {
     "name": "worker-2", "role": "worker", "ready": false, "tf_index": 2,
-    "drift": "pending", "drift_detail": "config 16384MiB/4cpu vs tfvars 8192MiB/4cpu",
+    "drift": "pending", "drift_detail": "config 16384MiB/4cpu/100GiB vs tfvars 8192MiB/4cpu/50GiB",
     "in_flight_op": "resize (tf-apply)"
   }
 ]
@@ -91,7 +91,7 @@ Flat array, one entry per cluster node.
 | `[].role` | string | `master`, `worker`, or `unknown` |
 | `[].ready` | bool | node's `Ready` condition is `True` |
 | `[].tf_index` | int | trailing numeric suffix of the node name (`worker2` → `2`), mapping the node to its terraform count index; omitted when the name has no numeric suffix |
-| `[].drift` | string | `none`, `pending`, or `unknown` — compares the config file's per-role cpu/memory to what was last rendered into terraform.tfvars. This is **not** a live VM query (okdctl fetches no per-guest Proxmox sizing anywhere today): `pending` means a sizing change is staged in the workspace, not that the node's guest has actually been resized. `unknown` means either terraform.tfvars has not been rendered yet, or the node's `role` is `unknown` (no config sizing exists to compare against) |
+| `[].drift` | string | `none`, `pending`, or `unknown` — compares the config file's per-role cpu/memory/os-disk size to what was last rendered into terraform.tfvars. This is **not** a live VM query (okdctl fetches no per-guest Proxmox sizing anywhere today): `pending` means a sizing change is staged in the workspace, not that the node's guest has actually been resized. `unknown` means either terraform.tfvars has not been rendered yet, or the node's `role` is `unknown` (no config sizing exists to compare against) |
 | `[].drift_detail` | string | present only when `drift=pending`; the compared config/tfvars values |
 | `[].in_flight_op` | string | present only on the node targeted by an in-flight `remove`/`resize`/`compact` op's on-disk marker, formatted `"<op> (<step>)"` |
 

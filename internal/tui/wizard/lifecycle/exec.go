@@ -106,7 +106,7 @@ func (s *ExecStep) Init() tea.Cmd {
 }
 
 func (s *ExecStep) buildRows() {
-	rows := GateRows(s.st.Op, s.execRole(), s.st.SkipDrain)
+	rows := GateRows(s.st.Op, s.execRole(), s.st.SkipDrain, diskModeFor(s.st))
 	if s.st.Plan == nil {
 		return
 	}

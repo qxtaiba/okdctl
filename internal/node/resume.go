@@ -24,7 +24,9 @@ type opMatch func(m *OpMarker) bool
 // map only needs to stay internally monotonic within each op's own step
 // subset; it is not a single shared timeline across ops. Node add's sequence
 // reuses StepTFApply's slot (2) for its worker_count apply, so its own steps
-// are numbered around that fixed point rather than renumbering it.
+// are numbered around that fixed point rather than renumbering it. Resize's
+// StepDiskGrow shares slot 4 with remove's StepDeleteK8s for the same
+// reason — the two ops never compare each other's steps.
 //
 // StepIgnitionUp sorts BEFORE StepBuildISO: the ignition revive is a
 // batch-scoped step recorded against the batch's first node, so a resume that
@@ -35,6 +37,7 @@ var stepOrder = map[Step]int{
 	StepDrain:      1,
 	StepTFApply:    2,
 	StepPowerCycle: 3,
+	StepDiskGrow:   4,
 	StepDeleteK8s:  4,
 	StepUncordon:   5,
 

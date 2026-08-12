@@ -99,3 +99,25 @@ func TestValidateMemoryBudget(t *testing.T) {
 		}
 	})
 }
+
+func TestValidateDatastoreBudget(t *testing.T) {
+	cases := []struct {
+		name           string
+		availGB, delta int
+		wantErr        bool
+	}{
+		{"fits", 500, 150, false},
+		{"exact", 150, 150, false},
+		{"over", 100, 150, true},
+		{"zero delta passes", 10, 0, false},
+		{"negative delta passes", 10, -50, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateDatastoreBudget(tc.availGB, tc.delta)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("availGB=%d delta=%d: err=%v wantErr=%v", tc.availGB, tc.delta, err, tc.wantErr)
+			}
+		})
+	}
+}

@@ -153,6 +153,22 @@ func validateMemoryBudget(hostTotalMiB, allocatedMiB, deltaMiB int) error {
 	return nil
 }
 
+// validateDatastoreBudget reports whether growing provisioned disk by
+// deltaGB fits the os datastore's free space. availGB is the datastore's
+// reported available space; a non-positive delta always passes. Thin
+// provisioning means the space is not consumed immediately, but a grow the
+// pool can never honor is refused up front rather than discovered at
+// write time as guest I/O errors.
+func validateDatastoreBudget(availGB, deltaGB int) error {
+	if deltaGB <= 0 {
+		return nil
+	}
+	if deltaGB > availGB {
+		return fmt.Errorf("datastore budget: growing os disks by %d GiB total exceeds the %d GiB available on the os datastore; free space or grow the pool first", deltaGB, availGB)
+	}
+	return nil
+}
+
 // workerNameSet builds a lookup of worker node names for ingress placement checks.
 func workerNameSet(nodes []cluster.NodeDetail) map[string]bool {
 	set := make(map[string]bool)

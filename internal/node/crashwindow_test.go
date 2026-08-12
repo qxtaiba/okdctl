@@ -524,3 +524,108 @@ func TestResizeResumesMidPowerCycleWithMemberDown(t *testing.T) {
 		t.Errorf("master2 must run fresh after the resume: cordoned=%v", fc.cordonedNodes)
 	}
 }
+
+// TestResizeResumesAtDiskGrowAfterApplyLanded is the broader crash-window
+// counterpart to TestResizeResumeFromStepDiskGrowRunsBothEtcdGates above: that
+// test locks the etcd-gate fix for a single already-marked node, this one
+// drives a full role roll. A 3-master disk-only resize crashes right after
+// master0's terraform apply landed but its in-guest grow failed (marker parks
+// at disk-grow, target master0). The resumed run must not re-apply master0's
+// already-landed terraform change, must re-run its in-guest grow, and must
+// still roll master1/master2 — never reached before the crash — through the
+// full sequence.
+func TestResizeResumesAtDiskGrowAfterApplyLanded(t *testing.T) {
+	fc := &fakeCluster{
+		nodes:       threeMasters(),
+		etcdHealthy: true,
+	}
+	ftf := &fakeTF{action: terraform.PlanActionUpdate}
+	fg := &fakeDiskGrower{err: errors.New("debug pod evicted")}
+	cfg := config.DefaultConfig()
+	cfg.Topology.ControlPlane.DiskGB = 50
+
+	r, _, _ := seedRunner(t, fc, ftf, cfg)
+	r.DryRun = false
+	r.Disk = fg
+
+	// First run: master0's terraform apply lands, then its in-guest grow
+	// fails — the roll stops there with the marker parked at disk-grow.
+	err := r.Resize(t.Context(), ResizeScope{Role: nodetypes.RoleMaster}, ResizeOptions{OSDiskGB: 100})
+	if err == nil {
+		t.Fatal("first run should fail at grow")
+	}
+	m, merr := ReadOpMarker(r.workDir, r.Cfg.Cluster.Name)
+	if merr != nil || m == nil || m.Step != StepDiskGrow || m.Target != testMasterNode {
+		t.Fatalf("marker = %+v, %v; want step disk-grow on %s", m, merr, testMasterNode)
+	}
+	if ftf.applyCalls != 1 {
+		t.Fatalf("first run applies = %d, want 1 (master0 only — the roll stops at the failed grow)", ftf.applyCalls)
+	}
+
+	// Second run resumes: the grower now succeeds. master0 must not
+	// re-apply (already landed) but must re-grow; master1/master2, never
+	// reached before the crash, must still roll in full.
+	appliesBefore := ftf.applyCalls
+	fg.err = nil
+	if err := r.Resize(t.Context(), ResizeScope{Role: nodetypes.RoleMaster}, ResizeOptions{OSDiskGB: 100}); err != nil {
+		t.Fatalf("resume failed: %v", err)
+	}
+
+	masters := threeMasters()
+	if got := ftf.applyCalls - appliesBefore; got != len(masters)-1 {
+		t.Fatalf("applies on resume = %d, want %d (master1 + master2; master0's already-landed apply must not repeat)", got, len(masters)-1)
+	}
+	if len(fg.grown) != len(masters)+1 {
+		t.Fatalf("grown = %v, want %d calls (master0 failed+retried, plus master1 and master2)", fg.grown, len(masters)+1)
+	}
+	if fg.grown[0] != testMasterNode || fg.grown[1] != testMasterNode {
+		t.Fatalf("%s must be both the failed first attempt and the resumed retry: grown=%v", testMasterNode, fg.grown)
+	}
+	if !slices.Contains(fg.grown[1:], "master1") || !slices.Contains(fg.grown[1:], "master2") {
+		t.Fatalf("master1 and master2 must both be grown on resume: grown=%v", fg.grown)
+	}
+	if fc.cordon != 0 || fc.drain != 0 || fc.uncordon != 0 {
+		t.Errorf("disk-only resize must never cordon/drain/uncordon: cordon=%d drain=%d uncordon=%d", fc.cordon, fc.drain, fc.uncordon)
+	}
+}
+
+// TestResizeResumeFromStepDiskGrowRunsBothEtcdGates covers the crash window
+// around a disk-only resize's in-guest grow: the process died right after
+// marking StepDiskGrow (mid GrowOSDisk, or just after it returned but before
+// the marker advanced further). Unlike a resume at StepPowerCycle, the node
+// here was never powered off — a disk-only resize never power-cycles at
+// all — so neither the pre- nor the post-etcd-health gate has any deadlock
+// risk to guard against, and both must run on resume. This locks the fix for
+// a bug where the pre/post gates shared one "at or past power-cycle" flag:
+// StepDiskGrow's slot in stepOrder sits at/after StepPowerCycle's, so that
+// shared flag silently skipped BOTH gates on this exact resume.
+func TestResizeResumeFromStepDiskGrowRunsBothEtcdGates(t *testing.T) {
+	fc := &fakeCluster{
+		nodes:       []cluster.NodeDetail{{Name: "master0", Role: nodetypes.RoleMaster, Ready: true}},
+		etcdHealthy: true,
+	}
+	ftf := &fakeTF{action: terraform.PlanActionUpdate}
+	fg := &fakeDiskGrower{}
+	cfg := config.DefaultConfig()
+	cfg.Topology.ControlPlane.DiskGB = 50
+
+	r, _, _ := seedRunner(t, fc, ftf, cfg)
+	r.DryRun = false
+	r.Disk = fg
+	seedMarker(t, r, OpResize, "master0", StepDiskGrow)
+
+	// Role scope, not a single-node scope: --os-disk-gb is refused against a
+	// single node (see TestResizeRefusesOSDiskGBOnSingleNode), so this test's
+	// one-master fake cluster is targeted via its role, resolving to the same
+	// sole node.
+	if err := r.Resize(context.Background(), ResizeScope{Role: nodetypes.RoleMaster}, ResizeOptions{OSDiskGB: 100}); err != nil {
+		t.Fatalf("resumed disk-grow resize: %v", err)
+	}
+
+	if len(fg.grown) != 1 {
+		t.Fatalf("resumed run must re-run the in-guest grow: grown=%v", fg.grown)
+	}
+	if fc.etcdCalls != 2 {
+		t.Fatalf("resumed disk-grow resume must run BOTH etcd gates (pre+post), the node was never powered off: etcdCalls=%d", fc.etcdCalls)
+	}
+}

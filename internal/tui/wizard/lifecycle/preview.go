@@ -206,9 +206,18 @@ func (s *PreviewStep) operationEntries() []wizard.KVEntry {
 			cpuLine = "unchanged"
 		}
 		entries = append(entries, wizard.KVEntry{Label: "target cpu", Value: cpuLine})
+		if plan.OSDiskGB > 0 {
+			entries = append(entries, wizard.KVEntry{
+				Label: "target os disk",
+				Value: fmt.Sprintf("%d → %d GiB per node", s.currentRoleDiskGB(), plan.OSDiskGB),
+			})
+		}
 		disruption := "each node is drained, then power-cycled (stop→start)"
 		if s.st.SkipDrain {
 			disruption = "power-cycle without drain (pods restart in place)"
+		}
+		if s.st.DiskOnly() {
+			disruption = "live resize — no drain, no power-cycle"
 		}
 		entries = append(entries, wizard.KVEntry{Label: sectionDisruption, Value: disruption})
 	}
@@ -254,7 +263,7 @@ func (s *PreviewStep) renderGates(st *wizard.SectionStyles) string {
 	b.WriteString("\n")
 	b.WriteString(st.Separator)
 	b.WriteString("\n")
-	b.WriteString(strings.Join(GateRows(s.st.Op, s.planRole(), s.st.SkipDrain), " → "))
+	b.WriteString(strings.Join(GateRows(s.st.Op, s.planRole(), s.st.SkipDrain, diskModeFor(s.st)), " → "))
 	b.WriteString("\n")
 	b.WriteString(okStyle.Render("plan gate: ✓ dry-run passed — the safety gate allows exactly the listed changes"))
 	b.WriteString("\n\n")
@@ -298,6 +307,13 @@ func (s *PreviewStep) currentRoleMemoryMB() int {
 		return s.st.Cfg.Topology.ControlPlane.MemoryMB
 	}
 	return s.st.Cfg.Topology.Workers.MemoryMB
+}
+
+func (s *PreviewStep) currentRoleDiskGB() int {
+	if s.planRole() == nodetypes.RoleMaster {
+		return s.st.Cfg.Topology.ControlPlane.DiskGB
+	}
+	return s.st.Cfg.Topology.Workers.DiskGB
 }
 
 func opVerb(op node.Op) string {

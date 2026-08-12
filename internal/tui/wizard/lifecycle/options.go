@@ -9,6 +9,7 @@ func ResizeOptionsFrom(st *State) node.ResizeOptions {
 	return node.ResizeOptions{
 		MemoryMB:    st.MemoryMB,
 		CPU:         st.CPU,
+		OSDiskGB:    st.OSDiskGB,
 		SkipDrain:   st.SkipDrain,
 		Acknowledge: st.Ack,
 	}
