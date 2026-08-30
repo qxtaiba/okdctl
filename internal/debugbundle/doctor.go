@@ -10,11 +10,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/executor"
 )
 
-// collectDoctorOutput re-execs the current binary with the `doctor`
-// subcommand and returns stdout (the --output json document) and stderr
-// (json-formatted warn logs) separately, so a warn line can never interleave
-// into the archived JSON. Non-zero exit (failing preflight checks) is not
-// treated as an error — the output is still useful for a support engineer.
+// collectDoctorOutput re-execs the binary as `doctor`, separating stdout
+// (json) from stderr; non-zero exit is not an error.
 func collectDoctorOutput(ctx context.Context) (stdout, stderr []byte, err error) {
 	self, err := os.Executable()
 	if err != nil {
@@ -22,8 +19,8 @@ func collectDoctorOutput(ctx context.Context) (stdout, stderr []byte, err error)
 	}
 	var outBuf, errBuf bytes.Buffer
 	cmd := exec.CommandContext(ctx, self, "doctor", "--output", "json", "--log-format", "json", "--log-level", "warn")
-	// Same allowlist as the sudo re-exec in cli/elevation.go: the child is
-	// okdctl itself, but unrelated shell tokens still have no business in it.
+	// Same allowlist as the sudo re-exec in cli/elevation.go — the child is
+	// okdctl, but stays scoped.
 	cmd.Env = executor.FilterParentEnv(executor.DefaultEnvAllowlist)
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf

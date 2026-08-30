@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -20,11 +21,11 @@ func (f *OKDVersionFetcher) fetchFromNetwork(ctx context.Context) ([]OKDReleaseS
 		return nil, fmt.Errorf("fetch OKD releases: %w", err)
 	}
 
-	releases = f.deduplicateReleases(releases)
-	series := f.parseReleases(releases)
+	releases = deduplicateReleases(releases)
+	series := parseReleases(releases)
 
 	if len(series) == 0 {
-		return nil, fmt.Errorf("no valid OKD versions found in GitHub releases")
+		return nil, errors.New("no valid OKD versions found in GitHub releases")
 	}
 
 	return series, nil
@@ -77,20 +78,20 @@ func (f *OKDVersionFetcher) fetchAllPages(ctx context.Context, repo string) ([]g
 		releases, err := f.fetchFromGitHub(ctx, repo, page, perPage)
 		if err != nil {
 			if page == 1 {
-				return nil, err // Fail completely if first page fails
+				return nil, err
 			}
 			// Return what we have if subsequent pages fail
 			break
 		}
 
 		if len(releases) == 0 {
-			break // No more pages
+			break
 		}
 
 		allReleases = append(allReleases, releases...)
 
 		if len(releases) < perPage {
-			break // Last page
+			break
 		}
 
 		page++
@@ -104,7 +105,7 @@ func (f *OKDVersionFetcher) fetchAllPages(ctx context.Context, repo string) ([]g
 	return allReleases, nil
 }
 
-func (f *OKDVersionFetcher) deduplicateReleases(releases []githubRelease) []githubRelease {
+func deduplicateReleases(releases []githubRelease) []githubRelease {
 	slices.SortFunc(releases, func(a, b githubRelease) int {
 		return strings.Compare(a.TagName, b.TagName)
 	})
@@ -113,7 +114,7 @@ func (f *OKDVersionFetcher) deduplicateReleases(releases []githubRelease) []gith
 	})
 }
 
-func (f *OKDVersionFetcher) parseReleases(releases []githubRelease) []OKDReleaseSeries {
+func parseReleases(releases []githubRelease) []OKDReleaseSeries {
 	seriesMap := make(map[string]*OKDReleaseSeries)
 
 	for _, rel := range releases {
@@ -121,15 +122,13 @@ func (f *OKDVersionFetcher) parseReleases(releases []githubRelease) []OKDRelease
 			continue
 		}
 
-		version := f.parseVersionTag(rel.TagName)
+		version := parseVersionTag(rel.TagName)
 		if version == nil {
 			continue
 		}
 
-		// Determine stability by tag pattern, not GitHub's prerelease flag.
-		// OKD uses ".ec." (engineering candidate) or ".rc." for prereleases.
-		// GitHub's prerelease flag is inconsistent - old releases (4.3, 4.4)
-		// were incorrectly marked as prerelease when they're actually stable.
+		// Stability comes from tag pattern (".ec."/".rc."), not GitHub's
+		// prerelease flag, which mismarks old stable releases (4.3, 4.4) as prerelease.
 		version.Stable = !isPrerelease(rel.TagName)
 		version.ReleaseDate = rel.PublishedAt
 
@@ -149,17 +148,13 @@ func (f *OKDVersionFetcher) parseReleases(releases []githubRelease) []OKDRelease
 	return sortAndClassifySeries(seriesMap)
 }
 
-// sortAndClassifySeries converts the series map into a sorted slice, marks the
-// latest stable/preview versions within each series, and assigns release types.
+// sortAndClassifySeries sorts the series map, marks latest stable/preview
+// per series, and assigns release types.
 func sortAndClassifySeries(seriesMap map[string]*OKDReleaseSeries) []OKDReleaseSeries {
 	var result []OKDReleaseSeries
 	for _, series := range seriesMap {
-		// Sort versions within series (newest first) using proper numeric
-		// comparison. When two versions compare equal by their numeric parts
-		// (e.g. tag variants on the same release), fall back to the GitHub
-		// published_at timestamp (newest first), and finally to the raw tag
-		// string, so the ordering is stable regardless of the input order
-		// returned by the GitHub API.
+		// Newest first; ties in numeric semver (e.g. tag variants like
+		// +fcos/+scos) fall back to published_at, then to the raw tag, for stable ordering.
 		slices.SortFunc(series.Versions, func(a, b OKDVersion) int {
 			return cmp.Or(
 				-semver.Compare("v"+a.Version, "v"+b.Version), // descending by semver
@@ -228,9 +223,8 @@ func sortAndClassifySeries(seriesMap map[string]*OKDReleaseSeries) []OKDReleaseS
 	return result
 }
 
-// isPrerelease reports whether tag matches an OKD prerelease pattern: modern
-// releases (4.12+) use ".ec." (engineering candidate) or ".rc.", while legacy
-// releases (4.4 and earlier) use a "-beta" suffix.
+// isPrerelease matches OKD's prerelease patterns: modern (4.12+) tags use
+// ".ec."/".rc."; legacy (4.4-) tags use a "-beta" suffix.
 func isPrerelease(tag string) bool {
 	tagLower := strings.ToLower(tag)
 	return strings.Contains(tagLower, ".ec.") ||
@@ -238,7 +232,7 @@ func isPrerelease(tag string) bool {
 		strings.Contains(tagLower, "-beta")
 }
 
-func (f *OKDVersionFetcher) parseVersionTag(tag string) *OKDVersion {
+func parseVersionTag(tag string) *OKDVersion {
 	tag = strings.Trim(tag, "\"'")
 
 	if !strings.Contains(tag, "okd") {

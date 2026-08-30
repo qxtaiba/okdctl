@@ -10,8 +10,6 @@ import (
 )
 
 // Summary is the post-cleanup inventory the CLI renders for the operator.
-// Exported so a future `okdctl cleanup status` verb can fetch and render it
-// without re-running cleanup.
 type Summary struct {
 	RemainingWorkFiles      int
 	RemainingIgnitionFiles  int
@@ -19,8 +17,8 @@ type Summary struct {
 	WorkDirSize             string
 }
 
-// GenerateSummary returns a post-cleanup inventory for opts. Non-existent
-// paths are treated as zero remaining.
+// GenerateSummary returns a post-cleanup inventory for opts; non-existent paths
+// count as zero remaining.
 func GenerateSummary(opts *Options) Summary {
 	summary := Summary{
 		WorkDirSize: "0B",
@@ -52,9 +50,8 @@ func GenerateSummary(opts *Options) Summary {
 	return summary
 }
 
-// countTerraformArtifacts counts leftover terraform working files in envDir.
-// terraform.tfstate is deliberately excluded — cleanup preserves it for
-// destroy.
+// countTerraformArtifacts counts leftover terraform files in envDir; tfstate is
+// deliberately excluded.
 func countTerraformArtifacts(envDir string) int {
 	count := 0
 	for _, f := range []string{"terraform.tfvars", "tfplan", "destroy.tfplan", "terraform.tfstate.backup"} {
@@ -91,17 +88,18 @@ func printSummary(opts *Options, t *cleanupTracker, logger *slog.Logger) {
 	}
 
 	totalRemaining := summary.RemainingWorkFiles + summary.RemainingIgnitionFiles + summary.RemainingTerraformFiles
-	if names := t.failedNames(); len(names) > 0 {
+	switch {
+	case len(t.names) > 0:
 		logger.Warn("cleanup: partial cleanup; rerun to retry; subsystems still active",
-			"failed_steps", names)
-	} else if totalRemaining == 0 {
+			"failed_steps", t.names)
+	case totalRemaining == 0:
 		if opts.Kind == Full {
 			logger.Info("cleanup: completed")
 			logger.Info("cleanup: system ready for fresh deployment")
 		} else {
 			logger.Info("cleanup: completed for scope", "scope", opts.Kind)
 		}
-	} else {
+	default:
 		logger.Warn("cleanup: partial completion")
 		logger.Info("cleanup: files remain (this may be normal)", "count", totalRemaining)
 	}

@@ -1,7 +1,6 @@
-// Package proxmox implements the Proxmox VE provider for OKD deployment.
-// The Provider drives Connect/Provision/Disconnect over a Terraform
-// executor; authentication is handled entirely via environment variables
-// forwarded to terraform (PROXMOX_VE_ENDPOINT, PROXMOX_VE_API_TOKEN).
+// Package proxmox implements the Proxmox VE provider: Provider drives
+// Connect/Provision/Disconnect over a Terraform executor, with auth passed
+// via env vars (PROXMOX_VE_ENDPOINT, PROXMOX_VE_API_TOKEN).
 package proxmox
 
 import (
@@ -27,14 +26,9 @@ import (
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
-// Provider drives the Proxmox VE infrastructure lifecycle (connect, provision,
-// disconnect) via a Terraform executor.
-//
-// Mutation invariant: all Proxmox mutations MUST flow through
-// terraform.Executor. Direct Proxmox HTTP calls are forbidden in deploy/destroy
-// paths — the bpg/proxmox terraform provider owns 5xx/408/429 retry/backoff.
-// If status reads are added later, route them through internal/download's
-// retryDownload/isRetryable helpers (exponential backoff, 4xx fail-fast).
+// Provider drives the Proxmox VE lifecycle (connect, provision, disconnect)
+// via a Terraform executor. All mutations MUST flow through it — direct HTTP
+// calls are forbidden since the terraform provider owns retry/backoff.
 type Provider struct {
 	connected      bool
 	host           string
@@ -57,41 +51,33 @@ func WithProjectRoot(root string) Option {
 	return func(p *Provider) { p.projectRoot = root }
 }
 
-// WithLogger sets the slog logger used by the Provider. Nil resolves to
-// logutil.NopLogger to match the other infrastructure constructors.
+// WithLogger sets the Provider's logger; nil resolves to logutil.NopLogger.
 func WithLogger(l *slog.Logger) Option {
 	return func(p *Provider) { p.logger = logutil.OrNop(l) }
 }
 
-// WithEnv passes environment variables through to terraform for provider authentication.
+// WithEnv passes env vars through to terraform for provider auth.
 func WithEnv(env []string) Option {
 	return func(p *Provider) {
 		p.env = append(p.env, env...)
 	}
 }
 
-// WithProgressReporter sets the callback used to signal long-running
-// operations. Defaults to logutil.NopProgressReporter when omitted, so
-// headless callers run silent.
+// WithProgressReporter sets the long-running-op callback, defaulting to
+// logutil.NopProgressReporter (silent) when omitted.
 func WithProgressReporter(r logutil.ProgressReporter) Option {
 	return func(p *Provider) { p.reporter = r }
 }
 
-// WithSSHExec sets the executor used for post-apply pvesh enumeration probes.
-// When omitted the probe is skipped and Provision relies on the terraform
-// output cross-check alone.
+// WithSSHExec sets the executor for post-apply pvesh enumeration probes;
+// when omitted, Provision relies on the terraform output cross-check alone.
 func WithSSHExec(e *executor.Executor) Option {
 	return func(p *Provider) { p.sshExec = e }
 }
 
-// ZeroizeEnv overwrites and clears the credential strings stored in the
-// Provider's env slice. Entries whose key matches logutil.KeyIsSecret are
-// blanked first; the full slice is then cleared so all string headers are
-// zeroed. It also delegates to the terraform executor's ZeroizeEnv:
-// setupTerraform hands that executor a copy of these credential strings, so
-// wiping only p.env would leave the copy GC-reachable. Call via defer
-// immediately after construction so even Connect/Provision failures still
-// wipe plaintext credentials.
+// ZeroizeEnv blanks Provider's secret-keyed env entries, then clears it and
+// zeroizes the terraform executor's copy too (setupTerraform's copy would
+// else outlive GC). Call via defer immediately after construction.
 func (p *Provider) ZeroizeEnv() {
 	for i, kv := range p.env {
 		key, _, _ := strings.Cut(kv, "=")
@@ -101,15 +87,13 @@ func (p *Provider) ZeroizeEnv() {
 	}
 	clear(p.env)
 	p.env = nil
-	// setupTerraform hands a copy of these credential strings to the terraform
-	// executor; wiping only p.env would leave that copy alive until GC.
 	if p.terraformExec != nil {
 		p.terraformExec.ZeroizeEnv()
 	}
 }
 
-// New constructs a Provider with the given options. The logger defaults to
-// a no-op logger if WithLogger is not supplied.
+// New constructs a Provider with the given options; the logger defaults to
+// a no-op logger if WithLogger is omitted.
 func New(opts ...Option) *Provider {
 	p := &Provider{
 		logger:   logutil.NopLogger,
@@ -121,14 +105,8 @@ func New(opts ...Option) *Provider {
 	return p
 }
 
-// Connect validates that the required Proxmox configuration is present and
-// records host/node for later use. It does NOT verify network connectivity
-// to the Proxmox host because authentication is handled via environment
-// variables (PROXMOX_VE_ENDPOINT, PROXMOX_VE_API_TOKEN) passed directly to
-// terraform — the Provider has no Proxmox HTTP client. Connectivity issues
-// surface during terraform plan/apply with clear provider-level errors.
-// ctx is accepted for symmetry with future network-bound providers; this
-// implementation is local-only. See Disconnect for the scaffolding rationale.
+// Connect validates required Proxmox config and records host/node; connectivity
+// isn't checked (auth flows via env vars to terraform); ctx is for future symmetry.
 func (p *Provider) Connect(ctx context.Context, cfg *config.Config) error {
 	if cfg == nil {
 		return &errtypes.ConfigError{Msg: "configuration is required"}
@@ -147,12 +125,8 @@ func (p *Provider) Connect(ctx context.Context, cfg *config.Config) error {
 	if p.sshExec != nil && (cfg.Provider.Proxmox.SSHHostFingerprint != "" || cfg.Provider.Proxmox.RequirePinnedFingerprint) {
 		path, err := sshpin.Verify(ctx, hostssh.ProxmoxBareHost(p.host), cfg.Provider.Proxmox.SSHHostFingerprint, cfg.Provider.Proxmox.RequirePinnedFingerprint, p.logger)
 		if err != nil {
-			// A host-key trust failure (mismatch, or require_pinned with no
-			// pin) arrives as *errtypes.AuthError; return it unchanged so its
-			// exit-5 identity survives — exitCodeFor checks NetworkError (3)
-			// before AuthError (5), so wrapping would downgrade a fail-closed
-			// trust failure to a generic network error. A keyscan transport
-			// failure stays a NetworkError.
+			// AuthError failures return unchanged (exit 5) — wrapping would let
+			// exitCodeFor's NetworkError(3) check match first and downgrade it.
 			var authErr *errtypes.AuthError
 			if errors.As(err, &authErr) {
 				return err
@@ -165,19 +139,12 @@ func (p *Provider) Connect(ctx context.Context, cfg *config.Config) error {
 	return nil
 }
 
-// Disconnect resets connection state. ctx is accepted for symmetry with future
-// network-bound providers; this implementation is local-only. The _ receiver
-// is intentional — if Proxmox ever adds a graceful session-teardown handshake
-// (e.g., via the Proxmox VE API), ctx threads through without a signature
-// change. Multi-provider support is explicitly out of scope (Proxmox is
-// the sole provider); this scaffolding is for a future network-bound
-// Proxmox disconnect, not a provider abstraction.
+// Disconnect resets connection state; the ignored ctx is scaffolding for a
+// future graceful-teardown handshake (Proxmox is the sole provider today).
 func (p *Provider) Disconnect(_ context.Context) error {
 	p.connected = false
-	// Callers defer ZeroizeEnv() and Disconnect() together; LIFO runs
-	// Disconnect first, so wipe the executor's credential env here before
-	// dropping the reference — otherwise nilling terraformExec would strand
-	// the plaintext copy that ZeroizeEnv can no longer reach.
+	// Callers defer ZeroizeEnv+Disconnect together (LIFO runs Disconnect
+	// first), so wipe the executor's env here before nilling the reference.
 	if p.terraformExec != nil {
 		p.terraformExec.ZeroizeEnv()
 	}
@@ -185,11 +152,8 @@ func (p *Provider) Disconnect(_ context.Context) error {
 	return nil
 }
 
-// setupTerraform initializes (or reinitializes) the terraform executor for the
-// given projectRoot/tfEnv. Not safe for concurrent use — the current call
-// graph is sequential per Provider instance (one deployment per CLI run). If
-// concurrent Provision ever becomes a requirement, add a mutex around
-// terraformExec / projectRoot / tfEnv.
+// setupTerraform (re)initializes the terraform executor for
+// projectRoot/tfEnv; not safe for concurrent use (one deployment per CLI run).
 func (p *Provider) setupTerraform(projectRoot, tfEnv string) {
 	if p.terraformExec != nil && p.projectRoot == projectRoot && p.tfEnv == tfEnv {
 		return
@@ -210,9 +174,8 @@ func (p *Provider) setupTerraform(projectRoot, tfEnv string) {
 	p.terraformExec = terraform.New(tfDir, tfOpts...)
 }
 
-// Provision runs terraform init/plan/apply for the configured environment.
-// Connect must have run first; otherwise this returns ErrNotConnected.
-// Provision is error-only.
+// Provision runs terraform init/plan/apply for the configured environment;
+// Connect must run first, or it returns ErrNotConnected.
 func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts ProvisionOptions) error {
 	if !p.connected {
 		return &errtypes.ConfigError{Msg: "proxmox provider not connected — call Connect() first", Err: ErrNotConnected}
@@ -258,10 +221,8 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 	stopSpinner()
 	if applyErr != nil {
 		if errors.Is(ctx.Err(), context.Canceled) {
-			// Bare wrap intentional: cli/root.go::signalExitCode walks the chain
-			// via errors.Is(err, context.Canceled) before exitCodeFor runs,
-			// mapping SIGINT→130 / SIGTERM→143 without a typed error. Do not
-			// wrap this in errtypes.ClusterError.
+			// Bare wrap intentional: signalExitCode checks errors.Is(_, context.Canceled)
+			// before exitCodeFor runs — don't wrap this in errtypes.ClusterError.
 			return fmt.Errorf("terraform apply interrupted: %w", errors.Join(ctx.Err(), applyErr))
 		}
 		p.logger.Warn("terraform: apply failed; partial infrastructure may exist. run 'okdctl destroy' to clean up", "err", applyErr)
@@ -290,17 +251,11 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 	return nil
 }
 
-// planPreviewFileName is the plan file PlanPreview writes, distinct from
-// terraform.PlanFileName so a preview run never collides with a plan file
-// an apply left behind (concurrent runs are still serialized by runlock).
+// planPreviewFileName differs from terraform.PlanFileName so preview and apply plans can't collide.
 const planPreviewFileName = "plan-preview.tfplan"
 
-// PlanPreview runs terraform init and a saved plan for the configured
-// environment, returning the parsed non-no-op resource changes without
-// applying anything. opts.ProjectRoot and opts.TerraformEnv must both be
-// set. The plan file is removed before returning, success or failure, so
-// PlanPreview never leaves an apply-able artefact on disk. Used by both
-// `okdctl plan` and `deploy --dry-run`.
+// PlanPreview inits and plans without applying; opts.ProjectRoot/TerraformEnv
+// must be set, and the plan file is always removed before returning.
 func (p *Provider) PlanPreview(ctx context.Context, cfg *config.Config, opts ProvisionOptions) ([]terraform.ResourceChange, error) {
 	if !p.connected {
 		return nil, &errtypes.ConfigError{Msg: "proxmox provider not connected — call Connect() first", Err: ErrNotConnected}
@@ -341,18 +296,14 @@ func (p *Provider) PlanPreview(ctx context.Context, cfg *config.Config, opts Pro
 }
 
 // vmNodeSpec pairs a node name with its config-derived static IP for the
-// post-apply summary log. It makes no claim about observed VM state — see
-// planProvisionedNodes.
+// post-apply summary log; it makes no claim about observed VM state.
 type vmNodeSpec struct {
 	name string
 	ip   string
 }
 
-// planProvisionedNodes validates that the configured static IP range fits
-// the topology and CIDR, then returns the name/IP pairs Provision logs
-// after a successful apply. It reports config-derived addresses only, with
-// no state claim — no VM's running status or API server reachability is
-// observed here. The IP scheme is owned by nodetypes.ClusterNodes.
+// planProvisionedNodes validates the static IP range fits the topology/CIDR
+// and returns config-derived name/IP pairs; no VM state is observed here.
 func (p *Provider) planProvisionedNodes(cfg *config.Config) ([]vmNodeSpec, error) {
 	if cfg.Networking.StaticIP.Start == "" {
 		return nil, &errtypes.ConfigError{Msg: "static IP start address is required for OKD deployments"}
@@ -369,10 +320,8 @@ func (p *Provider) planProvisionedNodes(cfg *config.Config) ([]vmNodeSpec, error
 	return nodes, nil
 }
 
-// checkTerraformOutputs cross-checks the vm_ids counts from terraform output
-// against the topology config. IP-address comparison is deferred: outputs.tf
-// exposes only vm_ids today; IP comparison needs control_plane_ips/worker_ips
-// outputs.
+// checkTerraformOutputs cross-checks vm_ids counts from terraform output
+// against topology; IP comparison is deferred until outputs.tf exposes IPs.
 func (p *Provider) checkTerraformOutputs(ctx context.Context, cfg *config.Config) {
 	outputs, err := p.terraformExec.Output(ctx)
 	if err != nil {
@@ -406,12 +355,8 @@ func (p *Provider) checkTerraformOutputs(ctx context.Context, cfg *config.Config
 	}
 }
 
-// initWithRetry wraps terraform init in a bounded retry for transient
-// failures (network blips during provider-plugin download, brief Proxmox
-// API unavailability) via system.DefaultBackoff(). Permanent failures
-// (config/auth errors, context cancellation) abort on the first attempt.
-// Repeated identical failures demote to Debug after the first Warn so a
-// long retry run doesn't spam the log.
+// initWithRetry retries terraform init via system.DefaultBackoff() for
+// retryable failures (see initIsRetryable), demoting repeat warns to Debug.
 func (p *Provider) initWithRetry(ctx context.Context) error {
 	initWarn := logutil.NewDedupWarner(p.logger)
 	var attempt int
@@ -426,10 +371,8 @@ func (p *Provider) initWithRetry(ctx context.Context) error {
 	})
 }
 
-// initIsRetryable reports whether an error from terraform init should
-// trigger another attempt. Config/auth errors, a missing terraform binary,
-// and context cancellation are permanent; everything else (non-zero exit,
-// network/DNS failure) is transient and worth retrying.
+// initIsRetryable classifies a terraform init error: config/auth, missing
+// binary, and cancellation are permanent; anything else is retried.
 func initIsRetryable(err error) bool {
 	if err == nil {
 		return false
@@ -454,11 +397,9 @@ type vmEnumerationState int
 const (
 	// enumYes: vmidBase was found in the pvesh QEMU list.
 	enumYes vmEnumerationState = iota
-	// enumNo: the probe ran and parsed successfully but vmidBase was absent
-	// — the VM is not yet enumerable.
+	// enumNo: probe ran and parsed, but vmidBase was absent.
 	enumNo
-	// enumProbeSkipped: no sshExec, an SSH error, or a parse error — the
-	// probe could not run, so callers treat the VM as present by default.
+	// enumProbeSkipped: probe failed to run or parse; callers default to VM present.
 	enumProbeSkipped
 )
 
@@ -467,8 +408,6 @@ type vmIDProbe struct {
 	VMID int `json:"vmid"`
 }
 
-// probeVMEnumeration queries pvesh over SSH to check whether vmidBase is
-// visible in the Proxmox QEMU list.
 func (p *Provider) probeVMEnumeration(ctx context.Context, cfg *config.Config) vmEnumerationState {
 	if p.sshExec == nil {
 		return enumProbeSkipped

@@ -17,42 +17,21 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// Verify runs ssh-keyscan against host and compares each returned key's
-// SHA256 fingerprint against expected.
-//
-// On match: writes a temp known_hosts file containing only the matched line
-// and returns its path. Caller owns cleanup via defer os.Remove(path).
-//
-// When expected is empty and requirePinned is false: logs all observed
-// fingerprints at WARN so the operator can set proxmox.ssh_host_fingerprint,
-// then returns ("", nil). Callers pass the empty path to SSHRun/SSHRunArgv,
-// preserving accept-new.
-//
-// When expected is empty and requirePinned is true: returns *errtypes.AuthError
-// so the caller fails closed without TOFU.
-//
-// When expected is non-empty and no key matches: returns an error containing
-// both the expected and all observed fingerprints.
+// Verify runs ssh-keyscan against host and compares SHA256 fingerprints
+// against expected. On match it writes a temp known_hosts file (caller
+// must remove it) and returns its path; an empty expected warns and
+// returns ("", nil) unless requirePinned (then errors); a mismatch
+// returns an error listing expected vs observed fingerprints.
 func Verify(ctx context.Context, host, expected string, requirePinned bool, log *slog.Logger) (string, error) {
-	out, err := runKeyscan(ctx, host)
+	// ssh-keyscan runs without -H so hostnames appear in plain, deterministic
+	// form (no random salt).
+	out, err := executor.OutputCaptured(ctx, "ssh-keyscan", "-T", "5", host)
 	if err != nil {
 		return "", fmt.Errorf("ssh-keyscan %s: %w", host, err)
 	}
-	return parseAndMatch(out, host, expected, requirePinned, log)
+	return parseAndMatch(string(out), host, expected, requirePinned, log)
 }
 
-// runKeyscan invokes ssh-keyscan without -H so hostnames appear in plain
-// form, making output deterministic across invocations (no random salt).
-func runKeyscan(ctx context.Context, host string) (string, error) {
-	out, err := executor.OutputCaptured(ctx, "ssh-keyscan", "-T", "5", host)
-	if err != nil {
-		return "", err
-	}
-	return string(out), nil
-}
-
-// parseAndMatch inspects keyscanOut line by line, parses each key, and
-// compares its fingerprint against expected.
 func parseAndMatch(keyscanOut, host, expected string, requirePinned bool, log *slog.Logger) (string, error) {
 	var observed []string
 

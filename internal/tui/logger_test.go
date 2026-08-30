@@ -8,18 +8,9 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
-// TestStderrSlog_RedactsSecrets locks the RedactHandler wiring: an attr
-// whose key names a credential (password/token/secret/api_key/apikey) must
-// never appear verbatim in logutil.X output, regardless of the value type.
 func TestStderrSlog_RedactsSecrets(t *testing.T) {
 	var buf bytes.Buffer
-	if err := ConfigureLoggers("debug", "text", &buf, &buf, false); err != nil {
-		t.Fatal(err)
-	}
-	// ConfigureLoggers only touches stdoutLogger/stderrLogger's output;
-	// the installed handler already wraps the stderrLogger pointer so its
-	// output follows SetOutput. Reinstall defensively to be explicit.
-	logutil.InstallHandler(newStderrHandler())
+	configureBuf(t, &buf)
 
 	cases := []struct {
 		key   string
@@ -49,10 +40,7 @@ func TestStderrSlog_RedactsSecrets(t *testing.T) {
 
 func TestStderrSlog_NonSecretsPassThrough(t *testing.T) {
 	var buf bytes.Buffer
-	if err := ConfigureLoggers("debug", "text", &buf, &buf, false); err != nil {
-		t.Fatal(err)
-	}
-	logutil.InstallHandler(newStderrHandler())
+	configureBuf(t, &buf)
 
 	buf.Reset()
 	logutil.Info("test message", logutil.LF("cluster", "prod"), logutil.LF("ip", "10.0.0.1"))
@@ -67,10 +55,7 @@ func TestStderrSlog_NonSecretsPassThrough(t *testing.T) {
 
 func TestSetRunID_RefreshesRedactionWrapper(t *testing.T) {
 	var buf bytes.Buffer
-	if err := ConfigureLoggers("debug", "text", &buf, &buf, false); err != nil {
-		t.Fatal(err)
-	}
-	logutil.InstallHandler(newStderrHandler())
+	configureBuf(t, &buf)
 
 	SetRunID("run-42")
 	buf.Reset()

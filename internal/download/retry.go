@@ -13,14 +13,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// HTTPStatusError carries the HTTP status returned from a failed request so
-// isRetryable can tell 4xx (fail fast) from 5xx (retry). Body is a ≤256-byte
-// excerpt of the response body with non-printable bytes stripped. Error()
-// scrubs at the string layer — URL userinfo and query are stripped and Body
-// runs through logutil's credential scrub — so the raw text stays safe even
-// when a wrap (errtypes.NetworkError) hides HTTPStatusError from the
-// Redacted() dispatch a structured log sink performs on the top-level value.
-// Redacted omits URL and Body entirely for the slog-attr path.
+// HTTPStatusError carries a failed request's status for retry classification;
+// Body is a ≤256-byte sanitized excerpt. Error() scrubs URL/body itself so a
+// wrapping NetworkError can't hide HTTPStatusError from a log sink's Redacted()
+// dispatch.
 type HTTPStatusError struct {
 	Status int
 	Method string
@@ -36,10 +32,8 @@ func (e *HTTPStatusError) Error() string {
 	return fmt.Sprintf("HTTP %d %s %s", e.Status, e.Method, redactURL(e.URL))
 }
 
-// redactURL strips userinfo and the query string from raw so a pre-signed
-// token in the query or credentials in userinfo never reach an error string
-// or the log/debug-bundle sinks that stringify the wrap chain. An unparseable
-// URL is replaced with a placeholder rather than echoed verbatim.
+// redactURL strips userinfo/query so tokens or credentials never reach an error
+// string or log sink; unparseable input yields a placeholder.
 func redactURL(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -51,9 +45,8 @@ func redactURL(raw string) string {
 	return u.String()
 }
 
-// Redacted omits URL and Body so a tokenized/pre-signed URL or a
-// credential-echoing response body never reaches a structured log sink via
-// slog attrs; mirrors executor.ExitError.Redacted.
+// Redacted omits URL and Body so a tokenized URL or credential-echoing body
+// never reaches a slog sink; mirrors executor.ExitError.Redacted.
 func (e *HTTPStatusError) Redacted() any {
 	return struct {
 		Status int
@@ -61,10 +54,9 @@ func (e *HTTPStatusError) Redacted() any {
 	}{e.Status, e.Method}
 }
 
-// bodySnippet trims a response-body read down to a printable string. Control
-// bytes are stripped so terminal escape sequences in an error body cannot
-// corrupt the display. truncated appends "..." when the caller stopped at
-// the read cap.
+// bodySnippet trims raw to a printable string, stripping control bytes so
+// terminal escapes can't corrupt the display; truncated appends "..." at the
+// read cap.
 func bodySnippet(raw []byte, truncated bool) string {
 	clean := strings.Map(func(r rune) rune {
 		if unicode.IsPrint(r) || r == '\n' || r == '\r' || r == '\t' {
@@ -82,16 +74,11 @@ func bodySnippet(raw []byte, truncated bool) string {
 	return clean
 }
 
-// isRetryable reports whether err should trigger another download attempt.
-// 5xx responses and transport errors (net.Dial, TLS, reset, DNS) are
-// retryable, as are 408 Request Timeout, 429 Too Many Requests, and a
-// per-attempt HTTP client timeout — net/http makes Client.Timeout satisfy
-// errors.Is(err, context.DeadlineExceeded), so classifying DeadlineExceeded
-// as non-retryable would disable the retry loop for the exact slow-mirror
-// failure it exists for. Only genuine caller cancellation (context.Canceled,
-// e.g. Ctrl-C) aborts here without consuming a backoff step; a cancelled
-// caller deadline is still caught immediately by system.Retry's own ctx.Done
-// check. Other 4xx responses stay fail-fast.
+// isRetryable classifies err for another attempt: 5xx, transport errors, 408/429, and per-attempt
+// timeouts retry — Client.Timeout satisfies
+// errors.Is(context.DeadlineExceeded), so treating that as non-retryable would
+// break the slow-mirror case it exists for. Only context.Canceled aborts
+// outright; other 4xx stay fail-fast.
 func isRetryable(err error) bool {
 	if err == nil {
 		return false
@@ -114,9 +101,8 @@ func isRetryable(err error) bool {
 	return true
 }
 
-// retryDownload runs fn with system.DefaultBackoff() and returns how many
-// attempts were made and the final error. Non-retryable failures abort
-// immediately; context cancellation returns ctx.Err().
+// retryDownload runs fn with system.DefaultBackoff, returning the attempt count
+// and final error; non-retryable failures abort immediately.
 func retryDownload(ctx context.Context, fn func() error) (int, error) {
 	var attempts int
 	err := system.Retry(ctx, system.DefaultBackoff(), isRetryable, func(context.Context) error {

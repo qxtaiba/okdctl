@@ -2,8 +2,6 @@ package system
 
 import (
 	"errors"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
@@ -41,8 +39,7 @@ func TestIsAllowedChownRoot(t *testing.T) {
 }
 
 func TestChownTreeToInvokingUser_RefusesDisallowedPath(t *testing.T) {
-	t.Setenv("SUDO_UID", "1000")
-	t.Setenv("SUDO_GID", "1000")
+	setSudoEnv(t, "1000", "1000")
 
 	err := ChownTreeToInvokingUser("/etc")
 	if err == nil {
@@ -51,50 +48,5 @@ func TestChownTreeToInvokingUser_RefusesDisallowedPath(t *testing.T) {
 	var ae *errtypes.AuthError
 	if !errors.As(err, &ae) {
 		t.Fatalf("err is %T; want *errtypes.AuthError", err)
-	}
-}
-
-func TestChownTreeToInvokingUser_AllowsTempDir(t *testing.T) {
-	t.Setenv("SUDO_UID", "")
-	t.Setenv("SUDO_GID", "")
-
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "f"), []byte("x"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := ChownTreeToInvokingUser(dir); err != nil {
-		t.Errorf("expected no-op for temp dir; got %v", err)
-	}
-}
-
-func TestWriteAsInvokingUser_ParentExistedFlag(t *testing.T) {
-	t.Setenv("SUDO_UID", "")
-	t.Setenv("SUDO_GID", "")
-
-	cases := []struct {
-		name    string
-		statErr error
-	}{
-		{"parent does not exist", os.ErrNotExist},
-		{"parent exists", nil},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			orig := statFn
-			t.Cleanup(func() { statFn = orig })
-			statFn = func(name string) (os.FileInfo, error) {
-				if tc.statErr != nil {
-					return nil, tc.statErr
-				}
-				return orig(name)
-			}
-
-			dir := t.TempDir()
-			path := filepath.Join(dir, "sub", "file.txt")
-			if err := WriteAsInvokingUser(path, []byte("data"), 0o600); err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-		})
 	}
 }

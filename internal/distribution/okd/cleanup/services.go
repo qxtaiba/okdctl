@@ -15,8 +15,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/platform"
 )
 
-// dnsmasqConfPattern and dnsmasqBackupPattern are package-level vars so
-// tests can redirect Dnsmasq's glob-and-remove loop to t.TempDir().
+// dnsmasqConfPattern/dnsmasqBackupPattern are vars so tests can redirect the glob-and-remove loop.
 var (
 	dnsmasqConfPattern   = "/etc/dnsmasq.d/okd-*.conf"
 	dnsmasqBackupPattern = "/etc/dnsmasq.d/*.backup"
@@ -26,18 +25,13 @@ func removePackage(ctx context.Context, pkg string, logger *slog.Logger) {
 	logger = logutil.OrNop(logger)
 	pm := detectPackageManager(logger)
 	if err := pm.Remove(ctx, []string{pkg}); err != nil {
-		logger.Warn("cleanup: failed to remove package", "pkg", pkg, "err", err)
+		logger.Warn("cleanup: could not remove package", "pkg", pkg, "err", err)
 	}
 }
 
-// HAProxy stops the haproxy service, removes its config and backups,
-// releases the VIP (when set), and uninstalls the haproxy package.
-// Firewall rule removal is delegated to StepCleanupFirewall so destroy
-// summary doesn't double-count the same operation.
-//
-// Assumes an okdctl-dedicated bastion: it deletes the live config plus every
-// backup the glob matches, including setup's pristine pre-okdctl snapshot, so
-// a pre-existing haproxy config is not restored.
+// HAProxy stops the haproxy service, removes its config, backups, and VIP,
+// and uninstalls the package. Assumes a dedicated bastion: it deletes every
+// backup the glob matches.
 func HAProxy(ctx context.Context, haproxyConfig, vip string, logger *slog.Logger) error {
 	logger = logutil.OrNop(logger)
 	logger.Info("cleanup: haproxy service and configuration")
@@ -46,9 +40,7 @@ func HAProxy(ctx context.Context, haproxyConfig, vip string, logger *slog.Logger
 
 	_ = SafeRemoveWithLogger(ctx, haproxyConfig, "haproxy configuration file", logger)
 
-	// The glob covers postinstall's timestamped backups and setup's fixed
-	// pristine snapshot; the latter used to be missed, leaving root-owned
-	// residue in /etc/haproxy after uninstall.
+	// Covers both postinstall's timestamped backups and setup's fixed pristine snapshot.
 	backups, _ := filepath.Glob(phase.HAProxyBackupGlob(haproxyConfig))
 	for _, backup := range backups {
 		_ = SafeRemoveWithLogger(ctx, backup, "haproxy backup configuration", logger)
@@ -63,8 +55,7 @@ func HAProxy(ctx context.Context, haproxyConfig, vip string, logger *slog.Logger
 	return nil
 }
 
-// Apache stops the httpd service and removes the apache package using the
-// platform-appropriate service and package names.
+// Apache stops the httpd service and removes the apache package using platform-appropriate names.
 func Apache(ctx context.Context, logger *slog.Logger) error {
 	logger = logutil.OrNop(logger)
 	logger.Info("cleanup: apache httpd service")
@@ -81,12 +72,9 @@ func Apache(ctx context.Context, logger *slog.Logger) error {
 	return nil
 }
 
-// WebServer removes generated *.ign files from the httpd ignition directory.
-// Best-effort: per-file removal errors (including policy refusals from
-// SafeRemoveWithLogger) are logged and swallowed, so a nil return does not
-// guarantee the web root is clean — ignition payloads embedding the pull
-// secret may still be served. It also returns nil early when the directory or
-// glob is empty. Callers needing a hard guarantee must inspect the directory.
+// WebServer removes generated *.ign files from the httpd ignition directory, best-effort.
+// A nil return does not guarantee the web root is clean — ignition payloads
+// embedding the pull secret may still be served.
 func WebServer(ctx context.Context, httpServerRoot string, logger *slog.Logger) error {
 	logger = logutil.OrNop(logger)
 	ignitionDir := filepath.Join(httpServerRoot, "ignition")
@@ -113,19 +101,15 @@ func WebServer(ctx context.Context, httpServerRoot string, logger *slog.Logger) 
 	return nil
 }
 
-// Dnsmasq restores the system resolver, stops dnsmasq, removes the
-// cluster-specific config, and uninstalls the dnsmasq package.
-//
-// Assumes an okdctl-dedicated bastion: after the cluster's own okd-<name>.conf
-// is removed it also purges every /etc/dnsmasq.d/okd-*.conf and every
-// *.backup regardless of origin, so a second cluster's DNS config or a foreign
-// backup on a shared bastion would be destroyed too.
+// Dnsmasq restores the system resolver, stops dnsmasq, removes the cluster
+// config, and uninstalls the package. Assumes a dedicated bastion: it purges
+// every okd-*.conf and *.backup regardless of origin.
 func Dnsmasq(ctx context.Context, clusterName string, logger *slog.Logger) error {
 	logger = logutil.OrNop(logger)
 	logger.Info("cleanup: dnsmasq service and configuration")
 
 	if err := dns.RestoreSystemResolver(ctx, logger); err != nil {
-		logger.Warn("cleanup: failed to restore system resolver", "err", err)
+		logger.Warn("cleanup: could not restore system resolver", "err", err)
 	}
 
 	phase.StopAndDisableService(ctx, "dnsmasq", logger)

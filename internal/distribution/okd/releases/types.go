@@ -8,8 +8,8 @@ import (
 	"time"
 )
 
-// ReleaseType classifies an OKD release for display. Values drive DisplayName
-// suffixes ("(Latest)", "(Preview)", etc.) surfaced by the releases CLI.
+// ReleaseType classifies an OKD release for display (drives DisplayName's
+// "(Latest)"/"(Preview)" suffixes).
 type ReleaseType int
 
 const (
@@ -25,39 +25,33 @@ const (
 	ReleaseTypeLTS
 )
 
-// OKDVersion is one OKD release entry fetched from the release catalog.
-// JSON field names are part of the `okdctl releases list --output=json`
-// contract; do not rename a field without updating downstream consumers.
+// OKDVersion is one release entry from the catalog. JSON field names are the
+// `releases list --output=json` wire contract — do not rename without updating consumers.
 type OKDVersion struct {
 	Version     string      `json:"version"`
 	Tag         string      `json:"tag"`
 	ReleaseDate time.Time   `json:"release_date"`
 	Stable      bool        `json:"stable"`
-	Latest      bool        `json:"latest"`       // Latest in its minor version series
-	Type        ReleaseType `json:"release_type"` // Computed release type for display
+	Latest      bool        `json:"latest"` // within its minor series
+	Type        ReleaseType `json:"release_type"`
 }
 
-// OKDReleaseSeries groups releases by major.minor with the newest member
-// cached as Latest for O(1) lookup.
+// OKDReleaseSeries groups releases by major.minor, caching the newest as Latest for O(1) lookup.
 type OKDReleaseSeries struct {
 	Major    int
 	Minor    int
 	Versions []OKDVersion
-	Latest   OKDVersion // Latest version in this series
+	Latest   OKDVersion
 }
 
 type githubRelease struct {
 	TagName     string    `json:"tag_name"`
-	Name        string    `json:"name"`
-	Prerelease  bool      `json:"prerelease"`
 	Draft       bool      `json:"draft"`
 	PublishedAt time.Time `json:"published_at"`
 }
 
-// diskCacheSchema versions the on-disk cache JSON. json.Unmarshal tolerates
-// shape drift silently, so loadFromDiskCache discards any cache whose schema
-// does not match exactly (a missing field decodes as 0) and refetches; bump
-// it whenever diskCache or its nested types change shape.
+// diskCacheSchema versions the cache JSON: json.Unmarshal tolerates shape
+// drift silently, so a schema mismatch is discarded outright; bump on any shape change.
 const diskCacheSchema = 1
 
 type diskCache struct {
@@ -66,11 +60,8 @@ type diskCache struct {
 	Series   []OKDReleaseSeries `json:"series"`
 }
 
-// releaseTypeLabels maps each ReleaseType to its exact wire label. These
-// labels are part of the `releases list --output=json` contract and the
-// on-disk cache schema, so String and UnmarshalJSON both resolve against this
-// single table — a label spelled once cannot drift between the two directions
-// and silently break cache round-trip.
+// releaseTypeLabels is the single wire-label source for String and
+// UnmarshalJSON, so the wire contract and cache schema can't drift apart.
 var releaseTypeLabels = map[ReleaseType]string{
 	ReleaseTypeStable:        "stable",
 	ReleaseTypeLatestStable:  "latest-stable",
@@ -79,7 +70,7 @@ var releaseTypeLabels = map[ReleaseType]string{
 	ReleaseTypeLTS:           "lts",
 }
 
-// String returns the canonical human-readable label for the release type.
+// String returns the release type's canonical label.
 func (t ReleaseType) String() string {
 	if label, ok := releaseTypeLabels[t]; ok {
 		return label
@@ -87,14 +78,13 @@ func (t ReleaseType) String() string {
 	return "unknown"
 }
 
-// MarshalJSON encodes ReleaseType as its string label so OKDVersion serialises
-// with "release_type": "stable" rather than a raw integer.
+// MarshalJSON encodes ReleaseType as its string label instead of a raw integer.
 func (t ReleaseType) MarshalJSON() ([]byte, error) {
 	return json.Marshal(t.String())
 }
 
-// UnmarshalJSON decodes the string label back into the typed constant.
-// Required for round-trip correctness of the on-disk release cache.
+// UnmarshalJSON decodes the string label back into the typed constant (needed
+// for cache round-trip).
 func (t *ReleaseType) UnmarshalJSON(data []byte) error {
 	var s string
 	if err := json.Unmarshal(data, &s); err != nil {
@@ -127,8 +117,7 @@ func (v *OKDVersion) Minor() int {
 	return n
 }
 
-// DisplayName returns the version string with a release-type suffix
-// ("4.15.1 (Latest)"), used by the releases list CLI renderer.
+// DisplayName returns the version string with a release-type suffix (e.g. "4.15.1 (Latest)").
 func (v *OKDVersion) DisplayName() string {
 	switch v.Type {
 	case ReleaseTypeLatestStable:
@@ -144,8 +133,7 @@ func (v *OKDVersion) DisplayName() string {
 	}
 }
 
-// ShortVersion returns the "major.minor" form (e.g. "4.15") of the version,
-// or "0.0" when Version is unparsable.
+// ShortVersion returns the "major.minor" form (e.g. "4.15"), or "0.0" if unparsable.
 func (v *OKDVersion) ShortVersion() string {
 	return fmt.Sprintf("%d.%d", v.Major(), v.Minor())
 }

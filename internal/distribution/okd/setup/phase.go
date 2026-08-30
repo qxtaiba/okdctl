@@ -1,11 +1,7 @@
-// Package setup runs the OKD setup phase: install host packages and the
-// tool trio (oc, openshift-install, terraform), render install-config and
-// Kubernetes manifests (including kube-vip, chrony, and fstrim), generate
-// ignition files, and configure HAProxy, dnsmasq, and the bastion firewall.
-// The ISO build/upload and ignition-server machinery shared with day-2 node
-// operations lives in the embedded provision.Provisioner. Steps are declared
-// in setupBaseSteps, setupManifestSteps, setupWebSteps, and setupInfraSteps,
-// concatenated by setupSteps.
+// Package setup runs the OKD setup phase: install tools, render
+// install-config/manifests/ignition, and configure HAProxy, dnsmasq, and
+// the firewall. ISO/ignition-server machinery shared with day-2 node ops
+// lives in the embedded provision.Provisioner.
 package setup
 
 import (
@@ -20,9 +16,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
-// openshift-install integration points. openshiftSubdir is the manifests
-// subdirectory openshift-install creates beneath clusterDir; openshiftInstallBin
-// is the binary name invoked for manifest and ignition generation.
+// openshiftSubdir is the manifests subdir openshift-install creates under
+// clusterDir; openshiftInstallBin is its binary name.
 const (
 	openshiftSubdir     = "openshift"
 	openshiftInstallBin = "openshift-install"
@@ -47,15 +42,12 @@ func NewOptions(cfg *config.Config, projectRoot string) Options {
 	}
 }
 
-// provisionOpts projects the setup options onto the narrow option set the
-// shared provisioning machinery consumes.
 func (o *Options) provisionOpts() provision.Options {
 	return provision.Options{ProjectRoot: o.ProjectRoot, WorkDir: o.WorkDir}
 }
 
-// packageInstaller is the subset of platform.Manager the setup phase calls.
-// A consumer-side interface so tests can substitute a no-op fake without
-// shelling out to the real host package manager.
+// packageInstaller is the subset of platform.Manager used here, defined
+// consumer-side so tests can fake it.
 type packageInstaller interface {
 	Install(ctx context.Context, packages []string) error
 }
@@ -68,8 +60,8 @@ type Phase struct {
 	BinDir string
 }
 
-// New constructs a setup Phase with the given options. Host OS detection
-// populates OS and Pkg; detection errors fall back to RHEL/dnf.
+// New constructs a setup Phase with the given options; host-OS detection
+// populates OS and Pkg, falling back to RHEL/dnf on error.
 func New(opts ...phase.BasePhaseOption) *Phase {
 	bp := phase.NewBasePhase(opts...)
 	bp.Log = bp.Log.With("phase", "setup")
@@ -80,10 +72,9 @@ func New(opts ...phase.BasePhaseOption) *Phase {
 	}
 }
 
-// Execute runs the setup phase step sequence and returns each step's
-// result. A non-nil error means orchestration stopped early. cfg must be
-// the same cfg passed to NewOptions — opts was derived from it and the two
-// are not re-validated for consistency here.
+// Execute runs the setup phase steps, stopping at the first error. cfg must be
+// the same value passed to NewOptions, since opts is derived from it and not
+// re-checked here.
 func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) ([]distribution.StepResult, error) {
 	p.Log.Info("setup: starting okd cluster configuration")
 
@@ -101,15 +92,15 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) 
 	return orchestrator.Results(), nil
 }
 
-// StepDefs returns the ordered step definitions this phase executes for
-// cfg/opts, without running them. Provisioner.DeploySteps calls this for
-// the deploy --dry-run listing, so the listing cannot drift from Execute.
+// StepDefs returns cfg/opts's ordered step definitions without running them;
+// Provisioner.DeploySteps calls this for --dry-run so it can't drift from
+// Execute.
 func (p *Phase) StepDefs(cfg *config.Config, opts *Options) []distribution.StepDef {
 	return p.setupSteps(cfg, opts)
 }
 
 // PrintSetupCompletionSummary logs the cluster-config dir and terraform
-// environment a user needs to reference for the follow-up install step.
+// environment needed for the follow-up install step.
 func (p *Phase) PrintSetupCompletionSummary(cfg *config.Config, opts *Options) {
 	clusterDir := workspace.ClusterConfigDir(opts.WorkDir)
 	tfEnv := cfg.TerraformEnvName()

@@ -8,16 +8,11 @@ import (
 	"strings"
 )
 
-// PlanAction is the change verb okdctl gates a targeted plan on. It collapses
-// terraform's raw resource_changes[].change.actions array into one value so
-// node-lifecycle callers can assert intent (a delete, an in-place update)
-// without re-implementing the create/delete → replace folding.
+// PlanAction folds terraform's raw resource_changes[].change.actions array into one gate-able verb.
 type PlanAction string
 
-// Folded terraform plan actions. Noop is ["no-op"]/["read"]; Create/Update/
-// Delete map the single-verb arrays; Replace is ["delete","create"] (or the
-// reverse) — the destroy-and-recreate a resize gate must reject because it
-// wipes the VM instead of mutating it in place; Unknown is anything else.
+// Replace (create+delete in either order) is a destroy-and-recreate; a resize
+// gate must reject it, not treat it as in-place.
 const (
 	PlanActionNoop    PlanAction = "no-op"
 	PlanActionCreate  PlanAction = "create"
@@ -44,12 +39,11 @@ type planShow struct {
 	} `json:"resource_changes"`
 }
 
-// foldActions collapses terraform's actions array into a single PlanAction.
 func foldActions(actions []string) PlanAction {
 	switch len(actions) {
 	case 1:
 		switch actions[0] {
-		case "no-op":
+		case "no-op", "read":
 			return PlanActionNoop
 		case "create":
 			return PlanActionCreate
@@ -57,8 +51,6 @@ func foldActions(actions []string) PlanAction {
 			return PlanActionUpdate
 		case "delete":
 			return PlanActionDelete
-		case "read":
-			return PlanActionNoop
 		}
 	case 2:
 		if slices.Contains(actions, "create") && slices.Contains(actions, "delete") {
@@ -68,9 +60,8 @@ func foldActions(actions []string) PlanAction {
 	return PlanActionUnknown
 }
 
-// parsePlanChanges decodes `terraform show -json` output into the non-no-op
-// resource changes. no-op entries are dropped so callers reason only about
-// what the plan actually mutates.
+// parsePlanChanges decodes terraform show -json output, dropping no-op entries
+// so callers reason only about actual mutations.
 func parsePlanChanges(raw []byte) ([]ResourceChange, error) {
 	var ps planShow
 	if err := json.Unmarshal(raw, &ps); err != nil {
@@ -87,11 +78,8 @@ func parsePlanChanges(raw []byte) ([]ResourceChange, error) {
 	return out, nil
 }
 
-// AssertOnlyChange verifies the plan's sole effective change is addr performing
-// want. It is the safety gate node-lifecycle ops run before applying a targeted
-// plan: an empty plan (variable never reached the module), an unexpected extra
-// resource, a wrong address, or a wrong action (notably a replace where an
-// update was intended) all return an error naming the offending set.
+// AssertOnlyChange verifies the plan's sole effective change is addr
+// performing want; node-lifecycle ops run this before applying a targeted plan.
 func AssertOnlyChange(changes []ResourceChange, addr string, want PlanAction) error {
 	if len(changes) == 0 {
 		return fmt.Errorf("plan gate: expected %s of %q but plan is empty (the variable may not reach the module)", want, addr)
@@ -114,13 +102,10 @@ func describeChanges(changes []ResourceChange) string {
 	return "[" + strings.Join(parts, ", ") + "]"
 }
 
-// EmptyPlanMeansAlreadyAtTarget interprets an empty targeted plan given
-// whether addr is currently present in state and the change the caller
-// wanted (want). A delete going empty means "already gone" only when addr is
-// absent from state; any other want (create/update) going empty means
-// "already there" only when addr is present. Callers use this to distinguish
-// a resumed re-run — the apply already landed — from a plan that never
-// reached the module at all.
+// EmptyPlanMeansAlreadyAtTarget interprets an empty targeted plan: delete
+// means already-gone only if addr is absent from state; any other want means
+// already-there only if addr is present — distinguishing a resumed re-run from
+// a plan that never reached the module.
 func EmptyPlanMeansAlreadyAtTarget(addrInState bool, want PlanAction) bool {
 	if want == PlanActionDelete {
 		return !addrInState
@@ -128,9 +113,8 @@ func EmptyPlanMeansAlreadyAtTarget(addrInState bool, want PlanAction) bool {
 	return addrInState
 }
 
-// ShowPlanChanges runs `terraform show -json <planFile>` and returns the folded
-// non-no-op resource changes. planFile is a saved plan produced by Plan with
-// OutputPlanFile set.
+// ShowPlanChanges runs terraform show -json <planFile> and returns the folded
+// non-no-op resource changes; planFile is a saved plan from Plan with OutputPlanFile set.
 func (t *Executor) ShowPlanChanges(ctx context.Context, planFile string) ([]ResourceChange, error) {
 	result, err := t.exec.RunOutputChecked(ctx, 0, "terraform", "show", "-json", planFile)
 	if err != nil {

@@ -28,9 +28,8 @@ type verifyCondition struct {
 	Status nodetypes.ConditionStatus `json:"status"`
 }
 
-// clusterOperatorList is a minimal view of `oc get clusteroperators -o json`
-// output. Decoupling from operator.openshift.io/v1 avoids pinning that schema
-// in lockstep with each OKD release.
+// clusterOperatorList is a minimal view of `oc get clusteroperators -o json`,
+// decoupled from operator.openshift.io/v1.
 type clusterOperatorList struct {
 	Items []struct {
 		Metadata struct {
@@ -42,9 +41,8 @@ type clusterOperatorList struct {
 	} `json:"items"`
 }
 
-// parseOperatorDegradation returns the names of ClusterOperators carrying a
-// type=Degraded status=True condition. Replaces a positional fields[4] text
-// parse that broke whenever oc adjusted column ordering between releases.
+// parseOperatorDegradation returns names of ClusterOperators with a
+// type=Degraded status=True condition.
 func parseOperatorDegradation(payload []byte) ([]string, error) {
 	var co clusterOperatorList
 	if err := json.Unmarshal(payload, &co); err != nil {
@@ -61,10 +59,7 @@ func parseOperatorDegradation(payload []byte) ([]string, error) {
 	return degraded, nil
 }
 
-// nodeList is a minimal view of `oc get nodes -o json` output — only the
-// fields we need for readiness counting. A local struct keeps the parse
-// decoupled from corev1 schema evolution; we'd need to pin a specific
-// k8s.io/api version in lockstep with the OKD release anyway.
+// nodeList is a minimal view of `oc get nodes -o json`, decoupled from corev1 schema evolution.
 type nodeList struct {
 	Items []struct {
 		Metadata struct {
@@ -76,11 +71,7 @@ type nodeList struct {
 	} `json:"items"`
 }
 
-// parseNodeReadiness returns (ready, total) from a `oc get nodes -o json`
-// payload. A node is ready when it has a condition with type=Ready and
-// status=True. Replaces the prior strings.Contains(line, "Ready") && !strings.
-// Contains(line, "NotReady") text-parse which misclassified "SchedulingDisabled
-// Ready" output and could not distinguish transient state flaps.
+// parseNodeReadiness returns (ready, total); ready requires a type=Ready status=True condition.
 func parseNodeReadiness(payload []byte) (ready, total int, err error) {
 	var n nodeList
 	if err := json.Unmarshal(payload, &n); err != nil {
@@ -151,8 +142,8 @@ func (p *Phase) VerifyClusterHealth(ctx context.Context, _ *Options) (*ClusterHe
 	return result, nil
 }
 
-// VerifyKubeVIP verifies that kube-vip is running and the VIP is responding.
-// Returns the VIP address if successful.
+// VerifyKubeVIP verifies kube-vip is running and the VIP responds, returning
+// the VIP address on success.
 func (p *Phase) VerifyKubeVIP(ctx context.Context, cfg *config.Config, opts *Options) (string, error) {
 	vip, err := phase.ResolveClusterVIP(cfg)
 	if err != nil {
@@ -216,11 +207,8 @@ func (p *Phase) waitForKubeVIPPing(ctx context.Context, vip string, opts *Option
 	return nil
 }
 
-// verifyKubeVIPAPIHealthBootstrap verifies the API server responds via the VIP
-// during the bootstrap-to-kube-vip transition. It tries a CA-verified request
-// first; falls back to InsecureSkipVerify only when the error is
-// x509.HostnameError (VIP not yet in the apiserver SANs — expected during the
-// 1-3 minute kube-vip cert re-issue window). All other TLS errors propagate.
+// verifyKubeVIPAPIHealthBootstrap checks API health via VIP, falling back to
+// insecure TLS only on x509.HostnameError (pre-SAN cert reissue window).
 func (p *Phase) verifyKubeVIPAPIHealthBootstrap(ctx context.Context, vip, clusterDir string) error {
 	healthURL := fmt.Sprintf("https://%s:%d/healthz", vip, phase.KubeAPIPort)
 
@@ -255,7 +243,6 @@ func (p *Phase) verifyKubeVIPAPIHealthBootstrap(ctx context.Context, vip, cluste
 		if !errors.As(err, &hostnameErr) {
 			return &errtypes.ClusterError{Msg: fmt.Sprintf("api health check at %s", healthURL), Err: err}
 		}
-		// VIP not yet in apiserver SANs — transient during kube-vip cert re-issue; retry insecure.
 		p.Log.Warn("kubevip: vip not in apiserver sans yet, retrying without tls verification", "vip", vip)
 		response, err = doRequest(httputil.NewInsecure(5 * time.Second))
 		if err != nil {
@@ -273,8 +260,7 @@ func (p *Phase) verifyKubeVIPAPIHealthBootstrap(ctx context.Context, vip, cluste
 	return nil
 }
 
-// verifyAPIHealthCheck performs a quick API health check via the cluster hostname.
-// Uses oc get --raw /healthz which goes through the kubeconfig's server URL.
+// verifyAPIHealthCheck checks API health via the cluster hostname (kubeconfig server URL).
 func (p *Phase) verifyAPIHealthCheck(ctx context.Context) error {
 	out, err := p.OcOutput(ctx, "get", "--raw", "/healthz")
 	if err != nil {

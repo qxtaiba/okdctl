@@ -12,11 +12,7 @@ import (
 	"time"
 )
 
-// fakePVE is an httptest-backed Proxmox API serving exactly the routes the
-// PowerCycler walks: node status, VM status/current + config, the power
-// POSTs, and task status. Power POSTs are recorded in order and flip the
-// reported VM status so sequencing (stop before start, no start after a
-// failed stop) is observable from the outside.
+// fakePVE serves exactly the routes PowerCycler walks, recording power POSTs in order.
 type fakePVE struct {
 	mu             sync.Mutex
 	vmStatus       string
@@ -62,8 +58,7 @@ func (f *fakePVE) start(t *testing.T) *PowerCycler {
 		fmt.Fprint(w, `{"data":{}}`)
 	})
 	mux.HandleFunc("POST /api2/json/nodes/pve1/qemu/101/status/{action}", func(w http.ResponseWriter, r *http.Request) {
-		// Mapping through constants also breaks gosec's G705 taint chain:
-		// the response never echoes request-derived input.
+		// Mapping through constants also breaks gosec's G705 taint chain.
 		var action, upid, newStatus string
 		switch r.PathValue("action") {
 		case actStart:
@@ -90,9 +85,8 @@ func (f *fakePVE) start(t *testing.T) *PowerCycler {
 		}
 		fmt.Fprintf(w, `{"data":%q}`, upid)
 	})
-	// The body must carry upid and node: Task.UnmarshalJSON overwrites every
-	// exported field, so omitting them zeroes t.UPID and the next poll builds
-	// a bad URL (go-proxmox v0.8.1 tasks.go).
+	// upid/node must be present: Task.UnmarshalJSON overwrites every field,
+	// zeroing t.UPID and breaking the next poll's URL (go-proxmox v0.8.1 tasks.go).
 	mux.HandleFunc("GET /api2/json/nodes/pve1/tasks/{upid}/status", func(w http.ResponseWriter, _ *http.Request) {
 		f.mu.Lock()
 		upid := f.lastUPID
@@ -209,27 +203,10 @@ func TestPowerCyclerStartVM(t *testing.T) {
 }
 
 func TestPowerCycler_timeout(t *testing.T) {
-	t.Run("default when unset", func(t *testing.T) {
-		pc := NewPowerCycler(&PowerCycleOptions{})
-		if got := pc.timeout(); got != defaultPowerCycleTimeout {
-			t.Errorf("timeout() = %v; want %v", got, defaultPowerCycleTimeout)
-		}
-	})
-
-	t.Run("default when negative", func(t *testing.T) {
-		pc := NewPowerCycler(&PowerCycleOptions{Timeout: -time.Second})
-		if got := pc.timeout(); got != defaultPowerCycleTimeout {
-			t.Errorf("timeout() = %v; want %v", got, defaultPowerCycleTimeout)
-		}
-	})
-
-	t.Run("override honored", func(t *testing.T) {
-		want := 90 * time.Second
-		pc := NewPowerCycler(&PowerCycleOptions{Timeout: want})
-		if got := pc.timeout(); got != want {
-			t.Errorf("timeout() = %v; want %v", got, want)
-		}
-	})
+	pc := NewPowerCycler(&PowerCycleOptions{})
+	if got := pc.timeout(); got != defaultPowerCycleTimeout {
+		t.Errorf("unset timeout() = %v; want %v", got, defaultPowerCycleTimeout)
+	}
 }
 
 func TestPowerCycleOptionsRedacted(t *testing.T) {

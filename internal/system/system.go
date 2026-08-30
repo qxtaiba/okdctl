@@ -1,8 +1,5 @@
-// Package system provides small, dependency-light host primitives used
-// across okdctl: filesystem helpers and privileged file writes,
-// invoking-user ownership and a passwordless-sudo probe, systemd unit
-// control, retry/backoff helpers, a generic context-aware polling loop, and
-// byte-buffer primitives with no narrower home. It does not execute
-// arbitrary subprocesses — see internal/executor for the command-execution
-// stack.
+// Package system provides small, dependency-light host primitives:
+// filesystem helpers, privileged writes, invoking-user ownership, a
+// passwordless-sudo probe, systemd control, retry/backoff, and a generic
+// polling loop. It does not execute arbitrary subprocesses — see internal/executor.
 package system

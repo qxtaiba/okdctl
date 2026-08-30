@@ -14,10 +14,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
-// pump drives the exec step the way bubbletea would: execute pending
-// commands, feed their messages back into Update, and stop at the
-// StepCompleteMsg. Spinner ticks are dropped instead of re-issued so the
-// loop terminates.
+// pump replays bubbletea's cmd loop to StepCompleteMsg, dropping spinner ticks so it terminates.
 func pump(t *testing.T, s *ExecStep, first tea.Cmd) tea.Msg {
 	t.Helper()
 	queue := []tea.Cmd{first}
@@ -49,10 +46,9 @@ func pump(t *testing.T, s *ExecStep, first tea.Cmd) tea.Msg {
 }
 
 func execState() *State {
-	return &State{
-		Cfg: config.DefaultConfig(), Op: node.OpResize, Plan: masterResizePlan(),
-		Proceed: true, Scope: node.ResizeScope{Role: nodetypes.RoleMaster},
-	}
+	st := doneState()
+	st.Scope = node.ResizeScope{Role: nodetypes.RoleMaster}
+	return st
 }
 
 func TestExecStepRunsToCompletion(t *testing.T) {

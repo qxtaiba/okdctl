@@ -22,8 +22,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// Tool binary fetch URLs and version pins. The {arch} placeholder is
-// expanded via strings.NewReplacer at install time.
+// Tool binary fetch URLs and version pins; {arch} is expanded via
+// strings.NewReplacer at install time.
 const (
 	helmVersion = "v3.17.3"
 	sopsVersion = "v3.9.4"
@@ -35,34 +35,27 @@ const (
 	yqURLTemplate   = "https://github.com/mikefarah/yq/releases/download/" + yqVersion + "/yq_linux_{arch}"
 )
 
-// archAMD64 / archARM64 are the two arch keys okdctl ships (Linux amd64,
-// Linux arm64). They appear as map keys in every per-tool checksum table —
-// extracted as constants so a typo in any one site is a compile error
-// rather than a silent miss.
+// archAMD64 / archARM64 are okdctl's two shipped arch keys; constants make a
+// typo a compile error, not a silent miss.
 const (
 	archAMD64 = "amd64"
 	archARM64 = "arm64"
 )
 
-// yqChecksumsByArch holds the SHA-256 for the yq_linux_<arch> binary at yqVersion,
-// sourced from the official checksums release asset. Must be updated with yqVersion.
+// yqChecksumsByArch holds the yq_linux_<arch> SHA-256 at yqVersion; update together.
 var yqChecksumsByArch = map[string]string{
 	archAMD64: "654d2943ca1d3be2024089eb4f270f4070f491a0610481d128509b2834870049",
 	archARM64: "ceea73d4c86f2e5c91926ee0639157121f5360da42beeb8357783d79c2cc6a1d",
 }
 
-// helmChecksumsByArch holds the SHA-256 for the helm-<helmVersion>-linux-<arch>.tar.gz
-// archive, sourced from get.helm.sh/<archive>.sha256sum. Must be updated when
-// helmVersion changes — pinning the checksum locally removes the runtime
-// FetchChecksum dependency on the same origin as the artifact.
+// helmChecksumsByArch holds the helm tarball SHA-256 per arch, pinned locally
+// rather than fetched from the same origin; update with helmVersion.
 var helmChecksumsByArch = map[string]string{
 	archAMD64: "ee88b3c851ae6466a3de507f7be73fe94d54cbf2987cbaa3d1a3832ea331f2cd",
 	archARM64: "7944e3defd386c76fd92d9e6fec5c2d65a323f6fadc19bfb5e704e3eee10348e",
 }
 
-// sopsChecksumsByArch holds the SHA-256 for the sops-<sopsVersion>.linux.<arch>
-// binary, sourced from github.com/getsops/sops/releases/download/<v>/sops-<v>.checksums.txt.
-// Must be updated when sopsVersion changes.
+// sopsChecksumsByArch holds the sops binary SHA-256 per arch; update together with sopsVersion.
 var sopsChecksumsByArch = map[string]string{
 	archAMD64: "5488e32bc471de7982ad895dd054bbab3ab91c417a118426134551e9626e4e85",
 	archARM64: "16564c6b181d88505d9e0dfef62771894293d85cde5884d9b1a843859eee174b",
@@ -169,9 +162,9 @@ func (p *Phase) installTerraform(ctx context.Context) error {
 			return err
 		}
 	default: // rhel family
-		// Build-time-pinned .repo content avoids trusting the .repo URL at deploy
-		// time. Written root-owned (AtomicWrite) so a non-root invoking user cannot
-		// later edit the gpgkey URL and poison subsequent dnf operations.
+		// Build-time-pinned .repo content avoids trusting the URL at deploy
+		// time; written root-owned so a non-root user can't poison the gpgkey
+		// URL.
 		repoPath := "/etc/yum.repos.d/hashicorp.repo"
 		if err := system.AtomicWrite(repoPath, hashicorpRPMRepo, 0o644); err != nil {
 			return fmt.Errorf("write HashiCorp repository file: %w", err)
@@ -197,34 +190,18 @@ type binaryInstallSpec struct {
 	name             string
 	url              string
 	versionFlag      string
-	archiveBinary    string // if non-empty, download is a tar.gz; value is the binary path within the archive
+	archiveBinary    string // non-empty: tar.gz binary path within the archive
 	stripComponents  int
-	checksumURL      string // if non-empty, SHA-256 is fetched and verified before the binary is installed
-	checksumFilename string // filename to look up in the checksums file
-	embeddedChecksum string // used when the vendor does not publish a compatible sha256sum file
+	embeddedChecksum string // build-time-pinned SHA-256, verified so a poisoned CDN can't swap the binary
 }
 
 func (p *Phase) installBinary(ctx context.Context, spec *binaryInstallSpec) error {
 	p.Log.Info("tools: installing", "tool", spec.name)
 
-	var expectedChecksum string
-	switch {
-	case spec.checksumURL != "":
-		// Verify the binary against the vendor-published SHA-256 before
-		// it lands in BinDir; prevents silent compromise on a poisoned CDN.
-		var err error
-		expectedChecksum, err = download.FetchChecksum(ctx, spec.checksumURL, spec.checksumFilename)
-		if err != nil {
-			return fmt.Errorf("fetch checksum for %s: %w", spec.name, err)
-		}
-	case spec.embeddedChecksum != "":
-		expectedChecksum = spec.embeddedChecksum
-	}
-
 	tempFile, err := system.WriteTempFile(spec.name+"-download-*", 0o600, func(f *os.File) error {
 		return download.Fetch(
 			ctx, spec.url, f.Name(),
-			download.WithFetchChecksum(expectedChecksum),
+			download.WithFetchChecksum(spec.embeddedChecksum),
 			download.WithDescription(spec.name),
 			download.WithTimeout(2*time.Minute),
 			download.WithLogger(p.Log),
@@ -290,10 +267,8 @@ func getToolVersion(ctx context.Context, tool, flag string) string {
 	return "unknown"
 }
 
-// expectedHashiCorpGPGFingerprint is the canonical fingerprint for the
-// HashiCorp release signing key. Verified against the key before it is
-// installed as a system trust root; a mismatch aborts the deploy so a MITM
-// during key fetch cannot plant a persistent malicious trust root.
+// expectedHashiCorpGPGFingerprint is HashiCorp's signing key fingerprint; a
+// mismatch aborts before install so a MITM can't plant a persistent trust root.
 const expectedHashiCorpGPGFingerprint = "798AEC654E5C15428C8E42EEAA16FCBCA621E701"
 
 func installHashiCorpDebianRepo(ctx context.Context, codename string) error {
@@ -326,9 +301,8 @@ func installHashiCorpDebianRepo(ctx context.Context, codename string) error {
 		return err
 	}
 
-	// Refuse to overwrite an existing keyring belonging to a different key.
-	// gpg --import-options show-only accepts both armored and binary inputs,
-	// so the same fingerprint helper handles the on-disk dearmored form.
+	// Refuses to overwrite a keyring from a different key; show-only accepts
+	// armored or binary, so the same helper checks the on-disk form too.
 	if _, statErr := os.Stat(gpgPath); statErr == nil {
 		if err := verifyHashiCorpGPGFingerprint(ctx, gpgPath); err != nil {
 			return &errtypes.ConfigError{

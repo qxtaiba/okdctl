@@ -13,11 +13,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
-// installFakeOCForCSRs writes a PATH-shadow "oc" script and prepends its
-// directory to PATH. Script branches on $1:
-//
-//	"get" — emits $OC_CSR_JSON on stdout; exits $OC_GET_EXIT (default 0).
-//	"adm" — appends "$@\n" to $OC_ARGV_FILE when set; exits $OC_APPROVE_EXIT (default 0).
+// installFakeOCForCSRs installs a PATH-shadow "oc" keyed off $OC_CSR_JSON,
+// $OC_GET_EXIT, $OC_ARGV_FILE, $OC_APPROVE_EXIT.
 func installFakeOCForCSRs(t *testing.T) {
 	t.Helper()
 	script := `#!/bin/sh

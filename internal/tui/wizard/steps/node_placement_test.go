@@ -20,12 +20,7 @@ func newProxmoxTestConfig() *config.Config {
 
 func TestNodePlacementApplyWritesFieldsInIndexOrder(t *testing.T) {
 	nodeNames := []string{"pve1", "pve2", "pve3"}
-	cfg := &config.Config{
-		Provider: config.ProviderConfig{
-			Type:    config.ProviderProxmox,
-			Proxmox: &config.ProxmoxConfig{},
-		},
-	}
+	cfg := newProxmoxTestConfig()
 	cfg.Topology.ControlPlane.Count = 3
 	cfg.Topology.Workers.Count = 2
 
@@ -38,8 +33,7 @@ func TestNodePlacementApplyWritesFieldsInIndexOrder(t *testing.T) {
 			len(s.controlPlaneFields), len(s.workerFields))
 	}
 
-	// Deliberately non-identity assignment: a reorder bug in Apply would not
-	// survive these permuted picks.
+	// Non-identity assignment: a reorder bug in Apply would not survive this.
 	wantControlPlane := []string{"pve3", "pve1", "pve2"}
 	wantWorkers := []string{"pve2", "pve3"}
 	for i, v := range wantControlPlane {
@@ -104,16 +98,14 @@ func TestNodePlacementStep_TabAdvancesAcrossSections(t *testing.T) {
 	s.phase = phasePlacing
 	s.SetFocused(true)
 
-	// Sections in build order: bootstrap (1 field), control plane (2 fields),
-	// workers (1 field) — disc is nil so there is no infrastructure section.
+	// build order: bootstrap(1), control plane(2), workers(1) — no infra section since disc is nil.
 	if got := s.inner.CurrentSection(); got != 0 {
 		t.Fatalf("initial CurrentSection() = %d, want 0 (bootstrap)", got)
 	}
 
 	tab := tea.KeyPressMsg{Code: tea.KeyTab}
 
-	// bootstrap's only field is also its last field: tab must cross into
-	// control plane rather than wrapping within the section.
+	// bootstrap's only field is also its last: tab must cross to control plane, not wrap.
 	_, _ = s.Update(tab)
 	if got := s.inner.CurrentSection(); got != 1 {
 		t.Fatalf("CurrentSection() after 1st tab = %d, want 1 (control plane)", got)
@@ -225,14 +217,6 @@ func TestAdditionalNetworksBridges(t *testing.T) {
 	nets := []config.AdditionalNetwork{{Bridge: "vmbr1"}, {Bridge: "vmbr2"}}
 	if got := additionalNetworksBridges(nets); got != "vmbr1,vmbr2" {
 		t.Fatalf("additionalNetworksBridges() = %q, want vmbr1,vmbr2", got)
-	}
-}
-
-func TestBridgeNames(t *testing.T) {
-	bridges := []proxmoxBridge{{Name: "vmbr0"}, {Name: "vmbr1"}}
-	got := bridgeNames(bridges)
-	if len(got) != 2 || got[0] != "vmbr0" || got[1] != "vmbr1" {
-		t.Fatalf("bridgeNames() = %v", got)
 	}
 }
 

@@ -97,31 +97,29 @@ func TestLoadExistingCert_ExpiredReturnsNotOK(t *testing.T) {
 	}
 }
 
-func TestLoadExistingCert_IPMismatchReturnsNotOK(t *testing.T) {
-	root := t.TempDir()
-	certPath, keyPath := IgnitionCertPaths(root)
-
-	if _, _, err := generateSelfSignedCert(certPath, keyPath, "192.0.2.1"); err != nil {
-		t.Fatalf("generateSelfSignedCert: %v", err)
+func TestLoadExistingCert_IPMatching(t *testing.T) {
+	cases := []struct {
+		name    string
+		probeIP string
+		wantOK  bool
+	}{
+		{name: "ip mismatch returns not ok", probeIP: "192.0.2.2", wantOK: false},
+		{name: "matching ip san returns ok", probeIP: "192.0.2.1", wantOK: true},
 	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			certPath, keyPath := IgnitionCertPaths(root)
 
-	_, _, ok := loadExistingCert(certPath, keyPath, "192.0.2.2")
-	if ok {
-		t.Error("loadExistingCert returned ok=true for non-matching IP; want false")
-	}
-}
+			if _, _, err := generateSelfSignedCert(certPath, keyPath, "192.0.2.1"); err != nil {
+				t.Fatalf("generateSelfSignedCert: %v", err)
+			}
 
-func TestLoadExistingCert_MatchingIPSANReturnsOK(t *testing.T) {
-	root := t.TempDir()
-	certPath, keyPath := IgnitionCertPaths(root)
-
-	if _, _, err := generateSelfSignedCert(certPath, keyPath, "192.0.2.1"); err != nil {
-		t.Fatalf("generateSelfSignedCert: %v", err)
-	}
-
-	_, _, ok := loadExistingCert(certPath, keyPath, "192.0.2.1")
-	if !ok {
-		t.Error("loadExistingCert returned ok=false for matching IP-SAN; want true")
+			_, _, ok := loadExistingCert(certPath, keyPath, tt.probeIP)
+			if ok != tt.wantOK {
+				t.Errorf("loadExistingCert(%q) ok = %v, want %v", tt.probeIP, ok, tt.wantOK)
+			}
+		})
 	}
 }
 

@@ -31,8 +31,7 @@ type State struct {
 	Op     node.Op
 	Marker *node.OpMarker
 	Resume bool
-	// Ack arms the backend's --acknowledge-interrupted-op override: the
-	// operator explicitly chose a different op over a stranded marker.
+	// Ack maps to --acknowledge-interrupted-op (operator overrode a stranded marker).
 	Ack bool
 
 	Nodes  []cluster.NodeDetail
@@ -49,12 +48,11 @@ type State struct {
 
 	Plan      *node.OpPlan
 	DryRunErr error
-	// Proceed is true only after the operator chose execute on the preview
-	// screen (and, for destructive plans, passed the typed confirmation).
+	// Proceed is true only after the operator executes the preview (and,
+	// for destructive plans, confirms by typed name).
 	Proceed bool
-	// Started marks that execution began (mutations may have happened);
-	// Executed marks that the backend returned. The gap between them is an
-	// interrupted run the CLI must report truthfully.
+	// Started marks execution began; Executed marks the backend returned —
+	// the gap is an interrupted run.
 	Started  bool
 	Executed bool
 

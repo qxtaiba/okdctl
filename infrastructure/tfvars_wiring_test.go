@@ -14,11 +14,8 @@ var (
 	modulePassthrough = regexp.MustCompile(`(?m)^\s*(\w+)\s*=\s*var\.(\w+)\b`)
 )
 
-// TestTfvarsTemplateVarsWired guards the render→root→module pipeline: every
-// variable okdctl's terraform.tfvars template renders must be declared in the
-// production root and passed through to the module. Terraform silently
-// ignores tfvars values for undeclared variables, so a template addition
-// without root wiring means the module default wins over user config.
+// TestTfvarsTemplateVarsWired checks every templated var is declared and
+// passed through; terraform silently ignores tfvars for undeclared vars.
 func TestTfvarsTemplateVarsWired(t *testing.T) {
 	tmplPath := filepath.Join("..", "internal", "distribution", "okd", "templates", "terraform.tfvars.tmpl")
 	tmpl, err := os.ReadFile(tmplPath)

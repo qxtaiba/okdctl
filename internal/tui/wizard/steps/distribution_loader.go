@@ -37,11 +37,11 @@ func (s *DistributionStep) updateVersionSelector() {
 
 		isExpanded := s.expandedMinor == series.Minor
 
-		desc := s.getSeriesDescription(series)
+		var desc string
 		if isExpanded {
 			desc = fmt.Sprintf("▼ %d patch versions available", len(series.Versions))
 		} else {
-			desc = fmt.Sprintf("▶ %s (tab to expand)", desc)
+			desc = fmt.Sprintf("▶ %s (tab to expand)", s.getSeriesDescription(series))
 		}
 
 		options = append(options, components.Option{

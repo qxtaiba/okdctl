@@ -1,6 +1,5 @@
-// Package steps defines the individual wizard steps (welcome, basics,
-// distribution, proxmox, networking, resources, addons, advanced, files,
-// review) that collect and validate a deployment config.
+// Package steps defines the individual wizard steps that collect and
+// validate a deployment config.
 package steps
 
 import (

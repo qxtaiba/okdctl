@@ -12,9 +12,18 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
-// TestHAProxy_RemovesFixedAndTimestampedBackups guards the backup-residue
-// fix: cleanup must sweep both setup's fixed pristine snapshot and
-// postinstall's timestamped backups, not just the timestamped ones.
+func redirectDnsmasqGlobs(t *testing.T, dir string) {
+	t.Helper()
+	origConf, origBackup := dnsmasqConfPattern, dnsmasqBackupPattern
+	dnsmasqConfPattern = filepath.Join(dir, "okd-*.conf")
+	dnsmasqBackupPattern = filepath.Join(dir, "*.backup")
+	t.Cleanup(func() {
+		dnsmasqConfPattern = origConf
+		dnsmasqBackupPattern = origBackup
+	})
+}
+
+// Guards the backup-residue fix: sweep both pristine and timestamped backups, not just timestamped.
 func TestHAProxy_RemovesFixedAndTimestampedBackups(t *testing.T) {
 	dir := t.TempDir()
 	cfg := filepath.Join(dir, "haproxy.cfg")
@@ -54,14 +63,7 @@ func TestDnsmasq_GlobLoopRemovesAllMatches(t *testing.T) {
 		}
 	}
 
-	orig1 := dnsmasqConfPattern
-	orig2 := dnsmasqBackupPattern
-	dnsmasqConfPattern = filepath.Join(dir, "okd-*.conf")
-	dnsmasqBackupPattern = filepath.Join(dir, "*.backup")
-	t.Cleanup(func() {
-		dnsmasqConfPattern = orig1
-		dnsmasqBackupPattern = orig2
-	})
+	redirectDnsmasqGlobs(t, dir)
 
 	if err := Dnsmasq(context.Background(), "", logutil.NopLogger); err != nil {
 		t.Fatalf("Dnsmasq: %v", err)
@@ -75,26 +77,14 @@ func TestDnsmasq_GlobLoopRemovesAllMatches(t *testing.T) {
 }
 
 func TestDnsmasq_RejectsClusterNameTraversalAtRegex(t *testing.T) {
-	// Traversal-shaped clusterName is blocked upstream of os.RemoveAll by
-	// dns.DnsmasqConfigPath's validConfigNameRegex. Asserting the rejection
-	// directly catches a regression that loosens the regex — the prior
-	// sentinel-in-tempdir shape was vacuous because the resolved path could
-	// never reach the sentinel.
+	// Traversal is blocked upstream by validConfigNameRegex; the old
+	// sentinel-in-tempdir test was vacuous.
 	if _, err := dns.DnsmasqConfigPath("okd-../../../../etc/okd-x"); err == nil {
 		t.Fatal("DnsmasqConfigPath accepted traversal-shaped name; want error from validConfigNameRegex")
 	}
 
-	// Dnsmasq() must not propagate the rejection as an error — it logs a
-	// warning and continues per services.go:159-161.
-	globDir := t.TempDir()
-	orig1 := dnsmasqConfPattern
-	orig2 := dnsmasqBackupPattern
-	dnsmasqConfPattern = filepath.Join(globDir, "okd-*.conf")
-	dnsmasqBackupPattern = filepath.Join(globDir, "*.backup")
-	t.Cleanup(func() {
-		dnsmasqConfPattern = orig1
-		dnsmasqBackupPattern = orig2
-	})
+	// Dnsmasq() logs the rejection as a warning; it must not return an error.
+	redirectDnsmasqGlobs(t, t.TempDir())
 
 	if err := Dnsmasq(context.Background(), "../../../../etc/okd-x", logutil.NopLogger); err != nil {
 		t.Fatalf("Dnsmasq returned unexpected error for traversal cluster name: %v", err)

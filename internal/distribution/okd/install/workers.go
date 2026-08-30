@@ -11,20 +11,9 @@ import (
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
-// StartWorkerVMs starts worker VMs after bootstrap completes so they can reach the MCS.
-//
-// terraform.tfvars is the deploy-time snapshot written by setup.GenerateTerraformVars
-// and is not mutated here. start_workers_immediately defaults to false in that
-// snapshot; this call overrides it at apply time via -var. Operators running
-// `terraform plan` from the workdir will see a diff on that variable — that is
-// expected. The authoritative cluster state lives in tfstate, not in tfvars.
-//
-// The apply is scoped via -target to the worker VM resource only, matching
-// CleanupBootstrap's precaution — an unscoped apply here would also
-// reconcile any drift accumulated elsewhere (e.g. a hand-edited
-// terraform.tfvars master CPU or network change) instead of leaving it for
-// the next full apply. That drift is deferred, not lost — it surfaces on
-// the next un-scoped `okdctl deploy` run.
+// StartWorkerVMs starts worker VMs after bootstrap so they can reach the MCS.
+// It applies start_workers_immediately via -var (untracked in tfvars, expect
+// a plan diff), scoped via -target to the worker VM only like CleanupBootstrap.
 func (p *Phase) StartWorkerVMs(ctx context.Context, cfg *config.Config, opts *Options) error {
 	if cfg.Topology.Workers.Count == 0 {
 		p.Log.Info("workers: no workers configured, skipping")
@@ -71,9 +60,8 @@ func (p *Phase) StartWorkerVMs(ctx context.Context, cfg *config.Config, opts *Op
 	return nil
 }
 
-// workersAlreadyRunning returns true when cfg.Topology.Workers.Count or more
-// worker nodes are registered in the cluster. A cluster-unreachable error
-// returns false so StartWorkerVMs runs as the safe fallback.
+// workersAlreadyRunning reports whether Count-or-more workers are registered;
+// unreachable returns false so StartWorkerVMs runs as fallback.
 func (p *Phase) workersAlreadyRunning(ctx context.Context, cfg *config.Config) (bool, error) {
 	if cfg.Topology.Workers.Count == 0 {
 		return true, nil

@@ -18,9 +18,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
 )
 
-// reviewJumpOrder lists the steps this screen's section headers may jump
-// to, in on-screen order. welcome and distribution have no dedicated
-// section here and are not reachable by digit jump.
+// reviewJumpOrder lists jumpable steps in on-screen order; welcome and
+// distribution have no section here and aren't reachable by digit.
 var reviewJumpOrder = []wizard.StepID{
 	wizard.StepIDBasics,
 	wizard.StepIDProxmox,
@@ -32,8 +31,7 @@ var reviewJumpOrder = []wizard.StepID{
 	wizard.StepIDAdvanced,
 }
 
-// ReviewStep renders the final configuration review and deploy/save action
-// selector.
+// ReviewStep renders the final configuration review and deploy/save action selector.
 type ReviewStep struct {
 	wizard.BaseStep
 	cfg         *config.Config
@@ -76,8 +74,7 @@ func (s *ReviewStep) SetConfig(cfg *config.Config) {
 	s.cfg = cfg
 }
 
-// Update handles digit-jump keys, action-selector navigation, and the enter
-// confirm key.
+// Update handles digit-jump keys, action-selector navigation, and enter to confirm.
 func (s *ReviewStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
 		for _, t := range s.jumpTargets {
@@ -90,20 +87,19 @@ func (s *ReviewStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	return s, s.action.Update(msg)
 }
 
-// JumpOrder returns the steps this screen's section headers may route a
-// digit keypress to; see reviewJumpOrder.
+// JumpOrder returns the steps a digit keypress may route to; see reviewJumpOrder.
 func (s *ReviewStep) JumpOrder() []wizard.StepID {
 	return reviewJumpOrder
 }
 
-// SetJumpTargets records the compacted digit assignments the wizard model
-// computed for reviewJumpOrder; called every time this step regains focus.
+// SetJumpTargets records the digit assignments computed for reviewJumpOrder;
+// called each time this step regains focus.
 func (s *ReviewStep) SetJumpTargets(targets []wizard.JumpTarget) {
 	s.jumpTargets = targets
 }
 
-// sectionTitle prefixes title with "[N] " when stepID has an active jump
-// digit, so the review screen's own headers double as its jump legend.
+// sectionTitle prefixes title with "[N] " when stepID has a jump digit,
+// doubling headers as the jump legend.
 func (s *ReviewStep) sectionTitle(title string, stepID wizard.StepID) string {
 	for _, t := range s.jumpTargets {
 		if t.StepID == stepID {
@@ -175,9 +171,8 @@ func (s *ReviewStep) renderProxmox(st *wizard.SectionStyles) string {
 	})
 }
 
-// renderNodePlacement shares renderProxmox's ShouldShow gate (the
-// NodePlacementStep only exists when the Proxmox provider is selected), so
-// it disappears from the jump legend under the same conditions.
+// renderNodePlacement shares renderProxmox's Proxmox-only gate, so it also
+// disappears from the jump legend when absent.
 func (s *ReviewStep) renderNodePlacement(st *wizard.SectionStyles) string {
 	p := s.cfg.Provider.Proxmox
 	if p == nil {
@@ -206,7 +201,7 @@ func (s *ReviewStep) renderNetworking(st *wizard.SectionStyles) string {
 		{Label: "api vip", Value: vipValue, Skip: vipValue == ""},
 		{Label: "host prefix", Value: fmt.Sprintf("%d", net.HostPrefix), Skip: net.HostPrefix == 0},
 		{Label: "pod cidr", Value: net.PodCIDR, Skip: net.PodCIDR == ""},
-		{Label: "service cidr", Value: net.ServiceCIDR, Skip: net.PodCIDR == ""},
+		{Label: "service cidr", Value: net.ServiceCIDR, Skip: net.ServiceCIDR == ""},
 		{Label: "static ip start", Value: net.StaticIP.Start, Skip: noStatic},
 		{Label: "interface", Value: net.StaticIP.Interface, Skip: noStatic},
 		{Label: "netmask", Value: net.StaticIP.Netmask + " (from cidr)", Skip: noStatic},

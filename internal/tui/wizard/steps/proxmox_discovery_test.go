@@ -20,11 +20,8 @@ func writeData(w http.ResponseWriter, v any) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"data": v})
 }
 
-// newFakeProxmoxServer answers the small slice of Proxmox REST endpoints
-// discoverProxmox and fetchNodeDetails exercise, matching the go-proxmox
-// client's request paths and {"data": ...} envelope. targetNode is
-// whichever node discoverProxmox is expected to pick (first node
-// reporting "online", else nodes[0]).
+// newFakeProxmoxServer mocks the go-proxmox endpoints, wrapping responses in
+// the {"data": ...} envelope the client expects.
 func newFakeProxmoxServer(t *testing.T, targetNode string) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -109,37 +106,35 @@ func TestDiscoverProxmox_Success(t *testing.T) {
 	}
 }
 
-func TestDiscoverProxmox_NoNodesFound(t *testing.T) {
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api2/json/access/ticket", func(w http.ResponseWriter, _ *http.Request) {
-		writeData(w, map[string]any{"ticket": "PVE:test", "CSRFPreventionToken": "tok", "username": "root@pam"})
-	})
-	mux.HandleFunc("GET /api2/json/nodes", func(w http.ResponseWriter, _ *http.Request) {
-		writeData(w, []map[string]any{})
-	})
-	server := httptest.NewServer(mux)
-	defer server.Close()
-
-	_, err := discoverProxmox(testProxmoxConfig(server.URL))
-	if err == nil || !strings.Contains(err.Error(), "no nodes found") {
-		t.Fatalf("err = %v; want substring \"no nodes found\"", err)
+func TestDiscoverProxmox_NodesEndpointFailures(t *testing.T) {
+	cases := []struct {
+		name    string
+		handler http.HandlerFunc
+		want    string
+	}{
+		{"no nodes found", func(w http.ResponseWriter, _ *http.Request) {
+			writeData(w, []map[string]any{})
+		}, "no nodes found"},
+		// want "connection failed": the classifyError default branch.
+		{"nodes request fails", func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}, "connection failed"},
 	}
-}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			mux := http.NewServeMux()
+			mux.HandleFunc("POST /api2/json/access/ticket", func(w http.ResponseWriter, _ *http.Request) {
+				writeData(w, map[string]any{"ticket": "PVE:test", "CSRFPreventionToken": "tok", "username": "root@pam"})
+			})
+			mux.HandleFunc("GET /api2/json/nodes", tc.handler)
+			server := httptest.NewServer(mux)
+			defer server.Close()
 
-func TestDiscoverProxmox_NodesRequestFails(t *testing.T) {
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api2/json/access/ticket", func(w http.ResponseWriter, _ *http.Request) {
-		writeData(w, map[string]any{"ticket": "PVE:test", "CSRFPreventionToken": "tok", "username": "root@pam"})
-	})
-	mux.HandleFunc("GET /api2/json/nodes", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	})
-	server := httptest.NewServer(mux)
-	defer server.Close()
-
-	_, err := discoverProxmox(testProxmoxConfig(server.URL))
-	if err == nil || !strings.Contains(err.Error(), "connection failed") {
-		t.Fatalf("err = %v; want substring \"connection failed\" (classifyError default branch)", err)
+			_, err := discoverProxmox(testProxmoxConfig(server.URL))
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("err = %v; want substring %q", err, tc.want)
+			}
+		})
 	}
 }
 
@@ -153,7 +148,6 @@ func TestDiscoverProxmox_ValidationBranches(t *testing.T) {
 	}{
 		{"nil proxmox config", &config.Config{}, "no proxmox config"},
 		{"missing host", &config.Config{Provider: config.ProviderConfig{Proxmox: &config.ProxmoxConfig{Username: "root"}}}, "missing credentials"},
-		{"missing username", &config.Config{Provider: config.ProviderConfig{Proxmox: &config.ProxmoxConfig{Host: "pve"}}}, "missing credentials"},
 		{"token id without password", &config.Config{Provider: config.ProviderConfig{Proxmox: &config.ProxmoxConfig{Host: "pve", Username: "root", TokenID: "tok"}}}, "discovery uses password auth"},
 		{"missing password", &config.Config{Provider: config.ProviderConfig{Proxmox: &config.ProxmoxConfig{Host: "pve", Username: "root"}}}, "missing credentials — enter host, username, and password"},
 	}

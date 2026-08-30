@@ -15,15 +15,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// validVaultName anchors 1Password vault names to a safe charset so a name
-// can never break out of the marshalled SecretStore document or smuggle YAML
-// structure. Marshalling already escapes values; this rejects garbage early
-// on both the validate and install paths.
+// validVaultName limits vault names to a safe charset (defense in depth atop escaping).
 var validVaultName = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 
-// validateHTTPURL returns a human-readable error string when raw is not a
-// well-formed http/https URL, or "" when it is valid. Used to gate every
-// operator-supplied endpoint before it reaches the SecretStore manifest.
+// validateHTTPURL returns an error string for a malformed http/https URL, or "" when valid.
 func validateHTTPURL(field, raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
@@ -32,21 +27,18 @@ func validateHTTPURL(field, raw string) string {
 	return ""
 }
 
-// provider is the internal contract each ESO backend must satisfy.
-// buildResources returns ordered YAML manifests (auth Secrets first, then
-// the ESO SecretStore CRD) to apply via `oc apply`. secretNames returns the
-// Opaque Secret names the provider creates — used by Verify and Uninstall.
+// provider is the per-ESO-backend contract; buildResources must return auth
+// Secrets before the SecretStore CRD.
 type provider interface {
 	validate(s Settings) []string
 	buildResources(ctx context.Context, env *addon.Environment, s Settings) ([]string, error)
 	secretNames() []string
 }
 
-// providerKind is the enumeration of ESO backends the secretstore addon
-// supports. Wire values are lowercase strings matching the YAML settings map.
+// providerKind enumerates supported ESO backends; values are the lowercase wire
+// strings from settings.
 type providerKind string
 
-// Provider values accepted by the secretstore addon.
 const (
 	providerOnepassword providerKind = "onepassword"
 	providerVault       providerKind = "vault"
@@ -59,9 +51,8 @@ var providers = map[providerKind]provider{
 	providerBitwarden:   &bitwardenProvider{},
 }
 
-// resolveProvider returns the provider implementation for the `provider`
-// setting, defaulting to "onepassword" when unset. The second return value
-// is the resolved providerKind (useful for error messages on miss).
+// resolveProvider looks up the provider for the "provider" setting, defaulting
+// to onepassword when unset.
 func resolveProvider(settings map[string]string) (impl provider, kind providerKind) {
 	kind = providerKind(settings[SettingProvider])
 	if kind == "" {
@@ -74,8 +65,7 @@ func resolveProvider(settings map[string]string) (impl provider, kind providerKi
 	return p, kind
 }
 
-// ESO SecretStore manifest field keys, repeated across the provider builders.
-// Kept as constants so goconst stays quiet; they are k8s manifest field names.
+// Manifest field keys shared across provider builders; constants to keep goconst quiet.
 const (
 	mfName     = "name"
 	mfAuth     = "auth"
@@ -114,9 +104,8 @@ func (p *onepasswordProvider) validate(s Settings) []string {
 	if e := validateHTTPURL("onepassword_connect_host", s.OnePassword.ConnectHost); e != "" {
 		errs = append(errs, e)
 	}
-	// Vault-name charset is enforced at decode time (parseOnepasswordVaults),
-	// so a decoded Settings here is already clean; re-check defensively in
-	// case a Settings value is constructed without going through decode.
+	// Defensive re-check: decode-time validation (parseOnepasswordVaults) could
+	// be bypassed by a hand-built Settings.
 	for name := range s.OnePassword.Vaults {
 		if !validVaultName.MatchString(name) {
 			errs = append(errs, fmt.Sprintf("onepassword vault name %q is invalid (allowed: alphanumeric, ., _, -)", name))
@@ -162,10 +151,8 @@ func (p *onepasswordProvider) buildResources(ctx context.Context, env *addon.Env
 	return manifests, nil
 }
 
-// parseOnepasswordVaults parses the `onepassword_vaults` setting. The wire
-// format is CSV of `name=priority` pairs (e.g. "homelab=1,shared=2") since
-// the addon settings map is map[string]string. Empty input falls back to
-// the default single-vault shape.
+// parseOnepasswordVaults parses "name=priority,..." CSV (settings values are
+// strings); empty input yields the default single vault.
 func parseOnepasswordVaults(input string) (map[string]int, error) {
 	if strings.TrimSpace(input) == "" {
 		return map[string]int{"homelab": 1}, nil
@@ -200,10 +187,8 @@ func parseOnepasswordVaults(input string) (map[string]int, error) {
 	return out, nil
 }
 
-// secretStoreManifest marshals an ESO SecretStore CRD from a provider block.
-// Emitting via sigs.k8s.io/yaml (JSON round-trip) escapes every interpolated
-// value, so operator-supplied settings can never inject YAML structure into
-// the document piped to `oc apply` under the cluster-admin kubeconfig.
+// secretStoreManifest marshals an ESO SecretStore CRD via sigs.k8s.io/yaml,
+// which escapes values and blocks YAML injection from settings.
 func secretStoreManifest(providerBlock map[string]any) (string, error) {
 	doc := map[string]any{
 		"apiVersion": "external-secrets.io/v1beta1",
@@ -288,11 +273,9 @@ func buildVaultSecretStoreCRD(server, path, version string) (string, error) {
 	})
 }
 
-// bitwardenProvider backs ESO's bitwardensecretsmanager provider. It works
-// against Bitwarden Secrets Manager SaaS as well as self-hosted Vaultwarden
-// (point the three URL settings at the self-hosted endpoints). Requires a
-// machine-account access token in bitwarden-token.txt and an in-cluster
-// bitwarden-sdk-server sidecar (ESO ships one; not provisioned here).
+// bitwardenProvider backs ESO's bitwardensecretsmanager, supporting Bitwarden
+// SaaS or self-hosted Vaultwarden; the required bitwarden-sdk-server sidecar is
+// not provisioned here.
 type bitwardenProvider struct{}
 
 func (p *bitwardenProvider) validate(s Settings) []string {

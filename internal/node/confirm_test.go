@@ -12,8 +12,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
 
-// confirmSnapshot records the mutation-counter state observed at the instant the
-// confirm hook fired, proving guards ran and no mutation happened before consent.
 type confirmSnapshot struct {
 	fired      bool
 	plan       OpPlan
@@ -33,9 +31,7 @@ func TestRemoveConfirmRunsAfterGuardsBeforeMutation(t *testing.T) {
 			{Name: "master0", Role: nodetypes.RoleMaster},
 		},
 		schedulable: true,
-		// OSD on the target, force-allowed: the storage guard runs, warns, and the
-		// plan still reaches confirm carrying the OSD verdict — proof the read-only
-		// guards executed before the prompt.
+		// OSD on target, force-allowed: storage guard warns but confirm still sees the OSD verdict.
 		osdPods: []cluster.PodPlacement{{Name: "osd-1", Namespace: "rook-ceph", NodeName: "worker1"}},
 	}
 	ftf := &fakeTF{action: terraform.PlanActionDelete}
@@ -72,7 +68,6 @@ func TestRemoveConfirmRunsAfterGuardsBeforeMutation(t *testing.T) {
 		t.Errorf("mutation happened before confirm: cordon=%d drain=%d delete=%d apply=%d",
 			snap.cordon, snap.drain, snap.deleteNode, snap.tfApply)
 	}
-	// Declining leaves zero mutation.
 	if fc.cordon != 0 || fc.drain != 0 || fc.deleteNode != 0 || ftf.applyCalls != 0 {
 		t.Errorf("declined remove mutated: cordon=%d drain=%d delete=%d apply=%d",
 			fc.cordon, fc.drain, fc.deleteNode, ftf.applyCalls)
@@ -110,7 +105,6 @@ func TestCompactConfirmRunsAfterPreflightBeforeControlPlane(t *testing.T) {
 	if !snap.fired {
 		t.Fatal("confirm hook never fired")
 	}
-	// Preflight plan-gated every worker before confirm.
 	if len(snap.plan.Nodes) != 2 {
 		t.Errorf("compact plan should carry both workers; got %d", len(snap.plan.Nodes))
 	}
@@ -124,8 +118,6 @@ func TestCompactConfirmRunsAfterPreflightBeforeControlPlane(t *testing.T) {
 	}
 }
 
-// TestResizeConfirmYesProceeds is the non-interactive analog: a confirm hook
-// that approves (mirroring --yes) lets the resize run to completion.
 func TestResizeConfirmYesProceeds(t *testing.T) {
 	fc := &fakeCluster{
 		nodes:       []cluster.NodeDetail{{Name: "master0", Role: nodetypes.RoleMaster, Ready: true}},
@@ -156,12 +148,6 @@ func TestResizeConfirmYesProceeds(t *testing.T) {
 	}
 }
 
-// TestClusterPowerConfirmGate locks the confirm gate on the whole-cluster power
-// ops (stop, start), which power off / on every VM: the gate must fire after
-// read-only enumeration and before any cordon/shutdown/power-on, a decline must
-// return ErrDeclined with zero mutation, and an approval must run the full
-// sequence. The plan handed to the hook carries the op and its power ordering
-// (stop takes workers first, start takes masters first).
 func TestClusterPowerConfirmGate(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -176,10 +162,7 @@ func TestClusterPowerConfirmGate(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			fc := &fakeCluster{
-				nodes:          stopTestNodes(),
-				signerNotAfter: time.Now().Add(60 * 24 * time.Hour),
-			}
+			fc := stopTestCluster()
 			fp := &fakePower{}
 			r, _, _ := seedRunner(t, fc, &fakeTF{}, startTestConfig())
 			r.DryRun = false
@@ -251,11 +234,6 @@ func TestClusterPowerConfirmGate(t *testing.T) {
 	}
 }
 
-// TestCompactConsentFiresExactlyOnceThroughLoop drives an approving compact all
-// the way through its remove-every-worker loop and asserts the consent gate
-// fired EXACTLY ONCE for the whole compact — not once per inner RemoveWorker.
-// The plan the hook last saw (what the CLI records as rc.captured for the
-// completion box) must be the compact plan, never an inner remove plan.
 func TestCompactConsentFiresExactlyOnceThroughLoop(t *testing.T) {
 	fc := &fakeCluster{
 		nodes:       compactNodes(),
@@ -291,8 +269,6 @@ func TestCompactConsentFiresExactlyOnceThroughLoop(t *testing.T) {
 	if len(lastPlan.Nodes) != 2 {
 		t.Errorf("compact plan should carry both workers; got %d", len(lastPlan.Nodes))
 	}
-	// The loop ran to completion under the single grant: both workers removed,
-	// the control plane made schedulable once with the compact ingress applied.
 	if fc.deleteNode != 2 {
 		t.Errorf("both workers should be removed; deleteNode=%d", fc.deleteNode)
 	}

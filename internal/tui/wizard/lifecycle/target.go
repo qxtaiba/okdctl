@@ -51,8 +51,7 @@ type TargetStep struct {
 
 	selector *components.Selector
 	choices  []targetChoice
-	// blocked lists remove-ineligible workers rendered as dimmed lines
-	// below the selector, teaching the top-down constraint.
+	// blocked: remove-ineligible workers, rendered dimmed to teach the top-down constraint.
 	blocked []string
 }
 
@@ -133,8 +132,6 @@ func (s *TargetStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	return s, nil
 }
 
-// buildChoices assembles the selector options for the current op from the
-// live node list.
 func (s *TargetStep) buildChoices(nodes []cluster.NodeDetail) {
 	masters := filterRole(nodes, nodetypes.RoleMaster)
 	workers := filterRole(nodes, nodetypes.RoleWorker)
@@ -153,13 +150,11 @@ func (s *TargetStep) buildChoices(nodes []cluster.NodeDetail) {
 				ID:    top.Name,
 				Title: nodeLine(top),
 			})
-			for i, w := range workers[1:] {
-				after := make([]string, 0, i+1)
-				for _, higher := range workers[:i+1] {
-					after = append(after, higher.Name)
-				}
+			after := []string{top.Name}
+			for _, w := range workers[1:] {
 				s.blocked = append(s.blocked,
 					fmt.Sprintf("○ %s      removable only after %s (top-down)", w.Name, strings.Join(after, ", ")))
+				after = append(after, w.Name)
 			}
 		}
 	} else {
@@ -210,9 +205,8 @@ func filterRole(nodes []cluster.NodeDetail, role nodetypes.NodeRole) []cluster.N
 	return out
 }
 
-// sortByIndex orders nodes by their terraform index (ascending, or
-// descending for the remove screen's top-down list). Nodes without a
-// derivable index sort last.
+// sortByIndex orders by terraform index (desc for remove's top-down list);
+// unindexed nodes sort last.
 func sortByIndex(nodes []cluster.NodeDetail, descending bool) {
 	sort.SliceStable(nodes, func(i, j int) bool {
 		a, aok := cluster.NodeIndex(nodes[i].Name)
@@ -225,11 +219,6 @@ func sortByIndex(nodes []cluster.NodeDetail, descending bool) {
 		}
 		return a < b
 	})
-}
-
-// selectableCount reports how many real options the selector offers.
-func (s *TargetStep) selectableCount() int {
-	return len(s.choices)
 }
 
 // View renders the spinner, a load error, or the target selector plus any

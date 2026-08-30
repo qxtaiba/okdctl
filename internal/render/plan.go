@@ -8,9 +8,7 @@ import (
 )
 
 // PlanPreview renders the drift-preview box shared by `okdctl plan` and
-// `deploy --dry-run`: a clean confirmation when changes is empty, or a
-// per-resource create/update/replace/delete listing when terraform found
-// pending changes.
+// `deploy --dry-run`, listing per-resource changes or a clean confirmation.
 func PlanPreview(changes []terraform.ResourceChange) string {
 	sb := NewBuilder()
 	sb.WriteString("\n")

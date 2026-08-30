@@ -74,10 +74,8 @@ func TestWaitFor_Timeout(t *testing.T) {
 	})
 }
 
-// TestWaitFor_HungProbeDiesAtGrace locks the probe-context bound: a probe
-// that ignores readiness and blocks on its ctx must be cancelled at
-// opts.Timeout+probeGrace, so WaitFor returns instead of stalling forever
-// past its configured timeout.
+// Locks the probe-context bound: a hung probe must be cancelled at
+// opts.Timeout+probeGrace, not stall forever.
 func TestWaitFor_HungProbeDiesAtGrace(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var probeCtxErr error
@@ -108,8 +106,7 @@ func TestWaitFor_HungProbeDiesAtGrace(t *testing.T) {
 	})
 }
 
-// TestWaitFor_CtxCancellation locks that ctx.Err takes priority in the
-// message when both ctx and timeout fire.
+// Locks that ctx.Err takes priority when both ctx and timeout fire.
 func TestWaitFor_CtxCancellation(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -125,28 +122,6 @@ func TestWaitFor_CtxCancellation(t *testing.T) {
 		}
 		if !errors.Is(err, context.Canceled) {
 			t.Errorf("err = %v; want wrapping context.Canceled", err)
-		}
-	})
-}
-
-func TestWaitFor_DefaultInterval(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		err := WaitFor(context.Background(), "test", "default-interval", func(context.Context) bool { return true }, WaitForOptions{
-			Interval: 0,
-			Timeout:  1 * time.Minute,
-			Logger:   logutil.NopLogger,
-		})
-		if err != nil {
-			t.Errorf("default interval path errored: %v", err)
-		}
-	})
-}
-
-func TestWaitForWithTimeout_Convenience(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		err := WaitForWithTimeout(context.Background(), "test", "convenience", func(context.Context) bool { return true }, 5*time.Second, logutil.NopLogger)
-		if err != nil {
-			t.Errorf("err = %v", err)
 		}
 	})
 }

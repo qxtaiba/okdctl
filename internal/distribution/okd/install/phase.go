@@ -1,15 +1,11 @@
 // Package install drives the install phase: terraform-up, bootstrap monitor,
-// CSR approval, and cluster-operator settle. Default timeouts are 30 m for
-// bootstrap and 60 m for cluster-operator wait (both overridable via
-// Deployment.BootstrapTimeout / Deployment.InstallTimeout in the Config),
-// with a fixed 30 s CSR-approval poll cadence.
+// CSR approval, and cluster-operator settle.
 package install
 
 import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -21,16 +17,15 @@ import (
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
-// Default timeouts and intervals for the install phase. Overridable via
-// Deployment.BootstrapTimeout / Deployment.InstallTimeout in the Config.
+// Default timeouts and intervals for the install phase, overridable via
+// Deployment.BootstrapTimeout/InstallTimeout.
 const (
 	DefaultBootstrapTimeout    = 30 * time.Minute
 	DefaultInstallTimeout      = 60 * time.Minute
 	DefaultCSRApprovalInterval = 30 * time.Second
 )
 
-// Options configures an install run: timeouts, CSR approval cadence, and
-// the bootstrap IP/SSH details used to stream bootstrap logs.
+// Options configures an install run: timeouts and CSR approval cadence.
 type Options struct {
 	phase.BaseOptions
 	AutoApprove         bool
@@ -38,14 +33,9 @@ type Options struct {
 	InstallTimeout      time.Duration
 	CSRApprovalInterval time.Duration
 	SkipTerraform       bool
-	SkipConfirmation    bool
-	BootstrapIP         string
-	SSHKeyPath          string
 }
 
-// NewOptions builds install Options from cfg, applying deployment-level
-// timeout overrides and resolving the SSH key path for bootstrap log
-// streaming.
+// NewOptions builds install Options from cfg, applying deployment-level timeout overrides.
 func NewOptions(cfg *config.Config, projectRoot string) Options {
 	bootstrapTimeout := DefaultBootstrapTimeout
 	installTimeout := DefaultInstallTimeout
@@ -57,30 +47,20 @@ func NewOptions(cfg *config.Config, projectRoot string) Options {
 		installTimeout = time.Duration(cfg.Deployment.InstallTimeout) * time.Second
 	}
 
-	sshKeyPath := ""
-	if cfg.Files.SSHPublicKey != "" {
-		sshKeyPath = system.ExpandPath(cfg.Files.SSHPublicKey)
-		sshKeyPath = strings.TrimSuffix(sshKeyPath, ".pub")
-	}
-
 	return Options{
 		BaseOptions:         phase.NewBaseOptions(cfg, projectRoot),
 		AutoApprove:         cfg.Deployment.AutoApprove,
 		BootstrapTimeout:    bootstrapTimeout,
 		InstallTimeout:      installTimeout,
 		CSRApprovalInterval: DefaultCSRApprovalInterval,
-		BootstrapIP:         cfg.Networking.StaticIP.Start,
-		SSHKeyPath:          sshKeyPath,
 	}
 }
 
-// Phase drives the install flow: openshift-install wrapper, bootstrap
-// monitor, and cluster-up poll.
+// Phase drives the install flow: openshift-install wrapper, bootstrap monitor, and cluster-up poll.
 type Phase struct {
 	phase.BasePhase
 	// startMonitorCmd, when non-nil, replaces the default subprocess
-	// start-and-wait used by MonitorInstallation. Tests inject a pure-Go
-	// implementation to avoid spawning real processes.
+	// start-and-wait; tests inject a pure-Go stub.
 	startMonitorCmd func(ctx context.Context, clusterDir string) (<-chan error, func(), error)
 }
 
@@ -91,31 +71,25 @@ func New(opts ...phase.BasePhaseOption) *Phase {
 	return &Phase{BasePhase: bp}
 }
 
-// Execute runs the install phase step sequence and returns each step's
-// result. A non-nil error means orchestration stopped early. cfg must be
-// the same cfg passed to NewOptions — opts was derived from it and the two
-// are not re-validated for consistency here.
+// Execute runs the install phase steps. cfg must be the same cfg passed to
+// NewOptions — opts is derived from it and the two aren't re-validated here.
 func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) ([]distribution.StepResult, error) {
 	orchestrator := distribution.NewOrchestrator(distribution.BuildSteps(p.installSteps(cfg, opts))...)
 	orchestrator.SetLogger(p.Log)
 	orchestrator.SetMetricsRecorder(p.Recorder)
 
-	if err := orchestrator.Run(ctx); err != nil {
-		return orchestrator.Results(), err
-	}
-
-	return orchestrator.Results(), nil
+	err := orchestrator.Run(ctx)
+	return orchestrator.Results(), err
 }
 
-// StepDefs returns the ordered step definitions this phase executes for
-// cfg/opts, without running them. Provisioner.DeploySteps calls this for
-// the deploy --dry-run listing, so the listing cannot drift from Execute.
+// StepDefs returns the ordered step definitions for cfg/opts without running
+// them, used by Provisioner.DeploySteps for the deploy --dry-run listing.
 func (p *Phase) StepDefs(cfg *config.Config, opts *Options) []distribution.StepDef {
 	return p.installSteps(cfg, opts)
 }
 
-// DeployInfrastructure applies the generated Terraform plan against Proxmox
-// to provision the bootstrap and node VMs.
+// DeployInfrastructure applies the generated Terraform plan against Proxmox to
+// provision the bootstrap and node VMs.
 func (p *Phase) DeployInfrastructure(ctx context.Context, cfg *config.Config, opts *Options) error {
 	terraformDir := workspace.TerraformEnvDir(opts.ProjectRoot, opts.TerraformEnv)
 	tfvarsFile := filepath.Join(terraformDir, "terraform.tfvars")
@@ -150,19 +124,13 @@ func (p *Phase) DeployInfrastructure(ctx context.Context, cfg *config.Config, op
 		TerraformEnv: opts.TerraformEnv,
 	}
 
-	if err := prov.Provision(ctx, cfg, provOpts); err != nil {
-		return err
-	}
-
-	return nil
+	return prov.Provision(ctx, cfg, provOpts)
 }
 
 // SetupKubeconfig appends KUBECONFIG=<path> to the phase executor env so
-// subprocesses launched via p.Exec.Run inherit it. A cluster.Client built
-// with cluster.WithExecutor(p.Exec) (as BasePhase.oc() does) shares this env
-// and sees it automatically; a Client built any other way reads os.Environ
-// only at construction and will NOT see this — pass cluster.WithKubeconfig
-// explicitly in that case.
+// p.Exec.Run subprocesses inherit it. A cluster.Client not built via
+// cluster.WithExecutor(p.Exec) reads os.Environ only at construction and
+// won't see this — pass cluster.WithKubeconfig explicitly.
 func (p *Phase) SetupKubeconfig(ctx context.Context, clusterDir string) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("setup kubeconfig: %w", err)

@@ -1,5 +1,3 @@
-# cluster information
-
 output "cluster_name" {
   description = "name of the okd cluster"
   value       = var.cluster_name
@@ -9,8 +7,6 @@ output "cluster_nodes_total" {
   description = "total number of nodes in the cluster"
   value       = var.master_count + var.worker_count + (var.bootstrap_enabled ? 1 : 0)
 }
-
-# bootstrap node outputs
 
 output "bootstrap_vm_id" {
   description = "vm id of the bootstrap node"
@@ -31,8 +27,6 @@ output "bootstrap_node_info" {
     memory = proxmox_virtual_environment_vm.bootstrap[0].memory[0].dedicated
   } : null
 }
-
-# master node outputs
 
 output "master_vm_ids" {
   description = "list of vm ids for master nodes"
@@ -56,8 +50,6 @@ output "master_nodes_info" {
   ]
 }
 
-# worker node outputs
-
 output "worker_vm_ids" {
   description = "list of vm ids for worker nodes"
   value       = [for worker in proxmox_virtual_environment_vm.worker : worker.vm_id]
@@ -79,8 +71,6 @@ output "worker_nodes_info" {
     }
   ]
 }
-
-# all nodes summary
 
 output "all_vm_ids" {
   description = "list of all vm ids in the cluster"
@@ -128,8 +118,6 @@ output "all_nodes_info" {
   }
 }
 
-# resource summary
-
 output "cluster_resources" {
   description = "summary of cluster resources"
   value = {
@@ -153,10 +141,8 @@ output "cluster_resources" {
   }
 }
 
-# vm id ranges (useful for networking/firewall rules)
-
 output "vm_id_ranges" {
-  description = "vm id ranges for different node types"
+  description = "vm id ranges per node type (useful for networking/firewall rules)"
   value = {
     bootstrap_range = var.bootstrap_enabled ? "${var.vmid_base}-${var.vmid_base}" : null
     master_range    = var.master_count > 0 ? "${var.vmid_base + 10}-${var.vmid_base + 10 + var.master_count - 1}" : null

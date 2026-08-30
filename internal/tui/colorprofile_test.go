@@ -6,12 +6,9 @@ import (
 	"testing"
 )
 
-// TestBoxRespectsNoColorProfile is the regression guard for the highest-value
-// finding in the CLI overhaul: box helpers historically emitted 24-bit
-// truecolor unconditionally, so NO_COLOR and piped output kept every escape
-// sequence. A non-TTY writer must yield a box with zero ANSI escapes.
+// Regression guard: box helpers used to leak 24-bit escapes under NO_COLOR/pipes.
 func TestBoxRespectsNoColorProfile(t *testing.T) {
-	SetColorProfileFor(&bytes.Buffer{}) // a plain buffer is never a TTY -> NoTTY
+	SetColorProfileFor(&bytes.Buffer{}) // a buffer is never a TTY
 	t.Cleanup(func() { SetColorProfileFor(&bytes.Buffer{}) })
 
 	if colorEnabled() {

@@ -3,6 +3,7 @@ package provision
 import (
 	"bytes"
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -30,9 +31,30 @@ func newUploadExecutor(extra ...executor.Option) *executor.Executor {
 	return executor.New(opts...)
 }
 
-func TestUploadISOsViaSCP_argvShape(t *testing.T) {
+func runFakeSCPUpload(t *testing.T, isoFiles []string, host, remotePath, knownHostsPath string) []string {
+	t.Helper()
 	installFakeSCP(t)
 
+	var buf bytes.Buffer
+	exec := newUploadExecutor(executor.WithStdout(&buf))
+
+	if err := uploadISOsViaSCP(context.Background(), exec, isoFiles, host, remotePath, knownHostsPath); err != nil {
+		t.Fatalf("uploadISOsViaSCP: %v", err)
+	}
+	return strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+}
+
+func assertDashOPair(t *testing.T, lines []string, opt string) {
+	t.Helper()
+	for i, l := range lines {
+		if l == "-o" && i+1 < len(lines) && lines[i+1] == opt {
+			return
+		}
+	}
+	t.Errorf("argv missing -o %s pair; got: %v", opt, lines)
+}
+
+func TestUploadISOsViaSCP_argvShape(t *testing.T) {
 	const (
 		host       = "pve.example"
 		remotePath = "/srv/custom/iso"
@@ -42,116 +64,46 @@ func TestUploadISOsViaSCP_argvShape(t *testing.T) {
 		"/tmp/isos/custom.iso",
 	}
 
-	var buf bytes.Buffer
-	exec := newUploadExecutor(executor.WithStdout(&buf))
+	lines := runFakeSCPUpload(t, isoFiles, host, remotePath, "")
 
-	if err := uploadISOsViaSCP(context.Background(), exec, isoFiles, host, remotePath, ""); err != nil {
-		t.Fatalf("uploadISOsViaSCP: %v", err)
-	}
-
-	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
-
-	found := false
-	for i, l := range lines {
-		if l == "-o" && i+1 < len(lines) && lines[i+1] == "StrictHostKeyChecking=accept-new" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Errorf("argv missing -o StrictHostKeyChecking=accept-new pair; got: %v", lines)
-	}
+	assertDashOPair(t, lines, "StrictHostKeyChecking=accept-new")
 
 	for _, iso := range isoFiles {
-		seen := false
-		for _, l := range lines {
-			if l == iso {
-				seen = true
-				break
-			}
-		}
-		if !seen {
+		if !slices.Contains(lines, iso) {
 			t.Errorf("iso path %q missing as discrete argv entry; got: %v", iso, lines)
 		}
 	}
 
 	want := proxmoxSCPUser + "@" + host + ":" + remotePath + "/"
-	dest := false
-	for _, l := range lines {
-		if l == want {
-			dest = true
-			break
-		}
-	}
-	if !dest {
+	if !slices.Contains(lines, want) {
 		t.Errorf("destination %q missing or malformed; got: %v", want, lines)
 	}
 }
 
 func TestUploadISOsViaSCP_pinnedUsesStrictChecking(t *testing.T) {
-	installFakeSCP(t)
 	const (
 		host           = "pve.example"
 		remotePath     = "/var/lib/vz/template/iso"
 		knownHostsPath = "/tmp/okdctl-known-hosts-pinned"
 	)
-	isoFiles := []string{"/tmp/isos/coreos.iso"}
 
-	var buf bytes.Buffer
-	exec := newUploadExecutor(executor.WithStdout(&buf))
+	lines := runFakeSCPUpload(t, []string{"/tmp/isos/coreos.iso"}, host, remotePath, knownHostsPath)
 
-	if err := uploadISOsViaSCP(context.Background(), exec, isoFiles, host, remotePath, knownHostsPath); err != nil {
-		t.Fatalf("uploadISOsViaSCP: %v", err)
-	}
-
-	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
-
-	wantOpts := []string{
+	for _, opt := range []string{
 		"UserKnownHostsFile=" + knownHostsPath,
 		"StrictHostKeyChecking=yes",
 		"BatchMode=yes",
-	}
-	for _, opt := range wantOpts {
-		found := false
-		for i, l := range lines {
-			if l == "-o" && i+1 < len(lines) && lines[i+1] == opt {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("argv missing -o %s pair; got: %v", opt, lines)
-		}
+	} {
+		assertDashOPair(t, lines, opt)
 	}
 }
 
 func TestUploadISOsViaSCP_spaceInFilename(t *testing.T) {
-	installFakeSCP(t)
-
-	const (
-		host       = "pve.example"
-		remotePath = "/var/lib/vz/template/iso"
-	)
 	spaced := "/tmp/isos/my coreos image.iso"
-	isoFiles := []string{spaced}
 
-	var buf bytes.Buffer
-	exec := newUploadExecutor(executor.WithStdout(&buf))
+	lines := runFakeSCPUpload(t, []string{spaced}, "pve.example", "/var/lib/vz/template/iso", "")
 
-	if err := uploadISOsViaSCP(context.Background(), exec, isoFiles, host, remotePath, ""); err != nil {
-		t.Fatalf("uploadISOsViaSCP: %v", err)
-	}
-
-	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
-
-	found := false
-	for _, l := range lines {
-		if l == spaced {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !slices.Contains(lines, spaced) {
 		t.Errorf("spaced filename %q not found as single argv entry; got lines: %v", spaced, lines)
 	}
 }

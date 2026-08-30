@@ -170,9 +170,6 @@ func TestParamsStepRemoveForceStorage(t *testing.T) {
 }
 
 func TestParamsStepShownOnResume(t *testing.T) {
-	// The backend does not persist an interrupted op's parameters, so a
-	// resume must re-collect them: hiding this step would hand Resize
-	// zero sizing (refused) and Remove an unbounded drain timeout.
 	cfg := config.DefaultConfig()
 	st := &State{
 		Cfg: cfg, Op: node.OpResize, Resume: true,
@@ -189,8 +186,7 @@ func TestParamsStepShownOnResume(t *testing.T) {
 }
 
 func TestParamsStepRebuildsFormWhenOpChanges(t *testing.T) {
-	// The step instance survives esc-back-and-repick; a cached form for a
-	// different op used to Apply through nil field pointers and panic.
+	// Regression: esc-back-and-repick used to Apply through nil pointers for the old op's cached form.
 	st := &State{Cfg: config.DefaultConfig(), Op: node.OpAdd}
 	s := NewParamsStep(st)
 	_ = s.Init()

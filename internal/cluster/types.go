@@ -1,12 +1,7 @@
 package cluster
 
-// CSR is the minimal view of a Kubernetes CertificateSigningRequest used by
-// the client's approval helpers. Today PendingCSRs only returns pending
-// records, so a Pending bool would always be true and add nothing — store
-// just the name.
-// Scaffolding: a []string would suffice today; the struct shape is kept
-// for future fields (e.g. ExpiresAt, Signer) without breaking call-site
-// shapes. Do not collapse to []string.
+// CSR is the minimal view of a Kubernetes CertificateSigningRequest, kept as
+// a struct (not []string) so future fields don't break call-site shapes.
 type CSR struct {
 	Name string
 }

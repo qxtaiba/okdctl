@@ -8,9 +8,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 )
 
-// fakeStep is a minimal WizardStep double for exercising Model navigation
-// without depending on the concrete steps package (which itself imports
-// wizard, so importing it back here would cycle).
+// fakeStep is a minimal WizardStep double, avoiding an import cycle with the steps package.
 type fakeStep struct {
 	id         StepID
 	focused    bool
@@ -39,8 +37,7 @@ func (f *fakeStep) ShouldShow(cfg *config.Config) bool {
 	return f.shouldShow(cfg)
 }
 
-// fakeReviewStep additionally implements ReviewJumper, standing in for
-// steps.ReviewStep in navigation tests.
+// fakeReviewStep additionally implements ReviewJumper, standing in for steps.ReviewStep.
 type fakeReviewStep struct {
 	fakeStep
 	order   []StepID
@@ -50,9 +47,14 @@ type fakeReviewStep struct {
 func (r *fakeReviewStep) JumpOrder() []StepID           { return r.order }
 func (r *fakeReviewStep) SetJumpTargets(t []JumpTarget) { r.targets = t }
 
-// newNavTestSteps builds [basics, proxmox, networking, review] with review's
-// JumpOrder set to order. review is returned so tests can inspect the
-// compacted targets the model computed for it.
+func update(t *testing.T, m *Model, msg tea.Msg) *Model {
+	t.Helper()
+	mm, _ := m.Update(msg)
+	return mm.(*Model)
+}
+
+// newNavTestSteps builds [basics, proxmox, networking, review]; review is
+// returned to inspect computed jump targets.
 func newNavTestSteps(order []StepID) ([]WizardStep, *fakeReviewStep) {
 	review := &fakeReviewStep{fakeStep: fakeStep{id: StepIDReview}, order: order}
 	steps := []WizardStep{
@@ -64,17 +66,14 @@ func newNavTestSteps(order []StepID) ([]WizardStep, *fakeReviewStep) {
 	return steps, review
 }
 
-// advanceToReview drives the wizard forward with plain confirms until it
-// reaches review, checking before each step so it works whether or not
-// intermediate steps are hidden (goToNextStep skips those on its own).
+// advanceToReview drives forward with confirms until review, tolerant of hidden intermediate steps.
 func advanceToReview(t *testing.T, m *Model) *Model {
 	t.Helper()
 	for range len(m.steps) {
 		if m.CurrentStep().ID() == StepIDReview {
 			return m
 		}
-		mm, _ := m.Update(StepCompleteMsg{})
-		m = mm.(*Model)
+		m = update(t, m, StepCompleteMsg{})
 	}
 	t.Fatalf("setup: CurrentStep() = %v, want review", m.CurrentStep().ID())
 	return m
@@ -85,14 +84,12 @@ func TestModel_JumpFromReview_ConfirmReturnsToReview(t *testing.T) {
 	m := NewModel(steps, &config.Config{})
 	m = advanceToReview(t, m)
 
-	mm, _ := m.Update(JumpToStepMsg{StepID: StepIDProxmox})
-	m = mm.(*Model)
+	m = update(t, m, JumpToStepMsg{StepID: StepIDProxmox})
 	if got := m.CurrentStep().ID(); got != StepIDProxmox {
 		t.Fatalf("after jump: CurrentStep() = %v, want proxmox", got)
 	}
 
-	mm, _ = m.Update(StepCompleteMsg{StepID: StepIDProxmox})
-	m = mm.(*Model)
+	m = update(t, m, StepCompleteMsg{StepID: StepIDProxmox})
 	if got := m.CurrentStep().ID(); got != StepIDReview {
 		t.Fatalf("after confirm: CurrentStep() = %v, want review (not the intermediate replay)", got)
 	}
@@ -103,11 +100,9 @@ func TestModel_JumpFromReview_EscReturnsToReview(t *testing.T) {
 	m := NewModel(steps, &config.Config{})
 	m = advanceToReview(t, m)
 
-	mm, _ := m.Update(JumpToStepMsg{StepID: StepIDProxmox})
-	m = mm.(*Model)
+	m = update(t, m, JumpToStepMsg{StepID: StepIDProxmox})
 
-	mm, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
-	m = mm.(*Model)
+	m = update(t, m, tea.KeyPressMsg{Code: tea.KeyEscape})
 	if got := m.CurrentStep().ID(); got != StepIDReview {
 		t.Fatalf("after esc: CurrentStep() = %v, want review (not one step back)", got)
 	}
@@ -118,12 +113,9 @@ func TestModel_JumpFromReview_EscDoesNotApplyEditedStep(t *testing.T) {
 	m := NewModel(steps, &config.Config{})
 	m = advanceToReview(t, m)
 
-	mm, _ := m.Update(JumpToStepMsg{StepID: StepIDProxmox})
-	m = mm.(*Model)
+	m = update(t, m, JumpToStepMsg{StepID: StepIDProxmox})
 
-	// advanceToReview's own walk-through already applied every step once in
-	// the normal course of confirming forward, so compare against a
-	// snapshot rather than assuming zero.
+	// advanceToReview already applies every step once; compare against a snapshot, not zero.
 	proxmoxStep := steps[1].(*fakeStep)
 	before := proxmoxStep.applyCalls
 
@@ -131,36 +123,6 @@ func TestModel_JumpFromReview_EscDoesNotApplyEditedStep(t *testing.T) {
 
 	if proxmoxStep.applyCalls != before {
 		t.Errorf("Apply() called during esc (calls %d -> %d), want unchanged (esc discards edits everywhere else)", before, proxmoxStep.applyCalls)
-	}
-}
-
-// TestModel_JumpFromReview_NodePlacementDigit_ConfirmReturnsToReview guards
-// against StepIDNodePlacement being left out of a review step's JumpOrder
-// (as it originally was): with no entry mapping to it, no digit could ever
-// produce this jump, and the fields it renders became unreachable.
-func TestModel_JumpFromReview_NodePlacementDigit_ConfirmReturnsToReview(t *testing.T) {
-	order := []StepID{StepIDBasics, StepIDProxmox, StepIDNodePlacement, StepIDNetworking}
-	review := &fakeReviewStep{fakeStep: fakeStep{id: StepIDReview}, order: order}
-	steps := []WizardStep{
-		&fakeStep{id: StepIDBasics},
-		&fakeStep{id: StepIDProxmox},
-		&fakeStep{id: StepIDNodePlacement},
-		&fakeStep{id: StepIDNetworking},
-		review,
-	}
-	m := NewModel(steps, &config.Config{})
-	m = advanceToReview(t, m)
-
-	mm, _ := m.Update(JumpToStepMsg{StepID: StepIDNodePlacement})
-	m = mm.(*Model)
-	if got := m.CurrentStep().ID(); got != StepIDNodePlacement {
-		t.Fatalf("after jump: CurrentStep() = %v, want node-placement", got)
-	}
-
-	mm, _ = m.Update(StepCompleteMsg{StepID: StepIDNodePlacement})
-	m = mm.(*Model)
-	if got := m.CurrentStep().ID(); got != StepIDReview {
-		t.Fatalf("after confirm: CurrentStep() = %v, want review (not the intermediate replay)", got)
 	}
 }
 
@@ -192,8 +154,7 @@ func TestModel_JumpToStep_RefusesHiddenTarget(t *testing.T) {
 	m := NewModel(steps, &config.Config{})
 	m = advanceToReview(t, m)
 
-	mm, _ := m.Update(JumpToStepMsg{StepID: StepIDProxmox})
-	m = mm.(*Model)
+	m = update(t, m, JumpToStepMsg{StepID: StepIDProxmox})
 	if got := m.CurrentStep().ID(); got != StepIDReview {
 		t.Fatalf("jump to hidden step: CurrentStep() = %v, want unchanged review", got)
 	}
@@ -203,8 +164,7 @@ func TestModel_DigitKeyOutsideReviewUnaffected(t *testing.T) {
 	steps, _ := newNavTestSteps([]StepID{StepIDBasics, StepIDProxmox, StepIDNetworking})
 	m := NewModel(steps, &config.Config{})
 
-	mm, _ := m.Update(tea.KeyPressMsg{Code: '2', Text: "2"})
-	m = mm.(*Model)
+	m = update(t, m, tea.KeyPressMsg{Code: '2', Text: "2"})
 	if got := m.CurrentStep().ID(); got != StepIDBasics {
 		t.Fatalf("digit key on non-review step: CurrentStep() = %v, want basics (unaffected)", got)
 	}

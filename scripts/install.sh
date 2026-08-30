@@ -1,43 +1,25 @@
 #!/usr/bin/env bash
-# okdctl installer
-# ---------------------
-# Downloads the latest (or a pinned) okdctl release from GitHub,
-# verifies its SHA256 against the published SHA256SUMS file, verifies the
-# cosign signature on SHA256SUMS when cosign is available, and installs the
-# binary to /usr/local/bin (or $INSTALL_DIR if set).
+# okdctl installer: downloads a release from GitHub, verifies SHA256 (and
+# cosign, when available) against SHA256SUMS, and installs to
+# /usr/local/bin (or $INSTALL_DIR).
 #
 # Usage:
 #   curl -sSfL https://raw.githubusercontent.com/qxtaiba/okdctl/develop/scripts/install.sh | bash
 #
-# Environment variables:
-#   VERSION       - pin to a specific release, e.g. VERSION=v0.1.0 (default: latest)
-#   INSTALL_DIR   - where to put the binary (default: /usr/local/bin)
-#   INSECURE      - set to "1" to skip cosign signature verification when cosign is
-#                   absent or when you explicitly accept sha256-only trust.
-#   GITHUB_TOKEN  - bearer token injected when resolving the latest release;
-#                   lifts the GitHub API rate limit from 60 to 5 000 req/hr/IP,
-#                   which matters on shared CI runners with many co-tenants.
+# Env vars:
+#   VERSION       - pin a release, e.g. v0.1.0 (default: latest)
+#   INSTALL_DIR   - install location (default: /usr/local/bin)
+#   INSECURE      - "1" skips cosign verification (sha256-only trust)
+#   GITHUB_TOKEN  - bearer token for the latest-release lookup; raises the
+#                   GitHub API rate limit from 60 to 5000 req/hr/IP
 #
-# Requires: bash, curl, tar, sha256sum. Optionally: cosign (highly recommended).
+# Requires: bash, curl, tar, sha256sum. Recommended: cosign.
 #
-# Supply-chain trust layers (in order):
-#   1. TLS to GitHub Releases — curl_safe enforces --proto =https,
-#      --proto-redir =https, and --tlsv1.2; a downgrade or MITM is rejected
-#      at the transport layer on both the initial request and every redirect
-#      hop (GitHub releases always redirect to objects.githubusercontent.com).
-#   2. Cosign on SHA256SUMS — sigstore keyless signature ties SHA256SUMS to
-#      a specific GitHub Actions workflow run; a forged or substituted
-#      SHA256SUMS file fails certificate-identity verification.
-#   3. SHA256 on archive — the downloaded tarball is byte-compared against
-#      the cosign-verified checksum; a corrupted or swapped archive is
-#      rejected before any bytes land on the filesystem.
-#   4. --no-same-permissions on tar extraction — drops extracted file modes
-#      to the caller's umask (typically 0o755 for executables), preventing
-#      a tarball that encodes setuid/setgid bits from elevating privileges
-#      even when the sha256 check passes.
-#   5. install -m 0755 final write — regardless of the mode produced by
-#      step 4, the binary is written to $INSTALL_DIR with an explicit
-#      0755 mode, so the installed binary always has a known, safe mode.
+# Trust layers: (1) TLS-only curl (transport-level MITM/downgrade
+# rejection) (2) cosign verify-blob on SHA256SUMS, tied to the release
+# workflow's OIDC identity (3) SHA256 of the archive against the
+# cosign-verified sums (4) --no-same-permissions strips setuid/setgid
+# bits on extract (5) install -m 0755 sets a known final mode.
 
 set -euo pipefail
 
@@ -46,9 +28,7 @@ green() { printf '\033[32m%s\033[0m\n' "$*"; }
 info()  { printf '  %s\n' "$*"; }
 die()   { red "error: $*"; exit 1; }
 
-# curl_safe wraps curl with hardened defaults: HTTPS-only (including on
-# redirects, which every GitHub release download follows), TLS 1.2 floor,
-# connect + transfer timeouts, and two retries on connection refusal.
+# curl_safe: HTTPS-only (incl. redirects), TLS 1.2 floor, timeouts, 2 retries on connrefused.
 curl_safe() { curl --proto '=https' --proto-redir '=https' --tlsv1.2 --connect-timeout 10 --max-time 120 --retry 2 --retry-connrefused "$@"; }
 
 require() {
@@ -65,13 +45,9 @@ main() {
     require curl
     require tar
 
-    # sha256sum ships with coreutils on every supported Linux distro; refuse
-    # early rather than offering an env-var bypass when it is absent.
-    if command -v sha256sum >/dev/null 2>&1; then
-        SHA_CMD="sha256sum"
-    else
+    # sha256sum ships with coreutils; refuse early rather than offering a bypass.
+    command -v sha256sum >/dev/null 2>&1 ||
         die "sha256sum is required but not installed; install coreutils (e.g. apt-get install coreutils, dnf install coreutils)"
-    fi
 
     COSIGN_CMD=""
     if command -v cosign >/dev/null 2>&1; then
@@ -89,9 +65,8 @@ main() {
         red "         SHA256 verification still runs; unset INSECURE to re-enable cosign."
     fi
 
-    # okdctl is Linux-only. Refuse to install on anything else. OS/ARCH must
-    # match .goreleaser.yaml's name_template ({{ .Os }}_{{ .Arch }} — GOOS/GOARCH
-    # spellings), which produces okdctl_<v>_linux_{amd64,arm64}.tar.gz.
+    # Linux-only; OS/ARCH must match .goreleaser.yaml's name_template
+    # (produces okdctl_<v>_linux_{amd64,arm64}.tar.gz).
     OS=$(uname -s | tr '[:upper:]' '[:lower:]')
     case "$OS" in
         linux) ;;
@@ -105,14 +80,12 @@ main() {
         *) die "unsupported arch: $ARCH (supported: x86_64, arm64)" ;;
     esac
 
-    # Resolve latest version if not pinned. Pattern adapted from get.helm.sh
-    # (sed -n + capture group), more robust than grep | head | cut against
-    # JSON key reordering or whitespace variation in the API response.
+    # Resolve latest version if unpinned; sed -n + capture group (get.helm.sh
+    # pattern) is robust to JSON key reordering/whitespace, unlike grep|head|cut.
     if [ -z "$VERSION" ]; then
         info "resolving latest release..."
-        # Bearer token travels via curl --config on stdin, not -H argv, so it
-        # never shows up in ps / /proc/PID/cmdline on shared hosts. Lifts the
-        # GitHub API rate limit from 60 to 5 000 req/hr per IP when set.
+        # Token travels via curl --config on stdin (not -H argv), so it
+        # never appears in ps / /proc/PID/cmdline on shared hosts.
         _gh_config_line=""
         if [ -n "${GITHUB_TOKEN:-}" ]; then
             _gh_config_line=$(printf 'header = "Authorization: Bearer %s"' "$GITHUB_TOKEN")
@@ -135,10 +108,8 @@ main() {
     ARCHIVE_URL="$BASE_URL/$ARCHIVE_NAME"
     SHA_URL="$BASE_URL/SHA256SUMS"
 
-    # Download into a temporary directory that gets cleaned up on exit.
     TMP=$(mktemp -d 2>/dev/null || mktemp -d -t "$BINARY")
-    # EXIT does the single cleanup; INT/TERM exit deliberately with 130 (which
-    # re-triggers EXIT) rather than resuming past the interrupted command and
+    # EXIT does cleanup; INT/TERM exit 130 (re-triggers EXIT) rather than
     # relying on set -e to trip later with a misleading status.
     trap 'rm -rf "$TMP"' EXIT
     trap 'exit 130' INT TERM
@@ -147,23 +118,20 @@ main() {
     curl_safe -sSfL -o "$TMP/$ARCHIVE_NAME" "$ARCHIVE_URL" ||
         die "failed to download $ARCHIVE_URL"
 
-    # sha256sum is now required, so SHA256SUMS is always consumed.
     info "downloading SHA256SUMS"
     curl_safe -sSfL -o "$TMP/SHA256SUMS" "$SHA_URL" ||
         die "failed to download SHA256SUMS from $SHA_URL"
 
-    # Cosign verify-blob against the sigstore-published signature. Runs when
-    # cosign is present and INSECURE is unset. INSECURE=1 is only reachable here
-    # when cosign is installed (enforced above), so the shed layer is a user choice.
+    # Runs when cosign is present and INSECURE unset; INSECURE=1 here is a
+    # deliberate user opt-out (cosign presence already enforced above).
     if [ -n "$COSIGN_CMD" ] && [ -z "$INSECURE" ]; then
         info "verifying cosign signature on SHA256SUMS"
         curl_safe -sSfL -o "$TMP/SHA256SUMS.sig" "$BASE_URL/SHA256SUMS.sig" ||
             die "failed to download SHA256SUMS.sig (release missing signature? uninstall cosign if you accept the risk)"
         curl_safe -sSfL -o "$TMP/SHA256SUMS.pem" "$BASE_URL/SHA256SUMS.pem" ||
             die "failed to download SHA256SUMS.pem"
-        # stderr is intentionally passed through — on verification failure the
-        # user needs to see cosign's diagnostic (cert identity, OIDC issuer,
-        # signature mismatch) rather than a bare "verification failed".
+        # stderr passes through so the user sees cosign's diagnostic (cert
+        # identity, OIDC issuer, mismatch) instead of a bare failure.
         COSIGN_EXPERIMENTAL=1 cosign verify-blob \
             --certificate="$TMP/SHA256SUMS.pem" \
             --signature="$TMP/SHA256SUMS.sig" \
@@ -176,49 +144,43 @@ main() {
         info "cosign signature verification skipped (INSECURE=1)"
     fi
 
-    # SHA256 verification is mandatory; sha256sum was required at startup.
     # awk field-equality (not grep) avoids treating '.' in the filename as a
     # regex wildcard.
     info "verifying SHA256"
     EXPECTED=$(awk -v name="$ARCHIVE_NAME" '$2 == name || $2 == "*"name {print $1}' "$TMP/SHA256SUMS")
     [ -n "$EXPECTED" ] || die "no checksum found for $ARCHIVE_NAME in SHA256SUMS"
-    ACTUAL=$($SHA_CMD "$TMP/$ARCHIVE_NAME" | awk '{print $1}')
+    ACTUAL=$(sha256sum "$TMP/$ARCHIVE_NAME" | awk '{print $1}')
     [ "$EXPECTED" = "$ACTUAL" ] ||
         die "checksum mismatch: expected $EXPECTED, got $ACTUAL"
     info "checksum verified"
 
-    # Extract the archive. --no-same-owner and --no-same-permissions harden
-    # against a release tarball that encodes unexpected ownership. The cosign
-    # + sha256 verification above is the primary guard; these are defense-in-depth.
+    # --no-same-owner/--no-same-permissions harden against unexpected tarball
+    # ownership/modes; defense-in-depth behind the cosign+sha256 checks above.
     info "extracting"
     cd "$TMP"
-    # Defense-in-depth: reject archives containing absolute paths or parent-traversal
-    # entries before any bytes hit the filesystem. Goreleaser tarballs are flat, so
-    # a match here means a tampered or malformed archive slipped past the sha256 check.
-    # Capture the listing first, then grep it as a here-string: piping tar | grep -q
-    # lets grep exit on the first match and SIGPIPE-kill tar (141), which under
-    # pipefail + set -e would skip die and fail open on exactly a malicious archive.
+    # Reject absolute/parent-traversal paths before any bytes hit disk (a
+    # match means a tampered archive passed the sha256 check — goreleaser
+    # tarballs are flat). Capture the listing first: piping tar | grep -q
+    # would let grep exit early and SIGPIPE-kill tar under pipefail+set -e,
+    # skipping die and failing open on a malicious archive.
     entries=$(tar -tzf "$ARCHIVE_NAME")
     if grep -qE '(^|/)\.\.(/|$)|^/' <<<"$entries"; then
         die "archive contains absolute or parent-traversal paths"
     fi
     tar --no-same-owner --no-same-permissions --no-overwrite-dir -xzf "$ARCHIVE_NAME"
 
-    # -f follows symlinks, so a symlinked okdctl member (e.g. pointing at an
-    # absolute path) would pass the -f test and be copied through by install.
-    # The traversal grep above inspects member names only, never link targets.
+    # -f follows symlinks, so a symlinked okdctl member would pass -f; the
+    # traversal grep above checks names only, never link targets.
     [ ! -L "$BINARY" ] || die "$BINARY in archive is a symlink; refusing"
     [ -f "$BINARY" ] || die "$BINARY not found in archive"
 
-    # Install. If the install dir is not writable by the current user, try sudo.
-    # A nonexistent dir fails -w too and would silently route into the sudo
-    # branch, dying with a raw coreutils error instead of this diagnostic.
+    # A nonexistent INSTALL_DIR also fails -w, which would silently route into
+    # the sudo branch and die with a raw coreutils error instead of this one.
     [ -d "$INSTALL_DIR" ] || die "INSTALL_DIR does not exist: $INSTALL_DIR"
     info "installing to $INSTALL_DIR/$BINARY"
-    # Stage to a temp name on the target filesystem, then atomically rename over
-    # the final path (mv -f is a same-filesystem rename). An interrupt or ENOSPC
-    # mid-write leaves the temp file, never a truncated okdctl on PATH; clean the
-    # temp on rename failure so a botched install does not litter $INSTALL_DIR.
+    # Stage to a temp name, then atomically rename (mv -f, same filesystem):
+    # an interrupt or ENOSPC mid-write leaves the temp file, never a
+    # truncated okdctl on PATH.
     TMP_BIN="$INSTALL_DIR/.$BINARY.tmp.$$"
     if [ -w "$INSTALL_DIR" ]; then
         install -m 0755 "$BINARY" "$TMP_BIN" || die "stage $TMP_BIN"
@@ -234,7 +196,6 @@ main() {
     info "run 'okdctl doctor' to verify your environment"
 }
 
-# The wrapper makes bash parse the whole script before executing anything:
-# a curl|bash transfer truncated mid-stream would otherwise run a prefix
-# of the script (rustup / get.helm.sh installer pattern).
+# Wrapping in main() makes bash parse the whole script before running any
+# of it, so a truncated curl|bash transfer can't execute a partial prefix.
 main "$@"

@@ -12,8 +12,8 @@ type LogField struct {
 	Value any
 }
 
-// LF is the short-form constructor for a LogField. Prefer structured
-// attrs over fmt.Sprintf so RedactHandler can scrub secret-bearing values.
+// LF is the short-form constructor for a LogField; prefer structured attrs over
+// fmt.Sprintf so RedactHandler can scrub secrets.
 func LF(key string, value any) LogField {
 	return LogField{Key: key, Value: value}
 }
@@ -30,24 +30,17 @@ func init() {
 }
 
 // InstallHandler makes h the sink behind the package facade and
-// SimpleLogger. h is wrapped in RedactHandler here — the single choke
-// point — so no installed sink can bypass redaction. internal/tui installs
-// its styled stderr handler at package init and again from SetRunID; until
-// then records fall back to a plain text handler on stderr, so binaries and
-// tests that never link tui still log with redaction intact.
+// SimpleLogger, wrapped in RedactHandler as the single choke point so no
+// installed sink can bypass redaction. Binaries that never link
+// internal/tui still log through a plain-text fallback with redaction intact.
 func InstallHandler(h slog.Handler) {
 	facade.Store(slog.New(NewRedactHandler(h)))
 }
 
 // SimpleLogger returns a *slog.Logger backed by the currently installed
-// handler (the tui-styled stderr sink in the okdctl binary). stdout stays
-// reserved for user-requested data (`okdctl config show`, kubeconfig,
-// `releases list --format=json`). Every record passes through RedactHandler
-// so credentials in structured attrs never reach the sink.
-//
-// The returned logger is a snapshot of the current installation. It does
-// not auto-update if tui.SetRunID reinstalls the handler afterwards;
-// callers that need run_id must be invoked after SetRunID.
+// handler, snapshotted at call time — it does NOT auto-update if
+// tui.SetRunID reinstalls the handler afterward, so callers needing run_id
+// must call this after SetRunID.
 func SimpleLogger() *slog.Logger {
 	return facade.Load()
 }
@@ -60,9 +53,8 @@ func fieldsToArgs(fields []LogField) []any {
 	return args
 }
 
-// Debug emits a debug-level record on stderr. Stdout is reserved for data
-// the user explicitly asked for (config show, kubeconfig, JSON output).
-// Records pass through RedactHandler via the installed facade logger.
+// Debug logs at DEBUG through the RedactHandler-wrapped facade logger on
+// stderr; stdout is reserved for data the user explicitly asked for.
 func Debug(msg string, fields ...LogField) { facade.Load().Debug(msg, fieldsToArgs(fields)...) }
 
 // Info logs at INFO through the RedactHandler-wrapped facade logger.

@@ -14,12 +14,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
-func cleanupGuardConfig() *config.Config {
-	cfg := config.DefaultConfig()
-	cfg.Cluster.Name = guardTestCluster
-	return cfg
-}
-
 func TestCleanupKindRemovesCredentials(t *testing.T) {
 	removing := []cleanup.Kind{cleanup.Full, cleanup.WorkOnly}
 	for _, k := range removing {
@@ -35,10 +29,6 @@ func TestCleanupKindRemovesCredentials(t *testing.T) {
 	}
 }
 
-// TestConfirmCleanupInteractive drives the real gate: credential-removing
-// kinds (full, work-only) demand the exact cluster name before the y/N —
-// matching destroy's two-stage gate — while scoped kinds keep the single
-// y/N prompt.
 func TestConfirmCleanupInteractive(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -60,7 +50,7 @@ func TestConfirmCleanupInteractive(t *testing.T) {
 			testStdinReader = &lineReader{lines: tc.input}
 			t.Cleanup(func() { testStdinReader = nil })
 
-			proceed, err := confirmCleanupInteractive(context.Background(), cleanupGuardConfig(), tc.kind)
+			proceed, err := confirmCleanupInteractive(context.Background(), guardConfig(), tc.kind)
 			if err != nil {
 				t.Fatalf("confirmCleanupInteractive: %v", err)
 			}
@@ -83,14 +73,12 @@ func resetCleanupFlags(t *testing.T) {
 	cleanupConfirmCluster, cleanupKind = "", string(cleanup.Full)
 }
 
-// seedCleanupWorkspace writes a loadable okdctl.yaml (cluster "prod") plus a
-// sentinel file inside the okd-install workdir, then chdirs into the root.
-// The sentinel lets refusal-path tests prove nothing was removed.
+// seedCleanupWorkspace's sentinel file proves refusal paths delete nothing.
 func seedCleanupWorkspace(t *testing.T) (sentinelPath string) {
 	t.Helper()
 	root := t.TempDir()
 	t.Chdir(root)
-	if err := config.NewLoader().Save(cleanupGuardConfig(), filepath.Join(root, "okdctl.yaml")); err != nil {
+	if err := config.NewLoader().Save(guardConfig(), filepath.Join(root, "okdctl.yaml")); err != nil {
 		t.Fatalf("seed config: %v", err)
 	}
 	authDir := filepath.Join(root, workspace.WorkDirName, "cluster-config", "auth")
@@ -111,9 +99,6 @@ func mustSurviveCleanup(t *testing.T, sentinelPath string) {
 	}
 }
 
-// TestRunCleanup_Wiring locks runCleanup's guard and dry-run routing: the
-// dry-run branch must return before the confirm gate and any deletion, and
-// the confirm gate must run before runlock/phase construction.
 func TestRunCleanup_Wiring(t *testing.T) {
 	t.Run("--dry-run previews and removes nothing", func(t *testing.T) {
 		resetCleanupFlags(t)

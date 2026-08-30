@@ -12,7 +12,6 @@ import (
 	"testing"
 )
 
-// tarBuilder writes a tar.gz archive in memory for zip-slip tests.
 type tarEntry struct {
 	Name     string
 	Mode     int64
@@ -106,10 +105,7 @@ func TestExtractTarGz_ZipSlipRejected(t *testing.T) {
 			if err == nil {
 				t.Fatalf("expected rejection")
 			}
-			// tc.wantMsg is one plausible rejection phrasing; any non-nil
-			// error containing either that phrase or a generic "escape"
-			// / "outside" / "not allowed" token is acceptable since the
-			// guard has several phrasings depending on entry type.
+			// wantMsg is one plausible phrasing; any escape/outside/not-allowed match is acceptable.
 			lower := strings.ToLower(err.Error())
 			if !strings.Contains(lower, strings.ToLower(tc.wantMsg)) &&
 				!strings.Contains(lower, "outside") &&
@@ -117,7 +113,6 @@ func TestExtractTarGz_ZipSlipRejected(t *testing.T) {
 				t.Errorf("err = %v; want contains %q or generic escape phrasing", err, tc.wantMsg)
 			}
 
-			// Nothing escaped outside dest.
 			if _, statErr := os.Stat(filepath.Join(filepath.Dir(dest), "escape.txt")); !os.IsNotExist(statErr) {
 				t.Errorf("escape file materialized outside dest: %v", statErr)
 			}
@@ -131,10 +126,7 @@ func TestExtractTarGz_ZipSlipRejected(t *testing.T) {
 	}
 }
 
-// realTempDir returns a fully-resolved temp dir path so the extractor's
-// EvalSymlinks-based prefix check sees identical paths on both sides. On
-// macOS, t.TempDir() returns a symlink under /var that resolves to
-// /private/var — resolving once up front is the simplest fix.
+// realTempDir resolves macOS's /var symlink so EvalSymlinks-based checks compare identical paths.
 func realTempDir(t *testing.T) string {
 	t.Helper()
 	d := t.TempDir()
@@ -163,12 +155,7 @@ func TestExtractTarGz_HappyPath(t *testing.T) {
 	}
 }
 
-// TestExtractTarGz_ComposedSymlinkChainRejected is the reviewer's exact
-// reproduction: two in-tree links that each pass the textual pre-check compose
-// into an escaping link. `a/b/toroot -> ../..` resolves back to destDir, then
-// `a/b/toroot/esc -> ../etc` is created *through* toroot and lands at
-// destDir/esc pointing outside destDir. Extraction must fail with
-// ErrSymlinkEscape and leave no escaping link on disk.
+// a/b/toroot -> ../.. then a/b/toroot/esc -> ../etc composes past the textual check alone.
 func TestExtractTarGz_ComposedSymlinkChainRejected(t *testing.T) {
 	archive := buildTarGz(t, []tarEntry{
 		{Name: "a/", Mode: 0o755, Typeflag: tar.TypeDir},
@@ -185,8 +172,7 @@ func TestExtractTarGz_ComposedSymlinkChainRejected(t *testing.T) {
 		t.Errorf("err = %v; want errors.Is ErrSymlinkEscape", err)
 	}
 
-	// The escaping link materializes at destDir/esc (reached through toroot);
-	// it must have been removed. Check both the resolved and literal locations.
+	// Check both the resolved (destDir/esc) and literal locations for the removed link.
 	for _, rel := range []string{"esc", filepath.Join("a", "b", "toroot", "esc")} {
 		p := filepath.Join(dest, rel)
 		if _, statErr := os.Lstat(p); !os.IsNotExist(statErr) {
@@ -196,9 +182,7 @@ func TestExtractTarGz_ComposedSymlinkChainRejected(t *testing.T) {
 	}
 }
 
-// TestExtractTarGz_InTreeSymlinkChain confirms a legitimate composed chain
-// whose final target stays inside destDir still extracts. real/ exists before
-// the link is created, so the resolution post-check resolves it cleanly.
+// real/ exists before the link is created, so the resolution post-check resolves it cleanly.
 func TestExtractTarGz_InTreeSymlinkChain(t *testing.T) {
 	archive := buildTarGz(t, []tarEntry{
 		{Name: "real/", Mode: 0o755, Typeflag: tar.TypeDir},

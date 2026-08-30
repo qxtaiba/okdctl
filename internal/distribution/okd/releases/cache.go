@@ -10,16 +10,14 @@ import (
 )
 
 const (
-	// DiskCacheTTL bounds how long the on-disk OKD release cache is reused
-	// before a fresh network fetch is required.
-	DiskCacheTTL = 1 * time.Hour
+	// defaultDiskCacheTTL: how long the on-disk cache is reused before a refetch.
+	defaultDiskCacheTTL = 1 * time.Hour
 
 	cacheFileName = "okd-versions.json"
 )
 
-// Cache lives under the invoking user's home so `okdctl releases list` run
-// as a non-root user later can still read it, even when the cache was
-// populated during a root-mode deploy.
+// Cache lives under the invoking user's home so a later non-root `releases
+// list` can read it even if a root-mode deploy populated it.
 func (f *OKDVersionFetcher) getCacheFilePath() (string, error) {
 	homeDir, err := system.InvokingUserHomeDir()
 	if err != nil {
@@ -32,25 +30,25 @@ func (f *OKDVersionFetcher) getCacheFilePath() (string, error) {
 func (f *OKDVersionFetcher) loadFromDiskCache() []OKDReleaseSeries {
 	cachePath, err := f.getCacheFilePath()
 	if err != nil {
-		return nil // Gracefully fail - will fetch from network
+		return nil
 	}
 
 	data, err := os.ReadFile(cachePath)
 	if err != nil {
-		return nil // Cache doesn't exist or read error - gracefully fail
+		return nil
 	}
 
 	var cache diskCache
 	if err := json.Unmarshal(data, &cache); err != nil {
-		return nil // Invalid cache format - will refresh
+		return nil
 	}
 
 	if cache.Schema != diskCacheSchema {
-		return nil // Cache written by a different shape - treat as corrupt
+		return nil
 	}
 
 	if time.Since(cache.CachedAt) >= f.diskCacheTTL {
-		return nil // Cache is stale
+		return nil
 	}
 
 	return cache.Series
@@ -59,7 +57,7 @@ func (f *OKDVersionFetcher) loadFromDiskCache() []OKDReleaseSeries {
 func (f *OKDVersionFetcher) saveToDiskCache(series []OKDReleaseSeries) {
 	cachePath, err := f.getCacheFilePath()
 	if err != nil {
-		return // Can't determine cache path, skip silently
+		return
 	}
 
 	cache := diskCache{
@@ -70,11 +68,10 @@ func (f *OKDVersionFetcher) saveToDiskCache(series []OKDReleaseSeries) {
 
 	data, err := json.MarshalIndent(cache, "", "  ")
 	if err != nil {
-		return // Serialization failed, skip silently
+		return
 	}
 
-	// 0o600: cache may sit in $HOME/.cache. OKD version metadata is public,
-	// but tightening avoids surprising readability if a future field ends up
-	// in this file.
+	// 0o600: cache data is public, but tightening avoids surprising
+	// readability if a future field lands here.
 	_ = system.WriteAsInvokingUser(cachePath, data, 0o600)
 }

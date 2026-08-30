@@ -12,18 +12,15 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
-// signerNamespace and signerName locate the CA whose expiry gates kubelet
-// certificate rotation. When kube-apiserver-to-kubelet-signer expires,
-// kubelets can no longer complete their CSRs and nodes drift to NotReady —
-// the day-2 doctor check surfaces the runway before that happens.
+// signerNamespace/signerName locate the CA gating kubelet cert rotation;
+// expiry causes CSR failures and nodes drifting NotReady.
 const (
 	signerNamespace = "openshift-kube-apiserver-operator"
 	signerName      = "kube-apiserver-to-kubelet-signer"
 )
 
-// SignerNotAfter returns the NotAfter of the kube-apiserver-to-kubelet-signer
-// CA, parsed from the tls.crt of its secret in the
-// openshift-kube-apiserver-operator namespace.
+// SignerNotAfter returns the kube-apiserver-to-kubelet-signer CA's NotAfter,
+// parsed from its secret's tls.crt.
 func (c *Client) SignerNotAfter(ctx context.Context) (time.Time, error) {
 	data, err := c.getJSONChecked(ctx, "get kubelet signer",
 		"get", "secret", signerName, "-n", signerNamespace, "-o", "json")

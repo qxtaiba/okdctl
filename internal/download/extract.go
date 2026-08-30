@@ -15,11 +15,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
-// extractConfig holds the resolved configuration for an ExtractTarGz call.
-// logger is normalised via logutil.OrNop once at ExtractTarGz construction.
 type extractConfig struct {
-	archivePath     string
-	destDir         string
 	stripComponents int
 	cleanupArchive  bool
 	logger          *slog.Logger
@@ -28,8 +24,7 @@ type extractConfig struct {
 // ExtractOption configures an ExtractTarGz call.
 type ExtractOption func(*extractConfig)
 
-// ErrSymlinkEscape reports a symlink whose resolved location or target lands
-// outside destDir. Callers can match it with errors.Is.
+// ErrSymlinkEscape reports a symlink that resolves outside destDir. Match it with errors.Is.
 var ErrSymlinkEscape = errors.New("symlink resolves outside destination")
 
 // WithExtractStripComponents removes n leading path components from archive entries, like tar --strip-components.
@@ -47,12 +42,8 @@ func WithExtractLogger(l *slog.Logger) ExtractOption {
 	return func(c *extractConfig) { c.logger = logutil.OrNop(l) }
 }
 
-// verifyResolvedLink resolves rel (a path relative to destDir) through the
-// real filesystem and rejects it if the result escapes destDir. rel names a
-// just-created symlink, so EvalSymlinks follows both every parent component and
-// the link itself; a target that cannot be resolved within destDir — dangling
-// or escaping — is rejected identically, matching the pre-os.Root
-// verifyResolvedPath the ISO/tool archives were validated against.
+// verifyResolvedLink rejects rel if its real-filesystem resolution escapes
+// destDir; a dangling or escaping target is rejected identically.
 func verifyResolvedLink(destDir, rel string) error {
 	cleanDest, err := filepath.EvalSymlinks(destDir)
 	if err != nil {
@@ -69,22 +60,11 @@ func verifyResolvedLink(destDir, rel string) error {
 	return nil
 }
 
-// processTarEntry writes a single tar entry through root, which scopes every
-// filesystem op to destDir via openat2 so the kernel — not a textual prefix
-// check — rejects any resolved path outside the tree for files and dirs.
-//
-// Symlinks need two extra layers. os.Root will happily create a link whose
-// stored target text escapes destDir (it validates traversal *through* a link,
-// not the text written into one), and the extracted tree is later walked by
-// non-Root code that has no such protection. Worse, two composed in-tree links
-// can escape even though each passes a textual check: `a/b/toroot -> ../..`
-// resolves to destDir, then `a/b/toroot/esc -> ../etc` is created *through*
-// toroot and lands at destDir/esc pointing outside — the textual check saw the
-// literal parent "a/b/toroot", not the resolved one. So symlinks get (1) a
-// textual pre-check that rejects absolute or single-link escaping targets
-// before creation, and (2) a resolution post-check (EvalSymlinks on the real
-// filesystem) that rejects and removes any link whose resolved location or
-// target lands outside destDir once every parent link has been followed.
+// processTarEntry writes one tar entry through root, which scopes filesystem
+// ops to destDir via openat2 (kernel-enforced, not textual). Symlinks also get
+// a textual pre-check plus an EvalSymlinks post-check, since os.Root validates
+// traversal through a link but not its stored target text, and composed
+// in-tree links can escape a textual check alone (see verifyResolvedLink).
 func processTarEntry(root *os.Root, tarReader *tar.Reader, header *tar.Header, stripComponents int) error {
 	name := header.Name
 	if stripComponents > 0 {
@@ -154,10 +134,7 @@ func processTarEntry(root *os.Root, tarReader *tar.Reader, header *tar.Header, s
 		}
 
 		if err := verifyResolvedLink(root.Name(), clean); err != nil {
-			// The link escaped (or resolved to a target unreachable within
-			// destDir) once its parent components were followed. Remove it so
-			// no later non-Root consumer can traverse the escaping link, then
-			// fail the whole extraction.
+			// Escaped or unreachable: remove it so no non-Root consumer can traverse it, then fail.
 			_ = root.Remove(clean)
 			return fmt.Errorf("symlink %s: %w", name, err)
 		}
@@ -169,16 +146,13 @@ func processTarEntry(root *os.Root, tarReader *tar.Reader, header *tar.Header, s
 	return nil
 }
 
-// ExtractTarGz extracts archivePath into destDir. File and directory writes
-// are scoped to destDir through an os.Root, so zip-slip escapes are rejected by
-// the kernel at open time. Symlinks additionally get a resolution post-check
-// (see processTarEntry) so a stored target that escapes destDir is rejected and
-// removed before any non-Root consumer walks the tree.
+// ExtractTarGz extracts archivePath into destDir, scoping writes through an
+// os.Root so zip-slip escapes are rejected at open time. Symlinks additionally
+// get a resolution post-check (see processTarEntry) that removes any escaping
+// target.
 func ExtractTarGz(ctx context.Context, archivePath, destDir string, opts ...ExtractOption) error {
 	cfg := &extractConfig{
-		archivePath: archivePath,
-		destDir:     destDir,
-		logger:      logutil.NopLogger,
+		logger: logutil.NopLogger,
 	}
 	for _, o := range opts {
 		o(cfg)
@@ -232,7 +206,7 @@ func ExtractTarGz(ctx context.Context, archivePath, destDir string, opts ...Extr
 
 	if cfg.cleanupArchive {
 		if err := os.Remove(archivePath); err != nil {
-			cfg.logger.Warn("download: failed to cleanup archive", "file", filename)
+			cfg.logger.Warn("download: could not remove archive", "file", filename, "err", err)
 		}
 	}
 

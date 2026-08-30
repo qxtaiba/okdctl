@@ -15,8 +15,6 @@
   color: "c5def5"
 - name: area/terraform
   color: "5C4EE5"
-- name: area/flux
-  color: "5468FF"
 - name: area/automation
   color: "1D76DB"
 - name: area/ci

@@ -69,7 +69,6 @@ temp/
 # Backup files
 *.backup
 *.backup.*
-/etc/haproxy/haproxy.cfg.backup.*
 
 # OS generated files
 .DS_Store
@@ -102,7 +101,6 @@ okdctl.yaml
 # Test artifacts
 test.yaml
 demo.yaml
-
 
 # agent-workflow artifacts — local only, never shipped
 .claude/

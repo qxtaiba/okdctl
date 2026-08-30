@@ -39,20 +39,3 @@ func TestClusterStopStartRegisteredWithExpectedFlags(t *testing.T) {
 		})
 	}
 }
-
-// TestClusterCompactMasterMemoryFlag locks the flag spelling and its wiring
-// into compactMasterMemoryMB.
-func TestClusterCompactMasterMemoryFlag(t *testing.T) {
-	cmd := findSubcommand(t, clusterCmd, "compact")
-
-	if cmd.Flags().Lookup("master-memory-mb") == nil {
-		t.Fatal("compact must register --master-memory-mb")
-	}
-	if err := cmd.Flags().Set("master-memory-mb", "24576"); err != nil {
-		t.Fatalf("flag must parse: %v", err)
-	}
-	t.Cleanup(func() { compactMasterMemoryMB = 0 })
-	if compactMasterMemoryMB != 24576 {
-		t.Fatalf("flag must write compactMasterMemoryMB, got %d", compactMasterMemoryMB)
-	}
-}

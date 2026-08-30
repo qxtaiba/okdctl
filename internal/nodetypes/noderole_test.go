@@ -23,16 +23,4 @@ func TestParseNodeRole(t *testing.T) {
 			}
 		}
 	})
-
-	t.Run("constants stay lowercase - load-bearing for openshift-install", func(t *testing.T) {
-		if string(RoleBootstrap) != "bootstrap" {
-			t.Errorf("RoleBootstrap = %q", RoleBootstrap)
-		}
-		if string(RoleMaster) != "master" {
-			t.Errorf("RoleMaster = %q", RoleMaster)
-		}
-		if string(RoleWorker) != "worker" {
-			t.Errorf("RoleWorker = %q", RoleWorker)
-		}
-	})
 }

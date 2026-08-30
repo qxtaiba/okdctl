@@ -147,14 +147,9 @@ func init() {
 	nodeCmd.AddCommand(nodeSnapshotCmd)
 }
 
-// buildSnapshotRunner wires a node.Runner for the pvesh-over-SSH snapshot
-// surface: it verifies the Proxmox host's SSH fingerprint, builds the
-// RemoteISOParams the runner's HostsshSnapshotClient needs, and acquires the
-// project run lock. Unlike buildNodeRunner it never touches Terraform
-// (snapshots don't need the terraform root) and never wires Power
-// (proxmox.NewPowerCycler is REST/API-credential
-// based; snapshots are SSH-key based), keeping the pvesh surface separate
-// from cluster stop/start's REST surface.
+// buildSnapshotRunner wires a node.Runner for pvesh-over-SSH; unlike
+// buildNodeRunner it skips Terraform/Power since snapshots use SSH-key auth,
+// not REST/API credentials.
 func buildSnapshotRunner(ctx context.Context, cfg *config.Config, dryRun bool) (*nodeRunnerCtx, error) {
 	if cfg.Provider.Proxmox == nil {
 		return nil, &errtypes.ConfigError{Msg: "node snapshot requires provider.proxmox to be configured"}
@@ -183,9 +178,8 @@ func buildSnapshotRunner(ctx context.Context, cfg *config.Config, dryRun bool) (
 		return nil, err
 	}
 
-	// nil terraform executor on purpose: snapshot ops never plan or apply,
-	// and NewRunner supplies the timeout defaults the old hand-built literal
-	// silently dropped.
+	// nil terraform executor is deliberate: snapshot ops never plan/apply, and
+	// NewRunner supplies the timeout defaults.
 	runner := node.NewRunner(cl, nil, cfg,
 		node.WithProjectRoot(projectRoot),
 		node.WithConfigPath(cfgFile),
@@ -209,15 +203,8 @@ func buildSnapshotRunner(ctx context.Context, cfg *config.Config, dryRun bool) (
 	}, nil
 }
 
-// nodeSnapshotGate runs the write-op consent flow shared by create,
-// rollback, and delete: the --yes/--confirm-cluster pairing check always
-// runs; the interactive gate (single y/N, or rollback's two-stage typed-
-// cluster-name for its genuinely destructive VM power-on + disk restore) is
-// skipped under --yes or --dry-run, so a dry-run never blocks on a prompt
-// whose only purpose is deciding whether to mutate anything — mirroring
-// buildNodeRunner's Preview/Confirm split. warnMsg fires immediately before
-// the interactive prompt only: a --yes run sees the crash-consistency
-// notice solely from the runner's own log line, not a duplicate here.
+// nodeSnapshotGate runs the shared --yes/--confirm-cluster consent flow for
+// create/rollback/delete, skipping the prompt under --yes or --dry-run.
 func nodeSnapshotGate(ctx context.Context, verb string, twoStage, yes, dryRun bool, confirmCluster, clusterName, warnMsg string, warnFields ...logutil.LogField) (bool, error) {
 	if err := confirmClusterMatches(yes, confirmCluster, clusterName, verb); err != nil {
 		return false, err
@@ -232,9 +219,7 @@ func nodeSnapshotGate(ctx context.Context, verb string, twoStage, yes, dryRun bo
 }
 
 func runNodeSnapshotCreate(cmd *cobra.Command, args []string) error {
-	// Validated here as well as in hostssh so a --dry-run previews only
-	// values a real run would accept, instead of echoing a name/description
-	// the create itself would reject.
+	// validated here too so a --dry-run previews only values a real run would accept
 	if nodeSnapshotCreateName != "" {
 		if err := hostssh.ValidateSnapshotName(nodeSnapshotCreateName); err != nil {
 			return &errtypes.ConfigError{Msg: fmt.Sprintf("invalid --name %q", nodeSnapshotCreateName), Err: err}
@@ -284,14 +269,10 @@ func runNodeSnapshotCreate(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// runNodeSnapshotMutate is the shared shape behind rollback and delete: gate
-// consent, build the snapshot runner, and invoke op — the cluster.go
-// runClusterPower pattern applied to the pvesh surface. create keeps its own
-// RunE since it must thread the (possibly auto-generated) snapshot name back
-// to stdout on success.
+// runNodeSnapshotMutate is the shared rollback/delete shape; create keeps its
+// own RunE to print the generated snapshot name.
 func runNodeSnapshotMutate(cmd *cobra.Command, verb string, twoStage, yes, dryRun bool, confirmCluster, warnMsg, target, snapname string, op func(rc *nodeRunnerCtx) error) error {
-	// Validated here as well as in hostssh so a --dry-run previews only names
-	// a real run would accept.
+	// validated here too so a --dry-run previews only names a real run would accept
 	if err := hostssh.ValidateSnapshotName(snapname); err != nil {
 		return &errtypes.ConfigError{Msg: fmt.Sprintf("invalid snapshot name %q", snapname), Err: err}
 	}
@@ -369,8 +350,8 @@ func runNodeSnapshotList(cmd *cobra.Command, args []string) error {
 	return printNodeSnapshotList(cmd.OutOrStdout(), entries)
 }
 
-// nodeSnapshotEntry is one row of `okdctl node snapshot list --output
-// json`; see docs/cli/json-schema.md for the documented, stable shape.
+// nodeSnapshotEntry is one row of `okdctl node snapshot list --output json`;
+// see docs/cli/json-schema.md.
 type nodeSnapshotEntry struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
@@ -411,11 +392,8 @@ func printNodeSnapshotList(w io.Writer, entries []nodeSnapshotEntry) error {
 	return tw.Flush()
 }
 
-// stripControl drops control characters from a value before it reaches the
-// operator's terminal. okdctl-created snapshot fields are charset-safe, but a
-// snapshot created in the Proxmox UI carries free-text — a hostile description
-// could otherwise inject terminal escapes or fabricate extra listing rows.
-// JSON output needs no equivalent: encoding/json escapes control characters.
+// stripControl strips control chars so a hostile snapshot description can't
+// inject terminal escapes into operator output.
 func stripControl(s string) string {
 	return strings.Map(func(r rune) rune {
 		if unicode.IsControl(r) {

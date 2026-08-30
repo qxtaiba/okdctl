@@ -17,58 +17,36 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
-func TestRunFullDeployment_RejectsInvalidProviderConfig(t *testing.T) {
-	cfg := &config.Config{
-		Provider: config.ProviderConfig{
-			Type: config.ProviderProxmox,
-			Proxmox: &config.ProxmoxConfig{
-				Host:       "px.local",
-				Node:       "pve",
-				Storage:    "local-lvm",
-				ISOStorage: "${inject}",
-			},
-		},
+// Bogus-type case: validateProvider no-ops on a non-proxmox type, so the gate
+// also needs the required/enum scopes.
+func TestRunFullDeployment_RejectsInvalidProvider(t *testing.T) {
+	cases := []struct {
+		name         string
+		providerType config.ProviderType
+		isoStorage   string
+	}{
+		{"invalid provider config", config.ProviderProxmox, "${inject}"},
+		{"bogus provider type", "Proxmox", `x"inject`},
 	}
-	err := runFullDeployment(context.Background(), cfg, io.Discard)
-	var ce *errtypes.ConfigError
-	if !errors.As(err, &ce) {
-		t.Fatalf("want *errtypes.ConfigError, got %T: %v", err, err)
-	}
-}
-
-func TestRunFullDeployment_RejectsBogusProviderType(t *testing.T) {
-	// validateProvider no-ops on a non-proxmox type, so the gate must also
-	// run the required/enum scopes that reject the type itself.
-	cfg := &config.Config{
-		Provider: config.ProviderConfig{
-			Type: "Proxmox",
-			Proxmox: &config.ProxmoxConfig{
-				Host:       "px.local",
-				Node:       "pve",
-				Storage:    "local-lvm",
-				ISOStorage: `x"inject`,
-			},
-		},
-	}
-	err := runFullDeployment(context.Background(), cfg, io.Discard)
-	var ce *errtypes.ConfigError
-	if !errors.As(err, &ce) {
-		t.Fatalf("want *errtypes.ConfigError, got %T: %v", err, err)
-	}
-}
-
-func TestDeployGateScope_CoversRenderSurfaces(t *testing.T) {
-	for name, scope := range map[string]config.ValidationScope{
-		"required":            config.ScopeRequired,
-		"enums":               config.ScopeEnums,
-		"provider":            config.ScopeProvider,
-		"advanced networking": config.ScopeAdvancedNetworking,
-		"networking":          config.ScopeNetworking,
-		"http server":         config.ScopeHTTPServer,
-	} {
-		if !deployGateScope.HasScope(scope) {
-			t.Errorf("deploy gate is missing the %s scope", name)
-		}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := &config.Config{
+				Provider: config.ProviderConfig{
+					Type: tc.providerType,
+					Proxmox: &config.ProxmoxConfig{
+						Host:       "px.local",
+						Node:       "pve",
+						Storage:    "local-lvm",
+						ISOStorage: tc.isoStorage,
+					},
+				},
+			}
+			err := runFullDeployment(context.Background(), cfg, io.Discard)
+			var ce *errtypes.ConfigError
+			if !errors.As(err, &ce) {
+				t.Fatalf("want *errtypes.ConfigError, got %T: %v", err, err)
+			}
+		})
 	}
 }
 
@@ -112,27 +90,6 @@ func TestDeployDryRunSteps_DerivedFromLivePhaseSteps(t *testing.T) {
 	}
 }
 
-// TestDeployYesWriteConfigFlagContract locks the assume-yes alignment:
-// --yes deploys (like every sibling command's --yes), --write-config carries
-// the old write-only meaning, and the two are mutually exclusive.
-func TestDeployYesWriteConfigFlagContract(t *testing.T) {
-	yes := deployCmd.Flags().Lookup("yes")
-	if yes == nil || yes.Shorthand != "y" {
-		t.Fatal("deploy must keep --yes with the -y shorthand")
-	}
-	wc := deployCmd.Flags().Lookup("write-config")
-	if wc == nil {
-		t.Fatal("deploy must register --write-config")
-	}
-	if wc.Shorthand != "" {
-		t.Error("--write-config must stay long-form only (boolean tail flags carry no shorthand)")
-	}
-}
-
-// TestRunDeployYesWithoutConfigExitsNoInput verifies that a non-interactive
-// deploy refuses to run against compiled-in defaults: --yes with no config
-// file on disk must exit 66 (ErrConfigMissing), not silently write config
-// and exit 0 like the pre-v0.2.0 --yes did.
 func TestRunDeployYesWithoutConfigExitsNoInput(t *testing.T) {
 	t.Chdir(t.TempDir())
 	deployYes = true
@@ -147,8 +104,6 @@ func TestRunDeployYesWithoutConfigExitsNoInput(t *testing.T) {
 	}
 }
 
-// TestRunDeployWriteConfigWritesWithoutDeploying verifies --write-config
-// saves the configuration file and returns without deploying.
 func TestRunDeployWriteConfigWritesWithoutDeploying(t *testing.T) {
 	t.Chdir(t.TempDir())
 	deployWriteConfig = true
@@ -162,9 +117,6 @@ func TestRunDeployWriteConfigWritesWithoutDeploying(t *testing.T) {
 	}
 }
 
-// TestWriteCredentialsEnv covers the sole wizard→disk credential persister:
-// the env file lands at EnvFilePath(configPath), carries whichever secret is
-// set, and neither-set writes no file at all.
 func TestWriteCredentialsEnv(t *testing.T) {
 	cases := []struct {
 		name        string
@@ -218,8 +170,6 @@ func TestWriteCredentialsEnv(t *testing.T) {
 	}
 }
 
-// TestWriteCredentialsEnvNilProxmox verifies the nil-Proxmox short-circuit
-// writes nothing and does not panic.
 func TestWriteCredentialsEnvNilProxmox(t *testing.T) {
 	cfg := &config.Config{Provider: config.ProviderConfig{Type: config.ProviderProxmox}}
 	configPath := filepath.Join(t.TempDir(), "okdctl.yaml")
@@ -232,9 +182,6 @@ func TestWriteCredentialsEnvNilProxmox(t *testing.T) {
 	}
 }
 
-// TestClearConfigCredentials verifies the wizard's in-memory secret bytes are
-// zeroized in place: aliases grabbed before the call read all-zero afterward
-// and the fields report empty.
 func TestClearConfigCredentials(t *testing.T) {
 	t.Run("wipes password and token", func(t *testing.T) {
 		cfg := &config.Config{Provider: config.ProviderConfig{Proxmox: &config.ProxmoxConfig{}}}

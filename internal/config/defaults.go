@@ -7,13 +7,11 @@ import (
 
 const (
 	defaultBastionIP = "192.168.1.20"
-	// defaultStaticIPStart is deliberately distant from the default
-	// provider.proxmox.host (192.168.1.100): the bootstrap VM boots at
-	// this address and must not ARP-fight the hypervisor.
+	// defaultStaticIPStart avoids provider.proxmox.host so the bootstrap VM
+	// doesn't ARP-fight the hypervisor.
 	defaultStaticIPStart = "192.168.1.140"
 	defaultFluxAddon     = "flux"
-	// defaultTerraformEnv is the embedded environment that ships in the
-	// repo; validators trust it without a disk check.
+	// defaultTerraformEnv ships embedded; validators trust it without a disk check.
 	defaultTerraformEnv = workspace.DefaultTerraformEnv
 )
 

@@ -22,11 +22,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
-// DefaultIngressLBTimeout caps how long update-ingress waits for the
-// ingress LB service to report a ready external IP. 10 minutes is the
-// empirical upper bound observed on kube-vip-managed deployments; the
-// conversion timeout is shorter because the delete-then-create cycle
-// doesn't wait for pods to schedule.
+// DefaultIngressLBTimeout caps the wait for the ingress LB's external IP;
+// 10m is the empirical ceiling observed on kube-vip-managed deployments.
 const (
 	DefaultIngressLBTimeout  = 10 * time.Minute
 	defaultConversionTimeout = 5 * time.Minute
@@ -34,21 +31,19 @@ const (
 	ingressRollbackTimeout   = 2 * time.Minute
 )
 
-// On-disk backup artifact for the delete-to-create window of
-// convertToLoadBalancer: <cluster-config>/ingresscontroller-<name>.backup.json.
+// Backup path for convertToLoadBalancer's delete-to-create window:
+// <cluster-config>/ingresscontroller-<name>.backup.json.
 const (
 	ingressBackupPrefix = "ingresscontroller-"
 	ingressBackupSuffix = ".backup.json"
 )
 
 // UpdateIngressOptions configures the update-ingress flow. ConfirmConversion
-// is called when HostNetwork IngressControllers are detected; returning
-// false aborts conversion.
+// is called on detected HostNetwork controllers; returning false aborts conversion.
 type UpdateIngressOptions struct {
 	RemoveHAProxy     bool
 	ConfirmConversion func(hostNetworkICs []string) bool
-	// WorkDir is the okdctl work directory (parent of cluster-config/); used to
-	// locate the kubeconfig CA when re-verifying the VIP after HAProxy removal.
+	// WorkDir is the okdctl work directory (parent of cluster-config/).
 	WorkDir string
 }
 
@@ -63,8 +58,7 @@ type IngressEntry struct {
 }
 
 // UpdateIngressResult summarises the outcome of an update-ingress run.
-// DNSReconciled is true when update-ingress detected that the on-disk dnsmasq
-// config was still in bootstrap state and re-deployed production DNS.
+// DNSReconciled is true when the on-disk dnsmasq config was still bootstrap-state.
 type UpdateIngressResult struct {
 	Entries        []IngressEntry
 	KubeVipIP      string
@@ -73,9 +67,8 @@ type UpdateIngressResult struct {
 	DNSReconciled  bool
 }
 
-// UpdateIngress discovers all IngressControllers from the cluster, optionally
-// converts HostNetwork controllers to LoadBalancerService, waits for their
-// LoadBalancer IPs, deploys production DNS, and optionally removes HAProxy.
+// UpdateIngress discovers IngressControllers, optionally converts HostNetwork
+// to LoadBalancerService, collects LB IPs, and deploys production DNS.
 func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts UpdateIngressOptions) (*UpdateIngressResult, error) {
 	vip, err := phase.ResolveClusterVIP(cfg)
 	if err != nil {
@@ -181,11 +174,8 @@ func (p *Phase) UpdateIngress(ctx context.Context, cfg *config.Config, opts Upda
 	return result, nil
 }
 
-// reconcileBootstrapDNSOnly deploys production DNS without querying the cluster.
-// Used when bootstrap-state DNS is detected but ingress discovery fails or
-// returns no controllers (e.g. kube-vip-only deploys, or a cluster API that
-// is unreachable mid-postinstall). *.apps stays on the bastion until a
-// LoadBalancer addon is installed later.
+// reconcileBootstrapDNSOnly deploys dns without querying the cluster, when
+// discovery is unreachable/empty; *.apps stays on the bastion until a LB addon lands.
 func (p *Phase) reconcileBootstrapDNSOnly(ctx context.Context, cfg *config.Config, vip string) (*UpdateIngressResult, error) {
 	appsIP := cfg.Networking.Bastion.IP
 	if err := p.deployProductionDNS(ctx, cfg, appsIP, vip, nil); err != nil {
@@ -198,9 +188,8 @@ func (p *Phase) reconcileBootstrapDNSOnly(ctx context.Context, cfg *config.Confi
 	}, nil
 }
 
-// collectLBEntries waits for LoadBalancer IPs on all LB-type controllers.
-// HostNetwork controllers that were not converted get entries pointing at the
-// bastion IP.
+// collectLBEntries waits for LoadBalancer IPs on all LB-type controllers;
+// unconverted HostNetwork controllers get entries pointing at the bastion IP.
 func (p *Phase) collectLBEntries(
 	ctx context.Context,
 	lbICs, hostNetworkICs []ingressControllerInfo,
@@ -283,15 +272,13 @@ func (p *Phase) finalizeIngress(
 		ConvertedCount: convertedCount,
 	}
 
-	// DNS swap must precede HAProxy removal: RemoveHAProxy verifies the new
-	// path by resolving api.* via dnsmasq, which must already point at the
-	// VIP — not the bastion — before HAProxy stops listening.
+	// DNS swap must precede HAProxy removal: RemoveHAProxy verifies the
+	// new path by resolving api.* via dnsmasq to the VIP, not the bastion.
 	if opts.RemoveHAProxy && hostNetworkCount == 0 {
 		p.Log.Info("update-ingress: removing haproxy from bastion")
 		if err := p.RemoveHAProxy(ctx, vip, workspace.ClusterConfigDir(opts.WorkDir)); err != nil {
 			p.Log.Warn("update-ingress: haproxy removal failed — rolling back dns to bootstrap", "err", err)
-			// Detached from ctx: a Ctrl-C during haproxy removal would
-			// otherwise doom the dns rollback before it starts.
+			// Detached: a Ctrl-C here must not doom the dns rollback too.
 			rbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ingressRollbackTimeout)
 			defer cancel()
 			dnsRolledBack := false
@@ -315,9 +302,8 @@ func (p *Phase) finalizeIngress(
 	return result, nil
 }
 
-// handleHostNetworkConversion converts HostNetwork IngressControllers to
-// LoadBalancerService when MetalLB is available and the caller confirms.
-// Returns the number converted and the set of converted names.
+// handleHostNetworkConversion converts confirmed HostNetwork ICs to
+// LoadBalancerService when MetalLB is available.
 func (p *Phase) handleHostNetworkConversion(
 	ctx context.Context,
 	hostNetworkICs []ingressControllerInfo,
@@ -383,10 +369,8 @@ const (
 	strategyLoadBalancer IngressStrategy = "LoadBalancerService"
 )
 
-// parseIngressStrategy returns the typed constant for s when s is one of
-// the handled strategies, and ok=false for any other non-empty value.
-// Callers must handle ok=false: unknown strategies should be skipped with
-// a warning rather than silently routing through HostNetwork logic.
+// parseIngressStrategy maps s to its typed constant; ok=false means callers
+// must skip with a warning, never default silently to HostNetwork.
 func parseIngressStrategy(s string) (IngressStrategy, bool) {
 	switch IngressStrategy(s) {
 	case strategyHostNetwork, strategyLoadBalancer:
@@ -440,8 +424,7 @@ func (p *Phase) discoverIngressControllers(ctx context.Context) ([]ingressContro
 			return nil, fmt.Errorf("parse IngressController item: %w", err)
 		}
 
-		// OKD's bare-metal default has endpointPublishingStrategy unset (null) —
-		// treat null/empty as HostNetwork.
+		// OKD's bare-metal default leaves this unset (null); treat as HostNetwork.
 		strategy := strategyHostNetwork
 		if item.Spec.EndpointPublishingStrategy != nil && item.Spec.EndpointPublishingStrategy.Type != "" {
 			raw := string(item.Spec.EndpointPublishingStrategy.Type)
@@ -485,10 +468,8 @@ func (p *Phase) convertToLoadBalancer(ctx context.Context, ic *ingressController
 		return &errtypes.ClusterError{Msg: "build replacement IngressController", Err: err}
 	}
 
-	// The delete below removes the only live copy of the controller spec, so
-	// a create-ready original is persisted on disk first: a crash in the
-	// delete-to-create window leaves a restorable artifact that the next
-	// UpdateIngress run re-creates via restoreOrphanedIngressBackups.
+	// Persisted before the delete below, so a crash in the delete-to-create
+	// window leaves a restorable artifact (see restoreOrphanedIngressBackups).
 	rollbackJSON, err := buildRollbackJSON(ic)
 	if err != nil {
 		return &errtypes.ClusterError{Msg: fmt.Sprintf("build rollback payload for IngressController %q; refusing to delete without a recovery copy", ic.Name), Err: err}
@@ -501,8 +482,7 @@ func (p *Phase) convertToLoadBalancer(ctx context.Context, ic *ingressController
 		"-n", "openshift-ingress-operator")
 	if err != nil {
 		// Keep the backup: a cancelled/failed delete may still have completed
-		// server-side, and restoreOrphanedIngressBackups drops stale backups
-		// whose controller survived on the next run.
+		// server-side; restoreOrphanedIngressBackups drops it if so, next run.
 		return &errtypes.ClusterError{Msg: fmt.Sprintf("delete IngressController %q", ic.Name), Err: err}
 	}
 
@@ -515,10 +495,8 @@ func (p *Phase) convertToLoadBalancer(ctx context.Context, ic *ingressController
 	_, err = p.Exec.RunWithStdinChecked(ctx, replacementJSON, "oc", "create", "-f", "-")
 	if err != nil {
 		p.Log.Warn("update-ingress: failed to create replacement, attempting rollback", "err", err)
-		// Detached from ctx: cancellation may be exactly why the create
-		// failed, and a rollback under a cancelled ctx dies before it starts,
-		// leaving no IngressController (see internal/node/add.go ignition
-		// teardown for the pattern).
+		// Detached: cancellation may be why the create failed, and a rollback
+		// under a cancelled ctx would die before it starts, leaving no IC.
 		rbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ingressRollbackTimeout)
 		defer cancel()
 		if rbErr := p.attemptRollback(rbCtx, ic); rbErr != nil {
@@ -532,9 +510,8 @@ func (p *Phase) convertToLoadBalancer(ctx context.Context, ic *ingressController
 	return nil
 }
 
-// ingressBackupPath returns the on-disk backup path for controller name, or
-// "" when workDir is unknown (direct test callers), in which case the
-// backup is skipped.
+// ingressBackupPath returns the on-disk backup path, or "" when workDir is
+// unknown (backup skipped).
 func ingressBackupPath(workDir, name string) string {
 	if workDir == "" {
 		return ""
@@ -542,8 +519,8 @@ func ingressBackupPath(workDir, name string) string {
 	return filepath.Join(workspace.ClusterConfigDir(workDir), ingressBackupPrefix+name+ingressBackupSuffix)
 }
 
-// ingressBackupControllerName extracts the controller name from a backup
-// path, or "" when the path does not match the backup naming scheme.
+// ingressBackupControllerName extracts the name from a backup path, or "" if it
+// doesn't match the naming scheme.
 func ingressBackupControllerName(path string) string {
 	base := filepath.Base(path)
 	if !strings.HasPrefix(base, ingressBackupPrefix) || !strings.HasSuffix(base, ingressBackupSuffix) {
@@ -576,11 +553,8 @@ func (p *Phase) removeIngressBackup(path string) {
 	}
 }
 
-// restoreOrphanedIngressBackups re-creates IngressControllers from on-disk
-// backups left by a convertToLoadBalancer run that died in its
-// delete-to-create window. A backup whose controller exists again is stale
-// and removed; a restore failure keeps the backup file and logs a warning.
-// Returns the number of controllers restored.
+// restoreOrphanedIngressBackups re-creates ICs from backups a crashed
+// conversion left behind, dropping stale ones whose controller already exists.
 func (p *Phase) restoreOrphanedIngressBackups(ctx context.Context, workDir string, controllers []ingressControllerInfo) int {
 	if workDir == "" {
 		return 0
@@ -693,8 +667,7 @@ func buildLBIngressController(ic *ingressControllerInfo) (string, error) {
 	return string(data), nil
 }
 
-// buildRollbackJSON strips server-managed fields from the original RawJSON so
-// the payload round-trips through `oc create` during rollback.
+// buildRollbackJSON strips server-managed fields so the payload round-trips through `oc create`.
 func buildRollbackJSON(ic *ingressControllerInfo) (string, error) {
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(ic.RawJSON, &obj); err != nil {
@@ -728,10 +701,8 @@ func buildRollbackJSON(ic *ingressControllerInfo) (string, error) {
 	return string(data), nil
 }
 
-// attemptRollback recreates the original IngressController from its captured
-// RawJSON. A non-nil return means the rollback itself failed; the caller
-// joins it with the primary error rather than replacing it. Subprocess
-// stderr is redacted before it reaches the error string.
+// attemptRollback recreates the original IC from its captured RawJSON; a non-nil
+// return is joined with the primary error by the caller, not substituted for it.
 func (p *Phase) attemptRollback(ctx context.Context, ic *ingressControllerInfo) error {
 	p.Log.Info("update-ingress: rollback: starting", "name", ic.Name)
 	rollbackJSON, err := buildRollbackJSON(ic)
@@ -754,11 +725,8 @@ func (p *Phase) attemptRollback(ctx context.Context, ic *ingressControllerInfo) 
 	return nil
 }
 
-// restoreHAProxyBackup restores haproxyConfigPath from the newest timestamped
-// backup left by RemoveHAProxy — falling back to setup's fixed pristine
-// snapshot when no timestamped backup exists — so DNS rollback has a coherent
-// recovery target. Returns true only when the restore succeeds; errors are
-// logged as warnings.
+// restoreHAProxyBackup restores from the newest timestamped RemoveHAProxy
+// backup, falling back to setup's pristine snapshot; true only on success.
 func (p *Phase) restoreHAProxyBackup() bool {
 	pattern := phase.HAProxyBackupGlob(haproxyConfigPath)
 	matches, err := filepath.Glob(pattern)

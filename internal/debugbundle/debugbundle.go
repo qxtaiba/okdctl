@@ -1,7 +1,5 @@
-// Package debugbundle assembles the okdctl support tarball: redacted
-// configuration, recent log output, terraform state summary, doctor results,
-// oc adm must-gather output, and system metadata. Credentials are redacted
-// and the raw terraform state file is never included.
+// Package debugbundle assembles the okdctl support tarball: redacted config,
+// logs, terraform state summary, doctor results, and must-gather output.
 package debugbundle
 
 import (
@@ -41,15 +39,12 @@ const (
 	categorySystemMeta     bundleCategory = "system-meta"
 )
 
-// maxBundleFileBytes caps individual file reads in tarDirInto.
-// must-gather routinely emits multi-GB dumps; the bundle is for troubleshooting,
-// not full dump retention. var (not const) so tests can lower it without
-// allocating tens of MB of zeros.
+// maxBundleFileBytes caps tarDirInto reads (must-gather emits multi-GB
+// dumps); var, not const, so tests can lower it.
 var maxBundleFileBytes int64 = 50 * 1024 * 1024
 
-// Options configures Write. LoadConfig and ProjectRoot are invoked lazily so
-// their diagnostics (e.g. config-not-found guidance) appear at the same point
-// in the collection sequence as the rest of the progress output.
+// Options configures Write; LoadConfig and ProjectRoot run lazily so their
+// diagnostics land inline with the rest of the progress output.
 type Options struct {
 	// OutPath is the bundle destination; empty means okdctl-debug-<ts>.tgz.
 	OutPath        string
@@ -59,9 +54,8 @@ type Options struct {
 	SkipMustGather bool
 }
 
-// bundleManifest is the top-level structure written as manifest.yaml inside
-// the tarball. Support engineers read this first to understand bundle contents
-// and why any section was skipped or failed.
+// bundleManifest is written as manifest.yaml so support engineers can see
+// what succeeded, skipped, or failed.
 type bundleManifest struct {
 	BundleID  string          `json:"bundle_id"`
 	BundleAt  string          `json:"bundle_at"`
@@ -85,9 +79,8 @@ type manifestEntry struct {
 	Message string         `json:"message,omitempty"`
 }
 
-// Write collects every bundle section and writes the finalized tarball to
-// opts.OutPath. Section failures are recorded in the manifest rather than
-// aborting; only tarball-level failures return an error.
+// Write collects every bundle section into opts.OutPath. Section failures are
+// recorded in the manifest, not returned; only tarball-level failures return an error.
 func Write(ctx context.Context, opts Options) (retErr error) {
 	bundleID := rand.Text()
 	bundleAt := time.Now().UTC()
@@ -116,9 +109,8 @@ func Write(ctx context.Context, opts Options) (retErr error) {
 
 	gz := gzip.NewWriter(f)
 	tw := tar.NewWriter(gz)
-	// Deferred closes run on every return path so a failure between tar writes
-	// and explicit Close still finalizes the archive — without this a mid-run
-	// error leaves a truncated .tgz that gunzip reports as corrupt.
+	// Ensures every return path finalizes the archive, so a mid-run error
+	// doesn't leave a truncated .tgz that gunzip reports as corrupt.
 	defer func() {
 		if cErr := tw.Close(); cErr != nil && retErr == nil {
 			retErr = fmt.Errorf("finalize tar: %w", cErr)
@@ -194,10 +186,8 @@ func collectSections(ctx context.Context, addFile func(string, []byte) error, ad
 	return secs
 }
 
-// safeMessage converts err to a string safe for inclusion in the bundle
-// manifest. If err implements Redacted() any the redacted form is used,
-// preventing a future error type from leaking credentials into the
-// operator-shared bundle. Mirrors logutil.redactAny's dispatch shape.
+// safeMessage renders err for the manifest via Redacted() any when
+// implemented, so credentials never leak into the bundle.
 func safeMessage(err error) string {
 	if err == nil {
 		return ""
@@ -223,9 +213,8 @@ func bundleConfig(addFile func(string, []byte) error, cfg *config.Config, cfgErr
 	return manifestEntry{Name: categoryConfig, Status: bundleStatusOK}
 }
 
-// bundleLogFile archives the run log. An explicit --log-file path wins;
-// otherwise it falls back to the default <workspace>/okdctl.log that
-// deploy, destroy, and cleanup append to.
+// bundleLogFile archives the run log: an explicit --log-file path wins,
+// else falls back to <workspace>/okdctl.log.
 func bundleLogFile(addFile func(string, []byte) error, logFile, projectRoot string, prErr error) manifestEntry {
 	if logFile == "" {
 		if prErr != nil {
@@ -328,13 +317,9 @@ func bundleMustGather(ctx context.Context, addStream func(*tar.Header, io.Reader
 	return manifestEntry{Name: categoryMustGather, Status: bundleStatusOK}
 }
 
-// tarDirInto walks srcDir and streams each regular file into addStream,
-// prefixing entry names with bundlePrefix. Reads go through os.Root so
-// symlinks cannot redirect reads outside srcDir (TOCTOU-safe). Files larger
-// than maxBundleFileBytes are capped; their relative paths are returned in
-// the truncated slice so callers can record the truncation. A cancelled ctx
-// aborts the walk between entries; the caller's deferred tar/gzip Close still
-// finalizes a readable partial archive.
+// tarDirInto streams srcDir's regular files into addStream via os.Root
+// (symlink-safe); oversized files are capped and reported in truncated,
+// and a cancelled ctx aborts the walk between entries.
 func tarDirInto(ctx context.Context, addStream func(*tar.Header, io.Reader) error, srcDir, bundlePrefix string) (truncated []string, err error) {
 	root, openErr := os.OpenRoot(srcDir)
 	if openErr != nil {
@@ -385,7 +370,7 @@ func tarDirInto(ctx context.Context, addStream func(*tar.Header, io.Reader) erro
 }
 
 func bundleDoctor(ctx context.Context, addFile func(string, []byte) error) manifestEntry {
-	// Skip the re-exec instead of bundling doctor's non-linux refusal message.
+	// Skip the re-exec rather than bundling doctor's non-linux refusal message.
 	if runtime.GOOS != "linux" {
 		return manifestEntry{Name: categoryDoctor, Status: bundleStatusSkipped, Message: "doctor is only supported on linux"}
 	}

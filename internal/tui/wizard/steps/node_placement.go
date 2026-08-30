@@ -40,8 +40,6 @@ type discoveryCompleteMsg struct {
 
 // NodePlacementStep discovers Proxmox infrastructure and presents
 // selectable dropdowns for bridge, storage, and per-VM node assignment.
-// It uses a two-phase approach: spinner during discovery, then a
-// dynamically-built MultiSectionForm for the selection UI.
 type NodePlacementStep struct {
 	wizard.BaseStep
 
@@ -52,10 +50,8 @@ type NodePlacementStep struct {
 	discovery      *proxmoxDiscovery
 	discoveryErr   error
 
-	// inner is the multi-section form built after discovery. The typed field
-	// pointers below alias fields inside it so Apply reads them back directly,
-	// in index order, without key-string round-trips. A pointer is nil when
-	// discovery did not surface that field.
+	// inner is the post-discovery form; fields below alias into it, nil if
+	// discovery didn't surface that field.
 	inner *wizard.MultiSectionForm
 
 	bridgeField        *components.SelectField
@@ -110,9 +106,8 @@ func (s *NodePlacementStep) fetchDiscovery() tea.Msg {
 	return discoveryCompleteMsg{discovery: disc, err: err}
 }
 
-// buildInnerStep builds the MultiSectionForm of SelectField/MultiSelectField
-// dropdowns from discovery results, retaining typed field pointers so Apply
-// can read them back directly.
+// buildInnerStep builds the form's dropdowns, retaining typed field pointers so
+// Apply can read them back directly.
 func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, nodeNames []string) {
 	px := s.cfg.Provider.Proxmox
 	clusterName := s.cfg.Cluster.Name
@@ -189,11 +184,8 @@ func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, nodeNames []s
 	s.inner = wizard.NewMultiSectionForm(sections)
 }
 
-// newSelectField builds a select dropdown, applying def as the starting
-// default and then overlaying current — matching the DataDrivenStep
-// buildFormField+LoadFromConfig sequence: SetValue("") is a no-op unless ""
-// is itself an option (the fcos "blank" case), so an empty current preserves
-// the default for ordinary fields.
+// newSelectField sets def then overlays current; SetValue("") is a no-op unless
+// "" is itself an option (the fcos blank case).
 func newSelectField(label, help string, options []string, def, current string) *components.SelectField {
 	sf := components.NewSelectField(label, options)
 	sf.Help = help
@@ -202,9 +194,8 @@ func newSelectField(label, help string, options []string, def, current string) *
 	return sf
 }
 
-// nodeSelectFields builds per-node proxmox-node dropdowns for a role, seeding
-// each with the matching existing assignment when present. These fields carry
-// no config-load overlay, so the default alone determines the initial value.
+// nodeSelectFields builds per-node dropdowns seeded from existing assignments;
+// no config-load overlay, so the default alone sets the value.
 func nodeSelectFields(fieldPrefix, clusterName string, count int, existing []string, defaultNode string, allNodes []string) []*components.SelectField {
 	fields := make([]*components.SelectField, 0, count)
 	for i := range count {
@@ -303,10 +294,9 @@ func (s *NodePlacementStep) View(width, height int) string {
 	return header
 }
 
-// Apply writes each retained field's value into cfg. Per-node dropdowns are
-// read in index order, so controlPlaneFields[i]/workerFields[i] map to
-// ControlPlaneNodes[i]/WorkerNodes[i] — the ordering is the correctness
-// contract for VM-to-node assignment.
+// Apply writes each retained field's value into cfg; controlPlaneFields[i]/
+// workerFields[i] map to ControlPlaneNodes[i]/WorkerNodes[i] by index, which
+// is the correctness contract for VM-to-node assignment.
 func (s *NodePlacementStep) Apply(cfg *config.Config) error {
 	if s.inner == nil || cfg.Provider.Proxmox == nil {
 		return nil
@@ -359,7 +349,7 @@ func (s *NodePlacementStep) SetFocused(focused bool) {
 		return
 	}
 	if focused {
-		_ = s.inner.Focus() // Command executed during Init()
+		_ = s.inner.Focus() // cmd runs via Init(), not here
 		return
 	}
 	s.inner.Blur()
@@ -386,9 +376,6 @@ func bridgeNames(bridges []proxmoxBridge) []string {
 	return names
 }
 
-// additionalNetworksBridges serialises []AdditionalNetwork to a comma-
-// separated list of bridge names for round-tripping through the wizard's
-// string-valued field model.
 func additionalNetworksBridges(nets []config.AdditionalNetwork) string {
 	names := make([]string, len(nets))
 	for i, n := range nets {
@@ -397,10 +384,9 @@ func additionalNetworksBridges(nets []config.AdditionalNetwork) string {
 	return strings.Join(names, ",")
 }
 
-// parseAdditionalNetworks converts a comma-separated bridge-name string into
-// []AdditionalNetwork. Pre-existing entries matched by Bridge are preserved
-// intact (keeping hand-authored Model and VLANTag values). Newly selected
-// bridges get Model "virtio". Empty input returns nil.
+// parseAdditionalNetworks converts a bridge-name CSV to []AdditionalNetwork
+// (nil if empty), preserving existing entries by Bridge match and defaulting
+// new ones to Model "virtio".
 func parseAdditionalNetworks(v string, existing []config.AdditionalNetwork) []config.AdditionalNetwork {
 	v = strings.TrimSpace(v)
 	if v == "" {

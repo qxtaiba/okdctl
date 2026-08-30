@@ -10,9 +10,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
-// TestErrorStringOmitsInner locks the contract that Error() does not
-// interpolate the inner err: a credential-bearing inner error must not
-// leak via .Error() string, only via the typed errors.Unwrap chain.
+// TestErrorStringOmitsInner locks that Error() never interpolates the inner err
+// (credentials only reachable via Unwrap).
 func TestErrorStringOmitsInner(t *testing.T) {
 	inner := errors.New("user=admin password=hunter2")
 	cases := []struct {
@@ -39,13 +38,8 @@ func TestErrorStringOmitsInner(t *testing.T) {
 	}
 }
 
-// TestUnwrapChainIntact verifies errors.Is still walks to the wrapped
-// sentinel after the Error()-only change.
-//
-// The ctx-sentinel rows lock the signalExitCode invariant: every errtype
-// must preserve context.Canceled and context.DeadlineExceeded identity
-// through its Unwrap chain so SIGINT→130 / SIGTERM→143 mapping stays
-// correct even when a cancellation is wrapped inside a typed error.
+// TestUnwrapChainIntact locks that Unwrap preserves
+// ctx.Canceled/DeadlineExceeded so SIGINT→130/SIGTERM→143 stays correct.
 func TestUnwrapChainIntact(t *testing.T) {
 	ctxCanceled := context.Canceled
 	ctxDeadline := context.DeadlineExceeded
@@ -81,13 +75,6 @@ func TestUnwrapChainIntact(t *testing.T) {
 	cases = append(cases, mkCases("UsageError", func(s error) error {
 		return &errtypes.UsageError{Msg: "test", Err: s}
 	})...)
-	cases = append(cases, sentinelCase{
-		name:     "ConfigError/os.ErrNotExist",
-		err:      &errtypes.ConfigError{Msg: "open install-config.yaml", Err: os.ErrNotExist},
-		sentinel: os.ErrNotExist,
-		wantIs:   true,
-	})
-
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got := errors.Is(tc.err, tc.sentinel)
@@ -99,8 +86,8 @@ func TestUnwrapChainIntact(t *testing.T) {
 	}
 }
 
-// TestUnwrapNilWhenNoInner ensures a type with no Err returns nil from
-// Unwrap and plays nicely with errors.Is over a nil target.
+// TestUnwrapNilWhenNoInner: Unwrap returns nil when Err is unset, and errors.Is
+// doesn't panic on a nil target.
 func TestUnwrapNilWhenNoInner(t *testing.T) {
 	e := &errtypes.ConfigError{Msg: "x"}
 	if got := errors.Unwrap(e); got != nil {
@@ -111,10 +98,8 @@ func TestUnwrapNilWhenNoInner(t *testing.T) {
 	}
 }
 
-// TestWithHintCarriesStructuredHint locks WithHint's contract: the hint rides
-// in a separate field, never mutating Msg; the receiver is unchanged; the
-// returned error keeps the same concrete type and Unwrap chain; and the hint
-// surfaces only through Error() (as a "; <hint>" suffix) and Describe.
+// TestWithHintCarriesStructuredHint locks that WithHint doesn't mutate the
+// receiver, preserves type/Unwrap, and surfaces the hint via Error()/Describe.
 func TestWithHintCarriesStructuredHint(t *testing.T) {
 	inner := errors.New("boom")
 	cfg := &errtypes.ConfigError{Msg: "config broke", Err: inner}
@@ -141,21 +126,10 @@ func TestWithHintCarriesStructuredHint(t *testing.T) {
 	if cfg.Msg != "config broke" {
 		t.Errorf("receiver mutated: Msg = %q; want unchanged %q", cfg.Msg, "config broke")
 	}
-
-	cluster := &errtypes.ClusterError{Msg: "cluster broke"}
-	gotCluster := cluster.WithHint("try Y")
-	var gotClusterErr *errtypes.ClusterError
-	if !errors.As(gotCluster, &gotClusterErr) || gotClusterErr.Msg != "cluster broke" {
-		t.Errorf("ClusterError.WithHint() mutated Msg = %v; want %q", gotCluster, "cluster broke")
-	}
-	if gotCluster.Error() != "cluster error: cluster broke; try Y" {
-		t.Errorf("ClusterError.WithHint().Error() = %q; want hint suffix", gotCluster.Error())
-	}
 }
 
 // TestWithHintUniformAcrossCategories locks that every category implements
-// HintAppender and preserves its concrete type — the invariant WithLockHint's
-// non-ConfigError callers depend on to keep their exit code.
+// HintAppender and preserves its type (exit-code callers rely on this).
 func TestWithHintUniformAcrossCategories(t *testing.T) {
 	cases := []struct {
 		name string

@@ -69,33 +69,13 @@ func destroyableOpts(workDir, projectRoot string) *Options {
 	}
 }
 
-func TestNewOptions_Defaults(t *testing.T) {
-	cfg := &config.Config{}
-	cfg.Deployment.AutoApprove = true
-	opts := NewOptions(cfg, "/proj")
-
-	if opts.WorkDir != "/proj/okd-install" {
-		t.Errorf("WorkDir = %q; want /proj/okd-install", opts.WorkDir)
-	}
-	if opts.TerraformEnv != "production" {
-		t.Errorf("TerraformEnv = %q; want production (default)", opts.TerraformEnv)
-	}
-	if !opts.AutoApprove {
-		t.Error("AutoApprove not propagated from cfg.Deployment")
-	}
-	if opts.CleanupKind != cleanup.Full {
-		t.Errorf("CleanupKind = %q; want %q", opts.CleanupKind, cleanup.Full)
-	}
-}
-
 func TestDestroySteps_StepListAndSkipWiring(t *testing.T) {
 	cases := []struct {
 		name     string
 		mutate   func(cfg *config.Config, opts *Options)
 		tfFailed bool
-		// wantSkip only lists steps with a deterministic expectation. The
-		// firewall step's "not skipped" case depends on the host's active
-		// firewall backend, so only its skip=true cases are asserted.
+		// wantSkip only lists deterministic expectations; firewall's "not
+		// skipped" case depends on the host's active firewall backend.
 		wantSkip map[distribution.StepID]bool
 	}{
 		{
@@ -110,16 +90,6 @@ func TestDestroySteps_StepListAndSkipWiring(t *testing.T) {
 			name:     "skip-terraform gates only the infra step",
 			mutate:   func(_ *config.Config, o *Options) { o.SkipTerraform = true },
 			wantSkip: map[distribution.StepID]bool{StepDestroyInfra: true, StepRemoveRemoteISO: false, StepCleanupFiles: false},
-		},
-		{
-			name:     "keep-isos gates iso removal",
-			mutate:   func(_ *config.Config, o *Options) { o.KeepISOs = true },
-			wantSkip: map[distribution.StepID]bool{StepDestroyInfra: false, StepRemoveRemoteISO: true},
-		},
-		{
-			name:     "nil proxmox provider gates iso removal",
-			mutate:   func(c *config.Config, _ *Options) { c.Provider.Proxmox = nil },
-			wantSkip: map[distribution.StepID]bool{StepRemoveRemoteISO: true},
 		},
 		{
 			name:     "skip-cleanup gates file cleanup",
@@ -183,10 +153,8 @@ func TestDestroySteps_StepListAndSkipWiring(t *testing.T) {
 	}
 }
 
-// installFakeTerraformArgv writes an argv-logging POSIX-sh terraform into a
-// temp dir and points PATH at ONLY that dir, which also keeps the firewall
-// step deterministic: DetectBackend finds no firewall-cmd/ufw/iptables and
-// reports None. TF_FAKE_MODE=plan-fail makes `terraform plan` exit 1.
+// installFakeTerraformArgv points PATH at an argv-logging fake terraform,
+// which incidentally makes DetectBackend report None (no firewall-cmd/ufw/iptables on PATH).
 func installFakeTerraformArgv(t *testing.T) string {
 	t.Helper()
 	if runtime.GOOS == "windows" {

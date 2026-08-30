@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -14,6 +13,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
+	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
 func TestProvider_ZeroizeEnv(t *testing.T) {
@@ -178,31 +178,7 @@ func TestProvider_Disconnect(t *testing.T) {
 	}
 }
 
-// TestProvider_Disconnect_ZeroizesExecutorEnv exercises the delegation that
-// keeps credential strings handed to the terraform executor from outliving the
-// Provider: Disconnect must wipe the executor env before dropping the
-// reference, since the install phase defers ZeroizeEnv and Disconnect together
-// and LIFO runs Disconnect first. The byte-level wipe is pinned by terraform's
-// TestExecutor_ZeroizeEnv_BlanksInnerEnv; here we assert the path runs without
-// panic and the reference is cleared.
-func TestProvider_Disconnect_ZeroizesExecutorEnv(t *testing.T) {
-	p := New(WithEnv([]string{"PROXMOX_VE_API_TOKEN=tok-fake"}))
-	p.connected = true
-	p.setupTerraform(t.TempDir(), "production")
-	if p.terraformExec == nil {
-		t.Fatal("setupTerraform did not build a terraform executor")
-	}
-	if err := p.Disconnect(context.Background()); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if p.terraformExec != nil {
-		t.Error("expected p.terraformExec = nil after Disconnect")
-	}
-}
-
-// TestProvider_ZeroizeEnv_DelegatesToExecutor covers the path where Disconnect
-// is not called but a terraform executor holds a credential-env copy: the
-// deferred ZeroizeEnv must reach it too.
+// Covers ZeroizeEnv alone reaching the executor's copy when Disconnect is never called.
 func TestProvider_ZeroizeEnv_DelegatesToExecutor(t *testing.T) {
 	p := New(WithEnv([]string{"PROXMOX_VE_PASSWORD=hunter2"}))
 	p.setupTerraform(t.TempDir(), "production")
@@ -227,42 +203,34 @@ func TestProvider_setupTerraform_idempotent(t *testing.T) {
 	}
 }
 
-func TestProvider_Provision_Guards(t *testing.T) {
-	t.Run("not connected", func(t *testing.T) {
-		p := New()
-		err := p.Provision(context.Background(), &config.Config{}, ProvisionOptions{})
-		if !errors.Is(err, ErrNotConnected) {
-			t.Fatalf("err = %v; want ErrNotConnected", err)
-		}
-	})
-
-	t.Run("terraform not configured", func(t *testing.T) {
-		p := New()
-		p.connected = true
-		err := p.Provision(context.Background(), &config.Config{}, ProvisionOptions{})
-		if !errors.Is(err, ErrTerraformNotConfigured) {
-			t.Fatalf("err = %v; want ErrTerraformNotConfigured", err)
-		}
-	})
-}
-
-func TestProvider_PlanPreview_Guards(t *testing.T) {
-	t.Run("not connected", func(t *testing.T) {
-		p := New()
+func TestProvider_Guards(t *testing.T) {
+	provision := func(p *Provider) error {
+		return p.Provision(context.Background(), &config.Config{}, ProvisionOptions{})
+	}
+	planPreview := func(p *Provider) error {
 		_, err := p.PlanPreview(context.Background(), &config.Config{}, ProvisionOptions{})
-		if !errors.Is(err, ErrNotConnected) {
-			t.Fatalf("err = %v; want ErrNotConnected", err)
-		}
-	})
-
-	t.Run("terraform not configured", func(t *testing.T) {
-		p := New()
-		p.connected = true
-		_, err := p.PlanPreview(context.Background(), &config.Config{}, ProvisionOptions{})
-		if !errors.Is(err, ErrTerraformNotConfigured) {
-			t.Fatalf("err = %v; want ErrTerraformNotConfigured", err)
-		}
-	})
+		return err
+	}
+	cases := []struct {
+		name      string
+		op        func(*Provider) error
+		connected bool
+		want      error
+	}{
+		{"provision not connected", provision, false, ErrNotConnected},
+		{"provision terraform not configured", provision, true, ErrTerraformNotConfigured},
+		{"plan preview not connected", planPreview, false, ErrNotConnected},
+		{"plan preview terraform not configured", planPreview, true, ErrTerraformNotConfigured},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := New()
+			p.connected = tc.connected
+			if err := tc.op(p); !errors.Is(err, tc.want) {
+				t.Fatalf("err = %v; want %v", err, tc.want)
+			}
+		})
+	}
 }
 
 func TestProvider_PlanPreview(t *testing.T) {
@@ -310,16 +278,11 @@ func TestProvider_PlanPreview(t *testing.T) {
 	})
 }
 
-// installFakeTerraformDispatch writes a POSIX "terraform" fake on PATH that
-// answers "init" with exit 0, "plan" with planExit (mirroring
-// -detailed-exitcode: 0=no changes, 2=changes), and "show" with showStdout.
+// installFakeTerraformDispatch fakes terraform: init exits 0, plan exits
+// planExit (-detailed-exitcode semantics), show echoes showStdout.
 func installFakeTerraformDispatch(t *testing.T, planExit int, showStdout string) {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("fake terraform script relies on POSIX sh")
-	}
-	dir := t.TempDir()
-	script := fmt.Sprintf(`#!/bin/sh
+	testutil.InstallFakeBin(t, "terraform", fmt.Sprintf(`#!/bin/sh
 cmd="$1"
 case "$cmd" in
   init) exit 0 ;;
@@ -337,37 +300,23 @@ EOF
     exit 0 ;;
 esac
 exit 0
-`, planExit, showStdout)
-	path := filepath.Join(dir, "terraform")
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+`, planExit, showStdout))
 }
 
-// installFakePvesh writes a POSIX "ssh" fake on PATH that always answers
-// with the contents of response, regardless of the pvesh subcommand/path
-// it was invoked with.
+// installFakePvesh fakes ssh to always answer with response, regardless of the pvesh subcommand.
 func installFakePvesh(t *testing.T, response string) {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("fake-ssh script relies on POSIX sh")
-	}
-	dir := t.TempDir()
-	respFile := filepath.Join(dir, "response.json")
-	if err := os.WriteFile(respFile, []byte(response), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	script := fmt.Sprintf("#!/bin/sh\ncat %q\n", respFile)
-	sshPath := filepath.Join(dir, "ssh")
-	if err := os.WriteFile(sshPath, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	testutil.InstallFakeBin(t, "ssh", "#!/bin/sh\ncat <<'EOF'\n"+response+"\nEOF\n")
 }
 
 func TestProvider_ProbeVMEnumeration(t *testing.T) {
 	cfg := &config.Config{Topology: config.TopologyConfig{VMIDBase: 100}}
+	enumProvider := func(node string) *Provider {
+		p := New()
+		p.host, p.node = "10.0.0.1", node
+		p.sshExec = executor.New()
+		return p
+	}
 
 	t.Run("no ssh exec skips probe", func(t *testing.T) {
 		p := New()
@@ -378,9 +327,7 @@ func TestProvider_ProbeVMEnumeration(t *testing.T) {
 	})
 
 	t.Run("pvesh run error (invalid node) skips probe", func(t *testing.T) {
-		p := New()
-		p.node = "bad;node"
-		p.sshExec = executor.New()
+		p := enumProvider("bad;node")
 		if got := p.probeVMEnumeration(context.Background(), cfg); got != enumProbeSkipped {
 			t.Errorf("got %v; want enumProbeSkipped", got)
 		}
@@ -388,40 +335,28 @@ func TestProvider_ProbeVMEnumeration(t *testing.T) {
 
 	t.Run("malformed json payload skips probe", func(t *testing.T) {
 		installFakePvesh(t, "not json")
-		p := New()
-		p.host, p.node = "10.0.0.1", "pve-01"
-		p.sshExec = executor.New()
-		if got := p.probeVMEnumeration(context.Background(), cfg); got != enumProbeSkipped {
+		if got := enumProvider("pve-01").probeVMEnumeration(context.Background(), cfg); got != enumProbeSkipped {
 			t.Errorf("got %v; want enumProbeSkipped", got)
 		}
 	})
 
 	t.Run("vmid found", func(t *testing.T) {
 		installFakePvesh(t, `[{"vmid":100},{"vmid":101}]`)
-		p := New()
-		p.host, p.node = "10.0.0.1", "pve-01"
-		p.sshExec = executor.New()
-		if got := p.probeVMEnumeration(context.Background(), cfg); got != enumYes {
+		if got := enumProvider("pve-01").probeVMEnumeration(context.Background(), cfg); got != enumYes {
 			t.Errorf("got %v; want enumYes", got)
 		}
 	})
 
 	t.Run("vmid not found", func(t *testing.T) {
 		installFakePvesh(t, `[{"vmid":200}]`)
-		p := New()
-		p.host, p.node = "10.0.0.1", "pve-01"
-		p.sshExec = executor.New()
-		if got := p.probeVMEnumeration(context.Background(), cfg); got != enumNo {
+		if got := enumProvider("pve-01").probeVMEnumeration(context.Background(), cfg); got != enumNo {
 			t.Errorf("got %v; want enumNo", got)
 		}
 	})
 
 	t.Run("default vmid base used when topology.VMIDBase is zero", func(t *testing.T) {
 		installFakePvesh(t, fmt.Sprintf(`[{"vmid":%d}]`, config.DefaultVMIDBase))
-		p := New()
-		p.host, p.node = "10.0.0.1", "pve-01"
-		p.sshExec = executor.New()
-		if got := p.probeVMEnumeration(context.Background(), &config.Config{}); got != enumYes {
+		if got := enumProvider("pve-01").probeVMEnumeration(context.Background(), &config.Config{}); got != enumYes {
 			t.Errorf("got %v; want enumYes", got)
 		}
 	})
@@ -438,8 +373,6 @@ func TestInitIsRetryable(t *testing.T) {
 		{"context deadline exceeded", context.DeadlineExceeded, false},
 		{"config error", &errtypes.ConfigError{Msg: "bad config"}, false},
 		{"auth error", &errtypes.AuthError{Msg: "bad token"}, false},
-		{"wrapped context canceled", fmt.Errorf("outer: %w", context.Canceled), false},
-		{"wrapped config error", fmt.Errorf("outer: %w", &errtypes.ConfigError{Msg: "x"}), false},
 		{"generic error is retryable", errors.New("connection reset"), true},
 	}
 

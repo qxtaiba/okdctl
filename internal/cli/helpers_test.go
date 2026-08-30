@@ -6,68 +6,40 @@ import (
 	"testing"
 )
 
-func TestHasProjectMarker_ConfigFile(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "okdctl.yaml"), []byte(""), 0o600); err != nil {
+func seedMarkerFile(t *testing.T, dir, relPath, content string) {
+	t.Helper()
+	path := filepath.Join(dir, filepath.FromSlash(relPath))
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if !hasProjectMarker(dir) {
-		t.Error("okdctl.yaml present: want true, got false")
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 
-func TestHasProjectMarker_EnvFile(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "okdctl.env"), []byte(""), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if !hasProjectMarker(dir) {
-		t.Error("okdctl.env present: want true, got false")
-	}
-}
+const tfStateRelPath = "infrastructure/terraform/environments/production/terraform.tfstate"
 
-func TestHasProjectMarker_TfState(t *testing.T) {
-	dir := t.TempDir()
-	envDir := filepath.Join(dir, "infrastructure", "terraform", "environments", "production")
-	if err := os.MkdirAll(envDir, 0o700); err != nil {
-		t.Fatal(err)
+func TestHasProjectMarker(t *testing.T) {
+	cases := []struct {
+		name    string
+		seed    string // relative path to create; empty seeds nothing
+		content string
+		want    bool
+	}{
+		{"config file", "okdctl.yaml", "", true},
+		{"env file", "okdctl.env", "", true},
+		{"tfstate", tfStateRelPath, "{}", true},
+		{"none", "", "", false},
 	}
-	if err := os.WriteFile(filepath.Join(envDir, "terraform.tfstate"), []byte("{}"), 0o600); err != nil {
-		t.Fatal(err)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if tc.seed != "" {
+				seedMarkerFile(t, dir, tc.seed, tc.content)
+			}
+			if got := hasProjectMarker(dir); got != tc.want {
+				t.Errorf("hasProjectMarker = %v, want %v", got, tc.want)
+			}
+		})
 	}
-	if !hasProjectMarker(dir) {
-		t.Error("terraform.tfstate present: want true, got false")
-	}
-}
-
-func TestHasProjectMarker_None(t *testing.T) {
-	dir := t.TempDir()
-	if hasProjectMarker(dir) {
-		t.Error("empty dir: want false, got true")
-	}
-}
-
-func TestWarnIfTfStateOnly_PrimaryPresent(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "okdctl.yaml"), []byte(""), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	warnIfTfStateOnly(dir)
-}
-
-func TestWarnIfTfStateOnly_TfStateOnly(t *testing.T) {
-	dir := t.TempDir()
-	envDir := filepath.Join(dir, "infrastructure", "terraform", "environments", "production")
-	if err := os.MkdirAll(envDir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(envDir, "terraform.tfstate"), []byte("{}"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	warnIfTfStateOnly(dir)
-}
-
-func TestWarnIfTfStateOnly_NoMarkers(t *testing.T) {
-	dir := t.TempDir()
-	warnIfTfStateOnly(dir)
 }

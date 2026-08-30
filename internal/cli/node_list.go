@@ -20,10 +20,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
-// Sizing-drift values for nodeListEntry.Drift. "pending" means config and
-// terraform.tfvars disagree on the node's role sizing — a resize was staged
-// (or the config was hand-edited) but not yet fully applied; "unknown" means
-// terraform.tfvars has not been rendered yet, so there is nothing to compare.
+// Sizing-drift values for nodeListEntry.Drift: "pending" means config and
+// terraform.tfvars disagree; "unknown" means tfvars hasn't been rendered yet.
 const (
 	driftNone    = "none"
 	driftPending = "pending"
@@ -55,8 +53,8 @@ func init() {
 	nodeCmd.AddCommand(nodeListCmd)
 }
 
-// nodeListEntry is one row of `okdctl node list --output json`; see
-// docs/cli/json-schema.md for the documented, stable shape.
+// nodeListEntry is one row of "okdctl node list --output json"; see
+// docs/cli/json-schema.md for the stable shape.
 type nodeListEntry struct {
 	Name        string             `json:"name"`
 	Role        nodetypes.NodeRole `json:"role"`
@@ -103,11 +101,8 @@ func runNodeList(cmd *cobra.Command, _ []string) error {
 	return printNodeList(cmd.OutOrStdout(), entries, unattached)
 }
 
-// nodeListSideData is the non-cluster context `okdctl node list` folds onto
-// each row: the sizing recorded in terraform.tfvars (for drift) and the
-// in-flight op marker, if any. Both are read best-effort — a read failure
-// degrades the affected column to "unknown"/absent rather than failing the
-// whole listing, matching clusterstatus.Collect's degrade-gracefully policy.
+// nodeListSideData is non-cluster context folded onto each row; read
+// best-effort, degrading the affected column instead of failing the listing.
 type nodeListSideData struct {
 	tfSizing      provision.TerraformVarsSizing
 	tfSizingFound bool
@@ -148,9 +143,8 @@ func buildNodeListEntries(nodes []cluster.NodeDetail, cfg *config.Config, side n
 	return entries
 }
 
-// unattachedOpNote reports a marker whose Target matches no listed node —
-// see the unattached-op text note. Empty when there is no marker or it is
-// already attached to a listed node via in_flight_op.
+// unattachedOpNote reports a marker whose Target matches no listed node; empty
+// when there is no marker or it's already attached via in_flight_op.
 func unattachedOpNote(marker *node.OpMarker, nodes []cluster.NodeDetail) string {
 	if marker == nil || slices.ContainsFunc(nodes, func(n cluster.NodeDetail) bool { return n.Name == marker.Target }) {
 		return ""
@@ -158,9 +152,8 @@ func unattachedOpNote(marker *node.OpMarker, nodes []cluster.NodeDetail) string 
 	return fmt.Sprintf("%s (%s) on %s", marker.Op, marker.Step, marker.Target)
 }
 
-// roleSizingDrift compares cfg's role sizing to sizing (parsed from
-// terraform.tfvars). found=false means terraform.tfvars has not been
-// rendered, so drift cannot be assessed.
+// roleSizingDrift compares cfg's role sizing to tfvars; found=false means
+// tfvars hasn't been rendered, so drift can't be assessed.
 func roleSizingDrift(cfg *config.Config, role nodetypes.NodeRole, sizing provision.TerraformVarsSizing, found bool) (status, detail string) {
 	if !found {
 		return driftUnknown, ""
@@ -182,10 +175,8 @@ func roleSizingDrift(cfg *config.Config, role nodetypes.NodeRole, sizing provisi
 	return driftPending, fmt.Sprintf("config %dMiB/%dcpu/%dGiB vs tfvars %dMiB/%dcpu/%dGiB", cfgMem, cfgCPU, cfgDisk, tfMem, tfCPU, tfDisk)
 }
 
-// printNodeList renders the text table through the shared tui.Table look
-// (dim header, red not-ready rows), plus a trailing note when unattachedOp
-// is non-empty (the unattached-op text note). This surface prints outside a
-// box, so each line goes through tui.Downsample to honor pipes and NO_COLOR.
+// printNodeList renders the table via tui.Table; each line goes through
+// tui.Downsample (no surrounding box) to honor pipes and NO_COLOR.
 func printNodeList(w io.Writer, entries []nodeListEntry, unattachedOp string) error {
 	if len(entries) == 0 {
 		if _, err := fmt.Fprintln(w, "no nodes found"); err != nil {

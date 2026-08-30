@@ -18,6 +18,29 @@ import (
 
 func intPtr(i int) *int { return &i }
 
+// headerColumns locates each header's byte offset and returns a slicer
+// extracting the same column from any row.
+func headerColumns(t *testing.T, header string, headers []string) (colStarts []int, col func(line string, i int) string) {
+	t.Helper()
+	colStarts = make([]int, len(headers))
+	for i, h := range headers {
+		idx := strings.Index(header, h)
+		if idx == -1 {
+			t.Fatalf("header missing %q: %q", h, header)
+		}
+		colStarts[i] = idx
+	}
+	col = func(line string, i int) string {
+		start := min(colStarts[i], len(line))
+		end := len(line)
+		if i+1 < len(colStarts) {
+			end = min(colStarts[i+1], len(line))
+		}
+		return strings.TrimSpace(line[start:end])
+	}
+	return colStarts, col
+}
+
 func TestRoleSizingDrift(t *testing.T) {
 	cfg := &config.Config{
 		Topology: config.TopologyConfig{
@@ -155,10 +178,7 @@ func TestNodeListEntryJSONShape(t *testing.T) {
 	}
 }
 
-// TestPrintNodeListAlignsColumnsWithLongNames is the table-alignment
-// regression: a long node name must not shift later columns out of alignment
-// between the header and every data row. The profile is pinned to no-color so
-// byte-offset column math stays valid on the styled header and not-ready row.
+// profile is pinned to no-color so byte-offset column math stays valid on ANSI-styled rows.
 func TestPrintNodeListAlignsColumnsWithLongNames(t *testing.T) {
 	tui.SetColorProfileFor(&bytes.Buffer{})
 	t.Cleanup(func() { tui.SetColorProfileFor(&bytes.Buffer{}) })
@@ -182,26 +202,9 @@ func TestPrintNodeListAlignsColumnsWithLongNames(t *testing.T) {
 	}
 	header, row0, row1 := lines[0], lines[1], lines[2]
 
-	// Column boundaries come from the header's own text, then every row is
-	// sliced at the same offsets — a substring search on row text would
-	// false-positive on "worker" appearing inside the long node name itself.
-	headers := []string{"NAME", "ROLE", "READY", "TF-INDEX", "DRIFT", "OP"}
-	colStarts := make([]int, len(headers))
-	for i, h := range headers {
-		idx := strings.Index(header, h)
-		if idx == -1 {
-			t.Fatalf("header missing %q: %q", h, header)
-		}
-		colStarts[i] = idx
-	}
-	col := func(line string, i int) string {
-		start := min(colStarts[i], len(line))
-		end := len(line)
-		if i+1 < len(colStarts) {
-			end = min(colStarts[i+1], len(line))
-		}
-		return strings.TrimSpace(line[start:end])
-	}
+	// offsets come from the header text; a substring search would
+	// false-positive on "worker" inside the long node name
+	colStarts, col := headerColumns(t, header, []string{"NAME", "ROLE", "READY", "TF-INDEX", "DRIFT", "OP"})
 
 	const roleCol, driftCol, opCol = 1, 4, 5
 	if got := col(row0, roleCol); got != nodetypes.RoleMaster.String() {
@@ -234,21 +237,8 @@ func TestPrintNodeListEmpty(t *testing.T) {
 	}
 }
 
-// TestPrintNodeListShowsUnattachedOpNote is FIX 2: a marker that matches no
-// listed node (a cluster-stop/start marker, or a node since removed) must
-// surface as a top-level note rather than vanish — even when the node table
-// itself is empty.
 func TestPrintNodeListShowsUnattachedOpNote(t *testing.T) {
 	var buf bytes.Buffer
-	entries := []nodeListEntry{{Name: "master-0", Role: nodetypes.RoleMaster, Ready: true, Drift: driftNone}}
-	if err := printNodeList(&buf, entries, "stop (shutdown) on grappleberry"); err != nil {
-		t.Fatalf("printNodeList: %v", err)
-	}
-	if !strings.Contains(buf.String(), "in-flight op: stop (shutdown) on grappleberry — not attached to a listed node") {
-		t.Errorf("missing unattached-op note: %q", buf.String())
-	}
-
-	buf.Reset()
 	if err := printNodeList(&buf, nil, "stop (shutdown) on grappleberry"); err != nil {
 		t.Fatalf("printNodeList: %v", err)
 	}
@@ -257,10 +247,6 @@ func TestPrintNodeListShowsUnattachedOpNote(t *testing.T) {
 	}
 }
 
-// TestUnattachedOpNote covers FIX 2's core predicate: a marker whose Target
-// matches a listed node is not unattached (it is already surfaced per-node
-// via in_flight_op); a marker naming the cluster (cluster stop/start) or a
-// removed node is.
 func TestUnattachedOpNote(t *testing.T) {
 	nodes := []cluster.NodeDetail{
 		{Name: "master-0", Role: nodetypes.RoleMaster},

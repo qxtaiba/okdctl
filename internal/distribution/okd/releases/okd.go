@@ -1,4 +1,5 @@
-// Package releases provides dynamic version fetching for Kubernetes distributions.
+// Package releases fetches, classifies, and caches the OKD release catalog
+// from GitHub.
 package releases
 
 import (
@@ -9,24 +10,21 @@ import (
 	"github.com/qxtaiba/okdctl/internal/httputil"
 )
 
-// OKDVersionFetcher resolves OKD release versions, using a short-lived
-// on-disk cache to avoid hammering GitHub on repeat invocations.
+// OKDVersionFetcher resolves OKD release versions via a short-lived on-disk cache.
 type OKDVersionFetcher struct {
 	httpClient   *http.Client
 	diskCacheTTL time.Duration
 }
 
-// NewOKDVersionFetcher returns a fetcher configured with the package default
-// HTTP timeout and DiskCacheTTL.
+// NewOKDVersionFetcher returns a fetcher with the default HTTP timeout and disk-cache TTL.
 func NewOKDVersionFetcher() *OKDVersionFetcher {
 	return &OKDVersionFetcher{
 		httpClient:   httputil.New(httputil.TimeoutShort),
-		diskCacheTTL: DiskCacheTTL,
+		diskCacheTTL: defaultDiskCacheTTL,
 	}
 }
 
-// FetchVersions returns the full list of OKD release series, preferring the
-// on-disk cache while it is fresh and falling back to a network fetch.
+// FetchVersions returns OKD release series, preferring a fresh on-disk cache over a network fetch.
 func (f *OKDVersionFetcher) FetchVersions(ctx context.Context) ([]OKDReleaseSeries, error) {
 	if cached := f.loadFromDiskCache(); cached != nil {
 		return cached, nil

@@ -2,12 +2,10 @@ package cli
 
 import "github.com/spf13/cobra"
 
-// doctorCmd is the user-facing 'okdctl doctor' command. It is separate
-// from main.preflight() (which is a startup guardrail) — doctor runs the
-// host preflight checks and reports each result.
-// runDoctor refuses non-linux hosts at runtime; see doctor.go.
 var doctorOutput string
 
+// doctorCmd differs from main.preflight (startup guardrail); runDoctor refuses
+// non-linux hosts at runtime.
 var doctorCmd = &cobra.Command{
 	Use:   "doctor",
 	Short: "Check that your environment is ready to deploy a cluster",

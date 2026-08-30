@@ -1,7 +1,5 @@
-// Package dns provides dnsmasq configuration for OKD clusters. Exported
-// service ops (EnableDnsmasq, RestartDnsmasq, ValidateDnsmasqConfig,
-// ConfigureSystemResolver, IsNetworkManagerActive) are the package's public
-// API surface even though today's only callers are intra-package.
+// Package dns configures dnsmasq for OKD clusters.
+// Some exports are public API despite only intra-package callers today.
 package dns
 
 import (
@@ -22,17 +20,14 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// buildConfigData assembles the DNS template data (cluster domain, node IPs,
-// VIPs, upstream servers) from a validated Config. The node IP range is
-// checked against machineCIDR up front so we fail early rather than midway
-// through per-node calculations.
+// buildConfigData assembles DNS template data, checking node IPs against
+// machineCIDR up front to fail early.
 func buildConfigData(cfg *config.Config) (templates.DNSConfigData, error) {
 	if cfg == nil {
 		return templates.DNSConfigData{}, &errtypes.ConfigError{Msg: "config cannot be nil"}
 	}
 
 	clusterDomain := fmt.Sprintf("%s.%s", cfg.Cluster.Name, cfg.Cluster.Domain)
-	staticIPStart := cfg.Networking.StaticIP.Start
 
 	if cfg.Cluster.Name == "" {
 		return templates.DNSConfigData{}, &errtypes.ConfigError{Msg: "cluster name is required"}
@@ -43,7 +38,7 @@ func buildConfigData(cfg *config.Config) (templates.DNSConfigData, error) {
 	if cfg.Networking.Bastion.IP == "" {
 		return templates.DNSConfigData{}, &errtypes.ConfigError{Msg: "bastion IP is required"}
 	}
-	if staticIPStart == "" {
+	if cfg.Networking.StaticIP.Start == "" {
 		return templates.DNSConfigData{}, &errtypes.ConfigError{Msg: "static IP start is required"}
 	}
 
@@ -83,8 +78,7 @@ func buildConfigData(cfg *config.Config) (templates.DNSConfigData, error) {
 	return data, nil
 }
 
-// GenerateBootstrapConfig renders the bootstrap-phase dnsmasq config to
-// outputDir/dnsmasq-bootstrap.conf and returns its path and content.
+// GenerateBootstrapConfig renders the bootstrap dnsmasq config to outputDir/dnsmasq-bootstrap.conf.
 func GenerateBootstrapConfig(cfg *config.Config, outputDir string) (path, content string, err error) {
 	data, err := buildConfigData(cfg)
 	if err != nil {
@@ -108,18 +102,13 @@ func GenerateBootstrapConfig(cfg *config.Config, outputDir string) (path, conten
 	return path, content, nil
 }
 
-// configName returns the dnsmasq drop-in name for clusterName ("okd-<name>").
 func configName(clusterName string) string {
 	return fmt.Sprintf("okd-%s", clusterName)
 }
 
-// IsBootstrapDNS reports whether the on-disk dnsmasq config is still in
-// bootstrap state (api.* resolves to the bastion IP rather than the kube-vip
-// VIP). Returns false when the config file is absent so the caller can treat
-// missing config as "nothing to reconcile" rather than a hard error.
-//
-// Match is line-exact rather than substring because IP suffixes alias (a
-// production VIP of "10.0.0.10" would match the bastion "10.0.0.1" prefix).
+// IsBootstrapDNS reports whether api.* in the on-disk config still points at
+// the bastion IP (false if absent). Matching is line-exact, not substring, to
+// avoid IP-suffix aliasing (10.0.0.10 vs 10.0.0.1).
 func IsBootstrapDNS(cfg *config.Config) (bool, error) {
 	cn := configName(cfg.Cluster.Name)
 	path, err := DnsmasqConfigPath(cn)
@@ -143,8 +132,8 @@ func IsBootstrapDNS(cfg *config.Config) (bool, error) {
 	return false, nil
 }
 
-// Setup enables dnsmasq and points the system resolver at it, with
-// fallbackDNS used when the cluster resolver is unavailable.
+// Setup enables dnsmasq and points the system resolver at it, falling back to
+// fallbackDNS when the cluster resolver is unavailable.
 func Setup(ctx context.Context, fallbackDNS []string, logger *slog.Logger) error {
 	if err := EnableDnsmasq(ctx); err != nil {
 		return fmt.Errorf("enable dnsmasq: %w", err)
@@ -155,8 +144,8 @@ func Setup(ctx context.Context, fallbackDNS []string, logger *slog.Logger) error
 	return nil
 }
 
-// DeployBootstrap writes the bootstrap-phase dnsmasq config and restarts the
-// service. On validation or restart failure the previous config is restored.
+// DeployBootstrap writes the bootstrap dnsmasq config and restarts the service.
+// On failure it restores the previous config.
 func DeployBootstrap(ctx context.Context, cfg *config.Config) error {
 	data, err := buildConfigData(cfg)
 	if err != nil {
@@ -173,16 +162,12 @@ func DeployBootstrap(ctx context.Context, cfg *config.Config) error {
 		return fmt.Errorf("write dnsmasq config: %w", err)
 	}
 
-	if err := validateAndRestartDnsmasq(ctx, cn); err != nil {
-		return err
-	}
-
-	return nil
+	return validateAndRestartDnsmasq(ctx, cn)
 }
 
-// DeployProduction writes the post-install dnsmasq config with cluster
-// apps/VIP records and any custom-domain overrides, then restarts dnsmasq.
-// On failure the previous config is restored.
+// DeployProduction writes the post-install dnsmasq config (cluster apps/VIP
+// records plus custom-domain overrides) and restarts dnsmasq. On failure it
+// restores the previous config.
 func DeployProduction(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP string, customDomains []templates.DNSCustomDomain) error {
 	data, err := buildConfigData(cfg)
 	if err != nil {
@@ -215,21 +200,14 @@ func DeployProduction(ctx context.Context, cfg *config.Config, appsIP, kubeVipIP
 		return fmt.Errorf("write dnsmasq config: %w", err)
 	}
 
-	if err := validateAndRestartDnsmasq(ctx, cn); err != nil {
-		return err
-	}
-
-	return nil
+	return validateAndRestartDnsmasq(ctx, cn)
 }
 
-// recoveryRestartTimeout bounds the best-effort dnsmasq restart issued after
-// a failed restart forced a config restore.
+// recoveryRestartTimeout bounds the best-effort restart after a rollback.
 const recoveryRestartTimeout = 30 * time.Second
 
-// validateAndRestartDnsmasq validates the dnsmasq config, then restarts the service.
-// On validation or restart failure, it restores the previous config from the .backup
-// file; a restart failure additionally re-restarts dnsmasq so the running service
-// converges to the restored config.
+// validateAndRestartDnsmasq restores .backup on failure, retrying the restart
+// once more if the restart itself failed.
 func validateAndRestartDnsmasq(ctx context.Context, configName string) error {
 	configPath, err := DnsmasqConfigPath(configName)
 	if err != nil {
@@ -237,15 +215,11 @@ func validateAndRestartDnsmasq(ctx context.Context, configName string) error {
 	}
 	backupPath := configPath + ".backup"
 
-	// restore rolls the drop-in back to its pre-write state and reports which
-	// branch it took. When a backup exists it is copied back; on a first
-	// deploy no backup was ever made, so the true previous state is the file's
-	// absence and we remove the rejected drop-in this call wrote rather than
-	// leaving invalid root-owned config in /etc/dnsmasq.d.
+	// restore reverts to backup, or on first deploy (no backup) removes the
+	// drop-in to avoid leaving broken root-owned config.
 	restore := func() string {
 		if system.FileExists(backupPath) {
-			// No follow-up os.Chmod: system.CopyFile preserves the source mode
-			// at open time, and os.Chmod follows symlinks at the destination.
+			// No chmod: CopyFile preserves mode; chmod would follow symlinks.
 			_ = system.CopyFile(backupPath, configPath)
 			return "previous config restored"
 		}
@@ -260,10 +234,8 @@ func validateAndRestartDnsmasq(ctx context.Context, configName string) error {
 
 	if err := restartDnsmasqFn(ctx); err != nil {
 		outcome := restore()
-		// Restart once more so the running service converges to the restored
-		// config instead of staying down (or up on the rejected one). Detached
-		// from ctx: a Ctrl-C that killed the first restart would otherwise
-		// doom the recovery restart before it starts.
+		// Restart again so the service converges; ctx is detached so a Ctrl-C
+		// killing the first restart can't kill this one too.
 		rCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), recoveryRestartTimeout)
 		defer cancel()
 		if rErr := restartDnsmasqFn(rCtx); rErr != nil {
@@ -272,7 +244,6 @@ func validateAndRestartDnsmasq(ctx context.Context, configName string) error {
 		return fmt.Errorf("restart dnsmasq — %s and service restarted with it: %w", outcome, err)
 	}
 
-	// Successful restart — clean up backup.
 	if system.FileExists(backupPath) {
 		_ = os.RemoveAll(backupPath)
 	}

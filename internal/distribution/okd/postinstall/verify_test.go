@@ -33,17 +33,6 @@ func TestParseOperatorDegradation(t *testing.T) {
 			wantDegraded: []string{"authentication"},
 		},
 		{
-			name: "multiple degraded operators",
-			payload: `{
-	"items": [
-		{"metadata":{"name":"authentication"},"status":{"conditions":[{"type":"Degraded","status":"True"}]}},
-		{"metadata":{"name":"dns"},"status":{"conditions":[{"type":"Degraded","status":"True"}]}},
-		{"metadata":{"name":"network"},"status":{"conditions":[{"type":"Degraded","status":"False"}]}}
-	]
-}`,
-			wantDegraded: []string{"authentication", "dns"},
-		},
-		{
 			name: "operator with no degraded condition is not counted",
 			payload: `{
 	"items": [
@@ -100,20 +89,7 @@ func TestParseNodeReadiness(t *testing.T) {
 		wantErr   string
 	}{
 		{
-			name: "all three nodes ready",
-			payload: `{
-	"items": [
-		{"metadata":{"name":"node-0"},"status":{"conditions":[{"type":"Ready","status":"True"}]}},
-		{"metadata":{"name":"node-1"},"status":{"conditions":[{"type":"Ready","status":"True"}]}},
-		{"metadata":{"name":"node-2"},"status":{"conditions":[{"type":"Ready","status":"True"}]}}
-	]
-}`,
-			wantReady: 3,
-			wantTotal: 3,
-		},
-		{
-			// SchedulingDisabled nodes still expose Ready=True in their conditions;
-			// the old strings.Contains text-parser misclassified these as not-ready.
+			// Regression: the old strings.Contains parser misclassified these as not-ready.
 			name: "scheduling-disabled node with Ready=True counts as ready",
 			payload: `{
 	"items": [

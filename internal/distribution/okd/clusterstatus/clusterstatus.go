@@ -27,22 +27,19 @@ type Client interface {
 	GetJSON(ctx context.Context, args ...string) (stdout string, truncated bool, err error)
 }
 
-// PowerProber is the seam over the Proxmox VM power probe
-// (proxmox.VMPowerStates): it reports the power state of the cluster's VMs
-// keyed by vmid.
+// PowerProber reports Proxmox VM power state keyed by vmid.
 type PowerProber interface {
 	VMStates(ctx context.Context) (map[int]nodetypes.VMState, error)
 }
 
-// LifecycleSources carries the non-API lifecycle signals phase derivation
-// consults when the kube-apiserver is unreachable. A nil field means that
-// signal is unavailable and derivation degrades to a less specific phase.
+// LifecycleSources carries non-API lifecycle signals consulted when the API
+// is unreachable; a nil field degrades derivation to a less specific phase.
 type LifecycleSources struct {
-	// DeployInProgress reports whether a trusted deploy-state marker records
-	// an unfinished deploy for this cluster (deploy.InstallInProgress).
+	// DeployInProgress reports an unfinished deploy for this cluster
+	// (deploy.InstallInProgress).
 	DeployInProgress func() bool
-	// InfraPresent reports whether the configured terraform environment's
-	// state records provisioned resources (TerraformStateHasResources).
+	// InfraPresent reports whether the configured terraform environment
+	// has provisioned resources (TerraformStateHasResources).
 	InfraPresent func() bool
 	// Power probes VM power states; nil when no Proxmox credentials resolve.
 	Power PowerProber
@@ -53,8 +50,8 @@ type AddonVerifier interface {
 	VerifyAll(ctx context.Context) ([]addon.VerifyResult, error)
 }
 
-// statusNodeList is a minimal view of `oc get nodes -o json` for role +
-// readiness parsing. Keeps the parse decoupled from corev1 schema evolution.
+// statusNodeList is a minimal view of `oc get nodes -o json`, decoupled
+// from corev1 schema evolution.
 type statusNodeList struct {
 	Items []statusNode `json:"items"`
 }
@@ -75,7 +72,7 @@ type statusNode struct {
 }
 
 // statusClusterOperatorList is a minimal view of `oc get clusteroperators -o json`
-// for degraded-condition parsing. Reuses statusCondition for the conditions slice.
+// for degraded-condition parsing.
 type statusClusterOperatorList struct {
 	Items []statusClusterOperator `json:"items"`
 }
@@ -130,12 +127,11 @@ func ParseNode(data []byte) (okd.NodeStatus, error) {
 	return okd.NodeStatus{Name: n.Metadata.Name, Role: n.role(), Ready: n.isReady()}, nil
 }
 
-// Collect queries the cluster for API reachability, node readiness, operator
-// degradation, and addon health, then derives the overall phase. Failed oc
-// queries degrade to empty sections rather than aborting so status renders
-// whatever it can reach. cl may be nil when no kubeconfig exists yet (e.g.
-// before the first deploy); Collect then skips the live queries and derives
-// the phase from the lifecycle sources alone.
+// Collect queries the cluster for reachability, node readiness, operator
+// degradation, and addon health, then derives the overall phase. cl may be
+// nil before the first deploy — Collect then derives phase from lifecycle
+// sources alone; failed oc queries otherwise degrade to empty sections
+// rather than aborting.
 func Collect(ctx context.Context, cl Client, verifier AddonVerifier, src LifecycleSources) okd.ClusterStatus {
 	apiOK := false
 	var nodes []okd.NodeStatus
@@ -167,21 +163,8 @@ func Collect(ctx context.Context, cl Client, verifier AddonVerifier, src Lifecyc
 	}
 }
 
-// derivePhase maps lifecycle signals onto ClusterPhase, consulting sources
-// cheapest-first:
-//
-//  1. Live API answers (already collected): Degraded when an operator
-//     degrades or a node is NotReady, Running when everything is ready,
-//     Unknown when the API responds but the node listing failed.
-//  2. Local files: a trusted deploy-state marker recording an unfinished
-//     deploy means Installing; no marker and no terraform resources means
-//     Pending.
-//  3. Proxmox power probe (network; reached only when the API is down, no
-//     deploy is in flight, and infra exists): every VM stopped means
-//     Stopped. Anything else — VMs still running (booting after 'cluster
-//     start', a network fault, an API outage) or an unavailable probe —
-//     stays Unknown: a powered-on cluster with an unreachable API cannot be
-//     classified further from here.
+// derivePhase maps lifecycle signals to ClusterPhase, checking cheapest
+// signals first: live API, then local markers, then the Proxmox power probe.
 func derivePhase(ctx context.Context, apiOK bool, nodes []okd.NodeStatus, degraded int, src LifecycleSources) okd.ClusterPhase {
 	if apiOK {
 		switch {
@@ -226,9 +209,8 @@ func powerPhase(ctx context.Context, prober PowerProber) okd.ClusterPhase {
 }
 
 // TerraformStateHasResources reports whether tfEnv's terraform state under
-// projectRoot records at least one resource. Only the configured environment
-// is consulted (not a glob across environments), and an empty post-destroy
-// state file does not count as live infrastructure.
+// projectRoot records at least one resource; an empty post-destroy state or
+// another environment's state does not count.
 func TerraformStateHasResources(projectRoot, tfEnv string) bool {
 	data, err := os.ReadFile(
 		filepath.Join(workspace.TerraformEnvDir(projectRoot, tfEnv), "terraform.tfstate"))

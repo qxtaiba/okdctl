@@ -9,11 +9,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-// NodeOpConfirm renders the informed preview shown before a destructive node op
-// runs: the target nodes, their terraform addresses and actions, the read-only
-// guard verdicts, and — when the plan destroys a VM — an amber irreversible
-// warning naming the VM and its data disk. It is printed whether or not the
-// operator is prompted, so --yes runs still surface what is about to happen.
+// NodeOpConfirm renders the preview before a destructive node op; it prints even under --yes.
 func NodeOpConfirm(plan *node.OpPlan) string {
 	sb := NewBuilder()
 	sb.WriteString("\n")
@@ -31,8 +27,7 @@ func NodeOpConfirm(plan *node.OpPlan) string {
 	return "\n" + tui.BoxedSectionCompact(sb.String(), opTitle(plan.Op), tui.DefaultBoxWidth) + "\n"
 }
 
-// NodeOpDryRun renders the ordered-operations summary for a dry-run of a node
-// op, mirroring the deploy-family dry-run box: no mutation, just the plan.
+// NodeOpDryRun renders the ordered-operations summary for a node-op dry-run.
 func NodeOpDryRun(plan *node.OpPlan) string {
 	sb := NewBuilder()
 	sb.WriteString("\n")
@@ -48,9 +43,8 @@ func NodeOpDryRun(plan *node.OpPlan) string {
 	return "\n" + tui.BoxedSectionCompact(sb.String(), opTitle(plan.Op), tui.DefaultBoxWidth) + "\n"
 }
 
-// NodeOpComplete renders the completion box shown after a node op succeeds,
-// listing the nodes acted on, the elapsed time, and the operation-specific
-// follow-up the operator still owns (HAProxy backend refresh, verification).
+// NodeOpComplete renders the completion box after a node op succeeds, listing
+// the affected nodes, elapsed time, and any operator-owned follow-up.
 func NodeOpComplete(plan *node.OpPlan, elapsed time.Duration) string {
 	sb := NewBuilder()
 	sb.WriteString("\n")
@@ -82,8 +76,7 @@ func NodeOpComplete(plan *node.OpPlan, elapsed time.Duration) string {
 	return "\n" + tui.BoxedSectionCompact(sb.String(), opTitle(plan.Op), tui.DefaultBoxWidth) + "\n"
 }
 
-// nodeOpDetails writes the shared header + per-node section used by the confirm
-// and dry-run boxes.
+// nodeOpDetails writes the shared header + per-node section for the confirm and dry-run boxes.
 func nodeOpDetails(sb *Builder, plan *node.OpPlan) {
 	sb.KV("cluster", plan.Cluster)
 	sb.KV("operation", string(plan.Op))
@@ -128,9 +121,8 @@ func nodeOpDetails(sb *Builder, plan *node.OpPlan) {
 	sb.Newline()
 }
 
-// NodeOpNextSteps returns the operator-owned follow-ups for a completed op;
-// shared by the CLI completion box and the wizard's done screen so the
-// wording never drifts.
+// NodeOpNextSteps returns the operator follow-ups for a completed op; shared by
+// the CLI and wizard so wording never drifts.
 func NodeOpNextSteps(plan *node.OpPlan) []string {
 	switch plan.Op {
 	case node.OpAdd:
@@ -164,9 +156,8 @@ func NodeOpNextSteps(plan *node.OpPlan) []string {
 	}
 }
 
-// nodePowerPlanVerb names the planned power action for a stop/start node line
-// in the confirm and dry-run boxes; these ops carry no terraform address, so
-// this replaces the [action] bracket used by tf-mutating ops.
+// nodePowerPlanVerb replaces the [action] bracket for stop/start ops, which
+// carry no terraform address.
 func nodePowerPlanVerb(op node.Op) string {
 	if op == node.OpStart {
 		return "powered on"
@@ -174,8 +165,6 @@ func nodePowerPlanVerb(op node.Op) string {
 	return "shut down"
 }
 
-// nodePowerCompleteVerb names the completed power action for a stop/start node
-// line in the completion box.
 func nodePowerCompleteVerb(op node.Op) string {
 	if op == node.OpStart {
 		return "started"

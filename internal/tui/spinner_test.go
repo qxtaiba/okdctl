@@ -15,8 +15,8 @@ import (
 
 const clearSeq = "\r\x1b[2K"
 
-// fakeOwner is a lineOwner that records how often the handler asked it to
-// clear, without painting on its own — so buffer contents are deterministic.
+// fakeOwner records clear calls without painting, keeping buffer contents
+// deterministic.
 type fakeOwner struct {
 	w      io.Writer
 	clears int
@@ -35,9 +35,6 @@ func configureBuf(t *testing.T, buf *bytes.Buffer) {
 	logutil.InstallHandler(newStderrHandler())
 }
 
-// TestHandler_ClearsOwnerLineOncePerRecord proves the stderr handler erases
-// the active line owner's line exactly once per record and that each record
-// is preceded by a column-0 clear sequence.
 func TestHandler_ClearsOwnerLineOncePerRecord(t *testing.T) {
 	var buf bytes.Buffer
 	configureBuf(t, &buf)
@@ -61,8 +58,6 @@ func TestHandler_ClearsOwnerLineOncePerRecord(t *testing.T) {
 	if !strings.HasPrefix(out, clearSeq) {
 		t.Fatalf("output does not open with a clear; record landed mid-line:\n%q", out)
 	}
-	// Every "phase tick" must be preceded by a clear, i.e. no record text
-	// precedes the first clear on its segment.
 	for _, seg := range strings.SplitAfter(out, clearSeq)[1:] {
 		if strings.Contains(seg, clearSeq) {
 			continue
@@ -73,10 +68,7 @@ func TestHandler_ClearsOwnerLineOncePerRecord(t *testing.T) {
 	}
 }
 
-// TestSpinner_LogDuringSpinnerStartsAtColumnZero runs the real spinner and
-// interleaves log records, asserting the handler clears the spinner line.
-// Runs under synctest so the between-record waits ride the fake clock: each
-// sleep spans at least one 120ms ticker frame without real-time delay.
+// Runs under synctest so sleeps ride the fake clock instead of real-time delay.
 func TestSpinner_LogDuringSpinnerStartsAtColumnZero(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var buf bytes.Buffer
@@ -102,9 +94,7 @@ func TestSpinner_LogDuringSpinnerStartsAtColumnZero(t *testing.T) {
 	})
 }
 
-// TestSpinner_NoDeadlockUnderConcurrentLogs logs from many goroutines while a
-// spinner paints; the -race build must find no data race and the join must
-// not hang. Guarded by a timeout so a deadlock fails fast instead of stalling.
+// Guarded by a timeout so a deadlock fails fast instead of stalling.
 func TestSpinner_NoDeadlockUnderConcurrentLogs(t *testing.T) {
 	var buf bytes.Buffer
 	configureBuf(t, &buf)
@@ -137,9 +127,7 @@ func TestSpinner_NoDeadlockUnderConcurrentLogs(t *testing.T) {
 	}
 }
 
-// TestSpinner_TeardownClearsAndDeregisters covers both stop paths: stop()
-// blocks until the goroutine exits with a cleared line and no owner remains,
-// and ctx cancellation stops the spinner without a hang.
+// Covers both stop paths: explicit stop() and ctx cancellation.
 func TestSpinner_TeardownClearsAndDeregisters(t *testing.T) {
 	var buf bytes.Buffer
 	stop := startSpinner(context.Background(), "waiting", &buf)
@@ -164,8 +152,6 @@ func TestSpinner_TeardownClearsAndDeregisters(t *testing.T) {
 	}
 }
 
-// TestStartSpinner_NonTTYNoOp locks the non-TTY contract: StartSpinner
-// registers no owner and returns a callable no-op stop.
 func TestStartSpinner_NonTTYNoOp(t *testing.T) {
 	prev := logutil.ProgressBarsEnabled()
 	logutil.SetProgressBarsEnabled(false)
@@ -178,10 +164,7 @@ func TestStartSpinner_NonTTYNoOp(t *testing.T) {
 	stop() // must not panic or block
 }
 
-// TestStatusLine_SetUpdatesDesc drives the updatable status line and asserts
-// the painted line reflects a desc replaced mid-run, on one owned line.
-// Runs under synctest so the two ticker frames the repaint needs pass on the
-// fake clock instead of a real 300ms load-sensitive sleep.
+// Runs under synctest so the ticker's repaint frames pass on the fake clock.
 func TestStatusLine_SetUpdatesDesc(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var buf bytes.Buffer
@@ -204,8 +187,6 @@ func TestStatusLine_SetUpdatesDesc(t *testing.T) {
 	})
 }
 
-// TestStartStatusLine_NonTTYNoOp locks the non-TTY contract: no owner is
-// registered and both returned funcs are callable no-ops.
 func TestStartStatusLine_NonTTYNoOp(t *testing.T) {
 	prev := logutil.ProgressBarsEnabled()
 	logutil.SetProgressBarsEnabled(false)
@@ -219,9 +200,6 @@ func TestStartStatusLine_NonTTYNoOp(t *testing.T) {
 	stop()        // must not panic or block
 }
 
-// TestLineRegistry_RegisterClearsOutgoingOwner proves a takeover erases the
-// displaced owner's line, so a shorter incoming line can't leave the tail of a
-// longer outgoing one on screen.
 func TestLineRegistry_RegisterClearsOutgoingOwner(t *testing.T) {
 	var reg lineRegistry
 	var buf bytes.Buffer
@@ -232,7 +210,7 @@ func TestLineRegistry_RegisterClearsOutgoingOwner(t *testing.T) {
 	if a.clears != 0 {
 		t.Fatalf("register cleared before any takeover: clears=%d", a.clears)
 	}
-	reg.register(b) // b takes over from a
+	reg.register(b)
 	if a.clears != 1 {
 		t.Fatalf("takeover did not clear the outgoing owner: a.clears=%d", a.clears)
 	}
@@ -246,9 +224,6 @@ func TestLineRegistry_RegisterClearsOutgoingOwner(t *testing.T) {
 	}
 }
 
-// TestSpinner_PaintErasesToEndOfLine proves each spinner frame opens with the
-// clear sequence, so a shorter frame painted after a longer one leaves no
-// residual tail from the previous frame.
 func TestSpinner_PaintErasesToEndOfLine(t *testing.T) {
 	var buf bytes.Buffer
 	sp := &spinner{w: &buf, desc: "a considerably longer description", start: time.Now()}

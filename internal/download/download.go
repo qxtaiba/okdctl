@@ -1,6 +1,5 @@
-// Package download fetches remote artifacts (ISOs, release binaries,
-// checksums) with progress reporting and handles archive extraction for
-// OKD installer tooling.
+// Package download fetches remote artifacts with retries and progress
+// reporting, and extracts archives, for OKD installer tooling.
 package download
 
 import (
@@ -20,12 +19,9 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
-// DefaultTimeout bounds a single Fetch call when no WithTimeout option is set.
-// Aliases httputil.TimeoutDownload so the download tier has one owner.
+// DefaultTimeout bounds a Fetch call when WithTimeout is unset; aliases httputil.TimeoutDownload.
 const DefaultTimeout = httputil.TimeoutDownload
 
-// dlConfig holds the resolved configuration for a Fetch call. logger is
-// normalised via logutil.OrNop once at Fetch construction.
 type dlConfig struct {
 	url              string
 	outputPath       string
@@ -54,9 +50,9 @@ func WithTimeout(d time.Duration) FetchOption { return func(c *dlConfig) { c.tim
 // WithOverwrite forces a re-download even when a file with a matching checksum exists.
 func WithOverwrite(v bool) FetchOption { return func(c *dlConfig) { c.overwrite = v } }
 
-// WithProgress enables the stderr progress bar. Default is off; TTY gating
-// is the caller's job — pass logutil.ProgressBarsEnabled() (or equivalent) so
-// this package stays free of presentation-layer imports.
+// WithProgress enables the stderr progress bar (off by default).
+// TTY gating is the caller's job (pass logutil.ProgressBarsEnabled()), keeping
+// this package free of presentation imports.
 func WithProgress(v bool) FetchOption { return func(c *dlConfig) { c.progress = v } }
 
 // WithLogger injects a structured logger; nil falls back to logutil.NopLogger.
@@ -91,14 +87,14 @@ func canSkipDownload(ctx context.Context, cfg *dlConfig) bool {
 
 	cfg.logger.Warn("download: checksum mismatch, re-downloading", "file", filename)
 	if err := os.Remove(cfg.outputPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		cfg.logger.Warn("download: failed to remove mismatched file", "file", filename, "err", err)
+		cfg.logger.Warn("download: could not remove mismatched file", "file", filename, "err", err)
 	}
 	return false
 }
 
 // Fetch downloads the artifact at url to dst with bounded retries and optional
-// SHA-256 verification. A partially-written file is removed on any mid-attempt
-// failure so retries start clean.
+// SHA-256 verification. A partial file is removed on any failure so retries
+// start clean.
 func Fetch(ctx context.Context, url, dst string, opts ...FetchOption) error {
 	cfg := &dlConfig{
 		url:        url,
@@ -143,8 +139,8 @@ func Fetch(ctx context.Context, url, dst string, opts ...FetchOption) error {
 	return nil
 }
 
-// fetchToFile runs one download attempt. On any mid-attempt failure the
-// partial file is removed so the next retry starts from a clean slate.
+// fetchToFile runs one attempt; a mid-attempt failure removes the partial file
+// so the next retry starts clean.
 func fetchToFile(ctx context.Context, client *http.Client, cfg *dlConfig, filename string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, cfg.url, http.NoBody)
 	if err != nil {
@@ -167,13 +163,9 @@ func fetchToFile(ctx context.Context, client *http.Client, cfg *dlConfig, filena
 		}
 	}
 
-	// 0o600 — downloaded artifacts may include release tarballs that
-	// contain the okdctl binary itself before signature verification.
-	// install.sh + setup.installBinaryToPath copy the binary to its
-	// final mode, so a tighter download mode is harmless to consumers.
-	// O_NOFOLLOW rejects a symlink at OutputPath; under the sudo re-exec
-	// model the open runs as root, so following a symlink would write
-	// binary content to an attacker-chosen path.
+	// 0o600 is tightened only for transit; consumers set their own final mode.
+	// O_NOFOLLOW rejects a symlink here — the open runs as root under sudo
+	// re-exec, so following one would write attacker content elsewhere.
 	outFile, err := os.OpenFile(cfg.outputPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC|syscall.O_NOFOLLOW, 0o600)
 	if err != nil {
 		return fmt.Errorf("create output file: %w", err)

@@ -20,14 +20,11 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// AlreadyDone for StepDeployIgnition requires all three to exist in the webroot.
-
-// zeroBytesFn wipes the pull-secret buffer. Tests may replace it to observe
-// zeroing behaviour; production code must not change it.
+// zeroBytesFn wipes the pull-secret buffer; tests may replace it, production must not.
 var zeroBytesFn = system.ZeroBytes
 
-// readNoFollow reads path while refusing to follow a symlink at the final
-// component. Mirrors the lstat-then-O_NOFOLLOW pattern in runlock.Acquire.
+// readNoFollow reads path via lstat+O_NOFOLLOW, refusing a symlink at the final
+// component (mirrors runlock.Acquire).
 func readNoFollow(path string) ([]byte, error) {
 	info, err := os.Lstat(path)
 	if err != nil {
@@ -44,8 +41,6 @@ func readNoFollow(path string) ([]byte, error) {
 	return io.ReadAll(f)
 }
 
-// renderAndWrite calls render and atomically writes the result to path,
-// wrapping errors with errLabel.
 func renderAndWrite(render func() (string, error), path string, mode os.FileMode, errLabel string) error {
 	content, err := render()
 	if err != nil {
@@ -57,9 +52,8 @@ func renderAndWrite(render func() (string, error), path string, mode os.FileMode
 	return nil
 }
 
-// generateInstallConfig renders install-config.yaml into outputDir using
-// pull-secret and SSH key paths from cfg, then keeps a .backup copy before
-// openshift-install consumes the original during manifest generation.
+// generateInstallConfig renders install-config.yaml from cfg's pull-secret and
+// SSH key, backing it up before openshift-install consumes the original.
 func (p *Phase) generateInstallConfig(ctx context.Context, cfg *config.Config, outputDir string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -106,16 +100,11 @@ func (p *Phase) generateInstallConfig(ctx context.Context, cfg *config.Config, o
 		func() (string, error) { return templates.RenderInstallConfig(&data) },
 		outputPath, 0o600, "install-config.yaml",
 	); err != nil {
-		return &errtypes.ConfigError{Msg: "render install-config.yaml", Err: err}
+		return &errtypes.ConfigError{Msg: "generate install-config.yaml", Err: err}
 	}
 
-	// openshift-install consumes install-config.yaml during manifest generation;
-	// .backup is the rollback artifact and inherits the 0o600 on-disk gate. It
-	// also doubles as generate-config's AlreadyDone sentinel, so it is written
-	// atomically — a torn copy would pass the existence guard and poison both
-	// resume and rollback. The in-memory pull-secret buffers are wiped via the
-	// defers on every return path; deleting .backup once manifests succeed is
-	// tracked separately.
+	// .backup doubles as the rollback artifact and AlreadyDone sentinel; a torn
+	// write would poison both, so it must be atomic.
 	rendered, err := os.ReadFile(outputPath)
 	if err != nil {
 		return &errtypes.ConfigError{Msg: "read install-config.yaml for backup", Err: err}
@@ -129,26 +118,23 @@ func (p *Phase) generateInstallConfig(ctx context.Context, cfg *config.Config, o
 	return nil
 }
 
-// ManifestsSentinel is the path of the completion sentinel written by
-// GenerateManifests on success. AlreadyDone for StepGenerateManifests
-// requires both the manifests/ directory and this file to exist.
+// ManifestsSentinel is the completion marker GenerateManifests writes;
+// StepGenerateManifests' AlreadyDone also requires the manifests/ directory to
+// exist.
 func ManifestsSentinel(clusterDir string) string {
 	return filepath.Join(clusterDir, "manifests", ".complete")
 }
 
-// IgnitionSentinel is the path of the completion sentinel written by
-// GenerateIgnitionConfigs on success. AlreadyDone for StepGenerateIgnition
-// keys on this file rather than the implicit presence of every .ign file —
-// a partial mid-write state would leave the .ign files present but
-// malformed.
+// IgnitionSentinel is the completion marker GenerateIgnitionConfigs writes;
+// AlreadyDone keys on it rather than .ign presence since a partial write can
+// leave malformed .ign files.
 func IgnitionSentinel(clusterDir string) string {
 	return filepath.Join(clusterDir, ".ignition.complete")
 }
 
-// manifestsGenerated reports whether create manifests completed for
-// clusterDir. The ignition sentinel alone is proof: create ignition-configs
-// consumes manifests/ (taking ManifestsSentinel with it), so a resume after
-// a completed generate-ignition must not re-run create manifests.
+// manifestsGenerated reports whether create-manifests completed;
+// IgnitionSentinel alone suffices since create ignition-configs also consumes
+// manifests/ and ManifestsSentinel.
 func manifestsGenerated(clusterDir string) bool {
 	if system.FileExists(IgnitionSentinel(clusterDir)) {
 		return true
@@ -157,11 +143,8 @@ func manifestsGenerated(clusterDir string) bool {
 		system.FileExists(ManifestsSentinel(clusterDir))
 }
 
-// restoreInstallConfigFromBackup re-materializes install-config.yaml from
-// its .backup when a prior run consumed it: openshift-install deletes the
-// file during create manifests, so a resume that re-runs the step would
-// otherwise hard-fail with no install-config. No-op when the original is
-// present or no backup exists.
+// restoreInstallConfigFromBackup restores install-config.yaml from .backup
+// after a prior run's create-manifests consumed it; no-op otherwise.
 func restoreInstallConfigFromBackup(clusterDir string) error {
 	outputPath := filepath.Join(clusterDir, "install-config.yaml")
 	backupPath := outputPath + ".backup"
@@ -171,9 +154,9 @@ func restoreInstallConfigFromBackup(clusterDir string) error {
 	return system.CopyFileMode(backupPath, outputPath, 0o600)
 }
 
-// GenerateManifests invokes "openshift-install create manifests" to expand
-// install-config.yaml into the full manifest set under clusterDir, then
-// writes ManifestsSentinel to mark a clean completion.
+// GenerateManifests expands install-config.yaml into the full manifest set
+// under clusterDir via "openshift-install create manifests", then writes
+// ManifestsSentinel.
 func (p *Phase) GenerateManifests(ctx context.Context, clusterDir string) error {
 	if err := restoreInstallConfigFromBackup(clusterDir); err != nil {
 		return &errtypes.ConfigError{Msg: "restore install-config.yaml from backup", Err: err}
@@ -190,9 +173,8 @@ func (p *Phase) GenerateManifests(ctx context.Context, clusterDir string) error 
 	return nil
 }
 
-// InjectCustomManifests copies user-supplied YAML from
-// automation/config/manifests into clusterDir/openshift/, returning the
-// count of files injected.
+// InjectCustomManifests copies user YAML from automation/config/manifests
+// into clusterDir/openshift/, returning the count injected.
 func (p *Phase) InjectCustomManifests(ctx context.Context, projectRoot, clusterDir string) (int, error) {
 	customDir := filepath.Join(projectRoot, "automation", "config", "manifests")
 
@@ -237,8 +219,7 @@ func (p *Phase) InjectCustomManifests(ctx context.Context, projectRoot, clusterD
 }
 
 // InjectCompactClusterManifests adds an ingress-controller placement
-// manifest when the cluster has no workers (compact topology). With
-// workers present, this is a no-op.
+// manifest for compact (workerless) topologies; a no-op when workers exist.
 func (p *Phase) InjectCompactClusterManifests(ctx context.Context, clusterDir string, workerCount, masterCount int) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -259,14 +240,13 @@ func (p *Phase) InjectCompactClusterManifests(ctx context.Context, clusterDir st
 		},
 		destPath, 0o644, "compact cluster ingress manifest",
 	); err != nil {
-		return &errtypes.ConfigError{Msg: "render compact cluster ingress manifest", Err: err}
+		return &errtypes.ConfigError{Msg: "inject compact cluster ingress manifest", Err: err}
 	}
 	return nil
 }
 
-// GenerateIgnitionConfigs invokes "openshift-install create ignition-configs",
-// validates that each expected .ign file exists and is non-trivial in size,
-// then writes IgnitionSentinel to mark a clean completion.
+// GenerateIgnitionConfigs runs "openshift-install create ignition-configs",
+// validates the resulting .ign files, then writes IgnitionSentinel.
 func (p *Phase) GenerateIgnitionConfigs(ctx context.Context, clusterDir string) error {
 	_, err := p.Exec.RunChecked(ctx, openshiftInstallBin, "create", "ignition-configs", "--dir", clusterDir)
 	if err != nil {
@@ -283,12 +263,9 @@ func (p *Phase) GenerateIgnitionConfigs(ctx context.Context, clusterDir string) 
 	return nil
 }
 
-// ValidateIgnitionFiles verifies that bootstrap.ign, master.ign, and
-// worker.ign exist in clusterDir and are at least 1 KiB.
+// ValidateIgnitionFiles verifies bootstrap.ign, master.ign, and worker.ign
+// exist in clusterDir and are at least 1 KiB.
 func (p *Phase) ValidateIgnitionFiles(ctx context.Context, clusterDir string) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
 	minSize := int64(1024) // ignition files are typically much larger
 
 	for _, file := range provision.IgnitionFilenames {

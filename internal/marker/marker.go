@@ -40,14 +40,10 @@ func (e *Envelope) Stale() bool { return e.Age() >= StaleAfter }
 // Payload is a marker payload; satisfied by embedding Envelope.
 type Payload interface{ envelope() *Envelope }
 
-// File is one marker file's schema contract. Migrate, when non-nil, maps a
-// recognized older schema version's already-decoded payload onto the current
-// vocabulary in place and reports whether it recognized the version;
-// unrecognized versions are warned about and read as absent.
+// File is one marker file's schema contract.
 type File struct {
 	Label   string
 	Version string
-	Migrate func(fromVersion string, p Payload) bool
 }
 
 // Write stamps the payload's envelope (current schema version, run id,
@@ -83,9 +79,6 @@ func (f File) Read(path string, p Payload) (bool, error) {
 	if version == f.Version {
 		return true, nil
 	}
-	if f.Migrate != nil && f.Migrate(version, p) {
-		return true, nil
-	}
 	logutil.Warn("ignoring marker with unknown schema_version",
 		logutil.LF("marker", f.Label),
 		logutil.LF("schema_version", version),
@@ -93,10 +86,9 @@ func (f File) Read(path string, p Payload) (bool, error) {
 	return false, nil
 }
 
-// Trusted applies the cluster-name guard. Markers gate resume decisions, so
-// a marker must positively identify the current cluster before it is
-// trusted: an empty or mismatching cluster name is warned about and
-// rejected.
+// Trusted applies the cluster-name guard: an empty or mismatching cluster
+// name is rejected, since markers gate resume decisions and must
+// positively identify the current cluster.
 func (f File) Trusted(p Payload, clusterName string) bool {
 	e := p.envelope()
 	switch {

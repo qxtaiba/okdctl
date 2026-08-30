@@ -16,9 +16,7 @@ import (
 
 // DefaultTimeout is the overall cap applied to post-install verification
 // steps that don't override it.
-const (
-	DefaultTimeout = 10 * time.Minute
-)
+const DefaultTimeout = 10 * time.Minute
 
 // Options configures the post-install phase: skip toggles plus per-step
 // timeouts for kube-vip verification.
@@ -32,10 +30,8 @@ type Options struct {
 	KubeVIPVIPTimeout       time.Duration
 }
 
-// NewOptions builds post-install Options from cfg and projectRoot, applying
-// the default timeout values. It returns a value so each caller receives an
-// independent, mutable copy of the defaults; callers pass &opts to Execute
-// once they have finished configuring the option set.
+// NewOptions builds post-install Options from cfg and projectRoot with
+// default timeouts applied; returns a value so each caller gets its own copy.
 func NewOptions(cfg *config.Config, projectRoot string) Options {
 	return Options{
 		BaseOptions:             phase.NewBaseOptions(cfg, projectRoot),
@@ -49,7 +45,6 @@ func NewOptions(cfg *config.Config, projectRoot string) Options {
 type Result struct {
 	KubeVipIP        string
 	BastionIP        string
-	NodeCount        int
 	BootstrapCleaned bool
 	DNSDeployed      bool
 }
@@ -60,7 +55,7 @@ type Phase struct {
 	phase.BasePhase
 }
 
-// New constructs a post-install Phase with the given options.
+// New constructs a post-install Phase.
 func New(opts ...phase.BasePhaseOption) *Phase {
 	bp := phase.NewBasePhase(opts...)
 	bp.Log = bp.Log.With("phase", "postinstall")
@@ -68,9 +63,7 @@ func New(opts ...phase.BasePhaseOption) *Phase {
 }
 
 // Execute runs the post-install step sequence and returns a summary Result
-// along with each step's outcome. cfg must be the same cfg passed to
-// NewOptions — opts was derived from it and the two are not re-validated
-// for consistency here.
+// with each step's outcome. cfg must be the same cfg passed to NewOptions.
 func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) (*Result, []distribution.StepResult, error) {
 	p.Log.Info("postinstall: starting cluster verification and configuration")
 
@@ -99,36 +92,28 @@ func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) 
 		BootstrapCleaned: state.BootstrapCleaned,
 		DNSDeployed:      state.DNSDeployed,
 	}
-	if state.ClusterHealth != nil {
-		result.NodeCount = state.ClusterHealth.ReadyNodes
-	}
 
 	p.Log.Info("postinstall: cluster configuration completed")
 
 	return result, orchestrator.Results(), nil
 }
 
-// warnIfDNSStranded names the manual recovery when the bootstrap VM is gone
-// but production DNS was never deployed: without this warning the phase can
-// report success while api.* still resolves via the bootstrap-era config.
+// warnIfDNSStranded flags when the bootstrap VM is gone but production DNS
+// never deployed, so success is never reported while api.* is bootstrap-era.
 func (p *Phase) warnIfDNSStranded(state postInstallContext) {
 	if state.BootstrapCleaned && (!state.KubeVIPVerified || !state.DNSDeployed) {
 		p.Log.Warn("postinstall: bootstrap vm destroyed but production dns not deployed — api dns may still be bootstrap-pointed; run 'okdctl update-ingress' to re-point it at the vip")
 	}
 }
 
-// deployProductionDNSFn and deployBootstrapDNSFn are package-level vars so
-// tests can exercise update-ingress flows without mutating /etc/dnsmasq.d,
-// mirroring the fn-var seams in internal/distribution/okd/dns.
+// Fn vars let tests exercise update-ingress without touching /etc/dnsmasq.d.
 var (
 	deployProductionDNSFn = dns.DeployProduction
 	deployBootstrapDNSFn  = dns.DeployBootstrap
 )
 
-// StepDefs returns the ordered step definitions this phase executes for
-// cfg/opts, without running them. Provisioner.DeploySteps calls this for
-// the deploy --dry-run listing; the addon.Manager and PhaseContext it builds
-// are throwaway since nothing here invokes Exec.
+// StepDefs returns the ordered step definitions for cfg/opts without running
+// them, for Provisioner.DeploySteps' dry-run listing.
 func (p *Phase) StepDefs(cfg *config.Config, opts *Options) []distribution.StepDef {
 	addonMgr := addon.NewManager(
 		cfg,

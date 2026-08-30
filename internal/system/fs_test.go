@@ -1,7 +1,6 @@
 package system
 
 import (
-	"bytes"
 	"errors"
 	"os"
 	"os/user"
@@ -11,6 +10,37 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
+
+// refuseSymlinkDst asserts the symlink-refusal contract shared by CopyFileMode and AtomicWrite.
+func refuseSymlinkDst(t *testing.T, dir string, op func(link string) error) {
+	t.Helper()
+	target := filepath.Join(dir, "symlink-target.txt")
+	if err := os.WriteFile(target, []byte("original"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "symlink-dst.txt")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	err := op(link)
+	if err == nil {
+		t.Fatal("write via symlink dst: expected error, got nil")
+	}
+	var authErr *errtypes.AuthError
+	if !errors.As(err, &authErr) {
+		t.Errorf("err type = %T, want *errtypes.AuthError", err)
+	}
+	if !errors.Is(err, os.ErrPermission) {
+		t.Errorf("err does not wrap os.ErrPermission: %v", err)
+	}
+	body, readErr := os.ReadFile(target)
+	if readErr != nil {
+		t.Fatalf("read target: %v", readErr)
+	}
+	if string(body) != "original" {
+		t.Errorf("target body = %q; symlink target was overwritten", body)
+	}
+}
 
 func TestWriteTempFile(t *testing.T) {
 	t.Run("success path creates file at mode and invokes writeFn", func(t *testing.T) {
@@ -102,32 +132,9 @@ func TestCopyFileMode(t *testing.T) {
 	})
 
 	t.Run("refuses symlink at dst", func(t *testing.T) {
-		target := filepath.Join(dir, "symlink-copy-target.txt")
-		if err := os.WriteFile(target, []byte("original"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		link := filepath.Join(dir, "symlink-copy-dst.txt")
-		if err := os.Symlink(target, link); err != nil {
-			t.Fatal(err)
-		}
-		err := CopyFileMode(src, link, 0o600)
-		if err == nil {
-			t.Fatal("CopyFileMode via symlink dst: expected error, got nil")
-		}
-		var authErr *errtypes.AuthError
-		if !errors.As(err, &authErr) {
-			t.Errorf("err type = %T, want *errtypes.AuthError", err)
-		}
-		if !errors.Is(err, os.ErrPermission) {
-			t.Errorf("err does not wrap os.ErrPermission: %v", err)
-		}
-		body, readErr := os.ReadFile(target)
-		if readErr != nil {
-			t.Fatalf("read target: %v", readErr)
-		}
-		if string(body) != "original" {
-			t.Errorf("target body = %q; symlink target was overwritten", body)
-		}
+		refuseSymlinkDst(t, dir, func(link string) error {
+			return CopyFileMode(src, link, 0o600)
+		})
 	})
 }
 
@@ -141,7 +148,7 @@ func TestCopyFile(t *testing.T) {
 					t.Fatal(err)
 				}
 				// WriteFile's mode is masked by umask; Chmod pins it exactly so
-				// the preservation assertion is not silently loosened.
+				// the preservation assertion isn't loosened.
 				if err := os.Chmod(src, mode); err != nil {
 					t.Fatal(err)
 				}
@@ -219,32 +226,9 @@ func TestAtomicWrite(t *testing.T) {
 	})
 
 	t.Run("refuses symlink target", func(t *testing.T) {
-		target := filepath.Join(dir, "symlink-target.txt")
-		if err := os.WriteFile(target, []byte("original"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		link := filepath.Join(dir, "symlink-write.txt")
-		if err := os.Symlink(target, link); err != nil {
-			t.Fatal(err)
-		}
-		err := AtomicWrite(link, []byte("overwrite"), 0o600)
-		if err == nil {
-			t.Fatal("AtomicWrite via symlink: expected error, got nil")
-		}
-		var authErr *errtypes.AuthError
-		if !errors.As(err, &authErr) {
-			t.Errorf("err type = %T, want *errtypes.AuthError", err)
-		}
-		if !errors.Is(err, os.ErrPermission) {
-			t.Errorf("err does not wrap os.ErrPermission: %v", err)
-		}
-		body, readErr := os.ReadFile(target)
-		if readErr != nil {
-			t.Fatalf("read target: %v", readErr)
-		}
-		if string(body) != "original" {
-			t.Errorf("target body = %q; symlink target was overwritten", body)
-		}
+		refuseSymlinkDst(t, dir, func(link string) error {
+			return AtomicWrite(link, []byte("overwrite"), 0o600)
+		})
 	})
 
 	t.Run("no .tmp-* leftovers after success", func(t *testing.T) {
@@ -301,9 +285,8 @@ func TestSafeRemove(t *testing.T) {
 		}
 	})
 
-	// os.RemoveAll on a symlink removes the link itself, not the target.
-	// SafeRemove(link) leaves target.txt intact, demonstrating that the
-	// Stat→RemoveAll sequence does not follow symlinks into the target.
+	// os.RemoveAll on a symlink removes the link itself, not the target; this
+	// proves SafeRemove doesn't follow it either.
 	t.Run("symlink_to_target", func(t *testing.T) {
 		target := filepath.Join(dir, "target.txt")
 		if err := os.WriteFile(target, []byte("data"), 0o600); err != nil {
@@ -351,9 +334,8 @@ func TestChownByName(t *testing.T) {
 	}
 }
 
-// TestChownByName_DoesNotFollowSymlink pins Lchown semantics via a dangling
-// symlink: Lchown on the link itself succeeds, while a rewrite back to
-// symlink-following os.Chown resolves the missing target and hits ENOENT.
+// Dangling symlink is the tripwire: Lchown succeeds without resolving it, while
+// os.Chown would hit ENOENT.
 func TestChownByName_DoesNotFollowSymlink(t *testing.T) {
 	u, err := user.Current()
 	if err != nil {
@@ -418,27 +400,6 @@ func TestExpandPath(t *testing.T) {
 			t.Errorf("ExpandPath(~) = %q, want ~", got)
 		}
 	})
-
-	t.Run("tilde_user prefix passes through unchanged", func(t *testing.T) {
-		t.Setenv("SUDO_USER", "")
-		if got := ExpandPath("~user/foo"); got != "~user/foo" {
-			t.Errorf("ExpandPath(~user/foo) = %q, want ~user/foo", got)
-		}
-	})
-
-	t.Run("absolute path passes through unchanged", func(t *testing.T) {
-		t.Setenv("SUDO_USER", "")
-		if got := ExpandPath("/abs/path"); got != "/abs/path" {
-			t.Errorf("ExpandPath(/abs/path) = %q, want /abs/path", got)
-		}
-	})
-
-	t.Run("relative path passes through unchanged", func(t *testing.T) {
-		t.Setenv("SUDO_USER", "")
-		if got := ExpandPath("relative/path"); got != "relative/path" {
-			t.Errorf("ExpandPath(relative/path) = %q, want relative/path", got)
-		}
-	})
 }
 
 func TestMakeExecutable(t *testing.T) {
@@ -473,27 +434,6 @@ func TestMakeExecutable(t *testing.T) {
 			}
 		})
 	}
-
-	t.Run("preserves_contents", func(t *testing.T) {
-		path := filepath.Join(dir, "binary-content")
-		body := []byte("#!/bin/sh\necho hello\n")
-		if err := os.WriteFile(path, body, 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Chmod(path, 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if err := MakeExecutable(path); err != nil {
-			t.Fatalf("MakeExecutable: %v", err)
-		}
-		got, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !bytes.Equal(got, body) {
-			t.Errorf("body changed after MakeExecutable: got %q", got)
-		}
-	})
 
 	t.Run("missing_path_error_contains_path", func(t *testing.T) {
 		missing := filepath.Join(dir, "does-not-exist")

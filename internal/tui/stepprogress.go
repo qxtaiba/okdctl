@@ -10,31 +10,20 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution"
 )
 
-// StepMeta identifies one planned deploy step for the checklist: its stable
-// ID, display name, and phase label. deploy builds this list from the phases
-// that will actually run, so the checklist counter (N/total) reflects the
-// current run — a resume that skips setup/install seeds a shorter plan.
+// StepMeta identifies one planned deploy step: ID, display name, and phase
+// label. deploy builds the list from phases that will actually run, so a
+// resume seeds a shorter checklist total.
 type StepMeta struct {
 	ID    distribution.StepID
 	Name  string
 	Phase string
 }
 
-// StepProgress renders a live, rewriting deploy step checklist to the terminal
-// and mirrors each step to the log sink. It implements
-// distribution.MetricsRecorder: StepStarted paints a dim in-progress line,
-// StepFinished rewrites it in place with the duration and a ✔/✖/skip glyph and
-// commits it to scrollback. Steps that are skipped or already-done emit
-// StepFinished without a preceding StepStarted; the renderer tolerates that.
-//
-// StepProgress is the second line owner (see lineowner.go) alongside the
-// spinner/status line a step body spawns. Only one owns the terminal line at a
-// time: StepStarted registers the checklist, a spawned spinner/status line
-// replaces it as owner for the step's long work, and StepFinished commits the
-// final line whether or not the checklist is still the registered owner. The
-// install-monitor status line (which repaints live operator/CSR counts via its
-// own ticker) is the owner during the monitor step; the checklist's dim line
-// for that step is transient hand-off state, so the two never fight.
+// StepProgress renders a live, rewriting deploy step checklist to stderr,
+// mirroring each step to the log sink (implements distribution.
+// MetricsRecorder). It's a line owner: StepStarted takes ownership, a
+// spawned spinner may replace it mid-step, and StepFinished always commits
+// the final line regardless of current owner.
 type StepProgress struct {
 	w       io.Writer
 	logSink io.Writer
@@ -47,11 +36,9 @@ type stepPos struct {
 	meta StepMeta
 }
 
-// NewStepProgress builds a checklist recorder rendering to stderr. logSink is
-// the persistent log file (may be nil); per-step records are mirrored there so
-// okdctl.log retains the numbered step trail the TTY checklist replaces. Wire
-// it only when ProgressBarsEnabled — the non-TTY path leaves the orchestrator's
-// own step log lines in place.
+// NewStepProgress builds a checklist recorder rendering to stderr; logSink
+// (may be nil) mirrors per-step records so okdctl.log keeps the trail the
+// TTY checklist replaces. Wire it only when ProgressBarsEnabled.
 func NewStepProgress(plan []StepMeta, logSink io.Writer) *StepProgress {
 	return newStepProgress(plan, os.Stderr, logSink)
 }
@@ -64,9 +51,9 @@ func newStepProgress(plan []StepMeta, w, logSink io.Writer) *StepProgress {
 	return &StepProgress{w: w, logSink: logSink, total: len(plan), index: index}
 }
 
-// SuppressStepLog reports that the orchestrator's own per-step Info lines are
-// redundant while this recorder renders the checklist, so they demote to Debug
-// on the TTY. The per-step trail still reaches okdctl.log via writeSink.
+// SuppressStepLog reports that the orchestrator's per-step Info lines are
+// redundant while this recorder renders the checklist, so they demote to
+// Debug on the TTY; the trail still reaches okdctl.log via writeSink.
 func (s *StepProgress) SuppressStepLog() bool { return true }
 
 // StepStarted paints the dim in-progress line for id and takes ownership of
@@ -84,9 +71,9 @@ func (s *StepProgress) StepStarted(id distribution.StepID) {
 	})
 }
 
-// StepFinished rewrites r's step line in place with its duration and a
-// ✔/✖/skip glyph, commits it to scrollback, and mirrors the record to the log
-// sink. Tolerates a missing StepStarted (skipped/already-done steps).
+// StepFinished rewrites r's step line with its duration and a ✔/✖/skip
+// glyph, commits it to scrollback, and mirrors to the log sink; tolerates a
+// missing StepStarted.
 func (s *StepProgress) StepFinished(r *distribution.StepResult) {
 	pos, ok := s.index[r.StepID]
 	if !ok {
@@ -94,20 +81,19 @@ func (s *StepProgress) StepFinished(r *distribution.StepResult) {
 	}
 	s.writeSink(s.plainStatus(r, pos))
 	final := s.finalLine(r, pos)
-	// withLine erases the active owner's line (a leftover spinner or this
-	// checklist's own in-progress line) before the commit, so the final line
-	// never lands on a half-painted frame.
+	// Clears any leftover spinner/checklist line first so the commit never
+	// lands on a half-painted frame.
 	lineReg.withLine(func() {
 		_, _ = fmt.Fprint(s.w, "\r\x1b[2K"+final+"\n")
 	})
 	lineReg.deregister(s)
 }
 
-// DeployFinished releases any line still owned at the end of a phase run; the
-// total duration is unused — each step already reported its own.
+// DeployFinished releases any line still owned at the end of a phase run;
+// total duration is unused.
 func (s *StepProgress) DeployFinished(time.Duration) { lineReg.release(s) }
 
-// clearLine implements lineOwner. The caller holds the line lock.
+// clearLine implements lineOwner; the caller holds the line lock.
 func (s *StepProgress) clearLine() {
 	_, _ = fmt.Fprint(s.w, "\r\x1b[2K")
 }
@@ -146,10 +132,9 @@ func (s *StepProgress) plainStatus(r *distribution.StepResult, pos stepPos) stri
 	}
 }
 
-// writeSink writes line straight to logSink, bypassing logutil.RedactHandler.
-// Callers must only ever pass static step identifiers and numbers (step ID,
-// counter, phase, duration) here — never config- or credential-derived
-// strings — since nothing downstream scrubs this trail.
+// writeSink writes line straight to logSink, bypassing RedactHandler;
+// callers must pass only static step identifiers/numbers, never config- or
+// credential-derived strings, since nothing downstream scrubs this trail.
 func (s *StepProgress) writeSink(line string) {
 	if s.logSink == nil {
 		return

@@ -140,7 +140,6 @@ func TestInstallToolsToSystem_AtomicAndExecutable(t *testing.T) {
 		}
 	}
 
-	// kubectl was absent from srcDir and must be skipped, not error.
 	if _, err := os.Stat(filepath.Join(p.BinDir, "kubectl")); err == nil {
 		t.Error("kubectl must not be installed when absent from srcDir")
 	}

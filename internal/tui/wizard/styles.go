@@ -73,9 +73,7 @@ var (
 				Foreground(tui.ColorSlate600)
 )
 
-// RenderStepProgress returns the wizard header's step dot indicator, with
-// dot 1..current-1 styled as completed, current as active, and the rest
-// pending.
+// RenderStepProgress renders the step dots: 1..current-1 completed, current active, rest pending.
 func RenderStepProgress(current, total int) string {
 	var parts []string
 	for i := range total {

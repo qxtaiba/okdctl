@@ -3,8 +3,6 @@
 module "okd_cluster" {
   source = "../../modules/proxmox-okd"
 
-  # proxmox infrastructure
-
   target_node   = var.target_node
   bridge        = var.bridge
   os_storage    = var.os_storage
@@ -12,8 +10,6 @@ module "okd_cluster" {
   bootstrap_iso = var.bootstrap_iso
   master_isos   = var.master_isos
   worker_isos   = var.worker_isos
-
-  # cluster configuration
 
   cluster_name = var.cluster_name
   vmid_base    = var.vmid_base
@@ -48,11 +44,7 @@ module "okd_cluster" {
   bootstrap_enabled         = var.bootstrap_enabled
   start_workers_immediately = var.start_workers_immediately
 
-  # high availability
-
   ha_enabled = var.ha_enabled
-
-  # hardware and placement
 
   cpu_type            = var.cpu_type
   numa_enabled        = var.numa_enabled

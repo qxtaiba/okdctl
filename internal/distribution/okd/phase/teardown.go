@@ -9,16 +9,15 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// StopAndDisableService stops serviceName when active and disables it when
-// enabled. Failures log at Warn and never abort — teardown must proceed past
-// a wedged unit. What happens to the service's config afterwards diverges by
-// caller on purpose: postinstall backs up haproxy.cfg before removing it,
-// cleanup purges the config and every backup.
+// StopAndDisableService stops and disables serviceName if active/enabled,
+// logging failures at Warn without aborting so teardown survives a wedged
+// unit; callers own the config file afterwards (postinstall backs it up,
+// cleanup purges it).
 func StopAndDisableService(ctx context.Context, serviceName string, logger *slog.Logger) {
 	logger = logutil.OrNop(logger)
 	if system.IsServiceActive(ctx, serviceName) {
 		if err := system.ManageService(ctx, system.ServiceStop, serviceName); err != nil {
-			logger.Warn("failed to stop service", "svc", serviceName, "err", err)
+			logger.Warn("could not stop service", "svc", serviceName, "err", err)
 		}
 	} else {
 		logger.Debug("service not running", "svc", serviceName)
@@ -26,16 +25,15 @@ func StopAndDisableService(ctx context.Context, serviceName string, logger *slog
 
 	if system.IsServiceEnabled(ctx, serviceName) {
 		if err := system.ManageService(ctx, system.ServiceDisable, serviceName); err != nil {
-			logger.Warn("failed to disable service", "svc", serviceName, "err", err)
+			logger.Warn("could not disable service", "svc", serviceName, "err", err)
 		}
 	} else {
 		logger.Debug("service not enabled", "svc", serviceName)
 	}
 }
 
-// ReleaseVIP removes vip from the host's default interface. No-op when vip
-// is empty; detection and removal failures log at Warn because VIP release
-// is best-effort during teardown.
+// ReleaseVIP removes vip from the host's default interface; a no-op if vip
+// is empty, and detection/removal failures log at Warn (best-effort).
 func ReleaseVIP(ctx context.Context, vip string, logger *slog.Logger) {
 	if vip == "" {
 		return

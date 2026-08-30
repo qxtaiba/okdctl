@@ -41,8 +41,7 @@ func TestElevationDecision(t *testing.T) {
 		{"nonroot+requiresRoot", deployCmd, 1000, elevElevate},
 		{"nonroot+noRoot", wizardCmd, 1000, elevAllow},
 		{"dryRun+requiresRoot+nonroot", dryDeployCmd, 1000, elevAllow},
-		// dry-run at root is policy-rejected: the dry-run flag flips
-		// requiresRoot to false, and euid=0 ∧ !requiresRoot is always reject.
+		// dry-run flips requiresRoot false; euid=0 ∧ !requiresRoot is always reject.
 		{"dryRun+requiresRoot+root", dryDeployCmd, 0, elevReject},
 	}
 

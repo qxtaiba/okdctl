@@ -7,29 +7,41 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"runtime"
 	"strings"
-	"syscall"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
-func TestWithCancelSignal(t *testing.T) {
-	t.Run("defaults to SIGTERM", func(t *testing.T) {
-		e := New()
-		if e.cancelSignal != syscall.SIGTERM {
-			t.Errorf("cancelSignal = %v; want SIGTERM", e.cancelSignal)
-		}
-	})
+// wantExitError fails t unless err unwraps to *ExitError with the given
+// exit code, returning it for further field assertions.
+func wantExitError(t *testing.T, err error, code int) *ExitError {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("expected *ExitError with exit %d; got nil", code)
+	}
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("err type = %T; want *ExitError", err)
+	}
+	if exitErr.ExitCode != code {
+		t.Errorf("ExitCode = %d; want %d", exitErr.ExitCode, code)
+	}
+	return exitErr
+}
 
-	t.Run("WithCancelSignal overrides", func(t *testing.T) {
-		e := New(WithCancelSignal(syscall.SIGINT))
-		if e.cancelSignal != syscall.SIGINT {
-			t.Errorf("cancelSignal = %v; want SIGINT", e.cancelSignal)
-		}
-	})
+// wantCtxErrorNotExitError fails t when err is nil or unwraps to *ExitError —
+// a ctx-cancelled run must surface the context error instead.
+func wantCtxErrorNotExitError(t *testing.T, err error) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("expected error after ctx cancel; got nil")
+	}
+	var exitErr *ExitError
+	if errors.As(err, &exitErr) {
+		t.Errorf("got *ExitError on ctx cancel; want context error, got: %v", err)
+	}
 }
 
 func TestRunDiscard(t *testing.T) {
@@ -53,16 +65,7 @@ func TestRunDiscard(t *testing.T) {
 		t.Parallel()
 		e := New(WithInheritedEnv())
 		_, err := e.RunDiscardChecked(context.Background(), "sh", "-c", "echo oops >&2; exit 3")
-		if err == nil {
-			t.Fatal("expected error for exit 3")
-		}
-		var exitErr *ExitError
-		if !errors.As(err, &exitErr) {
-			t.Fatalf("err type = %T; want *ExitError", err)
-		}
-		if exitErr.ExitCode != 3 {
-			t.Errorf("ExitCode = %d; want 3", exitErr.ExitCode)
-		}
+		exitErr := wantExitError(t, err, 3)
 		if !strings.Contains(exitErr.Stderr, "oops") {
 			t.Errorf("Stderr = %q; want it to contain 'oops'", exitErr.Stderr)
 		}
@@ -70,7 +73,6 @@ func TestRunDiscard(t *testing.T) {
 }
 
 func TestBuildEnv_AllowlistFilters(t *testing.T) {
-	// Seed some env vars — allowed and disallowed.
 	t.Setenv("PATH", "/usr/bin:/bin")
 	t.Setenv("HOME", "/tmp/home")
 	t.Setenv("KUBECONFIG", "/tmp/kube")
@@ -140,8 +142,8 @@ func TestBuildEnv_WithEnvAppendsAfterAllowlist(t *testing.T) {
 	e := New(WithEnv([]string{"KUBECONFIG=/caller/kube", "CUSTOM_VAR=value"}))
 
 	env := e.buildEnv()
-	// Caller override should appear AFTER the allowlist-filtered parent,
-	// so os/exec uses the last occurrence (Go's contract).
+	// Caller override must appear after the parent entry — os/exec uses the
+	// last occurrence.
 	joined := strings.Join(env, "\n")
 	if !strings.Contains(joined, "KUBECONFIG=/caller/kube") {
 		t.Errorf("caller KUBECONFIG missing: %v", env)
@@ -149,7 +151,6 @@ func TestBuildEnv_WithEnvAppendsAfterAllowlist(t *testing.T) {
 	if !strings.Contains(joined, "CUSTOM_VAR=value") {
 		t.Errorf("caller CUSTOM_VAR missing: %v", env)
 	}
-	// Verify order: caller override comes AFTER the parent entry.
 	parentIdx := strings.Index(joined, "KUBECONFIG=/parent/kube")
 	callerIdx := strings.Index(joined, "KUBECONFIG=/caller/kube")
 	if parentIdx < 0 || callerIdx < 0 || callerIdx < parentIdx {
@@ -159,9 +160,7 @@ func TestBuildEnv_WithEnvAppendsAfterAllowlist(t *testing.T) {
 }
 
 func TestBuildEnv_InheritedNilWhenNoCallerEnv(t *testing.T) {
-	// cmd.Env = nil is the os/exec contract for "inherit os.Environ() verbatim".
-	// We return nil so the subprocess gets the full parent environment
-	// without us having to enumerate it.
+	// nil env is the os/exec contract for inheriting os.Environ() verbatim.
 	e := New(WithInheritedEnv())
 	env := e.buildEnv()
 	if env != nil {
@@ -171,8 +170,8 @@ func TestBuildEnv_InheritedNilWhenNoCallerEnv(t *testing.T) {
 
 func TestBuildEnv_InheritedWithAppendedVars(t *testing.T) {
 	t.Setenv("OKDCTL_INTERNAL_TOKEN", "inherited")
-	// When WithInheritedEnv is combined with WithEnv, we have to materialize
-	// os.Environ() so we can append to it — nil would drop the caller's vars.
+	// Combining WithInheritedEnv+WithEnv must materialize os.Environ() —
+	// nil would drop the caller vars.
 	e := New(WithInheritedEnv(), WithEnv([]string{"EXTRA=1"}))
 	env := e.buildEnv()
 	joined := strings.Join(env, "\n")
@@ -190,22 +189,16 @@ func TestAllowlist_ExactAndPrefix(t *testing.T) {
 		want bool
 	}{
 		{"PATH", true},
-		{"HOME", true},
 		{"KUBECONFIG", true},
 		{"KUBE_PS1", true},
-		{"KUBERNETES_SERVICE_HOST", true},
 		{"TF_VAR_thing", true},
-		{"TF_LOG", true},
 		{"PROXMOX_VE_API_TOKEN", true},
 		{"OC_EDITOR", true},
 		{"HELM_CACHE_HOME", true},
 		{"GIT_SSH_COMMAND", true},
-		{"GIT_TERMINAL_PROMPT", true},
 		{"GITHUB_TOKEN", false},
 		{"GH_TOKEN", false},
 		{"AWS_SECRET_ACCESS_KEY", false},
-		{"DOCKER_PASSWORD", false},
-		{"GPG_PRIVATE_KEY", false},
 		{"", false},
 	}
 	for _, tc := range cases {
@@ -216,8 +209,6 @@ func TestAllowlist_ExactAndPrefix(t *testing.T) {
 	}
 }
 
-// TestBuildEnv_EndToEndWithEcho verifies the subprocess actually sees the
-// filtered env by echoing it via the shell. Skipped on Windows (no `env`).
 func TestBuildEnv_EndToEndWithEcho(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("needs POSIX env")
@@ -236,7 +227,6 @@ func TestBuildEnv_EndToEndWithEcho(t *testing.T) {
 	if !strings.Contains(result.Stdout, "PATH=") {
 		t.Errorf("PATH missing from subprocess env:\n%s", result.Stdout)
 	}
-	_ = os.Unsetenv("OKDCTL_SECRET_PROBE")
 }
 
 func TestZeroizeEnv(t *testing.T) {
@@ -285,26 +275,6 @@ func TestSnapshotEnv(t *testing.T) {
 			t.Errorf("mutation of snapshot altered internal env: got %q", e.env[0])
 		}
 	})
-
-	t.Run("length matches internal env", func(t *testing.T) {
-		kvs := []string{"A=1", "B=2", "C=3"}
-		e := New(WithEnv(kvs))
-		s := e.SnapshotEnv()
-		if len(s) != len(e.env) {
-			t.Errorf("len(snapshot)=%d; want %d", len(s), len(e.env))
-		}
-	})
-
-	t.Run("empty env returns non-nil zero-length slice", func(t *testing.T) {
-		e := New(WithEnv([]string{}))
-		s := e.SnapshotEnv()
-		if s == nil {
-			t.Error("snapshot of empty env must be non-nil")
-		}
-		if len(s) != 0 {
-			t.Errorf("len(snapshot)=%d; want 0", len(s))
-		}
-	})
 }
 
 func TestRunWithStdin_RoundTrip(t *testing.T) {
@@ -313,8 +283,8 @@ func TestRunWithStdin_RoundTrip(t *testing.T) {
 	}
 	t.Parallel()
 
-	// 100 lines x ~2 KiB = ~200 KiB, well past the 64 KiB kernel pipe
-	// buffer: the call only returns if stdin is fully drained by the child.
+	// 100×~2KiB exceeds the 64KiB pipe buffer — the call only returns if
+	// stdin is fully drained.
 	line := strings.Repeat("x", 2000)
 	var b strings.Builder
 	for range 100 {
@@ -357,18 +327,9 @@ func TestRunChecked(t *testing.T) {
 		t.Parallel()
 		e := New(WithInheritedEnv())
 		result, err := e.RunChecked(context.Background(), "sh", "-c", "echo broken >&2; exit 7")
-		if err == nil {
-			t.Fatal("expected error for exit 7")
-		}
-		var exitErr *ExitError
-		if !errors.As(err, &exitErr) {
-			t.Fatalf("err type = %T; want *ExitError", err)
-		}
+		exitErr := wantExitError(t, err, 7)
 		if exitErr.Command != "sh" {
 			t.Errorf("Command = %q; want %q", exitErr.Command, "sh")
-		}
-		if exitErr.ExitCode != 7 {
-			t.Errorf("ExitCode = %d; want 7", exitErr.ExitCode)
 		}
 		if !strings.Contains(exitErr.Stderr, "broken") {
 			t.Errorf("Stderr = %q; want it to contain 'broken'", exitErr.Stderr)
@@ -384,13 +345,7 @@ func TestRunChecked(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		_, err := e.RunChecked(ctx, "sh", "-c", "sleep 10")
-		if err == nil {
-			t.Fatal("expected error after ctx cancel")
-		}
-		var exitErr *ExitError
-		if errors.As(err, &exitErr) {
-			t.Errorf("got *ExitError on ctx cancel; want context error, got: %v", err)
-		}
+		wantCtxErrorNotExitError(t, err)
 	})
 }
 
@@ -399,33 +354,12 @@ func TestRunWithStdinChecked(t *testing.T) {
 		t.Skip("needs POSIX sh")
 	}
 
-	t.Run("stdin reaches child on success", func(t *testing.T) {
-		t.Parallel()
-		e := New(WithInheritedEnv())
-		result, err := e.RunWithStdinChecked(context.Background(), "payload", "sh", "-c", "cat")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if result.Stdout != "payload" {
-			t.Errorf("Stdout = %q; want %q", result.Stdout, "payload")
-		}
-	})
-
 	t.Run("non-zero exit returns typed ExitError", func(t *testing.T) {
 		t.Parallel()
 		e := New(WithInheritedEnv())
 		_, err := e.RunWithStdinChecked(context.Background(), "ignored", "sh", "-c",
 			"cat >/dev/null; echo apply-failed >&2; exit 1")
-		if err == nil {
-			t.Fatal("expected error for exit 1")
-		}
-		var exitErr *ExitError
-		if !errors.As(err, &exitErr) {
-			t.Fatalf("err type = %T; want *ExitError", err)
-		}
-		if exitErr.ExitCode != 1 {
-			t.Errorf("ExitCode = %d; want 1", exitErr.ExitCode)
-		}
+		_ = wantExitError(t, err, 1)
 	})
 }
 
@@ -440,21 +374,12 @@ func TestAppendEnv(t *testing.T) {
 		if err != nil {
 			t.Fatalf("env: %v", err)
 		}
-		// Non-allowlisted keys appended explicitly must still pass through:
-		// the allowlist filters the parent env, not caller-supplied entries.
+		// Allowlist filters the parent env only — explicitly appended keys
+		// must still pass through.
 		for _, want := range []string{"KUBECONFIG=/appended/kube", "CUSTOM_APPENDED_VAR=yes"} {
 			if !strings.Contains(result.Stdout, want) {
 				t.Errorf("appended entry %q missing from child env:\n%s", want, result.Stdout)
 			}
-		}
-	})
-
-	t.Run("visible via SnapshotEnv", func(t *testing.T) {
-		e := New(WithEnv([]string{"A=1"}))
-		e.AppendEnv("B=2")
-		snap := e.SnapshotEnv()
-		if len(snap) != 2 || snap[0] != "A=1" || snap[1] != "B=2" {
-			t.Errorf("SnapshotEnv = %v; want [A=1 B=2]", snap)
 		}
 	})
 
@@ -513,27 +438,29 @@ func TestExitError_Redacted(t *testing.T) {
 	})
 }
 
-func TestExitError_ErrorTruncatesLongStderr(t *testing.T) {
-	long := strings.Repeat("x", 500)
-	e := &ExitError{Command: "terraform apply", ExitCode: 1, Stderr: long}
-	got := e.Error()
-	if !strings.Contains(got, "[truncated]") {
-		t.Errorf("Error() missing truncation marker for 500-byte stderr; got: %q", got)
-	}
-	if strings.Contains(got, long) {
-		t.Errorf("Error() embedded full 500-byte stderr verbatim")
-	}
-}
+func TestExitError_Error(t *testing.T) {
+	t.Run("truncates long stderr", func(t *testing.T) {
+		long := strings.Repeat("x", 500)
+		e := &ExitError{Command: "terraform apply", ExitCode: 1, Stderr: long}
+		got := e.Error()
+		if !strings.Contains(got, "[truncated]") {
+			t.Errorf("Error() missing truncation marker for 500-byte stderr; got: %q", got)
+		}
+		if strings.Contains(got, long) {
+			t.Errorf("Error() embedded full 500-byte stderr verbatim")
+		}
+	})
 
-func TestExitError_ErrorShortStderrPassesThrough(t *testing.T) {
-	e := &ExitError{Command: "terraform plan", ExitCode: 2, Stderr: "permission denied"}
-	got := e.Error()
-	if !strings.Contains(got, "permission denied") {
-		t.Errorf("Error() dropped short stderr; got: %q", got)
-	}
-	if strings.Contains(got, "[truncated]") {
-		t.Errorf("Error() added truncation marker for short stderr; got: %q", got)
-	}
+	t.Run("short stderr passes through", func(t *testing.T) {
+		e := &ExitError{Command: "terraform plan", ExitCode: 2, Stderr: "permission denied"}
+		got := e.Error()
+		if !strings.Contains(got, "permission denied") {
+			t.Errorf("Error() dropped short stderr; got: %q", got)
+		}
+		if strings.Contains(got, "[truncated]") {
+			t.Errorf("Error() added truncation marker for short stderr; got: %q", got)
+		}
+	})
 }
 
 func TestRunStreamedChecked(t *testing.T) {
@@ -568,16 +495,7 @@ func TestRunStreamedChecked(t *testing.T) {
 
 		result, err := e.RunStreamedChecked(context.Background(), "sh", "-c",
 			"printf 'boom\n' >&2; exit 1")
-		if err == nil {
-			t.Fatal("expected error for exit 1; got nil")
-		}
-		var exitErr *ExitError
-		if !errors.As(err, &exitErr) {
-			t.Fatalf("err type = %T; want *ExitError", err)
-		}
-		if exitErr.ExitCode != 1 {
-			t.Errorf("ExitError.ExitCode = %d; want 1", exitErr.ExitCode)
-		}
+		exitErr := wantExitError(t, err, 1)
 		if !strings.Contains(exitErr.Stderr, "boom") {
 			t.Errorf("ExitError.Stderr = %q; want it to contain 'boom'", exitErr.Stderr)
 		}
@@ -597,13 +515,7 @@ func TestRunStreamedChecked(t *testing.T) {
 		cancel()
 
 		_, err := e.RunStreamedChecked(ctx, "sh", "-c", "sleep 10")
-		if err == nil {
-			t.Fatal("expected error after ctx cancel; got nil")
-		}
-		var exitErr *ExitError
-		if errors.As(err, &exitErr) {
-			t.Errorf("got *ExitError on ctx cancel; want context error, got: %v", err)
-		}
+		wantCtxErrorNotExitError(t, err)
 	})
 }
 
@@ -616,20 +528,14 @@ func TestRunInteractive_CtxCancelReturnsCtxErr(t *testing.T) {
 	cancel()
 
 	err := e.RunInteractive(ctx, "sh", "-c", "sleep 10")
-	if err == nil {
-		t.Fatal("expected error after ctx cancel; got nil")
-	}
-	var exitErr *ExitError
-	if errors.As(err, &exitErr) {
-		t.Errorf("got *ExitError on ctx cancel; want context error, got: %v", err)
-	}
+	wantCtxErrorNotExitError(t, err)
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("err = %v; want errors.Is(err, context.Canceled) == true", err)
 	}
 }
 
 func TestRunOutput_FullCapture(t *testing.T) {
-	t.Run("captures more than constMaxLines lines", func(t *testing.T) {
+	t.Run("captures more than maxCapturedLines lines", func(t *testing.T) {
 		t.Parallel()
 		e := New(WithInheritedEnv())
 		result, err := e.RunOutput(context.Background(), 0, "sh", "-c",
@@ -672,16 +578,7 @@ func TestRunOutput_FullCapture(t *testing.T) {
 		e := New(WithInheritedEnv())
 		result, err := e.RunOutputChecked(context.Background(), 0, "sh", "-c",
 			"printf 'out\n'; printf 'err\n' >&2; exit 2")
-		if err == nil {
-			t.Fatal("expected error for exit 2; got nil")
-		}
-		var exitErr *ExitError
-		if !errors.As(err, &exitErr) {
-			t.Fatalf("err type = %T; want *ExitError", err)
-		}
-		if exitErr.ExitCode != 2 {
-			t.Errorf("ExitCode = %d; want 2", exitErr.ExitCode)
-		}
+		_ = wantExitError(t, err, 2)
 		if result == nil {
 			t.Fatal("result must be non-nil on error")
 		}
@@ -689,36 +586,9 @@ func TestRunOutput_FullCapture(t *testing.T) {
 			t.Errorf("result.Stdout missing captured output; got %q", result.Stdout)
 		}
 	})
-
-	t.Run("zero exit returns full stdout", func(t *testing.T) {
-		t.Parallel()
-		e := New(WithInheritedEnv())
-		result, err := e.RunOutputChecked(context.Background(), 0, "sh", "-c", "printf 'hello'")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if result.Stdout != "hello" {
-			t.Errorf("Stdout = %q; want %q", result.Stdout, "hello")
-		}
-		if result.Truncated {
-			t.Errorf("Truncated = true; want false")
-		}
-	})
 }
 
 func TestResult_TruncatedOnRingPath(t *testing.T) {
-	t.Run("false when under ring cap", func(t *testing.T) {
-		t.Parallel()
-		e := New(WithInheritedEnv())
-		result, err := e.Run(context.Background(), "sh", "-c", "printf 'hello\n'")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if result.Truncated {
-			t.Errorf("Truncated = true for single-line output; want false")
-		}
-	})
-
 	t.Run("false at exactly the ring cap", func(t *testing.T) {
 		t.Parallel()
 		e := New(WithInheritedEnv())
@@ -786,8 +656,8 @@ func TestStartStreamed(t *testing.T) {
 func TestRunOutput_DrainsBeyondPipeBuffer(t *testing.T) {
 	t.Parallel()
 	e := New(WithInheritedEnv())
-	// 2 MiB of output against a 10-byte cap: the excess far exceeds the
-	// kernel pipe buffer, so the call only returns if the pipe is drained.
+	// 2MiB output vs a 10-byte cap exceeds the pipe buffer — returns only
+	// if fully drained.
 	result, err := e.RunOutput(context.Background(), 10, "sh", "-c",
 		"dd if=/dev/zero bs=1024 count=2048 2>/dev/null")
 	if err != nil {

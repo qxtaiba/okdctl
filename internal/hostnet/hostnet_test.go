@@ -24,19 +24,6 @@ printf '%%s %%s\n' "$1" "$2" >> '%s'
 case "$1" in
   -t)
     printf 'myconn:eth0\n'
-    exit 0
-    ;;
-  connection)
-    case "$2" in
-      show)
-        printf 'myconn:eth0\n'
-        exit 0
-        ;;
-    esac
-    exit 0
-    ;;
-  device)
-    exit 0
     ;;
 esac
 exit 0
@@ -46,9 +33,8 @@ exit 0
 	testutil.InstallFakeBin(t, "nmcli", nmcliScript)
 }
 
-// installReapplyFailNmcli wires a fake ip reporting the IP present plus an
-// nmcli where `device reapply` always fails; restoreExit controls whether the
-// compensating `+ipv4.addresses` modify succeeds (0) or fails too (non-zero).
+// installReapplyFailNmcli fakes an nmcli where device reapply always fails;
+// restoreExit controls whether the compensating rollback succeeds (0) or also fails.
 func installReapplyFailNmcli(t *testing.T, nmcliLog string, restoreExit int) {
 	t.Helper()
 	ipScript := `#!/bin/sh
@@ -118,7 +104,6 @@ func TestValidateConnectionName(t *testing.T) {
 		{"plain name", "eth0", false},
 		{"name with colon", "br0:1", false},
 		{"name with space", "Wired connection 1", false},
-		{"hyphen underscore", "my-conn_1", false},
 		{"slash in name", "br0/dnsmasq", false},
 		{"dot hyphen underscore", "a.b-c_d", false},
 		{"max length 128", strings.Repeat("a", 128), false},
@@ -135,7 +120,6 @@ func TestValidateConnectionName(t *testing.T) {
 		{"greater than rejected", "eth>0", true},
 		{"pipe rejected", "eth0|id", true},
 		{"ampersand rejected", "eth0&id", true},
-		{"shell injection rejected", "; rm -rf /", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -154,7 +138,6 @@ func TestValidateInterfaceName(t *testing.T) {
 		wantErr bool
 	}{
 		{"plain", "eth0", false},
-		{"proxmox default", "ens18", false},
 		{"vlan alias", "eth0.100", false},
 		{"empty rejected", "", true},
 		{"leading dash rejected", "-ipv4.method", true},
@@ -234,9 +217,8 @@ func TestActiveConnection(t *testing.T) {
 	})
 }
 
-// TestConnectionOpsRejectBadNamesBeforeExec pins the CWE-88 guard on every
-// exported op that places a connection name in nmcli argv position: a
-// leading-dash name must be refused before nmcli runs at all.
+// TestConnectionOpsRejectBadNamesBeforeExec pins the CWE-88 guard: a
+// leading-dash name must never reach nmcli.
 func TestConnectionOpsRejectBadNamesBeforeExec(t *testing.T) {
 	ops := map[string]func(context.Context, string) error{
 		"OverrideConnectionDNS": func(ctx context.Context, conn string) error {

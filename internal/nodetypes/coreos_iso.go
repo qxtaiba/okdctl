@@ -5,11 +5,8 @@ import (
 	"slices"
 )
 
-// CoreOSISONamePatterns are the filepath.Match glob shapes of a known-safe
-// base CoreOS installer ISO filename. OKD publishes fedora-coreos-*.iso
-// through 4.18 and scos-*.iso from 4.19 onward (every 5.x+ major ships
-// scos.json exclusively — see provision.streamFileForVersion). provision's local
-// ISO auto-detect and hostssh's remote path-safety guard both match
+// CoreOSISONamePatterns are the known-safe base CoreOS installer ISO filename glob shapes.
+// provision's ISO auto-detect and hostssh's path-safety guard both match
 // against this list so the two allowlists cannot drift apart.
 var CoreOSISONamePatterns = []string{
 	"fedora-coreos-*.iso",

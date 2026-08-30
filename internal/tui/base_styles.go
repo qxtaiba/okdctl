@@ -5,7 +5,7 @@ package tui
 
 import "charm.land/lipgloss/v2"
 
-// Base text styles used across TUI output; TitleStyle is the section header.
+// Base text styles used across TUI output.
 var (
 	TitleStyle      = lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary)
 	TextStyle       = lipgloss.NewStyle().Foreground(ColorText)

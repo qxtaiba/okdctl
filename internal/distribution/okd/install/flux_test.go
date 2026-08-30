@@ -92,7 +92,15 @@ func TestAddKubeconfigToBashrc_CreatesIfMissing(t *testing.T) {
 	}
 }
 
-// seedKubeconfig writes content to clusterDir/auth/kubeconfig and returns clusterDir.
+func stubHomeDir(t *testing.T) string {
+	t.Helper()
+	homeDir := t.TempDir()
+	orig := invokingUserHomeDirFn
+	invokingUserHomeDirFn = func() (string, error) { return homeDir, nil }
+	t.Cleanup(func() { invokingUserHomeDirFn = orig })
+	return homeDir
+}
+
 func seedKubeconfig(t *testing.T, content string) string {
 	t.Helper()
 	clusterDir := t.TempDir()
@@ -107,10 +115,7 @@ func seedKubeconfig(t *testing.T, content string) string {
 }
 
 func TestSetupClusterAccess_FreshInstall(t *testing.T) {
-	homeDir := t.TempDir()
-	orig := invokingUserHomeDirFn
-	invokingUserHomeDirFn = func() (string, error) { return homeDir, nil }
-	t.Cleanup(func() { invokingUserHomeDirFn = orig })
+	homeDir := stubHomeDir(t)
 
 	srcContent := "apiVersion: v1\nkind: Config\n"
 	clusterDir := seedKubeconfig(t, srcContent)
@@ -138,10 +143,7 @@ func TestSetupClusterAccess_FreshInstall(t *testing.T) {
 }
 
 func TestSetupClusterAccess_BackupOnOverwrite(t *testing.T) {
-	homeDir := t.TempDir()
-	orig := invokingUserHomeDirFn
-	invokingUserHomeDirFn = func() (string, error) { return homeDir, nil }
-	t.Cleanup(func() { invokingUserHomeDirFn = orig })
+	homeDir := stubHomeDir(t)
 
 	kubeDir := filepath.Join(homeDir, ".kube")
 	if err := os.MkdirAll(kubeDir, 0o755); err != nil {
@@ -200,10 +202,7 @@ func TestSetupClusterAccess_BackupOnOverwrite(t *testing.T) {
 }
 
 func TestSetupClusterAccess_CtxCancelledLeavesDestUntouched(t *testing.T) {
-	homeDir := t.TempDir()
-	orig := invokingUserHomeDirFn
-	invokingUserHomeDirFn = func() (string, error) { return homeDir, nil }
-	t.Cleanup(func() { invokingUserHomeDirFn = orig })
+	homeDir := stubHomeDir(t)
 
 	clusterDir := t.TempDir()
 

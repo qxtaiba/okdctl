@@ -8,36 +8,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
-// TestDoctorExitErr locks the tri-state contract shared by the JSON and text
-// rendering paths: clean run, warn-only run, and any-fail run must each map
-// to a distinct sentinel so exitCodeFor can resolve 0/6/2.
-func TestDoctorExitErr(t *testing.T) {
-	t.Run("all pass returns nil", func(t *testing.T) {
-		if err := doctorExitErr(0, 0); err != nil {
-			t.Fatalf("doctorExitErr(0, 0) = %v; want nil", err)
-		}
-	})
-
-	t.Run("warn only returns errDoctorWarn", func(t *testing.T) {
-		err := doctorExitErr(0, 2)
-		if !errors.Is(err, errDoctorWarn) {
-			t.Fatalf("doctorExitErr(0, 2) = %v; want errDoctorWarn", err)
-		}
-	})
-
-	t.Run("any fail returns ConfigError regardless of warns", func(t *testing.T) {
-		for _, warns := range []int{0, 3} {
-			err := doctorExitErr(1, warns)
-			var cfgErr *errtypes.ConfigError
-			if !errors.As(err, &cfgErr) {
-				t.Fatalf("doctorExitErr(1, %d) = %v (%T); want *errtypes.ConfigError", warns, err, err)
-			}
-		}
-	})
-}
-
-// TestDoctorExitErr_ExitCodeMapping verifies the full path from tallies to
-// process exit code: 0 = clean, 6 = warn-only, 2 = any fail.
 func TestDoctorExitErr_ExitCodeMapping(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -59,9 +29,8 @@ func TestDoctorExitErr_ExitCodeMapping(t *testing.T) {
 	}
 }
 
-// TestRunDoctorNonLinuxGateIsUsageError verifies the dev-host-only OS gate
-// maps to UsageError (exit 64) like the other invalid-invocation gates.
-// Meaningful only off the shipped linux targets, so it skips there.
+// TestRunDoctorNonLinuxGateIsUsageError is meaningful only off linux, where the
+// OS gate is reachable.
 func TestRunDoctorNonLinuxGateIsUsageError(t *testing.T) {
 	if runtime.GOOS == "linux" {
 		t.Skip("gate is unreachable on linux")

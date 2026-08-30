@@ -53,10 +53,8 @@ func init() {
 		"required with --yes; must equal the config cluster name")
 }
 
-// runUpdateIngressDryRun prints the mutations update-ingress would perform
-// without connecting to the cluster or modifying any host configuration.
-// It probes on-disk dnsmasq state and the haproxy service to label any
-// steps that would already be no-ops on the live system.
+// runUpdateIngressDryRun previews update-ingress mutations, probing
+// dnsmasq/haproxy state to label steps that are already no-ops.
 func runUpdateIngressDryRun(ctx context.Context, cfg *config.Config) error {
 	logutil.Info("dry-run: update-ingress for cluster",
 		logutil.LF("cluster", cfg.Cluster.Name), logutil.LF("domain", cfg.Cluster.Domain))
@@ -152,9 +150,9 @@ func runUpdateIngress(cmd *cobra.Command, _ []string) error {
 	logutil.Info("detecting ingress strategy and loadbalancer ips...")
 	startTime := time.Now()
 
-	// WorkDir stays empty so the provisioner defaults it to
-	// <projectRoot>/okd-install; passing projectRoot here pointed
-	// RemoveHAProxy at a cluster-config path that never exists.
+	// WorkDir stays empty so the provisioner defaults to
+	// <projectRoot>/okd-install; passing projectRoot pointed RemoveHAProxy at a
+	// path that never exists
 	result, err := p.UpdateIngress(ctx, cfg, postinstall.UpdateIngressOptions{
 		RemoveHAProxy:     !updateIngressKeepHAProxy,
 		ConfirmConversion: buildConvertConfirm(ctx, updateIngressYes),

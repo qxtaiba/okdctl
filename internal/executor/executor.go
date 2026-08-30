@@ -1,6 +1,5 @@
-// Package executor wraps os/exec to run shell and sudo commands with
-// context cancellation, timeouts, stream capture, and structured logging
-// used across setup, install, and postinstall phases.
+// Package executor wraps os/exec with context-aware execution, output
+// capture, and structured logging for setup/install/postinstall phases.
 package executor
 
 import (
@@ -19,35 +18,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
-// Executor wraps os/exec with context-aware command execution, output
-// capture, and structured logging for setup/install/postinstall phases.
-//
-// Output capture: Run and RunChecked capture stdout/stderr into a ring
-// buffer capped at constMaxLines (200) lines. Result.Stdout and
-// Result.Stderr carry the tail of the output, not the full stream.
-// Callers that need the full stream should use RunStreamed or
-// RunStreamedChecked, which tee live output to e.stdout/e.stderr while
-// still returning a ring-buffered tail in the Result. RunOutput/
-// RunOutputChecked instead fully buffer stdout up to a byte cap for
-// machine-parsed payloads; RunDiscard/RunDiscardChecked discard stdout
-// entirely for high-volume/uninteresting output.
-//
-// Environment handling: by default the Executor passes only a curated
-// allowlist of the parent environment down to subprocesses — credentials
-// that happen to be exported (unrelated AWS/GCP tokens, shell history
-// plumbing, etc.) do not reach every shellout. Parent entries whose key
-// matches logutil.KeyIsSecret (PROXMOX_VE_PASSWORD, TF_VAR_*token, …) are
-// dropped even when their namespace is allowlisted; a credential reaches a
-// subprocess only when the caller passes it explicitly via WithEnv or
-// AppendEnv. The rare caller that needs the full parent env (e.g. a tool
-// that consumes a non-allowlisted variable) opts out via WithInheritedEnv.
-//
-// Must be constructed via New — the zero value panics on first use
-// (logger and output streams are set only in New).
-//
-// Cancel signal: ctx cancellation sends cancelSignal to the subprocess
-// (SIGTERM by default; see WithCancelSignal) followed by SIGKILL after a
-// 30s WaitDelay if the process has not exited.
+// Executor wraps os/exec with context-aware execution, output capture, and
+// structured logging; must be constructed via New (the zero value panics).
 type Executor struct {
 	workDir      string
 	env          []string
@@ -76,39 +48,29 @@ func WithStderr(w io.Writer) Option {
 	return func(e *Executor) { e.stderr = w }
 }
 
-// WithEnv appends environment variables; they are appended after the
-// allowlist-filtered parent env (or the full inherited env when
-// WithInheritedEnv is set), so caller-supplied keys win on duplicates.
+// WithEnv appends vars after the allowlist-filtered (or fully inherited)
+// parent env, so caller keys win on duplicates.
 func WithEnv(env []string) Option {
 	return func(e *Executor) { e.env = append(e.env, env...) }
 }
 
-// WithLogger injects a structured logger used for command-trace output.
-// Nil logger falls back to logutil.NopLogger.
+// WithLogger injects a structured logger for command-trace output; nil
+// falls back to logutil.NopLogger.
 func WithLogger(l *slog.Logger) Option {
 	return func(e *Executor) { e.logger = logutil.OrNop(l) }
 }
 
-// WithInheritedEnv disables the default env allowlist and passes the
-// parent's full environment to subprocesses. Use sparingly — prefer
-// WithEnv for well-known variables. Use cases: a tool that consumes a
-// variable not on the allowlist, or a test that needs a custom env that
-// the allowlist would filter.
-//
-// Takes no argument because every current call site wants unconditional
-// inheritance; add a bool parameter (matching download.WithOverwrite's
-// shape) only when a caller needs WithInheritedEnv(false) dynamic dispatch.
+// WithInheritedEnv disables the allowlist and passes the parent's full
+// environment to subprocesses; use sparingly, only for a tool or test that
+// needs a non-allowlisted variable.
 func WithInheritedEnv() Option {
 	return func(e *Executor) { e.inheritEnv = true }
 }
 
-// WithCancelSignal overrides the signal cmd.Cancel sends on ctx
-// cancellation. Defaults to SIGTERM (see New): SIGTERM soft-cancel is the
-// default so DefaultEnvAllowlist-guarded subprocesses (oc, ssh, package
-// managers) get a graceful chance to flush before WaitDelay's 30s SIGKILL
-// escalation. SIGINT is terraform's documented soft-cancel: it triggers a
-// graceful plan/apply abort and releases the state lock before exit — pass
-// WithCancelSignal(syscall.SIGINT) only for a terraform-backed Executor.
+// WithCancelSignal overrides cmd.Cancel's signal (default SIGTERM, giving
+// guarded subprocesses time to flush before the 30s SIGKILL escalation).
+// Use SIGINT only for a terraform-backed Executor — its documented
+// soft-cancel releases the state lock before exit.
 func WithCancelSignal(sig syscall.Signal) Option {
 	return func(e *Executor) { e.cancelSignal = sig }
 }
@@ -129,14 +91,11 @@ func New(opts ...Option) *Executor {
 }
 
 // DefaultEnvAllowlist is the env filter shared by Executor subprocesses and
-// the sudo re-exec in internal/cli/elevation.go. It passes tooling plumbing
-// and provider namespaces; everything else is dropped to prevent unrelated
-// tokens reaching privileged processes.
-//
-// Executor subprocesses additionally drop secret-keyed entries from the
-// filtered base (see buildEnv); only re-exec sites that call
-// FilterParentEnv directly — okdctl handing the environment to itself —
-// receive allowlisted credentials such as PROXMOX_VE_PASSWORD.
+// the sudo re-exec in cli/elevation.go: it passes tooling/provider
+// namespaces and drops the rest so unrelated tokens don't reach privileged
+// processes. Executor subprocesses further drop secret-keyed entries
+// (buildEnv); only direct FilterParentEnv callers (self re-exec) get
+// allowlisted credentials like PROXMOX_VE_PASSWORD.
 var DefaultEnvAllowlist = EnvAllowlist{
 	Exact: map[string]bool{
 		"PATH": true, "HOME": true, "USER": true, "LOGNAME": true, "SHELL": true,
@@ -152,9 +111,8 @@ var DefaultEnvAllowlist = EnvAllowlist{
 		"XDG_CONFIG_HOME": true, "XDG_DATA_HOME": true,
 		"XDG_CACHE_HOME": true, "XDG_RUNTIME_DIR": true,
 		"DBUS_SESSION_BUS_ADDRESS": true,
-		// Broader GIT_/GITHUB_/GH_ prefixes are intentionally excluded —
-		// GITHUB_TOKEN, GH_TOKEN, and GIT_ASKPASS carry credentials no
-		// subprocess in this tree needs.
+		// GIT_/GITHUB_/GH_ prefixes are excluded — GITHUB_TOKEN/GH_TOKEN/
+		// GIT_ASKPASS carry credentials no subprocess here needs.
 		"GIT_SSH_COMMAND": true, "GIT_TERMINAL_PROMPT": true,
 	},
 	Prefixes: []string{
@@ -163,13 +121,12 @@ var DefaultEnvAllowlist = EnvAllowlist{
 		"TF_",        // terraform TF_VAR_*, TF_LOG, TF_PLUGIN_*
 		"TERRAFORM_", // terraform built-ins
 		"PROXMOX_",   // bpg/proxmox provider + PROXMOX_VE_*
-		"HELM_",      // helm
+		"HELM_",
 	},
 }
 
-// EnvAllowlist is a dual exact-match + prefix-match filter for environment
-// variables. Exported so callers outside this package (e.g. cli/elevation.go)
-// can reuse the same list rather than duplicating it.
+// EnvAllowlist is a dual exact+prefix filter for environment variables,
+// exported so callers like cli/elevation.go can reuse it.
 type EnvAllowlist struct {
 	Exact    map[string]bool
 	Prefixes []string
@@ -179,9 +136,8 @@ func (a EnvAllowlist) allows(key string) bool {
 	return a.Exact[key] || slices.ContainsFunc(a.Prefixes, func(p string) bool { return strings.HasPrefix(key, p) })
 }
 
-// FilterParentEnv returns the entries of os.Environ() whose keys pass the
-// allowlist. Exported so the sudo re-exec path in cli/elevation.go can use
-// the same filter without duplicating the allowlist.
+// FilterParentEnv returns os.Environ() entries whose keys pass the
+// allowlist, exported for reuse by the sudo re-exec path in cli/elevation.go.
 func FilterParentEnv(a EnvAllowlist) []string {
 	parent := os.Environ()
 	out := make([]string, 0, len(parent))
@@ -197,10 +153,9 @@ func FilterParentEnv(a EnvAllowlist) []string {
 	return out
 }
 
-// buildEnv composes the subprocess env for a single Run. Inherit mode passes
-// os.Environ() through unchanged. Default mode filters through
-// DefaultEnvAllowlist, drops secret-keyed entries, then appends
-// caller-supplied e.env (later wins in the duplicate-key tie).
+// buildEnv filters via DefaultEnvAllowlist (dropping secret-keyed entries)
+// then appends e.env, last write wins; inherit mode passes os.Environ()
+// through unchanged.
 func (e *Executor) buildEnv() []string {
 	if e.inheritEnv {
 		if len(e.env) == 0 {
@@ -215,12 +170,9 @@ func (e *Executor) buildEnv() []string {
 	return append(base, e.env...)
 }
 
-// dropSecretKeyed removes entries whose key matches logutil.KeyIsSecret.
-// The PROXMOX_/TF_ namespaces are allowlisted for provider plumbing, not
-// for broadcasting PROXMOX_VE_PASSWORD / PROXMOX_VE_API_TOKEN (which
-// credentials.LoadEnvFile setenvs into the process) to every oc/ssh/
-// package-manager shellout; executors that need credentials receive them
-// explicitly via WithEnv(creds.Env()).
+// dropSecretKeyed strips logutil.KeyIsSecret entries: PROXMOX_/TF_ are
+// allowlisted for plumbing, not for broadcasting PROXMOX_VE_PASSWORD-style
+// credentials to every shellout — those need explicit WithEnv(creds.Env()).
 func dropSecretKeyed(env []string) []string {
 	out := env[:0]
 	for _, kv := range env {
@@ -232,12 +184,10 @@ func dropSecretKeyed(env []string) []string {
 	return out
 }
 
-// Result is the captured outcome of a Run-style invocation.
-// Truncated is true when stdout was capped: the ring paths (Run/RunChecked/
-// RunStreamed) set it once a line is actually dropped past constMaxLines;
-// the byte-cap path (RunOutput) sets it when output exceeds the limit.
-// Callers that machine-parse stdout must use RunOutput/RunOutputChecked and
-// check Truncated before unmarshalling.
+// Result is the captured outcome of a Run-style invocation. Truncated is set
+// once ring-buffered stdout drops a line (Run/RunStreamed) or buffered
+// stdout exceeds the byte cap (RunOutput); machine-parsing callers must
+// check it via RunOutput/RunOutputChecked before unmarshalling.
 type Result struct {
 	ExitCode  int
 	Stdout    string
@@ -246,19 +196,17 @@ type Result struct {
 	Truncated bool
 }
 
-// ExitError is the typed error RunChecked / RunWithStdinChecked return when
-// a subprocess exits non-zero. Callers can errors.As to inspect ExitCode
-// without re-parsing the error message. Mirrors terraform.ExecError for
-// consistency.
+// ExitError is the typed error RunChecked/RunWithStdinChecked return on
+// non-zero exit; callers can errors.As it to inspect ExitCode without
+// re-parsing the message.
 type ExitError struct {
 	Command  string
 	ExitCode int
 	Stderr   string
 }
 
-// Error truncates Stderr to at most 400 bytes via logutil.RedactableStderr
-// so a credential-bearing terraform provider diagnostic does not reach log
-// sinks verbatim when a caller stringifies outside slog.
+// Error truncates Stderr to 400 bytes via logutil.RedactableStderr so a
+// credential-bearing diagnostic isn't leaked verbatim outside slog.
 func (e *ExitError) Error() string {
 	stderr := fmt.Sprint(logutil.RedactableStderr(strings.TrimSpace(e.Stderr)).Redacted())
 	return fmt.Sprintf("%s failed (exit %d): %s", e.Command, e.ExitCode, stderr)
@@ -273,10 +221,9 @@ func (e *ExitError) Redacted() any {
 	}{e.Command, e.ExitCode}
 }
 
-// NewExitError returns the ctx error when ctx is already cancelled so
-// errors.Is(err, context.Canceled) propagates through the call chain,
-// letting cli/root.go::signalExitCode map SIGINT→130 / SIGTERM→143
-// instead of falling through to the generic ClusterError exit code 4.
+// NewExitError returns ctx.Err() when ctx is already cancelled, so
+// errors.Is(_, context.Canceled) propagates for cli/root.go's SIGINT/SIGTERM
+// exit-code mapping.
 func NewExitError(ctx context.Context, cmd string, code int, stderr string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -284,9 +231,9 @@ func NewExitError(ctx context.Context, cmd string, code int, stderr string) erro
 	return &ExitError{Command: cmd, ExitCode: code, Stderr: stderr}
 }
 
-// Run executes a command and returns its result. The returned *Result is
-// always non-nil, even when error is non-nil — callers can safely access
-// result.ExitCode and result.Stderr without a nil guard.
+// Run executes a command and returns its result; *Result is always
+// non-nil, even on error, so callers can read ExitCode/Stderr without a
+// nil guard.
 func (e *Executor) Run(ctx context.Context, name string, args ...string) (*Result, error) {
 	return e.run(ctx, nil, name, args...)
 }
@@ -296,96 +243,81 @@ func (e *Executor) RunWithStdin(ctx context.Context, input, name string, args ..
 	return e.run(ctx, strings.NewReader(input), name, args...)
 }
 
-func (e *Executor) run(ctx context.Context, stdin io.Reader, name string, args ...string) (*Result, error) {
-	start := time.Now()
-
+// newCmd builds the shared exec.Cmd: workDir, filtered env, and soft-cancel
+// via e.cancelSignal before WaitDelay's SIGKILL escalation.
+func (e *Executor) newCmd(ctx context.Context, name string, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, name, args...)
-
 	if e.workDir != "" {
 		cmd.Dir = e.workDir
 	}
-
 	cmd.Env = e.buildEnv()
+	cmd.Cancel = func() error { return cmd.Process.Signal(e.cancelSignal) }
+	cmd.WaitDelay = 30 * time.Second
+	return cmd
+}
 
-	rout := newRingWriter(constMaxLines)
-	rerr := newRingWriter(constMaxLines)
+// splitExitError folds an *exec.ExitError into result.ExitCode (returns
+// nil); other errors pass through unchanged.
+func splitExitError(err error, result *Result) error {
+	if err == nil {
+		return nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		result.ExitCode = exitErr.ExitCode()
+		return nil
+	}
+	return err
+}
+
+func (e *Executor) run(ctx context.Context, stdin io.Reader, name string, args ...string) (*Result, error) {
+	start := time.Now()
+	cmd := e.newCmd(ctx, name, args...)
+
+	rout := newRingWriter(maxCapturedLines)
+	rerr := newRingWriter(maxCapturedLines)
 	cmd.Stdin = stdin
 	cmd.Stdout = rout
 	cmd.Stderr = rerr
-
-	// Soft-cancel via e.cancelSignal (SIGTERM by default; see
-	// WithCancelSignal) so the subprocess gets a chance to clean up before
-	// WaitDelay's SIGKILL escalation.
-	cmd.Cancel = func() error { return cmd.Process.Signal(e.cancelSignal) }
-	cmd.WaitDelay = 30 * time.Second
 
 	e.logger.Debug("exec: started", "cmd", name, "argc", len(args))
 
 	err := cmd.Run()
 
 	result := &Result{
-		ExitCode:  0,
 		Stdout:    rout.tail(),
 		Stderr:    rerr.tail(),
 		Duration:  time.Since(start),
 		Truncated: rout.dropped,
 	}
-
-	var retErr error
-	if err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			result.ExitCode = exitErr.ExitCode()
-		} else {
-			retErr = err
-		}
-	}
+	retErr := splitExitError(err, result)
 
 	e.logger.Debug("exec: completed", "cmd", name, "exit", result.ExitCode, "duration", result.Duration)
 	return result, retErr
 }
 
-// RunStreamed executes a command, piping its stdout and stderr live to
-// e.stdout and e.stderr while also retaining the last constMaxLines lines
-// in Result.Stdout and Result.Stderr for error reporting. The returned
-// *Result is always non-nil.
+// RunStreamed pipes stdout/stderr live to e.stdout/e.stderr while retaining
+// the last maxCapturedLines in Result for error reporting; *Result is
+// always non-nil.
 func (e *Executor) RunStreamed(ctx context.Context, name string, args ...string) (*Result, error) {
 	start := time.Now()
-	cmd := exec.CommandContext(ctx, name, args...)
+	cmd := e.newCmd(ctx, name, args...)
 
-	if e.workDir != "" {
-		cmd.Dir = e.workDir
-	}
-	cmd.Env = e.buildEnv()
-
-	rout := newRingWriter(constMaxLines)
-	rerr := newRingWriter(constMaxLines)
+	rout := newRingWriter(maxCapturedLines)
+	rerr := newRingWriter(maxCapturedLines)
 	cmd.Stdout = io.MultiWriter(e.stdout, rout)
 	cmd.Stderr = io.MultiWriter(e.stderr, rerr)
-
-	cmd.Cancel = func() error { return cmd.Process.Signal(e.cancelSignal) }
-	cmd.WaitDelay = 30 * time.Second
 
 	e.logger.Debug("exec: started", "cmd", name, "argc", len(args))
 	err := cmd.Run()
 
 	result := &Result{
-		ExitCode:  0,
 		Stdout:    rout.tail(),
 		Stderr:    rerr.tail(),
 		Duration:  time.Since(start),
 		Truncated: rout.dropped,
 	}
-
-	var retErr error
-	if err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			result.ExitCode = exitErr.ExitCode()
-		} else {
-			retErr = err
-		}
-	}
+	retErr := splitExitError(err, result)
 
 	e.logger.Debug("exec: completed", "cmd", name, "exit", result.ExitCode, "duration", result.Duration)
 	return result, retErr
@@ -404,24 +336,14 @@ func (e *Executor) RunStreamedChecked(ctx context.Context, name string, args ...
 	return result, nil
 }
 
-// StartStreamed starts name with args, piping stdout/stderr live to
-// e.stdout/e.stderr, and returns immediately with a channel that receives
-// cmd.Wait's result once the process exits. Shares buildEnv, cancelSignal,
-// and WaitDelay with the other Run* methods, so callers get the SIGTERM/
-// SIGINT + WaitDelay escalation without reimplementing it. kill is a no-op
-// retained for API symmetry with callers that inject a test stub expecting
-// an explicit kill function; cmd.Cancel already handles ctx cancellation.
+// StartStreamed starts name with args, piping stdout/stderr live, and
+// returns immediately with a channel that receives cmd.Wait's result. kill
+// is a deliberate no-op — cmd.Cancel already handles ctx cancellation; it
+// exists only for API symmetry with callers expecting an explicit kill func.
 func (e *Executor) StartStreamed(ctx context.Context, name string, args ...string) (done <-chan error, kill func(), err error) {
-	cmd := exec.CommandContext(ctx, name, args...)
-	if e.workDir != "" {
-		cmd.Dir = e.workDir
-	}
-	cmd.Env = e.buildEnv()
+	cmd := e.newCmd(ctx, name, args...)
 	cmd.Stdout = e.stdout
 	cmd.Stderr = e.stderr
-
-	cmd.Cancel = func() error { return cmd.Process.Signal(e.cancelSignal) }
-	cmd.WaitDelay = 30 * time.Second
 
 	e.logger.Debug("exec: started", "cmd", name, "argc", len(args))
 	if startErr := cmd.Start(); startErr != nil {
@@ -440,24 +362,11 @@ func (e *Executor) StartStreamed(ctx context.Context, name string, args ...strin
 // the Executor's stdout/stderr for user-facing prompts.
 func (e *Executor) RunInteractive(ctx context.Context, name string, args ...string) error {
 	start := time.Now()
-	cmd := exec.CommandContext(ctx, name, args...)
-
-	if e.workDir != "" {
-		cmd.Dir = e.workDir
-	}
-
-	cmd.Env = e.buildEnv()
+	cmd := e.newCmd(ctx, name, args...)
 
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = e.stdout
 	cmd.Stderr = e.stderr
-
-	// Soft-cancel via e.cancelSignal (SIGTERM by default; see
-	// WithCancelSignal). SIGINT is terraform's documented soft-cancel —
-	// opted into via WithCancelSignal for terraform's Executor. WaitDelay
-	// gives the process 30 s to clean up before SIGKILL fires.
-	cmd.Cancel = func() error { return cmd.Process.Signal(e.cancelSignal) }
-	cmd.WaitDelay = 30 * time.Second
 
 	e.logger.Debug("exec: started", "cmd", name, "argc", len(args))
 
@@ -471,9 +380,8 @@ func (e *Executor) RunInteractive(ctx context.Context, name string, args ...stri
 	return err
 }
 
-// exitCodeOf extracts the exit code from a cmd.Run error for logging.
-// Returns 0 for nil, the exit status for *exec.ExitError, and -1 for other
-// errors (e.g. exec not found).
+// exitCodeOf maps a cmd.Run error to its exit code for logging: 0 for nil,
+// the exit status for *exec.ExitError, -1 otherwise.
 func exitCodeOf(err error) int {
 	if err == nil {
 		return 0
@@ -485,10 +393,9 @@ func exitCodeOf(err error) int {
 	return -1
 }
 
-// RunChecked executes a command and returns an error if it fails to execute
-// or exits with a non-zero status. Use this when the caller expects success;
-// use Run directly when non-zero exit codes are acceptable (probing, cleanup).
-// Non-zero exits return an *ExitError — callers can errors.As to inspect.
+// RunChecked executes a command and errors on launch failure or non-zero
+// exit, returned as *ExitError for errors.As inspection. Use Run directly
+// when non-zero exit is acceptable (probing, cleanup).
 func (e *Executor) RunChecked(ctx context.Context, name string, args ...string) (*Result, error) {
 	result, err := e.Run(ctx, name, args...)
 	if err != nil {
@@ -500,27 +407,17 @@ func (e *Executor) RunChecked(ctx context.Context, name string, args ...string) 
 	return result, nil
 }
 
-// RunDiscard executes a command with stdout fully discarded — not even
-// ring-buffered — while stderr stays ring-capped at constMaxLines lines.
-// Use for high-volume/uninteresting stdout (package installs, repo
-// metadata refreshes) where only success/failure and stderr diagnostics
-// matter. The returned *Result is always non-nil; Result.Stdout is always
-// empty.
+// RunDiscard executes a command with stdout fully discarded (not
+// ring-buffered) while stderr stays ring-capped at maxCapturedLines; use
+// for high-volume stdout where only success/failure and stderr matter.
+// *Result is always non-nil; Result.Stdout is always empty.
 func (e *Executor) RunDiscard(ctx context.Context, name string, args ...string) (*Result, error) {
 	start := time.Now()
-	cmd := exec.CommandContext(ctx, name, args...)
+	cmd := e.newCmd(ctx, name, args...)
 
-	if e.workDir != "" {
-		cmd.Dir = e.workDir
-	}
-	cmd.Env = e.buildEnv()
-
-	rerr := newRingWriter(constMaxLines)
+	rerr := newRingWriter(maxCapturedLines)
 	cmd.Stdout = io.Discard
 	cmd.Stderr = rerr
-
-	cmd.Cancel = func() error { return cmd.Process.Signal(e.cancelSignal) }
-	cmd.WaitDelay = 30 * time.Second
 
 	e.logger.Debug("exec: started", "cmd", name, "argc", len(args))
 	err := cmd.Run()
@@ -529,16 +426,7 @@ func (e *Executor) RunDiscard(ctx context.Context, name string, args ...string) 
 		Stderr:   rerr.tail(),
 		Duration: time.Since(start),
 	}
-
-	var retErr error
-	if err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			result.ExitCode = exitErr.ExitCode()
-		} else {
-			retErr = err
-		}
-	}
+	retErr := splitExitError(err, result)
 
 	e.logger.Debug("exec: completed", "cmd", name, "exit", result.ExitCode, "duration", result.Duration)
 	return result, retErr
@@ -560,13 +448,11 @@ func (e *Executor) RunDiscardChecked(ctx context.Context, name string, args ...s
 // runOutputMaxBytes is the default stdout cap for RunOutput when limit=0.
 const runOutputMaxBytes = 4 * 1024 * 1024
 
-// RunOutput executes a command and returns the full stdout up to limit
-// bytes. When limit is 0, runOutputMaxBytes (4 MiB) is used. Unlike Run,
-// stdout is fully buffered rather than ring-truncated, making it safe for
-// machine parsing of large JSON payloads (e.g. oc get clusteroperators -o
-// json). Stderr stays ring-buffered for diagnostics. When stdout exceeds
-// limit, Result.Truncated is true and Stdout holds the capped prefix. The
-// returned *Result is always non-nil.
+// RunOutput executes a command and returns full stdout up to limit bytes (0
+// defaults to runOutputMaxBytes), fully buffered rather than ring-truncated
+// so it's safe for machine-parsing large JSON payloads. On overrun,
+// Result.Truncated is true and Stdout holds the capped prefix; *Result is
+// always non-nil.
 func (e *Executor) RunOutput(ctx context.Context, limit int, name string, args ...string) (*Result, error) {
 	return e.runOutput(ctx, nil, limit, name, args...)
 }
@@ -589,14 +475,9 @@ func (e *Executor) runOutput(ctx context.Context, stdin io.Reader, limit int, na
 		limit = runOutputMaxBytes
 	}
 	start := time.Now()
+	cmd := e.newCmd(ctx, name, args...)
 
-	cmd := exec.CommandContext(ctx, name, args...)
-	if e.workDir != "" {
-		cmd.Dir = e.workDir
-	}
-	cmd.Env = e.buildEnv()
-
-	rerr := newRingWriter(constMaxLines)
+	rerr := newRingWriter(maxCapturedLines)
 	cmd.Stdin = stdin
 	cmd.Stderr = rerr
 
@@ -605,21 +486,15 @@ func (e *Executor) runOutput(ctx context.Context, stdin io.Reader, limit int, na
 		return &Result{Duration: time.Since(start)}, pipeErr
 	}
 
-	// Soft-cancel via e.cancelSignal mirrors run(); see WithCancelSignal for
-	// the SIGTERM-default / terraform-SIGINT rationale.
-	cmd.Cancel = func() error { return cmd.Process.Signal(e.cancelSignal) }
-	cmd.WaitDelay = 30 * time.Second
-
 	e.logger.Debug("exec: started", "cmd", name, "argc", len(args))
 
 	if err := cmd.Start(); err != nil {
 		return &Result{Duration: time.Since(start)}, err
 	}
 
-	// Read limit+1 bytes so "exactly limit" and "exceeded limit" are
-	// distinguishable, then drain the rest: a child producing more than the
-	// kernel pipe buffer past the cap would otherwise block forever in write
-	// and Wait would never return.
+	// Read limit+1 to distinguish exact-limit from overrun, then drain the
+	// rest — otherwise a child writing past the pipe buffer would block
+	// forever and Wait would never return.
 	out, readErr := io.ReadAll(io.LimitReader(stdoutPipe, int64(limit)+1))
 	_, _ = io.Copy(io.Discard, stdoutPipe)
 	waitErr := cmd.Wait()
@@ -630,24 +505,15 @@ func (e *Executor) runOutput(ctx context.Context, stdin io.Reader, limit int, na
 	}
 
 	result := &Result{
-		ExitCode:  0,
 		Stdout:    string(out),
 		Stderr:    rerr.tail(),
 		Duration:  time.Since(start),
 		Truncated: truncated,
 	}
 
-	var retErr error
-	switch {
-	case readErr != nil:
-		retErr = readErr
-	case waitErr != nil:
-		var exitErr *exec.ExitError
-		if errors.As(waitErr, &exitErr) {
-			result.ExitCode = exitErr.ExitCode()
-		} else {
-			retErr = waitErr
-		}
+	retErr := readErr
+	if retErr == nil {
+		retErr = splitExitError(waitErr, result)
 	}
 
 	e.logger.Debug("exec: completed", "cmd", name, "exit", result.ExitCode, "duration", result.Duration)
@@ -666,30 +532,27 @@ func (e *Executor) RunWithStdinChecked(ctx context.Context, input, name string, 
 	return result, nil
 }
 
-// AppendEnv appends KEY=VALUE entries to the executor's env after construction.
-// All post-construction env mutation must go through this method so future
-// invariants (allowlist filtering, credential redaction on insert) have a
-// single enforcement point.
+// AppendEnv appends KEY=VALUE entries to the executor's env after
+// construction; all post-construction env mutation must go through this
+// method so future invariants (allowlist filtering, redaction) have one
+// enforcement point.
 func (e *Executor) AppendEnv(kvs ...string) {
 	e.env = append(e.env, kvs...)
 }
 
-// SnapshotEnv returns a copy of the current env slice. The copy prevents
-// callers from mutating the executor's internal env through the returned
-// slice. Note: ZeroizeEnv operates on the live e.env slice; copies already
-// handed to callers (e.g. terraform.WithEnv) are not reached by it — callers
-// must call their own ZeroizeEnv to bound credential lifetime there.
+// SnapshotEnv returns a copy of the current env slice so callers can't
+// mutate the executor's internal env through it. ZeroizeEnv only scrubs the
+// live e.env — copies already handed out (e.g. terraform.WithEnv) need
+// their own ZeroizeEnv to bound credential lifetime.
 func (e *Executor) SnapshotEnv() []string {
 	out := make([]string, len(e.env))
 	copy(out, e.env)
 	return out
 }
 
-// ZeroizeEnv blanks env entries whose key matches logutil.KeyIsSecret, then
-// clears and nils the slice. Credential-bearing strings (PROXMOX_VE_PASSWORD,
-// PROXMOX_VE_API_TOKEN, etc.) would otherwise persist as immutable heap
-// objects until GC; this bounds their plaintext lifetime. Call via defer
-// after all subprocess operations are complete.
+// ZeroizeEnv blanks logutil.KeyIsSecret entries, then clears and nils the
+// slice, bounding credential plaintext lifetime instead of leaving it on
+// the heap until GC. Call via defer after subprocess operations complete.
 func (e *Executor) ZeroizeEnv() {
 	for i, kv := range e.env {
 		key, _, _ := strings.Cut(kv, "=")

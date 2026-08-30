@@ -10,8 +10,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
-// Postinstall StepIDs. These identify each step in Phase.Run order
-// and appear in distribution.Orchestrator events.
+// Postinstall StepIDs identify each step in Phase.Run order.
 const (
 	StepVerifyHealth        distribution.StepID = "verify-health"
 	StepCleanupBootstrap    distribution.StepID = "cleanup-bootstrap"
@@ -21,8 +20,7 @@ const (
 	StepDisableRHDefaults   distribution.StepID = "disable-rh-defaults"
 )
 
-// StepNames maps each postinstall StepID to its display name. StepDef literals
-// in this file reference this map so each name has a single source.
+// StepNames maps each postinstall StepID to its display name.
 var StepNames = map[distribution.StepID]string{
 	StepVerifyHealth:        "verify cluster health",
 	StepCleanupBootstrap:    "cleanup bootstrap vm",
@@ -37,7 +35,6 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 		{
 			ID: StepVerifyHealth, Name: StepNames[StepVerifyHealth],
 			ReRunSafe:  distribution.ReRunSafeYes,
-			Desc:       "verifying cluster health",
 			SkipWhen:   func() bool { return opts.SkipClusterHealth },
 			SkipReason: "cluster health verification skipped by user",
 			Exec: func(ctx context.Context) error {
@@ -54,8 +51,8 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 		},
 		{
 			ID: StepVerifyKubeVIP, Name: StepNames[StepVerifyKubeVIP],
-			ReRunSafe: distribution.ReRunSafeYes,
-			Desc:      "verifying kube-vip api load balancer", NonFatal: true,
+			ReRunSafe:  distribution.ReRunSafeYes,
+			NonFatal:   true,
 			SkipWhen:   func() bool { return opts.SkipKubeVIP },
 			SkipReason: "kube-vip verification skipped by user",
 			Exec: func(ctx context.Context) error {
@@ -72,14 +69,11 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 			},
 			OnError: phase.WarnOnError(p.Log, "kubevip: verification failed"),
 		},
-		// Verify-before-destroy: the bootstrap VM is the API fallback while
-		// DNS is bootstrap-pointed, so it is only destroyed once kube-vip is
-		// confirmed serving the VIP — unless the operator explicitly skipped
-		// verification, which is honored as consent to proceed.
+		// Verify-before-destroy: the bootstrap VM stays as API fallback until
+		// kube-vip is confirmed, unless the operator explicitly skipped verification.
 		{
 			ID: StepCleanupBootstrap, Name: StepNames[StepCleanupBootstrap],
 			ReRunSafe: distribution.ReRunSafeYes,
-			Desc:      "destroying bootstrap vm via terraform",
 			SkipWhen: func() bool {
 				return !pctx.Get().KubeVIPVerified && !opts.SkipKubeVIP
 			},
@@ -96,8 +90,8 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 		},
 		{
 			ID: StepDeployProductionDNS, Name: StepNames[StepDeployProductionDNS],
-			ReRunSafe: distribution.ReRunSafeYes,
-			Desc:      "deploying production dns with api vip and apps on bastion", NonFatal: true,
+			ReRunSafe:  distribution.ReRunSafeYes,
+			NonFatal:   true,
 			SkipWhen:   func() bool { return !pctx.Get().KubeVIPVerified },
 			SkipReason: "kube-vip not verified, keeping bootstrap dns",
 			Exec: func(ctx context.Context) error {
@@ -116,10 +110,9 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 		},
 		{
 			ID: StepInstallAddons, Name: StepNames[StepInstallAddons],
-			// Addon installation uses helm upgrade --install / kubectl apply
-			// semantics; re-applying is a safe no-op for already-installed addons.
+			// helm upgrade --install / kubectl apply semantics: re-applying is a safe no-op.
 			ReRunSafe: distribution.ReRunSafeYes,
-			Desc:      "installing enabled cluster addons", NonFatal: true,
+			NonFatal:  true,
 			Exec: func(ctx context.Context) error {
 				if err := p.verifyAPIHealthCheck(ctx); err != nil {
 					p.Log.Warn("addons: api health check failed before addon install", "err", err)
@@ -133,8 +126,8 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 		},
 		{
 			ID: StepDisableRHDefaults, Name: StepNames[StepDisableRHDefaults],
-			ReRunSafe: distribution.ReRunSafeYes,
-			Desc:      "disabling operatorhub catalogsources and the insights alert that require a red hat subscription", NonFatal: true,
+			ReRunSafe:  distribution.ReRunSafeYes,
+			NonFatal:   true,
 			SkipWhen:   func() bool { return opts.KeepRedHatCatalogs },
 			SkipReason: "kept by --keep-redhat-catalogs",
 			Exec: func(ctx context.Context) error {

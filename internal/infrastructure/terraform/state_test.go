@@ -17,9 +17,7 @@ import (
 func TestSnapshotState_WritesBackup(t *testing.T) {
 	dir := t.TempDir()
 	payload := []byte(`{"version":4,"resources":[{"type":"proxmox_vm_qemu"}]}`)
-	if err := os.WriteFile(filepath.Join(dir, "terraform.tfstate"), payload, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	mustWriteFile(t, dir, "terraform.tfstate", string(payload))
 
 	e := &Executor{workDir: dir, logger: slog.New(&testutil.CaptureHandler{})}
 	dst, err := e.SnapshotState(context.Background())
@@ -68,10 +66,7 @@ func TestSnapshotState_AtomicWriteError(t *testing.T) {
 		t.Skip("root bypasses dir-mode write restrictions")
 	}
 	dir := t.TempDir()
-	payload := []byte(`{"version":4,"resources":[]}`)
-	if err := os.WriteFile(filepath.Join(dir, "terraform.tfstate"), payload, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	mustWriteFile(t, dir, "terraform.tfstate", `{"version":4,"resources":[]}`)
 
 	if err := os.Chmod(dir, 0o500); err != nil {
 		t.Fatal(err)
@@ -90,21 +85,7 @@ func TestSnapshotState_AtomicWriteError(t *testing.T) {
 
 func TestPruneSnapshots_KeepsFiveMostRecent(t *testing.T) {
 	dir := t.TempDir()
-
-	names := []string{
-		"terraform.tfstate.2024-01-01T00-00-00Z.bak",
-		"terraform.tfstate.2024-01-02T00-00-00Z.bak",
-		"terraform.tfstate.2024-01-03T00-00-00Z.bak",
-		"terraform.tfstate.2024-01-04T00-00-00Z.bak",
-		"terraform.tfstate.2024-01-05T00-00-00Z.bak",
-		"terraform.tfstate.2024-01-06T00-00-00Z.bak",
-		"terraform.tfstate.2024-01-07T00-00-00Z.bak",
-	}
-	for _, n := range names {
-		if err := os.WriteFile(filepath.Join(dir, n), []byte("x"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
+	names := writeBaks(t, dir, 1, 2, 3, 4, 5, 6, 7)
 
 	e := &Executor{workDir: dir, logger: slog.New(&testutil.CaptureHandler{})}
 	e.pruneSnapshots()
@@ -126,36 +107,36 @@ func TestPruneSnapshots_KeepsFiveMostRecent(t *testing.T) {
 	}
 }
 
-func TestCheckStateMajorVersion_RejectsMajorTwo(t *testing.T) {
-	dir := t.TempDir()
-	sf := filepath.Join(dir, "terraform.tfstate")
-	body := `{"version":4,"terraform_version":"2.0.0","resources":[]}`
-	if err := os.WriteFile(sf, []byte(body), 0o600); err != nil {
-		t.Fatal(err)
+func TestCheckStateMajorVersion(t *testing.T) {
+	cases := []struct {
+		name          string
+		version       string
+		wantConfigErr bool
+	}{
+		{"rejects major two", "2.0.0", true},
+		{"unparseable version is non-fatal", "notasemver", false},
 	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			sf := mustWriteFile(t, dir, "terraform.tfstate",
+				`{"version":4,"terraform_version":"`+tc.version+`","resources":[]}`)
 
-	log := slog.New(&testutil.CaptureHandler{})
-	err := checkStateMajorVersion(sf, log)
-	if err == nil {
-		t.Fatal("expected ConfigError for major=2; got nil")
-	}
-	var ce *errtypes.ConfigError
-	if !errors.As(err, &ce) {
-		t.Errorf("expected *errtypes.ConfigError; got %T: %v", err, err)
-	}
-}
-
-func TestCheckStateMajorVersion_UnparseableVersionIsNonFatal(t *testing.T) {
-	dir := t.TempDir()
-	sf := filepath.Join(dir, "terraform.tfstate")
-	body := `{"version":4,"terraform_version":"notasemver","resources":[]}`
-	if err := os.WriteFile(sf, []byte(body), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	log := slog.New(&testutil.CaptureHandler{})
-	if err := checkStateMajorVersion(sf, log); err != nil {
-		t.Errorf("expected nil for unparseable version; got %v", err)
+			err := checkStateMajorVersion(sf, slog.New(&testutil.CaptureHandler{}))
+			if !tc.wantConfigErr {
+				if err != nil {
+					t.Errorf("expected nil for version %q; got %v", tc.version, err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("expected ConfigError for major=2; got nil")
+			}
+			var ce *errtypes.ConfigError
+			if !errors.As(err, &ce) {
+				t.Errorf("expected *errtypes.ConfigError; got %T: %v", err, err)
+			}
+		})
 	}
 }
 

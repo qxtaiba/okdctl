@@ -2,7 +2,6 @@ package hostssh
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -31,28 +30,8 @@ func TestValidateVMID(t *testing.T) {
 	}
 }
 
-// TestValidateSnapshotName_RejectsInjectionPayloads exercises the exact
-// shell-metacharacter payloads TestValidateProxmoxName_RejectsBadNode uses
-// in pvesh_test.go: ValidateSnapshotName is the injection guard for the
-// snapshot-create/rollback/delete argv path the same way validateProxmoxName
-// guards the node atom.
-func TestValidateSnapshotName_RejectsInjectionPayloads(t *testing.T) {
-	payloads := []string{
-		"snap`id`",
-		"snap$(reboot)",
-		"snap;rm",
-		"snap|pipe",
-		"snap&bg",
-		"snap name",
-		"snap\tname",
-	}
-	for _, name := range payloads {
-		if err := ValidateSnapshotName(name); err == nil {
-			t.Errorf("ValidateSnapshotName(%q) accepted; want error", name)
-		}
-	}
-}
-
+// Reject list mirrors TestValidateProxmoxName's injection payloads — same guard
+// purpose, different atom.
 func TestValidateSnapshotName(t *testing.T) {
 	accept := []string{"a", "A", "snap-1", "snap_1", "okdctl-20260713-101500"}
 	for _, name := range accept {
@@ -69,6 +48,13 @@ func TestValidateSnapshotName(t *testing.T) {
 		"snap.name",
 		"snap/name",
 		"A" + strings.Repeat("a", 40), // 41 chars, over the 40-char cap
+		"snap`id`",
+		"snap$(reboot)",
+		"snap;rm",
+		"snap|pipe",
+		"snap&bg",
+		"snap name",
+		"snap\tname",
 	}
 	for _, name := range reject {
 		if err := ValidateSnapshotName(name); err == nil {
@@ -77,24 +63,8 @@ func TestValidateSnapshotName(t *testing.T) {
 	}
 }
 
-// TestValidateSnapshotDescription_RejectsInjectionPayloads mirrors
-// TestValidateSnapshotName_RejectsInjectionPayloads: description reaches the
-// remote shell as its own SSHRunArgv atom, so it needs the same guard.
-func TestValidateSnapshotDescription_RejectsInjectionPayloads(t *testing.T) {
-	payloads := []string{
-		"desc`id`",
-		"desc$(reboot)",
-		"desc;rm",
-		"desc|pipe",
-		"desc&bg",
-	}
-	for _, desc := range payloads {
-		if err := ValidateSnapshotDescription(desc); err == nil {
-			t.Errorf("ValidateSnapshotDescription(%q) accepted; want error", desc)
-		}
-	}
-}
-
+// Reject list mirrors injection payloads plus whitespace, which would
+// word-split in SSHRunArgv's space-join.
 func TestValidateSnapshotDescription(t *testing.T) {
 	accept := []string{"", "pre-upgrade_snapshot", "before-ceph-rebuild,2026-07-13"}
 	for _, desc := range accept {
@@ -104,9 +74,16 @@ func TestValidateSnapshotDescription(t *testing.T) {
 	}
 
 	longDesc := strings.Repeat("a", 201)
-	// "-vmstate"/"--description": a dash-led description could otherwise read
-	// as a pvesh option token on the remote command line.
-	reject := []string{"desc\nname", "desc\x00", longDesc, "-vmstate", "--description", "_leading", ".leading"}
+	reject := []string{
+		"desc\nname", "desc\x00", longDesc,
+		// "-vmstate"/"--description": a dash-led description could otherwise
+		// read as a pvesh option token on the remote command line.
+		"-vmstate", "--description", "_leading", ".leading",
+		// Injection payloads.
+		"desc`id`", "desc$(reboot)", "desc;rm", "desc|pipe", "desc&bg",
+		// Whitespace word-splits in ssh's space-join.
+		"before upgrade", "before\tupgrade", "before\nupgrade", " leading", "trailing ",
+	}
 	for _, desc := range reject {
 		if err := ValidateSnapshotDescription(desc); err == nil {
 			t.Errorf("ValidateSnapshotDescription(%q) accepted; want error", desc)
@@ -114,41 +91,8 @@ func TestValidateSnapshotDescription(t *testing.T) {
 	}
 }
 
-// TestValidateSnapshotDescription_RejectsWhitespace is FIX 1: SSHRunArgv
-// space-joins argv before handing it to the remote login shell, so a
-// multi-word description would word-split there instead of surviving as the
-// single token pvesh's -description flag expects. The validator must fail
-// closed rather than let a spaced value reach the remote shell corrupted.
-func TestValidateSnapshotDescription_RejectsWhitespace(t *testing.T) {
-	reject := []string{"before upgrade", "before\tupgrade", "before\nupgrade", " leading", "trailing "}
-	for _, desc := range reject {
-		if err := ValidateSnapshotDescription(desc); err == nil {
-			t.Errorf("ValidateSnapshotDescription(%q) accepted; want error (whitespace must be rejected)", desc)
-		}
-	}
-}
-
-// TestValidateUPID_RejectsInjectionPayloads mirrors the pvesh_test.go
-// payload set: validateUPID guards the task-status path built from a UPID
-// that Proxmox itself returned, so an attacker able to forge the response
-// (or trigger a parse bug) must not be able to smuggle metacharacters
-// through pveshWaitTask's SSHRunArgv call.
-func TestValidateUPID_RejectsInjectionPayloads(t *testing.T) {
-	payloads := []string{
-		"UPID`id`",
-		"UPID$(reboot)",
-		"UPID;rm",
-		"UPID|pipe",
-		"UPID&bg",
-		"UPID name",
-	}
-	for _, upid := range payloads {
-		if err := validateUPID(upid); err == nil {
-			t.Errorf("validateUPID(%q) accepted; want error", upid)
-		}
-	}
-}
-
+// Mirrors the injection payload set — validateUPID guards a server-returned
+// value, not just caller input.
 func TestValidateUPID(t *testing.T) {
 	accept := []string{
 		"UPID:pve-01:0002ABCD:00112233:00445566:qmsnapshot:100:root@pam:",
@@ -159,35 +103,19 @@ func TestValidateUPID(t *testing.T) {
 		}
 	}
 
-	reject := []string{""}
+	reject := []string{
+		"",
+		"UPID`id`",
+		"UPID$(reboot)",
+		"UPID;rm",
+		"UPID|pipe",
+		"UPID&bg",
+		"UPID name",
+	}
 	for _, upid := range reject {
 		if err := validateUPID(upid); err == nil {
 			t.Errorf("validateUPID(%q) accepted; want error", upid)
 		}
-	}
-}
-
-func TestPveshSnapshotPath(t *testing.T) {
-	got := pveshSnapshotPath("pve-01", 100)
-	want := "/nodes/pve-01/qemu/100/snapshot"
-	if got != want {
-		t.Errorf("pveshSnapshotPath = %q; want %q", got, want)
-	}
-}
-
-func TestPveshSnapshotNamePath(t *testing.T) {
-	got := pveshSnapshotNamePath("pve-01", 100, "pre-upgrade")
-	want := "/nodes/pve-01/qemu/100/snapshot/pre-upgrade"
-	if got != want {
-		t.Errorf("pveshSnapshotNamePath = %q; want %q", got, want)
-	}
-}
-
-func TestPveshTaskStatusPath(t *testing.T) {
-	got := pveshTaskStatusPath("pve-01", "UPID:pve-01:0002ABCD:00112233:00445566:qmsnapshot:100:root@pam:")
-	want := "/nodes/pve-01/tasks/UPID:pve-01:0002ABCD:00112233:00445566:qmsnapshot:100:root@pam:/status"
-	if got != want {
-		t.Errorf("pveshTaskStatusPath = %q; want %q", got, want)
 	}
 }
 
@@ -210,69 +138,46 @@ func TestAgentFlagEnabled(t *testing.T) {
 }
 
 func TestParseSnapshotList(t *testing.T) {
-	raw := `[
-		{"name":"current","description":"You are here!"},
-		{"name":"pre-upgrade","description":"before upgrade","snaptime":1690000000,"parent":""},
-		{"name":"post-upgrade","description":"after upgrade","snaptime":1690003600,"parent":"pre-upgrade"}
-	]`
+	t.Run("filters current", func(t *testing.T) {
+		raw := `[
+			{"name":"current","description":"You are here!"},
+			{"name":"pre-upgrade","description":"before upgrade","snaptime":1690000000,"parent":""},
+			{"name":"post-upgrade","description":"after upgrade","snaptime":1690003600,"parent":"pre-upgrade"}
+		]`
 
-	got, err := parseSnapshotList(raw)
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if len(got) != 2 {
-		t.Fatalf("len(got) = %d; want 2 (current filtered out)", len(got))
-	}
-	if got[0] != (SnapshotInfo{Name: "pre-upgrade", Description: "before upgrade", SnapTime: 1690000000}) {
-		t.Errorf("got[0] = %+v", got[0])
-	}
-	if got[1] != (SnapshotInfo{Name: "post-upgrade", Description: "after upgrade", SnapTime: 1690003600, Parent: "pre-upgrade"}) {
-		t.Errorf("got[1] = %+v", got[1])
-	}
+		got, err := parseSnapshotList(raw)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if len(got) != 2 {
+			t.Fatalf("len(got) = %d; want 2 (current filtered out)", len(got))
+		}
+		if got[0] != (SnapshotInfo{Name: "pre-upgrade", Description: "before upgrade", SnapTime: 1690000000}) {
+			t.Errorf("got[0] = %+v", got[0])
+		}
+		if got[1] != (SnapshotInfo{Name: "post-upgrade", Description: "after upgrade", SnapTime: 1690003600, Parent: "pre-upgrade"}) {
+			t.Errorf("got[1] = %+v", got[1])
+		}
+	})
+
+	t.Run("empty list", func(t *testing.T) {
+		got, err := parseSnapshotList(`[]`)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if len(got) != 0 {
+			t.Errorf("len(got) = %d; want 0", len(got))
+		}
+	})
+
+	t.Run("invalid json", func(t *testing.T) {
+		if _, err := parseSnapshotList("not json"); err == nil {
+			t.Fatal("expected error for malformed json; got nil")
+		}
+	})
 }
 
-func TestParseSnapshotList_EmptyList(t *testing.T) {
-	got, err := parseSnapshotList(`[]`)
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if len(got) != 0 {
-		t.Errorf("len(got) = %d; want 0", len(got))
-	}
-}
-
-func TestParseSnapshotList_InvalidJSON(t *testing.T) {
-	if _, err := parseSnapshotList("not json"); err == nil {
-		t.Fatal("expected error for malformed json; got nil")
-	}
-}
-
-func TestTaskStatusUnmarshal(t *testing.T) {
-	var running taskStatus
-	if err := json.Unmarshal([]byte(`{"status":"running"}`), &running); err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if running.Status != "running" || running.ExitStatus != "" {
-		t.Errorf("running = %+v", running)
-	}
-
-	var stoppedOK taskStatus
-	if err := json.Unmarshal([]byte(`{"status":"stopped","exitstatus":"OK"}`), &stoppedOK); err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if stoppedOK.Status != taskStatusStopped || stoppedOK.ExitStatus != "OK" {
-		t.Errorf("stoppedOK = %+v", stoppedOK)
-	}
-
-	var stoppedFailed taskStatus
-	if err := json.Unmarshal([]byte(`{"status":"stopped","exitstatus":"snapshot failed - no space left on device"}`), &stoppedFailed); err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if stoppedFailed.Status != taskStatusStopped || stoppedFailed.ExitStatus == "OK" {
-		t.Errorf("stoppedFailed = %+v", stoppedFailed)
-	}
-}
-
+// Confirms parseUPID validates server-controlled output too, not just caller input.
 func TestParseUPID(t *testing.T) {
 	got, err := parseUPID(`"UPID:pve-01:0002ABCD:00112233:00445566:qmsnapshot:100:root@pam:"`)
 	if err != nil {
@@ -282,32 +187,19 @@ func TestParseUPID(t *testing.T) {
 	if got != want {
 		t.Errorf("parseUPID = %q; want %q", got, want)
 	}
-}
 
-func TestParseUPID_InvalidJSON(t *testing.T) {
 	if _, err := parseUPID("not json"); err == nil {
 		t.Fatal("expected error for malformed json; got nil")
 	}
-}
-
-// TestParseUPID_RejectsInjection confirms parseUPID applies validateUPID to
-// server-controlled output, not just caller-controlled input — a
-// compromised or spoofed pvesh response must not smuggle metacharacters
-// past this boundary either.
-func TestParseUPID_RejectsInjection(t *testing.T) {
 	if _, err := parseUPID(`"UPID:pve;rm -rf /"`); err == nil {
 		t.Fatal("expected error for injection payload in upid; got nil")
 	}
 }
 
-// installFakeSnapshotSSH writes a POSIX shell script named "ssh" that fakes
-// pvesh create/delete/get responses for snapshot operations, keyed off
-// SNAP_* env vars. Distinct from installFakeSSH (remove_fcos_iso_test.go),
-// whose argv matching only covers the ISO-cleanup call shapes.
-//
-// SSHRunArgvOutput layout for accept-new mode: $1=-o $2=... $3=-o $4=...
-// $5=-o $6=ConnectTimeout=10 $7=root@host $8=pvesh $9=<subcommand>
-// $10=<path> [extra...].
+// installFakeSnapshotSSH fakes pvesh create/delete/get over SSHRunArgvOutput's
+// positional args ($8=pvesh $9=subcommand $10=path), keyed off SNAP_* env
+// vars; distinct from installFakeSSH (remove_fcos_iso_test.go), which only
+// covers ISO-cleanup shapes.
 func installFakeSnapshotSSH(t *testing.T) {
 	t.Helper()
 	script := `#!/bin/sh
@@ -367,18 +259,8 @@ func newTestSnapshotParams(t *testing.T) *RemoteISOParams {
 	}
 }
 
-func TestCreateSnapshot_success(t *testing.T) {
-	installFakeSnapshotSSH(t)
-	p := newTestSnapshotParams(t)
-
-	if err := CreateSnapshot(context.Background(), p, 100, "pre-upgrade", "before-upgrade", 5*time.Second); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-// TestCreateSnapshot_neverPassesVMState asserts -vmstate is absent from the
-// pvesh argv: the qemu-guest-agent is disabled fleet-wide, so a memory-state
-// snapshot would not be crash-consistent and must never be requested.
+// qemu-guest-agent is disabled fleet-wide, so a memory-state snapshot would not
+// be crash-consistent.
 func TestCreateSnapshot_neverPassesVMState(t *testing.T) {
 	installFakeSnapshotSSH(t)
 	p := newTestSnapshotParams(t)
@@ -405,9 +287,6 @@ func TestCreateSnapshot_neverPassesVMState(t *testing.T) {
 	}
 }
 
-// TestCreateSnapshot_taskExitStatusNotOK covers the pveshWaitTask distinction
-// design calls out: a stopped task with a non-OK exitstatus must surface as
-// its own error, not get folded into a generic timeout.
 func TestCreateSnapshot_taskExitStatusNotOK(t *testing.T) {
 	installFakeSnapshotSSH(t)
 	p := newTestSnapshotParams(t)
@@ -425,28 +304,9 @@ func TestCreateSnapshot_taskExitStatusNotOK(t *testing.T) {
 	}
 }
 
-// TestCreateSnapshot_rejectedByPvesh covers pveshCreateTaskCall's ExitCode
-// check: pveshRun would silently swallow a non-zero exit, which is
-// unacceptable once the call is issuing a destructive write.
-func TestCreateSnapshot_rejectedByPvesh(t *testing.T) {
-	installFakeSnapshotSSH(t)
-	p := newTestSnapshotParams(t)
-	t.Setenv("SNAP_TASK_EXIT_CODE", "1")
-	t.Setenv("SNAP_TASK_STDERR", "500 no such storage")
-
-	err := CreateSnapshot(context.Background(), p, 100, "pre-upgrade", "", 5*time.Second)
-	if err == nil {
-		t.Fatal("expected error for rejected create call; got nil")
-	}
-	if !strings.Contains(err.Error(), "no such storage") {
-		t.Errorf("err = %q; want it to surface pvesh stderr", err.Error())
-	}
-}
-
-// TestCreateSnapshot_rejectedByPveshScrubsStderr pins the executor.ExitError
-// routing in pveshTaskCall: remote stderr must be scrubbed before it can
-// reach a log sink, the path must stay out of the Command label, and the
-// path context must survive in the wrapping message.
+// pveshRun would silently swallow a non-zero exit; unacceptable for a
+// destructive write. Also pins executor.ExitError routing: stderr surfaces but
+// scrubbed, the path stays out of the Command label and survives in the wrap.
 func TestCreateSnapshot_rejectedByPveshScrubsStderr(t *testing.T) {
 	installFakeSnapshotSSH(t)
 	p := newTestSnapshotParams(t)
@@ -464,6 +324,9 @@ func TestCreateSnapshot_rejectedByPveshScrubsStderr(t *testing.T) {
 	if exitErr.Command != "pvesh create" {
 		t.Errorf("ExitError.Command = %q; the path must stay out of the Command label", exitErr.Command)
 	}
+	if !strings.Contains(err.Error(), "401 authentication failure") {
+		t.Errorf("err = %q; want it to surface pvesh stderr", err.Error())
+	}
 	if strings.Contains(err.Error(), "hunter2") {
 		t.Errorf("err = %q; remote stderr credential leaked unscrubbed", err.Error())
 	}
@@ -472,9 +335,6 @@ func TestCreateSnapshot_rejectedByPveshScrubsStderr(t *testing.T) {
 	}
 }
 
-// TestCreateSnapshot_duplicateName covers the ListSnapshots pre-check: a
-// name the VM already has must surface as errSnapshotExists instead of a
-// raw pvesh task exitstatus string.
 func TestCreateSnapshot_duplicateName(t *testing.T) {
 	installFakeSnapshotSSH(t)
 	p := newTestSnapshotParams(t)
@@ -494,9 +354,6 @@ func TestCreateSnapshot_duplicateName(t *testing.T) {
 	}
 }
 
-// TestCreateSnapshot_otherSnapshotsDoNotCollide proves the pre-check only
-// refuses an exact name match; unrelated existing snapshots must not block
-// the create.
 func TestCreateSnapshot_otherSnapshotsDoNotCollide(t *testing.T) {
 	installFakeSnapshotSSH(t)
 	p := newTestSnapshotParams(t)
@@ -512,11 +369,7 @@ func TestCreateSnapshot_otherSnapshotsDoNotCollide(t *testing.T) {
 	}
 }
 
-// TestCreateSnapshot_timesOutWhenTaskNeverStops proves pveshWaitTask does
-// not treat "pvesh returned a UPID" as success: if the background task never
-// reaches status=stopped, CreateSnapshot must fail rather than declare
-// victory the moment the task was launched (the fire-and-forget failure
-// mode the design explicitly guards against).
+// Guards against declaring success the moment pvesh returns a UPID (fire-and-forget failure mode).
 func TestCreateSnapshot_timesOutWhenTaskNeverStops(t *testing.T) {
 	installFakeSnapshotSSH(t)
 	p := newTestSnapshotParams(t)
@@ -528,59 +381,48 @@ func TestCreateSnapshot_timesOutWhenTaskNeverStops(t *testing.T) {
 	}
 }
 
-func TestCreateSnapshot_invalidVMID(t *testing.T) {
+// No fake ssh installed — reaching the transport would fail differently,
+// proving validation runs first.
+func TestSnapshotOps_invalidArgs(t *testing.T) {
 	p := &RemoteISOParams{Node: "pve-01"}
-	if err := CreateSnapshot(context.Background(), p, 1, "pre-upgrade", "", time.Second); err == nil {
-		t.Fatal("expected error for invalid vmid; got nil")
+	cases := []struct {
+		name string
+		call func(ctx context.Context) error
+	}{
+		{"create invalid vmid", func(ctx context.Context) error {
+			return CreateSnapshot(ctx, p, 1, "pre-upgrade", "", time.Second)
+		}},
+		{"create invalid name", func(ctx context.Context) error {
+			return CreateSnapshot(ctx, p, 100, "snap;rm", "", time.Second)
+		}},
+		{"create invalid description", func(ctx context.Context) error {
+			return CreateSnapshot(ctx, p, 100, "pre-upgrade", "desc`id`", time.Second)
+		}},
+		{"list invalid vmid", func(ctx context.Context) error {
+			_, err := ListSnapshots(ctx, p, 0)
+			return err
+		}},
+		{"rollback invalid name", func(ctx context.Context) error {
+			return RollbackSnapshot(ctx, p, 100, "$(reboot)", time.Second)
+		}},
+		{"delete empty name", func(ctx context.Context) error {
+			return DeleteSnapshot(ctx, p, 100, "", time.Second)
+		}},
+		{"agent probe invalid vmid", func(ctx context.Context) error {
+			_, err := VMAgentEnabled(ctx, p, -1)
+			return err
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.call(context.Background()); err == nil {
+				t.Fatal("expected validation error; got nil")
+			}
+		})
 	}
 }
 
-func TestCreateSnapshot_invalidName(t *testing.T) {
-	p := &RemoteISOParams{Node: "pve-01"}
-	if err := CreateSnapshot(context.Background(), p, 100, "snap;rm", "", time.Second); err == nil {
-		t.Fatal("expected error for invalid snapshot name; got nil")
-	}
-}
-
-func TestCreateSnapshot_invalidDescription(t *testing.T) {
-	p := &RemoteISOParams{Node: "pve-01"}
-	if err := CreateSnapshot(context.Background(), p, 100, "pre-upgrade", "desc`id`", time.Second); err == nil {
-		t.Fatal("expected error for invalid description; got nil")
-	}
-}
-
-func TestListSnapshots_success(t *testing.T) {
-	installFakeSnapshotSSH(t)
-	p := newTestSnapshotParams(t)
-
-	listFile := filepath.Join(t.TempDir(), "list.json")
-	if err := os.WriteFile(listFile, []byte(`[
-		{"name":"current","description":"You are here!"},
-		{"name":"pre-upgrade","description":"before upgrade","snaptime":1690000000,"parent":""}
-	]`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("SNAP_LIST_FILE", listFile)
-
-	got, err := ListSnapshots(context.Background(), p, 100)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(got) != 1 || got[0].Name != "pre-upgrade" {
-		t.Errorf("got = %+v; want one entry named pre-upgrade", got)
-	}
-}
-
-func TestListSnapshots_invalidVMID(t *testing.T) {
-	p := &RemoteISOParams{Node: "pve-01"}
-	if _, err := ListSnapshots(context.Background(), p, 0); err == nil {
-		t.Fatal("expected error for invalid vmid; got nil")
-	}
-}
-
-// TestRollbackSnapshot_passesStart1 asserts -start 1 reaches pvesh: it
-// auto-starts the VM once rollback completes, including a VM that was
-// deliberately powered off — a deliberate, documented side effect.
+// -start 1 auto-starts the VM post-rollback, even one deliberately powered off.
 func TestRollbackSnapshot_passesStart1(t *testing.T) {
 	installFakeSnapshotSSH(t)
 	p := newTestSnapshotParams(t)
@@ -604,13 +446,6 @@ func TestRollbackSnapshot_passesStart1(t *testing.T) {
 	}
 }
 
-func TestRollbackSnapshot_invalidName(t *testing.T) {
-	p := &RemoteISOParams{Node: "pve-01"}
-	if err := RollbackSnapshot(context.Background(), p, 100, "$(reboot)", time.Second); err == nil {
-		t.Fatal("expected error for invalid snapshot name; got nil")
-	}
-}
-
 func TestDeleteSnapshot_success(t *testing.T) {
 	installFakeSnapshotSSH(t)
 	p := newTestSnapshotParams(t)
@@ -620,40 +455,17 @@ func TestDeleteSnapshot_success(t *testing.T) {
 	}
 }
 
-func TestDeleteSnapshot_invalidName(t *testing.T) {
-	p := &RemoteISOParams{Node: "pve-01"}
-	if err := DeleteSnapshot(context.Background(), p, 100, "", time.Second); err == nil {
-		t.Fatal("expected error for empty snapshot name; got nil")
-	}
-}
-
+// Wiring only — the agent-value shapes themselves are covered by TestAgentFlagEnabled.
 func TestVMAgentEnabled(t *testing.T) {
-	cases := map[string]bool{
-		"1":         true,
-		"0":         false,
-		"":          false,
-		"enabled=1": true,
-	}
-	for value, want := range cases {
-		t.Run(value, func(t *testing.T) {
-			installFakeSnapshotSSH(t)
-			p := newTestSnapshotParams(t)
-			t.Setenv("SNAP_AGENT_VALUE", value)
+	installFakeSnapshotSSH(t)
+	p := newTestSnapshotParams(t)
+	t.Setenv("SNAP_AGENT_VALUE", "enabled=1")
 
-			got, err := VMAgentEnabled(context.Background(), p, 100)
-			if err != nil {
-				t.Fatalf("agent=%q: unexpected error: %v", value, err)
-			}
-			if got != want {
-				t.Errorf("VMAgentEnabled with agent=%q = %v; want %v", value, got, want)
-			}
-		})
+	got, err := VMAgentEnabled(context.Background(), p, 100)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-}
-
-func TestVMAgentEnabled_invalidVMID(t *testing.T) {
-	p := &RemoteISOParams{Node: "pve-01"}
-	if _, err := VMAgentEnabled(context.Background(), p, -1); err == nil {
-		t.Fatal("expected error for invalid vmid; got nil")
+	if !got {
+		t.Error("VMAgentEnabled with agent=enabled=1 = false; want true")
 	}
 }

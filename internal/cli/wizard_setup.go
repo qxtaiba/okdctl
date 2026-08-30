@@ -9,9 +9,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/steps"
 )
 
-// wizardDemoEnv puts the wizard in recording mode for the README demo:
-// fields start blank (defaults render as placeholders, not values) and
-// deploy skips the sudo re-exec. See scripts/demo/record.sh.
+// wizardDemoEnv enables README-demo recording mode: blank fields, no sudo
+// re-exec (see scripts/demo/record.sh).
 const wizardDemoEnv = "OKDCTL_WIZARD_DEMO"
 
 func runWizardWithMode(ctx context.Context, cfg *config.Config, configExists bool) (wizard.Result, steps.WelcomeMode, error) {
@@ -38,35 +37,19 @@ func runWizardWithMode(ctx context.Context, cfg *config.Config, configExists boo
 	return result, mode, err
 }
 
-type stepRegistration struct {
-	stepType wizard.StepType
-	factory  wizard.StepBuilderFactory
-}
-
-var defaultStepRegistrations = []stepRegistration{
-	{wizard.StepTypeWelcome, func() (wizard.WizardStep, wizard.StepState) { return steps.NewWelcomeStep(), nil }},
-	{wizard.StepTypeDistribution, func() (wizard.WizardStep, wizard.StepState) { return steps.NewDistributionStep(), nil }},
-	{wizard.StepTypeBasics, func() (wizard.WizardStep, wizard.StepState) { return steps.NewBasicsStep(), nil }},
-	{wizard.StepTypeProxmox, func() (wizard.WizardStep, wizard.StepState) { return steps.NewProxmoxStep(), nil }},
-	{wizard.StepTypeNodePlacement, func() (wizard.WizardStep, wizard.StepState) { return steps.NewNodePlacementStep(), nil }},
-	{wizard.StepTypeNetworking, func() (wizard.WizardStep, wizard.StepState) { return steps.NewNetworkingStep(), nil }},
-	{wizard.StepTypeResources, func() (wizard.WizardStep, wizard.StepState) { return steps.NewResourcesStep() }},
-	{wizard.StepTypeAddons, func() (wizard.WizardStep, wizard.StepState) { return steps.NewAddonsStep(), nil }},
-	{wizard.StepTypeFiles, func() (wizard.WizardStep, wizard.StepState) { return steps.NewFilesStep(), nil }},
-	{wizard.StepTypeAdvanced, func() (wizard.WizardStep, wizard.StepState) { return steps.NewAdvancedStep(), nil }},
-	{wizard.StepTypeReview, func() (wizard.WizardStep, wizard.StepState) { return steps.NewReviewStep(), nil }},
-}
-
-func newDefaultStepBuilder() *wizard.StepBuilder {
-	builder := wizard.NewStepBuilder()
-	for _, reg := range defaultStepRegistrations {
-		builder.Register(reg.stepType, reg.factory)
-	}
-	return builder
-}
-
 func buildWizardStepsWithState(wizardCfg wizard.Config) wizard.BuiltSteps {
-	builder := newDefaultStepBuilder()
+	builder := wizard.NewStepBuilder()
+	builder.Register(wizard.StepTypeWelcome, func() (wizard.WizardStep, wizard.StepState) { return steps.NewWelcomeStep(), nil })
+	builder.Register(wizard.StepTypeDistribution, func() (wizard.WizardStep, wizard.StepState) { return steps.NewDistributionStep(), nil })
+	builder.Register(wizard.StepTypeBasics, func() (wizard.WizardStep, wizard.StepState) { return steps.NewBasicsStep(), nil })
+	builder.Register(wizard.StepTypeProxmox, func() (wizard.WizardStep, wizard.StepState) { return steps.NewProxmoxStep(), nil })
+	builder.Register(wizard.StepTypeNodePlacement, func() (wizard.WizardStep, wizard.StepState) { return steps.NewNodePlacementStep(), nil })
+	builder.Register(wizard.StepTypeNetworking, func() (wizard.WizardStep, wizard.StepState) { return steps.NewNetworkingStep(), nil })
+	builder.Register(wizard.StepTypeResources, func() (wizard.WizardStep, wizard.StepState) { return steps.NewResourcesStep() })
+	builder.Register(wizard.StepTypeAddons, func() (wizard.WizardStep, wizard.StepState) { return steps.NewAddonsStep(), nil })
+	builder.Register(wizard.StepTypeFiles, func() (wizard.WizardStep, wizard.StepState) { return steps.NewFilesStep(), nil })
+	builder.Register(wizard.StepTypeAdvanced, func() (wizard.WizardStep, wizard.StepState) { return steps.NewAdvancedStep(), nil })
+	builder.Register(wizard.StepTypeReview, func() (wizard.WizardStep, wizard.StepState) { return steps.NewReviewStep(), nil })
 	built := wizard.BuildSteps(wizardCfg, builder)
 
 	configureWelcomeStep(built, wizardCfg.ConfigExists)

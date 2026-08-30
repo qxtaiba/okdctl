@@ -6,8 +6,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
-// TestLayoutContract pins the literal on-disk paths: renaming any of these
-// orphans existing user workspaces, so a change must be deliberate.
+// TestLayoutContract pins the literal on-disk paths — a rename orphans
+// existing workspaces.
 func TestLayoutContract(t *testing.T) {
 	root := "/proj"
 	if got, want := workspace.WorkDir(root), "/proj/okd-install"; got != want {

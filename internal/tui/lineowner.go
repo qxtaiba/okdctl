@@ -2,19 +2,16 @@ package tui
 
 import "sync"
 
-// lineOwner is a writer that owns the current terminal line — a spinner or,
-// later, a step-checklist renderer. The stderr log handler asks the active
-// owner to erase its painted line before writing a record so log lines start
-// at column 0; the owner repaints on its next tick.
+// lineOwner owns the current terminal line (spinner, step-checklist); the
+// stderr handler clears it before each record so log lines start at column 0.
 type lineOwner interface {
-	// clearLine erases the owner's currently painted line. The caller holds
-	// the line lock, so implementations must not re-acquire it.
+	// clearLine erases the owner's line; the caller holds the line lock, so
+	// implementations must not re-acquire it.
 	clearLine()
 }
 
-// lineReg coordinates the single active line owner with the stderr log
-// handler. Both the owner's repaint and a record write take reg.mu, so a
-// record is never interleaved with a half-painted spinner line.
+// lineReg coordinates the single active line owner with the stderr handler;
+// both take reg.mu so a record never interleaves with a half-painted line.
 var lineReg lineRegistry
 
 type lineRegistry struct {
@@ -22,9 +19,8 @@ type lineRegistry struct {
 	owner lineOwner
 }
 
-// register installs o as the active line owner, clearing the outgoing owner's
-// line first so a takeover by a shorter line leaves no stale tail from the
-// previous owner's longer one.
+// register installs o as owner, clearing the outgoing owner's line first so
+// a shorter takeover leaves no stale tail.
 func (r *lineRegistry) register(o lineOwner) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -34,8 +30,8 @@ func (r *lineRegistry) register(o lineOwner) {
 	r.owner = o
 }
 
-// release clears o's line and removes it as owner. No-op if o is not the
-// current owner (a later owner already replaced it).
+// release clears o's line and removes it as owner; no-op if o is not the
+// current owner.
 func (r *lineRegistry) release(o lineOwner) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -45,10 +41,9 @@ func (r *lineRegistry) release(o lineOwner) {
 	}
 }
 
-// deregister removes o as owner without clearing its line. The checklist uses
-// it after committing a step's final line with a trailing newline: the line is
-// already permanent, so a clearLine here would erase the fresh empty line
-// below it. No-op if o is not the current owner.
+// deregister removes o as owner without clearing its line (a step's final
+// line already ends with a newline, so clearing would erase the line below
+// it); no-op if o isn't owner.
 func (r *lineRegistry) deregister(o lineOwner) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -58,10 +53,8 @@ func (r *lineRegistry) deregister(o lineOwner) {
 }
 
 // paint runs o's repaint under the line lock, but only while o is still the
-// active owner. The guard mirrors release's owner check: with two concurrent
-// owners handing the line back and forth (the step checklist and the
-// spinner/status line it spawns per step), a stale owner whose line was already
-// replaced must not paint over the current owner's line.
+// active owner — a stale owner (replaced mid-handoff between checklist and
+// spinner) must not paint over the current one.
 func (r *lineRegistry) paint(o lineOwner, fn func()) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -71,12 +64,9 @@ func (r *lineRegistry) paint(o lineOwner, fn func()) {
 }
 
 // withLine erases the active owner's line, then runs fn, under the line
-// lock. Always locks, even with no owner: a lock-free fast path here let a
-// Handle() call that sampled "no owner" just before a concurrent register
-// skip the lock while another, already in-flight Handle() call wrote straight
-// through — same io.Writer, racing under two different locks. r.mu is
-// uncontended on the common no-owner path, so the cost is one extra
-// lock/unlock per log record.
+// lock — always locking even with no owner, since a lock-free fast path let
+// a sampled "no owner" race a concurrent register and write through
+// unlocked.
 func (r *lineRegistry) withLine(fn func()) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

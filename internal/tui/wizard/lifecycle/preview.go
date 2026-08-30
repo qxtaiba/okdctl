@@ -290,8 +290,7 @@ func (s *PreviewStep) operationLabel() string {
 	}
 }
 
-// planRole resolves the role driving the gate table: the plan's first node
-// (authoritative), falling back to the scoped role.
+// planRole prefers the plan's first node role (authoritative) over the scoped role.
 func (s *PreviewStep) planRole() nodetypes.NodeRole {
 	if len(s.st.Plan.Nodes) > 0 && s.st.Plan.Nodes[0].Role != "" {
 		return s.st.Plan.Nodes[0].Role

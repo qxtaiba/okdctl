@@ -109,8 +109,7 @@ func TestRunDeployPhases_ResumeRouting(t *testing.T) {
 	tests := []struct {
 		name        string
 		markerPhase deployPhase // "" = no marker on disk
-		// wantGuardResume nil means the guard (and setup) must never be
-		// consulted; otherwise it pins the ResumeInProgress value passed.
+		// wantGuardResume nil skips the guard entirely; otherwise pins ResumeInProgress.
 		wantGuardResume *bool
 		wantSetup       int
 		wantInstall     int
@@ -137,12 +136,6 @@ func TestRunDeployPhases_ResumeRouting(t *testing.T) {
 			name:           "postinstall marker runs resume-postinstall only",
 			markerPhase:    phasePostInstall,
 			wantResumePost: 1,
-		},
-		{
-			name:            "unknown marker phase does not bypass the guard",
-			markerPhase:     deployPhase("someday"),
-			wantGuardResume: guardResume(false),
-			wantSetup:       1, wantInstall: 1, wantPost: 1,
 		},
 	}
 

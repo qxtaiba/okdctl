@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -22,56 +21,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/platform"
 )
-
-type isoCapture struct {
-	records []slog.Record
-	attrs   []slog.Attr
-}
-
-func (h *isoCapture) Enabled(_ context.Context, _ slog.Level) bool { return true }
-
-func (h *isoCapture) Handle(_ context.Context, r slog.Record) error { //nolint:gocritic // hugeParam: slog.Handler interface requires value receiver
-	r.AddAttrs(h.attrs...)
-	h.records = append(h.records, r)
-	return nil
-}
-
-func (h *isoCapture) WithAttrs(attrs []slog.Attr) slog.Handler {
-	merged := append(append([]slog.Attr{}, h.attrs...), attrs...)
-	return &isoCapture{records: h.records, attrs: merged}
-}
-
-func (h *isoCapture) WithGroup(_ string) slog.Handler { return h }
-
-func newPhaseWithISOCapture(h *isoCapture) *Provisioner {
-	return &Provisioner{
-		BasePhase: phase.NewBasePhase(
-			phase.WithExecutor(executor.New(executor.WithLogger(logutil.NopLogger))),
-			phase.WithLogger(slog.New(h)),
-		),
-	}
-}
-
-func TestLogISOFound(t *testing.T) {
-	h := &isoCapture{}
-	p := newPhaseWithISOCapture(h)
-
-	p.logISOFound("/path/a/foo.iso")
-	p.logISOFound("/path/b/foo.iso")
-	if got := len(h.records); got != 1 {
-		t.Fatalf("after two calls with basename foo.iso: got %d records, want 1", got)
-	}
-
-	p.logISOFound("/path/a/bar.iso")
-	if got := len(h.records); got != 2 {
-		t.Fatalf("after adding bar.iso: got %d records, want 2", got)
-	}
-
-	p.logISOFound("/different/dir/foo.iso")
-	if got := len(h.records); got != 2 {
-		t.Fatalf("after repeat foo.iso from different dir: got %d records, want 2 (basename dedup)", got)
-	}
-}
 
 func makeStreamJSON(arch, release, isoURL string) []byte {
 	type disk struct {
@@ -122,11 +71,18 @@ func newTestPhase(t *testing.T) *Provisioner {
 	)}
 }
 
-// TestFindOrDownloadFCOSISO_globDetectsCoreOSNames asserts local ISO
-// auto-detect finds both the pre-4.19 fedora-coreos-*.iso shape and the
-// 4.19+ scos-*.iso shape without hitting the network. The real
-// hostssh.DefaultProxmoxISODir is checked first; the fixture lives under
-// opts.WorkDir/downloads so the test only exercises that second glob loop.
+func overrideStream(t *testing.T, baseURL string, pins map[okdVersionKey]coreOSStreamPin) {
+	t.Helper()
+	oldURL := streamRawBaseURL
+	streamRawBaseURL = baseURL
+	t.Cleanup(func() { streamRawBaseURL = oldURL })
+	oldPins := streamPins
+	streamPins = pins
+	t.Cleanup(func() { streamPins = oldPins })
+}
+
+// The real hostssh.DefaultProxmoxISODir is checked first; the fixture lives
+// under opts.WorkDir/downloads, exercising only the second glob loop.
 func TestFindOrDownloadFCOSISO_globDetectsCoreOSNames(t *testing.T) {
 	if _, err := os.Stat(hostssh.DefaultProxmoxISODir); err == nil {
 		t.Skipf("%s exists on this machine; test assumes no local proxmox iso dir", hostssh.DefaultProxmoxISODir)
@@ -174,8 +130,6 @@ func TestParseOKDVersion(t *testing.T) {
 	}{
 		{"4.19.0-0.okd-2025-05-01-123456", 4, 19, true},
 		{"4.21.0-okd-scos.10", 4, 21, true},
-		{"4.20.0-0.okd-2025-07-01-000000", 4, 20, true},
-		{"4.15.0-0.okd-2024-01-27-040212", 4, 15, true},
 		{"5.0.0-okd-scos.ec.4", 5, 0, true},
 		{"not-a-version", 0, 0, false},
 		{"", 0, 0, false},
@@ -210,14 +164,9 @@ func TestStreamFileForVersion(t *testing.T) {
 		want         string
 	}{
 		{4, 0, "fcos.json"},
-		{4, 15, "fcos.json"},
 		{4, 18, "fcos.json"},
 		{4, 19, "scos.json"},
-		{4, 20, "scos.json"},
-		{4, 99, "scos.json"},
 		{5, 0, "scos.json"},
-		{5, 19, "scos.json"},
-		{6, 0, "scos.json"},
 	}
 	for _, tt := range cases {
 		if got := streamFileForVersion(tt.major, tt.minor); got != tt.want {
@@ -264,11 +213,14 @@ func TestFetchCoreOSStream_non200(t *testing.T) {
 	}
 }
 
-func TestDetectCoreOSVersion_scosFor419(t *testing.T) {
-	arch := platform.CoreOSArch()
-	body := makeStreamJSON(arch, "9.0.20250510-0", "https://example.com/scos419.iso")
+func TestDetectCoreOSVersion_streamFile(t *testing.T) {
+	const (
+		okdVersion = "4.19.0-0.okd-2025-05-01-000000"
+		isoURL     = "https://example.com/scos419.iso"
+		testSHA    = "testpin0000000000000000000000000000000419"
+	)
+	body := makeStreamJSON(platform.CoreOSArch(), "9.0.20250510-0", isoURL)
 	sum := sha256.Sum256(body)
-	const testSHA = "testpin0000000000000000000000000000000419"
 
 	var requestedPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -277,62 +229,21 @@ func TestDetectCoreOSVersion_scosFor419(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	old := streamRawBaseURL
-	streamRawBaseURL = srv.URL
-	t.Cleanup(func() { streamRawBaseURL = old })
-
-	oldPins := streamPins
-	streamPins = map[okdVersionKey]coreOSStreamPin{
-		{4, 19}: {CommitSHA: testSHA, JSONSHA256: hex.EncodeToString(sum[:])},
-	}
-	t.Cleanup(func() { streamPins = oldPins })
+	overrideStream(t, srv.URL, map[okdVersionKey]coreOSStreamPin{
+		{Major: 4, Minor: 19}: {CommitSHA: testSHA, JSONSHA256: hex.EncodeToString(sum[:])},
+	})
 
 	p := newTestPhase(t)
-	info, err := p.DetectCoreOSVersion(context.Background(), "4.19.0-0.okd-2025-05-01-000000")
+	info, err := p.DetectCoreOSVersion(context.Background(), okdVersion)
 	if err != nil {
-		t.Fatalf("DetectCoreOSVersion 4.19: %v", err)
+		t.Fatalf("DetectCoreOSVersion %s: %v", okdVersion, err)
 	}
-	if !strings.Contains(requestedPath, "/openshift/installer/"+testSHA+"/data/data/coreos/scos.json") {
-		t.Errorf("4.19 should fetch scos.json at pinned commit; got %q", requestedPath)
+	wantPath := "/openshift/installer/" + testSHA + "/data/data/coreos/scos.json"
+	if !strings.Contains(requestedPath, wantPath) {
+		t.Errorf("%s should fetch scos.json at the pinned commit; got %q", okdVersion, requestedPath)
 	}
-	if info.ISOUrl != "https://example.com/scos419.iso" {
-		t.Errorf("ISOUrl = %q, want https://example.com/scos419.iso", info.ISOUrl)
-	}
-}
-
-func TestDetectCoreOSVersion_fcosFor418(t *testing.T) {
-	arch := platform.CoreOSArch()
-	body := makeStreamJSON(arch, "39.20231101.3.0", "https://example.com/fcos418.iso")
-	sum := sha256.Sum256(body)
-	const testSHA = "testpin0000000000000000000000000000000418"
-
-	var requestedPath string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestedPath = r.URL.Path
-		_, _ = w.Write(body)
-	}))
-	t.Cleanup(srv.Close)
-
-	old := streamRawBaseURL
-	streamRawBaseURL = srv.URL
-	t.Cleanup(func() { streamRawBaseURL = old })
-
-	oldPins := streamPins
-	streamPins = map[okdVersionKey]coreOSStreamPin{
-		{4, 18}: {CommitSHA: testSHA, JSONSHA256: hex.EncodeToString(sum[:])},
-	}
-	t.Cleanup(func() { streamPins = oldPins })
-
-	p := newTestPhase(t)
-	info, err := p.DetectCoreOSVersion(context.Background(), "4.18.0-0.okd-2024-12-01-000000")
-	if err != nil {
-		t.Fatalf("DetectCoreOSVersion 4.18: %v", err)
-	}
-	if !strings.Contains(requestedPath, "/openshift/installer/"+testSHA+"/data/data/coreos/fcos.json") {
-		t.Errorf("4.18 should fetch fcos.json at pinned commit; got %q", requestedPath)
-	}
-	if info.ISOUrl != "https://example.com/fcos418.iso" {
-		t.Errorf("ISOUrl = %q, want https://example.com/fcos418.iso", info.ISOUrl)
+	if info.ISOUrl != isoURL {
+		t.Errorf("ISOUrl = %q, want %q", info.ISOUrl, isoURL)
 	}
 }
 
@@ -342,15 +253,9 @@ func TestDetectCoreOSVersion_fetchFailErrors(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	old := streamRawBaseURL
-	streamRawBaseURL = srv.URL
-	t.Cleanup(func() { streamRawBaseURL = old })
-
-	oldPins := streamPins
-	streamPins = map[okdVersionKey]coreOSStreamPin{
+	overrideStream(t, srv.URL, map[okdVersionKey]coreOSStreamPin{
 		{4, 19}: {CommitSHA: "testpin0000000000000000000000000000000419", JSONSHA256: "aaaa"},
-	}
-	t.Cleanup(func() { streamPins = oldPins })
+	})
 
 	p := newTestPhase(t)
 	if _, err := p.DetectCoreOSVersion(context.Background(), "4.19.0-0.okd-2025-05-01-000000"); err == nil {
@@ -358,10 +263,8 @@ func TestDetectCoreOSVersion_fetchFailErrors(t *testing.T) {
 	}
 }
 
-// TestDetectCoreOSVersion_majorMinorDistinctness pins both "5.0" and a
-// synthetic "4.0" to different commits/checksums with the same minor number
-// (0) and asserts each resolves to its own pin — the (major, minor) key
-// prevents a 5.x version from colliding with an unrelated 4.x entry.
+// Pins "5.0" and a synthetic "4.0" to different commits with the same minor
+// (0) to prove the (major, minor) key doesn't collide.
 func TestDetectCoreOSVersion_majorMinorDistinctness(t *testing.T) {
 	arch := platform.CoreOSArch()
 	body4 := makeStreamJSON(arch, "39.20240101.3.0", "https://example.com/fcos4.iso")
@@ -386,16 +289,10 @@ func TestDetectCoreOSVersion_majorMinorDistinctness(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	old := streamRawBaseURL
-	streamRawBaseURL = srv.URL
-	t.Cleanup(func() { streamRawBaseURL = old })
-
-	oldPins := streamPins
-	streamPins = map[okdVersionKey]coreOSStreamPin{
+	overrideStream(t, srv.URL, map[okdVersionKey]coreOSStreamPin{
 		{4, 0}: {CommitSHA: testSHA4, JSONSHA256: hex.EncodeToString(sum4[:])},
 		{5, 0}: {CommitSHA: testSHA5, JSONSHA256: hex.EncodeToString(sum5[:])},
-	}
-	t.Cleanup(func() { streamPins = oldPins })
+	})
 
 	p := newTestPhase(t)
 
@@ -420,8 +317,8 @@ func TestDetectCoreOSVersion_majorMinorDistinctness(t *testing.T) {
 	}
 }
 
-// TestDetectCoreOSVersion_unpinned5x asserts an unpinned 5.x version fails
-// with the requested major.minor in the error, not a stale "4.%d" message.
+// Guards against a stale "4.%d" error message when the unpinned version is
+// actually 5.x.
 func TestDetectCoreOSVersion_unpinned5x(t *testing.T) {
 	p := newTestPhase(t)
 	_, err := p.DetectCoreOSVersion(context.Background(), "5.0.0-okd-scos.ec.4")

@@ -3,10 +3,9 @@ package nodetypes
 import "github.com/qxtaiba/okdctl/internal/config"
 
 // VMID resolves the QEMU vmid for a role/index pair under cfg's vmid base,
-// mirroring the terraform module's numbering (bootstrap=base,
-// masters=base+10+n, workers=base+100+n). Single owner of this arithmetic:
-// power operations and status probes must agree with the module or they
-// address the wrong VM.
+// mirroring the terraform module's numbering (bootstrap=base, master=base+10+n,
+// worker=base+100+n). It is the single source of this arithmetic; callers must
+// stay in sync with the module or address the wrong VM.
 func VMID(cfg *config.Config, role NodeRole, index int) int {
 	base := cfg.Topology.VMIDBase
 	if base == 0 {

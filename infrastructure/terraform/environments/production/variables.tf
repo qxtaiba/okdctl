@@ -1,18 +1,11 @@
-# proxmox connection (set via environment variables)
-# - PROXMOX_VE_ENDPOINT    (api url, e.g., https://pve.example.com:8006/)
-# - PROXMOX_VE_USERNAME    (username, e.g., root@pam)
-# - PROXMOX_VE_PASSWORD    (password)
-# - PROXMOX_VE_INSECURE  (DEV ONLY: disables TLS verification — never set in prod; use a CA-signed cert or add the proxmox CA to your trust store)
+# proxmox connection (env vars): PROXMOX_VE_ENDPOINT, PROXMOX_VE_USERNAME, PROXMOX_VE_PASSWORD.
+# PROXMOX_VE_INSECURE disables TLS verification — dev only, never set in production.
 
-# Every variable okdctl's terraform.tfvars template renders must be declared
-# here and passed to the module in main.tf — terraform silently ignores tfvars
-# values for undeclared variables, so a missing declaration means the module
-# default wins over user config (TestTfvarsTemplateVarsWired pins this).
-# Defaults mirror the module's; validation blocks stay module-only so the
-# module remains the single source of truth for constraints.
+# Every var the tfvars template renders must be declared + wired in main.tf,
+# else terraform silently uses the module default (TestTfvarsTemplateVarsWired).
+# Defaults mirror the module; validation stays module-only.
 
 
-# proxmox infrastructure variables
 variable "target_node" {
   description = "proxmox node name where vms will be created"
   type        = string
@@ -63,7 +56,6 @@ variable "worker_isos" {
 }
 
 
-# cluster configuration variables
 variable "cluster_name" {
   description = "name of the okd cluster"
   type        = string
@@ -74,18 +66,15 @@ variable "vmid_base" {
   type        = number
 }
 
-# master_count only passes the rendered tfvars value through (compact
-# single-master clusters); node ops never override it via -var — master
-# add/remove stays unsupported, guarded by prevent_destroy + the module's
-# odd-quorum validator.
+# Passthrough only — node ops never override master_count; add/remove is
+# unsupported (guarded by prevent_destroy + the module's odd-quorum validator).
 variable "master_count" {
   description = "number of master nodes to create"
   type        = number
   default     = 3
 }
 
-# worker_count is exposed at the root so `okdctl node remove` / `add` can
-# drive the worker VM set by count.
+# Exposed at the root so `okdctl node remove`/`add` can drive the worker VM set by count.
 variable "worker_count" {
   description = "number of worker nodes to create"
   type        = number
@@ -93,7 +82,6 @@ variable "worker_count" {
 }
 
 
-# vm resource configuration
 variable "cpu_cores" {
   description = "number of cpu cores per vm"
   type        = number
@@ -124,9 +112,8 @@ variable "worker_cpu_cores" {
   default     = null
 }
 
-# master_memory_mb / master_cpu_cores give `okdctl node resize masters` a clean
-# per-role knob. Null falls back to memory_mb / cpu_cores in the module's
-# coalesce, so a root that never sets them keeps the pre-widening behavior.
+# Gives `okdctl node resize masters` a per-role knob; null falls back to
+# memory_mb/cpu_cores in the module's coalesce, preserving pre-widening behavior.
 variable "master_memory_mb" {
   description = "memory for master nodes (defaults to memory_mb if not set)"
   type        = number
@@ -169,29 +156,25 @@ variable "worker_data_disk_size_gb" {
   default     = 500
 }
 
-# master_data_disk_size_gb is exposed so the compaction runbook can give the
-# masters Ceph OSD disks. Default 0 keeps masters diskless (matching how okdctl
-# deploys today); the module omits the data disk entirely when this is 0.
+# Exposed for the compaction runbook to give masters Ceph OSD disks; default 0
+# keeps masters diskless — the module omits the data disk entirely when 0.
 variable "master_data_disk_size_gb" {
   description = "size of data disk for master nodes in gb (0 = no data disk)"
   type        = number
   default     = 0
 }
 
-# master_mon_disk_size_gb is exposed so the mon-disk runbook can give the
-# masters a dedicated /var/lib/rook disk (scsi2). Default 0 keeps the disk
-# absent; the module omits it entirely when this is 0.
+# Exposed for the mon-disk runbook to give masters a dedicated /var/lib/rook
+# disk (scsi2); default 0 omits the disk entirely.
 variable "master_mon_disk_size_gb" {
   description = "size of dedicated mon-store disk for master nodes in gb (0 = no mon disk)"
   type        = number
   default     = 0
 }
 
-# Set this to the smallest data-disk size in use (e.g. 500) after initial
-# apply so a regenerated tfvars or a typo cannot shrink a ceph disk: the
-# module fails the plan when a nonzero size drops below this floor. Zeroing
-# a size still removes the disk — terraform cannot tell "never had a disk"
-# from "disk being deleted".
+# Set to the smallest data-disk size in use (e.g. 500) after initial apply —
+# plan fails if a regenerated tfvars/typo drops a nonzero size below this floor.
+# Zeroing still removes the disk: terraform can't tell "never had one" from "being deleted".
 variable "minimum_data_disk_size_gb" {
   description = "plan-time floor for nonzero data-disk sizes (0 disables the guard)"
   type        = number
@@ -199,13 +182,8 @@ variable "minimum_data_disk_size_gb" {
 }
 
 
-# node names
-# Exposed at the root so the rendered tfvars' cluster-prefixed names
-# (${cluster}-masterN / ${cluster}-workerN) take effect instead of the module's
-# bare masterN/workerN defaults. Without this, adopting the slim root would
-# rename every existing VM in place. Root defaults mirror the module's so a
-# standalone plan still validates; real deployments always supply names via
-# tfvars.
+# Exposed at the root so tfvars' cluster-prefixed names take effect instead of
+# the module's bare defaults — needed so adopting the slim root doesn't rename existing VMs.
 variable "master_names" {
   description = "list of master node names"
   type        = list(string)
@@ -225,13 +203,8 @@ variable "vm_tags" {
 }
 
 
-# deploy lifecycle
-# bootstrap_enabled and start_workers_immediately are the deploy-lifecycle knobs
-# that node ops assert as post-deploy invariants: a running cluster has no
-# bootstrap VM and its workers are started. Exposed at the root so `okdctl node`
-# ops can pass them as -var overrides (defeating any stale terraform.tfvars
-# value); defaults mirror the module, which the deploy flow flips via -var
-# during install and cleanup.
+# Deploy-lifecycle knobs node ops assert as post-deploy invariants (no bootstrap
+# VM, workers started); exposed at the root so `okdctl node` can -var override them.
 variable "bootstrap_enabled" {
   description = "whether to create the bootstrap node"
   type        = bool
@@ -245,7 +218,6 @@ variable "start_workers_immediately" {
 }
 
 
-# high availability
 variable "ha_enabled" {
   description = "enable proxmox ha anti-affinity for master vms (pve9+)"
   type        = bool
@@ -253,7 +225,6 @@ variable "ha_enabled" {
 }
 
 
-# hardware and placement
 variable "cpu_type" {
   description = "qemu cpu model for vms (commonly host, x86-64-v2, x86-64-v3, or kvm64; any model plus flags accepted)"
   type        = string

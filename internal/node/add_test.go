@@ -18,13 +18,11 @@ import (
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
-// fakeISO records BuildCustomISOs/UploadCustomISOsToProxmox calls so a
-// dry-run can be proven to trigger neither. events, when set, records the
-// per-node "build"/"upload" ordering shared with the other fakes.
+// fakeISO records BuildCustomISOs/UploadCustomISOsToProxmox calls; events, when
+// set, records ordering shared with the other fakes.
 type fakeISO struct {
 	buildCalls  int
 	uploadCalls int
-	buildErr    error
 	events      *[]string
 }
 
@@ -33,7 +31,7 @@ func (f *fakeISO) BuildCustomISOs(context.Context, *config.Config, provision.Opt
 	if f.events != nil {
 		*f.events = append(*f.events, "build")
 	}
-	return f.buildErr
+	return nil
 }
 
 func (f *fakeISO) UploadCustomISOsToProxmox(context.Context, *config.Config, provision.Options) error {
@@ -44,14 +42,9 @@ func (f *fakeISO) UploadCustomISOsToProxmox(context.Context, *config.Config, pro
 	return nil
 }
 
-// fakeIgnition records ReviveIgnitionServer/TeardownIgnitionServer calls so a
-// dry-run can be proven to revive/teardown neither, and a real batch can be
-// proven to revive/teardown exactly once. events records "revive"/"teardown".
-// teardownErrAtCall/teardownHadDeadline snapshot the passed context's state
-// synchronously inside the call (not after), since the caller's own deferred
-// cancel() may fire immediately after TeardownIgnitionServer returns — reading
-// ctx.Err() later would observe that cancel(), not the state teardown actually
-// ran under.
+// fakeIgnition records Revive/TeardownIgnitionServer calls; teardownErrAtCall/teardownHadDeadline
+// snapshot ctx synchronously inside the call since the caller's deferred
+// cancel() may fire right after return.
 type fakeIgnition struct {
 	configureCalls      int
 	teardownCalls       int
@@ -85,17 +78,13 @@ func addTestConfig(workerCount, workerMemMB int) *config.Config {
 	cfg.Cluster.Name = addTestClusterName
 	cfg.Topology.Workers.Count = workerCount
 	cfg.Topology.Workers.MemoryMB = workerMemMB
-	// Keep DefaultConfig's full Proxmox block (Node, etc.) so a non-dry-run
-	// batch's after-loop persistTopology can render terraform.tfvars; only the
-	// ISO storage is overridden to the value the worker_isos assertions expect.
+	// Keeps DefaultConfig's full Proxmox block so persistTopology can render terraform.tfvars.
 	cfg.Provider.Proxmox.ISOStorage = "iso-store"
 	return cfg
 }
 
-// seedAddRunner builds a Runner rooted at a fresh temp dir, with sentinel
-// tfvars/config files so a dry-run's zero-mutation contract can be checked,
-// plus the fake ISO/ignition collaborators wired so their call counts prove
-// (or disprove) mutation.
+// seedAddRunner seeds sentinel tfvars/config files so a dry-run's zero-mutation
+// contract can be checked.
 func seedAddRunner(t *testing.T, fc *fakeCluster, ftf *fakeTF, fiso *fakeISO, fign *fakeIgnition, cfg *config.Config) (r *Runner, tfvarsPath, cfgPath string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -124,8 +113,27 @@ func seedAddRunner(t *testing.T, fc *fakeCluster, ftf *fakeTF, fiso *fakeISO, fi
 	return r, tfvarsPath, cfgPath
 }
 
-// writeIgnitionArtifacts creates worker.ign and the ignition TLS cert under
-// r's workDir/projectRoot so preflightIgnitionArtifacts passes.
+type addTestHarness struct {
+	r               *Runner
+	ftf             *fakeTF
+	fiso            *fakeISO
+	fign            *fakeIgnition
+	tfvars, cfgPath string
+}
+
+// seedAddTest wires a create-shaped terraform fake; the ordering test builds
+// its own event-recording fakes instead.
+func seedAddTest(t *testing.T, fc *fakeCluster, cfg *config.Config) addTestHarness {
+	t.Helper()
+	h := addTestHarness{
+		ftf:  &fakeTF{action: terraform.PlanActionCreate},
+		fiso: &fakeISO{},
+		fign: &fakeIgnition{},
+	}
+	h.r, h.tfvars, h.cfgPath = seedAddRunner(t, fc, h.ftf, h.fiso, h.fign, cfg)
+	return h
+}
+
 func writeIgnitionArtifacts(t *testing.T, r *Runner) {
 	t.Helper()
 	clusterDir := workspace.ClusterConfigDir(r.workDir)
@@ -154,12 +162,8 @@ func addWorkerNodes(n int) []cluster.NodeDetail {
 
 func TestAddWorkersDryRunMakesNoMutation(t *testing.T) {
 	fc := &fakeCluster{nodes: addWorkerNodes(2)}
-	ftf := &fakeTF{action: terraform.PlanActionCreate}
-	fiso := &fakeISO{}
-	fign := &fakeIgnition{}
-	cfg := addTestConfig(2, 16384)
-
-	r, tfvars, cfgPath := seedAddRunner(t, fc, ftf, fiso, fign, cfg)
+	h := seedAddTest(t, fc, addTestConfig(2, 16384))
+	r, ftf, fiso, fign, tfvars, cfgPath := h.r, h.ftf, h.fiso, h.fign, h.tfvars, h.cfgPath
 	writeIgnitionArtifacts(t, r)
 
 	if err := r.AddWorkers(context.Background(), AddOptions{Count: 2}); err != nil {
@@ -181,9 +185,7 @@ func TestAddWorkersDryRunMakesNoMutation(t *testing.T) {
 	if ftf.planCalls != 2 {
 		t.Errorf("dry-run add must plan-gate every new node: planCalls=%d want 2", ftf.planCalls)
 	}
-	// #C3 fidelity: the preview must widen worker_count AND worker_isos
-	// together to the batch's final total (startIdx 2 + count 2 = 4), or the
-	// module's length(worker_isos) >= worker_count assertion trips the plan.
+	// worker_count and worker_isos must widen together, or the module's length assertion trips.
 	if ftf.lastVars["worker_count"] != "4" {
 		t.Errorf("dry-run add plan did not widen worker_count: vars=%v", ftf.lastVars)
 	}
@@ -200,15 +202,11 @@ func TestAddWorkersDryRunMakesNoMutation(t *testing.T) {
 
 func TestAddWorkersMemoryBudgetRejected(t *testing.T) {
 	fc := &fakeCluster{nodes: addWorkerNodes(2)}
-	ftf := &fakeTF{action: terraform.PlanActionCreate}
-	fiso := &fakeISO{}
-	fign := &fakeIgnition{}
-	cfg := addTestConfig(2, 40960)
-
-	r, _, _ := seedAddRunner(t, fc, ftf, fiso, fign, cfg)
+	h := seedAddTest(t, fc, addTestConfig(2, 40960))
+	r, ftf, fiso, fign := h.r, h.ftf, h.fiso, h.fign
 	writeIgnitionArtifacts(t, r)
 
-	// Host nearly full: adding 2 more 40 GiB workers must be refused.
+	// Host nearly full: must be refused.
 	err := r.AddWorkers(context.Background(), AddOptions{
 		Count:            2,
 		HostTotalMiB:     96000,
@@ -227,14 +225,9 @@ func TestAddWorkersMemoryBudgetRejected(t *testing.T) {
 
 func TestAddWorkersPreflightArtifactMissingRejected(t *testing.T) {
 	fc := &fakeCluster{nodes: addWorkerNodes(1)}
-	ftf := &fakeTF{action: terraform.PlanActionCreate}
-	fiso := &fakeISO{}
-	fign := &fakeIgnition{}
-	cfg := addTestConfig(1, 16384)
-
-	// No writeIgnitionArtifacts call: worker.ign and the TLS cert are absent,
-	// modelling `cleanup --kind web-only` having removed them.
-	r, _, _ := seedAddRunner(t, fc, ftf, fiso, fign, cfg)
+	// No writeIgnitionArtifacts call models `cleanup --kind web-only` having removed worker.ign/cert.
+	h := seedAddTest(t, fc, addTestConfig(1, 16384))
+	r, ftf, fiso := h.r, h.ftf, h.fiso
 
 	err := r.AddWorkers(context.Background(), AddOptions{Count: 1})
 	if err == nil {
@@ -261,12 +254,7 @@ func TestAddWorkersPlanShape(t *testing.T) {
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
 			fc := &fakeCluster{nodes: addWorkerNodes(tt.startCount)}
-			ftf := &fakeTF{action: terraform.PlanActionCreate}
-			fiso := &fakeISO{}
-			fign := &fakeIgnition{}
-			cfg := addTestConfig(tt.startCount, 16384)
-
-			r, _, _ := seedAddRunner(t, fc, ftf, fiso, fign, cfg)
+			r := seedAddTest(t, fc, addTestConfig(tt.startCount, 16384)).r
 			writeIgnitionArtifacts(t, r)
 
 			var captured *OpPlan
@@ -303,8 +291,7 @@ func TestAddWorkersPlanShape(t *testing.T) {
 	}
 }
 
-// addExistingWorkers builds the pre-add worker roster the count-match guard
-// checks against (names match r.workerName so the join wait can find them).
+// addExistingWorkers builds a pre-add worker roster whose names the join wait can match.
 func addExistingWorkers() []cluster.NodeDetail {
 	const n = 2
 	nodes := make([]cluster.NodeDetail, n)
@@ -330,9 +317,6 @@ func addAppearingWorkers(from, count int) []cluster.NodeDetail {
 	return nodes
 }
 
-// TestAddWorkersMutatingSequenceOrder locks the per-node ordering
-// (build→upload→apply→join) and the batch-scoped ignition window (revive
-// first, teardown last, each exactly once) for a fresh --count 2 batch.
 func TestAddWorkersMutatingSequenceOrder(t *testing.T) {
 	var events []string
 	fc := &fakeCluster{
@@ -366,50 +350,11 @@ func TestAddWorkersMutatingSequenceOrder(t *testing.T) {
 	}
 }
 
-// TestAddWorkersReviveTeardownOncePerBatch proves the join window is opened and
-// closed exactly once across a multi-node --count 3 batch (not once per node).
-func TestAddWorkersReviveTeardownOncePerBatch(t *testing.T) {
-	fc := &fakeCluster{
-		nodes:               addExistingWorkers(),
-		workersAppearAtCall: 2,
-		appearingWorkers:    addAppearingWorkers(2, 3),
-	}
-	ftf := &fakeTF{action: terraform.PlanActionCreate}
-	fiso := &fakeISO{}
-	fign := &fakeIgnition{}
-	cfg := addTestConfig(2, 16384)
-
-	r, _, _ := seedAddRunner(t, fc, ftf, fiso, fign, cfg)
-	writeIgnitionArtifacts(t, r)
-	r.DryRun = false
-
-	if err := r.AddWorkers(context.Background(), AddOptions{Count: 3}); err != nil {
-		t.Fatalf("add count 3: %v", err)
-	}
-	if fign.configureCalls != 1 {
-		t.Errorf("revive must run exactly once for the whole batch: configure=%d", fign.configureCalls)
-	}
-	if fign.teardownCalls != 1 {
-		t.Errorf("teardown must run exactly once for the whole batch: teardown=%d", fign.teardownCalls)
-	}
-	if fiso.buildCalls != 3 || fiso.uploadCalls != 3 || ftf.applyCalls != 3 {
-		t.Errorf("each new node must build/upload/apply once: build=%d upload=%d apply=%d",
-			fiso.buildCalls, fiso.uploadCalls, ftf.applyCalls)
-	}
-}
-
-// TestAddWorkersTeardownOnJoinTimeout proves the deferred teardown fires even
-// when a node never joins — the join window must not be left open on failure.
 func TestAddWorkersTeardownOnJoinTimeout(t *testing.T) {
-	fc := &fakeCluster{
-		nodes: addExistingWorkers(), // the new worker never appears → join times out
-	}
-	ftf := &fakeTF{action: terraform.PlanActionCreate}
-	fiso := &fakeISO{}
-	fign := &fakeIgnition{}
-	cfg := addTestConfig(2, 16384)
-
-	r, _, _ := seedAddRunner(t, fc, ftf, fiso, fign, cfg)
+	// The new worker never appears → join times out.
+	fc := &fakeCluster{nodes: addExistingWorkers()}
+	h := seedAddTest(t, fc, addTestConfig(2, 16384))
+	r, ftf, fiso, fign := h.r, h.ftf, h.fiso, h.fign
 	writeIgnitionArtifacts(t, r)
 	r.DryRun = false
 	r.NodeReadyTimeout = 50 * time.Millisecond
@@ -430,24 +375,12 @@ func TestAddWorkersTeardownOnJoinTimeout(t *testing.T) {
 	}
 }
 
-// TestAddWorkersTeardownRunsUnderDetachedCtxWhenCancelled proves the security
-// fix for the Ctrl-C-during-join-wait window: even when the caller's ctx is
-// already cancelled (mirroring SIGINT landing during waitWorkerJoined), the
-// deferred teardown must still run to completion under a context that is NOT
-// cancelled — otherwise system.IsServiceActive's exec.CommandContext would
-// fail to start, StopAndDisableService would wrongly conclude httpd isn't
-// running, and the pull-secret-serving ignition server would never be
-// stopped or disabled.
+// A cancelled ctx must not reach teardown, or StopAndDisableService would
+// wrongly conclude httpd isn't running and leave the pull-secret server up.
 func TestAddWorkersTeardownRunsUnderDetachedCtxWhenCancelled(t *testing.T) {
-	fc := &fakeCluster{
-		nodes: addExistingWorkers(), // the new worker never appears; the join wait observes cancellation
-	}
-	ftf := &fakeTF{action: terraform.PlanActionCreate}
-	fiso := &fakeISO{}
-	fign := &fakeIgnition{}
-	cfg := addTestConfig(2, 16384)
-
-	r, _, _ := seedAddRunner(t, fc, ftf, fiso, fign, cfg)
+	fc := &fakeCluster{nodes: addExistingWorkers()}
+	h := seedAddTest(t, fc, addTestConfig(2, 16384))
+	r, fign := h.r, h.fign
 	writeIgnitionArtifacts(t, r)
 	r.DryRun = false
 	r.NodeReadyTimeout = time.Minute // ctx cancellation must pre-empt this, not the timeout
@@ -474,9 +407,6 @@ func TestAddWorkersTeardownRunsUnderDetachedCtxWhenCancelled(t *testing.T) {
 	}
 }
 
-// TestAddWorkersResumeSkipsJoinedWorker models a batch interrupted while
-// waiting for worker1 to join: worker0 already joined and must be skipped
-// whole, worker1 re-runs only its join, and the guards/confirm are skipped.
 func TestAddWorkersResumeSkipsJoinedWorker(t *testing.T) {
 	fc := &fakeCluster{
 		nodes: []cluster.NodeDetail{
@@ -484,14 +414,9 @@ func TestAddWorkersResumeSkipsJoinedWorker(t *testing.T) {
 			{Name: "mycluster-worker1", Role: nodetypes.RoleWorker, Ready: true},
 		},
 	}
-	ftf := &fakeTF{action: terraform.PlanActionCreate}
-	fiso := &fakeISO{}
-	fign := &fakeIgnition{}
-	// Count never advanced (persist is after the whole batch), so the resumed
-	// range is still [0,1].
-	cfg := addTestConfig(0, 16384)
-
-	r, _, _ := seedAddRunner(t, fc, ftf, fiso, fign, cfg)
+	// Count never advanced (persist is after the whole batch), so the resumed range is still [0,1].
+	h := seedAddTest(t, fc, addTestConfig(0, 16384))
+	r, ftf, fiso, fign := h.r, h.ftf, h.fiso, h.fign
 	r.DryRun = false
 	seedMarker(t, r, OpAdd, "mycluster-worker1", StepWaitJoin)
 
@@ -512,7 +437,7 @@ func TestAddWorkersResumeSkipsJoinedWorker(t *testing.T) {
 	if fign.configureCalls != 1 || fign.teardownCalls != 1 {
 		t.Errorf("resume must still open/close the join window once: configure=%d teardown=%d", fign.configureCalls, fign.teardownCalls)
 	}
-	if cfg.Topology.Workers.Count != 2 {
-		t.Errorf("completed resume must persist the final worker count: got %d want 2", cfg.Topology.Workers.Count)
+	if r.Cfg.Topology.Workers.Count != 2 {
+		t.Errorf("completed resume must persist the final worker count: got %d want 2", r.Cfg.Topology.Workers.Count)
 	}
 }

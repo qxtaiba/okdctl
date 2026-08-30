@@ -27,8 +27,6 @@ var (
 	releasesShowOutput  string
 )
 
-// releasesCmd groups the read-only subcommands that query the OKD releases
-// feed, backed by the fetcher's disk cache.
 var releasesCmd = &cobra.Command{
 	Use:     "releases",
 	Aliases: []string{"release"},
@@ -36,8 +34,6 @@ var releasesCmd = &cobra.Command{
 	Long:    "List and inspect OKD releases resolved from the GitHub releases feed.",
 }
 
-// releasesListCmd prints available versions, filtered to Stable=true by
-// default or every non-draft release when --channel=all.
 var releasesListCmd = &cobra.Command{
 	Use:   cmdNameList,
 	Short: "List available OKD versions",
@@ -53,8 +49,6 @@ non-draft release. Results are served from a 1-hour on-disk cache
 	RunE: runReleasesList,
 }
 
-// releasesShowCmd prints release info for a single version matching either
-// the version string ("4.15.0") or the GitHub tag.
 var releasesShowCmd = &cobra.Command{
 	Use:   "show <version>",
 	Short: "Show release info for a single OKD version",

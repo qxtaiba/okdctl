@@ -7,11 +7,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
-// Redacted returns a deep copy of cfg with every string whose JSON tag name
-// or map key matches the secret-key denylist replaced by "***". Fields
-// tagged json:"-" (Password, APIToken, Username) are skipped — they never
-// marshal into operator-facing output. Maps and slices are cloned before
-// masking so the source config is never mutated through shared backing.
+// Redacted returns a deep copy of cfg with secret-keyed strings masked as
+// "***"; json:"-" credential fields are already excluded and untouched here.
 func Redacted(cfg *Config) Config {
 	out := *cfg
 	redactValue(reflect.ValueOf(&out))
@@ -72,8 +69,8 @@ func redactStructFields(v reflect.Value) {
 	}
 }
 
-// redactedMapCopy returns a masked copy of m. String values under a
-// secret-matching string key become "***"; other values recurse.
+// redactedMapCopy returns a masked copy of m: string values under a
+// secret-matching key become "***", others recurse.
 func redactedMapCopy(m reflect.Value) reflect.Value {
 	out := reflect.MakeMapWithSize(m.Type(), m.Len())
 	for iter := m.MapRange(); iter.Next(); {

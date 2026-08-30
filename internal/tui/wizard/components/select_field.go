@@ -10,9 +10,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-// SelectField is a dropdown-style form field that cycles through predefined
-// options using left/right keys. It renders with the same bordered box style
-// as InputField for visual consistency.
+// SelectField is a dropdown-style field that cycles options with left/right
+// keys, rendered in InputField's bordered box style.
 type SelectField struct {
 	Label   string
 	Help    string

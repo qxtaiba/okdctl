@@ -8,9 +8,8 @@ import (
 	"testing"
 )
 
-// isRuntimeArtifact reports whether name is written by terraform or okdctl
-// at deploy time rather than being a source file. Such files may exist in a
-// dev checkout that has run a deploy and must stay out of the embed.
+// isRuntimeArtifact reports whether name is deploy-time output that must
+// stay out of the embed.
 func isRuntimeArtifact(name string) bool {
 	switch {
 	case strings.HasPrefix(name, "terraform.tfstate"),
@@ -64,11 +63,6 @@ func diskTerraformSources(t *testing.T) map[string][]byte {
 	return files
 }
 
-// TestEmbeddedTerraformMatchesDisk guards TerraformFS against drift: every
-// source file on disk under terraform/modules and terraform/environments
-// must be embedded byte-for-byte, and nothing else may be embedded. Adding
-// an HCL file (or any non-.tf asset) without extending the embed list in
-// embed.go fails here.
 func TestEmbeddedTerraformMatchesDisk(t *testing.T) {
 	disk := diskTerraformSources(t)
 
@@ -108,10 +102,8 @@ func TestEmbeddedTerraformMatchesDisk(t *testing.T) {
 	}
 }
 
-// TestEmbeddedMasterKeepsPreventDestroy is a tripwire on the module's last
-// line of defense against etcd-quorum loss: the master VM resource must keep
-// lifecycle { prevent_destroy = true }. Deleting or flipping it (e.g. while
-// debugging a destroy) would let a targeted destroy or a replace-folding plan
+// TestEmbeddedMasterKeepsPreventDestroy guards prevent_destroy=true on the
+// master VM: without it, a targeted destroy or replace-folding plan could
 // silently wipe a control-plane VM.
 func TestEmbeddedMasterKeepsPreventDestroy(t *testing.T) {
 	data, err := TerraformFS.ReadFile("terraform/modules/proxmox-okd/main.tf")

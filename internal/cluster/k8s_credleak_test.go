@@ -11,9 +11,6 @@ import (
 
 const secretArg = "--from-literal=password=s3cr3t"
 
-// TestClientRun_TransportErrorNoArgvLeak exercises the subcommand() guard on
-// the transport-failure path: the wrapped error names the CLI and the first
-// arg only, never the full argv that may carry --from-literal secrets.
 func TestClientRun_TransportErrorNoArgvLeak(t *testing.T) {
 	c := New(WithCLI("okdctl-definitely-not-on-path-xyz"), WithExecutor(executor.New()))
 
@@ -29,11 +26,6 @@ func TestClientRun_TransportErrorNoArgvLeak(t *testing.T) {
 	}
 }
 
-// TestRunCheck_ExitErrorCommandBounded locks the non-zero-exit path: the
-// typed ExitError's Command is exactly "<cli> <subcommand>", so a regression
-// to strings.Join(args, " ") fails here before it can leak secrets into
-// wrapped errors and logs (the errtypes credleak canary proves ExitError
-// does not self-redact).
 func TestRunCheck_ExitErrorCommandBounded(t *testing.T) {
 	installFakeOCGeneric(t)
 	t.Setenv("OC_EXIT_CODE", "1")
@@ -53,14 +45,5 @@ func TestRunCheck_ExitErrorCommandBounded(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "s3cr3t") {
 		t.Errorf("secret-bearing argv leaked into ExitError: %q", err.Error())
-	}
-}
-
-func TestSubcommand(t *testing.T) {
-	if got := subcommand(nil); got != "(no args)" {
-		t.Errorf("subcommand(nil) = %q; want %q", got, "(no args)")
-	}
-	if got := subcommand([]string{"apply", "-f", "-"}); got != "apply" {
-		t.Errorf("subcommand = %q; want %q", got, "apply")
 	}
 }

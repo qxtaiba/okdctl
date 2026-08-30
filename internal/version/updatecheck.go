@@ -33,20 +33,14 @@ type cacheEntry struct {
 	LatestTag   string    `json:"latest_tag"`
 }
 
-// BackgroundCheck starts a goroutine that checks for a newer release.
-// It returns a buffered channel (capacity 1) that receives exactly one
-// CheckResult. If OKDCTL_NO_UPDATE_CHECK=1 the goroutine is not started
-// and the channel already holds a zero result. If the caller's select
-// expires before the result arrives, the buffered send in the goroutine
-// never blocks; the goroutine reaps within httpTimeout (4 s).
-// Debug records emitted by the goroutine route through slog.Default();
-// callers that bypass cli.Execute must install logutil.RedactHandler
-// before calling this function.
-//
-// Security note: the GitHub Releases API response is unsigned; the sole
-// trust anchor is TLS to api.github.com. The resulting notice is advisory
-// only — before upgrading, verify the binary via cosign or the published
-// checksums file.
+// BackgroundCheck starts a goroutine checking for a newer release and
+// returns a buffered (capacity-1) channel for the result. A disabled or
+// abandoned caller still lets the buffered send complete, bounding the
+// goroutine to httpTimeout (4s); set OKDCTL_NO_UPDATE_CHECK=1 to skip the
+// goroutine and return a zero result. Debug logs route through
+// slog.Default() — install logutil.RedactHandler first if bypassing
+// cli.Execute. The GitHub API response is unsigned (TLS is the only trust
+// anchor), so treat the notice as advisory only.
 func BackgroundCheck(ctx context.Context) <-chan CheckResult {
 	ch := make(chan CheckResult, 1)
 
@@ -129,8 +123,8 @@ func loadCache() (cacheEntry, bool) {
 		return cacheEntry{}, false
 	}
 
-	// Refuse group/world-writable cache file: a writable cache lets a local
-	// user poison the entry if a future field ever drives behaviour.
+	// Refuse a group/world-writable cache file — a writable cache would let
+	// a local user poison it.
 	if fi, err := os.Stat(path); err == nil {
 		if fi.Mode().Perm()&0o022 != 0 {
 			slog.Warn("update cache has unsafe permissions; ignoring",

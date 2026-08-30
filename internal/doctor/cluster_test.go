@@ -44,7 +44,7 @@ func (f *fakeProbe) SignerNotAfter(context.Context) (time.Time, error) {
 	return f.notAfter, f.signErr
 }
 
-func itemBySuffix(items []Item, name string) (Item, bool) {
+func itemByName(items []Item, name string) (Item, bool) {
 	for _, it := range items {
 		if it.Name == name {
 			return it, true
@@ -89,65 +89,60 @@ func TestClusterHealth_Unreachable(t *testing.T) {
 	}
 }
 
-func TestClusterHealth_DegradedOperatorFails(t *testing.T) {
-	p := healthyProbe()
-	p.ops = cluster.OperatorHealth{Degraded: []string{"ingress"}, Available: 29, Total: 30}
-	r := clusterHealth(context.Background(), p)
-	if r.Sev != Fail {
-		t.Fatalf("Sev = %v; want Fail", r.Sev)
+func TestClusterHealth_Findings(t *testing.T) {
+	cases := []struct {
+		name    string
+		mutate  func(p *fakeProbe)
+		wantSev Severity
+		item    string
+		itemSev Severity
+		note    string
+	}{
+		{
+			name: "degraded operator fails",
+			mutate: func(p *fakeProbe) {
+				p.ops = cluster.OperatorHealth{Degraded: []string{"ingress"}, Available: 29, Total: 30}
+			},
+			wantSev: Fail, item: "cluster operators", itemSev: Fail, note: "ingress",
+		},
+		{
+			name: "progressing operator warns",
+			mutate: func(p *fakeProbe) {
+				p.ops = cluster.OperatorHealth{Progressing: []string{"kube-apiserver"}, Available: 30, Total: 30}
+			},
+			wantSev: Warn, item: "cluster operators", itemSev: Warn, note: "kube-apiserver",
+		},
+		{
+			name: "etcd unhealthy fails",
+			mutate: func(p *fakeProbe) {
+				p.etcd = cluster.EtcdHealth{Healthy: false, Reason: "etcd pods not all ready (2/3)"}
+			},
+			wantSev: Fail, item: "etcd", itemSev: Fail, note: "2/3",
+		},
+		{
+			name:    "signer expiring warns",
+			mutate:  func(p *fakeProbe) { p.notAfter = time.Now().Add(12 * 24 * time.Hour) },
+			wantSev: Warn, item: "signer expiry", itemSev: Warn, note: "expires in",
+		},
+		{
+			name:    "signer expired fails",
+			mutate:  func(p *fakeProbe) { p.notAfter = time.Now().Add(-time.Hour) },
+			wantSev: Fail, item: "signer expiry", itemSev: Fail, note: "EXPIRED",
+		},
 	}
-	it, ok := itemBySuffix(r.Items, "cluster operators")
-	if !ok || it.Sev != Fail || !strings.Contains(it.Note, "ingress") {
-		t.Errorf("operators item = %+v ok=%v; want Fail naming ingress", it, ok)
-	}
-}
-
-func TestClusterHealth_ProgressingOperatorWarns(t *testing.T) {
-	p := healthyProbe()
-	p.ops = cluster.OperatorHealth{Progressing: []string{"kube-apiserver"}, Available: 30, Total: 30}
-	r := clusterHealth(context.Background(), p)
-	if r.Sev != Warn {
-		t.Fatalf("Sev = %v; want Warn", r.Sev)
-	}
-	it, _ := itemBySuffix(r.Items, "cluster operators")
-	if it.Sev != Warn || !strings.Contains(it.Note, "kube-apiserver") {
-		t.Errorf("operators item = %+v; want Warn naming kube-apiserver", it)
-	}
-}
-
-func TestClusterHealth_EtcdUnhealthyFails(t *testing.T) {
-	p := healthyProbe()
-	p.etcd = cluster.EtcdHealth{Healthy: false, Reason: "etcd pods not all ready (2/3)"}
-	r := clusterHealth(context.Background(), p)
-	if r.Sev != Fail {
-		t.Fatalf("Sev = %v; want Fail", r.Sev)
-	}
-	it, _ := itemBySuffix(r.Items, "etcd")
-	if it.Sev != Fail || !strings.Contains(it.Note, "2/3") {
-		t.Errorf("etcd item = %+v; want Fail with reason", it)
-	}
-}
-
-func TestClusterHealth_SignerExpiringWarns(t *testing.T) {
-	p := healthyProbe()
-	p.notAfter = time.Now().Add(12 * 24 * time.Hour)
-	r := clusterHealth(context.Background(), p)
-	if r.Sev != Warn {
-		t.Fatalf("Sev = %v; want Warn", r.Sev)
-	}
-	it, _ := itemBySuffix(r.Items, "signer expiry")
-	if it.Sev != Warn || !strings.Contains(it.Note, "expires in") {
-		t.Errorf("signer item = %+v; want Warn with days remaining", it)
-	}
-}
-
-func TestClusterHealth_SignerExpiredFails(t *testing.T) {
-	p := healthyProbe()
-	p.notAfter = time.Now().Add(-time.Hour)
-	r := clusterHealth(context.Background(), p)
-	it, _ := itemBySuffix(r.Items, "signer expiry")
-	if r.Sev != Fail || it.Sev != Fail || !strings.Contains(it.Note, "EXPIRED") {
-		t.Errorf("Sev = %v, signer item = %+v; want Fail EXPIRED", r.Sev, it)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := healthyProbe()
+			tc.mutate(p)
+			r := clusterHealth(context.Background(), p)
+			if r.Sev != tc.wantSev {
+				t.Fatalf("Sev = %v; want %v", r.Sev, tc.wantSev)
+			}
+			it, ok := itemByName(r.Items, tc.item)
+			if !ok || it.Sev != tc.itemSev || !strings.Contains(it.Note, tc.note) {
+				t.Errorf("%s item = %+v ok=%v; want Sev %v with note containing %q", tc.item, it, ok, tc.itemSev, tc.note)
+			}
+		})
 	}
 }
 
@@ -156,7 +151,7 @@ func TestClusterHealth_CSRRecoveryHint(t *testing.T) {
 	p.nodes = []cluster.NodeDetail{{Name: "master0", Ready: true}, {Name: "worker0", Ready: false}}
 	p.csrs = []cluster.CSR{{Name: "csr-1"}, {Name: "csr-2"}}
 	r := clusterHealth(context.Background(), p)
-	it, ok := itemBySuffix(r.Items, "csr recovery")
+	it, ok := itemByName(r.Items, "csr recovery")
 	if !ok || !strings.Contains(it.Note, "certificate approve") {
 		t.Errorf("recovery item = %+v ok=%v; want approval suggestion", it, ok)
 	}
@@ -170,7 +165,7 @@ func TestClusterHealth_NoCSRRecoveryWhenNodesReady(t *testing.T) {
 	p := healthyProbe()
 	p.csrs = []cluster.CSR{{Name: "csr-1"}}
 	r := clusterHealth(context.Background(), p)
-	if _, ok := itemBySuffix(r.Items, "csr recovery"); ok {
+	if _, ok := itemByName(r.Items, "csr recovery"); ok {
 		t.Error("csr recovery hint present with all nodes Ready; want absent")
 	}
 	// Pending CSRs alone are a warning, not a failure.

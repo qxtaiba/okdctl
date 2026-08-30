@@ -13,14 +13,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/executor"
 )
 
-// checkStateMajorVersion reads stateFile, extracts .terraform_version, and
-// returns *errtypes.ConfigError when the parsed major component does not equal
-// requiredTerraformMajor. Matches the constraint in
-// infrastructure/terraform/environments/production/versions.tf
-// (required_version = ">= 1.10, < 2.0"). Update the constant if the
-// constraint ever crosses a major boundary. Parsing failures are non-fatal:
-// they are logged and the caller continues so terraform itself can surface
-// the issue.
+// checkStateMajorVersion enforces requiredTerraformMajor against stateFile's
+// terraform_version (keep in sync with versions.tf); parse failures are non-fatal.
 func checkStateMajorVersion(stateFile string, log *slog.Logger) error {
 	const requiredTerraformMajor = 1
 
@@ -56,12 +50,9 @@ func checkStateMajorVersion(stateFile string, log *slog.Logger) error {
 	return nil
 }
 
-// StateHasResource reports whether addr is present in the terraform state by
-// running "terraform state list <addr>". terraform state list exits 1 with
-// empty stdout and stderr when addr is absent from state — that is the only
-// case classified as absent; any other non-zero exit (including exit 1 with
-// stderr output) is a hard error so a transport or auth failure is never
-// silently read as "resource not found".
+// StateHasResource reports whether addr is present via terraform state list
+// <addr>. Only exit 1 with empty stdout/stderr means absent; any other non-zero
+// exit is a hard error.
 func (t *Executor) StateHasResource(ctx context.Context, addr string) (bool, error) {
 	result, err := t.exec.RunOutput(ctx, 0, "terraform", "state", "list", addr)
 	if err != nil {

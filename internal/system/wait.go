@@ -12,13 +12,9 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
-// WaitForOptions configures the polling loop driven by WaitFor. It is a
-// per-call config struct rather than functional options: WaitFor is a
-// one-shot operation, not a long-lived object built once via a constructor,
-// so there is no natural attachment point for the WithX(...) pattern used
-// by terraform.PlanOptions or proxmox.ProvisionOptions. WaitForWithTimeout
-// wraps the common single-field case so most callers never build this
-// struct by hand.
+// WaitForOptions configures the polling loop driven by WaitFor.
+// WaitForWithTimeout wraps the common single-field case so most callers
+// never build this struct by hand.
 type WaitForOptions struct {
 	Interval time.Duration // Default: 30 seconds
 	Timeout  time.Duration // Default: no timeout (0)
@@ -34,18 +30,13 @@ func DefaultWaitForOptions() WaitForOptions {
 	}
 }
 
-// probeGrace bounds how far a final in-flight probe may outlive opts.Timeout.
-// A probe launched just before the poll deadline is allowed to finish rather
-// than being cancelled mid-call, but one that hangs (oc against a blackholed
-// API) must not stall WaitFor forever past its configured timeout.
+// probeGrace bounds how far a final in-flight probe may outlive opts.Timeout,
+// so a hung probe (e.g. oc against a blackholed API) can't stall WaitFor forever.
 const probeGrace = 30 * time.Second
 
 // WaitFor polls check at opts.Interval until it returns true, ctx is
 // cancelled, or opts.Timeout elapses. A timeout that races with ctx
-// cancellation reports ctx.Err as the primary cause. Lives here as a
-// generic, dependency-light polling primitive shared by phase/kubectl.go
-// and postinstall's ingress-termination wait — narrower than a
-// subprocess-exec concern, so it stays out of internal/executor.
+// cancellation reports ctx.Err as the primary cause.
 func WaitFor(ctx context.Context, prefix, description string, check func(context.Context) bool, opts WaitForOptions) error {
 	if opts.Interval == 0 {
 		opts.Interval = 30 * time.Second
@@ -62,11 +53,9 @@ func WaitFor(ctx context.Context, prefix, description string, check func(context
 	polls := 0
 	first := true
 
-	// The library passes its own deadline-bound context to the condition; we
-	// ignore it so a final in-flight probe isn't cancelled mid-call the
-	// instant the poll deadline lands. probeCtx keeps that intent bounded:
-	// probes run against the caller's ctx extended only by probeGrace past
-	// opts.Timeout, so a hung probe dies at deadline+grace instead of never.
+	// Ignores the library's own deadline context so an in-flight probe isn't
+	// cut off right at the poll deadline; probeCtx bounds it to ctx+probeGrace
+	// instead, so a hung probe dies at deadline+grace, not never.
 	probeCtx := ctx
 	if opts.Timeout > 0 {
 		var cancel context.CancelFunc
@@ -74,10 +63,8 @@ func WaitFor(ctx context.Context, prefix, description string, check func(context
 		defer cancel()
 	}
 
-	// PollUntilContextTimeout/Cancel invoke this once immediately (the
-	// "first" branch, mirroring the old pre-loop check) and then once per
-	// tick thereafter. Only the tick branch counts toward polls, matching
-	// the original ticker-driven accounting.
+	// PollUntilContextTimeout/Cancel call this once immediately (the first
+	// branch) then once per tick; only tick calls count toward polls.
 	condition := func(context.Context) (bool, error) {
 		if first {
 			first = false
@@ -108,17 +95,15 @@ func WaitFor(ctx context.Context, prefix, description string, check func(context
 		return nil
 	}
 
-	// A race between ctx and our own timeout reports ctx.Err as the primary
-	// cause; PollUntilContextTimeout derives its deadline from ctx, so ctx's
-	// own error (if any) always takes precedence over the synthetic one.
+	// PollUntilContextTimeout derives its own deadline from ctx, so ctx's own
+	// error always takes precedence over the synthetic timeout.
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("waiting for %s %s: %w", prefix, description, err)
 	}
 
-	// Return a ClusterError so exitCodeFor maps this to exit 4 rather than
-	// 130. ErrWaitTimeout chains to context.DeadlineExceeded so existing
-	// errors.Is checks still work, while letting callers tell a WaitFor
-	// poll timeout from a genuine context deadline.
+	// ClusterError maps to exit 4 (not 130); ErrWaitTimeout still chains to
+	// context.DeadlineExceeded so existing errors.Is checks work, while
+	// letting callers distinguish a poll timeout from a real ctx deadline.
 	return &errtypes.ClusterError{
 		Msg: fmt.Sprintf("timeout waiting for %s %s after %v (%d polls)", prefix, description, opts.Timeout, polls),
 		Err: errtypes.ErrWaitTimeout,

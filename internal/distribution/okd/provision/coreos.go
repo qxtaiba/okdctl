@@ -23,9 +23,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// logISOFound emits "coreos: iso found" at Info for isoPath, de-duping by
-// base filename across this Provisioner's lifetime so a single run never
-// logs the same ISO more than once.
+// logISOFound logs "coreos: iso found" for isoPath, deduped by base filename
+// across the Provisioner's lifetime.
 func (p *Provisioner) logISOFound(isoPath string) {
 	base := filepath.Base(isoPath)
 	if p.loggedISOs == nil {
@@ -47,12 +46,11 @@ const (
 	isoMissing                       // configured + absent: caller errors
 )
 
-// resolveConfiguredISO maps cfg.Provider.Proxmox.FCOSIso to one of three
-// states. ":iso/<file>" is resolved relative to hostssh.DefaultProxmoxISODir;
-// a bare "local:iso" pool reference (no filename) is treated as isoEmpty
-// so glob auto-detection still applies; bare paths are checked via
-// system.FileExists. Returning isoMissing prevents the previous silent
-// fallthrough to the glob loop on a misconfigured operator-pinned ISO.
+// resolveConfiguredISO maps FCOSIso to isoEmpty/isoResolved/isoMissing:
+// ":iso/<file>" resolves under hostssh.DefaultProxmoxISODir, bare "local:iso"
+// (no filename) is isoEmpty for glob auto-detection, and isoMissing (rather
+// than falling through to glob) surfaces a misconfigured pinned ISO instead
+// of silently ignoring it.
 func resolveConfiguredISO(spec string) (string, isoResolution) {
 	if spec == "" {
 		return "", isoEmpty
@@ -93,11 +91,9 @@ func (p *Provisioner) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Con
 		}
 	}
 
-	// nodetypes.CoreOSISONamePatterns covers the two official OKD artifact
-	// shapes (fedora-coreos-*.iso, scos-*.iso); fcos-*.iso and
-	// fedora-coreos.iso are additional local naming conventions for
-	// manually-placed ISOs and stay setup-local since hostssh's remote
-	// guard never needs to recognize them.
+	// CoreOSISONamePatterns covers official shapes (fedora-coreos-*.iso,
+	// scos-*.iso); fcos-*.iso/fedora-coreos.iso are local-only conventions
+	// hostssh's remote guard never needs to recognize.
 	patterns := slices.Concat(nodetypes.CoreOSISONamePatterns, []string{
 		"fcos-*.iso",
 		"fedora-coreos.iso",
@@ -117,7 +113,7 @@ func (p *Provisioner) findOrDownloadFCOSISO(ctx context.Context, cfg *config.Con
 	return p.EnsureCoreOSISO(ctx, cfg, Options{WorkDir: opts.WorkDir})
 }
 
-// findNewestISO globs dir against each pattern in order and returns the
+// findNewestISO globs dir against each pattern in order, returning the
 // lexicographically newest match from the first pattern with a hit.
 func (p *Provisioner) findNewestISO(dir string, patterns []string) (string, bool) {
 	for _, pattern := range patterns {
@@ -134,59 +130,47 @@ func (p *Provisioner) findNewestISO(dir string, patterns []string) (string, bool
 	return "", false
 }
 
-// minSCOSStreamMajor and minSCOSStreamMinor mark the first OKD release that
-// publishes scos.json (Stream CoreOS); earlier 4.x minors (4.15-4.18) ship
-// Fedora CoreOS via fcos.json. Every 5.x+ major ships scos.json exclusively.
-// The schema is identical at the path the parser walks.
+// minSCOSStreamMajor/Minor mark the first OKD release publishing scos.json
+// (Stream CoreOS); 4.15-4.18 ship fcos.json, every 5.x+ ships scos.json.
 // Verified 2026-04-20 across release-4.14 through release-4.24.
 const (
 	minSCOSStreamMajor = 4
 	minSCOSStreamMinor = 19
 )
 
-// streamRawBaseURL is the GitHub raw-content root for openshift/installer.
-// Tests override this to an httptest.Server URL for hermetic mocking.
+// streamRawBaseURL is the GitHub raw-content root for openshift/installer;
+// tests override it to an httptest.Server URL.
 var streamRawBaseURL = "https://raw.githubusercontent.com"
 
-// coreOSStreamPin is the compile-time anchor for one OKD release's stream
-// JSON. CommitSHA pins the openshift/installer tree (immutable); JSONSHA256
-// is the SHA-256 of the JSON file at that commit, verified before the body
-// is parsed. Both must update together on OKD version bumps — see README
-// "Bumping the CoreOS stream pin".
+// coreOSStreamPin anchors one OKD release's stream JSON: CommitSHA pins the
+// immutable installer tree, JSONSHA256 verifies the fetched body before
+// parsing. Both update together on version bumps — see README "Bumping the
+// CoreOS stream pin".
 type coreOSStreamPin struct {
 	CommitSHA  string
 	JSONSHA256 string
 }
 
-// okdVersionKey identifies one supported OKD release train by (major,
-// minor). Keying streamPins on minor alone would let a future 5.x version
-// collide with a pinned 4.x entry of the same minor number and silently
-// resolve to the wrong installer commit and SHA-256.
+// okdVersionKey identifies a release train by (major, minor) — keying on
+// minor alone would let a future 5.x collide with a same-numbered 4.x pin
+// and resolve to the wrong commit/SHA-256.
 type okdVersionKey struct {
 	Major int
 	Minor int
 }
 
-// streamPins maps each supported OKD (major, minor) release train to a
-// pinned openshift/installer commit SHA and the expected SHA-256 of its
-// stream JSON file. Fetching from release-X.Y branch (mutable) is
-// intentionally absent: an attacker who can rewrite the JSON on that branch
-// can also rewrite the sha256 field, making DownloadCoreOSISO's integrity
-// check meaningless.
+// streamPins maps each supported (major, minor) to a pinned
+// openshift/installer commit SHA and expected SHA-256, never fetched from
+// the mutable release-X.Y branch — an attacker who rewrites that JSON could
+// rewrite its sha256 too, defeating DownloadCoreOSISO's integrity check.
 //
-// 4.15-4.18 share an identical fcos.json sha256, and 4.21-4.23 likewise
-// share an identical scos.json sha256 (the file content is byte-equal across
-// each of those release branches at their pinned tips — verified genuine
-// upstream, not a copy-paste slip); goconst is suppressed because the
-// duplication is mechanical, machine-rewritten by scripts/update-coreos-pins.sh,
-// and any per-minor drift would surface as a real diff in the next bump PR.
+// 4.15-4.18 share one fcos.json sha256 and 4.21-4.23 share one scos.json
+// sha256 by design (byte-identical upstream files); goconst is suppressed
+// since scripts/update-coreos-pins.sh maintains this mechanically.
 //
-// To add or update a pin:
-//  1. git ls-remote https://github.com/openshift/installer release-X.Y
-//  2. curl -sSfL https://raw.githubusercontent.com/openshift/installer/<SHA>/data/data/coreos/<fcos|scos>.json | sha256sum
-//  3. update CommitSHA and JSONSHA256 below; run make test.
-//
-// Tests may override this var to inject hermetic pin entries.
+// To update: sha256sum the pinned commit's <fcos|scos>.json and set
+// CommitSHA/JSONSHA256 below, or see scripts/update-coreos-pins.sh. Tests
+// may override this var with hermetic pin entries.
 //
 //nolint:goconst,nolintlint // see comment above re: 4.15-4.18 / 4.21-4.23 sha-equal-by-design
 var streamPins = map[okdVersionKey]coreOSStreamPin{
@@ -206,9 +190,9 @@ var streamPins = map[okdVersionKey]coreOSStreamPin{
 	{4, 23}: {CommitSHA: "51977d88a06e9e2c95d31f5e33543e72cbd38dfa", JSONSHA256: "3bfc32f58e48880e3fb6ef56b19f8ba41411ba35416fef2d881d5adaf474600c"},
 }
 
-// coreOSStreamData is the subset of fcos.json / scos.json DetectCoreOSVersion
-// consumes. Both files share the schema at this path; the parser does not
-// read the top-level stream field, so c9s/c10s and stable all work.
+// coreOSStreamData is the fcos.json/scos.json subset DetectCoreOSVersion
+// consumes; it never reads the top-level stream field, so c9s/c10s and
+// stable all parse the same.
 type coreOSStreamData struct {
 	Architectures map[string]struct {
 		Artifacts struct {
@@ -227,16 +211,15 @@ type coreOSStreamData struct {
 	} `json:"architectures"`
 }
 
-// parseOKDVersion extracts major and minor from an OKD version like
-// "4.19.0-0.okd-2025-…". The bool is true only when both scanned
-// successfully; callers must refuse the request when it is false.
+// parseOKDVersion extracts major.minor from a version like
+// "4.19.0-0.okd-2025-…"; ok is false unless both scanned.
 func parseOKDVersion(version string) (major, minor int, ok bool) {
 	n, _ := fmt.Sscanf(version, "%d.%d", &major, &minor)
 	return major, minor, n == 2
 }
 
-// streamFileForVersion returns the data file an OKD (major, minor) release
-// publishes: fcos.json for 4.15-4.18, scos.json for 4.19+ and every 5.x+.
+// streamFileForVersion returns the data file an OKD release publishes:
+// fcos.json for 4.15-4.18, scos.json for 4.19+ and every 5.x+.
 func streamFileForVersion(major, minor int) string {
 	if major > minSCOSStreamMajor || (major == minSCOSStreamMajor && minor >= minSCOSStreamMinor) {
 		return "scos.json"
@@ -244,10 +227,10 @@ func streamFileForVersion(major, minor int) string {
 	return "fcos.json"
 }
 
-// fetchCoreOSStream fetches and parses the CoreOS stream JSON at url. When
-// expectedSHA256 is non-empty the response body is verified against it before
-// parsing; a mismatch is a hard error. Production callers always pass the
-// compile-time constant from streamPins; tests may pass "" to skip.
+// fetchCoreOSStream fetches and parses the CoreOS stream JSON at url,
+// verifying against expectedSHA256 before parsing when non-empty (a
+// mismatch is a hard error); production callers pass the streamPins
+// constant, tests may pass "" to skip.
 func fetchCoreOSStream(ctx context.Context, url, expectedSHA256 string) (*coreOSStreamData, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
@@ -294,18 +277,16 @@ func coreOSInfoFromStream(sd *coreOSStreamData) (*CoreOSInfo, error) {
 		return nil, &errtypes.ConfigError{Msg: "coreos iso location not found in stream"}
 	}
 	return &CoreOSInfo{
-		Version:      metal.Release,
-		ISOUrl:       iso.Location,
-		ISOChecksum:  iso.SHA256,
-		Architecture: archKey,
+		Version:     metal.Release,
+		ISOUrl:      iso.Location,
+		ISOChecksum: iso.SHA256,
 	}, nil
 }
 
 // DetectCoreOSVersion returns the CoreOS ISO location, checksum, and release
-// for the host architecture. okdVersion picks the right upstream data file:
-// 4.15-4.18 → fcos.json (Fedora CoreOS), 4.19+ and every 5.x → scos.json
-// (Stream CoreOS). A malformed okdVersion or an unpinned (major, minor)
-// fails fast as a ConfigError.
+// for the host architecture, picking fcos.json for 4.15-4.18 or scos.json
+// for 4.19+ via okdVersion. A malformed okdVersion or an unpinned (major,
+// minor) fails fast as a ConfigError.
 func (p *Provisioner) DetectCoreOSVersion(ctx context.Context, okdVersion string) (*CoreOSInfo, error) {
 	major, minor, ok := parseOKDVersion(okdVersion)
 	if !ok {
@@ -326,9 +307,8 @@ func (p *Provisioner) DetectCoreOSVersion(ctx context.Context, okdVersion string
 	return coreOSInfoFromStream(sd)
 }
 
-// DownloadCoreOSISO downloads the CoreOS ISO described by info to destPath.
-// An existing file with a matching checksum is reused; mismatch triggers a
-// re-download.
+// DownloadCoreOSISO downloads the CoreOS ISO described by info to destPath,
+// reusing an existing file with a matching checksum or re-downloading on mismatch.
 func (p *Provisioner) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, destPath string) error {
 	if system.FileExists(destPath) {
 		p.logISOFound(destPath)
@@ -366,11 +346,11 @@ func (p *Provisioner) DownloadCoreOSISO(ctx context.Context, info *CoreOSInfo, d
 	return nil
 }
 
-// EnsureCoreOSISO ensures the CoreOS ISO is available, downloading it to the
-// work directory (avoids permission issues with /var/lib/vz) when absent. An
-// ISO already present at the download path is reused on filename existence
-// alone: unlike DownloadCoreOSISO, no checksum is re-verified on that reuse
-// path, so a corrupt cached ISO must be deleted to force a fresh download.
+// EnsureCoreOSISO ensures the CoreOS ISO is available, downloading to the
+// work directory (avoiding /var/lib/vz permission issues) when absent. An
+// ISO already at the download path is reused on filename existence alone —
+// unlike DownloadCoreOSISO, no checksum is re-verified, so a corrupt cache
+// must be deleted manually.
 func (p *Provisioner) EnsureCoreOSISO(ctx context.Context, cfg *config.Config, opts Options) (string, error) {
 	p.Log.Info("coreos: resolving iso from pinned installer stream metadata")
 

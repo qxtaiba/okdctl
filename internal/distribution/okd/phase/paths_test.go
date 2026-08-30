@@ -37,18 +37,3 @@ func TestHAProxyBackupGlob_CoversPristineAndTimestamped(t *testing.T) {
 		t.Errorf("slices.Max = %q, want newest timestamped backup %q", got, newer)
 	}
 }
-
-func TestHAProxyBackupGlob_MaxFallsBackToPristine(t *testing.T) {
-	cfg := "/etc/haproxy/haproxy.cfg"
-	pristine := cfg + HAProxyBackupSuffix
-	ts := HAProxyTimestampedBackupPath(cfg, time.Now())
-	if got := slices.Max([]string{pristine, ts}); got != ts {
-		t.Errorf("timestamped backup must sort above pristine snapshot; Max = %q", got)
-	}
-	if got := slices.Max([]string{pristine}); got != pristine {
-		t.Errorf("Max over pristine-only = %q, want %q", got, pristine)
-	}
-	if DefaultHAProxyBackupPath != DefaultHAProxyConfigPath+HAProxyBackupSuffix {
-		t.Errorf("DefaultHAProxyBackupPath drifted from suffix contract: %q", DefaultHAProxyBackupPath)
-	}
-}

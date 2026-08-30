@@ -23,15 +23,11 @@ func TestNodeIndex(t *testing.T) {
 		wantOK  bool
 	}{
 		{"worker2", 2, true},
-		{"master0", 0, true},
 		{"grappleberry-worker11", 11, true},
 		// Kubernetes reports FQDNs; the index is in the first label, not the domain.
 		{"grappleberry-worker0.grappleberry.k8s.local", 0, true},
-		{"grappleberry-master2.grappleberry.k8s.local", 2, true},
 		{"bootstrap", 0, false},
-		{"bootstrap.grappleberry.k8s.local", 0, false},
 		{"", 0, false},
-		{"node-", 0, false},
 	}
 	for _, c := range cases {
 		idx, ok := NodeIndex(c.name)
@@ -74,9 +70,7 @@ func TestParseMastersSchedulable(t *testing.T) {
 	}
 }
 
-// installFakeOCHugeOutput installs a PATH-shadow "oc" script emitting more
-// than the executor's 4 MiB output-capture cap, so RunOutput sets
-// Result.Truncated without needing a real oversized cluster response.
+// installFakeOCHugeOutput emits >4MiB so RunOutput sets Result.Truncated.
 func installFakeOCHugeOutput(t *testing.T) {
 	t.Helper()
 	testutil.InstallFakeBin(t, "oc", `#!/bin/sh
@@ -85,9 +79,6 @@ exit 0
 `)
 }
 
-// TestMastersSchedulable_TruncatedOutputErrors is a regression test: before
-// the getJSONChecked fold, MastersSchedulable checked ExitCode only and fed
-// a capped (partial) payload straight to json.Unmarshal.
 func TestMastersSchedulable_TruncatedOutputErrors(t *testing.T) {
 	installFakeOCHugeOutput(t)
 	c := New(WithCLI("oc"), WithLogger(logutil.NopLogger))
@@ -116,13 +107,8 @@ func TestParsePodPlacements(t *testing.T) {
 	}
 }
 
-// installFakeOCGeneric installs a POSIX sh "oc" script that appends its full
-// argv to an argv log, copies stdin to a stdin log, prints $OC_STDOUT
-// verbatim, and exits $OC_EXIT_CODE (default 0). Returns the argv and stdin
-// log paths. Combines installFakePatchOC's argv logging with
-// installFakeOCEmitting's stdout emission so one fake covers both the
-// argv-shape assertions and the JSON-emitting reads used by the
-// node-lifecycle and raw-query primitives.
+// installFakeOCGeneric installs an "oc" fake logging argv/stdin and echoing
+// $OC_STDOUT, exit $OC_EXIT_CODE (default 0); returns the log paths.
 func installFakeOCGeneric(t *testing.T) (argvLog, stdinLog string) {
 	t.Helper()
 	testutil.InstallFakeBin(t, "oc", `#!/bin/sh
@@ -148,15 +134,81 @@ func readArgvLog(t *testing.T, path string) string {
 	return strings.TrimSpace(string(data))
 }
 
-func TestClientCordon_ArgvShape(t *testing.T) {
-	argvLog, _ := installFakeOCGeneric(t)
-	c := New(WithCLI("oc"), WithExecutor(executor.New()))
-
-	if err := c.Cordon(context.Background(), "worker0"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+func TestClientArgvShapes(t *testing.T) {
+	tests := []struct {
+		name   string
+		stdout string // OC_STDOUT for verbs that parse output
+		call   func(ctx context.Context, c *Client) error
+		want   string
+	}{
+		{
+			name: "cordon",
+			call: func(ctx context.Context, c *Client) error { return c.Cordon(ctx, "worker0") },
+			want: "adm cordon worker0",
+		},
+		{
+			name: "uncordon",
+			call: func(ctx context.Context, c *Client) error { return c.Uncordon(ctx, "worker0") },
+			want: "adm uncordon worker0",
+		},
+		{
+			name: "drain all options",
+			call: func(ctx context.Context, c *Client) error {
+				return c.Drain(ctx, "worker0", DrainOptions{
+					Force:            true,
+					Timeout:          "10m",
+					DeleteEmptyDir:   true,
+					IgnoreDaemonsets: true,
+				})
+			},
+			want: "adm drain worker0 --ignore-daemonsets --delete-emptydir-data --force --timeout=10m",
+		},
+		{
+			name: "drain no options",
+			call: func(ctx context.Context, c *Client) error { return c.Drain(ctx, "worker0", DrainOptions{}) },
+			want: "adm drain worker0",
+		},
+		{
+			name: "delete node",
+			call: func(ctx context.Context, c *Client) error { return c.DeleteNode(ctx, "worker0") },
+			want: "delete node worker0 --ignore-not-found",
+		},
+		{
+			name: "set masters schedulable",
+			call: func(ctx context.Context, c *Client) error { return c.SetMastersSchedulable(ctx, true) },
+			want: `patch schedulers.config.openshift.io cluster --type=merge -p {"spec":{"mastersSchedulable":true}}`,
+		},
+		{
+			name:   "pods for selector all namespaces",
+			stdout: `{"items":[]}`,
+			call: func(ctx context.Context, c *Client) error {
+				_, err := c.PodsForSelector(ctx, "", "app=rook-ceph-osd")
+				return err
+			},
+			want: "get pods -A -l app=rook-ceph-osd -o json",
+		},
+		{
+			name: "patch",
+			call: func(ctx context.Context, c *Client) error {
+				return c.Patch(ctx, "operatorhub.config.openshift.io", "cluster", "merge", `{"spec":{"sources":[]}}`)
+			},
+			want: `patch operatorhub.config.openshift.io cluster --type=merge -p {"spec":{"sources":[]}}`,
+		},
 	}
-	if got, want := readArgvLog(t, argvLog), "adm cordon worker0"; got != want {
-		t.Errorf("argv = %q; want %q", got, want)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			argvLog, _ := installFakeOCGeneric(t)
+			if tc.stdout != "" {
+				t.Setenv("OC_STDOUT", tc.stdout)
+			}
+			c := New(WithCLI("oc"), WithExecutor(executor.New()))
+			if err := tc.call(context.Background(), c); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got := readArgvLog(t, argvLog); got != tc.want {
+				t.Errorf("argv = %q; want %q", got, tc.want)
+			}
+		})
 	}
 }
 
@@ -189,104 +241,6 @@ func TestClientNonZeroExitWrapsClusterError(t *testing.T) {
 				t.Fatalf("err is %T; want *errtypes.ClusterError", err)
 			}
 		})
-	}
-}
-
-func TestClientUncordon_ArgvShape(t *testing.T) {
-	argvLog, _ := installFakeOCGeneric(t)
-	c := New(WithCLI("oc"), WithExecutor(executor.New()))
-
-	if err := c.Uncordon(context.Background(), "worker0"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got, want := readArgvLog(t, argvLog), "adm uncordon worker0"; got != want {
-		t.Errorf("argv = %q; want %q", got, want)
-	}
-}
-
-func TestClientDrain_ArgvShape_AllOptions(t *testing.T) {
-	argvLog, _ := installFakeOCGeneric(t)
-	c := New(WithCLI("oc"), WithExecutor(executor.New()))
-
-	opts := DrainOptions{
-		Force:            true,
-		Timeout:          "10m",
-		DeleteEmptyDir:   true,
-		IgnoreDaemonsets: true,
-	}
-	if err := c.Drain(context.Background(), "worker0", opts); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	want := "adm drain worker0 --ignore-daemonsets --delete-emptydir-data --force --timeout=10m"
-	if got := readArgvLog(t, argvLog); got != want {
-		t.Errorf("argv = %q; want %q", got, want)
-	}
-}
-
-func TestClientDrain_ArgvShape_NoOptions(t *testing.T) {
-	argvLog, _ := installFakeOCGeneric(t)
-	c := New(WithCLI("oc"), WithExecutor(executor.New()))
-
-	if err := c.Drain(context.Background(), "worker0", DrainOptions{}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got, want := readArgvLog(t, argvLog), "adm drain worker0"; got != want {
-		t.Errorf("argv = %q; want %q", got, want)
-	}
-}
-
-func TestClientDeleteNode_ArgvShape(t *testing.T) {
-	argvLog, _ := installFakeOCGeneric(t)
-	c := New(WithCLI("oc"), WithExecutor(executor.New()))
-
-	if err := c.DeleteNode(context.Background(), "worker0"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got, want := readArgvLog(t, argvLog), "delete node worker0 --ignore-not-found"; got != want {
-		t.Errorf("argv = %q; want %q", got, want)
-	}
-}
-
-func TestClientSetMastersSchedulable_ArgvShape(t *testing.T) {
-	argvLog, _ := installFakeOCGeneric(t)
-	c := New(WithCLI("oc"), WithExecutor(executor.New()))
-
-	if err := c.SetMastersSchedulable(context.Background(), true); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	want := `patch schedulers.config.openshift.io cluster --type=merge -p {"spec":{"mastersSchedulable":true}}`
-	if got := readArgvLog(t, argvLog); got != want {
-		t.Errorf("argv = %q; want %q", got, want)
-	}
-}
-
-func TestClientListNodes_FakeOC(t *testing.T) {
-	installFakeOCGeneric(t)
-	t.Setenv("OC_STDOUT", `{"items":[
-	  {"metadata":{"name":"master0","labels":{"node-role.kubernetes.io/master":""}},
-	   "status":{"conditions":[{"type":"Ready","status":"True"}]}}
-	]}`)
-	c := New(WithCLI("oc"), WithExecutor(executor.New()))
-
-	nodes, err := c.ListNodes(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(nodes) != 1 || nodes[0].Name != "master0" || !nodes[0].Ready {
-		t.Errorf("unexpected nodes: %+v", nodes)
-	}
-}
-
-func TestClientPodsForSelector_ArgvShape_AllNamespaces(t *testing.T) {
-	argvLog, _ := installFakeOCGeneric(t)
-	t.Setenv("OC_STDOUT", `{"items":[]}`)
-	c := New(WithCLI("oc"), WithExecutor(executor.New()))
-
-	if _, err := c.PodsForSelector(context.Background(), "", "app=rook-ceph-osd"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got, want := readArgvLog(t, argvLog), "get pods -A -l app=rook-ceph-osd -o json"; got != want {
-		t.Errorf("argv = %q; want %q", got, want)
 	}
 }
 

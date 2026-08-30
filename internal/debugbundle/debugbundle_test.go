@@ -18,7 +18,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
-// stubAddFile writes addFile callbacks as plain tar entries into tw.
 func stubAddFile(tw *tar.Writer) func(string, []byte) error {
 	return func(name string, data []byte) error {
 		hdr := &tar.Header{
@@ -35,7 +34,6 @@ func stubAddFile(tw *tar.Writer) func(string, []byte) error {
 	}
 }
 
-// stubAddStream writes stream callbacks as tar entries into tw.
 func stubAddStream(tw *tar.Writer) func(*tar.Header, io.Reader) error {
 	return func(hdr *tar.Header, r io.Reader) error {
 		if err := tw.WriteHeader(hdr); err != nil {
@@ -46,8 +44,7 @@ func stubAddStream(tw *tar.Writer) func(*tar.Header, io.Reader) error {
 	}
 }
 
-// readTarEntries closes tw, then reads every entry into the returned map.
-// Callers must not use tw after calling readTarEntries.
+// readTarEntries closes tw and returns its entries; callers must not use tw afterward.
 func readTarEntries(t *testing.T, tw *tar.Writer, buf *bytes.Buffer) map[string][]byte {
 	t.Helper()
 	if err := tw.Close(); err != nil {
@@ -104,66 +101,54 @@ func TestBundleConfigRedactsCredentials(t *testing.T) {
 }
 
 func TestBundleLogFile(t *testing.T) {
-	dir := t.TempDir()
-	logPath := filepath.Join(dir, "okdctl.log")
-	if err := os.WriteFile(logPath, []byte("line1\nline2\n"), 0o600); err != nil {
-		t.Fatal(err)
+	cases := []struct {
+		name       string
+		content    string // okdctl.log content written into the temp dir; empty writes no file
+		explicit   bool   // pass the log path directly instead of discovering it via projectRoot
+		prErr      error
+		wantStatus bundleStatus
+		wantMsg    string // substring of entry.Message when non-empty
+	}{
+		{name: "explicit path", content: "line1\nline2\n", explicit: true, prErr: errors.New("unused"), wantStatus: bundleStatusOK},
+		// Locks default-log discovery: no --log-file must still find <projectRoot>/okdctl.log.
+		{name: "default discovery", content: "deploy failed here\n", wantStatus: bundleStatusOK},
+		{name: "skips when no log exists", wantStatus: bundleStatusSkipped, wantMsg: "okdctl.log"},
 	}
-
-	var buf bytes.Buffer
-	tw := tar.NewWriter(&buf)
-	entry := bundleLogFile(stubAddFile(tw), logPath, "", errors.New("unused"))
-	if entry.Status != "ok" {
-		t.Fatalf("bundleLogFile status = %q; message: %s", entry.Status, entry.Message)
-	}
-	entries := readTarEntries(t, tw, &buf)
-	data, ok := entries["okdctl.log"]
-	if !ok {
-		t.Fatal("okdctl.log not found in tar")
-	}
-	if string(data) != "line1\nline2\n" {
-		t.Errorf("unexpected log content: %q", string(data))
-	}
-}
-
-// TestBundleLogFileDefaultDiscovery locks the zero-configuration pickup of
-// the default workspace log: with no --log-file, the bundle must find
-// <projectRoot>/okdctl.log on its own.
-func TestBundleLogFileDefaultDiscovery(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "okdctl.log"), []byte("deploy failed here\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	var buf bytes.Buffer
-	tw := tar.NewWriter(&buf)
-	entry := bundleLogFile(stubAddFile(tw), "", dir, nil)
-	if entry.Status != "ok" {
-		t.Fatalf("bundleLogFile status = %q; message: %s", entry.Status, entry.Message)
-	}
-	entries := readTarEntries(t, tw, &buf)
-	if string(entries["okdctl.log"]) != "deploy failed here\n" {
-		t.Errorf("default log content not bundled: %q", string(entries["okdctl.log"]))
-	}
-}
-
-func TestBundleLogFileSkipsWhenNoLogExists(t *testing.T) {
-	var buf bytes.Buffer
-	tw := tar.NewWriter(&buf)
-	entry := bundleLogFile(stubAddFile(tw), "", t.TempDir(), nil)
-	if entry.Status != "skipped" {
-		t.Fatalf("bundleLogFile status = %q, want skipped; message: %s", entry.Status, entry.Message)
-	}
-	if !strings.Contains(entry.Message, "okdctl.log") {
-		t.Errorf("skip message does not name the default log location: %s", entry.Message)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			logPath, projectRoot := "", dir
+			if tc.explicit {
+				logPath, projectRoot = filepath.Join(dir, "okdctl.log"), ""
+			}
+			if tc.content != "" {
+				if err := os.WriteFile(filepath.Join(dir, "okdctl.log"), []byte(tc.content), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var buf bytes.Buffer
+			tw := tar.NewWriter(&buf)
+			entry := bundleLogFile(stubAddFile(tw), logPath, projectRoot, tc.prErr)
+			if entry.Status != tc.wantStatus {
+				t.Fatalf("bundleLogFile status = %q, want %q; message: %s", entry.Status, tc.wantStatus, entry.Message)
+			}
+			if tc.wantMsg != "" && !strings.Contains(entry.Message, tc.wantMsg) {
+				t.Errorf("message = %q; want it to contain %q", entry.Message, tc.wantMsg)
+			}
+			if tc.wantStatus != bundleStatusOK {
+				return
+			}
+			data, ok := readTarEntries(t, tw, &buf)["okdctl.log"]
+			if !ok {
+				t.Fatal("okdctl.log not found in tar")
+			}
+			if string(data) != tc.content {
+				t.Errorf("bundled log content = %q, want %q", string(data), tc.content)
+			}
+		})
 	}
 }
 
-// TestBundledLogScrubsInstallerCredentials locks the package promise that
-// credentials are redacted from the bundled log. The log is produced the way
-// deploy produces it — openshift-install output streamed through
-// install.NewMilestoneWriter — then archived via bundleLogFile, so the test
-// covers the full writer-to-tarball chain.
 func TestBundledLogScrubsInstallerCredentials(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -229,8 +214,7 @@ func TestBundledLogScrubsInstallerCredentials(t *testing.T) {
 	}
 }
 
-// unavailableOptions stubs the config/project-root loaders so Write exercises
-// only tarball-level behavior; every section skips.
+// unavailableOptions makes every section skip so Write exercises only tarball-level behavior.
 func unavailableOptions(outPath string) Options {
 	return Options{
 		OutPath:        outPath,
@@ -333,7 +317,7 @@ func TestTarDirIntoRejectsSymlinkEscape(t *testing.T) {
 		return
 	}
 	// filepath.WalkDir marks directory symlinks non-regular, so tarDirInto
-	// skips them before os.Root fires. Verify the escaped file is absent.
+	// skips them before os.Root fires.
 	tr := tar.NewReader(bytes.NewReader(buf.Bytes()))
 	for {
 		hdr, nextErr := tr.Next()
@@ -350,8 +334,7 @@ func TestTarDirIntoRejectsSymlinkEscape(t *testing.T) {
 }
 
 func TestTarDirIntoTruncatesOversizedFile(t *testing.T) {
-	// Override the production cap with a tiny one so the test doesn't allocate
-	// tens of MB of zeros into a bytes.Buffer.
+	// Override the production cap so the test doesn't allocate tens of MB of zeros.
 	orig := maxBundleFileBytes
 	maxBundleFileBytes = 1024
 	t.Cleanup(func() { maxBundleFileBytes = orig })
@@ -419,7 +402,6 @@ func TestTarDirIntoCancelledContext(t *testing.T) {
 	}
 }
 
-// redactableErr is a test error type that implements Redacted() any.
 type redactableErr struct{ raw string }
 
 func (e redactableErr) Error() string { return e.raw }
@@ -444,8 +426,7 @@ func TestSafeMessageRedacted(t *testing.T) {
 func TestCollectSectionsSkipMustGather(t *testing.T) {
 	add := func(string, []byte) error { return nil }
 	addStream := func(*tar.Header, io.Reader) error { return nil }
-	// cfgErr/prErr non-nil so bundleConfig and bundleTerraformState skip
-	// without dereferencing nil cfg or stat-ing an empty path.
+	// cfgErr/prErr non-nil so bundleConfig/bundleTerraformState skip without dereferencing nil cfg.
 	secs := collectSections(
 		context.Background(),
 		add,

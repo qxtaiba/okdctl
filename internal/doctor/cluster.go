@@ -9,9 +9,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/cluster"
 )
 
-// ClusterProbe is the subset of *cluster.Client the day-2 checks consume.
-// doctor owns the interface so tests can supply a fake without a live cluster;
-// the CLI passes a real *cluster.Client.
+// ClusterProbe is the subset of *cluster.Client the day-2 checks consume, owned
+// here so tests can fake it.
 type ClusterProbe interface {
 	ListNodes(ctx context.Context) ([]cluster.NodeDetail, error)
 	ClusterOperatorHealth(ctx context.Context) (cluster.OperatorHealth, error)
@@ -20,13 +19,10 @@ type ClusterProbe interface {
 	SignerNotAfter(ctx context.Context) (time.Time, error)
 }
 
-// signerWarnWindow is how close to signer expiry the check warns. Kubelet cert
-// rotation needs the signer valid, so a month's runway is the point to act.
 const signerWarnWindow = 30 * 24 * time.Hour
 
-// ClusterCheck builds the day-2 "cluster" section from a live probe. The CLI
-// layer appends it only when a kubeconfig is present, so a missing cluster
-// keeps doctor a pure pre-deploy tool.
+// ClusterCheck builds the day-2 "cluster" section from a live probe; the CLI
+// appends it only when a kubeconfig is present.
 func ClusterCheck(probe ClusterProbe) Check {
 	return Check{
 		Name: "cluster",
@@ -43,9 +39,8 @@ func clusterHealth(ctx context.Context, probe ClusterProbe) Result {
 		worst = max(worst, sev)
 	}
 
-	// Nodes double as the reachability probe: with the API down every other
-	// query fails identically, so short-circuit to one clear finding rather
-	// than five cascading errors.
+	// Nodes double as the reachability probe, short-circuiting to one finding
+	// instead of five cascading errors.
 	nodes, err := probe.ListNodes(ctx)
 	if err != nil {
 		return Result{
@@ -116,8 +111,7 @@ func clusterHealth(ctx context.Context, probe ClusterProbe) Result {
 		}
 	}
 
-	// Pending CSRs alongside NotReady nodes is the classic post-signer-expiry
-	// recovery state: approving the requests lets kubelets re-register.
+	// Pending CSRs with NotReady nodes is the classic post-signer-expiry recovery state.
 	if pending > 0 && len(notReady) > 0 {
 		add(Warn, "csr recovery",
 			"NotReady nodes with pending CSRs — approve them: oc get csr -o name | xargs oc adm certificate approve")
@@ -126,8 +120,7 @@ func clusterHealth(ctx context.Context, probe ClusterProbe) Result {
 	return Result{Sev: worst, Items: items}
 }
 
-// oneLine flattens an error to a single line so a multi-line oc stderr cannot
-// smear the aligned item list.
+// oneLine flattens an error so multi-line oc stderr can't smear the aligned item list.
 func oneLine(err error) string {
 	return strings.ReplaceAll(strings.TrimSpace(err.Error()), "\n", "; ")
 }

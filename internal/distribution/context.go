@@ -1,10 +1,7 @@
 package distribution
 
-// PhaseContext provides type-safe data sharing between steps within a
-// phase. Today postinstall is the only consumer; the type is scaffolded
-// for symmetric use as resume-checkpoint work lands in other phases.
-// Orchestrator.Run executes steps serially, so access is single-threaded.
-// Must be created via NewPhaseContext; the zero value panics on use.
+// PhaseContext shares typed data between phase steps; the zero value panics,
+// so create it via NewPhaseContext.
 type PhaseContext[T any] struct {
 	data        T
 	initialized bool

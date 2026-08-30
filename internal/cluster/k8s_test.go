@@ -24,9 +24,16 @@ func TestValidateKubeconfigEnv(t *testing.T) {
 	if err := os.MkdirAll(kubeDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	kubeconfig := filepath.Join(kubeDir, "config")
-	if err := os.WriteFile(kubeconfig, []byte(""), 0o600); err != nil {
-		t.Fatal(err)
+	writeKubeconfig := func(name string, mode os.FileMode) string {
+		t.Helper()
+		f := filepath.Join(kubeDir, name)
+		if err := os.WriteFile(f, []byte(""), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(f, mode); err != nil {
+			t.Fatal(err)
+		}
+		return f
 	}
 
 	linkTarget := filepath.Join(tmpHome, "real-file")
@@ -38,107 +45,42 @@ func TestValidateKubeconfigEnv(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Run("dev_zero_rejected", func(t *testing.T) {
-		err := validateKubeconfigEnv("/dev/zero")
-		if err == nil {
-			t.Error("expected /dev/zero to be rejected; got nil")
-		}
-	})
-
-	t.Run("proc_self_environ_rejected", func(t *testing.T) {
-		err := validateKubeconfigEnv("/proc/self/environ")
-		if err == nil {
-			t.Error("expected /proc/self/environ to be rejected; got nil")
-		}
-	})
-
-	t.Run("symlink_rejected", func(t *testing.T) {
-		err := validateKubeconfigEnv(symlinkPath)
-		if err == nil {
-			t.Fatal("expected symlink inside $HOME to be rejected; got nil")
-		}
-		if !strings.Contains(err.Error(), "symlink") {
-			t.Errorf("error %q does not contain 'symlink'", err.Error())
-		}
-	})
-
-	t.Run("home_kube_config_accepted", func(t *testing.T) {
-		if err := validateKubeconfigEnv(kubeconfig); err != nil {
-			t.Errorf("expected $HOME/.kube/config to be accepted; got %v", err)
-		}
-	})
-
-	t.Run("traversal_outside_prefix_rejected", func(t *testing.T) {
+	tests := []struct {
+		name       string
+		path       string
+		wantErr    bool
+		wantSubstr string // asserted on the error only when wantErr
+	}{
+		{name: "dev_zero_rejected", path: "/dev/zero", wantErr: true},
+		{name: "proc_self_environ_rejected", path: "/proc/self/environ", wantErr: true},
+		{name: "symlink_rejected", path: symlinkPath, wantErr: true, wantSubstr: "symlink"},
+		{name: "home_kube_config_accepted", path: writeKubeconfig("config", 0o600)},
 		// /etc/foo/../../../tmp/attack cleans to /tmp/attack, outside both prefixes.
-		err := validateKubeconfigEnv("/etc/foo/../../../tmp/attack")
-		if err == nil {
-			t.Error("expected traversal-to-/tmp path to be rejected; got nil")
-		}
-	})
-
-	t.Run("missing_path_rejected", func(t *testing.T) {
-		missing := filepath.Join(tmpHome, "does-not-exist", "kubeconfig")
-		err := validateKubeconfigEnv(missing)
-		if err == nil {
-			t.Fatal("expected missing path to be rejected; got nil")
-		}
-		if !strings.Contains(err.Error(), "inaccessible") {
-			t.Errorf("error %q does not contain 'inaccessible'", err.Error())
-		}
-	})
-
-	t.Run("prefix_spoof_etcd_rejected", func(t *testing.T) {
-		// /etcd/foo shares the '/etc' byte prefix but not '/etc/'; even if the
-		// path existed the sep-guarded HasPrefix check would reject it.
-		err := validateKubeconfigEnv("/etcd/foo")
-		if err == nil {
-			t.Error("expected /etcd/foo to be rejected; got nil")
-		}
-	})
-
-	t.Run("perm_0600_accepted", func(t *testing.T) {
-		f := filepath.Join(kubeDir, "config-0600")
-		if err := os.WriteFile(f, []byte(""), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if err := validateKubeconfigEnv(f); err != nil {
-			t.Errorf("expected 0o600 kubeconfig to be accepted; got %v", err)
-		}
-	})
-
-	t.Run("perm_0644_rejected", func(t *testing.T) {
-		f := filepath.Join(kubeDir, "config-0644")
-		if err := os.WriteFile(f, []byte(""), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Chmod(f, 0o644); err != nil {
-			t.Fatal(err)
-		}
-		err := validateKubeconfigEnv(f)
-		if err == nil {
-			t.Fatal("expected 0o644 kubeconfig to be rejected; got nil")
-		}
-		if !strings.Contains(err.Error(), "insecure permissions") {
-			t.Errorf("error %q does not contain 'insecure permissions'", err.Error())
-		}
-	})
-
-	t.Run("perm_0620_rejected", func(t *testing.T) {
-		f := filepath.Join(kubeDir, "config-0620")
-		if err := os.WriteFile(f, []byte(""), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Chmod(f, 0o620); err != nil {
-			t.Fatal(err)
-		}
-		err := validateKubeconfigEnv(f)
-		if err == nil {
-			t.Fatal("expected 0o620 kubeconfig to be rejected; got nil")
-		}
-		if !strings.Contains(err.Error(), "insecure permissions") {
-			t.Errorf("error %q does not contain 'insecure permissions'", err.Error())
-		}
-	})
+		{name: "traversal_outside_prefix_rejected", path: "/etc/foo/../../../tmp/attack", wantErr: true},
+		{name: "missing_path_rejected", path: filepath.Join(tmpHome, "does-not-exist", "kubeconfig"), wantErr: true, wantSubstr: "inaccessible"},
+		// /etcd/foo shares the '/etc' prefix but not '/etc/'; sep-guard rejects it.
+		{name: "prefix_spoof_etcd_rejected", path: "/etcd/foo", wantErr: true},
+		{name: "perm_0600_accepted", path: writeKubeconfig("config-0600", 0o600)},
+		{name: "perm_0644_rejected", path: writeKubeconfig("config-0644", 0o644), wantErr: true, wantSubstr: "insecure permissions"},
+		{name: "perm_0620_rejected", path: writeKubeconfig("config-0620", 0o620), wantErr: true, wantSubstr: "insecure permissions"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateKubeconfigEnv(tc.path)
+			if !tc.wantErr {
+				if err != nil {
+					t.Errorf("expected %s to be accepted; got %v", tc.path, err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("expected %s to be rejected; got nil", tc.path)
+			}
+			if tc.wantSubstr != "" && !strings.Contains(err.Error(), tc.wantSubstr) {
+				t.Errorf("error %q does not contain %q", err.Error(), tc.wantSubstr)
+			}
+		})
+	}
 }
 
 func TestWithExecutor_SharesInjectedExecutorEnv(t *testing.T) {
@@ -149,8 +91,7 @@ exit 0
 
 	exec := executor.New()
 	c := New(WithCLI("oc"), WithExecutor(exec))
-	// AppendEnv runs after Client construction — Run must still observe it
-	// because the Client shares the executor pointer, not a private copy.
+	// AppendEnv runs after construction; Run must still see it (shared pointer, not a copy).
 	exec.AppendEnv("KUBECONFIG=/tmp/shared-kubeconfig")
 
 	result, err := c.Run(context.Background(), "get", "pods")

@@ -11,15 +11,20 @@ import (
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
-// TestCleanupTerraformEnv_PreservesState is the load-bearing test for the
-// invariant "terraform.tfstate must survive a cleanup run so destroy can
-// still use it." Regressing this loses cluster state.
+func writeFiles(t *testing.T, dir string, files map[string]string) {
+	t.Helper()
+	for name, body := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// Load-bearing: terraform.tfstate must survive cleanup so destroy can still use it.
 func TestCleanupTerraformEnv_PreservesState(t *testing.T) {
 	dir := t.TempDir()
 
-	// Seed an env dir with every file cleanupTerraformEnv is expected to
-	// remove PLUS terraform.tfstate, which it must NOT touch.
-	files := map[string]string{
+	writeFiles(t, dir, map[string]string{
 		"terraform.tfvars":                   "vars",
 		"tfplan":                             "plan",
 		"destroy.tfplan":                     "dplan",
@@ -27,12 +32,7 @@ func TestCleanupTerraformEnv_PreservesState(t *testing.T) {
 		".terraform.lock.hcl":                "lock",
 		workspace.BootstrapStateSentinelFile: `{"bootstrap_enabled":false}`,
 		"terraform.tfstate":                  `{"version":4,"resources":[]}`,
-	}
-	for name, body := range files {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
+	})
 	if err := os.MkdirAll(filepath.Join(dir, ".terraform", "providers"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -55,8 +55,6 @@ func TestCleanupTerraformEnv_PreservesState(t *testing.T) {
 		}
 	}
 
-	// THE invariant: terraform.tfstate must still be present with original
-	// contents intact.
 	body, err := os.ReadFile(filepath.Join(dir, "terraform.tfstate"))
 	if err != nil {
 		t.Fatalf("terraform.tfstate removed (DATA LOSS): %v", err)
@@ -65,8 +63,7 @@ func TestCleanupTerraformEnv_PreservesState(t *testing.T) {
 		t.Errorf("terraform.tfstate mutated: %q", body)
 	}
 
-	// terraform.tfstate.backup is the operator's last-resort rollback artefact;
-	// cleanup must not touch it.
+	// terraform.tfstate.backup is the operator's rollback artefact; cleanup must not touch it.
 	backup, err := os.ReadFile(filepath.Join(dir, "terraform.tfstate.backup"))
 	if err != nil {
 		t.Fatalf("terraform.tfstate.backup removed (DATA LOSS): %v", err)
@@ -83,30 +80,22 @@ func TestCleanupTerraformEnv_MissingDirIsNoOp(t *testing.T) {
 	}
 }
 
-// TestTerraformFilesToRemove_DoesNotIncludeTfstate pins the structural
-// invariant: terraform.tfstate must never appear in the cleanup list, or
-// destroy loses its only handle on existing infrastructure.
+// Pins the invariant: terraform.tfstate must never appear in the cleanup list.
 func TestTerraformFilesToRemove_DoesNotIncludeTfstate(t *testing.T) {
 	if slices.Contains(terraformFilesToRemove, "terraform.tfstate") {
 		t.Fatal("terraform.tfstate must not be in terraformFilesToRemove: would break destroy recoverability")
 	}
 }
 
-// TestTerraform_BaseDirMissing exercises the public Terraform entry point
-// when the environments/ base does not exist — should log and return nil,
-// not error.
 func TestTerraform_BaseDirMissing(t *testing.T) {
-	projectRoot := t.TempDir() // no infrastructure/terraform/environments under this
+	projectRoot := t.TempDir()
 	err := Terraform(context.Background(), projectRoot, "", logutil.NopLogger)
 	if err != nil {
 		t.Errorf("missing base must be nil; got %v", err)
 	}
 }
 
-// TestTerraform_AllEnvs_PreservesEachState asserts the implicit multi-env
-// walk (terraformEnv == "") preserves terraform.tfstate in every env dir
-// while still removing generated artefacts. A regression here silently
-// bricks destroy on multi-env setups.
+// Multi-env walk (terraformEnv == "") must preserve tfstate in every env dir.
 func TestTerraform_AllEnvs_PreservesEachState(t *testing.T) {
 	projectRoot := t.TempDir()
 	envBase := filepath.Join(projectRoot, "infrastructure", "terraform", "environments")
@@ -120,15 +109,11 @@ func TestTerraform_AllEnvs_PreservesEachState(t *testing.T) {
 		if err := os.MkdirAll(envDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(envDir, "terraform.tfstate"), []byte(stateBody), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(envDir, "tfplan"), []byte("plan"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(envDir, ".terraform.lock.hcl"), []byte("lock"), 0o600); err != nil {
-			t.Fatal(err)
-		}
+		writeFiles(t, envDir, map[string]string{
+			"terraform.tfstate":   stateBody,
+			"tfplan":              "plan",
+			".terraform.lock.hcl": "lock",
+		})
 	}
 
 	if err := Terraform(context.Background(), projectRoot, "", logutil.NopLogger); err != nil {
@@ -154,25 +139,18 @@ func TestTerraform_AllEnvs_PreservesEachState(t *testing.T) {
 	}
 }
 
-// TestCleanupTerraformEnv_PartialFailureDoesNotAbort verifies that an
-// EPERM on .terraform/providers does not abort the loop: tfvars is still
-// removed, terraform.tfstate still survives.
+// EPERM on .terraform/providers must not abort the loop; tfvars still removed, tfstate survives.
 func TestCleanupTerraformEnv_PartialFailureDoesNotAbort(t *testing.T) {
 	if os.Getuid() == 0 {
 		t.Skip("requires non-root for chmod-based EPERM")
 	}
 
 	dir := t.TempDir()
-	seed := map[string]string{
+	writeFiles(t, dir, map[string]string{
 		"terraform.tfvars":         "vars",
 		"terraform.tfstate":        `{"version":4,"resources":[]}`,
 		"terraform.tfstate.backup": "backup",
-	}
-	for name, body := range seed {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
+	})
 
 	dotTerraform := filepath.Join(dir, ".terraform")
 	if err := os.MkdirAll(filepath.Join(dotTerraform, "providers"), 0o755); err != nil {
@@ -205,20 +183,10 @@ func TestCleanupTerraformEnv_PartialFailureDoesNotAbort(t *testing.T) {
 	}
 }
 
-// TestTerraform_SingleEnv_PreservesState combines the Terraform() entry
-// point with the tfstate-preservation contract.
 func TestTerraform_SingleEnv_PreservesState(t *testing.T) {
 	projectRoot := t.TempDir()
-	envDir := filepath.Join(projectRoot, "infrastructure", "terraform", "environments", "production")
-	if err := os.MkdirAll(envDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(envDir, "terraform.tfstate"), []byte("STATE"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(envDir, "tfplan"), []byte("planned"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	envDir := filepath.Dir(seedStateFile(t, projectRoot, "STATE"))
+	writeFiles(t, envDir, map[string]string{"tfplan": "planned"})
 
 	if err := Terraform(context.Background(), projectRoot, "production", logutil.NopLogger); err != nil {
 		t.Fatal(err)

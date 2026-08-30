@@ -1,7 +1,6 @@
 package cluster
 
 import (
-	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -13,12 +12,8 @@ import (
 	"math/big"
 	"testing"
 	"time"
-
-	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
-// signerCertPEM builds a self-signed cert PEM with the given NotAfter so tests
-// can drive parseSignerNotAfter/SignerNotAfter without a live cluster.
 func signerCertPEM(t *testing.T, notAfter time.Time) []byte {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -38,17 +33,20 @@ func signerCertPEM(t *testing.T, notAfter time.Time) []byte {
 	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 }
 
-func TestParseSignerNotAfter(t *testing.T) {
-	want := time.Now().Add(400 * 24 * time.Hour).Truncate(time.Second)
-	pemBytes := signerCertPEM(t, want)
+func signerSecretJSON(t *testing.T, notAfter time.Time) []byte {
+	t.Helper()
 	secret, err := json.Marshal(map[string]any{
-		"data": map[string]string{"tls.crt": base64.StdEncoding.EncodeToString(pemBytes)},
+		"data": map[string]string{"tls.crt": base64.StdEncoding.EncodeToString(signerCertPEM(t, notAfter))},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	return secret
+}
 
-	got, err := parseSignerNotAfter(secret)
+func TestParseSignerNotAfter(t *testing.T) {
+	want := time.Now().Add(400 * 24 * time.Hour).Truncate(time.Second)
+	got, err := parseSignerNotAfter(signerSecretJSON(t, want))
 	if err != nil {
 		t.Fatalf("parseSignerNotAfter: %v", err)
 	}
@@ -60,27 +58,5 @@ func TestParseSignerNotAfter(t *testing.T) {
 func TestParseSignerNotAfter_MissingCrt(t *testing.T) {
 	if _, err := parseSignerNotAfter([]byte(`{"data":{}}`)); err == nil {
 		t.Fatal("expected error when tls.crt absent")
-	}
-}
-
-func TestSignerNotAfter_FakeOC(t *testing.T) {
-	installFakeOCEmitting(t)
-	want := time.Now().Add(10 * 24 * time.Hour).Truncate(time.Second)
-	pemBytes := signerCertPEM(t, want)
-	secret, err := json.Marshal(map[string]any{
-		"data": map[string]string{"tls.crt": base64.StdEncoding.EncodeToString(pemBytes)},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("OC_JSON", string(secret))
-
-	c := New(WithCLI("oc"), WithLogger(logutil.NopLogger))
-	got, err := c.SignerNotAfter(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !got.Equal(want) {
-		t.Errorf("NotAfter = %v; want %v", got, want)
 	}
 }

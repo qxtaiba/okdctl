@@ -38,9 +38,8 @@ func loadConfig(configFile string) (*config.Config, error) {
 	return cfg, nil
 }
 
-// handleCredentials loads the .env file (non-overwriting) then resolves
-// Proxmox credentials from environment and config. Returns an error if the
-// .env could not be loaded — callers must not proceed in that case.
+// handleCredentials loads the .env file then resolves credentials; callers must
+// not proceed if it returns an error.
 func handleCredentials(cfg *config.Config) (*credentials.ProxmoxCredentials, error) {
 	envPath := credentials.EnvFilePath(cfgFile)
 	if err := credentials.LoadEnvFile(envPath); err != nil {
@@ -59,9 +58,8 @@ func handleCredentials(cfg *config.Config) (*credentials.ProxmoxCredentials, err
 	return creds, nil
 }
 
-// reportCredentialProvenance logs the resolved credential source plus any
-// mixed-provenance warnings the operator should see (env-overrides-config,
-// endpoint falling back to config). Callers must check creds.IsValid first.
+// reportCredentialProvenance logs credential source and mixed-provenance
+// warnings; callers must check creds.IsValid first.
 func reportCredentialProvenance(creds *credentials.ProxmoxCredentials) {
 	logutil.Info("using credentials", logutil.LF("source", creds.Source))
 	if creds.ConfigCredentialsOverridden {
@@ -75,24 +73,17 @@ func reportCredentialProvenance(creds *credentials.ProxmoxCredentials) {
 	}
 }
 
-// planPreviewOptions configures runTerraformPlanPreview.
 type planPreviewOptions struct {
-	// ConfigPath derives the credentials .env file path via credentials.EnvFilePath.
+	// derives the .env file path via credentials.EnvFilePath
 	ConfigPath string
-	// ProjectRoot is the workspace root containing the terraform environments dir.
+	// contains the terraform environments dir
 	ProjectRoot string
-	// Caller is the runlock verb recorded for concurrent-run diagnostics
-	// (e.g. "deploy --dry-run", "plan").
+	// runlock verb recorded for concurrent-run diagnostics (e.g. "plan")
 	Caller string
 }
 
-// runTerraformPlanPreview loads credentials, acquires the project run lock,
-// connects the proxmox provider, and runs a read-only terraform plan
-// preview, returning the parsed non-no-op resource changes. It is the sole
-// path to a preview plan — deploy --dry-run and okdctl plan both call it so
-// the two commands cannot drift on how a preview is produced. Errors are
-// returned as-is (already typed via errtypes); callers decide whether to
-// wrap or let them surface.
+// runTerraformPlanPreview is the sole preview-plan path; deploy --dry-run and
+// okdctl plan both call it so they cannot drift on how a preview is produced.
 func runTerraformPlanPreview(ctx context.Context, cfg *config.Config, opts planPreviewOptions) ([]terraform.ResourceChange, error) {
 	envPath := credentials.EnvFilePath(opts.ConfigPath)
 	if err := credentials.LoadEnvFile(envPath); err != nil {
@@ -143,12 +134,9 @@ func resolveProjectRoot() (string, error) {
 	}
 	resolved, err := filepath.EvalSymlinks(abs)
 	if err != nil {
-		// EvalSymlinks fails with ErrNotExist when a path component does not
-		// exist yet (e.g., macOS temp dirs on startup). That case is benign:
-		// fall back to the absolute path. Any other error — EPERM, EIO, etc.
-		// — is a real filesystem problem that must not be silently swallowed,
-		// because abs may still be a symlink and handing it to sudo-elevated
-		// helpers would let an attacker redirect writes to arbitrary paths.
+		// ErrNotExist here is benign (path not created yet); any other error
+		// must not be swallowed, since a still-symlinked abs handed to
+		// sudo-elevated helpers could redirect writes.
 		if !errors.Is(err, os.ErrNotExist) {
 			return "", fmt.Errorf("resolve project root symlinks: %w", err)
 		}
@@ -157,10 +145,8 @@ func resolveProjectRoot() (string, error) {
 	return resolved, nil
 }
 
-// resolveWorkspaceRoot resolves the current directory as the workspace root
-// without requiring project markers. Deploy uses it directly: deploy is the
-// command that creates the markers, so gating it on their presence would be
-// circular.
+// resolveWorkspaceRoot resolves cwd without requiring project markers; deploy
+// uses it directly since deploy is what creates the markers.
 func resolveWorkspaceRoot() (string, error) {
 	root, err := resolveProjectRoot()
 	if err != nil {
@@ -177,12 +163,9 @@ func resolveProjectRootOrDie() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// Project marker check: okdctl.yaml and okdctl.env are the primary
-	// markers. terraform.tfstate is a secondary recovery hint — it can
-	// outlive a successful destroy+cleanup, which preserves it for
-	// resumability. At least one of the three must be present; a lone
-	// tfstate triggers an explicit operator warning (warnIfTfStateOnly)
-	// because it may belong to a different cluster.
+	// tfstate is a secondary recovery hint that can outlive destroy+cleanup; a
+	// lone tfstate warns (warnIfTfStateOnly) since it may belong to a different
+	// cluster.
 	if !hasProjectMarker(root) {
 		return "", &errtypes.ConfigError{
 			Msg: fmt.Sprintf(
@@ -199,9 +182,8 @@ func resolveProjectRootOrDie() (string, error) {
 	return root, nil
 }
 
-// hasPrimaryMarker reports whether root contains okdctl's primary config
-// markers: the configured config-file name or okdctl.env. Both are
-// exclusively written by okdctl inside a project root.
+// hasPrimaryMarker reports whether root has the config file or okdctl.env; both
+// are written exclusively by okdctl.
 func hasPrimaryMarker(root string) bool {
 	return slices.ContainsFunc([]string{filepath.Base(cfgFile), "okdctl.env"}, func(name string) bool {
 		_, err := os.Stat(filepath.Join(root, name))
@@ -214,17 +196,14 @@ func terraformStateMatches(root string) []string {
 	return matches
 }
 
-// hasProjectMarker reports whether root contains at least one okdctl project
-// marker: a primary marker (see hasPrimaryMarker) or a terraform.tfstate
-// under infrastructure/terraform/environments/.
+// hasProjectMarker reports whether root has a primary marker (see
+// hasPrimaryMarker) or a terraform.tfstate.
 func hasProjectMarker(root string) bool {
 	return hasPrimaryMarker(root) || len(terraformStateMatches(root)) > 0
 }
 
-// warnIfTfStateOnly emits a structured warning when the only project marker
-// is terraform.tfstate (okdctl.yaml and okdctl.env both absent). A lone
-// tfstate after destroy+cleanup may belong to a different cluster if the
-// operator removed the primary config files manually.
+// warnIfTfStateOnly warns when tfstate is the only marker present, since it may
+// belong to a different cluster.
 func warnIfTfStateOnly(root string) {
 	if hasPrimaryMarker(root) {
 		return
@@ -241,12 +220,8 @@ func warnIfTfStateOnly(root string) {
 	logutil.Info("if this directory belongs to a different cluster, stop and run 'okdctl deploy' in the correct directory")
 }
 
-// refuseInFlightNodeOp is deploy's counterpart to the node verbs' foreign-
-// marker guard: an interrupted node op leaves config/tfvars that undercount
-// the in-flight node(s), so a full reconcile would destroy them. Completed
-// add-batch residue (see node.OpMarker.CompletedAddResidue) is ignored — the
-// persisted topology already covers it. ack mirrors the sibling ops'
-// --acknowledge-interrupted-op override.
+// refuseInFlightNodeOp refuses when an interrupted node op would undercount
+// nodes in a full reconcile; ack mirrors --acknowledge-interrupted-op.
 func refuseInFlightNodeOp(projectRoot string, cfg *config.Config, ack bool) error {
 	m, err := node.ReadOpMarker(workspace.WorkDir(projectRoot), cfg.Cluster.Name)
 	if err != nil {
@@ -267,10 +242,8 @@ func refuseInFlightNodeOp(projectRoot string, cfg *config.Config, ack bool) erro
 		m.Op, m.Target, m.Step, m.Op)}
 }
 
-// announceInFlightNodeOp surfaces an in-flight node-op marker in a
-// preamble/preview (destroy, plan) so the operator's model of what terraform
-// state contains is correct before confirming or reading the plan.
-// Best-effort: the command proceeds regardless.
+// announceInFlightNodeOp surfaces an in-flight node-op marker before
+// destroy/plan confirms; best-effort, the command proceeds regardless.
 func announceInFlightNodeOp(projectRoot string, cfg *config.Config) {
 	m, err := node.ReadOpMarker(workspace.WorkDir(projectRoot), cfg.Cluster.Name)
 	if err != nil {

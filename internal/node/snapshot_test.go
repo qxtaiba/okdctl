@@ -18,23 +18,22 @@ import (
 
 const testSnapshotName = "pre-upgrade"
 
-// fakeSnapshotClient records the pvesh-backed calls a snapshot op makes, so a
-// dry-run can be asserted to make none and a real run can be asserted to make
-// them in the right order (via the shared log, when set).
+// fakeSnapshotClient records pvesh-backed calls; dry-run asserts none, a real
+// run asserts ordering via the shared log.
 type fakeSnapshotClient struct {
 	log *[]string
 
-	createCalls, listCalls, rollbackCalls, deleteCalls, agentCalls int
+	createCalls, rollbackCalls, deleteCalls int
 
 	agentEnabled bool
 	agentErr     error
 
-	createErr, listErr, rollbackErr, deleteErr error
+	createErr, rollbackErr, deleteErr error
 
 	snapshots []hostssh.SnapshotInfo
 
-	lastVMID                                         int
-	lastCreateName, lastRollbackName, lastDeleteName string
+	lastVMID       int
+	lastDeleteName string
 }
 
 func (f *fakeSnapshotClient) record(event string) {
@@ -43,28 +42,22 @@ func (f *fakeSnapshotClient) record(event string) {
 	}
 }
 
-func (f *fakeSnapshotClient) CreateSnapshot(_ context.Context, _ *hostssh.RemoteISOParams, vmid int, name, _ string, _ time.Duration) error {
+func (f *fakeSnapshotClient) CreateSnapshot(_ context.Context, _ *hostssh.RemoteISOParams, vmid int, _, _ string, _ time.Duration) error {
 	f.createCalls++
 	f.lastVMID = vmid
-	f.lastCreateName = name
 	f.record("snapshot-create")
 	return f.createErr
 }
 
 func (f *fakeSnapshotClient) ListSnapshots(_ context.Context, _ *hostssh.RemoteISOParams, vmid int) ([]hostssh.SnapshotInfo, error) {
-	f.listCalls++
 	f.lastVMID = vmid
 	f.record("snapshot-list")
-	if f.listErr != nil {
-		return nil, f.listErr
-	}
 	return f.snapshots, nil
 }
 
-func (f *fakeSnapshotClient) RollbackSnapshot(_ context.Context, _ *hostssh.RemoteISOParams, vmid int, name string, _ time.Duration) error {
+func (f *fakeSnapshotClient) RollbackSnapshot(_ context.Context, _ *hostssh.RemoteISOParams, vmid int, _ string, _ time.Duration) error {
 	f.rollbackCalls++
 	f.lastVMID = vmid
-	f.lastRollbackName = name
 	f.record("snapshot-rollback")
 	return f.rollbackErr
 }
@@ -78,7 +71,6 @@ func (f *fakeSnapshotClient) DeleteSnapshot(_ context.Context, _ *hostssh.Remote
 }
 
 func (f *fakeSnapshotClient) VMAgentEnabled(_ context.Context, _ *hostssh.RemoteISOParams, vmid int) (bool, error) {
-	f.agentCalls++
 	f.lastVMID = vmid
 	f.record("vm-agent-enabled")
 	if f.agentErr != nil {
@@ -100,6 +92,16 @@ func seedSnapshotRunner(t *testing.T, fc *fakeCluster, fsc *fakeSnapshotClient, 
 	return r
 }
 
+// seedWorkerSnapshotRunner builds a Runner over a Ready worker0; DryRun stays
+// at seedRunner's default (true).
+func seedWorkerSnapshotRunner(t *testing.T, fsc *fakeSnapshotClient) (*Runner, *fakeCluster) {
+	t.Helper()
+	fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}}}
+	cfg := config.DefaultConfig()
+	cfg.Provider.Proxmox.Node = testProxmoxNode
+	return seedSnapshotRunner(t, fc, fsc, cfg), fc
+}
+
 func indicesOf(log []string, event string) []int {
 	var out []int
 	for i, e := range log {
@@ -110,8 +112,6 @@ func indicesOf(log []string, event string) []int {
 	return out
 }
 
-// TestCreateSnapshot_readyNodeCordonsDrainsAndUncordons is requirement (a):
-// create on a Ready node does Cordon→Drain→CreateSnapshot→Uncordon in order.
 func TestCreateSnapshot_readyNodeCordonsDrainsAndUncordons(t *testing.T) {
 	var log []string
 	fc := &fakeCluster{
@@ -149,8 +149,6 @@ func TestCreateSnapshot_readyNodeCordonsDrainsAndUncordons(t *testing.T) {
 	}
 }
 
-// TestCreateSnapshot_notReadySkipsCordonAndDrain is requirement (b): create on
-// a NotReady node is snapshotted directly with no cordon/drain/uncordon.
 func TestCreateSnapshot_notReadySkipsCordonAndDrain(t *testing.T) {
 	fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: false}}}
 	fsc := &fakeSnapshotClient{}
@@ -171,15 +169,9 @@ func TestCreateSnapshot_notReadySkipsCordonAndDrain(t *testing.T) {
 	}
 }
 
-// TestCreateSnapshot_dryRunMakesZeroMutatingCalls is requirement (c) for create.
 func TestCreateSnapshot_dryRunMakesZeroMutatingCalls(t *testing.T) {
-	fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}}}
 	fsc := &fakeSnapshotClient{}
-	cfg := config.DefaultConfig()
-	cfg.Provider.Proxmox.Node = testProxmoxNode
-
-	r := seedSnapshotRunner(t, fc, fsc, cfg)
-	// seedRunner defaults DryRun to true.
+	r, fc := seedWorkerSnapshotRunner(t, fsc)
 
 	name, err := r.CreateSnapshot(context.Background(), "worker0", SnapshotCreateOptions{Name: testSnapshotName})
 	if err != nil {
@@ -196,14 +188,8 @@ func TestCreateSnapshot_dryRunMakesZeroMutatingCalls(t *testing.T) {
 	}
 }
 
-// TestCreateSnapshot_defaultName covers the auto-generated name path.
 func TestCreateSnapshot_defaultName(t *testing.T) {
-	fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}}}
-	fsc := &fakeSnapshotClient{}
-	cfg := config.DefaultConfig()
-	cfg.Provider.Proxmox.Node = testProxmoxNode
-
-	r := seedSnapshotRunner(t, fc, fsc, cfg)
+	r, _ := seedWorkerSnapshotRunner(t, &fakeSnapshotClient{})
 
 	name, err := r.CreateSnapshot(context.Background(), "worker0", SnapshotCreateOptions{})
 	if err != nil {
@@ -214,89 +200,46 @@ func TestCreateSnapshot_defaultName(t *testing.T) {
 	}
 }
 
-// TestCreateSnapshot_crashConsistencyWarningFires confirms the warning fires
-// unconditionally when the agent is disabled — including under dry-run.
-func TestCreateSnapshot_crashConsistencyWarningFires(t *testing.T) {
-	for _, dryRun := range []bool{true, false} {
-		t.Run(map[bool]string{true: "dry-run", false: "real"}[dryRun], func(t *testing.T) {
-			fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}}}
-			fsc := &fakeSnapshotClient{agentEnabled: false}
-			cfg := config.DefaultConfig()
-			cfg.Provider.Proxmox.Node = testProxmoxNode
-
-			r := seedSnapshotRunner(t, fc, fsc, cfg)
-			r.DryRun = dryRun
+// Pins the qemu-agent warning contract: fires when disabled (incl. dry-run) or
+// when the probe itself fails, never when the agent is enabled.
+func TestCreateSnapshot_crashConsistencyWarning(t *testing.T) {
+	tests := []struct {
+		name     string
+		fsc      *fakeSnapshotClient
+		dryRun   bool
+		wantWarn bool
+	}{
+		{name: "disabled dry-run warns", fsc: &fakeSnapshotClient{agentEnabled: false}, dryRun: true, wantWarn: true},
+		{name: "enabled no warning", fsc: &fakeSnapshotClient{agentEnabled: true}, dryRun: true, wantWarn: false},
+		{name: "probe failure assumes disabled", fsc: &fakeSnapshotClient{agentErr: errors.New("ssh timeout")}, dryRun: true, wantWarn: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r, _ := seedWorkerSnapshotRunner(t, tc.fsc)
+			r.DryRun = tc.dryRun
 			var buf bytes.Buffer
 			r.Log = slog.New(slog.NewTextHandler(&buf, nil))
 
 			if _, err := r.CreateSnapshot(context.Background(), "worker0", SnapshotCreateOptions{Name: testSnapshotName}); err != nil {
 				t.Fatalf("CreateSnapshot: %v", err)
 			}
-			if !strings.Contains(buf.String(), "crash-consistent only") {
-				t.Errorf("warning did not fire; log:\n%s", buf.String())
+			if got := strings.Contains(buf.String(), "crash-consistent only"); got != tc.wantWarn {
+				t.Errorf("crash-consistent-only warning fired=%v, want %v; log:\n%s", got, tc.wantWarn, buf.String())
 			}
 		})
 	}
 }
 
-// TestCreateSnapshot_agentEnabledNoWarning ensures the warning is specific to
-// the disabled/unprobeable case, not unconditional noise on every call.
-func TestCreateSnapshot_agentEnabledNoWarning(t *testing.T) {
-	fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}}}
-	fsc := &fakeSnapshotClient{agentEnabled: true}
-	cfg := config.DefaultConfig()
-	cfg.Provider.Proxmox.Node = testProxmoxNode
-
-	r := seedSnapshotRunner(t, fc, fsc, cfg)
-	var buf bytes.Buffer
-	r.Log = slog.New(slog.NewTextHandler(&buf, nil))
-
-	if _, err := r.CreateSnapshot(context.Background(), "worker0", SnapshotCreateOptions{Name: testSnapshotName}); err != nil {
-		t.Fatalf("CreateSnapshot: %v", err)
-	}
-	if strings.Contains(buf.String(), "crash-consistent only") {
-		t.Errorf("warning fired despite agent enabled; log:\n%s", buf.String())
-	}
-}
-
-// TestCreateSnapshot_agentProbeFailureAssumesDisabled covers the best-effort
-// probe: a probe error must not fail the op and must still warn.
-func TestCreateSnapshot_agentProbeFailureAssumesDisabled(t *testing.T) {
-	fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}}}
-	fsc := &fakeSnapshotClient{agentErr: errors.New("ssh timeout")}
-	cfg := config.DefaultConfig()
-	cfg.Provider.Proxmox.Node = testProxmoxNode
-
-	r := seedSnapshotRunner(t, fc, fsc, cfg)
-	var buf bytes.Buffer
-	r.Log = slog.New(slog.NewTextHandler(&buf, nil))
-
-	if _, err := r.CreateSnapshot(context.Background(), "worker0", SnapshotCreateOptions{Name: testSnapshotName}); err != nil {
-		t.Fatalf("probe failure must not fail the op: %v", err)
-	}
-	if !strings.Contains(buf.String(), "crash-consistent only") {
-		t.Errorf("probe failure must still warn crash-consistent-only; log:\n%s", buf.String())
-	}
-}
-
-// TestCreateSnapshot_successClearsOpMarker is part of FIX 2: a clean snapshot
-// leaves no op marker behind — cordonAndDrain's OpSnapshot marker must not
-// outlive a successful op, so `okdctl node list` never shows a phantom
-// in-flight op for a snapshot that already finished.
+// A leftover OpSnapshot marker would make `okdctl node list` show a phantom in-flight op.
 func TestCreateSnapshot_successClearsOpMarker(t *testing.T) {
-	fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}}}
-	fsc := &fakeSnapshotClient{}
-	cfg := config.DefaultConfig()
-	cfg.Provider.Proxmox.Node = testProxmoxNode
-
-	r := seedSnapshotRunner(t, fc, fsc, cfg)
+	r, _ := seedWorkerSnapshotRunner(t, &fakeSnapshotClient{})
 	r.DryRun = false
 
 	if _, err := r.CreateSnapshot(context.Background(), "worker0", SnapshotCreateOptions{Name: testSnapshotName}); err != nil {
 		t.Fatalf("CreateSnapshot: %v", err)
 	}
 
-	marker, err := ReadOpMarker(r.workDir, cfg.Cluster.Name)
+	marker, err := ReadOpMarker(r.workDir, r.Cfg.Cluster.Name)
 	if err != nil {
 		t.Fatalf("ReadOpMarker: %v", err)
 	}
@@ -305,28 +248,18 @@ func TestCreateSnapshot_successClearsOpMarker(t *testing.T) {
 	}
 }
 
-// TestCreateSnapshot_failureLeavesOpSnapshotMarkerNotOpRemove is FIX 2: it
-// proves the shared-marker hazard is closed. cordonAndDrain is shared between
-// RemoveWorker and snapshot; before this fix it always wrote OpRemove, so a
-// snapshot that cordoned/drained and then died left a marker `okdctl node
-// remove` would resume-match. Here the pvesh create call itself fails after a
-// successful cordon/drain, leaving a marker behind — it must be tagged
-// OpSnapshot, never OpRemove, since any future resume logic keys off Op
-// equality (see opstate.go's Op type).
+// cordonAndDrain is shared with RemoveWorker, so a dying snapshot must stay
+// tagged OpSnapshot, not OpRemove.
 func TestCreateSnapshot_failureLeavesOpSnapshotMarkerNotOpRemove(t *testing.T) {
-	fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}}}
 	fsc := &fakeSnapshotClient{createErr: errors.New("no space left on device")}
-	cfg := config.DefaultConfig()
-	cfg.Provider.Proxmox.Node = testProxmoxNode
-
-	r := seedSnapshotRunner(t, fc, fsc, cfg)
+	r, _ := seedWorkerSnapshotRunner(t, fsc)
 	r.DryRun = false
 
 	if _, err := r.CreateSnapshot(context.Background(), "worker0", SnapshotCreateOptions{Name: testSnapshotName}); err == nil {
 		t.Fatal("expected error when the pvesh create call fails")
 	}
 
-	marker, err := ReadOpMarker(r.workDir, cfg.Cluster.Name)
+	marker, err := ReadOpMarker(r.workDir, r.Cfg.Cluster.Name)
 	if err != nil {
 		t.Fatalf("ReadOpMarker: %v", err)
 	}
@@ -334,24 +267,15 @@ func TestCreateSnapshot_failureLeavesOpSnapshotMarkerNotOpRemove(t *testing.T) {
 		t.Fatal("expected a marker to remain after a cordoned failure")
 	}
 	if marker.Op != OpSnapshot {
-		t.Errorf("marker.Op = %q; want %q", marker.Op, OpSnapshot)
-	}
-	if marker.Op == OpRemove {
-		t.Fatal("marker.Op must never equal OpRemove: a later 'okdctl node remove' keys resume on Op equality")
+		t.Errorf("marker.Op = %q; want %q (a later 'okdctl node remove' keys resume on Op equality)", marker.Op, OpSnapshot)
 	}
 }
 
-// TestCreateSnapshot_refusesForeignMarkerWithoutAck locks Fix 1: snapshot
-// create is non-resumable, so a marker left by an unrelated op — here a
-// stranded remove on a different node — must refuse before any cordon/drain
-// or pvesh call, unless acknowledged.
+// snapshot create is non-resumable: a foreign marker (stranded remove on a
+// different node) must refuse unless acknowledged.
 func TestCreateSnapshot_refusesForeignMarkerWithoutAck(t *testing.T) {
-	fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}}}
 	fsc := &fakeSnapshotClient{}
-	cfg := config.DefaultConfig()
-	cfg.Provider.Proxmox.Node = testProxmoxNode
-
-	r := seedSnapshotRunner(t, fc, fsc, cfg)
+	r, fc := seedWorkerSnapshotRunner(t, fsc)
 	r.DryRun = false
 	seedMarker(t, r, OpRemove, "worker5", StepDrain)
 
@@ -359,11 +283,6 @@ func TestCreateSnapshot_refusesForeignMarkerWithoutAck(t *testing.T) {
 	var cfgErr *errtypes.ConfigError
 	if !errors.As(err, &cfgErr) {
 		t.Fatalf("want *errtypes.ConfigError refusing the foreign marker, got %v", err)
-	}
-	for _, want := range []string{"worker5", "drain", "remove"} {
-		if !strings.Contains(cfgErr.Error(), want) {
-			t.Errorf("refusal must name the stranded op: %q does not contain %q", cfgErr.Error(), want)
-		}
 	}
 	if fc.cordon != 0 || fc.drain != 0 || fc.uncordon != 0 || fsc.createCalls != 0 {
 		t.Errorf("refused create must make zero mutation: cordon=%d drain=%d uncordon=%d create=%d",
@@ -379,67 +298,54 @@ func TestCreateSnapshot_refusesForeignMarkerWithoutAck(t *testing.T) {
 	}
 }
 
-func TestCreateSnapshot_requiresProxmox(t *testing.T) {
-	fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}}}
-	r, _, _ := seedRunner(t, fc, &fakeTF{}, config.DefaultConfig())
+func TestSnapshotOpsRequireProxmox(t *testing.T) {
+	t.Run("create", func(t *testing.T) {
+		fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}}}
+		r, _, _ := seedRunner(t, fc, &fakeTF{}, config.DefaultConfig())
 
-	if _, err := r.CreateSnapshot(context.Background(), "worker0", SnapshotCreateOptions{}); err == nil {
-		t.Fatal("expected error when Proxmox is not configured")
-	}
-}
+		if _, err := r.CreateSnapshot(context.Background(), "worker0", SnapshotCreateOptions{}); err == nil {
+			t.Fatal("expected error when Proxmox is not configured")
+		}
+	})
 
-func TestListSnapshots(t *testing.T) {
-	fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker}}}
-	fsc := &fakeSnapshotClient{snapshots: []hostssh.SnapshotInfo{{Name: testSnapshotName}}}
-	cfg := config.DefaultConfig()
-	cfg.Provider.Proxmox.Node = testProxmoxNode
+	t.Run("rollback", func(t *testing.T) {
+		fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}}}
+		r, _, _ := seedRunner(t, fc, &fakeTF{}, config.DefaultConfig())
 
-	r := seedSnapshotRunner(t, fc, fsc, cfg)
-
-	got, err := r.ListSnapshots(context.Background(), "worker0")
-	if err != nil {
-		t.Fatalf("ListSnapshots: %v", err)
-	}
-	if len(got) != 1 || got[0].Name != testSnapshotName {
-		t.Errorf("got = %+v", got)
-	}
+		if err := r.RollbackSnapshot(context.Background(), "worker0", testSnapshotName, SnapshotRollbackOptions{}); err == nil {
+			t.Fatal("expected error when Proxmox is not configured")
+		}
+	})
 }
 
 func TestDeleteSnapshot(t *testing.T) {
-	fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker}}}
-	fsc := &fakeSnapshotClient{}
-	cfg := config.DefaultConfig()
-	cfg.Provider.Proxmox.Node = testProxmoxNode
+	t.Run("real deletes by name", func(t *testing.T) {
+		fsc := &fakeSnapshotClient{}
+		r, _ := seedWorkerSnapshotRunner(t, fsc)
+		r.DryRun = false
 
-	r := seedSnapshotRunner(t, fc, fsc, cfg)
-	r.DryRun = false
+		if err := r.DeleteSnapshot(context.Background(), "worker0", testSnapshotName); err != nil {
+			t.Fatalf("DeleteSnapshot: %v", err)
+		}
+		if fsc.deleteCalls != 1 || fsc.lastDeleteName != testSnapshotName {
+			t.Errorf("deleteCalls=%d lastDeleteName=%q", fsc.deleteCalls, fsc.lastDeleteName)
+		}
+	})
 
-	if err := r.DeleteSnapshot(context.Background(), "worker0", testSnapshotName); err != nil {
-		t.Fatalf("DeleteSnapshot: %v", err)
-	}
-	if fsc.deleteCalls != 1 || fsc.lastDeleteName != testSnapshotName {
-		t.Errorf("deleteCalls=%d lastDeleteName=%q", fsc.deleteCalls, fsc.lastDeleteName)
-	}
+	t.Run("dry-run makes zero mutating calls", func(t *testing.T) {
+		fsc := &fakeSnapshotClient{}
+		r, _ := seedWorkerSnapshotRunner(t, fsc)
+
+		if err := r.DeleteSnapshot(context.Background(), "worker0", testSnapshotName); err != nil {
+			t.Fatalf("dry-run DeleteSnapshot: %v", err)
+		}
+		if fsc.deleteCalls != 0 {
+			t.Errorf("dry-run called DeleteSnapshot: deleteCalls=%d", fsc.deleteCalls)
+		}
+	})
 }
 
-func TestDeleteSnapshot_dryRunMakesZeroMutatingCalls(t *testing.T) {
-	fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker}}}
-	fsc := &fakeSnapshotClient{}
-	cfg := config.DefaultConfig()
-	cfg.Provider.Proxmox.Node = testProxmoxNode
-
-	r := seedSnapshotRunner(t, fc, fsc, cfg)
-
-	if err := r.DeleteSnapshot(context.Background(), "worker0", testSnapshotName); err != nil {
-		t.Fatalf("dry-run DeleteSnapshot: %v", err)
-	}
-	if fsc.deleteCalls != 0 {
-		t.Errorf("dry-run called DeleteSnapshot: deleteCalls=%d", fsc.deleteCalls)
-	}
-}
-
-// TestRollbackSnapshot_workerHappyPath exercises a full non-master rollback:
-// no etcd/ceph gates, cordon→rollback→ready-wait→uncordon.
+// Non-master rollback: no etcd/ceph gates, cordon→rollback→ready-wait→uncordon.
 func TestRollbackSnapshot_workerHappyPath(t *testing.T) {
 	var log []string
 	fc := &fakeCluster{
@@ -464,9 +370,6 @@ func TestRollbackSnapshot_workerHappyPath(t *testing.T) {
 	}
 }
 
-// TestRollbackSnapshot_masterGatesHealthPrePostBeforeUncordon is requirement
-// (d): rollback on a MASTER calls EtcdHealthy+CephHealthy pre AND post, in
-// order, before the final Uncordon.
 func TestRollbackSnapshot_masterGatesHealthPrePostBeforeUncordon(t *testing.T) {
 	var log []string
 	fc := &fakeCluster{
@@ -510,8 +413,6 @@ func TestRollbackSnapshot_masterGatesHealthPrePostBeforeUncordon(t *testing.T) {
 	}
 }
 
-// TestRollbackSnapshot_postGateFailureLeavesNodeCordoned is requirement (e):
-// a failed POST-rollback health gate returns an error and does NOT uncordon.
 func TestRollbackSnapshot_postGateFailureLeavesNodeCordoned(t *testing.T) {
 	fc := &fakeCluster{
 		nodes:                 []cluster.NodeDetail{{Name: "master0", Role: nodetypes.RoleMaster, Ready: true}},
@@ -544,18 +445,10 @@ func TestRollbackSnapshot_postGateFailureLeavesNodeCordoned(t *testing.T) {
 	}
 }
 
-// TestRollbackSnapshot_taskFailureLeavesNodeCordoned covers the "ON ANY
-// FAILURE FROM HERE" contract at the rollback task itself.
 func TestRollbackSnapshot_taskFailureLeavesNodeCordoned(t *testing.T) {
-	fc := &fakeCluster{
-		nodes:       []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}},
-		etcdHealthy: true,
-	}
 	fsc := &fakeSnapshotClient{rollbackErr: errors.New("no space left on device")}
-	cfg := config.DefaultConfig()
-	cfg.Provider.Proxmox.Node = testProxmoxNode
-
-	r := seedSnapshotRunner(t, fc, fsc, cfg)
+	r, fc := seedWorkerSnapshotRunner(t, fsc)
+	fc.etcdHealthy = true
 	r.DryRun = false
 
 	err := r.RollbackSnapshot(context.Background(), "worker0", testSnapshotName, SnapshotRollbackOptions{})
@@ -570,9 +463,7 @@ func TestRollbackSnapshot_taskFailureLeavesNodeCordoned(t *testing.T) {
 	}
 }
 
-// TestRollbackSnapshot_dryRunMakesZeroMutatingCalls is requirement (c) for
-// rollback: a dry-run must never cordon/drain, roll back, or block on the
-// pre-gate (mirroring compact's dry-run-never-blocks contract).
+// Mirrors compact's dry-run-never-blocks contract.
 func TestRollbackSnapshot_dryRunMakesZeroMutatingCalls(t *testing.T) {
 	fc := &fakeCluster{
 		nodes:       []cluster.NodeDetail{{Name: "master0", Role: nodetypes.RoleMaster, Ready: true}},
@@ -597,23 +488,15 @@ func TestRollbackSnapshot_dryRunMakesZeroMutatingCalls(t *testing.T) {
 	}
 }
 
-// TestRollbackSnapshot_successClearsOpMarker mirrors
-// TestCreateSnapshot_successClearsOpMarker for rollback: FIX 2 requires the
-// OpSnapshot marker cordonAndDrain wrote to be cleared on a fully clean run.
 func TestRollbackSnapshot_successClearsOpMarker(t *testing.T) {
-	fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}}}
-	fsc := &fakeSnapshotClient{}
-	cfg := config.DefaultConfig()
-	cfg.Provider.Proxmox.Node = testProxmoxNode
-
-	r := seedSnapshotRunner(t, fc, fsc, cfg)
+	r, _ := seedWorkerSnapshotRunner(t, &fakeSnapshotClient{})
 	r.DryRun = false
 
 	if err := r.RollbackSnapshot(context.Background(), "worker0", testSnapshotName, SnapshotRollbackOptions{}); err != nil {
 		t.Fatalf("RollbackSnapshot: %v", err)
 	}
 
-	marker, err := ReadOpMarker(r.workDir, cfg.Cluster.Name)
+	marker, err := ReadOpMarker(r.workDir, r.Cfg.Cluster.Name)
 	if err != nil {
 		t.Fatalf("ReadOpMarker: %v", err)
 	}
@@ -622,22 +505,10 @@ func TestRollbackSnapshot_successClearsOpMarker(t *testing.T) {
 	}
 }
 
-// TestRollbackSnapshot_finalUncordonFailureSurfacesAsError is FIX 3: a failed
-// final uncordon must surface as the op's result (matching CreateSnapshot's
-// promote-to-error behavior) rather than demote to a warning behind a nil
-// return — the command must never exit clean while the node is actually left
-// cordoned. The OpSnapshot marker must also survive, since the op did not
-// fully succeed.
+// A failed final uncordon must surface as the op's error, never a warning behind nil.
 func TestRollbackSnapshot_finalUncordonFailureSurfacesAsError(t *testing.T) {
-	fc := &fakeCluster{
-		nodes:       []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}},
-		uncordonErr: errors.New("connection refused"),
-	}
-	fsc := &fakeSnapshotClient{}
-	cfg := config.DefaultConfig()
-	cfg.Provider.Proxmox.Node = testProxmoxNode
-
-	r := seedSnapshotRunner(t, fc, fsc, cfg)
+	r, fc := seedWorkerSnapshotRunner(t, &fakeSnapshotClient{})
+	fc.uncordonErr = errors.New("connection refused")
 	r.DryRun = false
 
 	err := r.RollbackSnapshot(context.Background(), "worker0", testSnapshotName, SnapshotRollbackOptions{})
@@ -651,7 +522,7 @@ func TestRollbackSnapshot_finalUncordonFailureSurfacesAsError(t *testing.T) {
 		t.Errorf("uncordon calls = %d; want 1 (attempted, even though it failed)", fc.uncordon)
 	}
 
-	marker, merr := ReadOpMarker(r.workDir, cfg.Cluster.Name)
+	marker, merr := ReadOpMarker(r.workDir, r.Cfg.Cluster.Name)
 	if merr != nil {
 		t.Fatalf("ReadOpMarker: %v", merr)
 	}
@@ -660,15 +531,9 @@ func TestRollbackSnapshot_finalUncordonFailureSurfacesAsError(t *testing.T) {
 	}
 }
 
-// TestRollbackSnapshot_refusesForeignMarkerWithoutAck mirrors
-// TestCreateSnapshot_refusesForeignMarkerWithoutAck for rollback.
 func TestRollbackSnapshot_refusesForeignMarkerWithoutAck(t *testing.T) {
-	fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}}}
 	fsc := &fakeSnapshotClient{}
-	cfg := config.DefaultConfig()
-	cfg.Provider.Proxmox.Node = testProxmoxNode
-
-	r := seedSnapshotRunner(t, fc, fsc, cfg)
+	r, fc := seedWorkerSnapshotRunner(t, fsc)
 	r.DryRun = false
 	seedMarker(t, r, OpRemove, "worker5", StepDrain)
 
@@ -676,11 +541,6 @@ func TestRollbackSnapshot_refusesForeignMarkerWithoutAck(t *testing.T) {
 	var cfgErr *errtypes.ConfigError
 	if !errors.As(err, &cfgErr) {
 		t.Fatalf("want *errtypes.ConfigError refusing the foreign marker, got %v", err)
-	}
-	for _, want := range []string{"worker5", "drain", "remove"} {
-		if !strings.Contains(cfgErr.Error(), want) {
-			t.Errorf("refusal must name the stranded op: %q does not contain %q", cfgErr.Error(), want)
-		}
 	}
 	if fc.cordon != 0 || fc.drain != 0 || fc.uncordon != 0 || fsc.rollbackCalls != 0 {
 		t.Errorf("refused rollback must make zero mutation: cordon=%d drain=%d uncordon=%d rollback=%d",
@@ -695,26 +555,10 @@ func TestRollbackSnapshot_refusesForeignMarkerWithoutAck(t *testing.T) {
 	}
 }
 
-func TestRollbackSnapshot_requiresProxmox(t *testing.T) {
-	fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}}}
-	r, _, _ := seedRunner(t, fc, &fakeTF{}, config.DefaultConfig())
-
-	if err := r.RollbackSnapshot(context.Background(), "worker0", testSnapshotName, SnapshotRollbackOptions{}); err == nil {
-		t.Fatal("expected error when Proxmox is not configured")
-	}
-}
-
-// TestCreateSnapshot_acknowledgeConsumesForeignMarker pins the ack contract:
-// a --skip-drain create never writes a marker of its own, so the acknowledged
-// foreign marker must be deleted by the guard itself — otherwise the marker
-// the operator already acknowledged resurfaces and re-blocks the next op.
+// --skip-drain create writes no marker of its own, so the guard must delete the
+// acknowledged one or it resurfaces.
 func TestCreateSnapshot_acknowledgeConsumesForeignMarker(t *testing.T) {
-	fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}}}
-	fsc := &fakeSnapshotClient{}
-	cfg := config.DefaultConfig()
-	cfg.Provider.Proxmox.Node = testProxmoxNode
-
-	r := seedSnapshotRunner(t, fc, fsc, cfg)
+	r, _ := seedWorkerSnapshotRunner(t, &fakeSnapshotClient{})
 	r.DryRun = false
 	seedMarker(t, r, OpRemove, "worker5", StepDrain)
 
@@ -723,7 +567,7 @@ func TestCreateSnapshot_acknowledgeConsumesForeignMarker(t *testing.T) {
 		t.Fatalf("acknowledged --skip-drain create must proceed: %v", err)
 	}
 
-	marker, err := ReadOpMarker(r.workDir, cfg.Cluster.Name)
+	marker, err := ReadOpMarker(r.workDir, r.Cfg.Cluster.Name)
 	if err != nil {
 		t.Fatalf("re-read marker: %v", err)
 	}

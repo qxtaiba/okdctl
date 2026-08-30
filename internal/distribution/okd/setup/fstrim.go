@@ -9,18 +9,12 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// fstrimMachineConfigRoles are the MachineConfig pools the fstrim workaround
-// must target — the MCO applies pool-scoped configs only to matching nodes,
-// so shipping only "master" would leave workers on FCOS's broken stock
-// fstrim.timer (coreos/fedora-coreos-tracker#468).
+// fstrimMachineConfigRoles must include both pools; the MCO applies configs
+// only to matching nodes (coreos/fedora-coreos-tracker#468).
 var fstrimMachineConfigRoles = []string{string(nodetypes.RoleMaster), string(nodetypes.RoleWorker)}
 
-// generateFstrimManifests writes an fstrim MachineConfig for each node pool.
-// FCOS ships no /etc/fstab, so the stock fstrim.timer's `fstrim --fstab`
-// unit fails and guest-side TRIM never runs; every disk in the Proxmox
-// module is provisioned with discard=on, so this silently defeats thin-pool
-// reclaim. The MachineConfig masks the stock timer and ships an okdctl-owned
-// replacement that trims explicit FCOS mountpoints.
+// generateFstrimManifests replaces FCOS's broken stock fstrim.timer (no
+// /etc/fstab) so thin-pool discard reclaim runs.
 func (p *Phase) generateFstrimManifests(clusterDir string) error {
 	openshiftDir := filepath.Join(clusterDir, openshiftSubdir)
 	if err := system.EnsureDir(openshiftDir); err != nil {

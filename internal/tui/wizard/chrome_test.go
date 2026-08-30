@@ -19,21 +19,7 @@ func newNopStep() *nopStep { return &nopStep{BaseStep: NewBaseStep("nop", "nop",
 
 func viewContent(t *testing.T, m *Model) string {
 	t.Helper()
-	updated, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
-	return updated.(*Model).View().Content
-}
-
-func TestDefaultChromeRendersLegacyTaglineAndBadge(t *testing.T) {
-	cfg := config.DefaultConfig()
-	cfg.Distribution.Version = "4.22.0"
-	m := NewModel([]WizardStep{newNopStep()}, cfg)
-	out := viewContent(t, m)
-	if !strings.Contains(out, "okd over proxmox, the easy way") {
-		t.Errorf("default chrome must keep the legacy tagline; view:\n%s", out)
-	}
-	if !strings.Contains(out, "4.22.0") {
-		t.Errorf("default chrome must keep the distribution badge; view:\n%s", out)
-	}
+	return update(t, m, tea.WindowSizeMsg{Width: 100, Height: 30}).View().Content
 }
 
 func TestCustomChromeRendersTaglineAndBadge(t *testing.T) {

@@ -10,10 +10,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
-// installRecordingTerraform installs a fake terraform on PATH that appends
-// each invocation's argv to argv.log in the executor's working directory
-// (the executor sets cmd.Dir, so cwd == workDir). failSubcommand, when
-// non-empty, makes that subcommand exit 1 with stderr output.
+// installRecordingTerraform logs each invocation's argv to argv.log in workDir;
+// failSubcommand exits 1 for that subcommand.
 func installRecordingTerraform(t *testing.T, failSubcommand string) {
 	t.Helper()
 	testutil.InstallFakeBin(t, "terraform", `#!/bin/sh
@@ -41,10 +39,7 @@ const masterAddr = "module.okd_cluster.proxmox_virtual_environment_vm.master[0]"
 func TestExecutor_Destroy_UsePlanPlansThenAppliesSavedPlan(t *testing.T) {
 	workDir := t.TempDir()
 	installRecordingTerraform(t, "")
-	tfvars := filepath.Join(workDir, "terraform.tfvars")
-	if err := os.WriteFile(tfvars, []byte("x = 1\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	tfvars := mustWriteFile(t, workDir, "terraform.tfvars", "x = 1\n")
 
 	e := New(workDir)
 	if err := e.Destroy(context.Background(), DestroyOptions{
@@ -69,11 +64,6 @@ func TestExecutor_Destroy_UsePlanPlansThenAppliesSavedPlan(t *testing.T) {
 	}
 }
 
-// TestExecutor_Destroy_PlanFailureNeverMutates locks the no-silent-fallback
-// contract: when the destroy plan fails, Destroy must surface the plan error
-// and never degrade to a direct `terraform destroy` or apply — a plan failure
-// usually signals an auth/state problem the operator must see before any
-// infra mutation.
 func TestExecutor_Destroy_PlanFailureNeverMutates(t *testing.T) {
 	workDir := t.TempDir()
 	installRecordingTerraform(t, "plan")
@@ -83,7 +73,7 @@ func TestExecutor_Destroy_PlanFailureNeverMutates(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when destroy plan fails")
 	}
-	if !strings.Contains(err.Error(), "destroy plan failed") {
+	if !strings.Contains(err.Error(), "destroy plan:") {
 		t.Errorf("error should name the failed plan step: %v", err)
 	}
 
@@ -94,16 +84,12 @@ func TestExecutor_Destroy_PlanFailureNeverMutates(t *testing.T) {
 	}
 }
 
-// TestExecutor_DestroyDirect_ArgvShape pins the emergency direct-destroy argv
-// (UsePlan=false). destroyDirect currently has no production caller; this is
-// the regression coverage its doc comment relies on.
+// destroyDirect has no production caller; this pins its argv shape as the
+// regression coverage its doc comment relies on.
 func TestExecutor_DestroyDirect_ArgvShape(t *testing.T) {
 	workDir := t.TempDir()
 	installRecordingTerraform(t, "")
-	tfvars := filepath.Join(workDir, "terraform.tfvars")
-	if err := os.WriteFile(tfvars, []byte("x = 1\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	tfvars := mustWriteFile(t, workDir, "terraform.tfvars", "x = 1\n")
 
 	e := New(workDir)
 	if err := e.Destroy(context.Background(), DestroyOptions{
@@ -124,10 +110,6 @@ func TestExecutor_DestroyDirect_ArgvShape(t *testing.T) {
 	}
 }
 
-// TestExecutor_Apply_PlanFileSupersedesVarsAndApprove locks ApplyOptions'
-// documented mutual exclusion: with PlanFile set, Vars/VarFile/AutoApprove/
-// Targets must not leak into argv — the saved plan already encodes the full
-// change set, and appending -var would make terraform error out mid-destroy.
 func TestExecutor_Apply_PlanFileSupersedesVarsAndApprove(t *testing.T) {
 	workDir := t.TempDir()
 	installRecordingTerraform(t, "")
@@ -150,17 +132,10 @@ func TestExecutor_Apply_PlanFileSupersedesVarsAndApprove(t *testing.T) {
 	}
 }
 
-// TestExecutor_Init_RefusesForeignStateMajor locks the fail-closed preflight:
-// a terraform.tfstate written by a different terraform major must abort Init
-// before any terraform subprocess runs, so an incompatible CLI can never
-// touch (and irreversibly upgrade or corrupt) the state.
 func TestExecutor_Init_RefusesForeignStateMajor(t *testing.T) {
 	workDir := t.TempDir()
 	installRecordingTerraform(t, "")
-	state := `{"version":4,"terraform_version":"2.1.0","resources":[{"type":"x"}]}`
-	if err := os.WriteFile(filepath.Join(workDir, "terraform.tfstate"), []byte(state), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	mustWriteFile(t, workDir, "terraform.tfstate", `{"version":4,"terraform_version":"2.1.0","resources":[{"type":"x"}]}`)
 
 	e := New(workDir)
 	err := e.Init(context.Background())
@@ -181,9 +156,7 @@ func TestExecutor_Init_AlreadyInitializedSkipsInvocation(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(workDir, ".terraform", "providers"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(workDir, ".terraform.lock.hcl"), []byte("# lock\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	mustWriteFile(t, workDir, ".terraform.lock.hcl", "# lock\n")
 
 	e := New(workDir)
 	if err := e.Init(context.Background()); err != nil {
@@ -197,8 +170,7 @@ func TestExecutor_Init_AlreadyInitializedSkipsInvocation(t *testing.T) {
 func TestExecutor_Init_PartialInitReinitializes(t *testing.T) {
 	workDir := t.TempDir()
 	installRecordingTerraform(t, "")
-	// .terraform exists but the lock file and providers dir are missing: a
-	// crashed prior init. Init must re-run rather than trust the partial state.
+	// Partial init fixture: .terraform exists but lock file and providers dir are missing.
 	if err := os.MkdirAll(filepath.Join(workDir, ".terraform"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -255,10 +227,7 @@ func TestExecutor_ZeroizeEnv_NilSafe(t *testing.T) {
 	e.ZeroizeEnv()
 }
 
-// TestExecutor_ZeroizeEnv_BlanksInnerEnv pins the WithEnv -> AppendEnv ->
-// ZeroizeEnv delegation that every cli `defer tf.ZeroizeEnv()` relies on.
-// The byte-level blanking itself is locked in executor's own tests; this
-// guards the outer wiring against regressing to a no-op.
+// Pins the WithEnv→ZeroizeEnv delegation cli's defer tf.ZeroizeEnv() relies on.
 func TestExecutor_ZeroizeEnv_BlanksInnerEnv(t *testing.T) {
 	e := New(t.TempDir(), WithEnv([]string{
 		"PROXMOX_VE_PASSWORD=hunter2",

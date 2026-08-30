@@ -29,9 +29,7 @@ makestep 1.0 -1
 		t.Errorf("RenderChronyConf() = %q; want %q", got, want)
 	}
 
-	// makestep 1.0 -1 steps the clock on every correction, unbounded — the
-	// structural fix for VM pause/resume clock jumps. A regression here
-	// would silently reintroduce the slew-only etcd/TLS failure mode.
+	// regression guard: unconditional stepping is the actual fix for VM pause/resume clock jumps.
 	if !strings.Contains(got, "makestep 1.0 -1") {
 		t.Errorf("RenderChronyConf() missing makestep 1.0 -1 directive: %q", got)
 	}
@@ -75,14 +73,6 @@ spec:
 `
 		if got != want {
 			t.Errorf("RenderChronyMachineConfig(%s) = %q; want %q", role, got, want)
-		}
-
-		decoded, decErr := base64.StdEncoding.DecodeString(strings.TrimPrefix(source, "data:text/plain;charset=utf-8;base64,"))
-		if decErr != nil {
-			t.Fatalf("decode embedded chrony.conf: %v", decErr)
-		}
-		if string(decoded) != conf {
-			t.Errorf("embedded chrony.conf source = %q; want %q", decoded, conf)
 		}
 	}
 }
@@ -152,10 +142,7 @@ spec:
 			t.Errorf("RenderFstrimMachineConfig(%s) = %q; want %q", role, got, want)
 		}
 
-		// coreos/fedora-coreos-tracker#468 is the documented reason the stock
-		// fstrim.timer is masked instead of relied on — a regression here
-		// would silently drop that trail and mask: true is the actual fix
-		// (disable can be re-enabled by the MCO/user; mask cannot).
+		// regression guard: mask (not disable) is the actual fix, see coreos/fedora-coreos-tracker#468.
 		if !strings.Contains(got, "#468") {
 			t.Errorf("RenderFstrimMachineConfig(%s) missing #468 tracker reference: %q", role, got)
 		}

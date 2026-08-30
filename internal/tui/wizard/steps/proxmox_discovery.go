@@ -13,7 +13,6 @@ import (
 	infraproxmox "github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
 )
 
-// proxmoxNode is a discovered Proxmox cluster node.
 type proxmoxNode struct {
 	Name   string
 	Status string // "online" or "offline"
@@ -21,24 +20,17 @@ type proxmoxNode struct {
 	MemGB  int
 }
 
-// proxmoxStorage is a discovered storage pool.
 type proxmoxStorage struct {
 	Name    string
-	Type    string // lvm, lvmthin, dir, nfs, ceph, zfspool, etc.
 	Content string // comma-separated: images, iso, backup, etc.
-	Enabled bool
 	TotalGB int
-	UsedPct float64
 }
 
-// proxmoxBridge is a discovered network bridge.
 type proxmoxBridge struct {
-	Name   string
-	Active bool
-	CIDR   string // e.g. "192.168.1.1/24" if configured
+	Name string
+	CIDR string // e.g. "192.168.1.1/24" if configured
 }
 
-// proxmoxDiscovery holds everything discovered from a Proxmox cluster.
 type proxmoxDiscovery struct {
 	Nodes   []proxmoxNode
 	Storage []proxmoxStorage
@@ -46,7 +38,6 @@ type proxmoxDiscovery struct {
 	ISOs    []string // storage volids of ISO files, e.g. "local:iso/fcos.iso"
 }
 
-// discoverProxmox queries the Proxmox API to list nodes, storage, and bridges.
 func discoverProxmox(cfg *config.Config) (*proxmoxDiscovery, error) {
 	if cfg.Provider.Proxmox == nil {
 		return nil, fmt.Errorf("no proxmox config")
@@ -108,9 +99,8 @@ func discoverProxmox(cfg *config.Config) (*proxmoxDiscovery, error) {
 	}, nil
 }
 
-// fetchNodeDetails pulls storage, bridges, and ISO volids from the given
-// node. Errors are swallowed to nil slices — discovery is best-effort, and
-// a partial result beats no result when one endpoint misbehaves.
+// fetchNodeDetails pulls storage/bridges/ISOs, best-effort — endpoint errors
+// are swallowed to nil slices rather than failing the whole discovery.
 func fetchNodeDetails(ctx context.Context, client *proxmox.Client, nodeName string) ([]proxmoxStorage, []proxmoxBridge, []string) {
 	node, err := client.Node(ctx, nodeName)
 	if err != nil {
@@ -127,11 +117,8 @@ func fetchNodeDetails(ctx context.Context, client *proxmox.Client, nodeName stri
 			}
 			storage = append(storage, proxmoxStorage{
 				Name:    s.Name,
-				Type:    s.Type,
 				Content: s.Content,
-				Enabled: s.Enabled == 1,
 				TotalGB: int(s.Total / (1024 * 1024 * 1024)), //nolint:gosec // G115: uint64→int is safe for GB-scale storage
-				UsedPct: s.UsedFraction,
 			})
 			if strings.Contains(s.Content, "iso") {
 				isoStorageNames = append(isoStorageNames, s.Name)
@@ -144,9 +131,8 @@ func fetchNodeDetails(ctx context.Context, client *proxmox.Client, nodeName stri
 		bridges = make([]proxmoxBridge, 0, len(nets))
 		for _, n := range nets {
 			bridges = append(bridges, proxmoxBridge{
-				Name:   n.Iface,
-				Active: n.Active == 1,
-				CIDR:   n.CIDR,
+				Name: n.Iface,
+				CIDR: n.CIDR,
 			})
 		}
 	}
@@ -171,7 +157,6 @@ func fetchNodeDetails(ctx context.Context, client *proxmox.Client, nodeName stri
 	return storage, bridges, isos
 }
 
-// classifyError maps raw HTTP/TLS errors to user-friendly messages.
 func classifyError(err error) error {
 	msg := err.Error()
 	switch {

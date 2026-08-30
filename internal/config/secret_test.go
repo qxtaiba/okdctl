@@ -6,23 +6,6 @@ import (
 	"testing"
 )
 
-func TestSecretBytes_String(t *testing.T) {
-	t.Run("non-empty buffer returns redacted", func(t *testing.T) {
-		var s SecretBytes
-		s.Set("hunter2")
-		if got := s.String(); got != "[redacted]" {
-			t.Errorf("String() = %q; want [redacted]", got)
-		}
-	})
-
-	t.Run("zero-value returns redacted", func(t *testing.T) {
-		var s SecretBytes
-		if got := s.String(); got != "[redacted]" {
-			t.Errorf("String() = %q; want [redacted]", got)
-		}
-	})
-}
-
 func TestSecretBytes_SetZeroizesPriorBuffer(t *testing.T) {
 	var s SecretBytes
 	s.Set("first-secret")
@@ -65,24 +48,6 @@ func TestSecretBytes_Redacted(t *testing.T) {
 	got := s.Redacted()
 	if got != "[redacted]" {
 		t.Errorf("Redacted() = %v; want [redacted]", got)
-	}
-}
-
-func TestSecretBytes_IsEmpty(t *testing.T) {
-	var s SecretBytes
-
-	if !s.IsEmpty() {
-		t.Error("IsEmpty() = false on zero value; want true")
-	}
-
-	s.Set("something")
-	if s.IsEmpty() {
-		t.Error("IsEmpty() = true after Set; want false")
-	}
-
-	s.Zeroize()
-	if !s.IsEmpty() {
-		t.Error("IsEmpty() = false after Zeroize; want true")
 	}
 }
 

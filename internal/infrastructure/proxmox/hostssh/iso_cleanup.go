@@ -12,15 +12,14 @@ import (
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
 
-// DefaultProxmoxISODir is the default Proxmox-managed path where downloaded
-// CoreOS ISOs are uploaded via scp and referenced by `qm importdisk`.
+// DefaultProxmoxISODir is Proxmox's default ISO path, populated via scp and
+// referenced by `qm importdisk`.
 const DefaultProxmoxISODir = "/var/lib/vz/template/iso"
 
-// RemoteISOParams carries the connection parameters shared by pvesh/ssh
-// operations (ISO cleanup, VM snapshots, host probes) against a Proxmox
-// host. Host must be the bare hostname or IP (no port). KnownHostsPath,
-// when non-empty, enables strict host-key checking; empty preserves
-// accept-new TOFU.
+// RemoteISOParams carries the shared connection parameters for pvesh/ssh
+// operations against a Proxmox host. Host must be a bare hostname or IP (no
+// port); an empty KnownHostsPath allows accept-new TOFU, otherwise strict
+// host-key checking applies.
 type RemoteISOParams struct {
 	Host           string
 	Node           string
@@ -29,10 +28,9 @@ type RemoteISOParams struct {
 	KnownHostsPath string
 }
 
-// refuseUnsafeISOPath rejects any path that is not exactly <isoDir>/<name>
-// where name matches one of nodetypes.CoreOSISONamePatterns. The guard
-// prevents a config typo from pointing an SSH rm at an arbitrary path on
-// the Proxmox host.
+// refuseUnsafeISOPath rejects any path outside <isoDir>/<name> matching a
+// nodetypes.CoreOSISONamePatterns entry, guarding against a config typo
+// pointing an SSH rm at an arbitrary host path.
 func refuseUnsafeISOPath(isoDir, path string) error {
 	cleaned := filepath.Clean(path)
 	dir := filepath.Dir(cleaned)
@@ -47,20 +45,16 @@ func refuseUnsafeISOPath(isoDir, path string) error {
 	return nil
 }
 
-// shellSingleQuote wraps s in single quotes and escapes any embedded single
-// quotes using the POSIX end-quote/literal-quote/reopen idiom, making the
-// result safe to pass to a remote shell command string.
+// shellSingleQuote POSIX-quotes s so it's safe as a literal remote shell
+// command-string argument.
 func shellSingleQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-// validateProxmoxName is the defense-in-depth guard centralized at the
-// pveshRun helper boundary; config.ValidateOKDConfig already rejects
-// malformed node / storage names at load time, but a hand-edited YAML
-// could otherwise reach the remote-shell path through okdctl destroy.
-// New pvesh callers go through pveshRun and inherit this guard
-// automatically — do not interpolate names into ssh command strings
-// without it.
+// validateProxmoxName is the defense-in-depth guard at the pveshRun
+// boundary, catching a hand-edited YAML that bypasses
+// config.ValidateOKDConfig; new pvesh callers must route through pveshRun
+// rather than interpolating names directly.
 func validateProxmoxName(name string) error {
 	if name == "" {
 		return fmt.Errorf("must not be empty")
@@ -90,10 +84,10 @@ func ValidateISODir(isoDir string) error {
 	return nil
 }
 
-// ValidateRemoteFilename rejects filenames that contain shell metacharacters,
-// path separators, or the traversal atom ".." — any of which would let a
-// hostile filesystem entry inject commands into the remote sshd login shell
-// when interpolated into an SSHRunArgv argument.
+// ValidateRemoteFilename rejects filenames with shell metacharacters, path
+// separators, or the ".." traversal atom. A hostile filesystem entry could
+// otherwise inject commands into the remote login shell via an SSHRunArgv
+// argument.
 func ValidateRemoteFilename(name string) error {
 	if name == "" {
 		return fmt.Errorf("remote filename must not be empty")
@@ -110,10 +104,9 @@ func ValidateRemoteFilename(name string) error {
 	return nil
 }
 
-// parseVMIDsFromSummary parses the JSON array returned by
-// pvesh get /nodes/<node>/qemu and returns the vmid of each running VM.
-// Stopped VMs are excluded: yanking a cdrom from a running VM disrupts it,
-// but a stopped VM that still references an ISO can be destroyed cleanly.
+// parseVMIDsFromSummary returns running VMs' vmids only — yanking a cdrom
+// disrupts a running VM, but a stopped one referencing an ISO can be
+// destroyed cleanly.
 func parseVMIDsFromSummary(data []byte) ([]int, error) {
 	var vms []struct {
 		VMID   int               `json:"vmid"`
@@ -131,9 +124,6 @@ func parseVMIDsFromSummary(data []byte) ([]int, error) {
 	return ids, nil
 }
 
-// configDevicesReferenceISO parses the JSON object returned by
-// pvesh get /nodes/<node>/qemu/<vmid>/config and returns true if any
-// device-mapping field references isoBase.
 func configDevicesReferenceISO(data []byte, isoBase string) (bool, error) {
 	var config map[string]json.RawMessage
 	if err := json.Unmarshal(data, &config); err != nil {
@@ -142,21 +132,12 @@ func configDevicesReferenceISO(data []byte, isoBase string) (bool, error) {
 	return vmDevicesReferenceISO(config, isoBase), nil
 }
 
-func listProxmoxVMIDs(ctx context.Context, p *RemoteISOParams) ([]int, error) {
-	result, err := pveshRun(ctx, p, "get", pveshQEMUPath(p.Node))
-	if err != nil {
-		return nil, fmt.Errorf("ssh pvesh qemu list failed: %w", err)
-	}
-	return parseVMIDsFromSummary([]byte(result))
-}
-
-// vmConfigReferencesISO fetches the per-VM config for vmid and returns true
-// if any device-mapping field references isoBase. If the config call fails,
-// it returns true (fail-closed) to prevent removing an ISO whose usage is unknown.
+// vmConfigReferencesISO fails closed (returns true) if the config fetch
+// errors, so an ISO of unknown usage is never removed.
 func vmConfigReferencesISO(ctx context.Context, p *RemoteISOParams, vmid int, isoBase string) (bool, error) {
 	result, err := pveshRun(ctx, p, "get", pveshConfigPath(p.Node, vmid))
 	if err != nil {
-		return true, fmt.Errorf("ssh pvesh qemu config failed for vmid %d: %w", vmid, err)
+		return true, fmt.Errorf("ssh pvesh qemu config for vmid %d: %w", vmid, err)
 	}
 	found, parseErr := configDevicesReferenceISO([]byte(result), isoBase)
 	if parseErr != nil {
@@ -165,11 +146,12 @@ func vmConfigReferencesISO(ctx context.Context, p *RemoteISOParams, vmid int, is
 	return found, nil
 }
 
-// anyVMReferencesISO returns true if any running VM on the node has isoBase
-// in its device-mapping configuration. Issues one summary call and one config
-// call per running VM.
 func anyVMReferencesISO(ctx context.Context, p *RemoteISOParams, isoBase string) (bool, error) {
-	vmids, err := listProxmoxVMIDs(ctx, p)
+	result, err := pveshRun(ctx, p, "get", pveshQEMUPath(p.Node))
+	if err != nil {
+		return false, fmt.Errorf("ssh pvesh qemu list: %w", err)
+	}
+	vmids, err := parseVMIDsFromSummary([]byte(result))
 	if err != nil {
 		return false, err
 	}
@@ -202,8 +184,8 @@ var deviceFields = func() []string {
 	return fields
 }()
 
-// vmDevicesReferenceISO returns true if any device-mapping field in vm
-// contains a comma-separated segment whose value ends with the given isoBase.
+// vmDevicesReferenceISO matches when any device field's comma-separated
+// segment ends with isoBase.
 func vmDevicesReferenceISO(vm map[string]json.RawMessage, isoBase string) bool {
 	for _, field := range deviceFields {
 		raw, ok := vm[field]
@@ -214,8 +196,7 @@ func vmDevicesReferenceISO(vm map[string]json.RawMessage, isoBase string) bool {
 		if err := json.Unmarshal(raw, &value); err != nil {
 			continue
 		}
-		// Segments are comma-separated; device entries may be bare paths or
-		// "file=<storage>:<pool>/<name>" key=value form.
+		// Device entries may be bare paths or "file=<storage>:<pool>/<name>".
 		for seg := range strings.SplitSeq(value, ",") {
 			seg = strings.TrimSpace(seg)
 			if v, found := strings.CutPrefix(seg, "file="); found {
@@ -229,9 +210,9 @@ func vmDevicesReferenceISO(vm map[string]json.RawMessage, isoBase string) bool {
 	return false
 }
 
-// findCoreOSISONameClause builds a POSIX find(1) -name test that matches any
-// pattern in nodetypes.CoreOSISONamePatterns, keeping the remote find filter
-// in sync with refuseUnsafeISOPath's allowlist so the two cannot drift.
+// findCoreOSISONameClause builds a find(1) -name test from
+// nodetypes.CoreOSISONamePatterns so it can't drift from
+// refuseUnsafeISOPath's allowlist.
 func findCoreOSISONameClause() string {
 	terms := make([]string, len(nodetypes.CoreOSISONamePatterns))
 	for i, pat := range nodetypes.CoreOSISONamePatterns {
@@ -240,17 +221,14 @@ func findCoreOSISONameClause() string {
 	return `\( ` + strings.Join(terms, " -o ") + ` \)`
 }
 
-// RemoveFCOSISOFromProxmox removes base CoreOS installer ISOs matching
-// nodetypes.CoreOSISONamePatterns (fedora-coreos-*.iso, scos-*.iso) from
-// isoDir on the Proxmox host over SSH. Files still referenced by a running
-// VM are skipped with a warning. The path safety check runs before every rm.
+// RemoveFCOSISOFromProxmox removes base CoreOS ISOs (nodetypes.
+// CoreOSISONamePatterns) from isoDir over SSH, skipping any still
+// referenced by a running VM.
 //
-// Shell-injection policy of record: this function is the only place in the
-// repo that passes a constructed string to a remote shell via sshRun (sh -c).
-// sshRun/sshRunOutput are unexported so no other package can reach them; all
-// other SSH operations MUST use SSHRunArgv. Any new sh -c usage MUST
-// layer its own validateXxx guard (see ValidateISODir, refuseUnsafeISOPath)
-// and wrap every variable token with shellSingleQuote before interpolation.
+// Shell-injection policy: this is the repo's only sh -c call site (via
+// sshRun); every other SSH operation MUST use SSHRunArgv. New sh -c usage
+// MUST add its own validateXxx guard and shellSingleQuote every variable
+// token before interpolation.
 func RemoveFCOSISOFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir string) error {
 	if err := ValidateISODir(isoDir); err != nil {
 		return err
@@ -262,7 +240,7 @@ func RemoveFCOSISOFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir st
 	)
 	result, err := sshRunOutput(ctx, p.Exec, p.Host, p.KnownHostsPath, findCmd)
 	if err != nil {
-		return fmt.Errorf("ssh find failed: %w", err)
+		return fmt.Errorf("ssh find: %w", err)
 	}
 	if result.Truncated {
 		return fmt.Errorf("ssh find output truncated after %d bytes; refusing to process a partial file list", len(result.Stdout))
@@ -281,8 +259,7 @@ func RemoveFCOSISOFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir st
 		}
 
 		isoBase := filepath.Base(f)
-		// Match against the full Proxmox content-path token "iso/<file>" so a
-		// non-default storage layout cannot alias two ISOs with the same basename.
+		// Full "iso/<file>" token avoids aliasing two same-named ISOs across storage layouts.
 		inUse, err := anyVMReferencesISO(ctx, p, "iso/"+isoBase)
 		if err != nil {
 			p.Log.Warn("iso: could not check vm references — skipping", "file", isoBase, "err", err)
@@ -293,8 +270,7 @@ func RemoveFCOSISOFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir st
 			continue
 		}
 
-		// Shell-single-quote the path so filenames with spaces or metacharacters
-		// reach rm as a single literal argument.
+		// shellSingleQuote keeps spaces/metacharacters in f as one rm argument.
 		if _, rmErr := sshRun(ctx, p.Exec, p.Host, p.KnownHostsPath, "rm -f "+shellSingleQuote(f)); rmErr != nil {
 			p.Log.Warn("iso: failed to remove", "file", isoBase, "err", rmErr)
 			continue
@@ -305,12 +281,10 @@ func RemoveFCOSISOFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir st
 	return nil
 }
 
-// RemoveCustomISOsFromProxmox removes the exact per-node custom CoreOS ISOs
-// built by the setup phase (see provision.BuildNodeList) from isoDir on the
-// Proxmox host. Unlike RemoveFCOSISOFromProxmox this does not glob — names
-// are exact matches, so it uses SSHRunArgv per the repo's SSH shell policy.
-// A name that fails ValidateRemoteFilename or is still referenced by a
-// running VM is skipped with a warning rather than aborting the batch.
+// RemoveCustomISOsFromProxmox removes the exact per-node ISOs built by
+// provision.BuildNodeList from isoDir via SSHRunArgv (exact names, no
+// glob). A name that fails validation or is still referenced by a running
+// VM is skipped with a warning, not aborted.
 func RemoveCustomISOsFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir string, names []string) error {
 	if err := ValidateISODir(isoDir); err != nil {
 		return err
@@ -343,8 +317,8 @@ func RemoveCustomISOsFromProxmox(ctx context.Context, p *RemoteISOParams, isoDir
 	return nil
 }
 
-// parseNullDelimitedFileList splits find -print0 output on null bytes, which
-// is unambiguous even when filenames contain newlines or spaces.
+// parseNullDelimitedFileList splits find -print0 output on null bytes —
+// unambiguous even with spaces/newlines in filenames.
 func parseNullDelimitedFileList(output string) []string {
 	var files []string
 	for entry := range strings.SplitSeq(output, "\x00") {

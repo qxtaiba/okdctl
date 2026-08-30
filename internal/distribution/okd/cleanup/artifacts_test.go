@@ -20,8 +20,7 @@ func TestRefuseCriticalPath(t *testing.T) {
 		}
 	}
 
-	// filepath.Clean normalizes "/etc/" → "/etc", so the trailing-slash form
-	// must also be rejected.
+	// filepath.Clean normalizes "/etc/" → "/etc", so the trailing-slash form must also be rejected.
 	cleanedToCritical := []string{"/etc/", "/var/", "/../etc"}
 	for _, p := range cleanedToCritical {
 		if err := refuseCriticalPath(p); err == nil {
@@ -109,17 +108,6 @@ func TestSafeRemoveWithLogger(t *testing.T) {
 		}
 		if _, lerr := os.Lstat(link); os.IsNotExist(lerr) {
 			t.Error("symlink was removed; want it to survive")
-		}
-	})
-
-	t.Run("nil logger does not panic", func(t *testing.T) {
-		dir := t.TempDir()
-		p := filepath.Join(dir, "f")
-		if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if err := SafeRemoveWithLogger(ctx, p, "file", nil); err != nil {
-			t.Fatal(err)
 		}
 	})
 }

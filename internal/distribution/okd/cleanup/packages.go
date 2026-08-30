@@ -14,15 +14,13 @@ import (
 	"github.com/qxtaiba/okdctl/internal/platform"
 )
 
-// detectPackageManager returns a Manager for the current host OS, falling
-// back to RHEL/dnf if detection fails (cleanup runs on the bastion).
+// detectPackageManager returns a Manager for the host OS, falling back to
+// RHEL/dnf on detection failure.
 func detectPackageManager(logger *slog.Logger) *platform.Manager {
 	return platform.NewPackageManager(platform.DetectOrDefault(logger), logger)
 }
 
-// InstalledPackages returns the scoped list of dnf packages cleanup will
-// uninstall. Exported so a future cleanup preview/plan CLI verb can render
-// this list without executing the removal.
+// InstalledPackages returns the dnf packages cleanup will uninstall.
 func InstalledPackages() []string {
 	return []string{
 		"coreos-installer",
@@ -30,17 +28,13 @@ func InstalledPackages() []string {
 	}
 }
 
-// InstalledBinaries returns the installer-managed binaries cleanup will
-// remove from BinDir. Exported so a future cleanup preview/plan CLI verb
-// can render this list without executing the removal.
+// InstalledBinaries returns the installer-managed binaries cleanup removes from BinDir.
 func InstalledBinaries() []string {
 	return append(phase.OKDToolBinaries(), phase.ExternalToolBinaries()...)
 }
 
-// Packages removes dnf packages and tool binaries installed during setup.
-// Individual failures are logged and aggregated; the function returns an
-// error only if at least one removal failed. Empty binDir falls back to
-// config.DefaultBinDir.
+// Packages removes dnf packages and tool binaries installed during setup,
+// aggregating failures into a single error; empty binDir defaults to config.DefaultBinDir.
 func Packages(ctx context.Context, binDir string, logger *slog.Logger) error {
 	binDir = config.BinDirOrDefault(binDir)
 	logger = logutil.OrNop(logger)
@@ -51,14 +45,12 @@ func Packages(ctx context.Context, binDir string, logger *slog.Logger) error {
 
 	pm := detectPackageManager(logger)
 
-	pkgList := InstalledPackages()
-	if err := pm.Remove(ctx, pkgList); err != nil {
+	if err := pm.Remove(ctx, InstalledPackages()); err != nil {
 		logger.Warn("cleanup: some packages could not be removed (may require manual cleanup)", "err", err)
 		hasErrors = true
 	}
 
-	binaries := InstalledBinaries()
-	for _, binary := range binaries {
+	for _, binary := range InstalledBinaries() {
 		binPath := filepath.Join(binDir, binary)
 		if _, err := os.Stat(binPath); errors.Is(err, os.ErrNotExist) {
 			continue
@@ -70,7 +62,7 @@ func Packages(ctx context.Context, binDir string, logger *slog.Logger) error {
 		}
 
 		if err := os.RemoveAll(binPath); err != nil {
-			logger.Warn("cleanup: failed to remove binary", "path", binPath, "err", err)
+			logger.Warn("cleanup: could not remove binary", "path", binPath, "err", err)
 			hasErrors = true
 		} else {
 			logger.Info("cleanup: removed", "path", binPath)

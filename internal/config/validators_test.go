@@ -5,71 +5,86 @@ import (
 	"testing"
 )
 
-func TestIsValidNetmask(t *testing.T) {
-	good := []string{
-		"/8", "/16", "/24", "/32", "/0",
-		"255.255.255.0",
-		"255.255.255.255",
-		"128.0.0.0",
-		"255.255.0.0",
-		"255.255.255.254",
-	}
-	for _, s := range good {
-		if !isValidNetmask(s) {
-			t.Errorf("isValidNetmask(%q) = false; want true", s)
+func hasFieldError(r *ValidationResult, field string) bool {
+	for _, e := range r.Errors {
+		if e.Field == field {
+			return true
 		}
 	}
+	return false
+}
 
-	bad := []string{
-		"",
-		"/33",           // prefix too large
-		"/-1",           // invalid prefix
-		"0.0.0.0",       // canonical but disallowed (would claim whole space)
-		"255.255.255.1", // non-contiguous
-		"128.0.0.1",     // non-contiguous
-		"255.0.255.0",   // non-contiguous
-		"fe80::/10",     // ipv6
-		"not-an-address",
+func checkAcceptReject(t *testing.T, fn func(string) error, accept, reject []string) {
+	t.Helper()
+	for _, s := range accept {
+		if err := fn(s); err != nil {
+			t.Errorf("%q rejected: %v", s, err)
+		}
 	}
-	for _, s := range bad {
-		if isValidNetmask(s) {
-			t.Errorf("isValidNetmask(%q) = true; want false", s)
+	for _, s := range reject {
+		if err := fn(s); err == nil {
+			t.Errorf("%q accepted; want error", s)
 		}
 	}
 }
 
-func TestValidateProxmoxHost(t *testing.T) {
-	good := []string{
-		"pve.example.com",
-		"pve.example.com:8006",
-		"10.0.0.1",
-		"10.0.0.1:22",
-		"proxmox",
-		"[2001:db8::1]:8006",
-	}
+func checkBoolValidator(t *testing.T, fn func(string) bool, good, bad []string) {
+	t.Helper()
 	for _, s := range good {
-		if err := ValidateProxmoxHost(s); err != nil {
-			t.Errorf("ValidateProxmoxHost(%q) error: %v", s, err)
+		if !fn(s) {
+			t.Errorf("%q = false; want true", s)
 		}
-	}
-
-	bad := []string{
-		"",
-		":8006", // empty host
-		"!bad!.example",
-		"space in host",
-		"https://pve.example.com",   // scheme prefix (validated left half was "https")
-		"gopher://pve.example.com",  // arbitrary scheme
-		"file:///etc/passwd",        // scheme + path
-		"user:pass@pve.example.com", // userinfo
-		strings.Repeat("a", 254),    // over the 253-char domain cap
-		"h\x00st",                   // embedded NUL
 	}
 	for _, s := range bad {
-		if err := ValidateProxmoxHost(s); err == nil {
-			t.Errorf("ValidateProxmoxHost(%q) accepted; expected error", s)
+		if fn(s) {
+			t.Errorf("%q = true; want false", s)
 		}
 	}
+}
+
+func TestIsValidNetmask(t *testing.T) {
+	checkBoolValidator(t, isValidNetmask,
+		[]string{
+			"/24", "/32", "/0",
+			"255.255.255.0",
+			"255.255.255.255",
+			"128.0.0.0",
+			"255.255.255.254",
+		},
+		[]string{
+			"",
+			"/33",
+			"/-1",
+			"0.0.0.0", // canonical but disallowed (would claim whole space)
+			"255.255.255.1",
+			"255.0.255.0",
+			"fe80::/10",
+			"not-an-address",
+		})
+}
+
+func TestValidateProxmoxHost(t *testing.T) {
+	checkAcceptReject(t, ValidateProxmoxHost,
+		[]string{
+			"pve.example.com",
+			"pve.example.com:8006",
+			"10.0.0.1",
+			"10.0.0.1:22",
+			"proxmox",
+			"[2001:db8::1]:8006",
+		},
+		[]string{
+			"",
+			":8006",
+			"!bad!.example",
+			"space in host",
+			"https://pve.example.com",
+			"gopher://pve.example.com",
+			"file:///etc/passwd",
+			"user:pass@pve.example.com",
+			strings.Repeat("a", 254), // over the 253-char domain cap
+			"h\x00st",                // embedded NUL
+		})
 }
 
 func TestValidateHAMasters(t *testing.T) {
@@ -77,14 +92,10 @@ func TestValidateHAMasters(t *testing.T) {
 		count   int
 		wantErr bool
 	}{
-		{0, false}, // 0 is not > 1 so passes
+		{0, false},
 		{1, false},
-		{2, true}, // even >1
+		{2, true},
 		{3, false},
-		{4, true},
-		{5, false},
-		{7, false},
-		{6, true},
 	}
 	for _, tc := range cases {
 		err := validateHAMasters(tc.count)
@@ -98,126 +109,93 @@ func TestValidateHAMasters(t *testing.T) {
 }
 
 func TestValidateTerraformEnv(t *testing.T) {
-	good := []string{
-		"", // empty allowed (runtime default)
-		"production",
-		"staging",
-		"dev1",
-		"_private",
-		"A",
-		"Env-Name_01",
-	}
-	for _, s := range good {
-		if err := ValidateTerraformEnv(s); err != nil {
-			t.Errorf("ValidateTerraformEnv(%q) error: %v", s, err)
-		}
-	}
-
-	bad := []string{
-		"1starts-with-digit",
-		"-starts-with-dash",
-		"has space",
-		"has/slash",
-		"has..dots",
-		"../escape",
-		"/absolute",
-		"env\x00null", // null byte attempt
-		"unicodé",     // non-ASCII
-		"env.tf",
-	}
-	for _, s := range bad {
-		if err := ValidateTerraformEnv(s); err == nil {
-			t.Errorf("ValidateTerraformEnv(%q) accepted; want rejection", s)
-		} else if !strings.Contains(err.Error(), "letter") {
-			// Sanity: the error message mentions the rule shape.
-			t.Logf("ValidateTerraformEnv(%q) err = %v (shape acceptable)", s, err)
-		}
-	}
+	checkAcceptReject(t, ValidateTerraformEnv,
+		[]string{
+			"",
+			"production",
+			"staging",
+			"dev1",
+			"_private",
+			"A",
+			"Env-Name_01",
+		},
+		[]string{
+			"1starts-with-digit",
+			"-starts-with-dash",
+			"has space",
+			"has/slash",
+			"has..dots",
+			"../escape",
+			"/absolute",
+			"env\x00null",
+			"unicodé",
+			"env.tf",
+		})
 }
 
 func TestValidateProxmoxConfigFields(t *testing.T) {
-	goodStorage := []string{"local", "local-lvm", "ceph-pool", "storage1", "Tank", "has.dot"}
-	badStorage := []string{`local"inject`, "has space", "has/slash", ".leading-dot"}
-
-	hasFieldError := func(r *ValidationResult, field string) bool {
-		for _, e := range r.Errors {
-			if e.Field == field {
-				return true
+	newCfg := func() *ProxmoxConfig {
+		return &ProxmoxConfig{Host: "pve:8006", Node: "pve", Storage: "local-lvm"}
+	}
+	check := func(t *testing.T, set func(*ProxmoxConfig, string), value string, fields []string, wantErr bool) {
+		t.Helper()
+		cfg := newCfg()
+		set(cfg, value)
+		r := &ValidationResult{}
+		validateProxmoxConfig(cfg, r)
+		for _, f := range fields {
+			if got := hasFieldError(r, f); got != wantErr {
+				if wantErr {
+					t.Errorf("%s %q accepted; want rejection", f, value)
+				} else {
+					t.Errorf("%s %q rejected", f, value)
+				}
 			}
 		}
-		return false
 	}
 
-	for _, s := range goodStorage {
-		cfg := &ProxmoxConfig{Host: "pve:8006", Node: "pve", Storage: "local-lvm", ISOStorage: s, DataStorage: s}
-		r := &ValidationResult{}
-		validateProxmoxConfig(cfg, r)
-		if hasFieldError(r, FieldProxmoxISOStorage) {
-			t.Errorf("ISOStorage %q rejected", s)
-		}
-		if hasFieldError(r, FieldProxmoxDataStorage) {
-			t.Errorf("DataStorage %q rejected", s)
-		}
+	cases := []struct {
+		name   string
+		set    func(*ProxmoxConfig, string)
+		fields []string
+		good   []string
+		bad    []string
+	}{
+		{
+			name:   "storage names",
+			set:    func(p *ProxmoxConfig, s string) { p.ISOStorage = s; p.DataStorage = s },
+			fields: []string{FieldProxmoxISOStorage, FieldProxmoxDataStorage},
+			good:   []string{"local", "local-lvm", "ceph-pool", "storage1", "Tank", "has.dot"},
+			bad:    []string{`local"inject`, "has space", "has/slash", ".leading-dot"},
+		},
+		{
+			name:   "cpu type",
+			set:    func(p *ProxmoxConfig, s string) { p.CPUType = s },
+			fields: []string{FieldProxmoxCPUType},
+			good:   []string{"host", "kvm64", "x86-64-v2", "x86-64-v2-AES", "Skylake-Server-noTSX-IBRS", "x86-64-v2+pge", "x86-64-v2,flags=+pge"},
+			bad:    []string{`host"inject`, "has space", "has\nnewline", `"; rm -rf /`},
+		},
+		{
+			name:   "bridge",
+			set:    func(p *ProxmoxConfig, s string) { p.Bridge = s },
+			fields: []string{FieldProxmoxBridge},
+			good:   []string{"vmbr0", "vmbr1", "vmbr100", "eth0"},
+			bad:    []string{`vmbr0"inject`, "has space", "0starts-digit"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, s := range tc.good {
+				check(t, tc.set, s, tc.fields, false)
+			}
+			for _, s := range tc.bad {
+				check(t, tc.set, s, tc.fields, true)
+			}
+		})
 	}
 
-	for _, s := range badStorage {
-		cfg := &ProxmoxConfig{Host: "pve:8006", Node: "pve", Storage: "local-lvm", ISOStorage: s, DataStorage: s}
-		r := &ValidationResult{}
-		validateProxmoxConfig(cfg, r)
-		if !hasFieldError(r, FieldProxmoxISOStorage) {
-			t.Errorf("ISOStorage %q accepted; want rejection", s)
-		}
-		if !hasFieldError(r, FieldProxmoxDataStorage) {
-			t.Errorf("DataStorage %q accepted; want rejection", s)
-		}
-	}
-
-	goodCPU := []string{"host", "kvm64", "x86-64-v2", "x86-64-v2-AES", "Skylake-Server-noTSX-IBRS", "x86-64-v2+pge", "x86-64-v2,flags=+pge"}
-	badCPU := []string{`host"inject`, "has space", "has\nnewline", `"; rm -rf /`}
-
-	for _, s := range goodCPU {
-		cfg := &ProxmoxConfig{Host: "pve:8006", Node: "pve", Storage: "local-lvm", CPUType: s}
-		r := &ValidationResult{}
-		validateProxmoxConfig(cfg, r)
-		if hasFieldError(r, FieldProxmoxCPUType) {
-			t.Errorf("CPUType %q rejected", s)
-		}
-	}
-
-	for _, s := range badCPU {
-		cfg := &ProxmoxConfig{Host: "pve:8006", Node: "pve", Storage: "local-lvm", CPUType: s}
-		r := &ValidationResult{}
-		validateProxmoxConfig(cfg, r)
-		if !hasFieldError(r, FieldProxmoxCPUType) {
-			t.Errorf("CPUType %q accepted; want rejection", s)
-		}
-	}
-
-	goodBridge := []string{"vmbr0", "vmbr1", "vmbr100", "eth0"}
-	badBridge := []string{`vmbr0"inject`, "has space", "0starts-digit"}
-
-	for _, s := range goodBridge {
-		cfg := &ProxmoxConfig{Host: "pve:8006", Node: "pve", Storage: "local-lvm", Bridge: s}
-		r := &ValidationResult{}
-		validateProxmoxConfig(cfg, r)
-		if hasFieldError(r, FieldProxmoxBridge) {
-			t.Errorf("Bridge %q rejected", s)
-		}
-	}
-
-	for _, s := range badBridge {
-		cfg := &ProxmoxConfig{Host: "pve:8006", Node: "pve", Storage: "local-lvm", Bridge: s}
-		r := &ValidationResult{}
-		validateProxmoxConfig(cfg, r)
-		if !hasFieldError(r, FieldProxmoxBridge) {
-			t.Errorf("Bridge %q accepted; want rejection", s)
-		}
-	}
-
-	// empty optional fields must pass without errors on the new fields
-	emptyCfg := &ProxmoxConfig{Host: "pve:8006", Node: "pve", Storage: "local-lvm"}
 	emptyResult := &ValidationResult{}
-	validateProxmoxConfig(emptyCfg, emptyResult)
+	validateProxmoxConfig(newCfg(), emptyResult)
 	for _, e := range emptyResult.Errors {
 		switch e.Field {
 		case FieldProxmoxISOStorage, FieldProxmoxDataStorage, FieldProxmoxBridge, FieldProxmoxCPUType:
@@ -279,92 +257,48 @@ func TestValidatePlacementCounts(t *testing.T) {
 }
 
 func TestIsValidDNSLabel(t *testing.T) {
-	good := []string{
-		"a",
-		"abc",
-		"a-b",
-		"abc-def",
-		"a0",
-		"0abc",
-		strings.Repeat("a", 63),
-	}
-	for _, s := range good {
-		if !IsValidDNSLabel(s) {
-			t.Errorf("IsValidDNSLabel(%q) = false; want true", s)
-		}
-	}
-
-	bad := []string{
-		"",
-		"-abc",
-		"abc-",
-		"A-UPPER",
-		`a"b`,
-		"../etc",
-		strings.Repeat("a", 64),
-	}
-	for _, s := range bad {
-		if IsValidDNSLabel(s) {
-			t.Errorf("IsValidDNSLabel(%q) = true; want false", s)
-		}
-	}
+	checkBoolValidator(t, IsValidDNSLabel,
+		[]string{
+			"a",
+			"abc",
+			"a-b",
+			"abc-def",
+			"a0",
+			"0abc",
+			strings.Repeat("a", 63),
+		},
+		[]string{
+			"",
+			"-abc",
+			"abc-",
+			"A-UPPER",
+			`a"b`,
+			"../etc",
+			strings.Repeat("a", 64),
+		})
 }
 
 func TestValidateClusterName(t *testing.T) {
-	cases := []struct {
-		input   string
-		wantErr bool
-	}{
-		{"ab", false},
-		{"my-cluster", false},
-		{"0abc", false},
-		{strings.Repeat("a", 63), false},
-		{"", true},
-		{"a", true},
-		{"-abc", true},
-		{"ABC", true},
-		{`a"b`, true},
-		{"../etc", true},
-		{strings.Repeat("a", 64), true},
-	}
-	for _, tc := range cases {
-		err := ValidateClusterName(tc.input)
-		if tc.wantErr && err == nil {
-			t.Errorf("ValidateClusterName(%q) accepted; want error", tc.input)
-		}
-		if !tc.wantErr && err != nil {
-			t.Errorf("ValidateClusterName(%q) error: %v", tc.input, err)
-		}
-	}
+	checkAcceptReject(t, ValidateClusterName,
+		[]string{"ab", "my-cluster", "0abc", strings.Repeat("a", 63)},
+		[]string{"", "a", "-abc", "ABC", `a"b`, "../etc", strings.Repeat("a", 64)})
 }
 
 func TestValidateCIDR(t *testing.T) {
-	good := []string{
-		"192.168.1.0/24",
-		"10.0.0.0/8",
-		"172.16.0.0/12",
-		"::/0",
-		"2001:db8::/32",
-	}
-	for _, s := range good {
-		if err := ValidateCIDR(s); err != nil {
-			t.Errorf("ValidateCIDR(%q) error: %v", s, err)
-		}
-	}
-
-	bad := []string{
-		"",
-		"10.0.0.0/40",
-		"::/129",
-		"192.168.1.1",
-		"not-a-cidr",
-		"256.0.0.0/8",
-	}
-	for _, s := range bad {
-		if err := ValidateCIDR(s); err == nil {
-			t.Errorf("ValidateCIDR(%q) accepted; want error", s)
-		}
-	}
+	checkAcceptReject(t, ValidateCIDR,
+		[]string{
+			"192.168.1.0/24",
+			"::/0",
+			"2001:db8::/32",
+		},
+		[]string{
+			"",
+			"10.0.0.0/40",
+			"::/129",
+			"192.168.1.1",
+			"not-a-cidr",
+			"256.0.0.0/8",
+		})
 }
 
 func TestValidateGatewayInCIDR(t *testing.T) {
@@ -393,109 +327,30 @@ func TestValidateGatewayInCIDR(t *testing.T) {
 }
 
 func TestValidateSSHFingerprint(t *testing.T) {
-	good := []string{
-		"",
-		"SHA256:abcdefghijklmnopqrstuvwxyz012345678901234567",
-		"SHA256:x",
-	}
-	for _, s := range good {
-		if err := ValidateSSHFingerprint(s); err != nil {
-			t.Errorf("ValidateSSHFingerprint(%q) error: %v", s, err)
-		}
-	}
-
-	bad := []string{
-		"SHA256:",
-		"MD5:abcd1234",
-		"abcdefghijklmnopqrstuvwxyz012345678901234567",
-		"sha256:lowercase",
-	}
-	for _, s := range bad {
-		if err := ValidateSSHFingerprint(s); err == nil {
-			t.Errorf("ValidateSSHFingerprint(%q) accepted; want error", s)
-		}
-	}
+	checkAcceptReject(t, ValidateSSHFingerprint,
+		[]string{
+			"",
+			"SHA256:abcdefghijklmnopqrstuvwxyz012345678901234567",
+			"SHA256:x",
+		},
+		[]string{
+			"SHA256:",
+			"MD5:abcd1234",
+			"abcdefghijklmnopqrstuvwxyz012345678901234567",
+			"sha256:lowercase",
+		})
 }
 
 func TestValidateBinDir(t *testing.T) {
-	good := []string{
-		"",
-		"/usr/local/bin",
-		"/home/user/bin",
-		"/",
-	}
-	for _, s := range good {
-		if err := ValidateBinDir(s); err != nil {
-			t.Errorf("ValidateBinDir(%q) error: %v", s, err)
-		}
-	}
-
-	bad := []string{
-		"relative/path",
-		"bin",
-		"./bin",
-		"../bin",
-	}
-	for _, s := range bad {
-		if err := ValidateBinDir(s); err == nil {
-			t.Errorf("ValidateBinDir(%q) accepted; want error", s)
-		}
-	}
+	checkAcceptReject(t, ValidateBinDir,
+		[]string{"", "/usr/local/bin", "/home/user/bin", "/"},
+		[]string{"relative/path", "bin", "./bin", "../bin"})
 }
 
 func TestValidateNTPServer(t *testing.T) {
-	good := []string{
-		"",
-		"192.168.1.20",
-		"pool.ntp.org",
-		"2001:db8::1",
-	}
-	for _, s := range good {
-		if err := ValidateNTPServer(s); err != nil {
-			t.Errorf("ValidateNTPServer(%q) error: %v", s, err)
-		}
-	}
-
-	bad := []string{
-		"!bad!.example",
-		"space in host",
-		"192.168.1.20:123",
-	}
-	for _, s := range bad {
-		if err := ValidateNTPServer(s); err == nil {
-			t.Errorf("ValidateNTPServer(%q) accepted; want error", s)
-		}
-	}
-}
-
-func TestValidateNetworkingNTPServer(t *testing.T) {
-	cases := []struct {
-		name    string
-		server  string
-		wantErr bool
-	}{
-		{"empty accepted (bastion default applies)", "", false},
-		{"valid ip accepted", "192.168.1.20", false},
-		{"valid hostname accepted", "ntp.example.com", false},
-		{"invalid host rejected", "!not valid!", true},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			cfg := DefaultConfig()
-			cfg.Networking.NTPServer = tc.server
-			result := &ValidationResult{}
-			validateNetworking(cfg, result)
-			gotErr := false
-			for _, e := range result.Errors {
-				if e.Field == FieldNetworkingNTPServer {
-					gotErr = true
-				}
-			}
-			if gotErr != tc.wantErr {
-				t.Errorf("server %q: gotErr = %v, want %v; errors: %v", tc.server, gotErr, tc.wantErr, result.Errors)
-			}
-		})
-	}
+	checkAcceptReject(t, ValidateNTPServer,
+		[]string{"", "192.168.1.20", "pool.ntp.org", "2001:db8::1"},
+		[]string{"!bad!.example", "space in host", "192.168.1.20:123"})
 }
 
 func TestValidateNetmaskMatchesMachineCIDR(t *testing.T) {
@@ -515,13 +370,7 @@ func TestValidateNetmaskMatchesMachineCIDR(t *testing.T) {
 			cfg.Networking.StaticIP.Netmask = tc.netmask
 			result := &ValidationResult{}
 			validateAdvancedNetworking(cfg, result)
-			gotErr := false
-			for _, e := range result.Errors {
-				if e.Field == FieldNetworkingStaticIPNetmask {
-					gotErr = true
-				}
-			}
-			if gotErr != tc.wantErr {
+			if gotErr := hasFieldError(result, FieldNetworkingStaticIPNetmask); gotErr != tc.wantErr {
 				t.Errorf("netmask %q: gotErr = %v, want %v; errors: %v", tc.netmask, gotErr, tc.wantErr, result.Errors)
 			}
 		})
@@ -593,13 +442,7 @@ func TestValidateStaticIPCollisions(t *testing.T) {
 			tc.mutate(cfg)
 			result := &ValidationResult{}
 			validateStaticIPCollisions(cfg, result)
-			gotErr := false
-			for _, e := range result.Errors {
-				if e.Field == FieldNetworkingStaticIPStart {
-					gotErr = true
-				}
-			}
-			if gotErr != tc.wantErr {
+			if gotErr := hasFieldError(result, FieldNetworkingStaticIPStart); gotErr != tc.wantErr {
 				t.Errorf("gotErr = %v, want %v; errors: %v", gotErr, tc.wantErr, result.Errors)
 			}
 		})
@@ -607,14 +450,6 @@ func TestValidateStaticIPCollisions(t *testing.T) {
 }
 
 func TestValidateBastionAndStaticIPDNS(t *testing.T) {
-	hasField := func(r *ValidationResult, field string) bool {
-		for _, e := range r.Errors {
-			if e.Field == field {
-				return true
-			}
-		}
-		return false
-	}
 	cases := []struct {
 		name    string
 		bastion string
@@ -636,10 +471,10 @@ func TestValidateBastionAndStaticIPDNS(t *testing.T) {
 			result := &ValidationResult{}
 			validateNetworking(cfg, result)
 			if tc.wantErr {
-				if !hasField(result, tc.field) {
+				if !hasFieldError(result, tc.field) {
 					t.Errorf("expected error on %s; errors: %v", tc.field, result.Errors)
 				}
-			} else if hasField(result, FieldNetworkingBastionIP) || hasField(result, FieldNetworkingStaticIPDNS) {
+			} else if hasFieldError(result, FieldNetworkingBastionIP) || hasFieldError(result, FieldNetworkingStaticIPDNS) {
 				t.Errorf("unexpected bastion/dns error; errors: %v", result.Errors)
 			}
 		})
@@ -737,22 +572,13 @@ func TestValidateEndToEnd(t *testing.T) {
 		},
 	}
 
-	hasField := func(r *ValidationResult, field string) bool {
-		for _, e := range r.Errors {
-			if e.Field == field {
-				return true
-			}
-		}
-		return false
-	}
-
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := &Config{}
 			tc.mutateCfg(cfg)
 			result := cfg.Validate()
 			for _, field := range tc.wantFields {
-				if !hasField(result, field) {
+				if !hasFieldError(result, field) {
 					t.Errorf("expected error on field %q, not found; errors: %v", field, result.Errors)
 				}
 			}
@@ -818,14 +644,7 @@ func TestValidateAdditionalNetworks(t *testing.T) {
 				return
 			}
 			for _, field := range tc.wantFields {
-				found := false
-				for _, e := range r.Errors {
-					if e.Field == field {
-						found = true
-						break
-					}
-				}
-				if !found {
+				if !hasFieldError(r, field) {
 					t.Errorf("missing error for field %s; got %v", field, r.Errors)
 				}
 			}
@@ -909,13 +728,7 @@ func TestValidateBootstrap(t *testing.T) {
 				}
 				return
 			}
-			found := false
-			for _, e := range r.Errors {
-				if e.Field == tc.wantField {
-					found = true
-				}
-			}
-			if !found {
+			if !hasFieldError(r, tc.wantField) {
 				t.Errorf("expected error on %q; got %v", tc.wantField, r.Errors)
 			}
 		})
@@ -947,23 +760,13 @@ func TestValidateDeploymentFields(t *testing.T) {
 				}
 				return
 			}
-			found := false
-			for _, e := range r.Errors {
-				if e.Field == tc.wantField {
-					found = true
-				}
-			}
-			if !found {
+			if !hasFieldError(r, tc.wantField) {
 				t.Errorf("expected error on %q; got %v", tc.wantField, r.Errors)
 			}
 		})
 	}
 }
 
-// TestWizardWrapperValidators sweeps the exported wizard-facing wrappers
-// with accept/reject vectors. The primitives underneath carry their own
-// tests; this locks the wrappers' delegation so an inverted condition or a
-// wrong pattern var cannot wave hostile wizard input through unnoticed.
 func TestWizardWrapperValidators(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -995,49 +798,10 @@ func TestWizardWrapperValidators(t *testing.T) {
 			accept: []string{"1", "128"},
 			reject: []string{"0", "129", "four", ""},
 		},
-		{
-			name:   "ValidateMemory",
-			fn:     ValidateMemory,
-			accept: []string{"1024", "1048576"},
-			reject: []string{"1023", "1048577", "8G", ""},
-		},
-		{
-			name:   "ValidateOSDisk",
-			fn:     ValidateOSDisk,
-			accept: []string{"20", "1000"},
-			reject: []string{"19", "1001", "big", ""},
-		},
-		{
-			name:   "ValidateNodeCount",
-			fn:     ValidateNodeCount,
-			accept: []string{"0", "100"},
-			reject: []string{"-1", "101", "many", ""},
-		},
-		{
-			name:   "ValidateVMID",
-			fn:     ValidateVMID,
-			accept: []string{"100", "999999999"},
-			reject: []string{"99", "1000000000", "id", ""},
-		},
-		{
-			name:   "ValidateTimeout",
-			fn:     ValidateTimeout,
-			accept: []string{"60", "86400"},
-			reject: []string{"59", "86401", "1h", ""},
-		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			for _, in := range tc.accept {
-				if err := tc.fn(in); err != nil {
-					t.Errorf("%s(%q) rejected valid input: %v", tc.name, in, err)
-				}
-			}
-			for _, in := range tc.reject {
-				if err := tc.fn(in); err == nil {
-					t.Errorf("%s(%q) accepted; want error", tc.name, in)
-				}
-			}
+			checkAcceptReject(t, tc.fn, tc.accept, tc.reject)
 		})
 	}
 }

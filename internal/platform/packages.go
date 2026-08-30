@@ -13,18 +13,15 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
-// packageManagerTimeout bounds a single package-manager invocation. dnf/apt
-// against a wedged mirror or stale repo metadata can otherwise hang the
-// underlying exec indefinitely; 15 minutes mirrors ocExtractTimeout's
-// generous-but-bounded posture in setup/release_extract.go.
+// packageManagerTimeout bounds a package-manager invocation — dnf/apt
+// against a wedged mirror can hang indefinitely otherwise; 15m mirrors
+// ocExtractTimeout's posture (setup/release_extract.go).
 const packageManagerTimeout = 15 * time.Minute
 
 // Manager is the host package manager (dnf or apt-get) used to install OKD
-// host dependencies. The family field selects between RHEL (dnf/rpm) and
-// Debian (apt-get/dpkg) binaries.
-//
-// Must be constructed via NewPackageManager — the zero value panics on
-// first use (the backend commands and logger are set only there).
+// host dependencies, selecting RHEL (dnf/rpm) or Debian (apt-get/dpkg)
+// binaries via family. Must be constructed via NewPackageManager — the zero
+// value panics on first use.
 type Manager struct {
 	family    Family
 	pkgCmd    string                               // "dnf" | "apt-get"
@@ -34,9 +31,9 @@ type Manager struct {
 	logger    *slog.Logger
 }
 
-// NewPackageManager returns a Manager wired to the appropriate backend for
-// the detected OS family (dnf/rpm on RHEL, apt-get/dpkg on Debian). A nil
-// logger falls back to logutil.NopLogger.
+// NewPackageManager returns a Manager wired to the backend for the detected
+// OS family (dnf/rpm RHEL, apt-get/dpkg Debian); nil logger falls back to
+// logutil.NopLogger.
 func NewPackageManager(detected OS, logger *slog.Logger) *Manager {
 	logger = logutil.OrNop(logger)
 	if detected.Family == FamilyDebian {
@@ -60,8 +57,8 @@ func NewPackageManager(detected OS, logger *slog.Logger) *Manager {
 	}
 }
 
-// Install installs packages via the configured backend. Empty input
-// is a no-op.
+// Install installs packages via the configured backend; empty input is a
+// no-op.
 func (m *Manager) Install(ctx context.Context, packages []string) error {
 	if len(packages) == 0 {
 		return nil
@@ -99,9 +96,8 @@ func (m *Manager) Remove(ctx context.Context, packages []string) error {
 }
 
 // isInstalled reports whether pkg is present via the backend's query
-// command (for dpkg, stale "rc" entries are filtered). A non-zero exit
-// maps to (false, nil); other failures (ctx cancellation, LookPath,
-// I/O) propagate so callers don't treat a broken query backend as
+// command (dpkg filters stale "rc" entries); non-zero exit maps to (false,
+// nil), other failures propagate so a broken backend isn't mistaken for
 // "not installed".
 func (m *Manager) isInstalled(ctx context.Context, pkg string) (bool, error) {
 	args := slices.Concat(m.queryArgs, []string{pkg})

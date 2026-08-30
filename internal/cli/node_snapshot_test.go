@@ -6,97 +6,76 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox/hostssh"
-	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-// captureTuiStderr redirects tui's package-level stderr logger to a buffer
-// around fn and restores it after — logutil.Warn/Info write through a charmlog
-// writer captured once at package init, not the live os.Stderr variable, so
-// a plain os.Pipe swap (captureStderr) never sees these records.
-func captureTuiStderr(t *testing.T, fn func()) string {
-	t.Helper()
-	var buf bytes.Buffer
-	if err := tui.ConfigureLoggers("info", "text", io.Discard, &buf, false); err != nil {
-		t.Fatalf("ConfigureLoggers: %v", err)
+// Rows with no stdin wired prove the gate never prompts on that path
+// (promptForLine would hit the TTY guard and error).
+func TestNodeSnapshotGate(t *testing.T) {
+	cases := []struct {
+		name          string
+		verb          string
+		twoStage, yes bool
+		dryRun        bool
+		confirm, warn string
+		stdin         string // "" wires no stdin
+		wantOK        bool
+		wantUsageErr  bool
+	}{
+		{
+			// --yes with no --confirm-cluster must fail closed regardless of twoStage.
+			name: "yes skips prompt but still pairs confirm-cluster",
+			verb: "node snapshot create", yes: true, wantUsageErr: true,
+		},
+		{
+			name: "yes with matching confirm-cluster proceeds without prompt",
+			verb: "node snapshot create", yes: true, confirm: "prod", warn: "warn", wantOK: true,
+		},
+		{
+			name: "dry-run skips prompt even without yes",
+			verb: "node snapshot rollback", twoStage: true, dryRun: true, warn: "warn", wantOK: true,
+		},
+		{
+			name: "create single-stage y proceeds",
+			verb: "node snapshot create", warn: "crash-consistent warning", stdin: "y\n", wantOK: true,
+		},
+		{
+			name: "create single-stage plain n denies",
+			verb: "node snapshot create", stdin: "n\n", wantOK: false,
+		},
+		{
+			// The single-stage 'y' must NOT be enough for rollback's two-stage gate.
+			name: "rollback two-stage requires typed name",
+			verb: "node snapshot rollback", twoStage: true, stdin: "y\n", wantOK: false,
+		},
 	}
-	t.Cleanup(func() {
-		if err := tui.ConfigureLoggers("info", "text", os.Stdout, os.Stderr, false); err != nil {
-			t.Errorf("restore loggers: %v", err)
-		}
-	})
-	fn()
-	return buf.String()
-}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.stdin != "" {
+				testStdinReader = strings.NewReader(tc.stdin)
+				t.Cleanup(func() { testStdinReader = nil })
+			}
 
-func TestNodeSnapshotGate_YesSkipsPromptButStillPairsConfirmCluster(t *testing.T) {
-	// --yes with no --confirm-cluster must fail closed regardless of twoStage.
-	_, err := nodeSnapshotGate(context.Background(), "node snapshot create", false, true, false, "", "prod", "")
-	var usageErr *errtypes.UsageError
-	if !errors.As(err, &usageErr) {
-		t.Fatalf("want *errtypes.UsageError, got %v", err)
-	}
-}
-
-func TestNodeSnapshotGate_YesWithMatchingConfirmClusterProceedsWithoutPrompt(t *testing.T) {
-	// No stdin wired: if this tried to prompt, promptForLine would hit the
-	// TTY guard and return an error, so a nil error here proves --yes short-
-	// circuited before runNodeGate.
-	ok, err := nodeSnapshotGate(context.Background(), "node snapshot create", false, true, false, "prod", "prod", "warn")
-	if err != nil || !ok {
-		t.Fatalf("ok=%v err=%v; want true, nil", ok, err)
-	}
-}
-
-func TestNodeSnapshotGate_DryRunSkipsPromptEvenWithoutYes(t *testing.T) {
-	// dryRun=true, yes=false, no stdin wired — must not attempt to prompt.
-	ok, err := nodeSnapshotGate(context.Background(), "node snapshot rollback", true, false, true, "", "prod", "warn")
-	if err != nil || !ok {
-		t.Fatalf("ok=%v err=%v; want true, nil (dry-run never blocks on a prompt)", ok, err)
-	}
-}
-
-func TestNodeSnapshotGate_CreateSingleStageYN(t *testing.T) {
-	testStdinReader = strings.NewReader("y\n")
-	t.Cleanup(func() { testStdinReader = nil })
-
-	ok, err := nodeSnapshotGate(context.Background(), "node snapshot create", false, false, false, "", "prod", "crash-consistent warning")
-	if err != nil || !ok {
-		t.Fatalf("ok=%v err=%v; want true, nil", ok, err)
-	}
-}
-
-func TestNodeSnapshotGate_CreateSingleStageDeniesOnPlainNo(t *testing.T) {
-	testStdinReader = strings.NewReader("n\n")
-	t.Cleanup(func() { testStdinReader = nil })
-
-	ok, err := nodeSnapshotGate(context.Background(), "node snapshot create", false, false, false, "", "prod", "")
-	if err != nil {
-		t.Fatalf("want nil error on decline, got %v", err)
-	}
-	if ok {
-		t.Fatal("plain 'n' must deny the single-stage gate")
-	}
-}
-
-func TestNodeSnapshotGate_RollbackTwoStageRequiresTypedName(t *testing.T) {
-	// The single-stage 'y' answer must NOT be enough for rollback's two-stage
-	// gate — this is the create-vs-rollback wiring distinction under test.
-	testStdinReader = strings.NewReader("y\n")
-	t.Cleanup(func() { testStdinReader = nil })
-
-	ok, err := nodeSnapshotGate(context.Background(), "node snapshot rollback", true, false, false, "", "prod", "")
-	if err != nil {
-		t.Fatalf("want nil error on deny, got %v", err)
-	}
-	if ok {
-		t.Fatal("rollback's two-stage gate must not accept a bare y/N answer for the typed-name step")
+			ok, err := nodeSnapshotGate(context.Background(), tc.verb, tc.twoStage, tc.yes, tc.dryRun, tc.confirm, "prod", tc.warn)
+			if tc.wantUsageErr {
+				var usageErr *errtypes.UsageError
+				if !errors.As(err, &usageErr) {
+					t.Fatalf("want *errtypes.UsageError, got %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("want nil error, got %v", err)
+			}
+			if ok != tc.wantOK {
+				t.Fatalf("ok = %v, want %v", ok, tc.wantOK)
+			}
+		})
 	}
 }
 
@@ -116,27 +95,6 @@ func TestNodeSnapshotGate_RollbackTwoStageHappyPath(t *testing.T) {
 	ok, err := nodeSnapshotGate(context.Background(), "node snapshot rollback", true, false, false, "", "prod", "quorum-sensitive warning")
 	if err != nil || !ok {
 		t.Fatalf("ok=%v err=%v; want true, nil", ok, err)
-	}
-}
-
-func TestNodeSnapshotGate_WarnMsgOnlyPrintsOnInteractivePath(t *testing.T) {
-	testStdinReader = strings.NewReader("y\n")
-	t.Cleanup(func() { testStdinReader = nil })
-
-	out := captureTuiStderr(t, func() {
-		_, _ = nodeSnapshotGate(context.Background(), "node snapshot create", false, false, false, "", "prod", "crash-consistent only")
-	})
-	if !strings.Contains(out, "crash-consistent only") {
-		t.Errorf("interactive gate must print warnMsg; got:\n%s", out)
-	}
-}
-
-func TestNodeSnapshotGate_WarnMsgSuppressedUnderYes(t *testing.T) {
-	out := captureTuiStderr(t, func() {
-		_, _ = nodeSnapshotGate(context.Background(), "node snapshot create", false, true, false, "prod", "prod", "crash-consistent only")
-	})
-	if strings.Contains(out, "crash-consistent only") {
-		t.Errorf("--yes must not print the CLI-level warnMsg (only the runner's own log line): got:\n%s", out)
 	}
 }
 

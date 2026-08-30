@@ -1,6 +1,5 @@
-// Package flux provides the FluxCD GitOps addon, which bootstraps Flux
-// controllers into an OKD cluster and registers them via the addon system's
-// init()-based catalog.
+// Package flux implements the FluxCD GitOps addon, bootstrapping Flux
+// controllers into an OKD cluster.
 package flux
 
 import (
@@ -38,13 +37,10 @@ const (
 	defaultPath   = "kubernetes/clusters/production"
 )
 
-// ProviderID is the addon identity string for FluxCD. Wizard defaults and
-// addon DefaultSettings both reference this constant so the two cannot
-// silently diverge.
+// ProviderID is the addon identity string for FluxCD.
 const ProviderID = "flux"
 
-// Settings keys consumed by the Flux addon. Named here so callers (install
-// wizard, validators, gitops bootstrap) reference the same string.
+// Settings keys for the flux addon.
 const (
 	SettingRepository         = "repository"
 	SettingBranch             = "branch"
@@ -53,18 +49,12 @@ const (
 	SettingControllerTimeout  = "controller_timeout"
 	SettingGitSyncTimeout     = "git_sync_timeout"
 	SettingGitHostFingerprint = "git_host_fingerprint"
-	// SettingAcceptHostKey opts into TOFU when no git_host_fingerprint pin is
-	// set. Set to "true" only after reviewing the observed fingerprints logged
-	// at WARN on the first unauthenticated run.
+	// SettingAcceptHostKey opts into TOFU when git_host_fingerprint is unset.
 	SettingAcceptHostKey = "accept_host_key"
 )
 
-// k8sBoolTrue is the Kubernetes condition-status literal ("True") that
-// jsonpath status queries return. Aliased from nodetypes so the value is not
-// respelled here as a second copy of the enum the repo already owns.
 const k8sBoolTrue = string(nodetypes.ConditionStatusTrue)
 
-// validSyncPath matches safe sync paths: alphanumeric, slashes, underscores, dots, and hyphens.
 var validSyncPath = regexp.MustCompile(`^[a-zA-Z0-9/_.\-]+$`)
 
 func init() {
@@ -73,10 +63,8 @@ func init() {
 	}
 }
 
-// fluxAddon is the addon.Addon implementation for Flux GitOps.
 type fluxAddon struct{}
 
-// Info returns the addon metadata.
 func (f *fluxAddon) Info() addon.Metadata {
 	return addon.Metadata{
 		Name:           "flux",
@@ -89,8 +77,6 @@ func (f *fluxAddon) Info() addon.Metadata {
 	}
 }
 
-// Install provisions flux-operator and flux-instance via Helm and waits for
-// controllers and the initial git sync.
 func (f *fluxAddon) Install(ctx context.Context, env *addon.Environment) error {
 	if !executor.CommandExists("helm") {
 		return &errtypes.ConfigError{Msg: "helm is required to install Flux"}
@@ -123,7 +109,7 @@ func (f *fluxAddon) Install(ctx context.Context, env *addon.Environment) error {
 		return err
 	}
 
-	// Wait for GitRepository sync (non-fatal — user may need to fix deploy key or URL)
+	// Non-fatal: git sync failures are usually a bad deploy key or repo URL.
 	if err := f.waitForGitSync(ctx, env, &fs); err != nil {
 		env.Logger.Warn("flux: git sync not ready", "err", err)
 		env.Logger.Info("flux: debug with: oc get gitrepository -n flux-system -o yaml")
@@ -134,10 +120,8 @@ func (f *fluxAddon) Install(ctx context.Context, env *addon.Environment) error {
 	return nil
 }
 
-// helmUpgradeInstall wraps the shared "helm upgrade --install ... --wait"
-// invocation used for both flux-operator and flux-instance. extraArgs is
-// appended after the common --namespace flag (so callers can pass -f
-// <values-file> or --create-namespace).
+// helmUpgradeInstall runs "helm upgrade --install ... --wait"; extraArgs land
+// between --namespace and --wait.
 func (f *fluxAddon) helmUpgradeInstall(ctx context.Context, env *addon.Environment, release, chart, errLabel string, extraArgs ...string) error {
 	return addon.RetryDefault(ctx, func() error {
 		args := []string{"upgrade", "--install", release, chart, "--namespace", "flux-system"}
@@ -189,10 +173,8 @@ func (f *fluxAddon) installInstance(ctx context.Context, env *addon.Environment,
 	)
 }
 
-// buildInstanceValues marshals the flux-instance helm chart values from
-// Settings into YAML bytes. Keeping values in a file rather than --set argv
-// prevents repository URLs from appearing in /proc/<pid>/cmdline and in helm
-// release Secrets.
+// buildInstanceValues marshals flux-instance's helm chart values to YAML; a
+// file (not --set argv) keeps repo URLs out of /proc/<pid>/cmdline.
 func buildInstanceValues(fs *Settings) ([]byte, error) {
 	v := map[string]any{
 		"instance": map[string]any{
@@ -210,8 +192,7 @@ func buildInstanceValues(fs *Settings) ([]byte, error) {
 	return yaml.Marshal(v)
 }
 
-// Verify reports whether the flux-operator and source-controller deployments
-// have ready replicas. GitRepository sync status is logged but non-fatal.
+// Verify checks flux-operator/source-controller readiness; GitRepository sync status is non-fatal.
 func (f *fluxAddon) Verify(ctx context.Context, env *addon.Environment) error {
 	result, err := env.Exec.RunChecked(ctx, "oc", "get", "deployment", "flux-operator",
 		"-n", "flux-system", "-o", "jsonpath={.status.readyReplicas}")
@@ -220,7 +201,7 @@ func (f *fluxAddon) Verify(ctx context.Context, env *addon.Environment) error {
 	}
 	ready := strings.TrimSpace(result.Stdout)
 	if ready == "" || ready == "0" {
-		return fmt.Errorf("flux-operator has no ready replicas")
+		return errors.New("flux-operator has no ready replicas")
 	}
 	env.Logger.Info("flux: operator ready", "replicas", ready)
 
@@ -231,7 +212,7 @@ func (f *fluxAddon) Verify(ctx context.Context, env *addon.Environment) error {
 	} else {
 		scReady := strings.TrimSpace(result.Stdout)
 		if scReady == "" || scReady == "0" {
-			return fmt.Errorf("source-controller has no ready replicas")
+			return errors.New("source-controller has no ready replicas")
 		}
 		env.Logger.Info("flux: source-controller ready", "replicas", scReady)
 	}
@@ -250,13 +231,10 @@ func (f *fluxAddon) Verify(ctx context.Context, env *addon.Environment) error {
 	return nil
 }
 
-// Uninstall removes the flux-operator and flux-instance Helm releases and
-// deletes the flux-system namespace. Individual failures are logged but do
-// not abort the sequence.
+// Uninstall removes flux's Helm releases and namespace; step failures are logged, not aborted.
 func (f *fluxAddon) Uninstall(ctx context.Context, env *addon.Environment) error {
 	env.Logger.Info("flux: removing flux components")
-	// Run returns a nil error for non-zero exits (only start/ctx failures
-	// error), so the exit code must be checked or failures pass silently.
+	// Run returns nil on a non-zero exit; the exit code must be checked explicitly.
 	warnOnErr := func(res *executor.Result, err error, desc string) {
 		if err != nil || res.ExitCode != 0 {
 			env.Logger.Warn("flux: uninstall step failed", "step", desc, "exit", res.ExitCode, "err", err)
@@ -271,14 +249,12 @@ func (f *fluxAddon) Uninstall(ctx context.Context, env *addon.Environment) error
 	return nil
 }
 
-// RequiredTools lists the external binaries flux needs on the host (helm).
 func (f *fluxAddon) RequiredTools() []addon.ToolSpec {
 	return []addon.ToolSpec{
 		{Name: "helm", Description: "Helm package manager for installing Flux charts"},
 	}
 }
 
-// DefaultSettings returns the built-in defaults for flux's settings map.
 func (f *fluxAddon) DefaultSettings() map[string]string {
 	return map[string]string{
 		SettingProvider:          ProviderID,
@@ -289,11 +265,8 @@ func (f *fluxAddon) DefaultSettings() map[string]string {
 	}
 }
 
-// ValidateSettings checks the flux addon settings map. It requires a Git URL,
-// rejects malformed branch or path values, and rejects URLs with embedded
-// userinfo (https://user:token@host) — helm --set arguments end up in
-// /proc/<pid>/cmdline, so SSH-key auth via a deploy-key Secret is the only
-// supported credential channel.
+// ValidateSettings requires a Git URL and rejects embedded userinfo (https://user:token@host).
+// SSH deploy-key auth is the only supported credential channel.
 func (f *fluxAddon) ValidateSettings(settings map[string]string) []string {
 	fs, err := f.decodeSettings(settings)
 	if err != nil {
@@ -329,10 +302,7 @@ func (f *fluxAddon) waitForControllers(ctx context.Context, env *addon.Environme
 	timeout := fs.ControllerTimeout
 
 	if err := system.WaitForWithTimeout(ctx, "flux", "controllers", func(pctx context.Context) bool {
-		// RunOutput + Truncated guard, not the ring-truncated Run: this
-		// output is machine-parsed line by line. pctx is WaitFor's
-		// deadline-bounded probe ctx, so a hung oc probe dies at the poll
-		// deadline instead of running unbounded under the outer install ctx.
+		// pctx is WaitFor's poll-deadline ctx, bounding a hung oc probe instead of the outer ctx.
 		result, err := env.Exec.RunOutput(pctx, 0, "oc", "get", "deployments",
 			"-n", "flux-system",
 			"-l", "app.kubernetes.io/part-of=flux",
@@ -374,9 +344,7 @@ func (f *fluxAddon) waitForGitSync(ctx context.Context, env *addon.Environment, 
 			"-n", "flux-system",
 			"-o", "jsonpath={.items[0].status.conditions[?(@.type==\"Ready\")].status}")
 		if err != nil {
-			// A transport failure (oc gone from PATH, exec start failure) yields
-			// err with ExitCode 0, so without this arm the loop spins silently
-			// for the full timeout. Log once, then treat as a not-ready tick.
+			// A transport failure yields err with ExitCode 0; log once, then treat as not-ready.
 			if msg := err.Error(); msg != lastProbeErr {
 				env.Logger.Warn("flux: git sync probe failed", "err", err)
 				lastProbeErr = msg
@@ -408,9 +376,8 @@ func (f *fluxAddon) createDeployKeySecret(ctx context.Context, env *addon.Enviro
 		return fmt.Errorf("resolve git host for ssh-keyscan: %w", err)
 	}
 
-	// Resolve the invoking user's home so `ssh-keygen -f ~/.ssh/...` from
-	// their shell and the path we read here resolve to the same file, even
-	// after the deploy re-execs under sudo.
+	// Matches the invoking user's `ssh-keygen -f ~/.ssh/...` even after the
+	// deploy re-execs under sudo.
 	homeDir, err := system.InvokingUserHomeDir()
 	if err != nil {
 		return fmt.Errorf("get home directory: %w", err)
@@ -431,8 +398,7 @@ func (f *fluxAddon) createDeployKeySecret(ctx context.Context, env *addon.Enviro
 		return fmt.Errorf("read deploy key: %w", err)
 	}
 
-	// The public half is optional: flux/source-controller only requires identity
-	// and known_hosts. Users who only installed the private key should not fail.
+	// Public half is optional — flux only requires identity and known_hosts.
 	publicKeyFile := deployKeyFile + ".pub"
 	var publicKey []byte
 	if b, err := readKeyFile(publicKeyFile); err == nil {
@@ -441,9 +407,7 @@ func (f *fluxAddon) createDeployKeySecret(ctx context.Context, env *addon.Enviro
 		return fmt.Errorf("read deploy key public half: %w", err)
 	}
 
-	// RunOutputChecked, not the ring-truncated RunChecked: this output feeds
-	// fingerprint verification and the known_hosts Secret, so a silently
-	// truncated tail must fail closed instead of being parsed.
+	// RunOutputChecked (not ring-truncated RunChecked): a truncated tail must fail closed.
 	knownHostsResult, err := env.Exec.RunOutputChecked(ctx, 0, "ssh-keyscan", host)
 	if err != nil {
 		return fmt.Errorf("get host key for %s: %w", host, err)
@@ -471,17 +435,7 @@ func (f *fluxAddon) createDeployKeySecret(ctx context.Context, env *addon.Enviro
 	return nil
 }
 
-// verifyKeyscanFingerprint validates the output of ssh-keyscan against an
-// operator-configured SHA256 pin.
-//
-// When expected is non-empty: each parsed key's fingerprint is compared; a
-// match returns nil; no match returns an error naming expected and observed.
-//
-// When expected is empty and acceptHostKey is true: observed fingerprints
-// log at WARN and nil is returned (TOFU).
-//
-// When expected is empty and acceptHostKey is false: returns an error listing
-// observed fingerprints — fail closed without TOFU.
+// verifyKeyscanFingerprint fails closed on an unpinned host unless acceptHostKey opts into TOFU.
 func verifyKeyscanFingerprint(keyscanOut, host, expected string, acceptHostKey bool, log *slog.Logger) error {
 	var observed []string
 	sc := bufio.NewScanner(strings.NewReader(keyscanOut))
@@ -513,9 +467,7 @@ func verifyKeyscanFingerprint(keyscanOut, host, expected string, acceptHostKey b
 		host, expected, strings.Join(observed, ", "))
 }
 
-// filterKeyscanLines strips comment and blank lines from ssh-keyscan output,
-// returning only the host-key lines. The Flux Secret stays byte-stable across
-// keyscan runs whose banner-line ordering or comment content may vary.
+// filterKeyscanLines drops comment/blank lines so the Secret is byte-stable across keyscan runs.
 func filterKeyscanLines(keyscanOut string) []byte {
 	var b strings.Builder
 	sc := bufio.NewScanner(strings.NewReader(keyscanOut))
@@ -530,21 +482,18 @@ func filterKeyscanLines(keyscanOut string) []byte {
 	return []byte(b.String())
 }
 
-// gitHost extracts the host portion of a git repository URL. It supports
-// ssh://, https://, and the scp-style user@host:path form used by most git
-// servers (github, gitlab, gitea, self-hosted).
+// gitHost extracts the host from a git URL: ssh://, https://, or scp-style user@host:path.
 func gitHost(repoURL string) (string, error) {
 	repoURL = strings.TrimSpace(repoURL)
 	if repoURL == "" {
 		return "", &errtypes.ConfigError{Msg: "empty repository URL"}
 	}
-	// scp-style: user@host:path (no scheme, has @ and : before any /). Format
-	// only the substring after the last @ in errors: the userinfo before it may
-	// carry a token, and scp URLs are not masked by url.Redacted.
+	// scp-style user@host:path; error text uses only the substring after the
+	// last @ to avoid leaking a token.
 	if !strings.Contains(repoURL, "://") {
 		at := strings.LastIndex(repoURL, "@")
 		if at < 0 {
-			return "", fmt.Errorf("cannot parse host from repository URL")
+			return "", errors.New("cannot parse host from repository URL")
 		}
 		rest := repoURL[at+1:]
 		host, _, ok := strings.Cut(rest, ":")
@@ -558,9 +507,8 @@ func gitHost(repoURL string) (string, error) {
 	}
 	u, err := url.Parse(repoURL)
 	if err != nil {
-		// *url.Error carries the raw URL verbatim (password included); never
-		// wrap it. url.Redacted needs a parsed URL we do not have here.
-		return "", fmt.Errorf("cannot parse repository URL")
+		// *url.Error carries the raw URL (password included) verbatim; never wrap it.
+		return "", errors.New("cannot parse repository URL")
 	}
 	host := u.Hostname()
 	if host == "" {
@@ -572,10 +520,8 @@ func gitHost(repoURL string) (string, error) {
 	return host, nil
 }
 
-// buildFluxDeployKeySecret renders a Secret manifest containing the SSH deploy
-// key material. publicKey is optional — flux only requires identity and
-// known_hosts, so the identity.pub field is omitted when empty. Inputs are
-// []byte so callers can clear the private key buffer after use.
+// buildFluxDeployKeySecret renders the deploy-key Secret manifest; inputs are
+// []byte so callers can clear the private key after use.
 func buildFluxDeployKeySecret(namespace, name string, privateKey, publicKey, knownHosts []byte) (string, error) {
 	data := map[string][]byte{
 		"identity":    privateKey,
@@ -587,8 +533,7 @@ func buildFluxDeployKeySecret(namespace, name string, privateKey, publicKey, kno
 	return addon.BuildOpaqueSecret(namespace, name, data)
 }
 
-// readKeyFile reads path while refusing to follow a symlink at the final
-// component. Mirrors the lstat-then-O_NOFOLLOW pattern in runlock.Acquire.
+// readKeyFile refuses to follow a symlink at the final path component (mirrors runlock.Acquire).
 func readKeyFile(path string) ([]byte, error) {
 	if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSymlink != 0 {
 		return nil, fmt.Errorf("%s is a symlink; refusing to follow", path)

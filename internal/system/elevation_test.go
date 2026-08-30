@@ -13,11 +13,21 @@ import (
 	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
-// TestChownTreeToInvokingUser_SymlinkEscape drives the real function against
-// a symlink-escape fixture. The dangling symlink is the tripwire: Lchown on
-// the link itself succeeds, while a rewrite that follows symlinks (os.Chown /
-// walking outside os.Root) hits ENOENT on the dangling target and surfaces
-// in the joined error.
+func setSudoEnv(t *testing.T, uid, gid string) {
+	t.Helper()
+	t.Setenv("SUDO_UID", uid)
+	t.Setenv("SUDO_GID", gid)
+}
+
+// setSudoSelf pins to the current user; chown-to-self needs no privilege,
+// letting these tests run unprivileged.
+func setSudoSelf(t *testing.T) {
+	t.Helper()
+	setSudoEnv(t, strconv.Itoa(os.Getuid()), strconv.Itoa(os.Getgid()))
+}
+
+// The dangling symlink is the tripwire: a rewrite that follows symlinks
+// would hit ENOENT on it, while Lchown succeeds.
 func TestChownTreeToInvokingUser_SymlinkEscape(t *testing.T) {
 	inside := t.TempDir()
 	outside := t.TempDir()
@@ -35,10 +45,7 @@ func TestChownTreeToInvokingUser_SymlinkEscape(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Chown-to-self is always permitted, so the real function can run
-	// unprivileged with the invoking user pinned to the current user.
-	t.Setenv("SUDO_UID", strconv.Itoa(os.Getuid()))
-	t.Setenv("SUDO_GID", strconv.Itoa(os.Getgid()))
+	setSudoSelf(t)
 
 	if err := ChownTreeToInvokingUser(inside); err != nil {
 		t.Fatalf("ChownTreeToInvokingUser: %v (a symlink-following rewrite fails here via the dangling link)", err)
@@ -49,9 +56,8 @@ func TestChownTreeToInvokingUser_SymlinkEscape(t *testing.T) {
 	}
 }
 
-// TestChownToInvokingUser_DoesNotFollowSymlink pins Lchown semantics via a
-// dangling symlink: Lchown on the link itself succeeds, while a rewrite back
-// to symlink-following os.Chown resolves the missing target and hits ENOENT.
+// Dangling symlink is the tripwire: Lchown succeeds without resolving it,
+// while symlink-following os.Chown would hit ENOENT.
 func TestChownToInvokingUser_DoesNotFollowSymlink(t *testing.T) {
 	dir := t.TempDir()
 	link := filepath.Join(dir, "dangling")
@@ -59,10 +65,7 @@ func TestChownToInvokingUser_DoesNotFollowSymlink(t *testing.T) {
 		t.Skip("cannot create symlink:", err)
 	}
 
-	// Chown-to-self is always permitted, so the real function can run
-	// unprivileged with the invoking user pinned to the current user.
-	t.Setenv("SUDO_UID", strconv.Itoa(os.Getuid()))
-	t.Setenv("SUDO_GID", strconv.Itoa(os.Getgid()))
+	setSudoSelf(t)
 
 	if err := ChownToInvokingUser(link); err != nil {
 		t.Fatalf("ChownToInvokingUser on dangling symlink: %v (a symlink-following rewrite fails here)", err)
@@ -81,16 +84,14 @@ func TestChownFileToInvokingUser(t *testing.T) {
 	defer func() { _ = f.Close() }()
 
 	t.Run("no-op without sudo env", func(t *testing.T) {
-		t.Setenv("SUDO_UID", "")
-		t.Setenv("SUDO_GID", "")
+		setSudoEnv(t, "", "")
 		if err := ChownFileToInvokingUser(f); err != nil {
 			t.Errorf("expected no-op without SUDO_UID/GID; got %v", err)
 		}
 	})
 
 	t.Run("chowns through the descriptor", func(t *testing.T) {
-		t.Setenv("SUDO_UID", strconv.Itoa(os.Getuid()))
-		t.Setenv("SUDO_GID", strconv.Itoa(os.Getgid()))
+		setSudoSelf(t)
 		if err := ChownFileToInvokingUser(f); err != nil {
 			t.Errorf("fd chown to self: %v", err)
 		}
@@ -123,8 +124,7 @@ func TestInvokingUser(t *testing.T) {
 
 func TestInvokingUserIDs(t *testing.T) {
 	t.Run("both unset returns (nil, nil)", func(t *testing.T) {
-		t.Setenv("SUDO_UID", "")
-		t.Setenv("SUDO_GID", "")
+		setSudoEnv(t, "", "")
 		ids, err := invokingUserIDs()
 		if err != nil {
 			t.Fatal(err)
@@ -135,8 +135,7 @@ func TestInvokingUserIDs(t *testing.T) {
 	})
 
 	t.Run("both set and numeric returns struct", func(t *testing.T) {
-		t.Setenv("SUDO_UID", "1000")
-		t.Setenv("SUDO_GID", "1001")
+		setSudoEnv(t, "1000", "1001")
 		ids, err := invokingUserIDs()
 		if err != nil {
 			t.Fatal(err)
@@ -147,8 +146,7 @@ func TestInvokingUserIDs(t *testing.T) {
 	})
 
 	t.Run("non-numeric SUDO_UID returns error", func(t *testing.T) {
-		t.Setenv("SUDO_UID", "bogus")
-		t.Setenv("SUDO_GID", "1001")
+		setSudoEnv(t, "bogus", "1001")
 		_, err := invokingUserIDs()
 		if err == nil {
 			t.Errorf("expected parse error for bogus SUDO_UID")
@@ -156,8 +154,7 @@ func TestInvokingUserIDs(t *testing.T) {
 	})
 
 	t.Run("non-numeric SUDO_GID returns error", func(t *testing.T) {
-		t.Setenv("SUDO_UID", "1000")
-		t.Setenv("SUDO_GID", "bogus")
+		setSudoEnv(t, "1000", "bogus")
 		_, err := invokingUserIDs()
 		if err == nil {
 			t.Errorf("expected parse error for bogus SUDO_GID")
@@ -165,8 +162,7 @@ func TestInvokingUserIDs(t *testing.T) {
 	})
 
 	t.Run("only SUDO_UID set returns (nil, nil)", func(t *testing.T) {
-		t.Setenv("SUDO_UID", "1000")
-		t.Setenv("SUDO_GID", "")
+		setSudoEnv(t, "1000", "")
 		ids, err := invokingUserIDs()
 		if err != nil {
 			t.Fatal(err)
@@ -178,8 +174,7 @@ func TestInvokingUserIDs(t *testing.T) {
 }
 
 func TestWriteAsInvokingUser(t *testing.T) {
-	t.Setenv("SUDO_UID", "")
-	t.Setenv("SUDO_GID", "")
+	setSudoEnv(t, "", "")
 
 	t.Run("writes file with mode when parent exists", func(t *testing.T) {
 		dir := t.TempDir()
@@ -208,8 +203,7 @@ func TestWriteAsInvokingUser(t *testing.T) {
 		if os.Getuid() == 0 {
 			t.Skip("running as root: chown to 65534 succeeds, cannot exercise failure path")
 		}
-		t.Setenv("SUDO_UID", strconv.Itoa(65534))
-		t.Setenv("SUDO_GID", strconv.Itoa(65534))
+		setSudoEnv(t, "65534", "65534")
 
 		dir := t.TempDir()
 		path := filepath.Join(dir, "x")
@@ -224,8 +218,7 @@ func TestWriteAsInvokingUser(t *testing.T) {
 }
 
 func TestChownTreeToInvokingUser_NoSudo(t *testing.T) {
-	t.Setenv("SUDO_UID", "")
-	t.Setenv("SUDO_GID", "")
+	setSudoEnv(t, "", "")
 
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "a"), []byte("x"), 0o600); err != nil {
@@ -237,87 +230,67 @@ func TestChownTreeToInvokingUser_NoSudo(t *testing.T) {
 	}
 }
 
+// The walk must visit every entry rather than aborting on the first EPERM.
 func TestChownTreeToInvokingUser_AggregatesErrors(t *testing.T) {
-	t.Run("no-op when chown targets current uid", func(t *testing.T) {
-		uid := os.Getuid()
-		gid := os.Getgid()
-		t.Setenv("SUDO_UID", strconv.Itoa(uid))
-		t.Setenv("SUDO_GID", strconv.Itoa(gid))
+	setSudoEnv(t, "65534", "65534")
 
-		dir := t.TempDir()
-		if err := os.WriteFile(filepath.Join(dir, "file.txt"), []byte("x"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Symlink(filepath.Join(dir, "nonexistent"), filepath.Join(dir, "link")); err != nil {
-			t.Skip("cannot create symlink:", err)
-		}
-
-		if err := ChownTreeToInvokingUser(dir); err != nil {
-			t.Errorf("expected nil for same-uid chown; got %v", err)
-		}
-	})
-
-	t.Run("walk continues past chown failures and joins all errors", func(t *testing.T) {
-		t.Setenv("SUDO_UID", "65534")
-		t.Setenv("SUDO_GID", "65534")
-
-		dir := t.TempDir()
-		if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-
-		err := ChownTreeToInvokingUser(dir)
-
-		if os.Getuid() == 0 {
-			if err != nil {
-				t.Errorf("running as root: expected nil; got %v", err)
-			}
-			return
-		}
-
-		if err == nil {
-			t.Fatal("expected aggregated EPERM errors; got nil")
-		}
-		// errors.Join joins sub-errors with newlines; >=3 lines proves the
-		// walk visited "." + a.txt + b.txt rather than aborting at the first.
-		lineCount := strings.Count(err.Error(), "\n") + 1
-		if lineCount < 3 {
-			t.Errorf("expected >=3 joined errors (walk continued); got %d in: %v", lineCount, err)
-		}
-	})
-}
-
-// TestHasPasswordlessSudo_CtxCancelSurfacesCtxErr locks the executor.run
-// convention: a ctx-killed sudo probe reports the cancellation, not the
-// opaque *exec.ExitError from the delivered signal.
-func TestHasPasswordlessSudo_CtxCancelSurfacesCtxErr(t *testing.T) {
-	testutil.InstallFakeBin(t, "sudo", "#!/bin/sh\nexec /bin/sleep 5\n")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
-	err := HasPasswordlessSudo(ctx)
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("err = %v; want context.DeadlineExceeded", err)
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o600); err != nil {
+		t.Fatal(err)
 	}
-}
-
-// TestHasPasswordlessSudo_PassAndFail covers the two uncancelled outcomes:
-// exit 0 maps to nil, non-zero exit propagates as a non-ctx error.
-func TestHasPasswordlessSudo_PassAndFail(t *testing.T) {
-	testutil.InstallFakeBin(t, "sudo", "#!/bin/sh\nexit 0\n")
-	if err := HasPasswordlessSudo(context.Background()); err != nil {
-		t.Fatalf("passwordless probe: err = %v; want nil", err)
+	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b"), 0o600); err != nil {
+		t.Fatal(err)
 	}
 
-	testutil.InstallFakeBin(t, "sudo", "#!/bin/sh\nexit 1\n")
-	err := HasPasswordlessSudo(context.Background())
+	err := ChownTreeToInvokingUser(dir)
+
+	if os.Getuid() == 0 {
+		if err != nil {
+			t.Errorf("running as root: expected nil; got %v", err)
+		}
+		return
+	}
+
 	if err == nil {
-		t.Fatal("expected error for non-zero sudo exit")
+		t.Fatal("expected aggregated EPERM errors; got nil")
 	}
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("err = %v; must not be a ctx error", err)
+	// errors.Join uses newlines; >=3 lines proves the walk visited all three
+	// entries rather than stopping at the first.
+	lineCount := strings.Count(err.Error(), "\n") + 1
+	if lineCount < 3 {
+		t.Errorf("expected >=3 joined errors (walk continued); got %d in: %v", lineCount, err)
 	}
+}
+
+func TestHasPasswordlessSudo(t *testing.T) {
+	// Locks the executor.NewExitError convention: reports ctx cancellation, not
+	// an opaque exec.ExitError from the signal.
+	t.Run("ctx cancel surfaces ctx err", func(t *testing.T) {
+		testutil.InstallFakeBin(t, "sudo", "#!/bin/sh\nexec /bin/sleep 5\n")
+
+		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+		defer cancel()
+		err := HasPasswordlessSudo(ctx)
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("err = %v; want context.DeadlineExceeded", err)
+		}
+	})
+
+	t.Run("exit 0 maps to nil", func(t *testing.T) {
+		testutil.InstallFakeBin(t, "sudo", "#!/bin/sh\nexit 0\n")
+		if err := HasPasswordlessSudo(context.Background()); err != nil {
+			t.Fatalf("passwordless probe: err = %v; want nil", err)
+		}
+	})
+
+	t.Run("non-zero exit propagates as non-ctx error", func(t *testing.T) {
+		testutil.InstallFakeBin(t, "sudo", "#!/bin/sh\nexit 1\n")
+		err := HasPasswordlessSudo(context.Background())
+		if err == nil {
+			t.Fatal("expected error for non-zero sudo exit")
+		}
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("err = %v; must not be a ctx error", err)
+		}
+	})
 }

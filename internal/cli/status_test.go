@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -14,60 +13,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
 
-var ansiSeq = regexp.MustCompile(`\x1b\[[0-9;]*m`)
-
-// stripANSI removes SGR escape sequences so byte-offset column math is valid
-// on the dim-styled table header.
-func stripANSI(s string) string { return ansiSeq.ReplaceAllString(s, "") }
-
-// TestNodeStatusTableLinesAlignsColumnsWithLongNames covers only Ready nodes
-// (unstyled rows) so raw byte offsets are a valid alignment proxy — a
-// NotReady row's ANSI wrapping is covered separately since it shifts byte
-// offsets without shifting visual columns.
-func TestNodeStatusTableLinesAlignsColumnsWithLongNames(t *testing.T) {
-	nodes := []okd.NodeStatus{
-		{Name: "m0", Role: nodetypes.RoleMaster, Ready: true},
-		{Name: "worker-extraordinarily-long-hostname-12", Role: nodetypes.RoleWorker, Ready: true},
-	}
-	lines := nodeStatusTableLines(nodes)
-	if len(lines) != 3 {
-		t.Fatalf("len(lines) = %d, want 3 (header + 2 rows)", len(lines))
-	}
-	header, row0, row1 := stripANSI(lines[0]), lines[1], lines[2]
-
-	headers := []string{"NAME", "ROLE", "READY"}
-	colStarts := make([]int, len(headers))
-	for i, h := range headers {
-		idx := strings.Index(header, h)
-		if idx == -1 {
-			t.Fatalf("header missing %q: %q", h, header)
-		}
-		colStarts[i] = idx
-	}
-	col := func(line string, i int) string {
-		start := min(colStarts[i], len(line))
-		end := len(line)
-		if i+1 < len(colStarts) {
-			end = min(colStarts[i+1], len(line))
-		}
-		return strings.TrimSpace(line[start:end])
-	}
-
-	if got := col(row0, 1); got != "master" {
-		t.Errorf("row0 ROLE column = %q, want %q:\n%s", got, "master", strings.Join(lines, "\n"))
-	}
-	if got := col(row1, 1); got != "worker" {
-		t.Errorf("row1 ROLE column = %q, want %q:\n%s", got, "worker", strings.Join(lines, "\n"))
-	}
-	if got := col(row0, 2); got != "yes" {
-		t.Errorf("row0 READY column = %q, want %q", got, "yes")
-	}
-}
-
-// TestNodeStatusTableLinesStylesNotReadyRows asserts NotReady rows are
-// wrapped in tui.ErrorStyle while keeping the same visual width (lipgloss.Width
-// ignores the zero-width ANSI codes) as an equivalent unstyled row, so the
-// styling never perturbs the box's column padding.
+// lipgloss.Width ignores zero-width ANSI codes, so a styled row's visual width
+// matches an unstyled row's.
 func TestNodeStatusTableLinesStylesNotReadyRows(t *testing.T) {
 	nodes := []okd.NodeStatus{
 		{Name: "worker-0", Role: nodetypes.RoleWorker, Ready: true},

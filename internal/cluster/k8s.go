@@ -1,9 +1,5 @@
-// Package cluster provides a thin Kubernetes client wrapper around kubectl/oc
-// for OKD cluster operations such as CSR approval, node readiness checks, and
-// resource queries, shared by phase code (via BasePhase.Oc*, which delegates
-// internally) and non-phase CLI commands. Consumers define their own narrow
-// interfaces to test against (see install.csrApprover); Client returns
-// concrete types, never interfaces.
+// Package cluster provides a thin kubectl/oc client wrapper for OKD cluster
+// operations, shared by phase code and non-phase CLI commands.
 package cluster
 
 import (
@@ -19,9 +15,7 @@ import (
 )
 
 // Client is a kubectl/oc wrapper for the install and postinstall phases.
-//
-// Must be constructed via New — the zero value panics on first use (the
-// backing executor and logger are set only in New).
+// Must be constructed via New — the zero value panics on first use.
 type Client struct {
 	CLI string
 
@@ -45,35 +39,23 @@ func WithKubeconfig(path string) Option {
 	return func(c *Client) { c.Kubeconfig = path }
 }
 
-// WithLogger injects a structured logger. Nil logger falls back to
-// logutil.NopLogger.
+// WithLogger injects a structured logger; nil falls back to logutil.NopLogger.
 func WithLogger(l *slog.Logger) Option {
 	return func(c *Client) { c.logger = logutil.OrNop(l) }
 }
 
-// WithExecutor injects an already-configured executor instead of letting
-// New build a private one. The caller owns env wiring on this executor —
-// WithKubeconfig and WithEnvFallback's KUBECONFIG injection only apply to a
-// Client-owned executor and are silently skipped when this option is used.
-// BasePhase.oc() uses this to share the phase's own executor (whose env
-// already carries KUBECONFIG via Exec.AppendEnv) instead of duplicating the
-// oc/kubectl invocation and error-formatting logic in phase code.
+// WithExecutor injects an already-configured executor instead of letting New
+// build a private one. WithKubeconfig and WithEnvFallback's KUBECONFIG
+// injection are silently skipped when this option is used — the caller owns
+// env wiring.
 func WithExecutor(exec *executor.Executor) Option {
 	return func(c *Client) { c.exec = exec }
 }
 
-// WithEnvFallback reads the process environment and PATH at application time:
-// it sets Kubeconfig from $KUBECONFIG when still empty, and upgrades the
-// binary from "kubectl" to "oc" when "oc" is on PATH. It MUST be the last
-// option passed to New(); any WithKubeconfig or WithCLI that follows will
-// silently overwrite the env-derived values, negating the fallback.
-//
-// Deliberately unwired today: every okdctl command targets the
-// workspace-managed kubeconfig (<projectRoot>/okd-install/auth/kubeconfig),
-// and honoring $KUBECONFIG would silently retarget a command at whatever
-// unrelated cluster the user's env points to. Wire it only for a command
-// that must operate without a workspace — e.g. inspecting or adopting a
-// cluster okdctl did not deploy.
+// WithEnvFallback sets Kubeconfig from $KUBECONFIG and upgrades the CLI to
+// "oc" when available. It MUST be the last option passed to New — any
+// WithKubeconfig or WithCLI passed afterward silently overwrites the
+// env-derived values.
 func WithEnvFallback() Option {
 	return func(c *Client) {
 		if c.Kubeconfig == "" {
@@ -91,16 +73,8 @@ func WithEnvFallback() Option {
 	}
 }
 
-// validateKubeconfigEnv checks a KUBECONFIG path read from the process
-// environment. It rejects symlinks (Lstat does not follow the link,
-// eliminating the TOCTOU window that stat+open would leave) and paths
-// outside the $HOME or /etc prefix allowlist, preventing a hostile env var
-// from pointing the client at /dev/zero, /proc/self/environ, or similar.
-//
-// Every branch returns a plain error: the sole caller (WithEnvFallback) only
-// Debug-logs the result and then ignores the env value, so a rejected
-// $KUBECONFIG is advisory rather than fatal — a typed *errtypes.AuthError
-// exit classification could never be observed here and would only mislead.
+// validateKubeconfigEnv rejects symlinks (avoids a TOCTOU race) and paths
+// outside the $HOME/etc allowlist.
 func validateKubeconfigEnv(path string) error {
 	clean := filepath.Clean(path)
 
@@ -125,9 +99,8 @@ func validateKubeconfigEnv(path string) error {
 	return fmt.Errorf("kubeconfig path outside allowed prefixes ($HOME, /etc)")
 }
 
-// New builds a Client applying the supplied options in order.
-// It does not read the process environment or probe PATH; callers wanting
-// those defaults must pass WithEnvFallback() explicitly.
+// New builds a Client applying the supplied options in order. It does not
+// read the environment or probe PATH; pass WithEnvFallback explicitly for that.
 func New(opts ...Option) *Client {
 	c := &Client{
 		CLI:    "kubectl",
@@ -149,9 +122,7 @@ func New(opts ...Option) *Client {
 	return c
 }
 
-// subcommand returns args[0] when present, or "(no args)". Used for error
-// formatting so we never embed arbitrary arg values (which could carry
-// --from-literal=... style secrets) in wrapped errors or logs.
+// subcommand returns args[0] (or "(no args)") — full argv could leak secrets into logs.
 func subcommand(args []string) string {
 	if len(args) == 0 {
 		return "(no args)"
@@ -159,16 +130,13 @@ func subcommand(args []string) string {
 	return args[0]
 }
 
-// Run executes `<cli> <args...>` once via the shared executor and returns
-// the raw *executor.Result; callers inspect Result.ExitCode for command
-// failures. A non-nil error means a transport failure (binary missing, ctx
-// cancellation), wrapped with the CLI name and subcommand only — never the
-// full arg list — so a caller passing e.g. --from-literal=token=... never
-// leaks it into a wrapped error or log.
+// Run executes `<cli> <args...>` via the shared executor.
+// A non-nil error means a transport failure — check Result.ExitCode for
+// command failures; the error omits full argv, which could carry secrets.
 func (c *Client) Run(ctx context.Context, args ...string) (*executor.Result, error) {
 	result, err := c.exec.Run(ctx, c.CLI, args...)
 	if err != nil {
-		return nil, fmt.Errorf("%s %s failed: %w", c.CLI, subcommand(args), err)
+		return nil, fmt.Errorf("run %s %s: %w", c.CLI, subcommand(args), err)
 	}
 	return result, nil
 }
@@ -176,7 +144,7 @@ func (c *Client) Run(ctx context.Context, args ...string) (*executor.Result, err
 func (c *Client) runOutput(ctx context.Context, args ...string) (*executor.Result, error) {
 	result, err := c.exec.RunOutput(ctx, 0, c.CLI, args...)
 	if err != nil {
-		return nil, fmt.Errorf("%s %s failed: %w", c.CLI, subcommand(args), err)
+		return nil, fmt.Errorf("run %s %s: %w", c.CLI, subcommand(args), err)
 	}
 	return result, nil
 }
@@ -191,8 +159,7 @@ func (c *Client) runCheck(ctx context.Context, args ...string) error {
 		if stderr == "" {
 			stderr = strings.TrimSpace(result.Stdout)
 		}
-		// On a cancelled ctx this yields context.Canceled; otherwise a
-		// typed *executor.ExitError callers can errors.As for ExitCode.
+		// Cancelled ctx yields context.Canceled; otherwise *executor.ExitError.
 		return executor.NewExitError(ctx, c.CLI+" "+subcommand(args), result.ExitCode, stderr)
 	}
 	return nil

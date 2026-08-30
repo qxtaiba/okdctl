@@ -9,10 +9,9 @@ import (
 	"golang.org/x/term"
 )
 
-// progressWriter wraps dst, counting bytes written and rendering a simple
-// carriage-return progress bar to stderr on each Write. Caller must call
-// Close to emit the final newline. When enabled is false or total is
-// unknown (<=0), renders nothing and acts as a transparent pass-through.
+// progressWriter renders a carriage-return progress bar to stderr; caller must
+// call Close for the final newline. Disabled or unknown total (<=0) makes it a
+// transparent pass-through.
 type progressWriter struct {
 	dst     io.Writer
 	total   int64

@@ -12,54 +12,13 @@ import (
 	"github.com/qxtaiba/okdctl/internal/runlock"
 )
 
-func TestLockBodyContainsHostname(t *testing.T) {
-	dir := t.TempDir()
-	lock, err := runlock.Acquire(dir, "deploy")
-	if err != nil {
-		t.Fatalf("acquire failed: %v", err)
-	}
-	defer lock.Release()
-
-	body, err := os.ReadFile(filepath.Join(dir, ".okdctl.lock"))
-	if err != nil {
-		t.Fatalf("read lock file: %v", err)
-	}
-	s := string(body)
-	if !strings.Contains(s, "HOST=") {
-		t.Fatalf("lock body missing HOST= field: %q", s)
-	}
+// hostnameOrUnknown mirrors the lock body's os.Hostname fallback.
+func hostnameOrUnknown() string {
 	host, _ := os.Hostname()
 	if host == "" {
-		host = "unknown"
+		return "unknown"
 	}
-	if !strings.Contains(s, "HOST="+host) {
-		t.Fatalf("lock body HOST= value mismatch: want %q in %q", "HOST="+host, s)
-	}
-}
-
-func TestConflictMessageContainsHostname(t *testing.T) {
-	dir := t.TempDir()
-	first, err := runlock.Acquire(dir, "deploy")
-	if err != nil {
-		t.Fatalf("first acquire failed: %v", err)
-	}
-	defer first.Release()
-
-	_, err = runlock.Acquire(dir, "destroy")
-	if err == nil {
-		t.Fatal("expected conflict error, got nil")
-	}
-	var cfgErr *errtypes.ConfigError
-	if !errors.As(err, &cfgErr) {
-		t.Fatalf("expected *errtypes.ConfigError, got %T: %v", err, err)
-	}
-	host, _ := os.Hostname()
-	if host == "" {
-		host = "unknown"
-	}
-	if !strings.Contains(cfgErr.Msg, host) {
-		t.Fatalf("conflict message missing hostname %q: %q", host, cfgErr.Msg)
-	}
+	return host
 }
 
 func TestAcquireAndRelease(t *testing.T) {
@@ -88,6 +47,9 @@ func TestAcquireAndRelease(t *testing.T) {
 	if !strings.Contains(s, "TIME=") {
 		t.Fatalf("lock body missing TIME= field: %q", s)
 	}
+	if !strings.Contains(s, "HOST="+hostnameOrUnknown()) {
+		t.Fatalf("lock body HOST= value mismatch: want %q in %q", "HOST="+hostnameOrUnknown(), s)
+	}
 
 	lock.Release()
 	body, statErr := os.ReadFile(lockPath)
@@ -99,7 +61,7 @@ func TestAcquireAndRelease(t *testing.T) {
 	}
 }
 
-func TestConflictMessageContainsPID(t *testing.T) {
+func TestConflict(t *testing.T) {
 	dir := t.TempDir()
 	first, err := runlock.Acquire(dir, "deploy")
 	if err != nil {
@@ -115,27 +77,9 @@ func TestConflictMessageContainsPID(t *testing.T) {
 	if !errors.As(err, &cfgErr) {
 		t.Fatalf("expected *errtypes.ConfigError, got %T: %v", err, err)
 	}
-	pid := fmt.Sprintf("PID=%d", os.Getpid())
-	if !strings.Contains(cfgErr.Msg, pid) {
-		t.Fatalf("conflict message missing holder PID %s: %q", pid, cfgErr.Msg)
-	}
-}
 
-func TestConflictReturnsConfigError(t *testing.T) {
-	dir := t.TempDir()
-	first, err := runlock.Acquire(dir, "deploy")
-	if err != nil {
-		t.Fatalf("first acquire failed: %v", err)
-	}
-	defer first.Release()
-
-	_, err = runlock.Acquire(dir, "destroy")
-	if err == nil {
-		t.Fatal("expected conflict error, got nil")
-	}
-	var cfgErr *errtypes.ConfigError
-	if !errors.As(err, &cfgErr) {
-		t.Fatalf("expected *errtypes.ConfigError, got %T: %v", err, err)
+	if pid := fmt.Sprintf("PID=%d", os.Getpid()); !strings.Contains(cfgErr.Msg, pid) {
+		t.Fatalf("conflict message must name the holder (%s): %q", pid, cfgErr.Msg)
 	}
 }
 

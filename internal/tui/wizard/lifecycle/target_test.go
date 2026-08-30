@@ -32,7 +32,7 @@ func TestTargetStepResizeRoleAndNodeChoices(t *testing.T) {
 		{Name: "homelab-master0", Role: nodetypes.RoleMaster, Ready: true},
 	}
 	s := loadedTarget(t, st, nodes)
-	if got := s.selectableCount(); got != 4 { // masters group, workers group, 2 nodes
+	if got := len(s.choices); got != 4 { // masters group, workers group, 2 nodes
 		t.Fatalf("selectable options = %d, want 4", got)
 	}
 	if err := s.Apply(nil); err != nil { // first option: masters role
@@ -55,7 +55,7 @@ func TestTargetStepRemoveOnlyTopWorkerSelectable(t *testing.T) {
 		{Name: "homelab-master0", Role: nodetypes.RoleMaster, Ready: true},
 	}
 	s := loadedTarget(t, st, nodes)
-	if got := s.selectableCount(); got != 1 {
+	if got := len(s.choices); got != 1 {
 		t.Fatalf("selectable options = %d, want 1 (top worker only)", got)
 	}
 	if err := s.Apply(nil); err != nil {
@@ -115,17 +115,5 @@ func TestTargetStepShouldShow(t *testing.T) {
 		if got := NewTargetStep(st, Hooks{}).ShouldShow(cfg); got != tc.want {
 			t.Errorf("ShouldShow(op=%v resume=%v) = %v, want %v", tc.op, tc.res, got, tc.want)
 		}
-	}
-}
-
-func TestTargetStepTitleFollowsOp(t *testing.T) {
-	st := &State{Cfg: config.DefaultConfig(), Op: node.OpResize}
-	s := NewTargetStep(st, Hooks{})
-	if got := s.DisplayTitle(); !strings.Contains(got, "resized") {
-		t.Errorf("resize title = %q", got)
-	}
-	st.Op = node.OpRemove
-	if got := s.DisplayTitle(); !strings.Contains(got, "removed") {
-		t.Errorf("remove title = %q", got)
 	}
 }

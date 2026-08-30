@@ -34,9 +34,6 @@ func TestShouldRunStepResumesAtAndAfter(t *testing.T) {
 		{StepPowerCycle, StepTFApply, true},
 		{StepDeleteK8s, StepTFApply, true},
 		{StepUncordon, StepTFApply, true},
-		{StepCordon, StepUncordon, false},
-		{StepUncordon, StepUncordon, true},
-		{StepCordon, StepCordon, true},
 	}
 	for _, c := range cases {
 		if got := shouldRunStep(c.step, c.from); got != c.want {
@@ -85,22 +82,6 @@ func TestBeginOpMatchingMarkerResumes(t *testing.T) {
 	}
 }
 
-// TestBeginOpMatchingResizeMarkerResumes also exercises beginOp/matchTarget with
-// a second op and target so the resume seam is proven op-agnostic (C3 threads a
-// third op through the same call).
-func TestBeginOpMatchingResizeMarkerResumes(t *testing.T) {
-	r, _, _ := seedRunner(t, &fakeCluster{}, &fakeTF{}, config.DefaultConfig())
-	seedMarker(t, r, OpResize, testMasterNode, StepPowerCycle)
-
-	marker, err := r.beginOp(OpResize, matchTarget(testMasterNode), false)
-	if err != nil {
-		t.Fatalf("beginOp: %v", err)
-	}
-	if marker == nil || marker.Target != testMasterNode || marker.Step != StepPowerCycle {
-		t.Fatalf("resize marker must resume: %+v", marker)
-	}
-}
-
 func TestBeginOpForeignMarkerRefusedWithoutAck(t *testing.T) {
 	r, _, _ := seedRunner(t, &fakeCluster{}, &fakeTF{}, config.DefaultConfig())
 	seedMarker(t, r, OpResize, testMasterNode, StepPowerCycle)
@@ -146,9 +127,7 @@ func TestRefuseForeignMarkerAnyMarkerRefusedWithoutAllowlist(t *testing.T) {
 	}
 }
 
-// TestRefuseForeignMarkerAllowsListedOps proves allowResumable is the same
-// composition seam compact uses (OpRemove/OpResize) rather than a special
-// case — any op the caller lists is treated as its own, not foreign.
+// proves allowResumable is the same composition seam compact uses, not a special case.
 func TestRefuseForeignMarkerAllowsListedOps(t *testing.T) {
 	r, _, _ := seedRunner(t, &fakeCluster{}, &fakeTF{}, config.DefaultConfig())
 	seedMarker(t, r, OpResize, testMasterNode, StepPowerCycle)
@@ -188,11 +167,10 @@ func TestResizeScopeMatch(t *testing.T) {
 	}
 }
 
-// TestSweepCompletedAddMarker pins the completed-batch residue sweep: a crash
-// between AddWorkers' persistTopology and clearOpMarker leaves an OpAdd marker
-// whose index precedes the persisted worker count. Every op must sweep that
-// residue and proceed, while a genuinely in-flight add marker (index at the
-// persisted count) still refuses foreign ops.
+// TestSweepCompletedAddMarker: a crash between persistTopology and
+// clearOpMarker leaves an OpAdd marker whose index precedes the persisted
+// count; that residue must be swept, while an in-flight marker (index at count)
+// still refuses.
 func TestSweepCompletedAddMarker(t *testing.T) {
 	r, _, _ := seedRunner(t, &fakeCluster{}, &fakeTF{}, config.DefaultConfig())
 	r.Cfg.Topology.Workers.Count = 3

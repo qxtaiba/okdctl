@@ -2,26 +2,28 @@ package cluster
 
 import "testing"
 
-func TestParseCephHealthStructurallyHealthy(t *testing.T) {
-	data := `{
+func TestParseCephHealth(t *testing.T) {
+	tests := []struct {
+		name         string
+		data         string
+		wantHealthy  bool
+		wantDegraded int
+		wantOSDs     int
+	}{
+		{
+			name: "structurally healthy",
+			data: `{
 	  "quorum_names": ["a","b","c"],
 	  "monmap": {"mons":[{"name":"a"},{"name":"b"},{"name":"c"}]},
 	  "osdmap": {"num_osds":3,"num_up_osds":3,"num_in_osds":3},
 	  "pgmap": {"num_pgs":100,"pgs_by_state":[{"state_name":"active+clean","count":100}]}
-	}`
-	h, err := parseCephHealth([]byte(data))
-	if err != nil {
-		t.Fatalf("parseCephHealth: %v", err)
-	}
-	if !h.Applicable || !h.Healthy {
-		t.Fatalf("want applicable+healthy, got %+v", h)
-	}
-}
-
-func TestParseCephHealthBenignWarnIsHealthy(t *testing.T) {
-	// Steady-state HEALTH_WARN (slow ops) plus a scrubbing PG: structurally clean,
-	// so it must gate as healthy. The health block is intentionally ignored.
-	data := `{
+	}`,
+			wantHealthy: true, wantOSDs: 3,
+		},
+		{
+			// Structurally clean despite HEALTH_WARN; scrubbing PGs aren't degraded.
+			name: "benign warn is healthy",
+			data: `{
 	  "health": {"status":"HEALTH_WARN","checks":{"BLUESTORE_SLOW_OP_ALERT":{"severity":"HEALTH_WARN"}}},
 	  "quorum_names": ["a","b","c"],
 	  "monmap": {"mons":[{},{},{}]},
@@ -29,76 +31,71 @@ func TestParseCephHealthBenignWarnIsHealthy(t *testing.T) {
 	  "pgmap": {"num_pgs":100,"pgs_by_state":[
 	    {"state_name":"active+clean","count":90},
 	    {"state_name":"active+clean+scrubbing+deep","count":10}]}
-	}`
-	h, err := parseCephHealth([]byte(data))
-	if err != nil {
-		t.Fatalf("parseCephHealth: %v", err)
-	}
-	if !h.Healthy {
-		t.Fatalf("benign warn + scrubbing must be healthy, got reason %q", h.Reason)
-	}
-	if h.DegradedPGs != 0 {
-		t.Errorf("scrubbing PGs must not count as degraded, got %d", h.DegradedPGs)
-	}
-}
-
-func TestParseCephHealthDegradedPGs(t *testing.T) {
-	data := `{
+	}`,
+			wantHealthy: true, wantOSDs: 3,
+		},
+		{
+			name: "degraded pgs gate as unhealthy",
+			data: `{
 	  "quorum_names": ["a","b","c"],
 	  "monmap": {"mons":[{},{},{}]},
 	  "osdmap": {"num_osds":3,"num_up_osds":3,"num_in_osds":3},
 	  "pgmap": {"num_pgs":100,"pgs_by_state":[
 	    {"state_name":"active+clean","count":80},
 	    {"state_name":"active+undersized+degraded","count":20}]}
-	}`
-	h, _ := parseCephHealth([]byte(data))
-	if h.Healthy {
-		t.Fatal("degraded PGs must gate as unhealthy")
-	}
-	if h.DegradedPGs != 20 {
-		t.Errorf("want 20 degraded PGs, got %d", h.DegradedPGs)
-	}
-}
-
-func TestParseCephHealthOSDDown(t *testing.T) {
-	data := `{
+	}`,
+			wantDegraded: 20, wantOSDs: 3,
+		},
+		{
+			name: "osd down gates as unhealthy",
+			data: `{
 	  "quorum_names": ["a","b","c"],
 	  "monmap": {"mons":[{},{},{}]},
 	  "osdmap": {"num_osds":3,"num_up_osds":2,"num_in_osds":3},
 	  "pgmap": {"num_pgs":100,"pgs_by_state":[{"state_name":"active+clean","count":100}]}
-	}`
-	h, _ := parseCephHealth([]byte(data))
-	if h.Healthy {
-		t.Fatal("an OSD down must gate as unhealthy")
-	}
-}
-
-func TestParseCephHealthMonOutOfQuorum(t *testing.T) {
-	data := `{
+	}`,
+			wantOSDs: 3,
+		},
+		{
+			name: "mon out of quorum gates as unhealthy",
+			data: `{
 	  "quorum_names": ["a","b"],
 	  "monmap": {"mons":[{},{},{}]},
 	  "osdmap": {"num_osds":3,"num_up_osds":3,"num_in_osds":3},
 	  "pgmap": {"num_pgs":100,"pgs_by_state":[{"state_name":"active+clean","count":100}]}
-	}`
-	h, _ := parseCephHealth([]byte(data))
-	if h.Healthy {
-		t.Fatal("a mon out of quorum must gate as unhealthy")
-	}
-}
-
-func TestParseCephHealthNestedOsdmap(t *testing.T) {
-	// Older ceph nests the OSD counts under osdmap.osdmap.
-	data := `{
+	}`,
+			wantOSDs: 3,
+		},
+		{
+			// Older ceph nests the OSD counts under osdmap.osdmap.
+			name: "nested osdmap resolves",
+			data: `{
 	  "quorum_names": ["a","b","c"],
 	  "monmap": {"mons":[{},{},{}]},
 	  "osdmap": {"osdmap":{"num_osds":3,"num_up_osds":3,"num_in_osds":3}},
 	  "pgmap": {"num_pgs":100,"pgs_by_state":[{"state_name":"active+clean","count":100}]}
-	}`
-	h, err := parseCephHealth([]byte(data))
-	if err != nil {
-		t.Fatalf("parseCephHealth: %v", err)
+	}`,
+			wantHealthy: true, wantOSDs: 3,
+		},
 	}
-	if !h.Healthy || h.OSDsTotal != 3 {
-		t.Fatalf("nested osdmap must resolve to healthy 3 OSDs, got %+v", h)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h, err := parseCephHealth([]byte(tc.data))
+			if err != nil {
+				t.Fatalf("parseCephHealth: %v", err)
+			}
+			if !h.Applicable {
+				t.Fatalf("want applicable, got %+v", h)
+			}
+			if h.Healthy != tc.wantHealthy {
+				t.Fatalf("Healthy = %v; want %v (reason %q, %+v)", h.Healthy, tc.wantHealthy, h.Reason, h)
+			}
+			if h.DegradedPGs != tc.wantDegraded {
+				t.Errorf("DegradedPGs = %d; want %d", h.DegradedPGs, tc.wantDegraded)
+			}
+			if h.OSDsTotal != tc.wantOSDs {
+				t.Errorf("OSDsTotal = %d; want %d", h.OSDsTotal, tc.wantOSDs)
+			}
+		})
 	}
 }

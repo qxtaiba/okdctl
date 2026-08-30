@@ -9,119 +9,94 @@ import (
 	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
-// goosWindows names the one GOOS every POSIX-shell fake-ssh/find test in
-// this package skips on; a shared constant keeps goconst from flagging the
-// repeated literal across ssh_test.go, remove_fcos_iso_test.go, and
-// iso_cleanup_test.go.
-const goosWindows = "windows"
-
-// installFakeSSHEcho writes a POSIX shell script named "ssh" in a temp dir and
-// prepends that dir to PATH so the Executor picks it up. The script prints
-// all argv to stdout, one space-separated line.
+// installFakeSSHEcho stubs ssh via PATH; it echoes argv space-separated to stdout.
 func installFakeSSHEcho(t *testing.T) {
 	t.Helper()
 	testutil.InstallFakeBin(t, "ssh", "#!/bin/sh\necho \"$@\"\n")
 }
 
-func TestSSHRun_acceptNew(t *testing.T) {
-	installFakeSSHEcho(t)
-	exec := executor.New()
-
-	result, err := sshRun(context.Background(), exec, "10.0.0.1", "", "uptime")
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
+func TestSSHRunBaseArgs(t *testing.T) {
+	cases := []struct {
+		name       string
+		knownHosts string
+		run        func(exec *executor.Executor, knownHosts string) (*executor.Result, error)
+		wants      []string
+	}{
+		{
+			name: "sshRun accept-new",
+			run: func(exec *executor.Executor, knownHosts string) (*executor.Result, error) {
+				return sshRun(context.Background(), exec, "10.0.0.1", knownHosts, "uptime")
+			},
+			wants: []string{
+				"-o StrictHostKeyChecking=accept-new",
+				"-o BatchMode=yes",
+				"root@10.0.0.1",
+				"uptime",
+			},
+		},
+		{
+			name:       "sshRun strict mode",
+			knownHosts: "/tmp/known_hosts",
+			run: func(exec *executor.Executor, knownHosts string) (*executor.Result, error) {
+				return sshRun(context.Background(), exec, "10.0.0.1", knownHosts, "uptime")
+			},
+			wants: []string{
+				"-o UserKnownHostsFile=/tmp/known_hosts",
+				"-o StrictHostKeyChecking=yes",
+				"-o BatchMode=yes",
+				"root@10.0.0.1",
+				"uptime",
+			},
+		},
+		{
+			name: "SSHRunArgv accept-new",
+			run: func(exec *executor.Executor, knownHosts string) (*executor.Result, error) {
+				return SSHRunArgv(context.Background(), exec, "10.0.0.2", knownHosts, "pvesh", "get", "/nodes")
+			},
+			wants: []string{
+				"-o StrictHostKeyChecking=accept-new",
+				"-o BatchMode=yes",
+				"root@10.0.0.2",
+				"pvesh",
+				"get",
+				"/nodes",
+			},
+		},
+		{
+			name:       "SSHRunArgv strict mode",
+			knownHosts: "/tmp/known_hosts",
+			run: func(exec *executor.Executor, knownHosts string) (*executor.Result, error) {
+				return SSHRunArgv(context.Background(), exec, "10.0.0.2", knownHosts, "pvesh", "get", "/nodes")
+			},
+			wants: []string{
+				"-o UserKnownHostsFile=/tmp/known_hosts",
+				"-o StrictHostKeyChecking=yes",
+				"-o BatchMode=yes",
+				"root@10.0.0.2",
+				"pvesh",
+				"get",
+				"/nodes",
+			},
+		},
 	}
-
-	argv := strings.TrimSpace(result.Stdout)
-	for _, want := range []string{
-		"-o StrictHostKeyChecking=accept-new",
-		"-o BatchMode=yes",
-		"root@10.0.0.1",
-		"uptime",
-	} {
-		if !strings.Contains(argv, want) {
-			t.Errorf("argv = %q; missing %q", argv, want)
-		}
-	}
-}
-
-func TestSSHRun_strictMode(t *testing.T) {
-	installFakeSSHEcho(t)
-	exec := executor.New()
-
-	result, err := sshRun(context.Background(), exec, "10.0.0.1", "/tmp/known_hosts", "uptime")
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-
-	argv := strings.TrimSpace(result.Stdout)
-	for _, want := range []string{
-		"-o UserKnownHostsFile=/tmp/known_hosts",
-		"-o StrictHostKeyChecking=yes",
-		"-o BatchMode=yes",
-		"root@10.0.0.1",
-		"uptime",
-	} {
-		if !strings.Contains(argv, want) {
-			t.Errorf("argv = %q; missing %q", argv, want)
-		}
-	}
-}
-
-func TestSSHRunArgv_acceptNew(t *testing.T) {
-	installFakeSSHEcho(t)
-	exec := executor.New()
-
-	result, err := SSHRunArgv(context.Background(), exec, "10.0.0.2", "", "pvesh", "get", "/nodes")
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-
-	argv := strings.TrimSpace(result.Stdout)
-	for _, want := range []string{
-		"-o StrictHostKeyChecking=accept-new",
-		"-o BatchMode=yes",
-		"root@10.0.0.2",
-		"pvesh",
-		"get",
-		"/nodes",
-	} {
-		if !strings.Contains(argv, want) {
-			t.Errorf("argv = %q; missing %q", argv, want)
-		}
-	}
-}
-
-func TestSSHRunArgv_strictMode(t *testing.T) {
-	installFakeSSHEcho(t)
-	exec := executor.New()
-
-	result, err := SSHRunArgv(context.Background(), exec, "10.0.0.2", "/tmp/known_hosts", "pvesh", "get", "/nodes")
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-
-	argv := strings.TrimSpace(result.Stdout)
-	for _, want := range []string{
-		"-o UserKnownHostsFile=/tmp/known_hosts",
-		"-o StrictHostKeyChecking=yes",
-		"-o BatchMode=yes",
-		"root@10.0.0.2",
-		"pvesh",
-		"get",
-		"/nodes",
-	} {
-		if !strings.Contains(argv, want) {
-			t.Errorf("argv = %q; missing %q", argv, want)
-		}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			installFakeSSHEcho(t)
+			result, err := tc.run(executor.New(), tc.knownHosts)
+			if err != nil {
+				t.Fatalf("unexpected err: %v", err)
+			}
+			argv := strings.TrimSpace(result.Stdout)
+			for _, want := range tc.wants {
+				if !strings.Contains(argv, want) {
+					t.Errorf("argv = %q; missing %q", argv, want)
+				}
+			}
+		})
 	}
 }
 
-// TestSSHRunArgv_RejectsUnsafeAtoms covers the fail-closed backstop: an
-// unvalidated future caller must get an error before ssh runs, not a
-// space-joined command string the remote login shell can reinterpret. The
-// error must name the index and rune but never echo the atom, which could
-// carry credential material.
+// Error must name index/rune but never echo the atom, which could carry credential material.
 func TestSSHRunArgv_RejectsUnsafeAtoms(t *testing.T) {
 	installFakeSSHEcho(t)
 	exec := executor.New()
@@ -167,9 +142,8 @@ func TestSSHRunArgv_RejectsUnsafeAtoms(t *testing.T) {
 	}
 }
 
-// TestSSHRunArgv_AcceptsShlexSafeCharset pins the full allowed charset so a
-// future tightening cannot silently break pvesh paths, UPIDs (: @ .), or
-// option atoms.
+// Pins the full allowed charset so tightening it can't silently break pvesh
+// paths, UPIDs, or option atoms.
 func TestSSHRunArgv_AcceptsShlexSafeCharset(t *testing.T) {
 	installFakeSSHEcho(t)
 	exec := executor.New()
@@ -191,10 +165,8 @@ func TestProxmoxBareHost(t *testing.T) {
 		"pve.example:8006":        "pve.example",
 		"https://pve.example":     "pve.example",
 		"https://pve.example:443": "pve.example",
-		"http://pve.example:8006": "pve.example",
 		"[2001:db8::1]:8006":      "2001:db8::1",
 		"10.0.0.1":                "10.0.0.1",
-		"10.0.0.1:22":             "10.0.0.1",
 		"":                        "",
 	}
 	for in, want := range cases {

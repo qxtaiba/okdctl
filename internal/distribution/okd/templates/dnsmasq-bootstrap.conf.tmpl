@@ -1,10 +1,8 @@
-# =============================================================================
 # dnsmasq configuration - bootstrap/install phase
-# =============================================================================
+#
 # During bootstrap, api.* DNS points to the bastion IP where HAProxy load
 # balances to the control plane nodes. kube-vip gets exclusive ownership of
 # the VIP from the start - no ARP conflict with the bastion.
-# =============================================================================
 
 # listen on bastion IP and localhost (explicit binding overrides main config)
 listen-address=127.0.0.1

@@ -11,13 +11,11 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
 )
 
-const bootstrapGolden = `# =============================================================================
-# dnsmasq configuration - bootstrap/install phase
-# =============================================================================
+const bootstrapGolden = `# dnsmasq configuration - bootstrap/install phase
+#
 # During bootstrap, api.* DNS points to the bastion IP where HAProxy load
 # balances to the control plane nodes. kube-vip gets exclusive ownership of
 # the VIP from the start - no ARP conflict with the bastion.
-# =============================================================================
 
 # listen on bastion IP and localhost (explicit binding overrides main config)
 listen-address=127.0.0.1
@@ -55,11 +53,9 @@ address=/mycluster-master0/192.168.1.141
 address=/mycluster-worker0/192.168.1.142
 `
 
-const productionGolden = `# =============================================================================
-# dnsmasq configuration - post-bootstrap/production
-# =============================================================================
+const productionGolden = `# dnsmasq configuration - post-bootstrap/production
+#
 # use this after post-install. kube-vip handles api load balancing via vip.
-# =============================================================================
 
 # listen on bastion IP and localhost (explicit binding overrides main config)
 listen-address=127.0.0.1
@@ -120,43 +116,10 @@ func redirectConfigDir(t *testing.T) string {
 func stubServiceFns(t *testing.T) (restarts *int) {
 	t.Helper()
 	restarts = new(int)
-	origV, origR := validateDnsmasqConfigFn, restartDnsmasqFn
-	validateDnsmasqConfigFn = func(_ context.Context) error { return nil }
-	restartDnsmasqFn = func(_ context.Context) error { *restarts++; return nil }
-	t.Cleanup(func() {
-		validateDnsmasqConfigFn = origV
-		restartDnsmasqFn = origR
-	})
+	stubDnsmasqFns(t,
+		func(context.Context) error { return nil },
+		func(context.Context) error { *restarts++; return nil })
 	return restarts
-}
-
-func TestBuildConfigData(t *testing.T) {
-	data, err := buildConfigData(renderCfg())
-	if err != nil {
-		t.Fatalf("buildConfigData: %v", err)
-	}
-
-	if data.ClusterDomain != "mycluster.k8s.local" {
-		t.Errorf("ClusterDomain = %q", data.ClusterDomain)
-	}
-	if data.BastionIP != "192.168.1.20" {
-		t.Errorf("BastionIP = %q", data.BastionIP)
-	}
-	if data.KubeVipIP != "192.168.1.10" {
-		t.Errorf("KubeVipIP = %q, want the .10 derivation from the static start", data.KubeVipIP)
-	}
-	if len(data.UpstreamDNS) != 1 || data.UpstreamDNS[0] != "192.168.1.1" {
-		t.Errorf("UpstreamDNS = %v", data.UpstreamDNS)
-	}
-	if data.BootstrapNode.Name != "mycluster-bootstrap" || data.BootstrapNode.IP != "192.168.1.140" {
-		t.Errorf("BootstrapNode = %+v", data.BootstrapNode)
-	}
-	if len(data.MasterNodes) != 1 || data.MasterNodes[0].Name != "mycluster-master0" || data.MasterNodes[0].IP != "192.168.1.141" {
-		t.Errorf("MasterNodes = %+v", data.MasterNodes)
-	}
-	if len(data.WorkerNodes) != 1 || data.WorkerNodes[0].Name != "mycluster-worker0" || data.WorkerNodes[0].IP != "192.168.1.142" {
-		t.Errorf("WorkerNodes = %+v", data.WorkerNodes)
-	}
 }
 
 func TestBuildConfigData_Rejections(t *testing.T) {

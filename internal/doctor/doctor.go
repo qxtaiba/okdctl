@@ -1,7 +1,5 @@
-// Package doctor implements okdctl's host-prerequisite checks: OS and
-// operator-mode detection, tool and package presence, sudo mode, pull-secret
-// validity, disk space, and port availability. Rendering lives in the cli
-// package.
+// Package doctor implements okdctl's host-prerequisite checks: OS detection,
+// tool/package presence, sudo mode, pull-secret validity, disk space, and ports.
 package doctor
 
 import (
@@ -30,35 +28,30 @@ import (
 // Severity levels ordered from least to most alarming.
 type Severity int
 
-// Pass, Warn, and Fail order check outcomes from least to most alarming;
-// multi-item rollups keep the worst item severity.
+// Pass, Warn, and Fail order check outcomes; multi-item rollups keep the worst severity.
 const (
 	Pass Severity = iota
 	Warn
 	Fail
 )
 
-// Result is a check's outcome. If Items is non-empty, the renderer shows a
-// per-item sub-list and Detail is ignored; otherwise Detail is rendered as a
-// single-line result next to the bracketed label. Sev is the aggregate
-// severity (the worst item severity in the sub-list case, or set directly in
-// the single-line case).
+// Result is a check's outcome; a non-empty Items list renders as a per-item
+// sub-list (Detail ignored), else Detail renders as the single-line result.
 type Result struct {
 	Sev    Severity
 	Detail string
 	Items  []Item
 }
 
-// Item is one row in a multi-item check result (e.g. per-binary status under
-// the tools-and-packages check). Each item has its own severity so a rollup
-// check can mix [ok] / [warn] / [fail] rows under one title.
+// Item is one row in a multi-item check result, each with its own severity so a
+// rollup can mix [ok]/[warn]/[fail] rows.
 type Item struct {
 	Sev  Severity
 	Name string
 	Note string
 }
 
-// Check pairs a check's title and description with the probe that runs it.
+// Check pairs a title and description with the probe that runs it.
 type Check struct {
 	Name string
 	Desc string
@@ -74,13 +67,12 @@ func (s Severity) String() string {
 	case Fail:
 		return "fail"
 	default:
-		// unreachable with the current three-value iota; guards future additions
 		return "unknown"
 	}
 }
 
-// Checks returns the full preflight check list. cfgFile is loaded lazily and
-// at most once across the pull-secret and bin-dir checks.
+// Checks returns the full preflight check list; cfgFile loads lazily, once,
+// shared by the pull-secret and bin-dir checks.
 func Checks(cfgFile string) []Check {
 	loadedCfg := sync.OnceValues(func() (*config.Config, error) {
 		return config.NewLoader().LoadFile(cfgFile)
@@ -113,7 +105,6 @@ func Checks(cfgFile string) []Check {
 	}
 }
 
-// checkHostOS identifies the host OS by parsing /etc/os-release.
 func checkHostOS(_ context.Context) Result {
 	host, err := platform.Detect()
 	if err != nil {
@@ -122,9 +113,8 @@ func checkHostOS(_ context.Context) Result {
 	return Result{Sev: Pass, Detail: fmt.Sprintf("%s %s (%s family)", host.ID, host.Version, host.Family)}
 }
 
-// checkNotRoot is a secondary guard — main.preflight() already refuses to
-// run as root, so by the time doctor runs we know we are not root. We keep
-// the check so it shows up green in the output for user confidence.
+// checkNotRoot is a secondary guard: cli.ensureRoot rejects `sudo okdctl
+// doctor`, but OKDCTL_WIZARD_DEMO bypasses that.
 func checkNotRoot(_ context.Context) Result {
 	if os.Geteuid() == 0 {
 		return Result{Sev: Fail, Detail: "running as root; okdctl uses sudo internally"}
@@ -132,9 +122,8 @@ func checkNotRoot(_ context.Context) Result {
 	return Result{Sev: Pass, Detail: "running as unprivileged user"}
 }
 
-// binDirResolution pairs the resolved bin dir with a flag set when the
-// config file failed to load. The flag demotes pass→warn and suffixes the
-// detail so a malformed YAML never reads as green.
+// binDirResolution pairs the resolved dir with a load-failed flag so malformed
+// YAML demotes pass→warn instead of reading green.
 type binDirResolution struct {
 	Dir        string
 	LoadFailed bool
@@ -164,9 +153,8 @@ func checkPath(r binDirResolution) Result {
 	return Result{Sev: Fail, Detail: r.suffix(r.Dir + " missing from $PATH; add it to your shell profile (okdctl cannot auto-prepend a config-only dir)")}
 }
 
-// checkBinDir probes the effective bin dir for existence and user-write
-// access. User-configured dirs that are not user-writable are a fail because
-// setup runs under sudo and would install root-owned binaries.
+// checkBinDir probes the bin dir for existence/writability; an unwritable
+// user-configured dir fails since setup would install root-owned binaries there.
 func checkBinDir(r binDirResolution) Result {
 	defaultDir := r.Dir == config.DefaultBinDir
 	if _, err := os.Stat(r.Dir); err != nil {
@@ -187,11 +175,8 @@ func checkBinDir(r binDirResolution) Result {
 	return Result{Sev: r.demote(Pass), Detail: r.suffix(r.Dir + " writable")}
 }
 
-// checkBinaries reports per-item status for three categories: host tools
-// that must already exist (missing = fail), installable CLIs that setup
-// downloads into /usr/local/bin (missing = warn), and system packages
-// that setup installs via dnf/apt (missing = warn). The system package
-// list is a mirror of setup.installSystemPackages — keep in sync.
+// checkBinaries reports per-item status: host tools missing = fail; CLIs and
+// system packages missing = warn. Mirrors setup.installSystemPackages — keep in sync.
 func checkBinaries(_ context.Context) Result {
 	hostBinaries := []string{"curl", "ssh", "git"}
 	installableTools := []string{"oc", "openshift-install", "terraform"}
@@ -219,8 +204,7 @@ func checkBinaries(_ context.Context) Result {
 		probe(name, Warn, "will be installed via package manager")
 	}
 
-	// Apache binary name varies by distro: httpd on rhel-family, apache2
-	// on debian-family. If either is on PATH, treat apache as installed.
+	// Apache binary name varies by distro: httpd (rhel) or apache2 (debian).
 	apacheFound := slices.ContainsFunc([]string{"httpd", "apache2"}, func(bin string) bool {
 		_, err := exec.LookPath(bin)
 		return err == nil
@@ -235,10 +219,8 @@ func checkBinaries(_ context.Context) Result {
 	return Result{Sev: worst, Items: items}
 }
 
-// checkSudo verifies that sudo is present and can escalate without
-// prompting. A failing check is a warning rather than a fail because the
-// deploy re-exec gate can still succeed with an interactive password — but
-// the user should know up front whether the sudo prompt will appear.
+// checkSudo verifies passwordless sudo; failing here only warns since deploy's
+// re-exec gate still works interactively.
 func checkSudo(ctx context.Context) Result {
 	if _, err := exec.LookPath("sudo"); err != nil {
 		return Result{Sev: Fail, Detail: "sudo not installed"}
@@ -269,11 +251,8 @@ func checkSSHKey(_ context.Context) Result {
 	return Result{Sev: Warn, Detail: "no default ssh public key found; you will need to specify one in the wizard"}
 }
 
-// checkPullSecret reads the effective config file and verifies the path
-// at cfg.Files.PullSecret. If no config exists yet (normal pre-deploy
-// state), warns and directs the user to the wizard. If the config
-// points at a file that does not exist, is not valid JSON, or has an
-// empty 'auths' map, fails.
+// checkPullSecret verifies cfg.Files.PullSecret: missing config warns (normal
+// pre-deploy); missing file/invalid JSON/empty 'auths' fails.
 func checkPullSecret(cfgFile string) Result {
 	configPath := cfgFile
 	if configPath == "" {
@@ -331,9 +310,8 @@ func checkPullSecret(cfgFile string) Result {
 	return Result{Sev: Pass, Detail: path}
 }
 
-// readNoFollow reads path while refusing to follow a symlink at the final
-// component, matching how setup's ignition renderer reads the same pull
-// secret so a planted symlink cannot redirect the read.
+// readNoFollow refuses to follow a symlink at the final path component,
+// matching setup's ignition renderer.
 func readNoFollow(path string) ([]byte, error) {
 	info, err := os.Lstat(path)
 	if err != nil {
@@ -350,9 +328,7 @@ func readNoFollow(path string) ([]byte, error) {
 	return io.ReadAll(f)
 }
 
-// checkDiskSpace checks that the home directory has at least 20 GB free.
-// The deploy process downloads OKD tools, builds custom ISOs, and holds
-// terraform state, all of which live under ~/okd-install by default.
+// checkDiskSpace requires 20 GB free in home for OKD tools, ISOs, and terraform state.
 func checkDiskSpace(_ context.Context) Result {
 	const minGB = 20
 
@@ -371,13 +347,8 @@ func checkDiskSpace(_ context.Context) Result {
 	return Result{Sev: Pass, Detail: fmt.Sprintf("%d gb free in %s", freeGB, u.HomeDir)}
 }
 
-// checkPorts probes each port okdctl's deploy will bind by trying
-// to connect to 127.0.0.1:<port>. Connect-probe beats bind-probe for the
-// preflight use case: the real deploy binds happen via sudo (haproxy,
-// dnsmasq, apache), so the relevant question is "is something already
-// there?" — not "can this unprivileged user bind right now?". Catches
-// the common case of services bound on 0.0.0.0 or 127.0.0.1; misses
-// services bound only on a specific non-loopback address.
+// checkPorts connects to 127.0.0.1:<port> rather than binding (binds happen
+// via sudo later); misses services bound only on a non-loopback address.
 func checkPorts(ctx context.Context) Result {
 	ports := []int{53, 80, 443, 6443, 22623}
 

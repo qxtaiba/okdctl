@@ -7,24 +7,15 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
-
-	"github.com/qxtaiba/okdctl/internal/httputil"
 )
 
-const maxChecksumFileSize = 1024 * 1024
-
-// checksumChunkSize bounds how much of the file CalculateChecksum reads
-// between context checks, so hashing a multi-GB CoreOS ISO can be
-// interrupted by ctx cancellation within a couple of seconds instead of
-// running the read to completion.
+// checksumChunkSize bounds reads between ctx checks so hashing a multi-GB ISO
+// can be cancelled promptly.
 const checksumChunkSize = 2 << 20 // 2 MiB
 
-// ctxReader wraps r and fails with ctx.Err() once ctx is done, checked
-// before every Read call.
+// ctxReader fails with ctx.Err() once ctx is done, checked before every Read.
 type ctxReader struct {
 	ctx context.Context
 	r   io.Reader
@@ -74,66 +65,8 @@ func ValidateChecksum(ctx context.Context, path, expectedChecksum string) error 
 	return nil
 }
 
-// FetchChecksum downloads the sha256sum.txt at checksumsURL and extracts
-// the hex-encoded SHA-256 for filename. The response body is capped to
-// maxChecksumFileSize to prevent memory exhaustion.
-func FetchChecksum(ctx context.Context, checksumsURL, filename string) (string, error) {
-	client := httputil.New(httputil.TimeoutMedium)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, checksumsURL, http.NoBody)
-	if err != nil {
-		return "", fmt.Errorf("build checksum request for %s: %w", checksumsURL, err)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("fetch checksums from %s: %w", checksumsURL, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", &HTTPStatusError{
-			Status: resp.StatusCode,
-			Method: http.MethodGet,
-			URL:    checksumsURL,
-		}
-	}
-
-	limitedReader := io.LimitReader(resp.Body, maxChecksumFileSize)
-	body, err := io.ReadAll(limitedReader)
-	if err != nil {
-		return "", fmt.Errorf("read checksums response: %w", err)
-	}
-
-	for line := range strings.Lines(string(body)) {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		parts := strings.Fields(line)
-		if len(parts) >= 2 {
-			checksumValue := parts[0]
-			checksumFilename := parts[len(parts)-1]
-			checksumFilename = strings.TrimPrefix(checksumFilename, "*")
-			checksumFilename = strings.TrimPrefix(checksumFilename, "./")
-
-			if checksumFilename == filename || strings.HasSuffix(checksumFilename, "/"+filename) {
-				if len(checksumValue) != sha256.Size*2 {
-					return "", fmt.Errorf("malformed checksum for %s: expected %d hex chars, got %d",
-						filename, sha256.Size*2, len(checksumValue))
-				}
-				if _, err := hex.DecodeString(checksumValue); err != nil {
-					return "", fmt.Errorf("malformed checksum for %s: %w", filename, err)
-				}
-				return checksumValue, nil
-			}
-		}
-	}
-
-	return "", fmt.Errorf("checksum not found for file: %s", filename)
-}
-
+// verifyDownloadedFile checks path's checksum and removes it on failure so a
+// corrupt download never survives on disk.
 func verifyDownloadedFile(ctx context.Context, path, expectedChecksum string, logger *slog.Logger) error {
 	if expectedChecksum == "" {
 		return nil
@@ -143,16 +76,9 @@ func verifyDownloadedFile(ctx context.Context, path, expectedChecksum string, lo
 
 	logger.Info("download: verifying checksum", "file", filename)
 
-	actualChecksum, err := CalculateChecksum(ctx, path)
-	if err != nil {
+	if err := ValidateChecksum(ctx, path, expectedChecksum); err != nil {
 		_ = os.Remove(path)
-		return err
-	}
-
-	if actualChecksum != expectedChecksum {
-		_ = os.Remove(path)
-		return fmt.Errorf("checksum verification failed for %s:\n  expected: %s\n  actual:   %s",
-			filename, expectedChecksum, actualChecksum)
+		return fmt.Errorf("verify %s: %w", filename, err)
 	}
 
 	logger.Info("download: checksum verified", "file", filename)

@@ -22,48 +22,41 @@ import (
 
 const dnsmasqService = "dnsmasq"
 
-// dnsmasqConfigDir is the directory for per-cluster dnsmasq fragments.
-// Tests override this var to redirect writes to a t.TempDir().
+// dnsmasqConfigDir is overridden to t.TempDir() in tests.
 var dnsmasqConfigDir = phase.DefaultDNSMasqConfigDir
 
-// resolvedConf is the systemd-resolved drop-in written by ConfigureSystemResolver.
-// Tests override this var to redirect operations to a t.TempDir().
+// resolvedConf is the systemd-resolved drop-in path; overridden to t.TempDir() in tests.
 var resolvedConf = "/etc/systemd/resolved.conf.d/dnsmasq.conf"
 
 var (
-	// validateDnsmasqConfigFn and restartDnsmasqFn are package-level vars so
-	// tests can inject fakes without a real dnsmasq binary on PATH.
+	// validateDnsmasqConfigFn/restartDnsmasqFn: package vars so tests can
+	// inject fakes without a real dnsmasq binary.
 	validateDnsmasqConfigFn = ValidateDnsmasqConfig
 	restartDnsmasqFn        = RestartDnsmasq
-	// removeAllFn is the os.RemoveAll indirection used by RestoreSystemResolver.
-	// Tests inject a failing func to cover the logged-but-not-propagated error path.
+	// removeAllFn: os.RemoveAll indirection for injecting a failing func in
+	// RestoreSystemResolver tests.
 	removeAllFn = os.RemoveAll
-	// isNetworkManagerActiveFn and isServiceActiveFn let tests drive the
-	// resolver forward/restore paths from non-Linux hosts, where the real
-	// probes are hard-gated off by runtime.GOOS.
+	// isNetworkManagerActiveFn/isServiceActiveFn let tests drive resolver paths
+	// on non-Linux hosts, bypassing the runtime.GOOS gate.
 	isNetworkManagerActiveFn = IsNetworkManagerActive
 	isServiceActiveFn        = system.IsServiceActive
 )
 
 var validConfigNameRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
 
-// EnableDnsmasq marks dnsmasq to start at boot (systemctl enable, no
-// --now): it does not start the service — the restart after the first
-// config deploy brings it up.
+// EnableDnsmasq enables dnsmasq at boot (systemctl enable, no --now) without starting it.
 func EnableDnsmasq(ctx context.Context) error {
 	return system.ManageService(ctx, system.ServiceEnable, dnsmasqService)
 }
 
-// RestartDnsmasq restarts dnsmasq so a newly written config takes effect.
-// Run ValidateDnsmasqConfig first — restarting into a broken config takes
-// cluster DNS down.
+// RestartDnsmasq restarts dnsmasq to pick up a new config.
+// Callers must run ValidateDnsmasqConfig first, or a broken config takes cluster DNS down.
 func RestartDnsmasq(ctx context.Context) error {
 	return system.ManageService(ctx, system.ServiceRestart, dnsmasqService)
 }
 
 // ValidateDnsmasqConfig runs "dnsmasq --test" to verify the on-disk config.
-// stderr is captured so the returned error carries dnsmasq's actual
-// syntax-error message, not just "exit status 1".
+// stderr is captured so the error carries dnsmasq's syntax message, not just "exit status 1".
 func ValidateDnsmasqConfig(ctx context.Context) error {
 	return executor.RunCaptured(ctx, "dnsmasq", "--test")
 }
@@ -78,9 +71,8 @@ func validateConfigName(name string) error {
 	return nil
 }
 
-// writeDnsmasqConfig writes content to /etc/dnsmasq.d/<name>.conf. An
-// existing file is copied to <path>.backup first so validateAndRestartDnsmasq
-// can roll back on failure.
+// writeDnsmasqConfig writes to /etc/dnsmasq.d/<name>.conf, backing up any
+// existing file for validateAndRestartDnsmasq's rollback.
 func writeDnsmasqConfig(ctx context.Context, name, content string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -98,10 +90,8 @@ func writeDnsmasqConfig(ctx context.Context, name, content string) error {
 		}
 	}
 
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	if err := system.AtomicWriteString(configPath, content, 0o644); err != nil {
@@ -111,8 +101,8 @@ func writeDnsmasqConfig(ctx context.Context, name, content string) error {
 	return nil
 }
 
-// DnsmasqConfigPath returns the absolute path for the named drop-in config.
-// The name is validated to reject path-traversal characters.
+// DnsmasqConfigPath returns the absolute path for the named drop-in config,
+// rejecting path-traversal characters in name.
 func DnsmasqConfigPath(name string) (string, error) {
 	if err := validateConfigName(name); err != nil {
 		return "", fmt.Errorf("invalid dnsmasq config name: %w", err)
@@ -120,8 +110,8 @@ func DnsmasqConfigPath(name string) (string, error) {
 	return filepath.Join(dnsmasqConfigDir, fmt.Sprintf("%s.conf", name)), nil
 }
 
-// IsNetworkManagerActive reports whether NetworkManager is running on a
-// Linux host with nmcli present. Returns false on non-Linux platforms.
+// IsNetworkManagerActive reports whether NetworkManager is active on a Linux
+// host with nmcli present (always false elsewhere).
 func IsNetworkManagerActive(ctx context.Context) bool {
 	if runtime.GOOS != "linux" {
 		return false
@@ -141,10 +131,9 @@ func validateDNSAddresses(addresses []string) error {
 	return nil
 }
 
-// ConfigureSystemResolver configures the system to use localhost (dnsmasq) for DNS resolution,
-// with the given fallbackDNS servers for queries dnsmasq cannot resolve.
-//
-// It tries NetworkManager first, then systemd-resolved, and logs a warning if neither is found.
+// ConfigureSystemResolver points system DNS at localhost (dnsmasq), using
+// fallbackDNS for queries dnsmasq can't resolve. It tries NetworkManager then
+// systemd-resolved, warning if neither is found.
 func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *slog.Logger) error {
 	if err := validateDNSAddresses(fallbackDNS); err != nil {
 		return fmt.Errorf("invalid fallback DNS configuration: %w", err)
@@ -156,10 +145,8 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 			return err
 		}
 
-		// Capture the pre-change profile before any mutation so a failed
-		// connection-up can revert it. Fail before touching the profile if the
-		// capture itself fails — a half-applied override with no way back is
-		// worse than not starting.
+		// Captured before any mutation so a failed connection-up can revert;
+		// fail here rather than half-apply with no way back.
 		prevDNS, prevIgnore, err := captureConnDNS(ctx, conn)
 		if err != nil {
 			return fmt.Errorf("capture current DNS settings: %w", err)
@@ -174,10 +161,9 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 		}
 
 		if err := hostnet.ActivateConnection(ctx, conn); err != nil {
-			// The persistent profile now forces 127.0.0.1; connection-up failed
-			// so dnsmasq may not be reachable. Revert the profile so the host
-			// does not resurrect a dead resolver on the next reconnect/reboot.
-			// Detached ctx: a Ctrl-C that killed the up must not doom the revert.
+			// connection-up failed with DNS forced to 127.0.0.1; revert so a
+			// reboot doesn't resurrect a dead resolver (ctx detached so Ctrl-C
+			// can't kill the revert too).
 			rCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), resolverRestoreTimeout)
 			defer cancel()
 			if restoreErr := restoreConnDNS(rCtx, conn, prevDNS, prevIgnore); restoreErr != nil {
@@ -193,37 +179,30 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 	if isServiceActiveFn(ctx, "systemd-resolved") {
 		logger.Info("resolver: configuring systemd-resolved to use dnsmasq")
 		confPath := resolvedConf
-		confDir := filepath.Dir(resolvedConf)
-		confContent := "[Resolve]\nDNS=127.0.0.1\nDomains=~.\n"
-		if err := os.MkdirAll(confDir, 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(confPath), 0o755); err != nil {
 			return fmt.Errorf("create resolved.conf.d: %w", err)
 		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
+		if err := ctx.Err(); err != nil {
+			return err
 		}
 		tmpPath, err := system.WriteTempFile("resolved-conf", 0o644, func(f *os.File) error {
-			_, err := f.WriteString(confContent)
+			_, err := f.WriteString("[Resolve]\nDNS=127.0.0.1\nDomains=~.\n")
 			return err
 		})
 		if err != nil {
 			return fmt.Errorf("write dnsmasq.conf: %w", err)
 		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
 		defer func() { _ = os.Remove(tmpPath) }()
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err := system.CopyFile(tmpPath, confPath); err != nil {
 			return fmt.Errorf("install dnsmasq.conf: %w", err)
 		}
 		if err := executor.RunCaptured(ctx, "systemctl", "restart", "systemd-resolved"); err != nil {
-			// The drop-in now forces DNS=127.0.0.1; resolved failed to restart,
-			// so remove it to let the host fall back to its prior resolver
-			// rather than a dead one, then re-restart to converge. Detached ctx
-			// for the compensating restart, matching the revert above.
+			// resolved restart failed with DNS forced to 127.0.0.1; remove the
+			// drop-in and re-restart (detached ctx) so the host falls back
+			// instead of staying dead.
 			if rmErr := removeAllFn(confPath); rmErr != nil {
 				return fmt.Errorf("restart systemd-resolved: %w (drop-in %s left in place; removing it also failed: %w)", err, confPath, rmErr)
 			}
@@ -239,13 +218,11 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 	return nil
 }
 
-// resolverRestoreTimeout bounds the detached compensating call issued when a
-// resolver mutation partially applied and must be rolled back.
+// resolverRestoreTimeout bounds the detached rollback call after a partial resolver mutation.
 const resolverRestoreTimeout = 30 * time.Second
 
-// captureConnDNS reads the current ipv4.dns and ipv4.ignore-auto-dns of an
-// nmcli connection so ConfigureSystemResolver can revert them if the follow-up
-// connection-up fails.
+// captureConnDNS reads conn's ipv4.dns/ipv4.ignore-auto-dns so
+// ConfigureSystemResolver can revert them if connection-up fails.
 func captureConnDNS(ctx context.Context, conn string) (dns, ignoreAutoDNS string, err error) {
 	dnsOut, err := executor.OutputCaptured(ctx, "nmcli", "-g", "ipv4.dns", "connection", "show", conn)
 	if err != nil {
@@ -258,9 +235,8 @@ func captureConnDNS(ctx context.Context, conn string) (dns, ignoreAutoDNS string
 	return strings.TrimSpace(string(dnsOut)), strings.TrimSpace(string(ignoreOut)), nil
 }
 
-// restoreConnDNS rewrites conn's DNS settings back to the captured values. An
-// empty ignoreAutoDNS is normalised to "no" (the NetworkManager default) so the
-// revert never leaves the field blank.
+// restoreConnDNS restores conn's captured DNS settings, normalising an empty
+// ignoreAutoDNS to "no" so the revert never leaves it blank.
 func restoreConnDNS(ctx context.Context, conn, dns, ignoreAutoDNS string) error {
 	if ignoreAutoDNS == "" {
 		ignoreAutoDNS = "no"
@@ -268,9 +244,9 @@ func restoreConnDNS(ctx context.Context, conn, dns, ignoreAutoDNS string) error 
 	return executor.RunCaptured(ctx, "nmcli", "connection", "modify", conn, "ipv4.dns", dns, "ipv4.ignore-auto-dns", ignoreAutoDNS)
 }
 
-// RestoreSystemResolver undoes ConfigureSystemResolver: it clears the
-// nmcli DNS override or removes the systemd-resolved drop-in. Failures are
-// logged but do not abort cleanup.
+// RestoreSystemResolver undoes ConfigureSystemResolver: clears the nmcli DNS
+// override or removes the systemd-resolved drop-in. Failures are logged but do
+// not abort cleanup.
 func RestoreSystemResolver(ctx context.Context, logger *slog.Logger) error {
 	if isNetworkManagerActiveFn(ctx) {
 		conn, err := hostnet.ActiveConnection(ctx)

@@ -14,12 +14,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
-// errPlanDrift signals a plan run that found pending infrastructure changes.
-// It is a bare sentinel local to cli (not an errtypes category) because
-// drift is not a failure — exitCodeFor maps it to the dedicated code 7 so
-// scripted callers can distinguish "clean" from "drifted" from "failed"
-// (see docs/cli/exit-codes.md); execute() also skips its usual "command
-// failed" announcement for this sentinel.
+// errPlanDrift is a drift-only sentinel (not errtypes) mapped to exit code 7;
+// see docs/cli/exit-codes.md.
 var errPlanDrift = errors.New("plan: drift detected")
 
 var planOutput string
@@ -49,7 +45,7 @@ func init() {
 }
 
 // planJSONChange is one entry in planJSONOutput.Changes; see
-// docs/cli/json-schema.md for the documented, stable shape.
+// docs/cli/json-schema.md for the stable shape.
 type planJSONChange struct {
 	Address string `json:"address"`
 	Action  string `json:"action"`
@@ -77,10 +73,9 @@ func runPlan(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	// plan is read-only by design and never materializes the embedded
-	// terraform sources, so a workspace that deploy has not created yet must
-	// fail here with a pointer at deploy instead of surfacing a raw
-	// `terraform init … no such file or directory` from the provider layer.
+	// plan never materializes terraform sources, so a not-yet-deployed
+	// workspace must fail here with a pointer at deploy, not a raw terraform
+	// error.
 	envDir := workspace.TerraformEnvDir(projectRoot, cfg.TerraformEnvName())
 	if !system.DirExists(envDir) {
 		return &errtypes.ConfigError{Msg: fmt.Sprintf(

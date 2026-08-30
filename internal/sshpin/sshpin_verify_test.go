@@ -2,7 +2,6 @@ package sshpin
 
 import (
 	"context"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -11,36 +10,19 @@ import (
 	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
-// installFakeKeyscan writes a POSIX sh script named "ssh-keyscan" to a temp
-// dir and prepends it to PATH. script must begin with "#!/bin/sh\n".
-func installFakeKeyscan(t *testing.T, script string) {
-	t.Helper()
-	testutil.InstallFakeBin(t, "ssh-keyscan", script)
-}
-
 func TestVerify_HappyPath(t *testing.T) {
-	installFakeKeyscan(t, "#!/bin/sh\nprintf '%s\\n' '"+fixtureKeyscanLine+"'\n")
+	testutil.InstallFakeBin(t, "ssh-keyscan", "#!/bin/sh\nprintf '%s\\n' '"+fixtureKeyscanLine+"'\n")
 	fp := fingerprintFromFixture(t)
 
 	path, err := Verify(context.Background(), "pve.example", fp, false, logutil.NopLogger)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if path == "" {
-		t.Fatal("want non-empty known_hosts path on match; got empty string")
-	}
-	defer func() { _ = os.Remove(path) }()
-	content, readErr := os.ReadFile(path)
-	if readErr != nil {
-		t.Fatalf("cannot read known_hosts at %s: %v", path, readErr)
-	}
-	if !strings.Contains(string(content), "ssh-ed25519") {
-		t.Errorf("known_hosts content %q missing key type", string(content))
-	}
+	assertKnownHosts(t, path)
 }
 
 func TestVerify_KeyscanNonZeroExit(t *testing.T) {
-	installFakeKeyscan(t, "#!/bin/sh\nexit 1\n")
+	testutil.InstallFakeBin(t, "ssh-keyscan", "#!/bin/sh\nexit 1\n")
 
 	_, err := Verify(context.Background(), "pve.example", "SHA256:doesnotmatter", false, logutil.NopLogger)
 	if err == nil {
@@ -52,7 +34,7 @@ func TestVerify_KeyscanNonZeroExit(t *testing.T) {
 }
 
 func TestVerify_CtxDeadline(t *testing.T) {
-	installFakeKeyscan(t, "#!/bin/sh\nexec sleep 300\n")
+	testutil.InstallFakeBin(t, "ssh-keyscan", "#!/bin/sh\nexec sleep 300\n")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
 	defer cancel()

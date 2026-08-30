@@ -18,8 +18,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// BuildHAProxyConfigData assembles the HAProxy template data from cfg's
-// node list. When no workers are configured, masters serve ingress directly.
+// BuildHAProxyConfigData assembles HAProxy template data from cfg's node
+// list; masters serve ingress directly when no workers are configured.
 func (p *Phase) BuildHAProxyConfigData(cfg *config.Config) (templates.HAProxyConfigData, error) {
 	nodes, err := provision.BuildNodeList(cfg)
 	if err != nil {
@@ -45,10 +45,9 @@ func (p *Phase) BuildHAProxyConfigData(cfg *config.Config) (templates.HAProxyCon
 	var backupServers []templates.HAProxyServer
 
 	if len(workerServers) == 0 {
-		// With no dedicated workers, masters handle ingress directly
 		workerServers = masterServers
 	} else {
-		// Workers are configured but may not join; masters serve as backup for http/https
+		// Workers may not join yet; masters back up http/https meanwhile.
 		backupServers = masterServers
 	}
 
@@ -81,8 +80,8 @@ func (p *Phase) installHAProxyConfig(ctx context.Context, tmpPath string) error 
 	return nil
 }
 
-// enableAndRestartHAProxyFn lets tests substitute the enable+restart step
-// without calling system.ManageService, which always errors on non-Linux.
+// enableAndRestartHAProxyFn lets tests substitute this step since
+// system.ManageService errors on non-Linux.
 var enableAndRestartHAProxyFn = enableAndRestartHAProxy
 
 func enableAndRestartHAProxy(ctx context.Context) error {
@@ -92,9 +91,8 @@ func enableAndRestartHAProxy(ctx context.Context) error {
 	return system.ManageService(ctx, system.ServiceRestart, "haproxy")
 }
 
-// ConfigureHAProxy renders haproxy.cfg, installs it, validates with
-// "haproxy -c", and restarts the service. On any failure the previous
-// config is restored and haproxy is restarted with it.
+// ConfigureHAProxy renders, installs, and restarts haproxy.cfg; on failure it
+// restores the previous config and restarts with that instead.
 func (p *Phase) ConfigureHAProxy(ctx context.Context, cfg *config.Config, _ *Options) error {
 	data, err := p.BuildHAProxyConfigData(cfg)
 	if err != nil {
@@ -106,8 +104,8 @@ func (p *Phase) ConfigureHAProxy(ctx context.Context, cfg *config.Config, _ *Opt
 		return &errtypes.ConfigError{Msg: "render haproxy.cfg template", Err: err}
 	}
 
-	// A user-writable temp file is required because the final install step
-	// runs under sudo, so the write here cannot target /etc/haproxy directly.
+	// Final install runs under sudo; this write must target a user-writable
+	// temp file, not /etc/haproxy directly.
 	tmpPath, err := system.WriteTempFile("haproxy-*.cfg", 0o644, func(f *os.File) error {
 		_, werr := f.WriteString(content)
 		return werr
@@ -117,11 +115,9 @@ func (p *Phase) ConfigureHAProxy(ctx context.Context, cfg *config.Config, _ *Opt
 	}
 	defer func() { _ = os.Remove(tmpPath) }()
 
-	// Back up the live config so we can roll back if validation or restart
-	// fails after the new config is already in place. The fixed backup path
-	// is the single pristine pre-okdctl snapshot: from the second run onward
-	// the live file is okdctl's own render, so an existing backup is never
-	// overwritten — postinstall's timestamped backups cover later snapshots.
+	// haproxyBackupPath holds the pristine pre-okdctl config, written once and
+	// never overwritten again; postinstall's timestamped backups cover later
+	// snapshots.
 	hasBackup := system.FileExists(haproxyBackupPath)
 	if !hasBackup && system.FileExists(haproxyConfigPath) {
 		if err := system.CopyFile(haproxyConfigPath, haproxyBackupPath); err != nil {
@@ -153,9 +149,8 @@ func (p *Phase) ConfigureHAProxy(ctx context.Context, cfg *config.Config, _ *Opt
 	return nil
 }
 
-// attemptHAProxyRollback reads backupPath, writes its content to cfgPath via
-// writeFn, then calls restartFn. On any failure cause is joined with the
-// rollback error; on success only cause is returned.
+// attemptHAProxyRollback restores cfgPath from backupPath and restarts via
+// restartFn, joining any rollback failure onto cause (cause alone on success).
 func attemptHAProxyRollback(
 	cause error,
 	cfgPath, backupPath string,
@@ -175,10 +170,8 @@ func attemptHAProxyRollback(
 	return cause
 }
 
-// VerifyHAProxyPorts checks that haproxy is listening on the API, machine
-// config, HTTP, and HTTPS ports by dialing each on 127.0.0.1. Missing ports
-// are logged as warnings but do not return an error — listeners can come up
-// shortly after service start.
+// VerifyHAProxyPorts dials the API, machine-config, HTTP, and HTTPS ports on
+// 127.0.0.1, warning (not erroring) on any not yet listening.
 func (p *Phase) VerifyHAProxyPorts(ctx context.Context) error {
 	ports := []struct {
 		port        string

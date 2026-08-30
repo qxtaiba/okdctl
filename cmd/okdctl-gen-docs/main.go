@@ -1,13 +1,10 @@
 //go:build docs
 
 // Package main generates Markdown reference pages for every okdctl
-// subcommand and writes them to an output directory (default: docs/cli).
-// Run via: go run -tags docs ./cmd/okdctl-gen-docs [-o <dir>]
+// subcommand. Run via: go run -tags docs ./cmd/okdctl-gen-docs [-o <dir>]
 package main
 
-// Uses stdlib `log` instead of slog/tui: this generator runs only under
-// `go run -tags docs` and is never linked into the okdctl binary, so
-// pulling in the project's logger import graph would be dead weight.
+// Uses stdlib log, not slog/tui: this never links into the shipped binary.
 import (
 	"flag"
 	"log"
@@ -27,9 +24,7 @@ func main() {
 	}
 
 	root := cli.RootCmd()
-	// DisableAutoGenTag suppresses cobra's date-stamped footer; without it
-	// git diff --exit-code would fire on every regeneration regardless of
-	// whether any command actually changed.
+	// Drops cobra's date-stamped footer so regeneration diffs are stable.
 	root.DisableAutoGenTag = true
 
 	if err := doc.GenMarkdownTree(root, *outDir); err != nil {

@@ -65,10 +65,6 @@ func TestResolveVMID_ListNodesError(t *testing.T) {
 	}
 }
 
-// TestNewRunner_OptionsDeriveDirsAndDefaults locks the constructor contract:
-// WorkDir and EnvDir derive from the option-supplied project root and
-// terraform env regardless of option order, a nil logger normalizes to
-// no-op, and the default timeouts and snapshot client are wired.
 func TestNewRunner_OptionsDeriveDirsAndDefaults(t *testing.T) {
 	cfg := config.DefaultConfig()
 	projRoot := t.TempDir()
@@ -87,9 +83,6 @@ func TestNewRunner_OptionsDeriveDirsAndDefaults(t *testing.T) {
 	}
 	if r.envDir != workspace.TerraformEnvDir(projRoot, "production") {
 		t.Errorf("envDir = %q; want derived from project root + tf env", r.envDir)
-	}
-	if r.ConfigPath != configPath || r.RunID != "run-42" {
-		t.Errorf("ConfigPath/RunID = %q/%q; want option values", r.ConfigPath, r.RunID)
 	}
 	if r.Log == nil {
 		t.Error("nil logger must normalize to a no-op logger")

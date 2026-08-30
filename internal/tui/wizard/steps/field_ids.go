@@ -1,8 +1,6 @@
 package steps
 
-// Field/label IDs that recur across step form definitions, validators, and
-// the review summary. Keeping them in one place lets goconst's check go
-// quiet and prevents one site drifting from another.
+// Shared field/label IDs — keeps goconst quiet and avoids drift across sites.
 const (
 	fieldHost        = "host"
 	fieldDomain      = "domain"

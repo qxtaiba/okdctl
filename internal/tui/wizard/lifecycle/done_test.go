@@ -13,11 +13,16 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
-func TestDoneStepRendersOutcomeAndNextSteps(t *testing.T) {
-	st := &State{
+func doneState() *State {
+	return &State{
 		Cfg: config.DefaultConfig(), Op: node.OpResize,
-		Plan: masterResizePlan(), Proceed: true, Elapsed: 90 * time.Second,
+		Plan: masterResizePlan(), Proceed: true,
 	}
+}
+
+func TestDoneStepRendersOutcomeAndNextSteps(t *testing.T) {
+	st := doneState()
+	st.Elapsed = 90 * time.Second
 	s := NewDoneStep(st)
 	out := s.View(90, 40)
 	for _, want := range []string{"resize complete", "homelab-master0", "1m30s", "power-cycled"} {
@@ -28,11 +33,8 @@ func TestDoneStepRendersOutcomeAndNextSteps(t *testing.T) {
 }
 
 func TestDoneStepFailureCarriesError(t *testing.T) {
-	st := &State{
-		Cfg: config.DefaultConfig(), Op: node.OpResize,
-		Plan: masterResizePlan(), Proceed: true,
-		Result: errors.New("etcd health gate (post-master0) failed: quorum lost"),
-	}
+	st := doneState()
+	st.Result = errors.New("etcd health gate (post-master0) failed: quorum lost")
 	out := NewDoneStep(st).View(90, 40)
 	if !strings.Contains(out, "quorum lost") {
 		t.Errorf("failure view must carry the backend error:\n%s", out)
@@ -43,11 +45,7 @@ func TestDoneStepFailureCarriesError(t *testing.T) {
 }
 
 func TestDoneStepEnterCompletes(t *testing.T) {
-	st := &State{
-		Cfg: config.DefaultConfig(), Op: node.OpResize,
-		Plan: masterResizePlan(), Proceed: true,
-	}
-	s := NewDoneStep(st)
+	s := NewDoneStep(doneState())
 	_, cmd := s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatal("enter must complete the wizard")

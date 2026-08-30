@@ -25,18 +25,11 @@ import (
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
-// StateFileName is the deploy-state marker file written under the work
-// directory (<projectRoot>/okd-install).
+// StateFileName is the deploy-state marker file under <projectRoot>/okd-install.
 const StateFileName = ".okdctl-deploy-state.json"
 
-// streamWriters builds the stdout/stderr writers for the phase executor from
-// the persistent log sink. Default (not verbose): the openshift-install
-// firehose routes to the log file only, leaving the TTY for the curated
-// status line and milestone lines. Verbose: the stream is tee'd to both the
-// TTY (raw) and the log file. In every mode the stream is scanned for
-// milestones (bootstrap/install complete, degraded operators) promoted to the
-// TTY. Returns (nil, nil) when no sink is active, so the caller leaves the
-// executor on its os.Stdout/os.Stderr defaults.
+// streamWriters routes the stream to sink only by default, tees to the TTY
+// when verbose, and returns (nil, nil) when sink is nil.
 func streamWriters(sink io.Writer, verbose bool) (stdout, stderr io.Writer) {
 	if sink == nil {
 		return nil, nil
@@ -50,11 +43,8 @@ func streamWriters(sink io.Writer, verbose bool) (stdout, stderr io.Writer) {
 	return install.NewMilestoneWriter(baseOut, notify), install.NewMilestoneWriter(baseErr, notify)
 }
 
-// milestoneNotifier returns a notify func that promotes each openshift-install
-// milestone to the TTY log at most once per distinct event — openshift-install
-// re-prints a degraded operator on every poll, so a seen-set keeps the status
-// feed from spamming. The func is called from both the stdout and stderr copy
-// goroutines, so its map is mutex-guarded.
+// milestoneNotifier dedupes each milestone to one TTY log line, guarded by a
+// mutex shared across the stdout/stderr copy goroutines.
 func milestoneNotifier() func(install.Milestone) {
 	var mu sync.Mutex
 	seen := map[string]bool{}
@@ -89,9 +79,8 @@ func milestoneNotifier() func(install.Milestone) {
 	}
 }
 
-// NewProvisioner builds an okd.Provisioner wired for CLI use (tui logger,
-// credential env). Pass nil for creds when the operation only needs local
-// tools (oc, dnsmasq, systemctl). Callers must defer p.ZeroizeEnv().
+// NewProvisioner builds an okd.Provisioner wired for CLI use. Callers must
+// defer p.ZeroizeEnv().
 func NewProvisioner(creds *credentials.ProxmoxCredentials, projectRoot string, extra ...okd.ProvisionerOption) *okd.Provisioner {
 	opts := []okd.ProvisionerOption{
 		okd.WithProjectRoot(projectRoot),
@@ -106,9 +95,7 @@ func NewProvisioner(creds *credentials.ProxmoxCredentials, projectRoot string, e
 	return okd.New(opts...)
 }
 
-// provisioner is the slice of okd.Provisioner the deploy flow drives.
-// Tests substitute a fake to pin the resume routing — which phases run, and
-// with what guard opts — without executing real phase code.
+// provisioner is the interface the deploy flow drives; tests substitute a fake.
 type provisioner interface {
 	GuardSetup(cfg *config.Config, opts okd.SetupOpts) error
 	Setup(ctx context.Context, cfg *config.Config, opts okd.SetupOpts) ([]distribution.StepResult, error)
@@ -117,13 +104,8 @@ type provisioner interface {
 	ResumePostInstall(ctx context.Context, cfg *config.Config, keepRedHatCatalogs bool) (*postinstall.Result, []distribution.StepResult, error)
 }
 
-// runGuardedSetup runs the setup phase behind the live-cluster guard.
-// resumeInProgress carries the caller's marker decision: only a setup-phase
-// marker for this cluster reaches here (resolveResumePhase routes install and
-// postinstall markers past Setup entirely), so the guard bypass cannot wipe
-// material live VMs booted with. The guard probe runs before any marker
-// write — a refusal must not plant a marker that would bypass the guard on
-// the next invocation.
+// runGuardedSetup runs the guard before writing any marker, so a refusal
+// can't plant a marker that bypasses the guard next run.
 func runGuardedSetup(ctx context.Context, p provisioner, cfg *config.Config, markerPath, runID string, freshDeploy, resumeInProgress bool, started time.Time, w io.Writer) ([]distribution.StepResult, error) {
 	setupOpts := okd.SetupOpts{FreshDeploy: freshDeploy, ResumeInProgress: resumeInProgress && !freshDeploy}
 	if err := p.GuardSetup(cfg, setupOpts); err != nil {
@@ -141,12 +123,8 @@ func runGuardedSetup(ctx context.Context, p provisioner, cfg *config.Config, mar
 	return setupSteps, nil
 }
 
-// reportDeployFailure prints the end-of-run box for a phase error. Cancelled
-// runs keep the interrupt box; every other failure gets a failure summary
-// whose resume line names the phase the on-disk marker recorded just before
-// the phase ran, so re-running deploy truthfully resumes there. Setup
-// applies nothing to Proxmox, so its teardown alternative is cleanup —
-// destroy would be a misleading no-op.
+// reportDeployFailure prints the failure/interrupt box; a setup-phase
+// failure points at cleanup instead of destroy since terraform state is empty.
 func reportDeployFailure(w io.Writer, err error, phase deployPhase, steps []distribution.StepResult, runID string, started time.Time) {
 	if errors.Is(err, context.Canceled) {
 		fmt.Fprintln(w, render.InterruptSummary(steps, "okdctl deploy", runID))
@@ -166,17 +144,14 @@ func reportDeployFailure(w io.Writer, err error, phase deployPhase, steps []dist
 	}))
 }
 
-// reportDeployPhaseError prints the end-of-run box via reportDeployFailure
-// and, for a cancelled run, logs cancelHint — the phase-specific guidance on
-// terraform-state disposition. Returns err unchanged so callers can fold it
-// into their own return shape.
+// reportDeployPhaseError reports the failure, logs cancelHint on a
+// cancelled run, and returns err unchanged.
 func reportDeployPhaseError(w io.Writer, err error, phase deployPhase, steps []distribution.StepResult, runID string, started time.Time, cancelHint string) error {
 	reportDeployFailure(w, err, phase, steps, runID, started)
 	if errors.Is(err, context.Canceled) {
 		logutil.Info(cancelHint)
 	}
-	// The FailureSummary/InterruptSummary box above already presents this
-	// failure; mark it so the top-level handler does not stack a second box.
+	// Already presented above; mark it so the top-level handler doesn't stack a second box.
 	return render.Presented(err)
 }
 
@@ -188,21 +163,17 @@ type Options struct {
 	FreshDeploy        bool
 	KeepRedHatCatalogs bool
 	ProjectRoot        string
-	// LogSink is the persistent okdctl.log writer. When set, the
-	// openshift-install firehose routes there instead of the TTY; nil leaves
-	// streamed output on the default os.Stdout/os.Stderr.
+	// LogSink is the persistent okdctl.log writer; nil leaves streamed
+	// output on the default os.Stdout/os.Stderr.
 	LogSink io.Writer
-	// Verbose mirrors --verbose: it keeps the streamed subprocess output on
-	// the TTY (tee'd to LogSink) instead of routing it to the log file only.
+	// Verbose keeps streamed subprocess output on the TTY (tee'd to LogSink)
+	// instead of routing it to the log file only.
 	Verbose bool
 }
 
-// checklistRecorder builds the live step-checklist recorder for a TTY deploy,
-// seeded with only the steps the resumed run will actually execute so the
-// counter (N/total) reflects this run rather than a full deploy. Returns nil
-// when progress rendering is off (non-TTY or JSON), leaving the orchestrator's
-// plain step log lines in place. logSink receives the per-step trail so
-// okdctl.log keeps a record the checklist otherwise replaces on the TTY.
+// checklistRecorder builds a TTY step-checklist seeded only with steps this
+// resumed run executes (so N/total matches), or nil when progress rendering
+// is off; logSink still gets the per-step trail the checklist replaces on the TTY.
 func checklistRecorder(cfg *config.Config, projectRoot string, resumeFrom deployPhase, logSink io.Writer) distribution.MetricsRecorder {
 	if !logutil.ProgressBarsEnabled() {
 		return nil
@@ -221,16 +192,15 @@ func checklistRecorder(cfg *config.Config, projectRoot string, resumeFrom deploy
 	return tui.NewStepProgress(plan, logSink)
 }
 
-// phaseRuns reports whether a step in stepPhase executes given resumeFrom as
-// the entry point: a resume runs its entry phase and every later phase.
+// phaseRuns reports whether stepPhase executes given resumeFrom: a resume
+// runs its entry phase and every later phase.
 func phaseRuns(resumeFrom deployPhase, stepPhase okd.DeployPhase) bool {
 	order := map[okd.DeployPhase]int{okd.PhaseSetup: 0, okd.PhaseInstall: 1, okd.PhasePostInstall: 2}
 	return order[stepPhase] >= order[okd.DeployPhase(resumeFrom)]
 }
 
-// runDeployPhases executes setup, install, and postinstall, starting from
-// the phase the deploy-state marker says is safe to resume from. Returns the
-// postinstall result and every executed step across phases.
+// runDeployPhases runs setup/install/postinstall from the marker's resume
+// phase, returning the postinstall result and every executed step.
 func runDeployPhases(ctx context.Context, p provisioner, cfg *config.Config, projectRoot, markerPath, runID string, resumeFrom deployPhase, marker *deployState, freshDeploy, keepRedHatCatalogs bool, started time.Time, w io.Writer) (*postinstall.Result, []distribution.StepResult, error) {
 	var setupSteps []distribution.StepResult
 	var err error
@@ -276,13 +246,9 @@ func runDeployPhases(ctx context.Context, p provisioner, cfg *config.Config, pro
 	return result, slices.Concat(setupSteps, installSteps, postinstallSteps), nil
 }
 
-// Execute runs the full deployment — setup, install, postinstall — under the
-// project run lock, with resume routing and the post-deploy summary.
-// announceEmbeddedDrift warns when the write-once terraform workspace has
-// fallen behind this binary's embedded sources (an okdctl upgrade whose
-// module changed), so an operator learns their deploy runs old HCL instead
-// of discovering it via a mid-apply variable mismatch. Warn-only: refreshing
-// operator-editable HCL without consent would break the write-once contract.
+// announceEmbeddedDrift warns when the write-once terraform workspace lags
+// this binary's embedded sources; it only warns because refreshing
+// operator-edited HCL without consent would break the write-once contract.
 func announceEmbeddedDrift(root string) {
 	drift, err := DetectEmbeddedDrift(root)
 	if err != nil {
@@ -299,9 +265,8 @@ func announceEmbeddedDrift(root string) {
 	}
 }
 
-// Execute runs the full deploy pipeline under the project run lock: it
-// resolves the resume phase from the on-disk marker, drives the OKD
-// provisioner through every phase, and writes the post-deploy summary to w.
+// Execute runs the full deploy pipeline under the project run lock, resuming
+// from the on-disk marker's phase and writing the post-deploy summary to w.
 func Execute(ctx context.Context, cfg *config.Config, opts Options, w io.Writer) error {
 	projectRoot := opts.ProjectRoot
 
@@ -311,11 +276,9 @@ func Execute(ctx context.Context, cfg *config.Config, opts Options, w io.Writer)
 	}
 	defer lock.Release()
 
-	// Deploy writes per-run artifacts (install-config.yaml, manifests,
-	// ignition files, downloaded tools, ISOs) under <projectRoot>/okd-install.
-	// Under the sudo re-exec model these are root-owned by default; restore
-	// ownership to the invoking user at exit so they can inspect and rm -rf
-	// the workdir without sudo. No-op when not running under sudo.
+	// Under the sudo re-exec model, per-run artifacts under okd-install are
+	// root-owned; restore ownership to the invoking user at exit so they can
+	// inspect/rm -rf without sudo (no-op outside sudo).
 	workDir := workspace.WorkDir(projectRoot)
 	defer func() {
 		if chownErr := system.ChownTreeToInvokingUser(workDir); chownErr != nil {
@@ -344,7 +307,7 @@ func Execute(ctx context.Context, cfg *config.Config, opts Options, w io.Writer)
 	defer p.ZeroizeEnv()
 
 	if err := p.Validate(cfg); err != nil {
-		return fmt.Errorf("provisioner validation failed: %w", err)
+		return fmt.Errorf("validate deploy config: %w", err)
 	}
 
 	if opts.ShowStartMessage {

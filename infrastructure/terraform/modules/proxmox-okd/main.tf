@@ -1,13 +1,5 @@
-# provider configuration
-
-# uses environment variables:
-# - PROXMOX_VE_ENDPOINT    (api url, e.g., https://pve.example.com:8006/)
-# - PROXMOX_VE_USERNAME    (username, e.g., root@pam)
-# - PROXMOX_VE_PASSWORD    (password)
-# TLS verification is pinned on: the production environment sets insecure = false
-# (environments/production/versions.tf), which overrides PROXMOX_VE_INSECURE. A
-# self-signed PVE cert needs its CA in the host trust store, not an env-var bypass.
-# Provider configuration is handled by the parent module
+# Provider config comes from the parent module; connection env vars and the
+# TLS pin are documented in variables.tf.
 
 locals {
   masters = slice(var.master_names, 0, var.master_count)
@@ -23,8 +15,6 @@ locals {
   worker_memory     = coalesce(var.worker_memory_mb, var.memory_mb)
   worker_os_disk    = coalesce(var.worker_os_disk_size_gb, var.os_disk_size_gb)
 }
-
-# bootstrap node
 
 resource "proxmox_virtual_environment_vm" "bootstrap" {
   count = var.bootstrap_enabled ? 1 : 0
@@ -45,7 +35,6 @@ resource "proxmox_virtual_environment_vm" "bootstrap" {
   memory {
     dedicated = local.bootstrap_memory
   }
-
 
   # disabled for faster terraform operations
   agent {
@@ -111,7 +100,6 @@ resource "proxmox_virtual_environment_vm" "bootstrap" {
     type         = "4m"
   }
 
-
   lifecycle {
     precondition {
       condition     = var.bootstrap_iso != ""
@@ -122,29 +110,20 @@ resource "proxmox_virtual_environment_vm" "bootstrap" {
       error_message = "os_disk_size_gb (${local.bootstrap_os_disk}) is below minimum_os_disk_size_gb (${var.minimum_os_disk_size_gb}); raise the size or lower the floor deliberately."
     }
     ignore_changes = [
-      # bpg/terraform-provider-proxmox dynamic + static network_device coexist;
-      # the provider produces spurious diffs unless the static block is ignored.
+      # bpg/proxmox provider: dynamic + static network_device coexist, causing spurious diffs.
       network_device,
-      # startup ordering is owned at runtime, not terraform: HA supersedes
-      # startup{} on failover (see ha.tf) and okdctl drives power/boot order
-      # out-of-band, so the create-time values are write-once.
+      # HA (ha.tf) and okdctl drive this out-of-band at runtime; create-time value is write-once.
       startup,
-      # cdrom.file_id is the per-node ignition ISO; okdctl detaches/deletes it
-      # after first boot, so terraform must not re-attach a now-absent ISO.
+      # cdrom.file_id is the per-node ignition ISO; okdctl detaches it after first boot.
       cdrom,
-      # boot_order follows the same post-ignition reality: once the ISO is
-      # detached the effective boot device set changes; don't revert it.
+      # boot device set changes once the ignition ISO is detached; don't revert it.
       boot_order,
-      # efi_disk holds nvram/boot-order state across reboots; replacing the
-      # disk on a force-new attribute change would reset bootloader picks. Only
-      # type is ignored — datastore_id stays tracked so an os_storage move
-      # relocates the efi disk with the OS disk instead of stranding it.
+      # datastore_id stays tracked (an os_storage move relocates it); type reset
+      # would lose nvram/boot picks.
       efi_disk[0].type,
     ]
   }
 }
-
-# master nodes
 
 resource "proxmox_virtual_environment_vm" "master" {
   count = length(local.masters)
@@ -165,7 +144,6 @@ resource "proxmox_virtual_environment_vm" "master" {
   memory {
     dedicated = local.master_memory
   }
-
 
   # disabled for faster terraform operations
   agent {
@@ -193,11 +171,8 @@ resource "proxmox_virtual_environment_vm" "master" {
     serial       = "OS-DISK"
   }
 
-  # Ceph OSD data disk, terraform-managed (disk is intentionally NOT in
-  # ignore_changes) so it can be attached to a running master post-creation and
-  # rook auto-creates the OSD on the scsi1 device. INVARIANT: only ever add or
-  # grow master_data_disk_size_gb — decreasing it makes terraform destroy the
-  # disk and lose its OSD data.
+  # Ceph OSD data disk (not in ignore_changes); only grow
+  # master_data_disk_size_gb — shrinking destroys the OSD data.
   dynamic "disk" {
     for_each = var.master_data_disk_size_gb > 0 ? [1] : []
     content {
@@ -211,11 +186,8 @@ resource "proxmox_virtual_environment_vm" "master" {
     }
   }
 
-  # Dedicated ceph mon-store disk, terraform-managed (intentionally NOT in
-  # ignore_changes, same as the OSD disk above) so it can be attached to a
-  # running master post-creation; a machineconfig mounts it at /var/lib/rook.
-  # INVARIANT: only ever add or grow master_mon_disk_size_gb — decreasing it
-  # makes terraform destroy the disk and lose the mon store on it.
+  # Dedicated ceph mon-store disk (mounted at /var/lib/rook via machineconfig);
+  # only grow master_mon_disk_size_gb — shrinking destroys it.
   dynamic "disk" {
     for_each = var.master_mon_disk_size_gb > 0 ? [1] : []
     content {
@@ -267,17 +239,13 @@ resource "proxmox_virtual_environment_vm" "master" {
     type         = "4m"
   }
 
-  # prevent_destroy must be a literal boolean (hashicorp/terraform#3116 — not
-  # gatable via variable). A fully-confirmed `okdctl destroy` disables it
-  # automatically by writing a transient prevent_destroy_override.tf into
-  # this module directory and deleting it when the destroy finishes. For a
-  # manual destroy, create the same override HERE (an override file only
-  # merges with resources in its own module, so an environments/-level
-  # override cannot work):
+  # prevent_destroy must be a literal bool (hashicorp/terraform#3116); a
+  # confirmed `okdctl destroy` overrides it via a transient
+  # prevent_destroy_override.tf. For a manual destroy, add the same override
+  # in this module directory, then destroy and delete the file:
   #   resource "proxmox_virtual_environment_vm" "master" {
   #     lifecycle { prevent_destroy = false }
   #   }
-  # then run terraform destroy and delete the file.
   lifecycle {
     prevent_destroy = true
     precondition {
@@ -296,30 +264,16 @@ resource "proxmox_virtual_environment_vm" "master" {
       condition     = local.master_os_disk >= var.minimum_os_disk_size_gb
       error_message = "master os disk size (${local.master_os_disk}) is below minimum_os_disk_size_gb (${var.minimum_os_disk_size_gb}); master os disks hold /var/lib/etcd — raise the size or lower the floor deliberately."
     }
+    # Same ignore set/reasons as the bootstrap resource above.
     ignore_changes = [
-      # bpg/terraform-provider-proxmox dynamic + static network_device coexist;
-      # the provider produces spurious diffs unless the static block is ignored.
       network_device,
-      # startup ordering is owned at runtime, not terraform: HA supersedes
-      # startup{} on failover (see ha.tf) and okdctl drives power/boot order
-      # out-of-band, so the create-time values are write-once.
       startup,
-      # cdrom.file_id is the per-node ignition ISO; okdctl detaches/deletes it
-      # after first boot, so terraform must not re-attach a now-absent ISO.
       cdrom,
-      # boot_order follows the same post-ignition reality: once the ISO is
-      # detached the effective boot device set changes; don't revert it.
       boot_order,
-      # efi_disk holds nvram/boot-order state across reboots; replacing the
-      # disk on a force-new attribute change would reset bootloader picks. Only
-      # type is ignored — datastore_id stays tracked so an os_storage move
-      # relocates the efi disk with the OS disk instead of stranding it.
       efi_disk[0].type,
     ]
   }
 }
-
-# worker nodes
 
 resource "proxmox_virtual_environment_vm" "worker" {
   count = length(local.workers)
@@ -342,7 +296,6 @@ resource "proxmox_virtual_environment_vm" "worker" {
   memory {
     dedicated = local.worker_memory
   }
-
 
   # disabled for faster terraform operations
   agent {
@@ -370,8 +323,8 @@ resource "proxmox_virtual_environment_vm" "worker" {
     serial       = "OS-DISK"
   }
 
-  # Ceph OSD data disk, terraform-managed (see the master block's note). Only
-  # ever add or grow worker_data_disk_size_gb — a decrease destroys the OSD data.
+  # Ceph OSD data disk (see master block); only grow worker_data_disk_size_gb
+  # — shrinking destroys it.
   dynamic "disk" {
     for_each = var.worker_data_disk_size_gb > 0 ? [1] : []
     content {
@@ -423,10 +376,8 @@ resource "proxmox_virtual_environment_vm" "worker" {
     type         = "4m"
   }
 
-  # Workers deliberately have no prevent_destroy: okdctl node remove drives
-  # this set by count, and prevent_destroy cannot be variable-gated
-  # (hashicorp/terraform#3116). Removing a worker therefore destroys its
-  # data disk and the ceph osd data on it — drain and purge the osd first.
+  # No prevent_destroy (hashicorp/terraform#3116 — can't be variable-gated).
+  # Removing a worker destroys its ceph data disk — drain first.
   lifecycle {
     precondition {
       condition     = length(var.worker_isos) >= var.worker_count && alltrue([for iso in slice(var.worker_isos, 0, var.worker_count) : iso != ""])
@@ -440,24 +391,12 @@ resource "proxmox_virtual_environment_vm" "worker" {
       condition     = local.worker_os_disk >= var.minimum_os_disk_size_gb
       error_message = "worker os disk size (${local.worker_os_disk}) is below minimum_os_disk_size_gb (${var.minimum_os_disk_size_gb}); raise the size or lower the floor deliberately."
     }
+    # Same ignore set/reasons as the bootstrap resource above.
     ignore_changes = [
-      # bpg/terraform-provider-proxmox dynamic + static network_device coexist;
-      # the provider produces spurious diffs unless the static block is ignored.
       network_device,
-      # startup ordering is owned at runtime, not terraform: HA supersedes
-      # startup{} on failover (see ha.tf) and okdctl drives power/boot order
-      # out-of-band, so the create-time values are write-once.
       startup,
-      # cdrom.file_id is the per-node ignition ISO; okdctl detaches/deletes it
-      # after first boot, so terraform must not re-attach a now-absent ISO.
       cdrom,
-      # boot_order follows the same post-ignition reality: once the ISO is
-      # detached the effective boot device set changes; don't revert it.
       boot_order,
-      # efi_disk holds nvram/boot-order state across reboots; replacing the
-      # disk on a force-new attribute change would reset bootloader picks. Only
-      # type is ignored — datastore_id stays tracked so an os_storage move
-      # relocates the efi disk with the OS disk instead of stranding it.
       efi_disk[0].type,
     ]
   }

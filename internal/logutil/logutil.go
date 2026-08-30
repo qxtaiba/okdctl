@@ -8,11 +8,9 @@ import "log/slog"
 // falls back to it when --log-file was not set on the failing run.
 const DefaultLogFileName = "okdctl.log"
 
-// NopLogger discards all log records after passing them through
-// RedactHandler. Use it as a zero-value fallback for constructors that
-// accept an optional *slog.Logger, or for tests that don't care about log
-// output. The RedactHandler layer ensures any credential-bearing attr is
-// redacted even if a future call site logs to NopLogger inadvertently.
+// NopLogger discards all records after RedactHandler, so a future accidental
+// call site still gets its credential-bearing attrs redacted. Use as the
+// zero-value fallback for an optional *slog.Logger param.
 var NopLogger = slog.New(NewRedactHandler(slog.DiscardHandler))
 
 // OrNop returns l when non-nil, otherwise NopLogger. Use at the top of any
@@ -25,26 +23,17 @@ func OrNop(l *slog.Logger) *slog.Logger {
 	return l
 }
 
-// ProgressReporter starts a progress indicator for desc and returns a stop
-// func. The stop func MUST be idempotent. Implementations may discard desc.
-//
-// The type is defined here rather than in internal/tui (where StartSpinner,
-// the real implementation, lives) to break an import cycle: internal/tui
-// imports internal/logutil for RedactHandler, so placing this type in tui
-// would force every phase and infrastructure package that stores a reporter
-// field to import tui, completing the cycle.
+// ProgressReporter starts a progress indicator for desc and returns an
+// idempotent stop func; defined here (not tui) to avoid a tui->logutil->tui import cycle.
 type ProgressReporter func(desc string) (stop func())
 
 // NopProgressReporter is the no-op ProgressReporter; domain constructors use
 // it as the default so callers can invoke the reporter unconditionally.
 var NopProgressReporter ProgressReporter = func(string) func() { return func() {} }
 
-// StatusLineReporter starts an updatable status line for desc and returns a
-// set func (replaces the live detail shown alongside desc) plus an idempotent
-// stop func. Both are safe to call unconditionally; a nop implementation
-// discards updates. Defined here for the same import-cycle reason as
-// ProgressReporter — the real implementation (tui.StartStatusLine) lives in
-// internal/tui.
+// StatusLineReporter starts an updatable status line for desc, returning a
+// set func (updates the live detail) and an idempotent stop func — both safe
+// to call unconditionally. Same import-cycle reason as ProgressReporter.
 type StatusLineReporter func(desc string) (set func(detail string), stop func())
 
 // NopStatusLineReporter is the no-op StatusLineReporter used as the default so

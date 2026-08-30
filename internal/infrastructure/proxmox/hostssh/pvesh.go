@@ -8,27 +8,20 @@ import (
 	"github.com/qxtaiba/okdctl/internal/executor"
 )
 
-// pveshRun executes a pvesh subcommand on the Proxmox host in argv mode so
-// no shell string is assembled from user-controlled atoms. p.Node is
-// validated once here; callers must not re-validate. extra is inserted
-// between path and --output-format json (e.g. "-snapname", "foo" for a
-// snapshot create call); callers must validate every extra atom themselves
-// before passing it in, the same way p.Node is validated here — pveshRun
-// performs no allowlist checks on extra.
+// pveshRun executes a pvesh subcommand in argv mode; p.Node is validated
+// once here, but callers must validate every atom in extra themselves —
+// pveshRun applies no allowlist there.
 //
-// A non-zero pvesh exit is tolerated: the read-path callers parse whatever
-// landed on stdout. Poll paths that must fail loudly on a rejected read use
-// pveshRunChecked instead.
+// A non-zero exit is tolerated: read-path callers parse whatever landed on
+// stdout. Use pveshRunChecked when a rejected read must fail loudly instead.
 func pveshRun(ctx context.Context, p *RemoteISOParams, subcommand, path string, extra ...string) (string, error) {
 	return pveshRunImpl(ctx, p, false, subcommand, path, extra...)
 }
 
-// pveshRunChecked is pveshRun that additionally fails when pvesh exits
-// non-zero, routing the failure through executor.NewExitError so remote
-// stderr is scrubbed and truncated. The poll in pveshWaitTask uses it so a
-// permanently failing status read (expired UPID, wrong node) surfaces
-// pvesh's actual stderr instead of a downstream JSON-parse artifact, and
-// does not burn the whole timeout on a read that will never succeed.
+// pveshRunChecked is pveshRun that also fails on a non-zero exit, scrubbing
+// stderr via executor.NewExitError. pveshWaitTask uses it so a permanently
+// failing status read surfaces pvesh's real stderr instead of burning the
+// timeout on a JSON-parse artifact.
 func pveshRunChecked(ctx context.Context, p *RemoteISOParams, subcommand, path string, extra ...string) (string, error) {
 	return pveshRunImpl(ctx, p, true, subcommand, path, extra...)
 }
@@ -53,11 +46,10 @@ func pveshRunImpl(ctx context.Context, p *RemoteISOParams, checkExit bool, subco
 	return result.Stdout, nil
 }
 
-// PveshRun is the exported entry point for callers outside package hostssh.
-// resource is a node-relative path suffix (e.g. "qemu"); PveshRun composes
-// /nodes/<node>/<resource> itself so the node atom can never bypass
-// pveshRun's validateProxmoxName chokepoint, and callers must not validate
-// p.Node themselves. Returns the raw JSON stdout on success.
+// PveshRun is the exported entry point outside package hostssh; it composes
+// /nodes/<node>/<resource> from resource (a node-relative suffix like
+// "qemu") so the node atom can't bypass validateProxmoxName. Returns raw
+// JSON stdout on success.
 func PveshRun(ctx context.Context, p *RemoteISOParams, subcommand, resource string, extra ...string) (string, error) {
 	return pveshRun(ctx, p, subcommand, "/nodes/"+p.Node+"/"+resource, extra...)
 }

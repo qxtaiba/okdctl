@@ -23,12 +23,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-const (
-	minIgnitionFileSize = 1000 // bytes
-)
+const minIgnitionFileSize = 1000 // bytes
 
-// apacheVhostConfDirFn resolves the vhost drop-in dir for the detected OS.
-// Tests override this var to redirect writes to a t.TempDir().
+// apacheVhostConfDirFn resolves the vhost drop-in dir; tests override it to
+// redirect writes to a t.TempDir().
 var apacheVhostConfDirFn = platform.OS.ApacheVhostConfDir
 
 func (p *Provisioner) ensureIgnitionDir(ctx context.Context, webRoot string) (string, error) {
@@ -37,17 +35,15 @@ func (p *Provisioner) ensureIgnitionDir(ctx context.Context, webRoot string) (st
 	}
 	ignitionDir := filepath.Join(webRoot, "ignition")
 
-	// 0o750: apache user owns and reads; local non-apache users cannot read
-	// ignition files which embed the cluster pull-secret.
+	// 0o750: apache owns/reads; other local users can't read ignition files,
+	// which embed the pull-secret.
 	if err := os.MkdirAll(ignitionDir, 0o750); err != nil {
 		return "", &errtypes.ConfigError{Msg: "create ignition directory", Err: err}
 	}
 
-	// This runs as root and webRoot lives under paths a non-root user can
-	// influence; MkdirAll, ChownByName (os.Chown) and os.Chmod all follow a
-	// symlink planted at ignitionDir, so a link here would get its target
-	// chowned to apache and chmod'd 0750 by root. Refuse a symlink first,
-	// matching the refusals in system/fs.go.
+	// Runs as root over a path a non-root user can influence; MkdirAll,
+	// ChownByName, and Chmod all follow symlinks, so refuse one first,
+	// matching system/fs.go.
 	if info, err := os.Lstat(ignitionDir); err != nil {
 		return "", &errtypes.AuthError{Msg: fmt.Sprintf("lstat ignition dir %q", ignitionDir), Err: err}
 	} else if info.Mode()&os.ModeSymlink != 0 {
@@ -97,8 +93,8 @@ func (p *Provisioner) verifyApacheListening(ctx context.Context, bindIP string) 
 	p.Log.Info("apache: httpd service listening on port 443")
 }
 
-// configureApacheHTTPS writes the HTTPS vhost drop-in conf and, on Debian,
-// enables mod_ssl and the conf. On RHEL conf.d is auto-included by httpd.conf.
+// configureApacheHTTPS writes the HTTPS vhost conf and, on Debian, enables
+// mod_ssl and the conf (RHEL auto-includes conf.d).
 func (p *Provisioner) configureApacheHTTPS(ctx context.Context, certPath, keyPath, webRoot, bindIP string) error {
 	vhostDir := apacheVhostConfDirFn(p.OS)
 	if err := system.EnsureDir(vhostDir); err != nil {
@@ -131,21 +127,16 @@ func (p *Provisioner) configureApacheHTTPS(ctx context.Context, certPath, keyPat
 	return nil
 }
 
-// ConfigureApache configures httpd for serving ignition payloads over HTTPS:
-// writes the TLS vhost conf, adjusts the port, enables the service, and
-// creates the ignition directory. The payloads contain the cluster
-// pull-secret, SSH authorized keys, and machine-config tokens; TLS with a
-// pinned CA cert is the primary defence against credential capture over the
-// machine-network VLAN — BuildIgnitionURLForNode enforces the RFC1918
-// invariant at config time.
+// ConfigureApache configures httpd to serve ignition payloads over HTTPS:
+// writes the TLS vhost conf, enables the service, and creates the ignition
+// directory. TLS with a pinned CA cert is the primary defence against
+// credential capture on the machine-network VLAN.
 func (p *Provisioner) ConfigureApache(ctx context.Context, cfg *config.Config, projectRoot string) error {
 	p.Log.Info("apache: configuring httpd for serving ignition files over https")
 
 	bindIP := cfg.HTTPServer.IgnitionServerIP
-	// Listen :443 is provided by the platform's mod_ssl default conf
-	// (RHEL: /etc/httpd/conf.d/ssl.conf, Debian: ports.conf after a2enmod ssl).
-	// 443 is already labeled https_port_t in the default RHEL SELinux policy,
-	// so no SELinux port relabeling is needed here.
+	// 443 is already labeled https_port_t under RHEL SELinux, so no port
+	// relabel is needed here.
 
 	webRoot := cfg.HTTPServer.Root
 	if webRoot == "" {
@@ -173,11 +164,10 @@ func (p *Provisioner) ConfigureApache(ctx context.Context, cfg *config.Config, p
 }
 
 // ReviveIgnitionServer reopens the ignition join window for node add: the
-// same vhost/dir configuration as ConfigureApache plus a re-deploy of the
-// ignition payloads from clusterDir into the web root (healing a prior
-// 'okdctl cleanup --kind web-only', which removes only the served copies),
-// but the service is started WITHOUT being enabled — a hard crash mid-add
-// must not leave the pull-secret server resurrecting across host reboots.
+// same vhost/dir setup as ConfigureApache, plus a re-deploy of ignition
+// payloads into the web root. The service is started WITHOUT being
+// enabled, so a crash mid-add can't resurrect the pull-secret server
+// across reboots.
 func (p *Provisioner) ReviveIgnitionServer(ctx context.Context, cfg *config.Config, projectRoot, clusterDir string) error {
 	p.Log.Info("apache: reviving httpd for the node-add join window")
 
@@ -199,14 +189,11 @@ func (p *Provisioner) ReviveIgnitionServer(ctx context.Context, cfg *config.Conf
 	return p.DeployToWebServer(ctx, cfg, clusterDir)
 }
 
-// TeardownIgnitionServer stops and disables httpd once a node add's join
-// window closes, then verifies the stop took. The stop is attempted
-// unconditionally rather than gated on an is-active probe: teardown runs
-// under a detached post-cancel context where a failing probe would silently
-// skip the stop and leave the pull-secret window open. Unlike cleanup.Apache
-// it does not uninstall the httpd package or remove the vhost conf and TLS
-// cert, so a later revive is cheap. A non-nil return means httpd may still
-// be serving ignition payloads — the caller must surface that loudly.
+// TeardownIgnitionServer stops and disables httpd once a node-add join
+// window closes, verifying the stop took; the stop runs unconditionally
+// (not gated on an is-active probe) since teardown runs under a detached
+// post-cancel context. A non-nil return means httpd may still be serving
+// ignition payloads — the caller must surface that loudly.
 func (p *Provisioner) TeardownIgnitionServer(ctx context.Context) error {
 	svc := p.OS.ApacheServiceName()
 	var errs []error
@@ -222,11 +209,10 @@ func (p *Provisioner) TeardownIgnitionServer(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-// DeployToWebServer copies the generated ignition files from clusterDir
-// into the httpd web root. Auth credentials (kubeconfig, kubeadmin-password)
-// are intentionally not copied here — they are consumed directly from
-// clusterDir by the install and postinstall phases and must not be placed
-// under the apache DocumentRoot.
+// DeployToWebServer copies the generated ignition files from clusterDir into
+// the httpd web root. Auth credentials (kubeconfig, kubeadmin-password) are
+// intentionally not copied — they must never be placed under the apache
+// DocumentRoot.
 func (p *Provisioner) DeployToWebServer(ctx context.Context, cfg *config.Config, clusterDir string) error {
 	webRoot := cfg.HTTPServer.Root
 	if webRoot == "" {
@@ -250,9 +236,8 @@ func (p *Provisioner) DeployToWebServer(ctx context.Context, cfg *config.Config,
 		}
 
 		destPath := filepath.Join(ignitionDir, file)
-		// 0o640: apache group readable only; ignition files carry pullSecret.
-		// AtomicWrite (temp+fsync+rename) so a node booting mid-deploy can
-		// never fetch a torn copy from the live webroot.
+		// 0o640: apache-group-readable only (payload carries pullSecret);
+		// AtomicWrite so a booting node never fetches a torn copy.
 		if err := system.AtomicWrite(destPath, data, 0o640); err != nil {
 			return &errtypes.ConfigError{Msg: fmt.Sprintf("copy %s", file), Err: err}
 		}
@@ -262,11 +247,10 @@ func (p *Provisioner) DeployToWebServer(ctx context.Context, cfg *config.Config,
 }
 
 // IgnitionDeployAlreadyDone reports whether every generated ignition file in
-// clusterDir has a byte-identical copy under webRoot/ignition. Mere existence
-// is not enough: ignition regenerated after an aborted deploy embeds a fresh
-// cluster CA, and serving the stale prior copy wedges the install. Any read
-// failure conservatively returns false so Exec re-deploys and surfaces the
-// real failure.
+// clusterDir has a byte-identical copy under webRoot/ignition — mere
+// existence isn't enough since a regenerated ignition embeds a fresh
+// cluster CA. Any read failure conservatively returns false so Exec
+// re-deploys.
 func IgnitionDeployAlreadyDone(clusterDir, webRoot string) bool {
 	ignitionDir := filepath.Join(webRoot, "ignition")
 	for _, name := range IgnitionFilenames {
@@ -282,8 +266,8 @@ func IgnitionDeployAlreadyDone(clusterDir, webRoot string) bool {
 	return true
 }
 
-// fileSHA256 streams path through sha256 rather than reading it whole —
-// ignition payloads carry the pull-secret, so no full copy is held in memory.
+// fileSHA256 streams path through sha256 instead of reading it whole, so the
+// pull-secret-bearing payload is never fully buffered.
 func fileSHA256(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -298,9 +282,9 @@ func fileSHA256(path string) (string, error) {
 }
 
 // VerifyWebServer fetches bootstrap.ign over HTTPS from baseURL and verifies
-// the server certificate against caCertPEM. A mismatch causes the TLS handshake
-// to fail — confirming Apache is serving the cert that was embedded into the
-// node ISOs via --ignition-ca.
+// the server certificate against caCertPEM. A mismatch fails the TLS
+// handshake, confirming Apache serves the cert embedded into node ISOs via
+// --ignition-ca.
 func (p *Provisioner) VerifyWebServer(ctx context.Context, baseURL string, caCertPEM []byte) error {
 	testURL := fmt.Sprintf("%s/bootstrap.ign", baseURL)
 

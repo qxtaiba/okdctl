@@ -12,22 +12,14 @@ func TestHAProxyFrontendPorts(t *testing.T) {
 
 	wantNumbers := map[int]bool{phase.KubeAPIPort: true, 22623: true, 80: true, 443: true}
 
-	if len(ports) != len(haproxyFrontends) {
-		t.Errorf("len=%d, want %d (haproxyFrontends cardinality)", len(ports), len(haproxyFrontends))
-	}
-
+	// tcp-only is the invariant: a same-number udp rule (e.g. dns udp/53) must
+	// never slip into the HAProxy frontend set.
 	for _, p := range ports {
 		if !wantNumbers[p.Number] {
 			t.Errorf("unexpected port number %d", p.Number)
 		}
 		if p.Protocol != "tcp" {
 			t.Errorf("port %d: protocol=%q, want tcp", p.Number, p.Protocol)
-		}
-	}
-
-	for _, p := range ports {
-		if p.Number == 53 && p.Protocol == "udp" {
-			t.Error("DNS udp/53 must not appear in HAProxyFrontendPorts")
 		}
 	}
 

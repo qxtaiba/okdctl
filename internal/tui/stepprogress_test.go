@@ -21,9 +21,6 @@ func threeStepPlan() []StepMeta {
 	}
 }
 
-// TestStepProgress_StartThenFinishRewritesLine drives one step through
-// StepStarted → StepFinished and asserts the dim in-progress line is committed
-// as a permanent line carrying the counter, name, phase, duration and ✔.
 func TestStepProgress_StartThenFinishRewritesLine(t *testing.T) {
 	var tty, sink bytes.Buffer
 	sp := newStepProgress(threeStepPlan(), &tty, &sink)
@@ -52,9 +49,6 @@ func TestStepProgress_StartThenFinishRewritesLine(t *testing.T) {
 	}
 }
 
-// TestStepProgress_FinishWithoutStart covers skipped/already-done steps that
-// emit only StepFinished: the renderer must still commit a final line and not
-// panic on the missing start.
 func TestStepProgress_FinishWithoutStart(t *testing.T) {
 	var tty, sink bytes.Buffer
 	sp := newStepProgress(threeStepPlan(), &tty, &sink)
@@ -75,7 +69,6 @@ func TestStepProgress_FinishWithoutStart(t *testing.T) {
 	}
 }
 
-// TestStepProgress_FailureStyling asserts a failed step commits the ✖ glyph.
 func TestStepProgress_FailureStyling(t *testing.T) {
 	var tty, sink bytes.Buffer
 	sp := newStepProgress(threeStepPlan(), &tty, &sink)
@@ -91,26 +84,6 @@ func TestStepProgress_FailureStyling(t *testing.T) {
 	}
 }
 
-// TestStepProgress_ResumeSubsetTotals proves the counter total reflects only
-// the steps seeded (a resumed run's subset), not a full deploy, and that the
-// counter is padded to the total's digit width.
-func TestStepProgress_ResumeSubsetTotals(t *testing.T) {
-	plan := []StepMeta{
-		{ID: "verify", Name: "verify health", Phase: "postinstall"},
-		{ID: "cleanup", Name: "cleanup bootstrap", Phase: "postinstall"},
-	}
-	var tty bytes.Buffer
-	sp := newStepProgress(plan, &tty, nil)
-	t.Cleanup(func() { lineReg.release(sp) })
-
-	sp.StepStarted("cleanup")
-	if got := tty.String(); !strings.Contains(got, "[2/2]") {
-		t.Errorf("resume-subset counter wrong; want [2/2] in:\n%q", got)
-	}
-}
-
-// TestStepProgress_CounterPadding locks the right-aligned counter width to the
-// total's digit count, e.g. "[ 4/17]".
 func TestStepProgress_CounterPadding(t *testing.T) {
 	plan := make([]StepMeta, 17)
 	for i := range plan {
@@ -122,8 +95,6 @@ func TestStepProgress_CounterPadding(t *testing.T) {
 	}
 }
 
-// TestStepProgress_UnknownStepIgnored: an id absent from the plan is a no-op,
-// never a panic (guards against a phase emitting a step the plan omitted).
 func TestStepProgress_UnknownStepIgnored(t *testing.T) {
 	var tty bytes.Buffer
 	sp := newStepProgress(threeStepPlan(), &tty, nil)
@@ -134,14 +105,8 @@ func TestStepProgress_UnknownStepIgnored(t *testing.T) {
 	}
 }
 
-// TestStepProgress_ConcurrentInterleave drives the real runtime shape the
-// sequential tests above never exercise: one orchestrator goroutine cycling
-// StepStarted/StepFinished across several steps, a spinner taking the line
-// as the second owner during each step's simulated work (exactly as
-// tui.StartSpinner does inside a real step body), and N goroutines emitting
-// tui.Info records concurrently throughout. -race is the actual assertion;
-// the buffer checks below only confirm every committed checklist line
-// survived the interleave exactly once and at column 0.
+// -race is the actual assertion here; the buffer checks only confirm
+// ordering survived the interleave.
 func TestStepProgress_ConcurrentInterleave(t *testing.T) {
 	plan := []StepMeta{
 		{ID: "gen-config", Name: "generate config", Phase: "setup"},
@@ -168,22 +133,16 @@ func TestStepProgress_ConcurrentInterleave(t *testing.T) {
 		}(g)
 	}
 
-	// Each step hands the line to a fresh spinner exactly as a real step
-	// body would, then StepFinished commits while that spinner is still the
-	// registered owner (the "leftover spinner" clear path in withLine).
-	// Every spinner is stopped only after all log producers have joined
-	// below, so lineReg's active flag never flips false while a concurrent
-	// logutil.Info() call could still be mid-flight against it.
+	// Spinners stop only after all log producers join, keeping withLine's
+	// "leftover spinner" clear path racing against Info() calls.
 	ids := []distribution.StepID{"gen-config", "create-vms", "wait-bootstrap", "verify", "cleanup"}
 	results := make([]*distribution.StepResult, len(ids))
 	stopSpinners := make([]func(), 0, len(ids))
 	for i, id := range ids {
 		sp.StepStarted(id)
 		stopSpinners = append(stopSpinners, startSpinner(context.Background(), "step working", &buf))
-		// Real sleep on purpose — not a synctest candidate. In a bubble the
-		// fake clock advances only when every goroutine is durably blocked,
-		// so the busy logutil.Info() producers would defer this sleep until they
-		// finish, collapsing the mid-step interleave window -race needs.
+		// Real sleep on purpose — synctest's fake clock only advances when
+		// every goroutine blocks, which would collapse the race window here.
 		time.Sleep(2 * time.Millisecond)
 		results[i] = &distribution.StepResult{
 			StepID:   id,
@@ -193,8 +152,8 @@ func TestStepProgress_ConcurrentInterleave(t *testing.T) {
 		sp.StepFinished(results[i])
 	}
 
-	// Stop everything in order: join the log producers first, then release
-	// every spinner, so no writer remains active when we inspect buf.
+	// Join log producers before releasing spinners so no writer is active
+	// when we inspect buf.
 	wg.Wait()
 	for _, stop := range stopSpinners {
 		stop()

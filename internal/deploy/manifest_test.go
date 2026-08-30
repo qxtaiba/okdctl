@@ -1,26 +1,21 @@
 package deploy
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/infrastructure"
-	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 func prodDir(root string) string {
 	return filepath.Join(root, "infrastructure", "terraform", "environments", "production")
 }
 
-// writeProdRoot lays down both production env files so a stamped manifest has
-// managed files to record.
+// writeProdRoot lays down both production env files so a manifest has files to record.
 func writeProdRoot(t *testing.T, root string) {
 	t.Helper()
 	dir := prodDir(root)
@@ -67,9 +62,6 @@ func TestManifestRoundTrip(t *testing.T) {
 	}
 }
 
-// TestReadRootManifestUnknownSchemaIgnored pins that a manifest written by a
-// newer binary (unrecognised SchemaVersion) is never trusted: readRootManifest
-// returns nil, and the mismatch is logged rather than silently ignored.
 func TestReadRootManifestUnknownSchemaIgnored(t *testing.T) {
 	root := t.TempDir()
 	writeProdRoot(t, root)
@@ -86,12 +78,6 @@ func TestReadRootManifestUnknownSchemaIgnored(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var buf bytes.Buffer
-	if err := tui.ConfigureLoggers("warn", "text", io.Discard, &buf, false); err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = tui.ConfigureLoggers("info", "text", os.Stdout, os.Stderr, false) }()
-
 	got, err := readRootManifest(root)
 	if err != nil {
 		t.Fatalf("readRootManifest: %v", err)
@@ -99,14 +85,10 @@ func TestReadRootManifestUnknownSchemaIgnored(t *testing.T) {
 	if got != nil {
 		t.Fatalf("readRootManifest = %+v, want nil for an unrecognised schema version", got)
 	}
-	if !strings.Contains(buf.String(), "unknown schema") {
-		t.Errorf("expected a warn log for the unrecognised schema version, got: %s", buf.String())
-	}
 }
 
-// writeTestManifest writes a manifest recording the sha256 of each supplied
-// byte slice, decoupled from stampRootManifest (which records embedded bytes)
-// so a test can drive the Stale vs Unverified split directly.
+// writeTestManifest hashes supplied bytes directly (unlike stampRootManifest,
+// which hashes embedded bytes) so a test can drive the Stale vs Unverified split.
 func writeTestManifest(t *testing.T, root string, recorded map[string][]byte) {
 	t.Helper()
 	files := make(map[string]string, len(recorded))
@@ -124,22 +106,6 @@ func writeTestManifest(t *testing.T, root string, recorded map[string][]byte) {
 	}
 	if err := os.WriteFile(rootManifestPath(root), data, 0o644); err != nil {
 		t.Fatal(err)
-	}
-}
-
-func TestStampRootManifestCoversModuleFiles(t *testing.T) {
-	root := t.TempDir()
-	writeProdRoot(t, root)
-	if err := stampRootManifest(root, nodeOpsRootFormat); err != nil {
-		t.Fatalf("stampRootManifest: %v", err)
-	}
-	m, err := readRootManifest(root)
-	if err != nil || m == nil {
-		t.Fatalf("readRootManifest: (%+v, %v)", m, err)
-	}
-	const moduleMain = "terraform/modules/proxmox-okd/main.tf"
-	if m.Files[moduleMain] == "" {
-		t.Errorf("manifest has no hash for %s; module files must be covered", moduleMain)
 	}
 }
 

@@ -7,13 +7,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
-// wizardFieldParity maps every wizard field that carries a Validate func to
-// a value that validator refuses plus the config-validator field that must
-// refuse the same value at file load. The parity test fails when a new
-// validated wizard field lacks an entry, when the entry's bad value is not
-// actually refused by the wizard validator, or when Config.Validate() does
-// not flag the mapped field after ConfigSet injects the value — so a
-// constraint cannot exist on the wizard path without a file-load twin.
+// wizardFieldParity maps a validated wizard field to a bad value and the
+// file-load field that must also reject it.
 var wizardFieldParity = map[string]struct {
 	bad       string
 	wantField string

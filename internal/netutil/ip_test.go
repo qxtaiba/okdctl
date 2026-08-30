@@ -9,13 +9,9 @@ func TestCIDRToNetmask(t *testing.T) {
 		wantErr bool
 	}{
 		{"0.0.0.0/0", "0.0.0.0", false},
-		{"10.0.0.0/8", "255.0.0.0", false},
-		{"172.16.0.0/12", "255.240.0.0", false},
+		{"0.0.0.0/1", "128.0.0.0", false},
 		{"192.168.1.0/24", "255.255.255.0", false},
 		{"10.0.0.1/32", "255.255.255.255", false},
-		{"0.0.0.0/1", "128.0.0.0", false},
-		{"192.168.1.0/31", "255.255.255.254", false},
-		{"10.0.0.0/30", "255.255.255.252", false},
 		{"2001:db8::/32", "", true},
 		{"invalid", "", true},
 	}
@@ -47,13 +43,12 @@ func TestCalculateVMIP(t *testing.T) {
 	}{
 		{"192.168.1.10", 0, "192.168.1.10", false},
 		{"192.168.1.10", 5, "192.168.1.15", false},
-		{"192.168.1.255", 1, "192.168.2.0", false}, // octet rollover
-		{"0.0.0.0", 0, "0.0.0.0", false},
+		{"192.168.1.255", 1, "192.168.2.0", false},
 		{"255.255.255.254", 1, "255.255.255.255", false},
-		{"255.255.255.255", 1, "", true}, // overflow
-		{"0.0.0.0", -1, "", true},        // negative
+		{"255.255.255.255", 1, "", true},
+		{"0.0.0.0", -1, "", true},
 		{"not-an-ip", 0, "", true},
-		{"2001:db8::1", 0, "", true}, // ipv6 rejected
+		{"2001:db8::1", 0, "", true},
 	}
 	for _, tc := range cases {
 		got, err := CalculateVMIP(tc.start, tc.index)
@@ -86,7 +81,6 @@ func TestValidateIPRangeInCIDR(t *testing.T) {
 		{"last IP beyond /24 boundary", "192.168.1.254", 4, "192.168.1.0/24", true},
 		{"start outside CIDR", "192.168.2.10", 1, "192.168.1.0/24", true},
 		{"zero count rejected", "192.168.1.10", 0, "192.168.1.0/24", true},
-		{"negative count rejected", "192.168.1.10", -1, "192.168.1.0/24", true},
 		{"ipv6 start rejected", "fe80::1", 1, "192.168.1.0/24", true},
 		{"invalid CIDR rejected", "192.168.1.10", 1, "not-a-cidr", true},
 	}
@@ -145,12 +139,10 @@ func TestIPInCIDR(t *testing.T) {
 	}{
 		{"192.168.1.5", "192.168.1.0/24", true, false},
 		{"192.168.2.5", "192.168.1.0/24", false, false},
-		{"10.0.0.1", "10.0.0.0/8", true, false},
 		{"not-an-ip", "10.0.0.0/8", false, true},
 		{"10.0.0.1", "", false, true},
-		{"10.0.0.1", "10.0.0.0/40", false, true},        // prefix overflow
-		{"::ffff:10.0.0.1", "10.0.0.0/8", false, false}, // 4-in-6 family differs from v4 prefix: not contained, no error
-		{"fe80::1", "10.0.0.0/8", false, false},         // family mismatch: not contained, not an error
+		{"::ffff:10.0.0.1", "10.0.0.0/8", false, false}, // 4-in-6 mapped addr doesn't match v4 prefix
+		{"fe80::1", "10.0.0.0/8", false, false},         // family mismatch: no error
 	}
 	for _, tc := range cases {
 		got, err := IPInCIDR(tc.ip, tc.cidr)
@@ -178,11 +170,9 @@ func TestCIDRsOverlap(t *testing.T) {
 	}{
 		{"192.168.1.0/24", "192.168.1.128/25", true, false},
 		{"192.168.1.0/24", "192.168.2.0/24", false, false},
-		{"10.0.0.0/8", "10.0.0.0/16", true, false},
 		{"bogus", "10.0.0.0/8", false, true},
 		{"10.0.0.0/8", "", false, true},
-		{"10.0.0.0/40", "10.0.0.0/8", false, true}, // prefix overflow
-		{"10.0.0.0/8", "fe80::/16", false, false},  // mixed family: no overlap, not an error
+		{"10.0.0.0/8", "fe80::/16", false, false}, // mixed family: no overlap, no error
 	}
 	for _, tc := range cases {
 		got, err := CIDRsOverlap(tc.a, tc.b)

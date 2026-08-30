@@ -1,7 +1,5 @@
-// Package terraform provides a high-level interface for Terraform operations.
-// Subcommands run via internal/executor with an env allowlist; state snapshots
-// are written atomically via system.AtomicWrite. Executor exposes Init, Plan,
-// Apply, Destroy, and Output as the primary call surface.
+// Package terraform runs Terraform subcommands via internal/executor with an
+// env allowlist, exposing Init, Plan, Apply, Destroy, and Output on Executor.
 package terraform
 
 import (
@@ -25,26 +23,19 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// PlanFileName is the default plan file name used by Plan, Apply, and Cleanup.
+// PlanFileName is the default plan file name used by Plan, Apply, and CleanupPlans.
 const PlanFileName = "tfplan"
 
-// defaultLockTimeout is passed as -lock-timeout to every state-locking
-// terraform subcommand so a stale lock from a SIGKILL-ed prior run waits
-// then fails with a clean diagnostic instead of failing immediately.
+// defaultLockTimeout bounds -lock-timeout so a stale lock from a SIGKILL-ed
+// prior run waits then fails cleanly.
 const defaultLockTimeout = "120s"
 
-// ExecError is a type alias for executor.ExitError. Because it is a true
-// alias (not a defined type), errors.As(&terraform.ExecError{}) and
-// errors.As(&executor.ExitError{}) are equivalent — callers may use either
-// target interchangeably without a double unwrap.
+// ExecError is a true type alias for executor.ExitError, so errors.As works
+// against either name interchangeably.
 type ExecError = executor.ExitError
 
 // Executor wraps terraform subcommand execution for a single working
-// directory. varFile is the default var-file path; per-invocation
-// overrides come via the VarFile field on Plan/Apply/DestroyOptions.
-//
-// Must be constructed via New — the zero value panics on first use (the
-// backing executor and logger are set only in New).
+// directory. Must be constructed via New; the zero value panics on first use.
 type Executor struct {
 	workDir string
 	varFile string
@@ -64,20 +55,17 @@ func WithLogger(l *slog.Logger) Option {
 // WorkDir returns the working directory this Executor is rooted at.
 func (t *Executor) WorkDir() string { return t.workDir }
 
-// WithEnv appends environment variables to be passed to all terraform subprocess calls.
-// At execution time they are appended after the executor's allowlist-filtered
-// parent env, so entries here override allowlist values for the same key.
-// Multiple calls to WithEnv are cumulative; later entries for the same key win.
+// WithEnv appends environment variables to all terraform subprocess calls,
+// applied after the allowlist-filtered parent env so they override same-key
+// allowlist values; multiple calls are cumulative, with later entries winning.
 func WithEnv(env []string) Option {
 	return func(e *Executor) {
 		e.exec.AppendEnv(env...)
 	}
 }
 
-// PlanOptions configures a terraform plan invocation.
-//
-// OutputPlanFile and Destroy are independent and may be combined (destroy plan
-// saved to a file). Vars and VarFile are additive — both can be set.
+// PlanOptions configures a terraform plan invocation; OutputPlanFile and
+// Destroy are independent and may be combined.
 type PlanOptions struct {
 	// VarFile overrides the default terraform.tfvars path.
 	VarFile        string
@@ -89,12 +77,9 @@ type PlanOptions struct {
 	Targets []string
 }
 
-// ApplyOptions configures a terraform apply invocation.
-//
-// PlanFile and Vars/VarFile are mutually exclusive: when PlanFile is set,
-// terraform ignores Vars, VarFile, and AutoApprove because the plan file
-// already encodes the full set of changes. If both are provided, PlanFile
-// takes precedence and the other fields are silently unused.
+// ApplyOptions configures a terraform apply invocation. When PlanFile is
+// set, Vars/VarFile/AutoApprove are silently ignored — the plan file already
+// encodes the full change set.
 type ApplyOptions struct {
 	// VarFile overrides the default terraform.tfvars path.
 	VarFile     string
@@ -113,18 +98,16 @@ type DestroyOptions struct {
 	Parallelism int
 	// Targets limits the destroy to specific resource addresses.
 	Targets []string
-	// UsePlan creates a destroy plan first, then applies it.
-	// Safer because it previews changes. Plan failures surface as errors
-	// rather than silently degrading to direct destroy.
+	// UsePlan creates a destroy plan first, then applies it; plan failures
+	// surface as errors, not a silent fallback to direct destroy.
 	UsePlan bool
 }
 
-// New constructs an Executor rooted at workDir with the default var-file
-// path (<workDir>/terraform.tfvars).
+// New constructs an Executor rooted at workDir with the default var-file path
+// (<workDir>/terraform.tfvars).
 func New(workDir string, opts ...Option) *Executor {
-	// SIGINT is terraform's documented soft-cancel: it triggers a graceful
-	// plan/apply abort and releases the state lock before exit, unlike the
-	// executor package's SIGTERM default.
+	// SIGINT is terraform's documented soft-cancel (graceful abort + lock
+	// release), unlike the executor's SIGTERM default.
 	e := &Executor{
 		workDir: workDir,
 		varFile: filepath.Join(workDir, "terraform.tfvars"),
@@ -143,7 +126,7 @@ func (t *Executor) run(ctx context.Context, args ...string) error {
 
 	result, err := t.exec.Run(ctx, "terraform", args...)
 	if err != nil {
-		return fmt.Errorf("terraform %s failed: %w", args[0], err)
+		return fmt.Errorf("terraform %s: %w", args[0], err)
 	}
 	if result.ExitCode != 0 {
 		return executor.NewExitError(ctx, "terraform "+args[0], result.ExitCode, result.Stderr)
@@ -151,8 +134,8 @@ func (t *Executor) run(ctx context.Context, args ...string) error {
 	return nil
 }
 
-// Init runs "terraform init" when the working directory is not already
-// initialized. A partial init (some artifacts missing) triggers a re-init.
+// Init runs terraform init unless already initialized; a partial init (missing
+// artifacts) triggers a re-init.
 func (t *Executor) Init(ctx context.Context) error {
 	stateFile := filepath.Join(t.workDir, "terraform.tfstate")
 	if err := checkStateMajorVersion(stateFile, t.logger); err != nil {
@@ -203,11 +186,9 @@ func (t *Executor) buildVarArgs(varFile string, vars map[string]string) []string
 	return args
 }
 
-// LockHint returns a *errtypes.ConfigError when the Terraform local-backend
-// lock file (.terraform.tfstate.lock.info) is present in WorkDir, indicating
-// a stale lock from a prior crashed run. Returns nil when absent. Callers
-// must not auto-unlock — the message names the lock ID so the operator can
-// run terraform force-unlock after confirming no live process holds it.
+// LockHint returns a *errtypes.ConfigError naming the stale lock ID when
+// Terraform's local-backend lock file is present, nil when absent. Callers
+// must not auto-unlock — the operator must confirm no live process holds it first.
 func (t *Executor) LockHint() error {
 	lockFile := filepath.Join(t.workDir, ".terraform.tfstate.lock.info")
 	if !system.FileExists(lockFile) {
@@ -239,16 +220,9 @@ func parseLockID(lockFile string) string {
 	return info.ID
 }
 
-// WithLockHint attaches the terraform state-lock diagnostic (see LockHint) to
-// err as structured next-step text when a stale local-backend lock is present,
-// preserving err's concrete type so a terraform failure exits with the same
-// code whether or not a stale lock is involved. Every errtypes category
-// implements HintAppender, so the hint rides along without introducing the
-// hint's own *errtypes.ConfigError into the chain — a bare errors.Join would
-// let exitCodeFor match ConfigError before err's own type. Returns err
-// unchanged when err is nil or no lock file is present. For a non-errtypes err
-// the hint is wrapped as plain text via %w, keeping err outermost so no
-// ConfigError enters the chain and the exit code stays put.
+// WithLockHint attaches the LockHint diagnostic to err as next-step text,
+// preserving err's concrete type so the exit code is unaffected. A
+// non-errtypes err gets the hint via a plain %w wrap so no ConfigError enters the chain.
 func (t *Executor) WithLockHint(err error) error {
 	if err == nil {
 		return nil
@@ -286,9 +260,7 @@ func (t *Executor) planArgs(opts PlanOptions) []string {
 	return args
 }
 
-// Plan runs "terraform plan" with the options in opts. When Destroy is true
-// the plan is a destruction plan; non-destroy plans fail closed on a stale
-// destroy override (see refuseStaleDestroyOverride).
+// Plan runs terraform plan with opts; non-destroy plans fail closed on a stale destroy override.
 func (t *Executor) Plan(ctx context.Context, opts PlanOptions) error {
 	if !opts.Destroy {
 		if err := t.refuseStaleDestroyOverride(); err != nil {
@@ -298,12 +270,8 @@ func (t *Executor) Plan(ctx context.Context, opts PlanOptions) error {
 	return t.run(ctx, t.planArgs(opts)...)
 }
 
-// PlanDetailed runs "terraform plan -detailed-exitcode" and reports whether
-// the plan contains pending changes. Unlike Plan, a non-zero exit is not
-// automatically a failure: terraform's -detailed-exitcode convention uses
-// exit 2 to mean "changes present," which this method reports as (true,
-// nil) rather than an error. Exit 0 means no changes (false, nil); any
-// other exit code is a genuine plan failure.
+// PlanDetailed runs terraform plan -detailed-exitcode; exit 2 means changes
+// are pending, exit 0 means none, and any other exit is a genuine failure.
 func (t *Executor) PlanDetailed(ctx context.Context, opts PlanOptions) (bool, error) {
 	if !opts.Destroy {
 		if err := t.refuseStaleDestroyOverride(); err != nil {
@@ -315,7 +283,7 @@ func (t *Executor) PlanDetailed(ctx context.Context, opts PlanOptions) (bool, er
 
 	result, err := t.exec.Run(ctx, "terraform", args...)
 	if err != nil {
-		return false, fmt.Errorf("terraform %s failed: %w", args[0], err)
+		return false, fmt.Errorf("terraform %s: %w", args[0], err)
 	}
 	switch result.ExitCode {
 	case 0:
@@ -327,9 +295,8 @@ func (t *Executor) PlanDetailed(ctx context.Context, opts PlanOptions) (bool, er
 	}
 }
 
-// PlanStreamed runs "terraform plan" streaming stdout and stderr directly to the
-// terminal. Use instead of Plan when the operator must see the plan output —
-// Plan captures into internal buffers and only surfaces stderr on failure.
+// PlanStreamed runs terraform plan, streaming stdout/stderr directly to the
+// terminal; use instead of Plan when the operator must see live output.
 func (t *Executor) PlanStreamed(ctx context.Context, opts PlanOptions) error {
 	if !opts.Destroy {
 		if err := t.refuseStaleDestroyOverride(); err != nil {
@@ -341,10 +308,9 @@ func (t *Executor) PlanStreamed(ctx context.Context, opts PlanOptions) error {
 	return t.exec.RunInteractive(ctx, "terraform", args...)
 }
 
-// Apply runs "terraform apply". When opts.PlanFile is set, Vars, VarFile,
-// and AutoApprove are ignored — the plan file encodes the full change set.
-// Fails closed on a stale destroy override; only Destroy's internal apply
-// (of a destroy plan) bypasses the guard.
+// Apply runs terraform apply; when opts.PlanFile is set, Vars/VarFile/
+// AutoApprove are ignored. Fails closed on a stale destroy override; only
+// Destroy's internal apply bypasses the guard.
 func (t *Executor) Apply(ctx context.Context, opts ApplyOptions) error {
 	if err := t.refuseStaleDestroyOverride(); err != nil {
 		return err
@@ -371,9 +337,8 @@ func (t *Executor) apply(ctx context.Context, opts ApplyOptions) error {
 	return t.run(ctx, args...)
 }
 
-// Destroy runs "terraform destroy". When opts.UsePlan is true the destroy
-// plan is generated first and applied, so plan failures surface cleanly
-// before any infra mutation.
+// Destroy runs terraform destroy; when opts.UsePlan is true, the plan is
+// generated first so failures surface before any mutation.
 func (t *Executor) Destroy(ctx context.Context, opts DestroyOptions) error {
 	if opts.UsePlan {
 		return t.destroyWithPlan(ctx, opts)
@@ -381,10 +346,8 @@ func (t *Executor) Destroy(ctx context.Context, opts DestroyOptions) error {
 	return t.destroyDirect(ctx, opts)
 }
 
-// destroyWithPlan runs `terraform plan -destroy` and then applies the plan.
-// Plan failures are returned to the caller; we do NOT silently fall back to
-// direct destroy because a plan failure usually signals an auth/state issue
-// the operator needs to see before mutating infra.
+// destroyWithPlan runs plan -destroy then applies it; plan failures are never
+// silently downgraded to direct destroy.
 func (t *Executor) destroyWithPlan(ctx context.Context, opts DestroyOptions) error {
 	planFile := filepath.Join(t.workDir, "destroy.tfplan")
 
@@ -396,19 +359,15 @@ func (t *Executor) destroyWithPlan(ctx context.Context, opts DestroyOptions) err
 	})
 
 	if planErr != nil {
-		return fmt.Errorf("terraform destroy plan failed: %w (re-run with an explicit fix or pass UsePlan=false to skip the plan step)", planErr)
+		return fmt.Errorf("destroy plan: %w (pass UsePlan=false to skip the plan step)", planErr)
 	}
 
-	// t.apply, not t.Apply: the destroy session legitimately runs with the
-	// transient override in place.
+	// t.apply, not t.Apply: the destroy session legitimately bypasses the override guard.
 	return t.apply(ctx, ApplyOptions{PlanFile: planFile})
 }
 
-// destroyDirect runs terraform destroy without an intermediate plan file.
-// Currently no caller — Destroy is always invoked with UsePlan=true today —
-// but kept as an emergency-destroy path so the argv shape (parallelism,
-// -target injection) stays pinned by regression coverage if an opt-in
-// caller lands later.
+// destroyDirect has no current caller; kept as an emergency-destroy path pinned
+// by regression coverage.
 func (t *Executor) destroyDirect(ctx context.Context, opts DestroyOptions) error {
 	args := []string{"destroy", "-lock-timeout=" + defaultLockTimeout}
 	args = append(args, t.buildVarArgs(opts.VarFile, nil)...)
@@ -436,15 +395,13 @@ const (
 	StateStatusEmpty StateStatusValue = "empty"
 	// StateStatusPopulated means at least one managed resource is present.
 	StateStatusPopulated StateStatusValue = "populated"
-	// StateStatusCorrupt means the file exists but cannot be read or parsed.
-	// Callers must not treat this as "already destroyed" — surface a
-	// recovery error instead.
+	// StateStatusCorrupt means the file exists but cannot be read or parsed;
+	// never treat this as already-destroyed.
 	StateStatusCorrupt StateStatusValue = "corrupt"
 )
 
-// StateStatus classifies the terraform.tfstate in WorkDir. It distinguishes
-// corrupt files from genuinely empty or missing ones so callers can surface
-// actionable diagnostics instead of treating corruption as "already destroyed".
+// StateStatus classifies the terraform.tfstate in WorkDir, distinguishing
+// corrupt files from empty/missing ones.
 func (t *Executor) StateStatus() StateStatusValue {
 	stateFile := filepath.Join(t.workDir, "terraform.tfstate")
 	if !system.FileExists(stateFile) {
@@ -469,16 +426,14 @@ func (t *Executor) StateStatus() StateStatusValue {
 	return StateStatusPopulated
 }
 
-// HasState reports whether WorkDir contains a terraform.tfstate with at least
-// one managed resource. Returns false for missing, empty, or corrupt state.
+// HasState reports whether WorkDir's terraform.tfstate has at least one managed resource.
 func (t *Executor) HasState() bool {
 	return t.StateStatus() == StateStatusPopulated
 }
 
-// NewestBakSnapshot returns the absolute path of the most recent
-// terraform.tfstate.*.bak file in WorkDir, or "" when none are present.
-// os.ReadDir entries are name-sorted; timestamp-encoded names are therefore
-// chronologically ordered so the last matching entry is the newest.
+// NewestBakSnapshot returns the most recent terraform.tfstate.*.bak path in
+// WorkDir, or "" when none exist; timestamp-encoded names sort chronologically
+// under os.ReadDir's name order.
 func (t *Executor) NewestBakSnapshot() string {
 	entries, err := os.ReadDir(t.workDir)
 	if err != nil {
@@ -495,11 +450,8 @@ func (t *Executor) NewestBakSnapshot() string {
 }
 
 // SnapshotState copies terraform.tfstate to terraform.tfstate.<timestamp>.bak
-// in WorkDir immediately before a destructive operation. Returns the snapshot
-// path so callers can include it in error messages. Returns ("", nil) when no
-// state file is present — callers treat an empty path as "nothing to snapshot".
-// A write failure is a hard error; callers must not proceed with the
-// destructive operation without a saved backup.
+// before a destructive operation ("", nil when no state file exists). A
+// write failure is a hard error; callers must not proceed without a saved backup.
 func (t *Executor) SnapshotState(ctx context.Context) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
@@ -530,10 +482,8 @@ func (t *Executor) SnapshotState(ctx context.Context) (string, error) {
 	return dst, nil
 }
 
-// pruneSnapshots removes older terraform.tfstate.*.bak files from WorkDir,
-// keeping only the 5 most recent. os.ReadDir returns entries sorted by name;
-// because names encode UTC timestamps (lexicographic == chronological), no
-// additional sort step is needed.
+// pruneSnapshots keeps the 5 most recent terraform.tfstate.*.bak files by
+// os.ReadDir's chronological name order.
 func (t *Executor) pruneSnapshots() {
 	entries, err := os.ReadDir(t.workDir)
 	if err != nil {
@@ -560,8 +510,6 @@ func (t *Executor) pruneSnapshots() {
 
 // PruneBakSnapshotsExceptNewest removes every terraform.tfstate.*.bak file in
 // WorkDir except the most recent, returning its path (or "" if none exist).
-// Mirrors CleanupPlans' policy of keeping one rollback artefact rather than
-// deleting every snapshot outright.
 func (t *Executor) PruneBakSnapshotsExceptNewest() (string, error) {
 	newest := t.NewestBakSnapshot()
 	entries, err := os.ReadDir(t.workDir)
@@ -585,9 +533,8 @@ func (t *Executor) PruneBakSnapshotsExceptNewest() (string, error) {
 	return newest, errors.Join(errs...)
 }
 
-// ZeroizeEnv delegates to the inner executor's ZeroizeEnv, bounding the
-// lifetime of plaintext credential strings in process memory. Call via defer
-// after all terraform operations complete.
+// ZeroizeEnv delegates to the inner executor's ZeroizeEnv; call via defer after
+// terraform operations complete.
 func (t *Executor) ZeroizeEnv() {
 	if t.exec == nil {
 		return
@@ -595,12 +542,12 @@ func (t *Executor) ZeroizeEnv() {
 	t.exec.ZeroizeEnv()
 }
 
-// Output runs "terraform output -json" and returns the decoded top-level
-// map. Each value remains JSON-encoded; callers unmarshal individual entries.
+// Output runs terraform output -json; each value remains JSON-encoded for
+// callers to unmarshal individually.
 func (t *Executor) Output(ctx context.Context) (map[string]json.RawMessage, error) {
 	result, err := t.exec.RunOutputChecked(ctx, 0, "terraform", "output", "-json")
 	if err != nil {
-		return nil, fmt.Errorf("terraform output failed: %w", err)
+		return nil, fmt.Errorf("terraform output: %w", err)
 	}
 	if result.Truncated {
 		return nil, fmt.Errorf("terraform output: output truncated after %d bytes", len(result.Stdout))
@@ -612,9 +559,8 @@ func (t *Executor) Output(ctx context.Context) (map[string]json.RawMessage, erro
 	return out, nil
 }
 
-// CleanupPlans removes tfplan and destroy.tfplan; non-existent files are
-// ignored. terraform.tfstate.backup is intentionally left so the operator
-// retains a rollback artefact if the live tfstate is later corrupted.
+// CleanupPlans removes tfplan and destroy.tfplan; terraform.tfstate.backup is
+// left as the operator's rollback artefact.
 func (t *Executor) CleanupPlans() error {
 	var errs []error
 	files := []string{

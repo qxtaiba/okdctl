@@ -1,12 +1,6 @@
-// Package cleanup provides utilities for removing OKD cluster artifacts.
-// Cleanup is best-effort: a mid-run crash leaves workDir in a partially-removed
-// state with no resume capability. Terraform state is removed last so destroy
-// stays re-runnable as long as earlier steps have not corrupted it.
+// Package cleanup removes OKD cluster artifacts best-effort; terraform state
+// is removed last so destroy stays re-runnable after a mid-run crash.
 package cleanup
-
-// The exported subsystem funcs (WorkDirectory, WebServer, Dnsmasq, Packages,
-// IgnitionCerts, GenerateSummary, ValidKinds) are the package's public API
-// surface even though today's only callers are intra-package.
 
 import (
 	"context"
@@ -23,6 +17,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
@@ -30,8 +25,7 @@ import (
 // Kind selects which cleanup steps run.
 type Kind string
 
-// Cleanup kinds. Full removes everything; the *Only kinds scope cleanup to
-// a single subsystem.
+// Cleanup kinds: Full removes everything; the *Only kinds scope to one subsystem.
 const (
 	Full          Kind = "full"
 	WorkOnly      Kind = "work-only"
@@ -45,8 +39,7 @@ func ValidKinds() []Kind {
 	return []Kind{Full, WorkOnly, WebOnly, HAProxyOnly, TerraformOnly}
 }
 
-// KindStrings returns the string representations of ValidKinds, suitable for
-// error messages and help text.
+// KindStrings returns the string representations of ValidKinds.
 func KindStrings() []string {
 	ks := ValidKinds()
 	ss := make([]string, len(ks))
@@ -61,8 +54,11 @@ func (k Kind) IsValid() bool {
 	return slices.Contains(ValidKinds(), k)
 }
 
-// Validate returns a *errtypes.ConfigError when k is not a recognised Kind.
+// Validate returns a *errtypes.ConfigError when k is empty or not a recognised Kind.
 func (k Kind) Validate() error {
+	if k == "" {
+		return &errtypes.ConfigError{Msg: "cleanup kind not set"}
+	}
 	if k.IsValid() {
 		return nil
 	}
@@ -82,20 +78,16 @@ type Options struct {
 	ClusterName    string
 	RemovePackages bool
 	BinDir         string
-	// PostDestroy gates removal of an empty terraform.tfstate after a
-	// successful terraform destroy. Must not be set on setup-flow runs.
+	// PostDestroy gates removal of an empty terraform.tfstate after destroy;
+	// must not be set on setup-flow runs.
 	PostDestroy bool
-	// ForceCredentialWipe permits removing cluster-config (auth/kubeconfig
-	// and auth/kubeadmin-password) even while terraform state still has
-	// resources. Set it only after explicit operator consent naming
-	// credential loss (deploy --fresh); default false preserves the
-	// credentials of a live cluster.
+	// ForceCredentialWipe removes cluster-config even with live terraform
+	// state; only set via explicit consent (deploy --fresh).
 	ForceCredentialWipe bool
 }
 
 // NewOptions builds the default cleanup Options for cfg, projectRoot, and
-// kind. VIP, RemovePackages, and PostDestroy are not derivable from cfg
-// alone and stay field-by-field overrides after construction.
+// kind. VIP, RemovePackages, and PostDestroy must be set by the caller afterward.
 func NewOptions(cfg *config.Config, projectRoot string, kind Kind) Options {
 	return Options{
 		BaseOptions:    phase.NewBaseOptions(cfg, projectRoot),
@@ -107,11 +99,7 @@ func NewOptions(cfg *config.Config, projectRoot string, kind Kind) Options {
 	}
 }
 
-// Phase drives a cleanup run. Like destroy it deliberately exposes no
-// StepDefs listing (okdctl cleanup --dry-run previews targets at the CLI
-// layer), and Execute takes no cfg and returns no StepResults: every input
-// the steps need is carried on Options, and per-step outcomes surface as
-// the summary step's joined error.
+// Phase drives a cleanup run; per-step outcomes surface via the summary step's joined error.
 type Phase struct {
 	phase.BasePhase
 }
@@ -123,9 +111,8 @@ func New(opts ...phase.BasePhaseOption) *Phase {
 	return &Phase{BasePhase: bp}
 }
 
-// Execute runs the cleanup steps selected by opts.Kind. Individual step
-// failures are accumulated and returned as a joined error; a partial run
-// still attempts the remaining steps.
+// Execute runs the cleanup steps selected by opts.Kind; step failures
+// accumulate into a joined error and a partial run still attempts the rest.
 func (p *Phase) Execute(ctx context.Context, opts *Options) error {
 	return executeWithRecorder(ctx, opts, p.Log, p.Recorder)
 }
@@ -143,11 +130,7 @@ const (
 	StepCleanupSummary       distribution.StepID = "cleanup-summary"
 )
 
-// cleanupTracker buffers per-step errors and the names of failed subsystems
-// for the final summary step. Orchestrator.Run does not propagate NonFatal
-// step errors; the summary step returns errors.Join(t.errs...) so callers
-// receive a joined error when one or more subsystem cleanups fail. Safe
-// without a mutex because Orchestrator.Run executes steps serially.
+// cleanupTracker buffers per-step errors; safe without a mutex since steps run serially.
 type cleanupTracker struct {
 	errs  []error
 	names []string
@@ -160,17 +143,9 @@ func (t *cleanupTracker) onError(name string) func(error) {
 	}
 }
 
-func (t *cleanupTracker) failedNames() []string {
-	return t.names
-}
-
-// executeWithRecorder runs the cleanup step sequence with optional metrics
-// wiring; Phase.Execute forwards p.Recorder (matching setup/install/
-// postinstall), tests pass nil.
+// executeWithRecorder runs the cleanup step sequence with optional metrics wiring; rec may be nil.
 func executeWithRecorder(ctx context.Context, opts *Options, logger *slog.Logger, rec distribution.MetricsRecorder) error {
-	if opts.Kind == "" {
-		return &errtypes.ConfigError{Msg: "cleanup kind not set"}
-	}
+	logger = logutil.OrNop(logger)
 	if err := opts.Kind.Validate(); err != nil {
 		return err
 	}
@@ -181,13 +156,8 @@ func executeWithRecorder(ctx context.Context, opts *Options, logger *slog.Logger
 	return o.Run(ctx)
 }
 
-// retainClusterCredentials decides whether the work-directory step must
-// preserve cluster-config: populated terraform state means the VMs are
-// still live, so deleting the only admin credentials (kubeconfig,
-// kubeadmin-password) would orphan a running cluster. Corrupt state fails
-// closed with an error — it cannot vouch that the cluster is gone. Only
-// ForceCredentialWipe (explicit operator consent, e.g. deploy --fresh)
-// bypasses both outcomes.
+// retainClusterCredentials preserves cluster-config when terraform state is
+// live or corrupt (fail-closed); ForceCredentialWipe bypasses both.
 func retainClusterCredentials(opts *Options, logger *slog.Logger) (bool, error) {
 	if opts.ForceCredentialWipe {
 		return false, nil
@@ -211,7 +181,7 @@ func retainClusterCredentials(opts *Options, logger *slog.Logger) (bool, error) 
 func cleanupSummaryStep(opts *Options, t *cleanupTracker, logger *slog.Logger) distribution.StepDef {
 	return distribution.StepDef{
 		ID: StepCleanupSummary, Name: "cleanup summary",
-		Desc: "printing cleanup summary", NonFatal: false,
+		NonFatal:  false,
 		ReRunSafe: distribution.ReRunSafeYes,
 		Exec: func(_ context.Context) error {
 			printSummary(opts, t, logger)
@@ -223,7 +193,7 @@ func cleanupSummaryStep(opts *Options, t *cleanupTracker, logger *slog.Logger) d
 func ignitionCertsCleanupStep(opts *Options, t *cleanupTracker, logger *slog.Logger) distribution.StepDef {
 	return distribution.StepDef{
 		ID: StepCleanupIgnitionCerts, Name: "cleanup ignition certs",
-		Desc: "removing generated ignition TLS certs", NonFatal: true,
+		NonFatal:  true,
 		ReRunSafe: distribution.ReRunSafeYes,
 		AlreadyDone: func(_ context.Context) (bool, error) {
 			return !system.DirExists(filepath.Join(opts.ProjectRoot, "certs", "ignition")), nil
@@ -233,14 +203,12 @@ func ignitionCertsCleanupStep(opts *Options, t *cleanupTracker, logger *slog.Log
 	}
 }
 
-// terraformCleanupStep removes generated terraform artifacts and, on a
-// post-destroy sweep, the state file — but only when the state is provably
-// resource-free. Corrupt state fails closed the same way retainClusterCredentials
-// does: it cannot vouch that the tracked VMs are gone, so the file is preserved.
+// terraformCleanupStep removes terraform artifacts and, post-destroy, the state
+// file only when provably resource-free.
 func terraformCleanupStep(opts *Options, t *cleanupTracker, logger *slog.Logger) distribution.StepDef {
 	return distribution.StepDef{
 		ID: StepCleanupTerraform, Name: "cleanup terraform",
-		Desc: "removing generated terraform artifacts", NonFatal: true,
+		NonFatal:    true,
 		ReRunSafe:   distribution.ReRunSafeNo,
 		AlreadyDone: func(_ context.Context) (bool, error) { return terraformCleanupDone(opts) },
 		Exec: func(ctx context.Context) error {
@@ -275,7 +243,7 @@ func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 
 	workDirStep := distribution.StepDef{
 		ID: StepCleanupWorkDir, Name: "cleanup work directory",
-		Desc: "removing generated artifacts from work directory", NonFatal: true,
+		NonFatal:  true,
 		ReRunSafe: distribution.ReRunSafeNo,
 		AlreadyDone: func(_ context.Context) (bool, error) {
 			return !system.DirExists(opts.WorkDir), nil
@@ -292,7 +260,7 @@ func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 
 	webServerStep := distribution.StepDef{
 		ID: StepCleanupWebServer, Name: "cleanup web server",
-		Desc: "removing ignition files from web server", NonFatal: true,
+		NonFatal:  true,
 		ReRunSafe: distribution.ReRunSafeYes,
 		Exec:      func(ctx context.Context) error { return WebServer(ctx, opts.HTTPServerRoot, logger) },
 		OnError:   t.onError("web server"),
@@ -300,7 +268,7 @@ func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 
 	haproxyStep := distribution.StepDef{
 		ID: StepCleanupHAProxy, Name: "cleanup haproxy",
-		Desc: "stopping haproxy and removing its configuration", NonFatal: true,
+		NonFatal:  true,
 		ReRunSafe: distribution.ReRunSafeNo,
 		AlreadyDone: func(ctx context.Context) (bool, error) {
 			return !system.FileExists(opts.HAProxyConfig) && !system.IsServiceActive(ctx, "haproxy"), nil
@@ -311,7 +279,7 @@ func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 
 	apacheStep := distribution.StepDef{
 		ID: StepCleanupApache, Name: "cleanup apache",
-		Desc: "stopping apache httpd service", NonFatal: true,
+		NonFatal:  true,
 		ReRunSafe: distribution.ReRunSafeYes,
 		Exec:      func(ctx context.Context) error { return Apache(ctx, logger) },
 		OnError:   t.onError("apache"),
@@ -319,7 +287,7 @@ func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 
 	dnsmasqStep := distribution.StepDef{
 		ID: StepCleanupDnsmasq, Name: "cleanup dnsmasq",
-		Desc: "stopping dnsmasq and removing cluster dns configuration", NonFatal: true,
+		NonFatal:  true,
 		ReRunSafe: distribution.ReRunSafeNo,
 		AlreadyDone: func(_ context.Context) (bool, error) {
 			if opts.ClusterName == "" {
@@ -339,7 +307,7 @@ func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 
 	packagesStep := distribution.StepDef{
 		ID: StepCleanupPackages, Name: "cleanup packages",
-		Desc: "removing installed packages and tool binaries", NonFatal: true,
+		NonFatal:   true,
 		ReRunSafe:  distribution.ReRunSafeYes,
 		SkipWhen:   func() bool { return !opts.RemovePackages },
 		SkipReason: "package removal disabled",

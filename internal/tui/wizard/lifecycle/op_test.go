@@ -20,8 +20,8 @@ func TestOpStepSelectsOperations(t *testing.T) {
 	if st.Op != node.OpResize || st.Resume || st.Ack {
 		t.Fatalf("default selection: Op=%v Resume=%v Ack=%v, want resize/false/false", st.Op, st.Resume, st.Ack)
 	}
-	pressDown(s) // resize -> add
-	pressDown(s) // add -> remove
+	pressDown(s)
+	pressDown(s)
 	if err := s.Apply(nil); err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +36,7 @@ func TestOpStepMarkerAddsResumeOptionAndArmsAck(t *testing.T) {
 		Marker: &node.OpMarker{Op: node.OpResize, Target: "homelab-master0", Step: node.StepPowerCycle},
 	}
 	s := NewOpStep(st)
-	if err := s.Apply(nil); err != nil { // first option = resume
+	if err := s.Apply(nil); err != nil {
 		t.Fatal(err)
 	}
 	if !st.Resume || st.Op != node.OpResize || st.Ack {
@@ -46,8 +46,8 @@ func TestOpStepMarkerAddsResumeOptionAndArmsAck(t *testing.T) {
 		t.Fatalf("resume must seed the marker target into scope: %+v", st.Scope)
 	}
 
-	pressDown(s) // resume -> resize
-	pressDown(s) // resize -> add
+	pressDown(s)
+	pressDown(s)
 	if err := s.Apply(nil); err != nil {
 		t.Fatal(err)
 	}

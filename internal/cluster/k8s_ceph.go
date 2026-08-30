@@ -7,15 +7,11 @@ import (
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/executor"
 )
 
 // CephHealth summarizes rook-ceph fitness for a node op. Applicable is false
-// when no rook-ceph toolbox is present (not every cluster runs Ceph) — callers
-// skip the gate. Healthy reflects STRUCTURAL health only: mons in quorum, OSDs
-// up/in, PGs active+clean. Benign non-structural warnings (e.g. BlueStore slow
-// ops) are intentionally ignored, so a cluster whose steady state is
-// HEALTH_WARN still gates cleanly.
+// with no toolbox pod; Healthy means structural health only (quorum, OSD
+// up/in, PG active+clean) — benign warnings like BlueStore slow ops don't count.
 type CephHealth struct {
 	Applicable   bool
 	Healthy      bool
@@ -28,9 +24,8 @@ type CephHealth struct {
 	DegradedPGs  int
 }
 
-// CephHealthy runs `ceph -s -f json` in the rook-ceph toolbox pod and evaluates
-// structural health. When no toolbox pod exists it returns Applicable=false so
-// non-Ceph clusters skip the gate rather than failing.
+// CephHealthy runs `ceph -s -f json` in the toolbox pod and evaluates
+// structural health, returning Applicable=false when no toolbox pod exists.
 func (c *Client) CephHealthy(ctx context.Context) (CephHealth, error) {
 	pods, err := c.PodsForSelector(ctx, "", "app=rook-ceph-tools")
 	if err != nil {
@@ -41,7 +36,8 @@ func (c *Client) CephHealthy(ctx context.Context) (CephHealth, error) {
 		return CephHealth{Applicable: false}, nil
 	}
 
-	raw, err := c.execCephStatus(ctx, tools.Namespace, tools.Name)
+	raw, err := c.getJSONChecked(ctx, "ceph: exec ceph -s",
+		"exec", "-n", tools.Namespace, tools.Name, "--", "ceph", "-s", "-f", "json")
 	if err != nil {
 		return CephHealth{}, err
 	}
@@ -57,24 +53,6 @@ func firstScheduledPod(pods []PodPlacement) *PodPlacement {
 	return nil
 }
 
-func (c *Client) execCephStatus(ctx context.Context, namespace, pod string) ([]byte, error) {
-	result, err := c.runOutput(ctx, "exec", "-n", namespace, pod, "--", "ceph", "-s", "-f", "json")
-	if err != nil {
-		return nil, err
-	}
-	if result.ExitCode != 0 {
-		return nil, &errtypes.ClusterError{
-			Msg: "ceph: exec ceph -s",
-			Err: executor.NewExitError(ctx, c.CLI+" exec rook-ceph-tools", result.ExitCode, strings.TrimSpace(result.Stderr)),
-		}
-	}
-	if result.Truncated {
-		return nil, &errtypes.ClusterError{Msg: "ceph: status output truncated; cannot parse"}
-	}
-	return []byte(result.Stdout), nil
-}
-
-// cephStatus is the subset of `ceph -s -f json` the structural check reads.
 type cephStatus struct {
 	QuorumNames []string `json:"quorum_names"`
 	Monmap      struct {
@@ -91,9 +69,7 @@ type cephStatus struct {
 	} `json:"pgmap"`
 }
 
-// cephOsdmap handles both the flat (Reef+) and nested (older) osdmap shapes:
-// newer ceph reports counts on osdmap directly, older nests them under
-// osdmap.osdmap.
+// cephOsdmap handles both the flat (Reef+) and nested (older) osdmap shapes.
 type cephOsdmap struct {
 	NumOsds   int         `json:"num_osds"`
 	NumUpOsds int         `json:"num_up_osds"`
@@ -108,12 +84,8 @@ func (o cephOsdmap) resolve() cephOsdmap {
 	return o
 }
 
-// parseCephHealth applies the structural rule: healthy iff every mon is in
-// quorum, every OSD is up and in, and every PG is active+clean. A PG counts as
-// clean when its state contains both "active" and "clean" — this admits routine
-// scrubbing (active+clean+scrubbing) while rejecting any recovery/degraded/
-// undersized/peering/down state, which is exactly the mid-rebalance condition a
-// node op must wait out.
+// parseCephHealth requires every mon in quorum, every OSD up/in, and every
+// PG active+clean; scrubbing counts as clean, degraded/recovering does not.
 func parseCephHealth(data []byte) (CephHealth, error) {
 	var s cephStatus
 	if err := json.Unmarshal(data, &s); err != nil {

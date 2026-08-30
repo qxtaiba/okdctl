@@ -1,10 +1,5 @@
 ---
 schemaVersion: "v2"
-
-# Production-Ready Cluster Configuration
-# ======================================
-# This configuration creates a highly available production cluster
-# with all features enabled.
 ---
 cluster:
   name: production
@@ -25,12 +20,12 @@ topology:
     count: 3 # HA control plane
     cpu: 8
     memory_mb: 32768 # 32 GB
-    disk_gb: 200 # 200 GB
+    disk_gb: 200
   workers:
     count: 5
     cpu: 16
     memory_mb: 65536 # 64 GB
-    disk_gb: 500 # 500 GB
+    disk_gb: 500
 networking:
   machine_cidr: 192.168.1.0/24
   pod_cidr: 10.128.0.0/14

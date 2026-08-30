@@ -6,11 +6,7 @@ import (
 	"fmt"
 )
 
-// disabledCatalogSources are the default OperatorHub CatalogSources whose
-// index images require a Red Hat subscription to pull. No OKD cluster
-// carries one, so these index pods never resolve and the operators they
-// list can never be installed (okd-project/okd#2058). community-operators
-// needs no subscription and is left enabled.
+// disabledCatalogSources need a Red Hat subscription OKD lacks (okd-project/okd#2058).
 var disabledCatalogSources = []string{"redhat-operators", "certified-operators", "redhat-marketplace"}
 
 type operatorHubSource struct {
@@ -37,11 +33,8 @@ func buildOperatorHubPatch(names []string) (string, error) {
 	return string(out), nil
 }
 
-// disableSubscriptionGatedCatalogSources merge-patches
-// operatorhub.config.openshift.io/cluster to disable the subscription-gated
-// default CatalogSources. A merge patch replaces spec.sources wholesale,
-// which is safe here since this runs once against a freshly installed
-// cluster with an empty sources list.
+// Merge-patches operatorhub.config.openshift.io/cluster; wholesale replace of
+// spec.sources is safe since this only ever runs once, on a fresh cluster.
 func (p *Phase) disableSubscriptionGatedCatalogSources(ctx context.Context) error {
 	patch, err := buildOperatorHubPatch(disabledCatalogSources)
 	if err != nil {
@@ -50,20 +43,8 @@ func (p *Phase) disableSubscriptionGatedCatalogSources(ctx context.Context) erro
 	return p.OcPatch(ctx, "operatorhub.config.openshift.io", "cluster", "merge", patch)
 }
 
-// insightsConfigManifest silences the InsightsDisabled alert (and its
-// SimpleContentAccessNotAvailable/InsightsRecommendationActive siblings),
-// which fires permanently on every OKD cluster because the Insights
-// operator requires a console.redhat.com token no OKD install can supply
-// (okd-project/okd#2058). Two other documented mechanisms were considered
-// and rejected: the openshift-config/support secret's disableInsightsAlerts
-// key also turns off legitimate remote-health data upload, a broader
-// behaviour change than silencing one unresolvable alert; an Alertmanager
-// silence lives in Alertmanager's own state store rather than a manifest,
-// so it cannot be applied idempotently via oc and does not survive a
-// cluster rebuild. The insights-config ConfigMap's alerting.disabled field
-// is insights-operator's own purpose-built, declarative switch for exactly
-// this alert, so it is the least invasive of the three (mechanism documented
-// at github.com/openshift/insights-operator/blob/master/docs/arch.md).
+// insightsConfigManifest silences the permanent InsightsDisabled alert — OKD
+// lacks the console.redhat.com token the Insights operator requires (okd-project/okd#2058).
 const insightsConfigManifest = `apiVersion: v1
 kind: ConfigMap
 metadata:

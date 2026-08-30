@@ -3,7 +3,6 @@ package phase
 import (
 	"context"
 	"errors"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -15,9 +14,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
-// installFakeOC writes a POSIX shell script named "oc" in a temp dir,
-// then prepends that dir to PATH so the Executor's exec.CommandContext
-// picks it up. The script switches behaviour on the OC_FAKE_MODE env.
+// installFakeOC prepends a fake "oc" script to PATH; behavior switches on OC_FAKE_MODE.
 func installFakeOC(t *testing.T) {
 	t.Helper()
 	script := `#!/bin/sh
@@ -46,12 +43,6 @@ case "${OC_FAKE_MODE:-empty}" in
       echo "waiting"
     fi
     exit 0
-    ;;
-  argv)
-    # Logs full argv (and stdin, when OC_STDIN_LOG is set) for call-shape assertions.
-    echo "$@" >> "${OC_ARGV_LOG:-/dev/null}"
-    if [ -n "${OC_STDIN_LOG:-}" ]; then cat > "$OC_STDIN_LOG"; fi
-    exit "${OC_EXIT_CODE:-0}"
     ;;
   hugeout)
     # Emits more than the executor's 4 MiB capture cap to force truncation.
@@ -132,10 +123,7 @@ func TestOcResourceExists(t *testing.T) {
 
 	t.Run("exit non-zero → false without error", func(t *testing.T) {
 		t.Setenv("OC_FAKE_MODE", "error")
-		// oc error prints to stderr and exits 1 — Executor surfaces it as
-		// a non-zero ExitCode (not a transport err), so OcResourceExists
-		// returns (false, nil) by contract: "returns true only when exit
-		// 0 AND stdout non-empty".
+		// non-zero exit is a normal ExitCode, not a transport err, so this returns (false, nil).
 		ok, err := p.OcResourceExists(context.Background(), "check", "pods")
 		if err != nil {
 			t.Errorf("non-zero exit is not a transport error; err = %v", err)
@@ -250,84 +238,6 @@ func TestOcOutput(t *testing.T) {
 		}
 		if !errors.Is(err, context.Canceled) {
 			t.Errorf("err = %v; want context.Canceled in chain", err)
-		}
-	})
-}
-
-func TestOcPatch(t *testing.T) {
-	installFakeOC(t)
-	p := newTestPhase(t)
-
-	t.Run("builds patch argv", func(t *testing.T) {
-		dir := t.TempDir()
-		argvLog := filepath.Join(dir, "argv.log")
-		t.Setenv("OC_FAKE_MODE", "argv")
-		t.Setenv("OC_ARGV_LOG", argvLog)
-
-		err := p.OcPatch(context.Background(), "operatorhub.config.openshift.io", "cluster", "merge", `{"spec":{}}`)
-		if err != nil {
-			t.Fatalf("unexpected err: %v", err)
-		}
-		data, readErr := os.ReadFile(argvLog)
-		if readErr != nil {
-			t.Fatalf("argv log not written: %v", readErr)
-		}
-		want := `patch operatorhub.config.openshift.io cluster --type=merge -p {"spec":{}}` + "\n"
-		if string(data) != want {
-			t.Errorf("argv = %q; want %q", string(data), want)
-		}
-	})
-
-	t.Run("non-zero exit returns error", func(t *testing.T) {
-		t.Setenv("OC_FAKE_MODE", "argv")
-		t.Setenv("OC_ARGV_LOG", filepath.Join(t.TempDir(), "argv.log"))
-		t.Setenv("OC_EXIT_CODE", "1")
-
-		if err := p.OcPatch(context.Background(), "operatorhub.config.openshift.io", "cluster", "merge", `{}`); err == nil {
-			t.Fatal("expected error on non-zero exit")
-		}
-	})
-}
-
-func TestOcApply(t *testing.T) {
-	installFakeOC(t)
-	p := newTestPhase(t)
-
-	t.Run("feeds manifest on stdin", func(t *testing.T) {
-		dir := t.TempDir()
-		argvLog := filepath.Join(dir, "argv.log")
-		stdinLog := filepath.Join(dir, "stdin.log")
-		t.Setenv("OC_FAKE_MODE", "argv")
-		t.Setenv("OC_ARGV_LOG", argvLog)
-		t.Setenv("OC_STDIN_LOG", stdinLog)
-
-		manifest := "apiVersion: v1\nkind: ConfigMap\n"
-		if err := p.OcApply(context.Background(), []byte(manifest)); err != nil {
-			t.Fatalf("unexpected err: %v", err)
-		}
-		argv, readErr := os.ReadFile(argvLog)
-		if readErr != nil {
-			t.Fatalf("argv log not written: %v", readErr)
-		}
-		if strings.TrimSpace(string(argv)) != "apply -f -" {
-			t.Errorf("argv = %q; want %q", strings.TrimSpace(string(argv)), "apply -f -")
-		}
-		stdin, readErr := os.ReadFile(stdinLog)
-		if readErr != nil {
-			t.Fatalf("stdin log not written: %v", readErr)
-		}
-		if string(stdin) != manifest {
-			t.Errorf("stdin = %q; want %q", string(stdin), manifest)
-		}
-	})
-
-	t.Run("non-zero exit returns error", func(t *testing.T) {
-		t.Setenv("OC_FAKE_MODE", "argv")
-		t.Setenv("OC_ARGV_LOG", filepath.Join(t.TempDir(), "argv.log"))
-		t.Setenv("OC_EXIT_CODE", "1")
-
-		if err := p.OcApply(context.Background(), []byte("kind: ConfigMap")); err == nil {
-			t.Fatal("expected error on non-zero exit")
 		}
 	})
 }

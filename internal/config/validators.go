@@ -74,11 +74,8 @@ func validateEnums(cfg *Config, result *ValidationResult) {
 		result.AddError(FieldProviderType, fmt.Sprintf("unsupported provider: %s", cfg.Provider.Type))
 	}
 
-	// The charset gate must run on every load path: env is filepath.Join'd into
-	// the workspace path and becomes the cwd for the root-privileged terraform
-	// init/apply/destroy, so a "../" value must fail closed here. The directory
-	// existence check lives in validateTerraformEnvDir (ScopeFiles), which is
-	// projectRoot-aware.
+	// env becomes root-privileged terraform's cwd, so "../" must fail closed
+	// here; validateTerraformEnvDir checks dir existence separately.
 	if env := cfg.Deployment.TerraformEnv; env != "" {
 		if err := ValidateTerraformEnv(env); err != nil {
 			result.AddError(FieldDeploymentTerraformEnv, err.Error())
@@ -86,18 +83,11 @@ func validateEnums(cfg *Config, result *ValidationResult) {
 	}
 }
 
-// validateTerraformEnvDir requires a matching environment directory under
-// projectRoot. "production" ships in the repo and is trusted without a disk
-// check so DefaultConfig()-based callers (including tests run from a
-// package-local CWD) never trip this; a genuinely custom environment must
-// have a matching directory or terraform fails deep in the install phase
-// instead of here. An empty projectRoot resolves against the process cwd,
-// which only matches materialization when the caller runs at the workspace
-// root — deploy's gate passes its resolved root explicitly.
+// validateTerraformEnvDir requires a matching directory under projectRoot for
+// custom environments; "production" is trusted without a disk check.
 func validateTerraformEnvDir(cfg *Config, projectRoot string, result *ValidationResult) {
 	env := cfg.Deployment.TerraformEnv
-	// A pattern-invalid env already fails validateEnums; joining it into a
-	// path here would only add a second, noisier error.
+	// A pattern-invalid env already failed validateEnums; avoid a duplicate error here.
 	if env == "" || env == defaultTerraformEnv || ValidateTerraformEnv(env) != nil {
 		return
 	}
@@ -166,10 +156,8 @@ func validateNetworking(cfg *Config, result *ValidationResult) {
 		}
 	}
 
-	// bastion.ip and static_ip.dns flow verbatim into every node's kernel
-	// command line (nameserver=%s via --live-karg-append); a non-IP value
-	// injects extra kargs, so reject anything that is not a bare IP literal.
-	// Empty is tolerated for non-static-IP deployments.
+	// bastion.ip/static_ip.dns feed the kernel cmdline verbatim
+	// (nameserver=%s via --live-karg-append); a non-IP value injects extra kargs.
 	if cfg.Networking.Bastion.IP != "" && !IsValidIP(cfg.Networking.Bastion.IP) {
 		result.AddError(FieldNetworkingBastionIP, "must be a valid IP address")
 	}
@@ -246,12 +234,9 @@ func validateAdvancedNetworking(cfg *Config, result *ValidationResult) {
 		}
 	}
 
-	// One physical bastion host runs dnsmasq (the DNS server baked into
-	// every node's static-ip kernel args, see provision/kargs.go) and the
-	// ignition HTTPS server (apache binds HTTPServer.IgnitionServerIP
-	// directly, see provision/apache.go). A hand-edited config that points
-	// either at a different host than networking.bastion.ip fails deep in
-	// setup with no config-time diagnostic otherwise.
+	// The bastion runs both dnsmasq (provision/kargs.go) and the ignition
+	// server (provision/apache.go); a mismatch here fails deep in setup
+	// with no earlier diagnostic.
 	if bastionIP != "" {
 		if dns := cfg.Networking.StaticIP.DNS; dns != "" && dns != bastionIP {
 			result.AddError(FieldNetworkingStaticIPDNS, "must match networking.bastion.ip — dnsmasq (the VMs' DNS server) runs on the bastion")
@@ -261,37 +246,17 @@ func validateAdvancedNetworking(cfg *Config, result *ValidationResult) {
 		}
 	}
 
-	type namedIP struct {
-		name string
-		ip   string
-	}
-	uniqueIPs := []namedIP{
-		{"gateway", gateway},
-		{"bastion.ip", bastionIP},
-	}
-
-	seen := make(map[netip.Addr]string)
-	for _, nip := range uniqueIPs {
-		if nip.ip == "" {
-			continue
-		}
-		addr, err := netip.ParseAddr(nip.ip)
-		if err != nil {
-			continue
-		}
-		if prevField, exists := seen[addr]; exists {
-			result.AddError(fmt.Sprintf("networking.%s", nip.name),
-				fmt.Sprintf("ip %s is already used by %s", nip.ip, prevField))
-		} else {
-			seen[addr] = nip.name
+	// Parsed-address comparison catches textual variants of the same IP.
+	if gwAddr, err := netip.ParseAddr(gateway); err == nil {
+		if bAddr, err := netip.ParseAddr(bastionIP); err == nil && bAddr == gwAddr {
+			result.AddError(FieldNetworkingBastionIP,
+				fmt.Sprintf("ip %s is already used by gateway", bastionIP))
 		}
 	}
 }
 
-// validateStaticIPCollisions rejects a static_ip.start equal to the Proxmox
-// host or ignition server IP. The bootstrap node boots at start (see
-// StaticIPConfig.Start), so an equal address ARP-fights a live host on the
-// machine network.
+// validateStaticIPCollisions rejects static_ip.start colliding with the
+// proxmox host or ignition server IP — the bootstrap VM would ARP-fight it.
 func validateStaticIPCollisions(cfg *Config, result *ValidationResult) {
 	start, err := netip.ParseAddr(cfg.Networking.StaticIP.Start)
 	if err != nil {
@@ -320,21 +285,17 @@ func proxmoxHostAddr(proxmox *ProxmoxConfig) string {
 	return host
 }
 
-// stripProxmoxScheme drops a leading http:// or https:// from a Proxmox host
-// value. Trimming only http:// left https://host:port to reach SplitHostPort,
-// which mis-split it (two colons) and returned the whole URL, silently
-// no-oping the collision and host validators downstream.
+// stripProxmoxScheme drops a leading http(s):// — trimming only http:// let
+// https://host:port reach SplitHostPort and mis-split on the second colon.
 func stripProxmoxScheme(host string) string {
 	host = strings.TrimPrefix(host, "http://")
 	host = strings.TrimPrefix(host, "https://")
 	return host
 }
 
-// validateHostPort reports whether value is a bare hostname, IP, or host:port
-// (optionally a bracketed IPv6:port). A legal host[:port] never contains '/'
-// or '@', so rejecting them fails closed on scheme- and userinfo-prefixed
-// input that net.SplitHostPort would otherwise mis-split into a bogus
-// left-of-colon token (e.g. "https://h" → host "https").
+// validateHostPort accepts a bare hostname, IP, or host:port; rejecting '/'
+// and '@' fails closed on scheme/userinfo input SplitHostPort would mis-split
+// (e.g. "https://h" → host "https").
 func validateHostPort(value string) error {
 	if value == "" || strings.ContainsAny(value, "/@") {
 		return errors.New("must be a valid hostname or IP address")
@@ -393,13 +354,9 @@ func validateResources(cfg *Config, result *ValidationResult) {
 	validateBootstrap(cfg, result)
 }
 
-// validateBootstrap pins topology.bootstrap to the single ephemeral pivot
-// VM it models. Count has no consumer — terraform always creates exactly
-// one bootstrap VM — so any value other than 1 (or 0, field omitted) is an
-// operator error. DiskGB is only accepted when it matches the control-plane
-// OS disk size the VM actually gets (terraform's os_disk_size_gb): the
-// wizard keeps the two in lockstep, and a hand-edited divergent value would
-// otherwise be silently ignored.
+// validateBootstrap enforces that topology.bootstrap models the single
+// ephemeral pivot VM: Count must be 1, and DiskGB, if set, must match the
+// control-plane OS disk terraform actually uses.
 func validateBootstrap(cfg *Config, result *ValidationResult) {
 	b := cfg.Topology.Bootstrap
 	if b.Count != 0 && b.Count != 1 {
@@ -416,8 +373,7 @@ func validateBootstrap(cfg *Config, result *ValidationResult) {
 	}
 }
 
-// checkNodeResourceCaps applies the wizard's upper bounds; floors are
-// distribution-specific and belong to checkNodeResources.
+// checkNodeResourceCaps applies the wizard's upper bounds; floors belong to checkNodeResources.
 func checkNodeResourceCaps(node NodeConfig, cpuField, memField, diskField string, result *ValidationResult) {
 	if node.CPU > cpuBounds.hi {
 		result.AddError(cpuField, fmt.Sprintf("maximum %d%s", cpuBounds.hi, cpuBounds.unit))
@@ -430,11 +386,9 @@ func checkNodeResourceCaps(node NodeConfig, cpuField, memField, diskField string
 	}
 }
 
-// validateDeployment mirrors the wizard's advanced-step constraints for
-// hand-edited configs. Zero timeouts are valid — install falls back to its
-// compiled defaults. BinDir is checked after ~-expansion because that is
-// the form ResolveBinDir consumes; a value it would silently discard fails
-// here instead.
+// validateDeployment mirrors the wizard's advanced-step constraints: zero
+// timeouts fall back to compiled defaults, and BinDir is checked post
+// ~-expansion so a value ResolveBinDir would silently discard fails here.
 func validateDeployment(cfg *Config, result *ValidationResult) {
 	if v := cfg.Deployment.BootstrapTimeout; v != 0 {
 		if err := timeoutBounds.check(v); err != nil {
@@ -461,11 +415,9 @@ func validateProvider(cfg *Config, result *ValidationResult) {
 	}
 }
 
-// validateVMIDBase bounds topology.vm_id_base at config load (vmidBounds,
-// the same range ValidateVMID enforces in the wizard): terraform computes
-// each vmid as base + index, so an out-of-range base otherwise fails deep
-// inside the apply instead of here. The overflow check keeps the highest
-// computed vmid (bootstrap + masters + workers) under the Proxmox ceiling.
+// validateVMIDBase bounds topology.vm_id_base (same range as the wizard's
+// ValidateVMID) so an out-of-range base fails here, not inside terraform
+// apply; the overflow check also keeps the highest computed vmid under the ceiling.
 func validateVMIDBase(cfg *Config, result *ValidationResult) {
 	base := cfg.Topology.VMIDBase
 	if err := vmidBounds.check(base); err != nil {
@@ -479,10 +431,9 @@ func validateVMIDBase(cfg *Config, result *ValidationResult) {
 	}
 }
 
-// validatePlacementCounts rejects placement lists longer than the group's
-// topology count: terraform consumes entries by index and silently ignores
-// the excess, so a longer list is an operator error. Shorter lists are valid
-// — unassigned VMs fall back to provider.proxmox.node.
+// validatePlacementCounts rejects a placement list longer than the group's
+// topology count — terraform silently ignores the excess by index. Shorter
+// lists are valid; unassigned VMs fall back to provider.proxmox.node.
 func validatePlacementCounts(cfg *Config, result *ValidationResult) {
 	proxmox := cfg.Provider.Proxmox
 	if proxmox == nil {
@@ -562,15 +513,13 @@ func validateProxmoxConfig(proxmox *ProxmoxConfig, result *ValidationResult) {
 	validateAdditionalNetworks(proxmox.AdditionalNetworks, result)
 }
 
-// additionalNetworkModels is the qemu NIC model allowlist for
-// provider.proxmox.additional_networks[].model (empty selects the virtio
-// default at render time).
+// additionalNetworkModels allowlists provider.proxmox.additional_networks[].model;
+// empty selects virtio at render time.
 var additionalNetworkModels = []string{"virtio", "e1000", "rtl8139", "vmxnet3"}
 
-// validateAdditionalNetworks mirrors the primary Bridge validation for each
-// extra NIC. Bridge and Model render into terraform.tfvars HCL where %q
-// escaping does not neutralize ${…} interpolation, so the charset gates
-// here are the injection boundary for the root-privileged terraform apply.
+// validateAdditionalNetworks mirrors Bridge validation per NIC: Bridge/Model
+// render into terraform.tfvars HCL where %q doesn't neutralize ${…}
+// interpolation, so these charset gates are the injection boundary.
 func validateAdditionalNetworks(networks []AdditionalNetwork, result *ValidationResult) {
 	for i, n := range networks {
 		field := fmt.Sprintf("provider.proxmox.additional_networks[%d]", i)
@@ -588,11 +537,9 @@ func validateAdditionalNetworks(networks []AdditionalNetwork, result *Validation
 	}
 }
 
-// httpRootPattern is the allowlist of legal DocumentRoot characters. The value
-// is interpolated raw into a root-owned Apache vhost (DocumentRoot plus a
-// Directory block), so an allowlist fails closed on any unknown metacharacter
-// where the earlier denylist ("\n\r\t \"'`$;<>\\") would pass a character it
-// had not enumerated. Every previously denied character is excluded here.
+// httpRootPattern allowlists DocumentRoot characters; the value is
+// interpolated raw into a root-owned Apache vhost, so unknown metacharacters
+// must fail closed.
 var httpRootPattern = regexp.MustCompile(`^/[A-Za-z0-9._/-]*$`)
 
 func validateHTTPServer(cfg *Config, result *ValidationResult) {
@@ -607,16 +554,9 @@ func validateHTTPServer(cfg *Config, result *ValidationResult) {
 		case !httpRootPattern.MatchString(cfg.HTTPServer.Root):
 			result.AddError(FieldHTTPServerRoot, "must contain only letters, digits, and ._-/ (no shell or Apache directive metacharacters)")
 		case slices.Contains(strings.Split(cfg.HTTPServer.Root, "/"), ".."):
-			// The allowlist admits '.' and '/', so a ".." segment slips past
-			// it; reject traversal before the path reaches the vhost.
+			// The allowlist admits '.' and '/', so ".." slips past it; reject traversal separately.
 			result.AddError(FieldHTTPServerRoot, "must not contain a '..' path segment")
 		}
-	}
-}
-
-func validateDistribution(cfg *Config, result *ValidationResult) {
-	if cfg.Distribution.Type == DistributionOKD {
-		ValidateOKDConfig(cfg, result)
 	}
 }
 
@@ -640,28 +580,29 @@ func validateHAMasters(count int) error {
 	return nil
 }
 
-// ValidateOKDConfig applies OKD-specific version and node-resource floors.
-// Errors are appended to result; callers run this in addition to the
-// distribution-neutral validators.
+// ValidateOKDConfig applies OKD version and resource floors when cfg is OKD;
+// otherwise it is a no-op.
 func ValidateOKDConfig(cfg *Config, result *ValidationResult) {
-	if cfg.Distribution.Type == DistributionOKD {
-		if err := validateOKDVersion(cfg.Distribution.Version); err != nil {
-			result.AddError(FieldDistributionVersion, fmt.Sprintf("invalid okd version: %v", err))
-		}
+	if cfg.Distribution.Type != DistributionOKD {
+		return
+	}
 
-		checkNodeResources(cfg.Topology.ControlPlane, MinCPUControlPlaneOKD, MinMemoryMBControlPlaneOKD, MinDiskGBControlPlaneOKD,
-			FieldTopologyControlPlaneCPU, FieldTopologyControlPlaneMemory, FieldTopologyControlPlaneDisk,
-			"okd control plane", result)
+	if err := validateOKDVersion(cfg.Distribution.Version); err != nil {
+		result.AddError(FieldDistributionVersion, fmt.Sprintf("invalid okd version: %v", err))
+	}
 
-		if err := validateHAMasters(cfg.Topology.ControlPlane.Count); err != nil {
-			result.AddError(FieldTopologyControlPlaneCount, fmt.Sprintf("invalid master count: %v", err))
-		}
+	checkNodeResources(cfg.Topology.ControlPlane, MinCPUControlPlaneOKD, MinMemoryMBControlPlaneOKD, MinDiskGBControlPlaneOKD,
+		FieldTopologyControlPlaneCPU, FieldTopologyControlPlaneMemory, FieldTopologyControlPlaneDisk,
+		"okd control plane", result)
 
-		if cfg.Topology.Workers.Count > 0 {
-			checkNodeResources(cfg.Topology.Workers, MinCPUWorkerOKD, MinMemoryMBWorkerOKD, MinDiskGBWorkerOKD,
-				FieldTopologyWorkersCPU, FieldTopologyWorkersMemory, FieldTopologyWorkersDisk,
-				"okd workers", result)
-		}
+	if err := validateHAMasters(cfg.Topology.ControlPlane.Count); err != nil {
+		result.AddError(FieldTopologyControlPlaneCount, fmt.Sprintf("invalid master count: %v", err))
+	}
+
+	if cfg.Topology.Workers.Count > 0 {
+		checkNodeResources(cfg.Topology.Workers, MinCPUWorkerOKD, MinMemoryMBWorkerOKD, MinDiskGBWorkerOKD,
+			FieldTopologyWorkersCPU, FieldTopologyWorkersMemory, FieldTopologyWorkersDisk,
+			"okd workers", result)
 	}
 }
 
@@ -723,17 +664,28 @@ func isValidNetmask(s string) bool {
 	}
 	octets := addr.As4()
 	mask := uint32(octets[0])<<24 | uint32(octets[1])<<16 | uint32(octets[2])<<8 | uint32(octets[3])
-	// Reject 0.0.0.0 outright — it's a legal bit pattern but meaningless
-	// as a host netmask (would claim the entire IPv4 space).
+	// Reject 0.0.0.0 — legal bit pattern but meaningless as a host netmask.
 	if mask == 0 {
 		return false
 	}
-	// A canonical netmask is N contiguous 1 bits followed by (32-N) zeros.
-	// ^mask + 1 sets only the lowest zero-bit; a contiguous mask is a power
-	// of two in (^mask + 1), equivalently (~m & (~m+1)) == (~m+1). We allow
-	// the all-ones mask (255.255.255.255) where ~m is zero.
+	// A canonical netmask is N ones then zeros; ^mask+1 isolates the lowest
+	// zero-bit, so a contiguous mask is a power of two in ^mask+1 (all-ones
+	// is the special case where ~m is zero).
 	inverted := ^mask
 	return inverted == 0 || (inverted&(inverted+1)) == 0
+}
+
+// Listed rather than compared inline so a second variant lands in one place.
+func supportedDistributions() []DistributionType {
+	return []DistributionType{
+		DistributionOKD,
+	}
+}
+
+func supportedProviders() []ProviderType {
+	return []ProviderType{
+		ProviderProxmox,
+	}
 }
 
 func isValidDistribution(d DistributionType) bool {
@@ -776,9 +728,8 @@ func ValidateDomain(value string) error {
 	return nil
 }
 
-// ValidateProxmoxNodeName rejects names that do not match
-// [a-zA-Z][a-zA-Z0-9_-]*, the same constraint enforced by
-// ValidateProxmoxConfig and the downstream pveshRun guard.
+// ValidateProxmoxNodeName rejects names not matching [a-zA-Z][a-zA-Z0-9_-]*,
+// the same pattern enforced by validateProxmoxConfig and the pveshRun guard.
 func ValidateProxmoxNodeName(value string) error {
 	if !proxmoxNamePattern.MatchString(value) {
 		return errors.New("must start with a letter and contain only alphanumeric, hyphens, or underscores")
@@ -786,9 +737,8 @@ func ValidateProxmoxNodeName(value string) error {
 	return nil
 }
 
-// ValidateProxmoxHost accepts a bare hostname, IP, or host:port. Scheme- and
-// userinfo-prefixed values (https://host, user:pass@host) are rejected — this
-// validator guards the wizard field, which carries no scheme.
+// ValidateProxmoxHost accepts a bare hostname, IP, or host:port, and rejects
+// scheme/userinfo-prefixed values (https://host, user:pass@host).
 func ValidateProxmoxHost(value string) error {
 	return validateHostPort(value)
 }
@@ -815,9 +765,8 @@ func ValidateIP(value string) error {
 	return nil
 }
 
-// ValidateGatewayInCIDR reports an error if gateway is not inside cidr.
-// When either value is missing or malformed this returns nil — the required
-// field validators surface those cases separately.
+// ValidateGatewayInCIDR reports an error if gateway is not inside cidr; it
+// returns nil when either value is missing or malformed.
 func ValidateGatewayInCIDR(gateway, cidr string) error {
 	if gateway == "" || !IsValidIP(gateway) || cidr == "" || !IsValidCIDR(cidr) {
 		return nil
@@ -841,9 +790,8 @@ func ValidateCIDR(value string) error {
 	return nil
 }
 
-// intBounds is the single encoding of an integer field's [lo, hi] range,
-// shared by the wizard string validators and the file-load validators so
-// the two surfaces cannot drift.
+// intBounds is the single [lo, hi] range shared by wizard and file-load
+// validators so the two surfaces can't drift.
 type intBounds struct {
 	lo, hi int
 	unit   string
@@ -877,8 +825,7 @@ var (
 	timeoutBounds   = intBounds{60, 86400, " (seconds)"}
 )
 
-// Preset field validators used by wizard input fields. Each wraps an
-// intBounds range that the file-load validators also enforce.
+// Preset field validators for wizard input fields; each wraps an intBounds range.
 var (
 	ValidateCPU       = cpuBounds.validate
 	ValidateMemory    = memoryBounds.validate
@@ -917,11 +864,9 @@ func ValidateSSHFingerprint(value string) error {
 	return nil
 }
 
-// ValidateBinDir accepts empty (default applies) or an absolute path
-// without `..` elements. Relative paths resolve against an unpredictable
-// cwd at install time; `..` is rejected before Clean resolves it because
-// /usr/local/bin/../../etc would pass the absolute-path check yet land
-// tool installs in /etc.
+// ValidateBinDir accepts empty or an absolute path without `..` elements.
+// `..` is rejected before Clean resolves it because /usr/local/bin/../../etc
+// would pass the absolute-path check yet land installs in /etc.
 func ValidateBinDir(value string) error {
 	if value == "" {
 		return nil

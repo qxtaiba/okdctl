@@ -39,8 +39,8 @@ const (
 	protoUDP = "udp"
 )
 
-// goos and isServiceActiveFn are test seams: DetectBackend's platform gate
-// and firewalld-active probe are otherwise unreachable from non-Linux hosts.
+// goos and isServiceActiveFn are test seams for DetectBackend's platform
+// gate and firewalld probe.
 var (
 	goos              = runtime.GOOS
 	isServiceActiveFn = system.IsServiceActive
@@ -57,9 +57,8 @@ var OKDRequiredPorts = []Port{
 	{Number: 443, Protocol: protoTCP, Description: "https ingress + ignition server"},
 }
 
-// haproxyFrontends is the authoritative list of {number, protocol} pairs
-// HAProxy binds on the bastion. Protocol is explicit so a future UDP rule
-// on the same number cannot be silently included.
+// haproxyFrontends is the authoritative {number,protocol} list HAProxy binds
+// on the bastion; explicit protocol prevents a same-number UDP rule slipping in.
 var haproxyFrontends = []Port{
 	{Number: phase.KubeAPIPort, Protocol: protoTCP, Description: "kubernetes api"},
 	{Number: 22623, Protocol: protoTCP, Description: "machine config server"},
@@ -67,15 +66,14 @@ var haproxyFrontends = []Port{
 	{Number: 443, Protocol: protoTCP, Description: "https ingress"},
 }
 
-// HAProxyFrontendPorts returns the ports HAProxy binds on the bastion.
-// Postinstall uses this to tear down firewall rules when HAProxy is removed,
-// without touching DNS and ignition rules. The result is a defensive copy.
+// HAProxyFrontendPorts returns the ports HAProxy binds on the bastion, as a
+// defensive copy.
 func HAProxyFrontendPorts() []Port {
 	return slices.Clone(haproxyFrontends)
 }
 
-// Port describes a single firewall rule: number + protocol, with a
-// human-readable description used for logging.
+// Port describes a single firewall rule: number, protocol, and a logging
+// description.
 type Port struct {
 	Number      int
 	Protocol    string // tcp, udp
@@ -135,8 +133,8 @@ func (f *Firewall) DetectBackend(ctx context.Context) Backend {
 	return None
 }
 
-// Configure opens each port in ports on the active backend. When permanent
-// is true, firewalld rules persist across reloads. A None backend no-ops.
+// Configure opens each port in ports on the active backend; permanent
+// persists firewalld rules across reloads, and a None backend no-ops.
 func (f *Firewall) Configure(ctx context.Context, ports []Port, permanent bool) error {
 	backend := f.DetectBackend(ctx)
 
@@ -148,9 +146,10 @@ func (f *Firewall) Configure(ctx context.Context, ports []Port, permanent bool) 
 	f.logger.Info("firewall: configuring", "backend", backend)
 
 	for _, port := range ports {
-		if err := openPort(ctx, backend, port, permanent, f.logger); err != nil {
+		if err := modifyPort(ctx, backend, port, permanent, actionAdd); err != nil {
 			return fmt.Errorf("open port %d: %w", port.Number, err)
 		}
+		f.logger.Info("firewall: opened port", "port", port.Number, "proto", port.Protocol, "desc", port.Description)
 	}
 
 	if backend == Firewalld && permanent {
@@ -164,12 +163,8 @@ func (f *Firewall) Configure(ctx context.Context, ports []Port, permanent bool) 
 	return nil
 }
 
-// validatePort enforces an allowlist on Port.Protocol (tcp or udp only) and
-// a valid port number range. modifyPort MUST call this before embedding
-// port.Protocol into a firewall-cmd / iptables / ufw argument, since the
-// value flows into fmt.Sprintf("%d/%s", ...). Current callers only populate
-// Port from OKDRequiredPorts / HAProxyFrontendPorts, but the guard stays so
-// a future caller cannot slip an unvalidated protocol string into the rule.
+// validatePort allowlists Port.Protocol (tcp/udp) and the port range before
+// modifyPort embeds it into a shell argument — a future caller must not skip this.
 func validatePort(port Port) error {
 	if port.Number < 1 || port.Number > 65535 {
 		return fmt.Errorf("invalid port number: %d", port.Number)
@@ -177,15 +172,6 @@ func validatePort(port Port) error {
 	if port.Protocol != protoTCP && port.Protocol != protoUDP {
 		return fmt.Errorf("invalid protocol: %q (must be tcp or udp)", port.Protocol)
 	}
-	return nil
-}
-
-func openPort(ctx context.Context, backend Backend, port Port, permanent bool, logger *slog.Logger) error {
-	logger = logutil.OrNop(logger)
-	if err := modifyPort(ctx, backend, port, permanent, actionAdd); err != nil {
-		return err
-	}
-	logger.Info("firewall: opened port", "port", port.Number, "proto", port.Protocol, "desc", port.Description)
 	return nil
 }
 
@@ -207,9 +193,8 @@ func (f *Firewall) RemoveRules(ctx context.Context, ports []Port, permanent bool
 	}
 
 	if backend == Firewalld && permanent {
-		// A failed reload leaves the just-removed permanent rules live in the
-		// runtime set; surface it so the operator does not read "removing
-		// rules" as "ports closed". Stay best-effort — teardown must not fail.
+		// A failed reload leaves removed rules live in the runtime set; warn
+		// but stay best-effort since teardown must not fail.
 		if err := executor.RunCaptured(ctx, "firewall-cmd", "--reload"); err != nil {
 			f.logger.Warn("firewall: reload after rule removal failed", "err", err)
 		}
@@ -253,12 +238,9 @@ func modifyPort(ctx context.Context, backend Backend, port Port, permanent bool,
 	return nil
 }
 
-// modifyIptablesRule makes the iptables backend idempotent. Plain -I inserts a
-// duplicate on every re-run and -D removes only one instance, so StepConfigure
-// ReRunSafeYes would otherwise leave N-1 ACCEPT rules after N setups that a
-// single destroy pass cannot clear. A -C probe gates the add; a -D loop drains
-// every duplicate on remove. Port/protocol already validated by validatePort;
-// argv slice (no shell).
+// modifyIptablesRule makes iptables idempotent: -I would duplicate and -D
+// removes only one, so a -C probe gates add and a -D loop drains remove;
+// argv is pre-validated by validatePort (no shell).
 func modifyIptablesRule(ctx context.Context, port Port, action string) error {
 	rule := []string{"INPUT", "-p", port.Protocol, "--dport", strconv.Itoa(port.Number), "-j", "ACCEPT"}
 	exists := func() bool {

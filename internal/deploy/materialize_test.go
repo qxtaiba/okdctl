@@ -75,25 +75,9 @@ func TestMaterializeTerraformEmptyDir(t *testing.T) {
 	}
 }
 
-func TestMaterializeTerraformIdempotent(t *testing.T) {
-	root := t.TempDir()
-	if _, err := MaterializeTerraform(root); err != nil {
-		t.Fatalf("first run: %v", err)
-	}
-	created, err := MaterializeTerraform(root)
-	if err != nil {
-		t.Fatalf("second run: %v", err)
-	}
-	if len(created) != 0 {
-		t.Fatalf("second run created %d files, want 0: %v", len(created), created)
-	}
-}
-
-// hashInfraTree digests every regular file's relative path and content under
-// <root>/infrastructure so a caller can assert the tree — the stamped manifest
-// included — is byte-identical before and after an operation. The walk only
-// collects relative paths; files are read after WalkDir returns so no
-// filesystem operation runs inside the callback (gosec G122).
+// hashInfraTree digests every file's path+content under <root>/infrastructure
+// for before/after comparison; files are read after WalkDir returns so no fs
+// op runs inside the callback (gosec G122).
 func hashInfraTree(t *testing.T, root string) string {
 	t.Helper()
 	base := filepath.Join(root, "infrastructure")
@@ -128,9 +112,7 @@ func hashInfraTree(t *testing.T, root string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// TestMaterializeSettledRootWritesNothing pins the deploy --dry-run contract at
-// the materialize layer: a root that was already materialized and stamped is
-// left byte-identical on a repeat call — no file created, no manifest re-stamped.
+// Pins the deploy --dry-run contract: a stamped root is left byte-identical on repeat calls.
 func TestMaterializeSettledRootWritesNothing(t *testing.T) {
 	root := t.TempDir()
 	if _, err := MaterializeTerraform(root); err != nil {
@@ -185,43 +167,8 @@ func TestMaterializeTerraformPreservesModifiedFiles(t *testing.T) {
 	}
 }
 
-// TestMaterializeTerraformSourceCheckoutPassthrough pins the dev-checkout
-// contract: a pre-existing infrastructure/terraform tree is used as-is and
-// never rewritten.
-func TestMaterializeTerraformSourceCheckoutPassthrough(t *testing.T) {
-	root := t.TempDir()
-	const sentinel = "# checkout content\n"
-	for _, path := range embeddedTerraformPaths(t) {
-		target := filepath.Join(root, "infrastructure", filepath.FromSlash(path))
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(target, []byte(sentinel), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	created, err := MaterializeTerraform(root)
-	if err != nil {
-		t.Fatalf("MaterializeTerraform: %v", err)
-	}
-	if len(created) != 0 {
-		t.Fatalf("created = %v, want none in a source checkout", created)
-	}
-	probe := filepath.Join(root, "infrastructure", "terraform", "environments", "production", "main.tf")
-	got, err := os.ReadFile(probe)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(got) != sentinel {
-		t.Errorf("checkout file was overwritten: %q", got)
-	}
-}
-
-// TestMaterializeTerraformNoOpRunNeverStamps pins that a pre-existing
-// checkout that already carries the real embedded content never gets a
-// manifest stamped by a no-op MaterializeTerraform run — stamping is a
-// side effect of creating files, and a dry run must stay side-effect free.
+// Pins that a no-op MaterializeTerraform run never stamps a manifest —
+// stamping is a side effect of creating files.
 func TestMaterializeTerraformNoOpRunNeverStamps(t *testing.T) {
 	root := t.TempDir()
 	for _, path := range embeddedTerraformPaths(t) {

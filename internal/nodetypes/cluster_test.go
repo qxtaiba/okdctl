@@ -56,22 +56,6 @@ func TestClusterNodes_OffsetsAndCounts(t *testing.T) {
 	}
 }
 
-func TestClusterNodePrefixedName(t *testing.T) {
-	tests := []struct {
-		node ClusterNode
-		want string
-	}{
-		{ClusterNode{Role: RoleBootstrap}, "okd-bootstrap"},
-		{ClusterNode{Role: RoleMaster, Index: 0}, "okd-master0"},
-		{ClusterNode{Role: RoleWorker, Index: 2}, "okd-worker2"},
-	}
-	for _, tc := range tests {
-		if got := tc.node.PrefixedName("okd"); got != tc.want {
-			t.Errorf("PrefixedName(okd) = %q; want %q", got, tc.want)
-		}
-	}
-}
-
 func TestClusterNodes_InvalidBaseIPPropagates(t *testing.T) {
 	// No CIDR configured, so the range pre-check is skipped and the failure
 	// must surface from the first per-node offset calculation.

@@ -175,11 +175,10 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 		},
 	},
 	ExtraContent: func(_ map[string]string, _ int) string {
-		subtitle := lipgloss.NewStyle().
+		return lipgloss.NewStyle().
 			Foreground(tui.ColorSlate400).
 			Italic(true).
 			Render("these settings have sensible defaults - adjust only if needed")
-		return subtitle
 	},
 }
 

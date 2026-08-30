@@ -1,15 +1,7 @@
 // Package wizard implements the bubbletea model and step orchestration for
-// okdctl's interactive configuration wizard, producing a validated
-// config.Config for downstream deployment.
-//
-// A step reaches the UI by one of two paths, and only two:
-//   - Declarative: a StepDefinition describes sections and fields, and
-//     NewDataDrivenStep renders and binds them automatically. Prefer this.
-//   - Hand-rolled: a type implements WizardStep directly, for steps whose
-//     sections depend on runtime input a static StepDefinition can't express
-//     (e.g. node placement, sized only after Proxmox discovery). Such steps
-//     may still reuse MultiSectionForm or components.InputGroup for navigation
-//     and rendering rather than duplicating it.
+// okdctl's interactive configuration wizard. Steps are declarative
+// (StepDefinition + NewDataDrivenStep, preferred) or hand-rolled
+// (WizardStep directly) for runtime-dependent sections.
 package wizard
 
 import (
@@ -33,11 +25,9 @@ type FieldType int
 const (
 	FieldTypeText FieldType = iota
 	FieldTypePassword
-	FieldTypeNumber
-	FieldTypeBool        // For yes/no fields
-	FieldTypeSelect      // Dropdown selector with predefined options
-	FieldTypeMultiSelect // Checklist where multiple options may be toggled
-	FieldTypeKeyValue    // Editable table of key=value pairs
+	FieldTypeSelect      // dropdown selector
+	FieldTypeMultiSelect // checklist, multiple toggles
+	FieldTypeKeyValue    // editable key=value table
 )
 
 // ConfigSetter writes a field's value into a Config.
@@ -54,7 +44,7 @@ type FieldDefinition struct {
 	Default  string
 	Help     string
 	Type     FieldType
-	Options  []string // populated only when Type == FieldTypeSelect
+	Options  []string // used by FieldTypeSelect and FieldTypeMultiSelect
 	Required bool
 	Validate func(string) error
 
@@ -78,14 +68,13 @@ type StepDefinition struct {
 	Sections     []SectionDefinition
 
 	Validate     func(values map[string]string) error
-	Apply        func(step *DataDrivenStep, cfg *config.Config) error // Custom apply (after auto-binding)
+	Apply        func(step *DataDrivenStep, cfg *config.Config) error // runs after auto-binding
 	ShouldShow   func(*config.Config) bool
 	ExtraContent func(values map[string]string, width int) string
 }
 
-// FormSection pairs a titled/annotated section with its built InputGroup. It
-// is the runtime counterpart to SectionDefinition and the unit MultiSectionForm
-// navigates across.
+// FormSection pairs a titled section with its built InputGroup — the
+// runtime counterpart to SectionDefinition that MultiSectionForm navigates across.
 type FormSection struct {
 	Title string
 	Note  string // e.g. prerequisites, shown below the title
@@ -108,17 +97,13 @@ func (s *FormSection) isComplete() bool {
 }
 
 // MultiSectionForm is a reusable multi-section input form with tab/shift-tab
-// navigation across section boundaries and per-section ✓/●/○ indicators. It
-// backs DataDrivenStep and is available to hand-rolled WizardSteps whose
-// sections are computed at runtime. It is a widget, not a step: Update returns
-// enterPressed rather than a StepCompleteMsg so the caller can layer its own
-// validation and completion.
+// navigation and per-section status indicators. It is a widget, not a step:
+// Update returns enterPressed rather than emitting StepCompleteMsg itself.
 type MultiSectionForm struct {
 	sections       []FormSection
 	currentSection int
 
-	// totalFieldsCache is the summed field count across all sections, used by
-	// emitFocusChanged. -1 means "not yet computed".
+	// totalFieldsCache caches the field count for emitFocusChanged; -1 means uncomputed.
 	totalFieldsCache int
 }
 
@@ -146,8 +131,7 @@ func (f *MultiSectionForm) FieldAt(section, field int) components.FormField {
 	return group.Field(field)
 }
 
-// currentGroup returns the Group of the currently-active section, or nil if
-// the index is out of range or the section has no Group.
+// currentGroup returns the active section's Group, or nil if out of range or groupless.
 func (f *MultiSectionForm) currentGroup() *components.InputGroup {
 	if f.currentSection < 0 || f.currentSection >= len(f.sections) {
 		return nil
@@ -181,9 +165,9 @@ func (f *MultiSectionForm) Blur() {
 	}
 }
 
-// Update handles navigation (tab/shift-tab across section boundaries) and
-// forwards other input to the focused group. On enter it reports
-// enterPressed=true without validating or completing — the caller layers that.
+// Update handles tab/shift-tab section navigation and forwards other input
+// to the focused group. On enter it reports enterPressed=true without
+// validating or completing — the caller layers that.
 func (f *MultiSectionForm) Update(msg tea.Msg) (cmd tea.Cmd, enterPressed bool) {
 	group := f.currentGroup()
 	if group == nil {
@@ -343,18 +327,17 @@ type fieldLocation struct {
 	field   int
 }
 
-// DataDrivenStep renders a multi-section form built from a StepDefinition and
-// implements the WizardStep interface.
+// DataDrivenStep renders a multi-section form built from a StepDefinition, implementing WizardStep.
 type DataDrivenStep struct {
 	BaseStep
 
 	definition *StepDefinition
-	fieldKeys  map[string]fieldLocation // maps Key -> section/field indices
+	fieldKeys  map[string]fieldLocation
 
 	form *MultiSectionForm
 
-	// customExtraContent, when non-nil, overrides definition.ExtraContent.
-	// Set via WithExtraContentFunc.
+	// customExtraContent, when non-nil, overrides definition.ExtraContent (set
+	// via WithExtraContentFunc).
 	customExtraContent func(width int) string
 }
 
@@ -392,7 +375,8 @@ func NewDataDrivenStep(def *StepDefinition) *DataDrivenStep {
 }
 
 func buildFormField(def *FieldDefinition) components.FormField {
-	if def.Type == FieldTypeKeyValue {
+	switch def.Type {
+	case FieldTypeKeyValue:
 		kv := components.NewKeyValueField(def.Label)
 		kv.Help = def.Help
 		if def.Validate != nil {
@@ -402,42 +386,38 @@ func buildFormField(def *FieldDefinition) components.FormField {
 			kv.SetValue(def.Default)
 		}
 		return kv
-	}
 
-	if def.Type == FieldTypeMultiSelect {
+	case FieldTypeMultiSelect:
 		mf := components.NewMultiSelectField(def.Label, def.Options)
 		mf.Help = def.Help
 		if def.Default != "" {
 			mf.SetValue(def.Default)
 		}
 		return mf
-	}
 
-	if def.Type == FieldTypeSelect {
+	case FieldTypeSelect:
 		sf := components.NewSelectField(def.Label, def.Options)
 		sf.Help = def.Help
 		if def.Default != "" {
 			sf.SetDefault(def.Default)
 		}
 		return sf
-	}
 
-	var field *components.InputField
-	if def.Type == FieldTypePassword {
-		field = components.NewPasswordField(def.Label, def.Default)
-	} else {
-		field = components.NewInputField(def.Label, def.Default)
+	default:
+		var field *components.InputField
+		if def.Type == FieldTypePassword {
+			field = components.NewPasswordField(def.Label, def.Default)
+		} else {
+			field = components.NewInputField(def.Label, def.Default)
+		}
+		field.Required = def.Required
+		field.Help = def.Help
+		field.Validator = def.Validate
+		return field
 	}
-	field.Required = def.Required
-	field.Help = def.Help
-	field.Validator = def.Validate
-	return field
 }
 
-// getField resolves a field key to its FormField via the form's section/field
-// coordinates, returning nil if the key is unknown or the location is missing.
-// Callers must handle the nil case. The parameter is named fieldKey rather than
-// key to avoid shadowing the bubbles/v2/key import.
+// getField resolves fieldKey to its FormField, or nil if unknown; callers must handle nil.
 func (s *DataDrivenStep) getField(fieldKey string) components.FormField {
 	loc, ok := s.fieldKeys[fieldKey]
 	if !ok {
@@ -584,9 +564,8 @@ func (s *DataDrivenStep) ShouldShow(cfg *config.Config) bool {
 	return true
 }
 
-// formViewStyles holds pre-computed lipgloss styles for DataDrivenStep.View.
-// Caching is safe because tui.Color* values are set once during package init
-// and never change.
+// formViewStyles caches DataDrivenStep.View's lipgloss styles; safe since
+// tui.Color* values never change after init.
 var formViewStyles = struct {
 	sectionHeader   lipgloss.Style
 	activeSection   lipgloss.Style
@@ -628,8 +607,6 @@ func (s *DataDrivenStep) View(width, height int) string {
 	var content strings.Builder
 	content.WriteString(s.form.View(width))
 
-	// customExtraContent (set via WithExtraContentFunc) takes precedence over
-	// the definition's ExtraContent.
 	switch {
 	case s.customExtraContent != nil:
 		content.WriteString(s.customExtraContent(width))
@@ -675,8 +652,7 @@ func GetString(getter func(cfg *config.Config) string) ConfigGetter {
 	return getter
 }
 
-// GetInt adapts an int getter into a ConfigGetter that returns the base-10
-// encoded value.
+// GetInt adapts an int getter into a ConfigGetter returning base-10 text.
 func GetInt(getter func(cfg *config.Config) int) ConfigGetter {
 	return func(cfg *config.Config) string {
 		return strconv.Itoa(getter(cfg))

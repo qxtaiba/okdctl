@@ -44,8 +44,7 @@ func TestReadOpStateMissing(t *testing.T) {
 	}
 }
 
-// TestReadOpState_LegacyV1RawMarker locks migration compatibility: the
-// literal JSON bytes pre-unification binaries wrote must keep loading.
+// Pins the marker's on-disk v1 JSON shape: these literal bytes must keep loading.
 func TestReadOpState_LegacyV1RawMarker(t *testing.T) {
 	path := filepath.Join(t.TempDir(), OpMarkerFileName)
 	raw := `{"schema_version":"v1","op":"resize","target":"master0","step":"tf-apply","run_id":"run-1","cluster_name":"clusterA","timestamp":"2026-05-01T10:00:00Z"}`
@@ -64,33 +63,34 @@ func TestReadOpState_LegacyV1RawMarker(t *testing.T) {
 	}
 }
 
-func TestReadOpStateEmptyClusterNameTreatedAbsent(t *testing.T) {
-	path := filepath.Join(t.TempDir(), OpMarkerFileName)
-	raw := `{"schema_version":"v1","op":"remove","target":"worker0","step":"drain","run_id":"run-1","cluster_name":"","timestamp":"2026-05-01T10:00:00Z"}`
-	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
-		t.Fatalf("seed file: %v", err)
+func TestReadOpStateUntrustedRawMarkerTreatedAbsent(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+	}{
+		{
+			name: "empty cluster name",
+			raw:  `{"schema_version":"v1","op":"remove","target":"worker0","step":"drain","run_id":"run-1","cluster_name":"","timestamp":"2026-05-01T10:00:00Z"}`,
+		},
+		{
+			name: "unknown schema",
+			raw:  `{"schema_version":"v99","op":"remove","target":"worker0","step":"drain","run_id":"run-1","cluster_name":"clusterA","timestamp":"2026-05-01T10:00:00Z"}`,
+		},
 	}
-	got, err := readOpState(path, "clusterA")
-	if err != nil {
-		t.Fatalf("readOpState: %v", err)
-	}
-	if got != nil {
-		t.Fatalf("marker without cluster name must read as absent, got %+v", got)
-	}
-}
-
-func TestReadOpStateUnknownSchemaTreatedAbsent(t *testing.T) {
-	path := filepath.Join(t.TempDir(), OpMarkerFileName)
-	raw := `{"schema_version":"v99","op":"remove","target":"worker0","step":"drain","run_id":"run-1","cluster_name":"clusterA","timestamp":"2026-05-01T10:00:00Z"}`
-	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
-		t.Fatalf("seed file: %v", err)
-	}
-	got, err := readOpState(path, "clusterA")
-	if err != nil {
-		t.Fatalf("readOpState: %v", err)
-	}
-	if got != nil {
-		t.Fatalf("unknown-schema marker must read as absent, got %+v", got)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), OpMarkerFileName)
+			if err := os.WriteFile(path, []byte(tc.raw), 0o600); err != nil {
+				t.Fatalf("seed file: %v", err)
+			}
+			got, err := readOpState(path, "clusterA")
+			if err != nil {
+				t.Fatalf("readOpState: %v", err)
+			}
+			if got != nil {
+				t.Fatalf("untrusted marker must read as absent, got %+v", got)
+			}
+		})
 	}
 }
 

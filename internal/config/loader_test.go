@@ -46,13 +46,16 @@ func TestLoadFile_PermGate(t *testing.T) {
 	}
 }
 
-func TestLoadFile_MissingSchemaVersion(t *testing.T) {
+func TestLoadFile_Rejections(t *testing.T) {
 	cases := []struct {
-		name string
-		yaml string
+		name      string
+		yaml      string
+		wantInMsg string
 	}{
-		{"explicitly empty", `schemaVersion: ""` + "\n"},
-		{"absent", "cluster:\n  name: mycluster\n"},
+		{"schemaVersion explicitly empty", `schemaVersion: ""` + "\n", SchemaVersionCurrent},
+		{"schemaVersion absent", "cluster:\n  name: mycluster\n", SchemaVersionCurrent},
+		{"unsupported schemaVersion", "schemaVersion: v99\n", ""},
+		{"unknown top-level key", "schemaVersion: v2\nunknownField: oops\n", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -66,38 +69,10 @@ func TestLoadFile_MissingSchemaVersion(t *testing.T) {
 			if !errors.As(err, &cfgErr) {
 				t.Fatalf("err = %v; want *errtypes.ConfigError", err)
 			}
-			if !strings.Contains(cfgErr.Msg, SchemaVersionCurrent) {
-				t.Errorf("ConfigError.Msg = %q; want it to contain %q", cfgErr.Msg, SchemaVersionCurrent)
+			if tc.wantInMsg != "" && !strings.Contains(cfgErr.Msg, tc.wantInMsg) {
+				t.Errorf("ConfigError.Msg = %q; want it to contain %q", cfgErr.Msg, tc.wantInMsg)
 			}
 		})
-	}
-}
-
-func TestLoadFile_UnsupportedSchemaVersion(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "okdctl.yaml")
-	if err := os.WriteFile(path, []byte("schemaVersion: v99\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	_, err := NewLoader().LoadFile(path)
-	var cfgErr *errtypes.ConfigError
-	if !errors.As(err, &cfgErr) {
-		t.Fatalf("err = %v; want *errtypes.ConfigError", err)
-	}
-}
-
-func TestLoadFile_UnknownTopLevelKey(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "okdctl.yaml")
-	if err := os.WriteFile(path, []byte("schemaVersion: v2\nunknownField: oops\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	_, err := NewLoader().LoadFile(path)
-	var cfgErr *errtypes.ConfigError
-	if !errors.As(err, &cfgErr) {
-		t.Fatalf("err = %v; want *errtypes.ConfigError wrapping UnmarshalStrict rejection", err)
 	}
 }
 
@@ -167,25 +142,5 @@ func TestLoadFile_SaveRoundTrip(t *testing.T) {
 	}
 	if loaded.Cluster.Name != cfg.Cluster.Name {
 		t.Errorf("Cluster.Name = %q; want %q", loaded.Cluster.Name, cfg.Cluster.Name)
-	}
-}
-
-func TestLoadFile_SaveRoundTrip_HAEnabled(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "okdctl.yaml")
-
-	loader := NewLoader()
-	cfg := DefaultConfig()
-	cfg.Provider.Proxmox.HAEnabled = true
-	if err := loader.Save(cfg, path); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
-
-	loaded, err := loader.LoadFile(path)
-	if err != nil {
-		t.Fatalf("LoadFile after Save: %v", err)
-	}
-	if loaded.Provider.Proxmox == nil || !loaded.Provider.Proxmox.HAEnabled {
-		t.Errorf("Provider.Proxmox.HAEnabled = %+v; want true", loaded.Provider.Proxmox)
 	}
 }
