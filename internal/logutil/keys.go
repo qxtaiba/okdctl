@@ -1,9 +1,7 @@
 package logutil
 
-// Log attr key glossary. Structured keys are a shared vocabulary: log
-// queries join records on them, so one concept gets exactly one key.
-// Pick from this list before minting a new key and extend it when a
-// genuinely new concept appears.
+// Log attr key glossary — one concept, one key, so log queries can join
+// records on them. Pick from here before minting a new key.
 //
 //	err            error value, passed structured ("err", err) — never err.Error()
 //	path           filesystem path (file or directory), absolute where known

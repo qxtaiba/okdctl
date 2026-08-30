@@ -13,8 +13,8 @@ const defaultPowerCycleTimeout = 5 * time.Minute
 
 const powerTaskPollInterval = 2 * time.Second
 
-// PowerCycleOptions carries the Proxmox API credentials for a power-cycle.
-// Password/APIToken are the caller's credential bytes; the caller owns Zeroize.
+// PowerCycleOptions carries the Proxmox API credentials for a power-cycle;
+// Password/APIToken are caller-owned bytes the caller must Zeroize.
 type PowerCycleOptions struct {
 	Endpoint string
 	Username string
@@ -24,10 +24,8 @@ type PowerCycleOptions struct {
 	Timeout  time.Duration
 }
 
-// redactedPowerCycleOptions is the safe projection of PowerCycleOptions
-// returned by Redacted(). It omits Password and APIToken so any code path
-// that formats the options — including slog's redactAny switch — cannot
-// reach the secret bytes.
+// redactedPowerCycleOptions is PowerCycleOptions without Password/APIToken,
+// safe to format (slog's redactAny).
 type redactedPowerCycleOptions struct {
 	Endpoint string
 	Username string
@@ -35,8 +33,7 @@ type redactedPowerCycleOptions struct {
 	Timeout  time.Duration
 }
 
-// Redacted returns a struct containing only the non-secret fields of o,
-// satisfying the interface{ Redacted() any } that logutil.redactAny detects.
+// Redacted returns o's non-secret fields, for the logutil.redactAny interface.
 func (o *PowerCycleOptions) Redacted() any {
 	if o == nil {
 		return nil
@@ -49,8 +46,7 @@ func (o *PowerCycleOptions) Redacted() any {
 	}
 }
 
-// String masks secret fields so accidental %v / %s / log calls can't leak
-// the password or token.
+// String masks secret fields so accidental %v/%s/log calls can't leak them.
 func (o *PowerCycleOptions) String() string {
 	if o == nil {
 		return "PowerCycleOptions(nil)"
@@ -58,15 +54,9 @@ func (o *PowerCycleOptions) String() string {
 	return fmt.Sprintf("%+v", o.Redacted())
 }
 
-// PowerCycler stops then starts a VM through the Proxmox API. A resize changes a
-// VM's *configured* memory but bpg/proxmox does not restart it, so the guest
-// keeps its old RAM until a hypervisor stop→start spawns a fresh QEMU process
-// (a guest reboot reuses the same process and RAM, so it will not do). This is a
-// narrow, operational power-cycle — not an infra-state mutation — and is the
-// sanctioned API-path analogue of the SSH exemption in hostssh/iso_cleanup.go:
-// the bastion cannot SSH to the Proxmox host, so this goes over the API instead.
-// The same rationale extends to ShutdownVM/StartVM: cluster stop/start needs
-// graceful, per-VM power control that terraform apply/destroy cannot express.
+// PowerCycler stops then starts a VM via the Proxmox API: bpg/proxmox can't
+// restart on resize (only stop→start picks up new RAM). Sanctioned exception
+// to routing mutations through terraform, which can't express per-VM power.
 type PowerCycler struct {
 	opts *PowerCycleOptions
 }
@@ -76,7 +66,6 @@ func NewPowerCycler(opts *PowerCycleOptions) *PowerCycler {
 	return &PowerCycler{opts: opts}
 }
 
-// timeout returns the configured per-task timeout, or defaultPowerCycleTimeout.
 func (pc *PowerCycler) timeout() time.Duration {
 	if pc.opts.Timeout > 0 {
 		return pc.opts.Timeout
@@ -84,9 +73,7 @@ func (pc *PowerCycler) timeout() time.Duration {
 	return defaultPowerCycleTimeout
 }
 
-// vm builds a client scoped to timeout and returns the target VM with its
-// current status already populated (go-proxmox fetches status/current +
-// config as part of the lookup).
+// vm builds a timeout-scoped client; go-proxmox populates status/config on lookup.
 func (pc *PowerCycler) vm(ctx context.Context, node string, vmid int, timeout time.Duration) (*proxmox.VirtualMachine, error) {
 	client, err := newProxmoxClient(pc.opts.Endpoint, pc.opts.Username, pc.opts.Password, pc.opts.APIToken, pc.opts.Insecure, timeout)
 	if err != nil {
@@ -104,9 +91,8 @@ func (pc *PowerCycler) vm(ctx context.Context, node string, vmid int, timeout ti
 	return vm, nil
 }
 
-// PowerCycleVM stops (if running) then starts the VM, waiting for each task to
-// complete. It is fail-closed: any error leaves the caller to treat the resize
-// as unrealized. node is the Proxmox node name; vmid the QEMU id.
+// PowerCycleVM stops (if running) then starts the VM, waiting for each task;
+// it is fail-closed, leaving the caller to treat the resize as unrealized on error.
 func (pc *PowerCycler) PowerCycleVM(ctx context.Context, node string, vmid int) error {
 	timeout := pc.timeout()
 
@@ -135,11 +121,8 @@ func (pc *PowerCycler) PowerCycleVM(ctx context.Context, node string, vmid int) 
 	return nil
 }
 
-// ShutdownVM sends an ACPI graceful shutdown and waits for it to power off.
-// It is a no-op if the VM already reports stopped. A completed shutdown task
-// does not by itself prove the guest powered off — the guest can ignore the
-// ACPI signal — so ShutdownVM re-pings the VM afterward and errors unless
-// Proxmox now reports it stopped.
+// ShutdownVM sends ACPI shutdown then confirms via ping, since a completed
+// task alone doesn't prove the guest powered off. No-op if already stopped.
 func (pc *PowerCycler) ShutdownVM(ctx context.Context, node string, vmid int) error {
 	timeout := pc.timeout()
 
@@ -168,8 +151,7 @@ func (pc *PowerCycler) ShutdownVM(ctx context.Context, node string, vmid int) er
 	return nil
 }
 
-// StartVM starts the VM if it is not already running and waits for the task
-// to complete. It is a no-op if the VM already reports running.
+// StartVM starts the VM and waits for the task; a no-op if already running.
 func (pc *PowerCycler) StartVM(ctx context.Context, node string, vmid int) error {
 	timeout := pc.timeout()
 

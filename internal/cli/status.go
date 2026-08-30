@@ -120,12 +120,9 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 	return printClusterStatus(cmd, &cs)
 }
 
-// statusLifecycleSources wires the non-API lifecycle signals phase
-// derivation consults: the deploy-state marker, the configured environment's
-// terraform state, and — when Proxmox credentials resolve — the VM power
-// probe. Credentials load silently (no provenance logging, no prompt):
-// status is read-only and merely degrades to a less specific phase without
-// them. The returned cleanup zeroizes the credentials.
+// statusLifecycleSources wires phase-derivation signals; credentials load
+// silently (status degrades gracefully without them) and the returned cleanup
+// zeroizes them.
 func statusLifecycleSources(cfg *config.Config, projectRoot string) (src clusterstatus.LifecycleSources, cleanup func()) {
 	src = clusterstatus.LifecycleSources{
 		DeployInProgress: func() bool {
@@ -148,8 +145,8 @@ func statusLifecycleSources(cfg *config.Config, projectRoot string) (src cluster
 }
 
 // proxmoxPowerProber adapts proxmox.VMPowerStates to the clusterstatus seam,
-// enumerating the durable cluster VMs (masters + workers; the ephemeral
-// bootstrap VM is covered by the deploy marker while it exists).
+// covering masters+workers (bootstrap is covered separately by the deploy
+// marker).
 type proxmoxPowerProber struct {
 	cfg   *config.Config
 	creds *credentials.ProxmoxCredentials
@@ -233,10 +230,8 @@ func printClusterStatus(cmd *cobra.Command, st *okd.ClusterStatus) error {
 	return err
 }
 
-// nodeStatusTableLines renders the NAME/ROLE/READY node table for the status
-// box through the shared tui.Table primitive: dim header, per-row red skin for
-// a not-ready node. Padding is computed on plain text so a styled row's
-// zero-width escapes never shift a later column.
+// nodeStatusTableLines renders via tui.Table; padding is computed on plain text
+// so a styled row's zero-width escapes never shift a column.
 func nodeStatusTableLines(nodes []okd.NodeStatus) []string {
 	rows := make([][]string, 0, len(nodes))
 	for _, n := range nodes {
@@ -336,10 +331,9 @@ func runDescribeAddon(cmd *cobra.Command, args []string) error {
 			break
 		}
 	}
-	// JSON emits the structured healthy bool + optional error (matching
-	// okd.AddonStatus and `addon verify`) rather than the flattened display
-	// string, so the "not enabled"/"degraded: <err>" concept is discoverable
-	// (see docs/cli/json-schema.md).
+	// JSON emits the structured healthy bool + optional error, not the
+	// flattened display string, so state is discoverable (see
+	// docs/cli/json-schema.md).
 	if describeAddonOutput == outputJSON {
 		payload := map[string]any{
 			colName:        info.Name,

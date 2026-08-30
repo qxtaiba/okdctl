@@ -38,8 +38,7 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, cfg *config.Config, o
 		return &errtypes.ClusterError{Msg: msg}
 	}
 
-	// Snapshot before Init: terraform init may rewrite terraform_version on schema
-	// migration, making a post-init snapshot useless as a pre-run restore point.
+	// Snapshot before Init: init may rewrite terraform_version on schema migration.
 	snapPath, snapErr := tf.SnapshotState(ctx)
 	if snapErr != nil {
 		return &errtypes.ClusterError{Msg: "terraform destroy: state snapshot failed", Err: snapErr}
@@ -51,10 +50,8 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, cfg *config.Config, o
 
 	p.warnTopologyDrift(ctx, tf, cfg, len(opts.TerraformTargets) > 0)
 
-	// The CLI's strongest confirmation gate has already passed by the time
-	// this phase runs, so the master resource's prevent_destroy backstop is
-	// disabled for exactly this destroy via a transient module override,
-	// written here and removed on every exit path below.
+	// prevent_destroy on the master resource is lifted for exactly this
+	// destroy via a transient module override, removed on every exit path.
 	moduleDir := workspace.TerraformModuleDir(opts.ProjectRoot)
 	overridePath, ovrErr := terraform.WriteDestroyOverride(moduleDir)
 	if ovrErr != nil {
@@ -92,11 +89,8 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, cfg *config.Config, o
 }
 
 // warnTopologyDrift probes the state for a master/worker instance one past
-// the config's topology count. A hit means the config was edited since
-// deploy: scoped --only destroys expand targets from config counts and
-// would leave the higher-index VMs running, and customISONames would miss
-// their per-node ISOs. Best-effort — a failed probe warns and never blocks
-// the destroy, which tears down whatever the state actually holds.
+// the config's topology count, warning of a config/state mismatch without
+// ever blocking the destroy.
 func (p *Phase) warnTopologyDrift(ctx context.Context, tf *terraform.Executor, cfg *config.Config, scoped bool) {
 	probes := []struct {
 		role  nodetypes.NodeRole
@@ -126,11 +120,8 @@ func (p *Phase) warnTopologyDrift(ctx context.Context, tf *terraform.Executor, c
 	}
 }
 
-// customISONames returns the exact per-node custom ISO filenames the setup
-// phase uploads to the Proxmox host (bootstrap.iso, master<N>.iso,
-// worker<N>.iso) for cfg's topology — see provision.BuildNodeList for the
-// naming this mirrors. Names carry no cluster prefix; removal-side safety
-// comes from hostssh.RemoveCustomISOsFromProxmox's in-use check, not the name.
+// customISONames returns the setup phase's per-node ISO filenames (no cluster
+// prefix — removal safety relies on RemoveCustomISOsFromProxmox's in-use check).
 func customISONames(cfg *config.Config) []string {
 	names := []string{string(nodetypes.RoleBootstrap) + ".iso"}
 	for i := range cfg.Topology.ControlPlane.Count {

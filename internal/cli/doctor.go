@@ -16,17 +16,12 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-// errDoctorWarn signals a doctor run with warnings but no failures. It is a
-// bare sentinel local to cli (not an errtypes category) because warn-only is
-// not a real failure — exitCodeFor maps it to the dedicated code 6 so cron
-// consumers can distinguish "clean", "warn", and "fail" (see
-// docs/cli/exit-codes.md); execute() also skips its usual "command failed"
-// announcement for this sentinel.
+// errDoctorWarn is a warn-only sentinel (not errtypes) mapped to exit code 6;
+// see docs/cli/exit-codes.md.
 var errDoctorWarn = errors.New("doctor: warnings present, no failures")
 
-// doctorExitErr maps a doctor run's fail/warn tallies to the value runDoctor
-// returns, shared by both the JSON and text rendering paths so the two
-// outputs can never drift on exit-code behavior.
+// doctorExitErr maps fail/warn tallies to runDoctor's return value; shared by
+// the JSON and text paths so they can't drift on exit code.
 func doctorExitErr(fails, warns int) error {
 	switch {
 	case fails > 0:
@@ -38,9 +33,8 @@ func doctorExitErr(fails, warns int) error {
 	}
 }
 
-// doctorJSONCheck is one entry in the JSON output's checks array. For
-// multi-item checks, every sub-item becomes its own entry; detail is omitted
-// when empty.
+// doctorJSONCheck is one entry in the JSON output's checks array; a multi-item
+// check emits one entry per sub-item.
 type doctorJSONCheck struct {
 	Name     string `json:"name"`
 	Severity string `json:"severity"`
@@ -55,10 +49,7 @@ type doctorJSONOutput struct {
 }
 
 func runDoctor(cmd *cobra.Command, _ []string) error {
-	// Runtime gate rather than a build tag so the check pipeline compiles,
-	// lints, and tests on darwin dev hosts; doctor still refuses to run there.
-	// UsageError (64) matches the other invalid-invocation gates; the branch
-	// is dead on the shipped linux targets.
+	// Runtime gate (not a build tag) keeps the pipeline compiling/testing on darwin dev hosts.
 	if runtime.GOOS != "linux" {
 		return &errtypes.UsageError{Msg: fmt.Sprintf("okdctl doctor is only supported on linux (current: %s)", runtime.GOOS)}
 	}
@@ -141,10 +132,8 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 	return doctorExitErr(fails, warns)
 }
 
-// discoverClusterCheck returns the day-2 cluster check when a deployed
-// cluster's kubeconfig is present, located the same way status does. Absent a
-// kubeconfig (or outside a project dir) it returns ok=false so doctor stays a
-// pure pre-deploy tool.
+// discoverClusterCheck returns the day-2 cluster check when a kubeconfig is
+// present, else ok=false so doctor stays a pure pre-deploy tool.
 func discoverClusterCheck() (doctor.Check, bool) {
 	root, err := resolveProjectRoot()
 	if err != nil {
@@ -157,9 +146,8 @@ func discoverClusterCheck() (doctor.Check, bool) {
 	return doctor.ClusterCheck(cl), true
 }
 
-// severityMarkers returns the styled icon, the styled bracketed label,
-// and the raw (unstyled) label text for a given severity. Callers use the
-// raw text for column-width math when rendering aligned sub-item lists.
+// severityMarkers returns the styled icon, styled label, and raw label text;
+// callers use raw text for column-width math.
 func severityMarkers(sev doctor.Severity) (icon, label, rawLabel string) {
 	rawLabel = "[" + sev.String() + "]"
 	switch sev {
@@ -176,9 +164,6 @@ func severityMarkers(sev doctor.Severity) (icon, label, rawLabel string) {
 	return
 }
 
-// printResult renders one check as either a two-line block (title + single
-// result line) or a title followed by a per-item sub-list. A blank line
-// follows either shape so check blocks remain visually distinct.
 func printResult(c doctor.Check, r doctor.Result, w io.Writer) {
 	icon, aggregateLabel, _ := severityMarkers(r.Sev)
 
@@ -189,8 +174,7 @@ func printResult(c doctor.Check, r doctor.Result, w io.Writer) {
 	fmt.Fprintln(w, "  "+icon+" "+title)
 
 	if len(r.Items) > 0 {
-		// Sub-list: each item on its own line, labels aligned to the
-		// widest possible label ("[fail]" / "[warn]" at 6 chars).
+		// Labels aligned to the widest possible label ("[fail]"/"[warn]" at 6 chars).
 		const maxLabelWidth = 6
 		for _, item := range r.Items {
 			_, itemLabel, itemRawLabel := severityMarkers(item.Sev)

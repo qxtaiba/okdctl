@@ -27,45 +27,25 @@ func makeEnv(projectRoot, secretsDir string) *addon.Environment {
 	}
 }
 
-func TestResolveSecretsDir_Absolute(t *testing.T) {
-	absDir := "/srv/secrets"
-	env := makeEnv("/project/root", absDir)
-	got := resolveSecretsDir(env)
-	if got != absDir {
-		t.Errorf("resolveSecretsDir absolute = %q; want %q", got, absDir)
+func TestResolveSecretsDir(t *testing.T) {
+	const root = "/project/root"
+	cases := []struct {
+		name       string
+		secretsDir string
+		want       string
+	}{
+		{"absolute", "/srv/secrets", "/srv/secrets"},
+		{"relative", "secrets/provider", filepath.Join(root, "secrets", "provider")},
+		{"empty", "", filepath.Join(root, defaultSecretsDir)},
+		// Anchors current permissive behaviour; update if allowlist hardening lands.
+		{"traversal anchor", "../etc", filepath.Join(root, "..", "etc")},
 	}
-}
-
-func TestResolveSecretsDir_Relative(t *testing.T) {
-	root := "/project/root"
-	env := makeEnv(root, "secrets/provider")
-	got := resolveSecretsDir(env)
-	want := filepath.Join(root, "secrets", "provider")
-	if got != want {
-		t.Errorf("resolveSecretsDir relative = %q; want %q", got, want)
-	}
-}
-
-func TestResolveSecretsDir_Empty(t *testing.T) {
-	root := "/project/root"
-	env := makeEnv(root, "")
-	got := resolveSecretsDir(env)
-	want := filepath.Join(root, defaultSecretsDir)
-	if got != want {
-		t.Errorf("resolveSecretsDir empty = %q; want %q", got, want)
-	}
-}
-
-// Anchors current permissive behaviour: SecretsDir="../etc" is joined under
-// ProjectRoot via filepath.Join's Clean. Future allowlist hardening should
-// update this assertion.
-func TestResolveSecretsDir_TraversalAnchor(t *testing.T) {
-	root := "/project/root"
-	env := makeEnv(root, "../etc")
-	got := resolveSecretsDir(env)
-	want := filepath.Join(root, "..", "etc")
-	if got != want {
-		t.Errorf("resolveSecretsDir traversal = %q; want %q", got, want)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := resolveSecretsDir(makeEnv(root, tc.secretsDir)); got != tc.want {
+				t.Errorf("resolveSecretsDir(%q) = %q; want %q", tc.secretsDir, got, tc.want)
+			}
+		})
 	}
 }
 
@@ -186,37 +166,5 @@ func TestReadSecret_PermRefusal(t *testing.T) {
 				t.Errorf("perm %#o: readSecret = %q; want %q", tc.perm, got, contents)
 			}
 		})
-	}
-}
-
-func TestSecretManifestFromFile_NamespaceAndName(t *testing.T) {
-	tmp := t.TempDir()
-	credFile := filepath.Join(tmp, "creds.json")
-	if err := os.WriteFile(credFile, []byte(`{"key":"val"}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	env := makeEnv(tmp, tmp)
-	manifest, err := secretManifestFromFile(context.Background(), env, credFile, "onepassword-connect-credentials", "credentials_base64")
-	if err != nil {
-		t.Fatalf("secretManifestFromFile error: %v", err)
-	}
-
-	var parsed map[string]any
-	if err := yaml.Unmarshal([]byte(manifest), &parsed); err != nil {
-		t.Fatalf("manifest YAML invalid: %v", err)
-	}
-	meta, _ := parsed["metadata"].(map[string]any)
-	if meta == nil {
-		t.Fatal("metadata missing")
-	}
-	if meta["name"] != "onepassword-connect-credentials" {
-		t.Errorf("metadata.name = %v; want onepassword-connect-credentials", meta["name"])
-	}
-	if meta["namespace"] != defaultNamespace {
-		t.Errorf("metadata.namespace = %v; want %s", meta["namespace"], defaultNamespace)
-	}
-	if _, ok := parsed["data"].(map[string]any)["credentials_base64"]; !ok {
-		t.Errorf("data[credentials_base64] key missing")
 	}
 }

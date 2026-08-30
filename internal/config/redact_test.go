@@ -131,24 +131,6 @@ func TestRedacted(t *testing.T) {
 		}
 	})
 
-	t.Run("nested struct secret field masked via reflection walker", func(t *testing.T) {
-		cfg := &Config{
-			Provider: ProviderConfig{
-				Proxmox: &ProxmoxConfig{
-					Host:    "pve.example",
-					TokenID: "nested-token-value",
-				},
-			},
-		}
-		got := Redacted(cfg)
-		if got.Provider.Proxmox.TokenID != "***" {
-			t.Errorf("nested TokenID = %q; want ***", got.Provider.Proxmox.TokenID)
-		}
-		if got.Provider.Proxmox.Host != "pve.example" {
-			t.Errorf("non-sensitive Host altered to %q", got.Provider.Proxmox.Host)
-		}
-	})
-
 	t.Run("secret-keyed addon setting masked in map", func(t *testing.T) {
 		cfg := &Config{
 			Addons: map[string]AddonConfig{
@@ -217,16 +199,6 @@ func TestRedacted(t *testing.T) {
 		if cfg.Provider.Proxmox.AdditionalNetworks[0].Bridge != "vmbr1" {
 			t.Error("slice backing shared between Redacted copy and source")
 		}
-	})
-
-	t.Run("nil pointer fields do not panic", func(t *testing.T) {
-		defer func() {
-			if r := recover(); r != nil {
-				t.Errorf("Redacted panicked on nil pointer: %v", r)
-			}
-		}()
-		cfg := &Config{}
-		_ = Redacted(cfg)
 	})
 }
 

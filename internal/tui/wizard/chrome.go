@@ -1,14 +1,11 @@
 package wizard
 
 import (
-	"strings"
-
 	"github.com/qxtaiba/okdctl/internal/config"
 )
 
-// FlowChrome parameterizes the per-flow header chrome: the tagline under
-// the logo and the green context badge on the footer divider. Badge may be
-// nil (no badge).
+// FlowChrome parameterizes per-flow header chrome — tagline plus an
+// optional context badge on the footer divider; Badge may be nil.
 type FlowChrome struct {
 	Tagline string
 	Badge   func(cfg *config.Config) string
@@ -20,12 +17,12 @@ func DefaultChrome() FlowChrome {
 }
 
 func distributionBadge(cfg *config.Config) string {
-	var parts []string
-	if cfg.Distribution.Type != "" {
-		parts = append(parts, string(cfg.Distribution.Type))
-		if cfg.Distribution.Version != "" {
-			parts[0] += " " + cfg.Distribution.Version
-		}
+	if cfg.Distribution.Type == "" {
+		return ""
 	}
-	return strings.Join(parts, " → ")
+	badge := string(cfg.Distribution.Type)
+	if cfg.Distribution.Version != "" {
+		badge += " " + cfg.Distribution.Version
+	}
+	return badge
 }

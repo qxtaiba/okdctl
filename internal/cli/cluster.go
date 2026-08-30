@@ -138,7 +138,7 @@ func runClusterCompact(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	consent := nodeConsent{yes: compactYes, dryRun: compactDryRun, twoStage: destroyGradeVerb("compact")}
+	consent := nodeConsent{yes: compactYes, dryRun: compactDryRun, twoStage: destroyGradeVerbs["compact"]}
 	rc, err := buildNodeRunner(cmd, cfg, "compact", consent, true)
 	if err != nil {
 		return err
@@ -177,10 +177,8 @@ func runClusterStart(cmd *cobra.Command, _ []string) error {
 		})
 }
 
-// runClusterPower is the shared shape behind cluster stop and cluster start:
-// both are whole-cluster power ops (neither destroys a VM, so both stay off
-// the destroy-grade gate via destroyGradeVerb) that differ only in which
-// Runner method they call.
+// runClusterPower is shared by stop/start; both stay off the destroy-grade gate
+// since neither destroys a VM.
 func runClusterPower(cmd *cobra.Command, verb string, yes bool, confirmCluster string, dryRun bool, op func(*nodeRunnerCtx) error) error {
 	cfg, err := loadConfig(cfgFile)
 	if err != nil {
@@ -191,7 +189,7 @@ func runClusterPower(cmd *cobra.Command, verb string, yes bool, confirmCluster s
 		return err
 	}
 
-	consent := nodeConsent{yes: yes, dryRun: dryRun, twoStage: destroyGradeVerb(verb)}
+	consent := nodeConsent{yes: yes, dryRun: dryRun, twoStage: destroyGradeVerbs[verb]}
 	rc, err := buildNodeRunner(cmd, cfg, verb, consent, true)
 	if err != nil {
 		return err

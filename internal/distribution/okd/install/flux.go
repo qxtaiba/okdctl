@@ -17,12 +17,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
-// invokingUserHomeDirFn resolves the invoking user's home directory.
-// Tests override this to redirect writes to a temp dir.
+// invokingUserHomeDirFn resolves the invoking user's home; tests override it.
 var invokingUserHomeDirFn = system.InvokingUserHomeDir
 
-// ValidateClusterAccess runs "oc whoami" to confirm the kubeconfig points at
-// a live cluster and logs the server version when available.
+// ValidateClusterAccess confirms the kubeconfig points at a live cluster via oc whoami.
 func (p *Phase) ValidateClusterAccess(ctx context.Context) error {
 	p.Log.Debug("cluster: validating access with oc whoami")
 
@@ -50,19 +48,14 @@ func (p *Phase) ValidateClusterAccess(ctx context.Context) error {
 	return nil
 }
 
-// SetupClusterAccess installs the generated kubeconfig into the invoking
-// user's ~/.kube/config, chowning paths so the file is usable after any
-// sudo re-exec returns.
+// SetupClusterAccess installs the generated kubeconfig into the invoking user's
+// ~/.kube/config, chowning paths for post-sudo use.
 func (p *Phase) SetupClusterAccess(ctx context.Context, clusterDir string) error {
-	// One entry-point check suffices: every step below is a microsecond-scale
-	// local filesystem call, so interior ctx.Err() repeats would add no
-	// cancellation responsiveness. Bare return preserves context.Canceled
-	// identity for cli/root.go::signalExitCode.
+	// Bare return preserves context.Canceled identity for signalExitCode.
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	// Resolve the invoking user's home (not root's) so files land where
-	// the user will look for them after the re-exec'd deploy returns.
+	// Invoking user's home, not root's, so files land where expected post re-exec.
 	homeDir, err := invokingUserHomeDirFn()
 	if err != nil {
 		return &errtypes.ConfigError{Msg: "resolve invoking user home", Err: err}
@@ -79,9 +72,7 @@ func (p *Phase) SetupClusterAccess(ctx context.Context, clusterDir string) error
 	srcKubeconfig := workspace.KubeconfigPath(clusterDir)
 	destKubeconfig := filepath.Join(kubeDir, "config")
 
-	// Skip the backup when the existing config already matches the source, so
-	// idempotent deploy re-runs don't drop an unbounded pile of identical
-	// ~/.kube/config.backup.<ts> files.
+	// Skip backup when content already matches, so idempotent re-runs don't pile up backups.
 	if system.FileExists(destKubeconfig) && !sameFileContent(srcKubeconfig, destKubeconfig) {
 		backupPath := destKubeconfig + ".backup." + time.Now().Format("20060102-150405")
 		if err := system.CopyFileMode(destKubeconfig, backupPath, 0o600); err != nil {
@@ -106,9 +97,7 @@ func (p *Phase) SetupClusterAccess(ctx context.Context, clusterDir string) error
 	return nil
 }
 
-// sameFileContent reports whether a and b both exist and hold identical bytes.
-// A read error on either returns false so the caller errs toward taking a
-// backup rather than silently skipping one.
+// sameFileContent treats a read error as false so the caller takes a backup.
 func sameFileContent(a, b string) bool {
 	da, err := os.ReadFile(a)
 	if err != nil {
@@ -125,9 +114,7 @@ func (p *Phase) addKubeconfigToBashrc(homeDir, kubeconfigPath string) error {
 	bashrcPath := filepath.Join(homeDir, ".bashrc")
 	exportLine := fmt.Sprintf("export KUBECONFIG=%s", kubeconfigPath)
 
-	// Preserve the existing .bashrc mode so appending an export line can't
-	// silently relax stricter perms the user may have set. 0644 is only
-	// used when the file does not yet exist (sane default for bashrc).
+	// Preserve existing .bashrc mode; 0644 only applies when creating a new file.
 	mode := os.FileMode(0o644)
 	created := false
 	if fi, err := os.Stat(bashrcPath); err == nil {
@@ -136,9 +123,7 @@ func (p *Phase) addKubeconfigToBashrc(homeDir, kubeconfigPath string) error {
 		created = true
 	}
 
-	// Lstat before open: defense-in-depth producing a clear diagnostic if a
-	// symlink is already present. O_NOFOLLOW on the open below closes the
-	// TOCTOU window for symlinks planted after this check.
+	// Lstat gives a clear symlink diagnostic; O_NOFOLLOW below closes the TOCTOU window.
 	if lfi, lstatErr := os.Lstat(bashrcPath); lstatErr == nil {
 		if lfi.Mode()&os.ModeSymlink != 0 {
 			return fmt.Errorf("refusing to modify %s: path is a symlink", bashrcPath)

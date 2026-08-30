@@ -2,7 +2,6 @@ package tui
 
 import (
 	"os"
-	"slices"
 
 	"charm.land/lipgloss/v2"
 )
@@ -10,9 +9,8 @@ import (
 // ColorTheme selects between the default palette and a high-contrast variant.
 type ColorTheme int
 
-// Scaffolding: ThemeDefault and ThemeHighContrast are exported for the
-// future 'okdctl theme' CLI verb that will let users pick a palette at
-// runtime; setTheme is the only current caller.
+// Scaffolding: exported for a future 'okdctl theme' CLI verb; setTheme is
+// the only current caller.
 const (
 	ThemeDefault ColorTheme = iota
 	ThemeHighContrast
@@ -24,9 +22,8 @@ var (
 	ColorPurple600 = lipgloss.Color("#9333EA")
 	ColorPurple800 = lipgloss.Color("#6B21A8")
 	ColorPrimary   = ColorPurple600
-	// ColorPrimaryDim tints box borders with the brand instead of slate grey,
-	// so every box reads as okdctl at a glance while the brighter ColorPrimary
-	// carries the title.
+	// ColorPrimaryDim tints box borders with the brand (not slate) so every
+	// box reads as okdctl.
 	ColorPrimaryDim = ColorPurple800
 
 	ColorGreen500 = lipgloss.Color("#22C55E")
@@ -89,13 +86,9 @@ func setTheme(theme ColorTheme) {
 	}
 }
 
-// highContrastRequested checks OKDCTL_HIGH_CONTRAST and the legacy
-// HOMELAB_HIGH_CONTRAST (kept working for existing scripts/dotfiles).
 func highContrastRequested() bool {
-	return slices.ContainsFunc([]string{"OKDCTL_HIGH_CONTRAST", "HOMELAB_HIGH_CONTRAST"}, func(name string) bool {
-		v := os.Getenv(name)
-		return v == "1" || v == "true"
-	})
+	v := os.Getenv("OKDCTL_HIGH_CONTRAST")
+	return v == "1" || v == "true"
 }
 
 func init() {

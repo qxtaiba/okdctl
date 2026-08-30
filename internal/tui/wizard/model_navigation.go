@@ -48,8 +48,7 @@ func (m *Model) handleScrollKey(msg tea.KeyPressMsg) bool {
 	return true
 }
 
-// autoScrollToField uses percentage-based scrolling relative to field progress
-// through the form to keep the focused field visible in the viewport.
+// autoScrollToField scrolls by field-progress percentage to keep the focused field visible.
 func (m *Model) autoScrollToField(fieldIndex, totalFields int) {
 	if totalFields == 0 {
 		return
@@ -70,13 +69,7 @@ func (m *Model) autoScrollToField(fieldIndex, totalFields int) {
 	}
 
 	maxOffset := totalContent - viewportHeight
-	targetOffset := int(progress * float64(maxOffset))
-	if targetOffset < 0 {
-		targetOffset = 0
-	}
-	if targetOffset > maxOffset {
-		targetOffset = maxOffset
-	}
+	targetOffset := min(max(int(progress*float64(maxOffset)), 0), maxOffset)
 
 	m.viewport.SetYOffset(targetOffset)
 }
@@ -173,7 +166,7 @@ func (m *Model) goToPreviousStep() (tea.Model, tea.Cmd) {
 }
 
 // jumpToReview clears returnToReview and focuses the review step directly,
-// skipping whatever steps sit between the current step and review.
+// skipping intermediate steps.
 func (m *Model) jumpToReview() (tea.Model, tea.Cmd) {
 	m.returnToReview = false
 
@@ -185,8 +178,8 @@ func (m *Model) jumpToReview() (tea.Model, tea.Cmd) {
 	return m.focusStep(idx)
 }
 
-// jumpToStep applies and blurs the current step, then focuses id directly
-// and arms returnToReview so the eventual confirm/back lands back here.
+// jumpToStep applies/blurs the current step, focuses id, and arms
+// returnToReview so confirm/back returns here.
 func (m *Model) jumpToStep(id StepID) (tea.Model, tea.Cmd) {
 	idx := m.indexOfStepByID(id)
 	if idx < 0 || !stepShouldShow(m.steps[idx], m.config) {
@@ -219,8 +212,8 @@ func (m *Model) indexOfStepByID(id StepID) int {
 	return -1
 }
 
-// focusStep is the shared tail of every step transition: resize, focus,
-// refresh review jump targets, and reset/re-sync the viewport.
+// focusStep is the shared tail of every step transition: resize, focus, refresh
+// jump targets, resync viewport.
 func (m *Model) focusStep(idx int) (tea.Model, tea.Cmd) {
 	m.currentStep = idx
 
@@ -242,9 +235,8 @@ func (m *Model) focusStep(idx int) (tea.Model, tea.Cmd) {
 	return m, m.steps[idx].Init()
 }
 
-// syncJumpTargets refreshes the review step's digit-jump table whenever the
-// current step implements ReviewJumper. Hidden targets (ShouldShow false)
-// are skipped entirely so digits stay compact instead of leaving gaps.
+// syncJumpTargets refreshes the review step's digit-jump table, compacting out
+// hidden (ShouldShow false) targets.
 func (m *Model) syncJumpTargets() {
 	rj, ok := m.steps[m.currentStep].(ReviewJumper)
 	if !ok {

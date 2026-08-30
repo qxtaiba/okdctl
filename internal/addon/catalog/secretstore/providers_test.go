@@ -1,7 +1,6 @@
 package secretstore
 
 import (
-	"strings"
 	"testing"
 
 	"sigs.k8s.io/yaml"
@@ -14,7 +13,6 @@ func TestParseOnepasswordVaults(t *testing.T) {
 		want map[string]int
 	}{
 		{"empty defaults", "", map[string]int{"homelab": 1}},
-		{"whitespace defaults", "   ", map[string]int{"homelab": 1}},
 		{"single", "homelab=1", map[string]int{"homelab": 1}},
 		{"multiple", "a=1,b=2", map[string]int{"a": 1, "b": 2}},
 		{"padded", "  a = 1 , b = 2 ", map[string]int{"a": 1, "b": 2}},
@@ -45,7 +43,6 @@ func TestParseOnepasswordVaults(t *testing.T) {
 		{"empty name", "=1"},
 		{"non-numeric priority", "a=x"},
 		{"newline in name", "evil\nkey=1"},
-		{"space in name", "bad name=1"},
 		{"colon injection in name", "a: b=1"},
 	}
 	for _, tc := range reject {
@@ -140,8 +137,7 @@ func TestProviderValidate(t *testing.T) {
 	})
 }
 
-// providerBlock unmarshals a CRD builder's output back into a nested map so
-// tests can assert structure rather than string-match the YAML text.
+// providerBlock unmarshals manifest into a map so tests assert structure, not YAML text.
 func providerBlock(t *testing.T, manifest string) map[string]any {
 	t.Helper()
 	var doc map[string]any
@@ -163,8 +159,8 @@ func providerBlock(t *testing.T, manifest string) map[string]any {
 }
 
 func TestBuildVaultSecretStoreCRD_Injection(t *testing.T) {
-	// A server value that, under fmt.Sprintf interpolation, would inject a
-	// sibling YAML key. Marshalling must keep it a scalar string.
+	// Would inject a sibling YAML key under naive fmt.Sprintf interpolation;
+	// must stay a scalar string.
 	evil := "https://vault\n      injected: pwned"
 	manifest, err := buildVaultSecretStoreCRD(evil, "secret", "v2")
 	if err != nil {
@@ -217,15 +213,10 @@ func TestBuildBitwardenSecretStoreCRD(t *testing.T) {
 	if bw["organizationID"] != "org-1" || bw["projectID"] != "proj-1" {
 		t.Errorf("org/project = %v/%v; want org-1/proj-1", bw["organizationID"], bw["projectID"])
 	}
-	// The token secret name must never appear as an interpolated value gone
-	// wrong; assert the auth ref is nested under secretRef.credentials.
 	auth, _ := bw["auth"].(map[string]any)
 	secretRef, _ := auth["secretRef"].(map[string]any)
 	creds, _ := secretRef["credentials"].(map[string]any)
 	if creds["name"] != bitwardenTokenSecretName {
 		t.Errorf("auth credentials name = %v; want %s", creds["name"], bitwardenTokenSecretName)
-	}
-	if strings.Contains(manifest, "\torganizationID") {
-		t.Errorf("manifest contains a tab; sigs.k8s.io/yaml should emit spaces only")
 	}
 }

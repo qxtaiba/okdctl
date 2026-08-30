@@ -13,21 +13,17 @@ var registry = &addonRegistry{
 	addons: make(map[string]Addon),
 }
 
-// addonRegistry holds the set of addons an okdctl build knows about. Lookups
-// are safe for concurrent use; iteration order is insertion order (the order
-// the addon packages' init() functions called Register), not alphabetical.
-// All access goes through the package-level Register/Get/All/Enabled/Names
-// functions on the singleton above.
+// addonRegistry holds addons in Register-call (insertion) order, safe for
+// concurrent access.
 type addonRegistry struct {
 	mu     sync.RWMutex
 	addons map[string]Addon
 	order  []string // insertion order for deterministic iteration
 }
 
-// Register adds an addon to the global registry. It returns an error if an
-// addon with the same name is already registered. Callers invoking Register
-// from an init() function should handle the error explicitly (typically by
-// panicking — init() cannot propagate errors).
+// Register adds an addon to the global registry, erroring if the name is
+// already taken. Callers in init() must handle the error explicitly
+// (typically by panicking), since init cannot propagate one.
 func Register(a Addon) error {
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
@@ -84,8 +80,8 @@ func Names() []string {
 	return slices.Clone(registry.order)
 }
 
-// IsRegistered reports whether name is in the registry. Unused today — kept
-// for a future "okdctl addon validate" verb and wizard pre-checks.
+// IsRegistered reports whether name is in the registry; unused today, kept
+// for a future addon-validate verb.
 func IsRegistered(name string) bool {
 	registry.mu.RLock()
 	defer registry.mu.RUnlock()

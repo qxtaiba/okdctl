@@ -5,57 +5,41 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
 func installFakeTerraformCapture(t *testing.T, argvLog, snapshotLog string) {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("fake-terraform script relies on POSIX sh")
-	}
-	dir := t.TempDir()
-	script := `#!/bin/sh
+	testutil.InstallFakeBin(t, "terraform", `#!/bin/sh
 printf '%s\n' "$*" >> "$TF_TEST_ARGV_LOG"
 if [ "$1" = "apply" ] && ls terraform.tfstate.*.bak >/dev/null 2>&1; then
   printf 'snapshot-present\n' >> "$TF_TEST_SNAPSHOT_LOG"
 fi
 exit 0
-`
-	path := filepath.Join(dir, "terraform")
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+`)
 	t.Setenv("TF_TEST_ARGV_LOG", argvLog)
 	t.Setenv("TF_TEST_SNAPSHOT_LOG", snapshotLog)
 }
 
 func installFakeTerraformApplyFails(t *testing.T) {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("fake-terraform script relies on POSIX sh")
-	}
-	dir := t.TempDir()
-	script := "#!/bin/sh\ncase \"$1\" in\n  apply) echo \"fake terraform: apply failed\" >&2; exit 1 ;;\n  *) exit 0 ;;\nesac\n"
-	if err := os.WriteFile(filepath.Join(dir, "terraform"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	testutil.InstallFakeBin(t, "terraform", `#!/bin/sh
+case "$1" in
+  apply) echo "fake terraform: apply failed" >&2; exit 1 ;;
+  *) exit 0 ;;
+esac
+`)
 }
 
 func installFakeOc(t *testing.T) {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("fake-oc script relies on POSIX sh")
-	}
-	dir := t.TempDir()
-	script := `#!/bin/sh
+	testutil.InstallFakeBin(t, "oc", `#!/bin/sh
 if [ -n "$OC_FAKE_FAIL" ]; then
   exit 1
 fi
@@ -63,11 +47,7 @@ if [ -n "$OC_FAKE_NODES" ]; then
   printf '%s\n' "$OC_FAKE_NODES"
 fi
 exit 0
-`
-	if err := os.WriteFile(filepath.Join(dir, "oc"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+`)
 }
 
 func seedWorkerTerraformEnvDir(t *testing.T, projectRoot, env string) {
@@ -89,10 +69,6 @@ func seedWorkerTerraformEnvDir(t *testing.T, projectRoot, env string) {
 	}
 }
 
-// TestStartWorkerVMs_TargetsScopedAndSnapshotsBeforeApply locks the two
-// safety properties StartWorkerVMs' docstring claims: apply is scoped via
-// -target to the worker VM resource with start_workers_immediately=true,
-// and a state snapshot exists before the apply subprocess runs.
 func TestStartWorkerVMs_TargetsScopedAndSnapshotsBeforeApply(t *testing.T) {
 	projectRoot := t.TempDir()
 	seedWorkerTerraformEnvDir(t, projectRoot, "production")
@@ -144,8 +120,6 @@ func TestStartWorkerVMs_NoWorkersSkips(t *testing.T) {
 	}
 }
 
-// TestStartWorkerVMs_ApplyFailureWrapsClusterError locks that an apply
-// failure surfaces as *errtypes.ClusterError naming the state backup path.
 func TestStartWorkerVMs_ApplyFailureWrapsClusterError(t *testing.T) {
 	projectRoot := t.TempDir()
 	seedWorkerTerraformEnvDir(t, projectRoot, "production")

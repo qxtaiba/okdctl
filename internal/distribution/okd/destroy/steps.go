@@ -26,10 +26,9 @@ const (
 	StepPrintSummary    distribution.StepID = "print-summary"
 )
 
-// destroyTracker buffers step-level failures and skip labels for the final
-// summary step, which must stay NonFatal:false — the orchestrator does not
-// propagate NonFatal errors, and the summary's joined error is what makes a
-// failed teardown exit non-zero instead of reporting misleading success.
+// destroyTracker buffers step-level failures/skips for the summary step,
+// which must stay NonFatal:false — its joined error is what makes a failed
+// teardown exit non-zero.
 type destroyTracker struct {
 	log      *slog.Logger
 	errs     []error
@@ -45,9 +44,8 @@ func (t *destroyTracker) onError(label string) func(error) {
 	}
 }
 
-// skipWhen adapts cause — which returns the single skip condition that
-// fired, or "" to run the step — into a StepDef SkipWhen/SkipReasonFunc
-// pair, recording "label: reason" for the final summary.
+// skipWhen adapts cause (the fired skip condition, or "" to run) into a
+// StepDef SkipWhen/SkipReasonFunc pair, recording "label: reason" for the summary.
 func (t *destroyTracker) skipWhen(label string, cause func() string) (when func() bool, reason func() string) {
 	var fired string
 	when = func() bool {
@@ -102,8 +100,8 @@ func (t *destroyTracker) buildSkips(ctx context.Context, cfg *config.Config, opt
 	return s
 }
 
-// labelTerraformDestroy must match the label passed to track() at the
-// StepDestroyInfra OnError site; a mismatch silently breaks terraformFailed().
+// labelTerraformDestroy must match track()'s StepDestroyInfra OnError label,
+// or terraformFailed() breaks silently.
 const labelTerraformDestroy = "terraform destroy"
 
 func (t *destroyTracker) terraformFailed() bool {
@@ -118,10 +116,7 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 	return []distribution.StepDef{
 		{
 			ID: StepDestroyInfra, Name: "destroy infrastructure", ReRunSafe: distribution.ReRunSafeYes,
-			Desc: "destroying proxmox infrastructure using terraform",
-			// terraform destroy on already-destroyed infra exits cleanly (no
-			// resources to remove), so re-runs are safe. NonFatal further limits
-			// blast radius if the second run encounters a transient TF error.
+			// destroy on already-destroyed infra exits cleanly, so re-runs are safe.
 			NonFatal:       true, // orchestrator continues through cleanup steps on TF failure
 			SkipWhen:       sk.tf,
 			SkipReasonFunc: sk.tfReason,
@@ -136,7 +131,6 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 		},
 		{
 			ID: StepRemoveRemoteISO, Name: "remove remote ISO", ReRunSafe: distribution.ReRunSafeYes,
-			Desc:           "removing coreos iso from proxmox host",
 			NonFatal:       true,
 			SkipWhen:       sk.iso,
 			SkipReasonFunc: sk.isoReason,
@@ -162,7 +156,7 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 		},
 		{
 			ID: StepCleanupFiles, Name: "cleanup files", ReRunSafe: distribution.ReRunSafeYes,
-			Desc: "performing comprehensive cleanup", NonFatal: true,
+			NonFatal:       true,
 			SkipWhen:       sk.cleanup,
 			SkipReasonFunc: sk.cleanupReason,
 			Exec: func(ctx context.Context) error {
@@ -188,7 +182,7 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 		},
 		{
 			ID: StepCleanupFirewall, Name: "cleanup firewall", ReRunSafe: distribution.ReRunSafeYes,
-			Desc: "removing firewall rules", NonFatal: true,
+			NonFatal:       true,
 			SkipWhen:       sk.firewall,
 			SkipReasonFunc: sk.fwReason,
 			Exec: func(ctx context.Context) error {
@@ -202,7 +196,7 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 		},
 		{
 			ID: StepPrintSummary, Name: "print summary", ReRunSafe: distribution.ReRunSafeYes,
-			Desc: "printing destruction summary", NonFatal: false,
+			NonFatal: false,
 			Exec: func(_ context.Context) error {
 				errs, failures, skipped := t.errs, t.failures, t.skipped
 				switch {

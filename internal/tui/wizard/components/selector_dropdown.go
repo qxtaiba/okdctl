@@ -12,8 +12,7 @@ const (
 	maxDropdownVisible  = 5
 )
 
-// moveUp moves selection up. Navigation is trapped within dropdown
-// boundaries and won't wrap around.
+// moveUp moves selection up, trapped within dropdown boundaries (no wrap-around).
 func (s *Selector) moveUp() {
 	if len(s.options) == 0 {
 		return
@@ -40,10 +39,9 @@ func (s *Selector) moveUp() {
 		s.selected = len(s.options) - 1
 	}
 
-	nowInDropdown := s.options[s.selected].InDropdown
-	if nowInDropdown {
+	if s.options[s.selected].InDropdown {
 		s.adjustDropdownScroll()
-	} else if wasInDropdown && !nowInDropdown {
+	} else if wasInDropdown {
 		s.dropdownScrollOffset = 0
 	}
 }
@@ -74,10 +72,9 @@ func (s *Selector) moveDown() {
 		s.selected = 0
 	}
 
-	nowInDropdown := s.options[s.selected].InDropdown
-	if nowInDropdown {
+	if s.options[s.selected].InDropdown {
 		s.adjustDropdownScroll()
-	} else if wasInDropdown && !nowInDropdown {
+	} else if wasInDropdown {
 		s.dropdownScrollOffset = 0
 	}
 }
@@ -101,10 +98,7 @@ func (s *Selector) adjustDropdownScroll() {
 		s.dropdownScrollOffset = posInDropdown - maxDropdownVisible + 1
 	}
 
-	maxOffset := dropdownCount - maxDropdownVisible
-	if maxOffset < 0 {
-		maxOffset = 0
-	}
+	maxOffset := max(dropdownCount-maxDropdownVisible, 0)
 	if s.dropdownScrollOffset > maxOffset {
 		s.dropdownScrollOffset = maxOffset
 	}
@@ -131,10 +125,7 @@ func (s *Selector) renderDropdownRegion(start, end int, scrollStyle, borderStyle
 	var lines []string
 
 	visibleStart := start + s.dropdownScrollOffset
-	visibleEnd := visibleStart + maxDropdownVisible - 1
-	if visibleEnd > end {
-		visibleEnd = end
-	}
+	visibleEnd := min(visibleStart+maxDropdownVisible-1, end)
 
 	itemsAbove := s.dropdownScrollOffset
 	itemsBelow := end - visibleEnd

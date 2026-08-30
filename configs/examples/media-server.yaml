@@ -1,10 +1,5 @@
 ---
 schemaVersion: "v2"
-
-# Media Server Stack Configuration
-# =================================
-# This configuration creates a cluster optimized for running
-# the media server stack (Plex, *arr apps, etc.)
 ---
 cluster:
   name: grappleberry
@@ -25,12 +20,12 @@ topology:
     count: 3
     cpu: 4
     memory_mb: 16384 # 16 GB
-    disk_gb: 100 # 100 GB
+    disk_gb: 100
   workers:
     count: 3
     cpu: 8
     memory_mb: 32768 # 32 GB
-    disk_gb: 200 # 200 GB
+    disk_gb: 200
 networking:
   machine_cidr: 192.168.227.0/24
   pod_cidr: 10.128.0.0/14

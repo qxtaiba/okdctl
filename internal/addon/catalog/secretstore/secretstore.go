@@ -1,6 +1,5 @@
-// Package secretstore provides the External Secrets Operator secret-bootstrap
-// addon. It supports multiple ESO backends (onepassword, vault, bitwarden) via
-// a provider setting and applies both auth Secrets and an ESO SecretStore CRD.
+// Package secretstore is the External Secrets Operator secret-bootstrap addon,
+// applying auth Secrets and an ESO SecretStore CRD for onepassword/vault/bitwarden.
 package secretstore
 
 import (
@@ -47,10 +46,9 @@ func init() {
 	}
 }
 
-// secretStore is the multi-provider ESO secret-bootstrap addon.
 type secretStore struct{}
 
-// Info returns the addon metadata block used by the registry.
+// Info returns the addon's metadata block.
 func (s *secretStore) Info() addon.Metadata {
 	return addon.Metadata{
 		Name:           "secretstore",
@@ -63,9 +61,9 @@ func (s *secretStore) Info() addon.Metadata {
 	}
 }
 
-// Install creates the auth Secrets and the ESO SecretStore CRD for the
-// configured provider. When provider prerequisites (e.g., credential files)
-// are absent it logs setup instructions and returns nil.
+// Install creates the auth Secrets and ESO SecretStore CRD for the configured provider.
+// It returns nil without applying anything when provider prerequisites
+// (credential files) are absent.
 func (s *secretStore) Install(ctx context.Context, env *addon.Environment) error {
 	ts, err := s.decodeSettings(env.AddonConfig.Settings)
 	if err != nil {
@@ -95,9 +93,8 @@ func (s *secretStore) Install(ctx context.Context, env *addon.Environment) error
 		return err
 	}
 	for _, manifest := range manifests {
-		m := manifest
 		if err := addon.RetryDefault(ctx, func() error {
-			if _, err := env.Exec.RunWithStdinChecked(ctx, m, "oc", "apply", "-f", "-"); err != nil {
+			if _, err := env.Exec.RunWithStdinChecked(ctx, manifest, "oc", "apply", "-f", "-"); err != nil {
 				return fmt.Errorf("apply %s manifest: %w", ts.Provider, err)
 			}
 			return nil
@@ -110,47 +107,57 @@ func (s *secretStore) Install(ctx context.Context, env *addon.Environment) error
 	return nil
 }
 
-// installPrereqCheck validates provider-specific file prerequisites. It
-// returns (true, nil) to signal a non-fatal skip when required files are
-// absent — install warns and points at docs/addons/secretstore.md so the
-// caller can rerun after placing the files.
+// providerPrereqs lists each provider's candidate credential files (any one
+// present satisfies the check) and its skip/refusal messages.
+var providerPrereqs = map[providerKind]struct {
+	files    []string
+	warnMsg  string
+	sopsNoun string
+}{
+	providerOnepassword: {
+		files:    []string{opCredentialsFile, opTokenFile},
+		warnMsg:  "secretstore: no secret files found, skipping",
+		sopsNoun: "secret files",
+	},
+	providerVault: {
+		files:    []string{vaultTokenFile},
+		warnMsg:  "secretstore: vault-token.txt not found, skipping",
+		sopsNoun: "vault token",
+	},
+	providerBitwarden: {
+		files:    []string{bitwardenTokenFile},
+		warnMsg:  "secretstore: bitwarden-token.txt not found, skipping",
+		sopsNoun: "bitwarden token",
+	},
+}
+
+// installPrereqCheck returns (skip=true, nil) as a non-fatal skip when required
+// credential files are absent.
 func (s *secretStore) installPrereqCheck(env *addon.Environment, providerName string) (skip bool, err error) {
+	pre, ok := providerPrereqs[providerKind(providerName)]
+	if !ok {
+		return false, nil
+	}
 	dir := resolveSecretsDir(env)
-	switch providerKind(providerName) {
-	case providerOnepassword:
-		credPath := filepath.Join(dir, opCredentialsFile)
-		tokenPath := filepath.Join(dir, opTokenFile)
-		if !system.FileExists(credPath) && !system.FileExists(tokenPath) {
-			env.Logger.Warn("secretstore: no secret files found, skipping",
-				"dir", dir,
-				"docs", "docs/addons/secretstore.md")
-			return true, nil
+	paths := make([]string, len(pre.files))
+	anyExists := false
+	for i, f := range pre.files {
+		paths[i] = filepath.Join(dir, f)
+		anyExists = anyExists || system.FileExists(paths[i])
+	}
+	if !anyExists {
+		env.Logger.Warn(pre.warnMsg, "dir", dir, "docs", "docs/addons/secretstore.md")
+		return true, nil
+	}
+	sopsDetected := false
+	for _, p := range paths {
+		if isSopsEncrypted(p) {
+			sopsDetected = true
+			break
 		}
-		if (isSopsEncrypted(credPath) || isSopsEncrypted(tokenPath)) && !executor.CommandExists("sops") {
-			return false, fmt.Errorf("sops-encrypted secret files detected but sops is not installed: install with 'brew install sops'")
-		}
-	case providerVault:
-		tokenPath := filepath.Join(dir, vaultTokenFile)
-		if !system.FileExists(tokenPath) {
-			env.Logger.Warn("secretstore: vault-token.txt not found, skipping",
-				"dir", dir,
-				"docs", "docs/addons/secretstore.md")
-			return true, nil
-		}
-		if isSopsEncrypted(tokenPath) && !executor.CommandExists("sops") {
-			return false, fmt.Errorf("sops-encrypted vault token detected but sops is not installed: install with 'brew install sops'")
-		}
-	case providerBitwarden:
-		tokenPath := filepath.Join(dir, bitwardenTokenFile)
-		if !system.FileExists(tokenPath) {
-			env.Logger.Warn("secretstore: bitwarden-token.txt not found, skipping",
-				"dir", dir,
-				"docs", "docs/addons/secretstore.md")
-			return true, nil
-		}
-		if isSopsEncrypted(tokenPath) && !executor.CommandExists("sops") {
-			return false, fmt.Errorf("sops-encrypted bitwarden token detected but sops is not installed: install with 'brew install sops'")
-		}
+	}
+	if sopsDetected && !executor.CommandExists("sops") {
+		return false, fmt.Errorf("sops-encrypted %s detected but sops is not installed: install with 'brew install sops'", pre.sopsNoun)
 	}
 	return false, nil
 }
@@ -179,9 +186,8 @@ func (s *secretStore) Uninstall(ctx context.Context, env *addon.Environment) err
 	env.Logger.Info("secretstore: removing provider resources", "provider", string(kind))
 	if p != nil {
 		for _, name := range p.secretNames() {
-			// Run returns a nil error for non-zero exits (only start/ctx
-			// failures error), so the exit code must be checked or a failed
-			// delete passes silently.
+			// Run returns nil error even on non-zero exit; the exit code must
+			// be checked or a failed delete passes silently.
 			if res, err := env.Exec.Run(ctx, "oc", "delete", "secret", name, "-n", ns); err != nil || res.ExitCode != 0 {
 				env.Logger.Warn("secretstore: delete secret failed", "name", name, "exit", res.ExitCode, "err", err)
 			}
@@ -200,7 +206,7 @@ func (s *secretStore) RequiredTools() []addon.ToolSpec {
 	}
 }
 
-// DefaultSettings returns the built-in defaults for secretstore's settings.
+// DefaultSettings returns the addon's default settings.
 func (s *secretStore) DefaultSettings() map[string]string {
 	return map[string]string{
 		SettingSecretsDir:            defaultSecretsDir,
@@ -214,8 +220,7 @@ func (s *secretStore) DefaultSettings() map[string]string {
 	}
 }
 
-// ValidateSettings dispatches to the selected provider's validator and
-// returns human-readable error strings for any invalid settings.
+// ValidateSettings dispatches to the selected provider's validator and returns any error strings.
 func (s *secretStore) ValidateSettings(settings map[string]string) []string {
 	ts, err := s.decodeSettings(settings)
 	if err != nil {
@@ -241,12 +246,8 @@ func isSopsEncryptedBytes(data []byte) bool {
 	return strings.Contains(content, `"sops"`) || strings.Contains(content, "sops_version=")
 }
 
-// readSecret reads and returns the secret at path, decrypting via sops when
-// the file is sops-encrypted. The symlink refusal and O_NOFOLLOW open guard
-// both branches: the sops-vs-plaintext classification reads through the same
-// guarded descriptor rather than re-reading by path, so it cannot follow a
-// symlink planted during a sudo re-exec. The 0o077 permission floor applies
-// only to plaintext secrets (a sops ciphertext is safe at looser modes).
+// readSecret reads path, decrypting via sops if encrypted; O_NOFOLLOW makes the
+// symlink check and classification TOCTOU-safe. The 0o077 floor is plaintext-only.
 func readSecret(ctx context.Context, env *addon.Environment, path string) (string, error) {
 	// lstat (not stat) so the perm gate and the open see the same inode.
 	fi, err := os.Lstat(path)

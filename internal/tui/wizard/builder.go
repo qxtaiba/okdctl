@@ -9,9 +9,8 @@ type StepBuilder struct {
 	factories map[StepType]StepBuilderFactory
 }
 
-// StepState is a marker interface for the optional state value a step
-// factory may return; it prevents accidental registration of an unrelated
-// type that would only fail at runtime on a type assertion.
+// StepState is a marker interface for a step factory's optional state value,
+// preventing accidental registration of a type that fails only at runtime.
 type StepState interface{ IsWizardStepState() }
 
 // StepBuilderFactory constructs a WizardStep and its backing state.
@@ -49,9 +48,8 @@ type BuiltSteps struct {
 	States map[StepType]StepState
 }
 
-// BuildSteps walks wizardCfg.Steps, invokes the matching factory from
-// builder for each one, and returns the ordered steps plus a state map
-// keyed by StepType.
+// BuildSteps builds the ordered step list and per-type state map from
+// wizardCfg.Steps using builder's factories.
 func BuildSteps(wizardCfg Config, builder *StepBuilder) BuiltSteps {
 	result := BuiltSteps{
 		Steps:  make([]WizardStep, 0, len(wizardCfg.Steps)),

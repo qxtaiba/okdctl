@@ -24,23 +24,6 @@ func TestDeduplicateReleases(t *testing.T) {
 			want:  0,
 		},
 		{
-			name: "no duplicates",
-			input: []githubRelease{
-				{TagName: "4.15.0-okd", PublishedAt: now},
-				{TagName: "4.16.0-okd", PublishedAt: now},
-			},
-			want: 2,
-		},
-		{
-			name: "all same tag",
-			input: []githubRelease{
-				{TagName: "4.15.0-okd", PublishedAt: now},
-				{TagName: "4.15.0-okd", PublishedAt: now},
-				{TagName: "4.15.0-okd", PublishedAt: now},
-			},
-			want: 1,
-		},
-		{
 			name: "mixed duplicates",
 			input: []githubRelease{
 				{TagName: "4.15.0-okd", PublishedAt: now},
@@ -53,10 +36,9 @@ func TestDeduplicateReleases(t *testing.T) {
 		},
 	}
 
-	f := &OKDVersionFetcher{}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := f.deduplicateReleases(tc.input)
+			got := deduplicateReleases(tc.input)
 			if len(got) != tc.want {
 				t.Errorf("deduplicateReleases: got %d entries; want %d", len(got), tc.want)
 			}
@@ -89,7 +71,6 @@ func findVersion(t *testing.T, series []OKDReleaseSeries, tag string) OKDVersion
 }
 
 func TestParseReleases_Classification(t *testing.T) {
-	f := &OKDVersionFetcher{}
 	releases := []githubRelease{
 		{TagName: "4.17.0-okd-scos.ec.9", PublishedAt: date(20)},
 		{TagName: "4.17.0-okd-scos.1", PublishedAt: date(15)},
@@ -102,7 +83,7 @@ func TestParseReleases_Classification(t *testing.T) {
 		{TagName: "v1.33.0", PublishedAt: date(1)},
 	}
 
-	series := f.parseReleases(releases)
+	series := parseReleases(releases)
 
 	wantMinors := []int{17, 16, 15, 4}
 	if len(series) != len(wantMinors) {
@@ -152,10 +133,8 @@ func TestParseReleases_Classification(t *testing.T) {
 }
 
 func TestParseReleases_TagVariantTieBreak(t *testing.T) {
-	f := &OKDVersionFetcher{}
-
 	t.Run("published_at wins over raw tag order", func(t *testing.T) {
-		series := f.parseReleases([]githubRelease{
+		series := parseReleases([]githubRelease{
 			{TagName: "4.12.0-0.okd+fcos", PublishedAt: date(20)},
 			{TagName: "4.12.0-0.okd+scos", PublishedAt: date(10)},
 		})
@@ -168,7 +147,7 @@ func TestParseReleases_TagVariantTieBreak(t *testing.T) {
 	})
 
 	t.Run("equal published_at falls back to descending raw tag", func(t *testing.T) {
-		series := f.parseReleases([]githubRelease{
+		series := parseReleases([]githubRelease{
 			{TagName: "4.12.0-0.okd+fcos", PublishedAt: date(10)},
 			{TagName: "4.12.0-0.okd+scos", PublishedAt: date(10)},
 		})

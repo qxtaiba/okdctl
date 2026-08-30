@@ -1,11 +1,6 @@
 {
   "packageRules": [
     {
-      "description": "group flux helmrelease updates",
-      "matchManagers": ["flux"],
-      "groupName": "helm charts"
-    },
-    {
       "description": "group terraform provider updates",
       "matchManagers": ["terraform"],
       "matchDepTypes": ["provider"],

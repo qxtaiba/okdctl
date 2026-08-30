@@ -21,10 +21,9 @@ type LiveKargsParams struct {
 	IgnitionURL string
 }
 
-// BuildLiveKargs returns the kernel arguments used by the live ISO during
-// FCOS install (ignition URL plus static networking). The CA cert that
-// authenticates the HTTPS ignition server is embedded into the live ISO via
-// `coreos-installer iso customize --ignition-ca <file>` — not as a karg.
+// BuildLiveKargs returns the live-ISO kernel arguments for FCOS install
+// (ignition URL plus static networking). The CA cert is embedded separately
+// via --ignition-ca, not as a karg.
 func BuildLiveKargs(params *LiveKargsParams) []string {
 	return []string{
 		fmt.Sprintf("coreos.inst.ignition_url=%s", params.IgnitionURL),
@@ -33,9 +32,7 @@ func BuildLiveKargs(params *LiveKargsParams) []string {
 	}
 }
 
-// BuildDestKargs returns persistent networking kernel arguments for the
-// installed system. Idempotent across rebuilds (each buildNodeISO
-// overwrites its output).
+// BuildDestKargs returns persistent networking kernel arguments for the installed system.
 func BuildDestKargs(params *LiveKargsParams) []string {
 	return []string{
 		fmt.Sprintf("ip=%s::%s:%s::%s:none", params.NodeIP, params.Gateway, params.Netmask, params.Interface),
@@ -43,9 +40,9 @@ func BuildDestKargs(params *LiveKargsParams) []string {
 	}
 }
 
-// ExtractNetworkConfig returns the networking kargs seed values derived
-// from cfg, applying netutil defaults for netmask/interface and the
-// bastion IP for DNS when unset.
+// ExtractNetworkConfig derives networking kargs seed values from cfg,
+// applying netutil defaults for netmask/interface and the bastion IP for
+// DNS when unset.
 func ExtractNetworkConfig(cfg *config.Config) (gateway, netmask, dns, iface string) {
 	staticCfg := cfg.Networking.StaticIP
 
@@ -69,12 +66,10 @@ func ExtractNetworkConfig(cfg *config.Config) (gateway, netmask, dns, iface stri
 	return gateway, netmask, dns, iface
 }
 
-// BuildIgnitionURLForNode builds the https:// ignition URL a node of the
-// given role fetches during FCOS first-boot. The payload contains the
-// cluster pull-secret, SSH authorized keys, and machine-config tokens;
-// TLS with a pinned CA cert is the primary defence against credential
-// capture over the machine-network VLAN. IgnitionServerIP must be RFC1918,
-// loopback, or link-local to prevent exposure on public interfaces.
+// BuildIgnitionURLForNode builds the https:// ignition URL a node fetches on
+// first boot; the payload carries the pull-secret, SSH keys, and
+// machine-config tokens. IgnitionServerIP must be RFC1918, loopback, or
+// link-local to prevent exposing credentials on a public interface.
 func BuildIgnitionURLForNode(cfg *config.Config, role nodetypes.NodeRole) (string, error) {
 	ignitionIP := cfg.HTTPServer.IgnitionServerIP
 
@@ -82,9 +77,9 @@ func BuildIgnitionURLForNode(cfg *config.Config, role nodetypes.NodeRole) (strin
 	if err != nil {
 		return "", &errtypes.ConfigError{Msg: fmt.Sprintf("ignition server IP %q is not a valid IP address", ignitionIP), Err: err}
 	}
-	// Fail closed on IPv6: BuildIgnitionURL renders the host unbracketed, so an
-	// IPv6 literal would produce an invalid URL, and netutil rejects IPv6
-	// everywhere else this field is consumed. Keep the two consumers coherent.
+	// Fail closed on IPv6: BuildIgnitionURL renders the host unbracketed
+	// (invalid URL for IPv6), and netutil rejects IPv6 everywhere else this
+	// field is used.
 	if !addr.Is4() {
 		return "", &errtypes.ConfigError{Msg: fmt.Sprintf("ignition server IP %q must be IPv4 — IPv6 is not supported", ignitionIP)}
 	}

@@ -1,13 +1,7 @@
-# proxmox connection (set via environment variables)
-# - PROXMOX_VE_ENDPOINT    (api url, e.g., https://pve.example.com:8006/)
-# - PROXMOX_VE_USERNAME    (username, e.g., root@pam)
-# - PROXMOX_VE_PASSWORD    (password)
-# TLS verification is pinned on: the production environment sets insecure = false
-# (environments/production/versions.tf), which overrides PROXMOX_VE_INSECURE. A
-# self-signed PVE cert needs its CA in the host trust store, not an env-var bypass.
-
-
-# proxmox infrastructure variables
+# proxmox connection via env vars: PROXMOX_VE_ENDPOINT, PROXMOX_VE_USERNAME,
+# PROXMOX_VE_PASSWORD. TLS verification is pinned on (see
+# environments/production/versions.tf); a self-signed cert needs its CA in
+# the host trust store, not an env-var bypass.
 
 variable "target_node" {
   description = "proxmox node name where vms will be created"
@@ -127,9 +121,6 @@ variable "worker_isos" {
   }
 }
 
-
-# cluster configuration variables
-
 variable "cluster_name" {
   description = "name of the okd cluster"
   type        = string
@@ -184,9 +175,6 @@ variable "worker_count" {
   }
 }
 
-
-# vm resource configuration
-
 variable "cpu_cores" {
   description = "number of cpu cores per vm"
   type        = number
@@ -207,7 +195,6 @@ variable "memory_mb" {
   }
 }
 
-# optional: different resources per node type
 variable "bootstrap_cpu_cores" {
   description = "cpu cores for bootstrap node (defaults to cpu_cores if not set)"
   type        = number
@@ -244,9 +231,6 @@ variable "worker_memory_mb" {
   default     = null
 }
 
-
-# node names
-
 variable "master_names" {
   description = "list of master node names"
   type        = list(string)
@@ -258,9 +242,6 @@ variable "worker_names" {
   type        = list(string)
   default     = ["worker0", "worker1", "worker2"]
 }
-
-
-# optional configuration
 
 variable "vm_tags" {
   description = "tags to apply to all vms"
@@ -288,10 +269,8 @@ variable "numa_enabled" {
   default     = false
 }
 
-# Any qemu cpu model is legal, not just the common four — okdctl's config
-# validator admits models like Skylake-Server-noTSX-IBRS or x86-64-v2,flags=+pge
-# and passes them through verbatim, so this must not narrow the set. The regex
-# mirrors internal/config/validators.go's proxmoxCPUTypePattern.
+# Any qemu cpu model is legal — okdctl passes it through verbatim, mirroring
+# internal/config/validators.go's proxmoxCPUTypePattern.
 variable "cpu_type" {
   description = "qemu cpu model for vms (commonly host, x86-64-v2, x86-64-v3, or kvm64; any model plus flags accepted)"
   type        = string
@@ -315,9 +294,9 @@ variable "worker_target_nodes" {
 }
 
 variable "start_workers_immediately" {
-  description = "Start worker nodes immediately on creation (false to start after bootstrap)"
+  description = "start worker nodes immediately on creation (false to start after bootstrap)"
   type        = bool
-  default     = false # Default to delayed start for reliability
+  default     = false
 }
 
 variable "ha_enabled" {

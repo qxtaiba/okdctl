@@ -20,8 +20,8 @@ const (
 	StepSetupAccess     distribution.StepID = "setup-access"
 )
 
-// StepNames maps each install StepID to its display name. StepDef literals in
-// this file reference this map so each name has a single source.
+// StepNames maps each install StepID to its display name; StepDef literals in
+// this file reference it as the single source.
 var StepNames = map[distribution.StepID]string{
 	StepDeployInfra:     "deploy infrastructure",
 	StepWaitBootstrap:   "wait for bootstrap",
@@ -38,10 +38,8 @@ func (p *Phase) installSteps(cfg *config.Config, opts *Options) []distribution.S
 	return []distribution.StepDef{
 		{
 			ID: StepDeployInfra, Name: StepNames[StepDeployInfra],
-			// terraform apply is idempotent: re-running against existing infra
-			// is a safe no-op per the Terraform execution model.
+			// terraform apply is idempotent: re-running against existing infra is a safe no-op.
 			ReRunSafe:  distribution.ReRunSafeYes,
-			Desc:       "deploying proxmox infrastructure using terraform",
 			SkipWhen:   func() bool { return opts.SkipTerraform },
 			SkipReason: "terraform deployment disabled",
 			Exec: func(ctx context.Context) error {
@@ -55,7 +53,6 @@ func (p *Phase) installSteps(cfg *config.Config, opts *Options) []distribution.S
 		{
 			ID: StepWaitBootstrap, Name: StepNames[StepWaitBootstrap],
 			ReRunSafe: distribution.ReRunSafeYes,
-			Desc:      "waiting for bootstrap node to initialize",
 			OnStart: func() {
 				p.Log.Info("bootstrap: waiting for control plane initialization")
 				p.Log.Info("bootstrap: this process typically takes 15-30 minutes")
@@ -67,7 +64,6 @@ func (p *Phase) installSteps(cfg *config.Config, opts *Options) []distribution.S
 		{
 			ID: StepStartWorkers, Name: StepNames[StepStartWorkers],
 			ReRunSafe:   distribution.ReRunSafeYes,
-			Desc:        "starting worker nodes after bootstrap complete",
 			AlreadyDone: func(ctx context.Context) (bool, error) { return p.workersAlreadyRunning(ctx, cfg) },
 			SkipWhen:    func() bool { return opts.SkipTerraform },
 			SkipReason:  "terraform deployment disabled",
@@ -76,19 +72,16 @@ func (p *Phase) installSteps(cfg *config.Config, opts *Options) []distribution.S
 		{
 			ID: StepSetupKubeconfig, Name: StepNames[StepSetupKubeconfig],
 			ReRunSafe: distribution.ReRunSafeYes,
-			Desc:      "configuring cluster access",
 			Exec:      func(ctx context.Context) error { return p.SetupKubeconfig(ctx, clusterDir) },
 		},
 		{
 			ID: StepValidateAccess, Name: StepNames[StepValidateAccess],
 			ReRunSafe: distribution.ReRunSafeYes,
-			Desc:      "validating cluster access",
 			Exec:      func(ctx context.Context) error { return p.ValidateClusterAccess(ctx) },
 		},
 		{
 			ID: StepMonitorInstall, Name: StepNames[StepMonitorInstall],
 			ReRunSafe: distribution.ReRunSafeYes,
-			Desc:      "monitoring installation and approving certificate requests",
 			OnStart: func() {
 				p.Log.Info("install: monitoring cluster operators and approving csrs")
 				p.Log.Info("install: this process typically takes 30-60 minutes")
@@ -100,9 +93,9 @@ func (p *Phase) installSteps(cfg *config.Config, opts *Options) []distribution.S
 		{
 			ID: StepSetupAccess, Name: StepNames[StepSetupAccess],
 			ReRunSafe: distribution.ReRunSafeYes,
-			Desc:      "configuring persistent cluster access", NonFatal: true,
-			Exec:    func(ctx context.Context) error { return p.SetupClusterAccess(ctx, clusterDir) },
-			OnError: phase.WarnOnError(p.Log, "kubeconfig: failed to setup persistent access"),
+			NonFatal:  true,
+			Exec:      func(ctx context.Context) error { return p.SetupClusterAccess(ctx, clusterDir) },
+			OnError:   phase.WarnOnError(p.Log, "kubeconfig: could not set up persistent access"),
 		},
 	}
 }

@@ -1,21 +1,14 @@
 #!/usr/bin/env bash
-# update-coreos-pins.sh refreshes the streamPins map in coreos.go from
-# upstream openshift/installer release-4.X branch tips. Run via
-# .github/workflows/update-coreos-pins.yml on a schedule, or manually
-# before a release to land any drift in a reviewable PR.
+# Refreshes the streamPins map in coreos.go from openshift/installer
+# release-4.X branch tips. Run via .github/workflows/update-coreos-pins.yml
+# on a schedule, or manually before a release.
 #
-# streamPins is keyed by (major, minor); MAJOR is fixed at 4 here because
-# every currently supported minor is a 4.x release. Bumping onto a new major
-# (e.g. once OKD 5.x is generally available) means adding a second
-# major/minor loop rather than changing MAJOR in place.
+# streamPins is keyed by (major, minor); MAJOR=4 until OKD 5.x exists, at
+# which point add a second major/minor loop rather than changing MAJOR.
 #
-# For each supported OKD minor:
-#   1. resolve release-4.X tip → commit SHA
-#   2. fetch fcos.json (4.15-4.18) or scos.json (4.19+) at that commit
-#   3. compute sha256 of the JSON body
-#   4. rewrite the streamPins map in coreos.go
-#
-# Exits 0 with a clean working tree when no drift was found.
+# Per minor: resolve branch tip -> commit SHA, fetch fcos.json (<=4.18) or
+# scos.json (4.19+) at that commit, sha256 it, and rewrite streamPins.
+# Exits 0 with a clean tree when no drift was found.
 
 set -euo pipefail
 
@@ -33,19 +26,19 @@ require python3
 env_args=()
 for minor in "${SUPPORTED_MINORS[@]}"; do
     flavor=fcos
-    # The fcos/scos split at minor 19 is specific to MAJOR=4; a second
-    # major/minor loop (see header) must define its own boundary, not reuse 19.
+    # fcos/scos split at 19 is specific to MAJOR=4; a future major loop must
+    # define its own boundary, not reuse 19.
     [ "$minor" -ge 19 ] && flavor=scos
-    # --heads + an anchored refs/heads/ pattern so a like-named tag cannot also
-    # match; NR==1 takes a single sha even if the pattern ever widens.
+    # --heads + anchored refs/heads/ prevents a like-named tag from matching;
+    # NR==1 takes one sha even if the pattern ever widens.
     sha=$(git ls-remote --heads https://github.com/openshift/installer "refs/heads/release-$MAJOR.$minor" | awk 'NR==1{print $1}')
     if [ -z "$sha" ]; then
         echo "warn: no tip for release-$MAJOR.$minor — skipping" >&2
         continue
     fi
-    # Capture the body and reject empty/non-JSON before hashing: a 200 with a
-    # truncated or empty payload would otherwise hash to a plausible pin (the
-    # empty-input sha256 e3b0c442...) and make a degenerate stream verify.
+    # Reject empty/non-JSON before hashing: a truncated 200 would otherwise
+    # hash to a plausible pin (empty-input sha256 e3b0c442...) and make a
+    # degenerate stream verify.
     json_body=$(curl -sSfL --proto '=https' --proto-redir '=https' --tlsv1.2 --connect-timeout 10 --max-time 60 "https://raw.githubusercontent.com/openshift/installer/${sha}/data/data/coreos/${flavor}.json")
     if [ -z "$json_body" ] || ! printf '%s' "$json_body" | python3 -c 'import json,sys; json.load(sys.stdin)' 2>/dev/null; then
         echo "warn: empty or non-JSON ${flavor}.json for release-$MAJOR.$minor — skipping" >&2
@@ -74,11 +67,9 @@ block = block_re.search(text)
 if block is None:
     raise SystemExit("streamPins block not found in coreos.go")
 
-# Seed from the committed map, then overlay freshly-resolved pins. Merging (not
-# rebuilding) means a minor that failed to resolve this run — branch retired
-# upstream, transient network — keeps its committed pin instead of being
-# silently dropped, and a minor hand-added to coreos.go but absent from
-# SUPPORTED_MINORS is preserved rather than deleted by the whole-map rewrite.
+# Merge onto the committed map rather than rebuilding: a minor that failed
+# to resolve this run keeps its old pin instead of being dropped, and a
+# minor hand-added but absent from SUPPORTED_MINORS survives too.
 entry_re = re.compile(
     r'\{(\d+),\s*(\d+)\}:\s*\{CommitSHA:\s*"([0-9a-f]+)",\s*JSONSHA256:\s*"([0-9a-f]+)"\}'
 )

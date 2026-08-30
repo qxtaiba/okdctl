@@ -3,6 +3,7 @@ package components
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -15,13 +16,10 @@ import (
 
 var errKVEmptyKey = errors.New("key cannot be empty")
 
-// KeyValueField renders an editable table of key=value rows.
-// Navigate mode: j/k moves the row cursor; h/l switches the active column;
-// a adds a row; d deletes the current row. ctrl+e enters edit mode on the
-// active cell; pressing ctrl+e again commits and exits edit mode.
-// enter, tab, and shift+tab are consumed by the host DataDrivenStep for
-// inter-field navigation and therefore cannot be used as edit-commit keys —
-// same constraint as MultiSelectField and SelectField.
+// KeyValueField renders an editable key=value table (j/k row, h/l col, a
+// add, d delete, ctrl+e edit). enter/tab/shift+tab are reserved by the host
+// DataDrivenStep and can't be edit-commit keys — same constraint as
+// MultiSelectField/SelectField.
 type KeyValueField struct {
 	Label     string
 	Help      string
@@ -63,7 +61,7 @@ func NewKeyValueField(label string) *KeyValueField {
 	}
 }
 
-// Value serializes rows as "k1=v1,k2=v2". Rows with a blank key are omitted.
+// Value serializes rows as "k1=v1,k2=v2", omitting rows with a blank key.
 // Values containing a comma will not round-trip through SetValue.
 func (f *KeyValueField) Value() string {
 	var parts []string
@@ -109,10 +107,7 @@ func (f *KeyValueField) Blur() {
 // textinputs so key and value columns fill the available space evenly.
 func (f *KeyValueField) SetWidth(width int) {
 	f.width = width
-	half := (width - 8) / 2
-	if half < 10 {
-		half = 10
-	}
+	half := f.cellWidth()
 	for i := range f.rows {
 		f.rows[i].keyInput.SetWidth(half)
 		f.rows[i].valInput.SetWidth(half)
@@ -137,9 +132,8 @@ func (f *KeyValueField) Validate() error {
 	return nil
 }
 
-// Update routes messages: ctrl+e toggles edit mode; in navigate mode
-// j/k/h/l/a/d adjust cursor and rows; in edit mode all other keystrokes
-// forward to the active textinput.
+// Update routes messages: ctrl+e toggles edit mode; navigate mode uses
+// j/k/h/l/a/d; edit mode forwards other keys to the active textinput.
 func (f *KeyValueField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 	if !f.focused {
 		return f, nil
@@ -225,10 +219,7 @@ func (f *KeyValueField) deleteRow() {
 	if len(f.rows) == 0 {
 		return
 	}
-	newRows := make([]kvRow, 0, len(f.rows)-1)
-	newRows = append(newRows, f.rows[:f.cursor]...)
-	newRows = append(newRows, f.rows[f.cursor+1:]...)
-	f.rows = newRows
+	f.rows = slices.Delete(f.rows, f.cursor, f.cursor+1)
 	if f.cursor >= len(f.rows) && f.cursor > 0 {
 		f.cursor--
 	}
@@ -281,11 +272,7 @@ func (f *KeyValueField) View() string {
 }
 
 func (f *KeyValueField) cellWidth() int {
-	w := (f.width - 8) / 2
-	if w < 10 {
-		return 10
-	}
-	return w
+	return max((f.width-8)/2, 10)
 }
 
 func (f *KeyValueField) viewHeader(colW int) string {

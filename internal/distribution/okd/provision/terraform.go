@@ -17,34 +17,27 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// DefaultProxmoxCPUType is the Proxmox qemu cpu type used when the operator
-// has not set proxmox.cpuType. "host" passes every CPU flag through so nested
-// virt and vector extensions (AVX2, AES-NI) required by OKD nodes work.
+// DefaultProxmoxCPUType is the qemu cpu type used when proxmox.cpuType is
+// unset. "host" passes every CPU flag through so nested virt and vector
+// extensions (AVX2, AES-NI) required by OKD nodes work.
 const DefaultProxmoxCPUType = "host"
 
-// msgProxmoxProviderRequired is the ConfigError context raised when a
-// Proxmox-targeted step runs without provider credentials configured.
+// msgProxmoxProviderRequired is the ConfigError message when a
+// Proxmox-targeted step runs without provider config.
 const msgProxmoxProviderRequired = "proxmox provider configuration required"
 
-func buildQuotedRoleList(format, prefix string, role nodetypes.NodeRole, count int) []string {
+func buildISOStrings(isoStorage string, role nodetypes.NodeRole, count int) []string {
 	result := make([]string, count)
 	for i := range count {
-		result[i] = fmt.Sprintf(format, prefix, role, i)
+		result[i] = fmt.Sprintf(`"%s:iso/%s%d.iso"`, isoStorage, role, i)
 	}
 	return result
 }
 
-func buildISOStrings(isoStorage string, role nodetypes.NodeRole, count int) []string {
-	return buildQuotedRoleList(`"%s:iso/%s%d.iso"`, isoStorage, role, count)
-}
-
 // WorkerISOsPlanVar renders the plan-time -var override for worker_isos
-// widened to workerCount entries, reusing buildISOStrings so the ISO path
-// format has one source of truth with buildTerraformVarsData. A node-add
-// dry-run widens worker_count to preview the create; the module asserts
-// length(worker_isos) >= worker_count, so the preview must widen worker_isos
-// in lockstep or the plan fails against the smaller list still on disk in
-// terraform.tfvars.
+// widened to workerCount entries. A node-add dry-run must widen worker_isos
+// in lockstep with worker_count, or the module's length(worker_isos) >=
+// worker_count assertion fails the plan.
 func WorkerISOsPlanVar(isoStorage string, workerCount int) string {
 	isos := buildISOStrings(isoStorage, nodetypes.RoleWorker, workerCount)
 	return "[" + strings.Join(isos, ", ") + "]"
@@ -172,11 +165,10 @@ func formatAdditionalNetworks(networks []config.AdditionalNetwork) string {
 	return "[" + strings.Join(parts, ", ") + "]"
 }
 
-// WriteTerraformVars renders terraform.tfvars from cfg into envDir. Unlike
-// setup's GenerateTerraformVars it does NOT touch the bootstrap sentinel, so
-// a post-install re-render (node add/remove/resize) cannot resurrect the
-// bootstrap VM by flipping bootstrap_enabled back to true. envDir is the
-// concrete environment directory (…/environments/<env>).
+// WriteTerraformVars renders terraform.tfvars from cfg into envDir (the
+// concrete …/environments/<env> directory). Unlike setup's
+// GenerateTerraformVars, it does not touch the bootstrap sentinel, so a
+// post-install re-render can't resurrect the bootstrap VM.
 func WriteTerraformVars(cfg *config.Config, envDir string) error {
 	if cfg.Provider.Proxmox == nil {
 		return &errtypes.ConfigError{Msg: msgProxmoxProviderRequired}
@@ -204,18 +196,16 @@ type TerraformVarsSizing struct {
 	WorkerOSDiskGB int
 }
 
-// tfvarsIntAssignment matches okdctl's own generated "key = 1234" lines. It is
-// not a general HCL parser — WriteTerraformVars is the only writer of this
-// file's scalar fields, so a purpose-built reader for that exact shape is
-// enough; hand-edited tfvars using interpolation or expressions for these
-// keys will not match and ReadTerraformVarsSizing reports it as missing.
+// tfvarsIntAssignment matches okdctl's own generated "key = 1234" lines —
+// not a general HCL parser, since WriteTerraformVars is the only writer of
+// these scalar fields. Hand-edited tfvars using expressions won't match;
+// ReadTerraformVarsSizing reports them as missing.
 var tfvarsIntAssignment = regexp.MustCompile(`(?m)^(\w+)\s*=\s*(-?\d+)\s*$`)
 
-// ReadTerraformVarsSizing parses the six scalar sizing fields WriteTerraformVars
-// renders out of envDir's terraform.tfvars, so `okdctl node list` can detect
-// drift between the live config and the sizing last materialized to disk.
-// found=false (with a nil error) means terraform.tfvars has not been rendered
-// yet — a fresh workspace has nothing to drift from.
+// ReadTerraformVarsSizing parses the six scalar sizing fields
+// WriteTerraformVars rendered into envDir's terraform.tfvars, so node list
+// can detect drift. found=false with a nil error means terraform.tfvars
+// hasn't been rendered yet.
 func ReadTerraformVarsSizing(envDir string) (sizing TerraformVarsSizing, found bool, err error) {
 	path := filepath.Join(envDir, "terraform.tfvars")
 	data, err := os.ReadFile(path)

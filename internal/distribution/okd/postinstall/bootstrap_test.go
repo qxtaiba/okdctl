@@ -10,15 +10,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/executor"
-	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
-// installFakeTerraformForBootstrap writes a POSIX sh script named "terraform"
-// into a temp dir and prepends it to PATH. Behaviour switches on TF_FAKE_MODE:
-// "success" — both plan and apply exit 0; "plan-fail" — plan exits 1; and
-// "apply-fail" — plan exits 0, apply exits 1.
+// installFakeTerraformForBootstrap installs a fake terraform gated by TF_FAKE_MODE.
 func installFakeTerraformForBootstrap(t *testing.T) {
 	t.Helper()
 	script := `#!/bin/sh
@@ -57,106 +52,52 @@ func seedBootstrapEnvDir(t *testing.T, projectRoot string) string {
 	return envDir
 }
 
-func newBootstrapPhase(t *testing.T) *Phase {
-	t.Helper()
-	return &Phase{
-		BasePhase: phase.NewBasePhase(
-			phase.WithExecutor(executor.New()),
-			phase.WithLogger(logutil.NopLogger),
-		),
+func TestCleanupBootstrap(t *testing.T) {
+	cases := []struct {
+		name    string
+		mode    string
+		wantErr bool
+	}{
+		{"success", "success", false},
+		{"plan fails", "plan-fail", true},
+		{"apply fails", "apply-fail", true},
 	}
-}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			installFakeTerraformForBootstrap(t)
+			t.Setenv("TF_FAKE_MODE", tc.mode)
 
-func TestCleanupBootstrap_Success(t *testing.T) {
-	installFakeTerraformForBootstrap(t)
-	t.Setenv("TF_FAKE_MODE", "success")
+			projectRoot := t.TempDir()
+			envDir := seedBootstrapEnvDir(t, projectRoot)
+			planPath := filepath.Join(envDir, "bootstrap-destroy.tfplan")
+			if err := os.WriteFile(planPath, []byte("stub"), 0o600); err != nil {
+				t.Fatal(err)
+			}
 
-	projectRoot := t.TempDir()
-	envDir := seedBootstrapEnvDir(t, projectRoot)
-	planPath := filepath.Join(envDir, "bootstrap-destroy.tfplan")
-	if err := os.WriteFile(planPath, []byte("stub"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+			p := newTestPhase(t)
+			opts := &Options{
+				BaseOptions: phase.BaseOptions{
+					ProjectRoot:  projectRoot,
+					TerraformEnv: "production",
+				},
+			}
+			cfg := &config.Config{Cluster: config.ClusterConfig{Name: "test-cluster"}}
 
-	p := newBootstrapPhase(t)
-	opts := &Options{
-		BaseOptions: phase.BaseOptions{
-			ProjectRoot:  projectRoot,
-			TerraformEnv: "production",
-		},
-	}
-	cfg := &config.Config{Cluster: config.ClusterConfig{Name: "test-cluster"}}
-
-	if err := p.CleanupBootstrap(context.Background(), cfg, opts); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if _, err := os.Stat(planPath); !os.IsNotExist(err) {
-		t.Errorf("planPath still exists after success; defer SafeRemove did not fire")
-	}
-}
-
-func TestCleanupBootstrap_PlanFails(t *testing.T) {
-	installFakeTerraformForBootstrap(t)
-	t.Setenv("TF_FAKE_MODE", "plan-fail")
-
-	projectRoot := t.TempDir()
-	envDir := seedBootstrapEnvDir(t, projectRoot)
-	planPath := filepath.Join(envDir, "bootstrap-destroy.tfplan")
-	if err := os.WriteFile(planPath, []byte("stub"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	p := newBootstrapPhase(t)
-	opts := &Options{
-		BaseOptions: phase.BaseOptions{
-			ProjectRoot:  projectRoot,
-			TerraformEnv: "production",
-		},
-	}
-	cfg := &config.Config{Cluster: config.ClusterConfig{Name: "test-cluster"}}
-
-	err := p.CleanupBootstrap(context.Background(), cfg, opts)
-	if err == nil {
-		t.Fatal("expected error when plan fails")
-	}
-	var clusterErr *errtypes.ClusterError
-	if !errors.As(err, &clusterErr) {
-		t.Errorf("err = %v; want *errtypes.ClusterError", err)
-	}
-	if _, statErr := os.Stat(planPath); !os.IsNotExist(statErr) {
-		t.Errorf("planPath still exists after plan failure; defer SafeRemove did not fire")
-	}
-}
-
-func TestCleanupBootstrap_ApplyFails(t *testing.T) {
-	installFakeTerraformForBootstrap(t)
-	t.Setenv("TF_FAKE_MODE", "apply-fail")
-
-	projectRoot := t.TempDir()
-	envDir := seedBootstrapEnvDir(t, projectRoot)
-	planPath := filepath.Join(envDir, "bootstrap-destroy.tfplan")
-	if err := os.WriteFile(planPath, []byte("stub"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	p := newBootstrapPhase(t)
-	opts := &Options{
-		BaseOptions: phase.BaseOptions{
-			ProjectRoot:  projectRoot,
-			TerraformEnv: "production",
-		},
-	}
-	cfg := &config.Config{Cluster: config.ClusterConfig{Name: "test-cluster"}}
-
-	err := p.CleanupBootstrap(context.Background(), cfg, opts)
-	if err == nil {
-		t.Fatal("expected error when apply fails")
-	}
-	var clusterErr *errtypes.ClusterError
-	if !errors.As(err, &clusterErr) {
-		t.Errorf("err = %v; want *errtypes.ClusterError", err)
-	}
-	if _, statErr := os.Stat(planPath); !os.IsNotExist(statErr) {
-		t.Errorf("planPath still exists after apply failure; defer SafeRemove did not fire")
+			err := p.CleanupBootstrap(context.Background(), cfg, opts)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected error in mode %s", tc.mode)
+				}
+				var clusterErr *errtypes.ClusterError
+				if !errors.As(err, &clusterErr) {
+					t.Errorf("err = %v; want *errtypes.ClusterError", err)
+				}
+			} else if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if _, statErr := os.Stat(planPath); !os.IsNotExist(statErr) {
+				t.Errorf("planPath still exists after %s; defer SafeRemove did not fire", tc.mode)
+			}
+		})
 	}
 }

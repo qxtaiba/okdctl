@@ -8,12 +8,8 @@ import (
 	"testing"
 )
 
-// TestMain implements the subprocess-hijack used to fake the re-exec inside
-// collectDoctorOutput. The re-exec always passes "doctor" as the first arg,
-// so when this test binary is started that way it IS the fake doctor
-// command: it writes fixed markers to stdout and stderr (plus any canary
-// env var, to prove env filtering) and exits 1 to simulate a failing
-// preflight. Normal `go test` invocations never have "doctor" as argv[1].
+// TestMain re-execs as a fake `doctor` command (argv[1] == "doctor"): writes
+// markers to stdout/stderr plus a canary env var, exits 1.
 func TestMain(m *testing.M) {
 	if len(os.Args) > 1 && os.Args[1] == "doctor" {
 		fmt.Print("fake-doctor-stdout")
@@ -34,8 +30,7 @@ func TestCollectDoctorOutputSeparatesStreamsAndToleratesFailure(t *testing.T) {
 	if string(stdout) != "fake-doctor-stdout" {
 		t.Errorf("stdout = %q, want %q with no stderr interleaved", stdout, "fake-doctor-stdout")
 	}
-	// Prefix, not equality: under `go test -cover` the re-exec'd test binary
-	// appends a GOCOVERDIR warning to stderr after the marker.
+	// Prefix, not equality: `go test -cover` appends a GOCOVERDIR warning after the marker.
 	if !strings.HasPrefix(string(stderr), "fake-doctor-stderr") {
 		t.Errorf("stderr = %q, want %q prefix", stderr, "fake-doctor-stderr")
 	}

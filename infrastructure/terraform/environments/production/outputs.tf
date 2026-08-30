@@ -1,11 +1,7 @@
-# cluster information
-
 output "cluster_name" {
   description = "name of the deployed okd cluster"
   value       = module.okd_cluster.cluster_name
 }
-
-# cluster summary
 
 output "cluster_summary" {
   description = "summary of the deployed cluster"
@@ -18,8 +14,6 @@ output "cluster_summary" {
   }
 }
 
-# vm ids
-
 output "vm_ids" {
   description = "all vm ids for reference"
   value = {
@@ -28,8 +22,6 @@ output "vm_ids" {
     workers   = module.okd_cluster.worker_vm_ids
   }
 }
-
-# cluster resources
 
 output "cluster_resources" {
   description = "total cluster resources"

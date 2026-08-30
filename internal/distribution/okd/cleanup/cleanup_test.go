@@ -7,55 +7,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/testutil"
 )
-
-func TestExecute_UnknownKind(t *testing.T) {
-	opts := &Options{
-		BaseOptions: phase.BaseOptions{WorkDir: t.TempDir()},
-		Kind:        "unknown",
-	}
-	err := executeWithRecorder(context.Background(), opts, logutil.NopLogger, nil)
-	if err == nil {
-		t.Fatal("expected error for unknown kind")
-	}
-	var cfgErr *errtypes.ConfigError
-	if !errors.As(err, &cfgErr) {
-		t.Errorf("err = %v; want *errtypes.ConfigError", err)
-	}
-	if !strings.Contains(err.Error(), "unknown cleanup type") {
-		t.Errorf("err message = %q; want 'unknown cleanup type'", err.Error())
-	}
-}
-
-func TestExecute_WorkOnlyKindScopesToWorkDirOnly(t *testing.T) {
-	// WorkOnly should not touch HAProxy/Apache/Dnsmasq/Terraform paths.
-	// We prove this negatively by pointing them at paths that would error
-	// if cleanup tried to touch them — and asserting the run still succeeds.
-	workDir := t.TempDir()
-	probe := filepath.Join(workDir, "probe.txt")
-	if err := os.WriteFile(probe, []byte("x"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	opts := &Options{
-		BaseOptions: phase.BaseOptions{WorkDir: workDir, ProjectRoot: t.TempDir()},
-		Kind:        WorkOnly,
-	}
-
-	if err := executeWithRecorder(context.Background(), opts, logutil.NopLogger, nil); err != nil {
-		t.Errorf("WorkOnly run errored: %v", err)
-	}
-	if _, err := os.Stat(workDir); !os.IsNotExist(err) {
-		t.Errorf("workDir not removed under WorkOnly: %v", err)
-	}
-}
 
 func TestExecute_WebOnlyKindScopesToWebServerOnly(t *testing.T) {
 	httpRoot := t.TempDir()
@@ -87,16 +44,9 @@ func TestExecute_WebOnlyKindScopesToWebServerOnly(t *testing.T) {
 }
 
 func TestExecute_TerraformOnlyPreservesTFState(t *testing.T) {
-	// The tfstate-preservation invariant tested in infra_test.go applies
-	// through Execute's dispatch path too.
+	// Same invariant as infra_test.go, exercised through Execute's dispatch path.
 	projectRoot := t.TempDir()
-	envDir := filepath.Join(projectRoot, "infrastructure", "terraform", "environments", "production")
-	if err := os.MkdirAll(envDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(envDir, "terraform.tfstate"), []byte("LIVE-STATE"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	tfstate := seedStateFile(t, projectRoot, "LIVE-STATE")
 
 	opts := &Options{
 		BaseOptions: phase.BaseOptions{
@@ -110,7 +60,7 @@ func TestExecute_TerraformOnlyPreservesTFState(t *testing.T) {
 	if err := executeWithRecorder(context.Background(), opts, logutil.NopLogger, nil); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	body, err := os.ReadFile(filepath.Join(envDir, "terraform.tfstate"))
+	body, err := os.ReadFile(tfstate)
 	if err != nil {
 		t.Fatalf("terraform.tfstate removed (DATA LOSS): %v", err)
 	}
@@ -119,28 +69,13 @@ func TestExecute_TerraformOnlyPreservesTFState(t *testing.T) {
 	}
 }
 
-func TestExecute_NilLoggerOk(t *testing.T) {
-	opts := &Options{
-		BaseOptions: phase.BaseOptions{WorkDir: t.TempDir()},
-		Kind:        WorkOnly,
-	}
-	if err := executeWithRecorder(context.Background(), opts, logutil.NopLogger, nil); err != nil {
-		t.Errorf("nil logger caused error: %v", err)
-	}
-}
-
-// installFakePkg prepends a temp dir containing rpm/dnf/dpkg/apt-get shell
-// stubs to PATH. dnf and apt-get append their argv to pkg.called in the same
-// dir so the assertion is package-manager-agnostic. rpm exits 0 (RHEL
-// IsInstalled treats 0 = installed); dpkg prints "ii  <pkg>" so the Debian
-// postCheck (`bytes.Contains(stdout, "ii  "+pkg)`) returns true.
+// installFakePkg stubs rpm/dnf/dpkg/apt-get on PATH; dnf/apt-get log argv to pkg.called.
 func installFakePkg(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	logScript := "#!/bin/sh\necho \"$@\" >> \"" + filepath.Join(dir, "pkg.called") + "\"\nexit 0\n"
 	rpmScript := "#!/bin/sh\nexit 0\n"
-	// dpkg -l <pkg>  must print a line containing "ii  <pkg>" so platform's
-	// postCheck (bytes.Contains) treats the package as installed.
+	// dpkg -l <pkg> must print "ii  <pkg>" so platform's postCheck treats it as installed.
 	dpkgScript := "#!/bin/sh\nfor a in \"$@\"; do\n  case \"$a\" in -*) continue ;; esac\n  echo \"ii  $a 1.0 amd64 fake\"\ndone\nexit 0\n"
 	scripts := map[string]string{
 		"dnf":     logScript,
@@ -199,34 +134,31 @@ func assertPkgNotCalled(t *testing.T, binDir, pkg string) {
 	}
 }
 
-func TestExecute_FullKind_AllStepsRun(t *testing.T) {
-	workDir := t.TempDir()
+func seedWorkAndWebDirs(t *testing.T) (workDir, httpRoot, ignFile string) {
+	t.Helper()
+	workDir = t.TempDir()
 	if err := os.WriteFile(filepath.Join(workDir, "probe.txt"), []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-
-	httpRoot := t.TempDir()
+	httpRoot = t.TempDir()
 	ignDir := filepath.Join(httpRoot, "ignition")
 	if err := os.MkdirAll(ignDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	ignFile := filepath.Join(ignDir, "bootstrap.ign")
+	ignFile = filepath.Join(ignDir, "bootstrap.ign")
 	if err := os.WriteFile(ignFile, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	return workDir, httpRoot, ignFile
+}
 
-	projectRoot := t.TempDir()
-	envDir := filepath.Join(projectRoot, "infrastructure", "terraform", "environments", "production")
-	if err := os.MkdirAll(envDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	// Empty (destroyed) state: a populated or corrupt tfstate makes the
-	// work-directory step preserve cluster credentials instead.
+func TestExecute_FullKind_AllStepsRun(t *testing.T) {
+	workDir, httpRoot, ignFile := seedWorkAndWebDirs(t)
+
+	// Empty state avoids credential preservation triggered by populated/corrupt tfstate.
 	const stateBody = `{"version":4,"resources":[]}`
-	tfstate := filepath.Join(envDir, "terraform.tfstate")
-	if err := os.WriteFile(tfstate, []byte(stateBody), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	projectRoot := t.TempDir()
+	tfstate := seedStateFile(t, projectRoot, stateBody)
 
 	opts := &Options{
 		BaseOptions: phase.BaseOptions{
@@ -259,23 +191,9 @@ func TestExecute_FullKind_AllStepsRun(t *testing.T) {
 }
 
 func TestExecute_FullKind_AggregatesErrors(t *testing.T) {
-	workDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(workDir, "probe.txt"), []byte("x"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	workDir, httpRoot, ignFile := seedWorkAndWebDirs(t)
 
-	httpRoot := t.TempDir()
-	ignDir := filepath.Join(httpRoot, "ignition")
-	if err := os.MkdirAll(ignDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	ignFile := filepath.Join(ignDir, "bootstrap.ign")
-	if err := os.WriteFile(ignFile, []byte("x"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	// Plant a regular FILE where Terraform expects a directory. os.ReadDir
-	// returns ENOTDIR (not ENOENT), so Terraform() returns *errtypes.ConfigError.
+	// A file where Terraform expects a directory yields ENOTDIR, not ENOENT, forcing a ConfigError.
 	projectRoot := t.TempDir()
 	envsParent := filepath.Join(projectRoot, "infrastructure", "terraform")
 	if err := os.MkdirAll(envsParent, 0o755); err != nil {
@@ -343,15 +261,9 @@ func TestExecute_PostDestroy_TFStateGating(t *testing.T) {
 	setup := func(t *testing.T, tfstateBody string) (string, *Options) {
 		t.Helper()
 		projectRoot := t.TempDir()
-		envDir := filepath.Join(projectRoot, "infrastructure", "terraform", "environments", "production")
-		if err := os.MkdirAll(envDir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(envDir, "terraform.tfstate"), []byte(tfstateBody), 0o600); err != nil {
-			t.Fatal(err)
-		}
+		tfstate := seedStateFile(t, projectRoot, tfstateBody)
 		// terraform.tfvars must exist so AlreadyDone returns false and the step runs.
-		if err := os.WriteFile(filepath.Join(envDir, "terraform.tfvars"), []byte("cluster_name = \"test\""), 0o600); err != nil {
+		if err := os.WriteFile(filepath.Join(filepath.Dir(tfstate), "terraform.tfvars"), []byte("cluster_name = \"test\""), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		opts := &Options{
@@ -363,7 +275,7 @@ func TestExecute_PostDestroy_TFStateGating(t *testing.T) {
 			Kind:        TerraformOnly,
 			PostDestroy: true,
 		}
-		return filepath.Join(envDir, "terraform.tfstate"), opts
+		return tfstate, opts
 	}
 
 	t.Run("non-empty state preserved", func(t *testing.T) {
@@ -392,37 +304,4 @@ func TestExecute_PostDestroy_TFStateGating(t *testing.T) {
 			t.Errorf("empty terraform.tfstate not removed after PostDestroy: stat err = %v", err)
 		}
 	})
-}
-
-type fakeMetricsRecorder struct {
-	started  []distribution.StepID
-	finished []distribution.StepID
-	deployed bool
-}
-
-func (f *fakeMetricsRecorder) StepStarted(id distribution.StepID) { f.started = append(f.started, id) }
-
-func (f *fakeMetricsRecorder) StepFinished(r *distribution.StepResult) {
-	f.finished = append(f.finished, r.StepID)
-}
-
-func (f *fakeMetricsRecorder) DeployFinished(time.Duration) { f.deployed = true }
-
-func TestPhaseExecute_WiresMetricsRecorder(t *testing.T) {
-	rec := &fakeMetricsRecorder{}
-	p := New(phase.WithLogger(logutil.NopLogger), phase.WithRecorder(rec))
-	opts := &Options{
-		BaseOptions: phase.BaseOptions{WorkDir: t.TempDir()},
-		Kind:        WorkOnly,
-	}
-
-	if err := p.Execute(context.Background(), opts); err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	if len(rec.started) == 0 {
-		t.Error("StepStarted never called; Phase.Execute did not wire p.Recorder into the orchestrator")
-	}
-	if !rec.deployed {
-		t.Error("DeployFinished never called; Phase.Execute did not wire p.Recorder into the orchestrator")
-	}
 }

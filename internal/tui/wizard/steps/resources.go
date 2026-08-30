@@ -10,7 +10,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
-// ResourcesStepState pairs the resources step with the Config it edits so
+// ResourcesStepState pairs the resources step with the Config it edits, so
 // callers can inspect values after the wizard completes.
 type ResourcesStepState struct {
 	Step *wizard.DataDrivenStep
@@ -177,10 +177,7 @@ func renderResourceSummary(step *wizard.DataDrivenStep, state *ResourcesStepStat
 	totalOSDisk := (cpDisk * cpCount) + (workerDisk * workerCount)
 	totalDataDisk := (workerDataDisk * workerCount) + (cpDataDisk * cpCount)
 
-	boxContentWidth := width - 8
-	if boxContentWidth < 30 {
-		boxContentWidth = 30
-	}
+	boxContentWidth := max(width-8, 30)
 
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).

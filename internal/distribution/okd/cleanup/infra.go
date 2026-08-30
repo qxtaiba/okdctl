@@ -14,10 +14,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
-// Terraform removes generated Terraform artifacts under
-// infrastructure/terraform/environments. When terraformEnv is empty every
-// environment directory is cleaned; otherwise only that one.
-// terraform.tfstate is intentionally preserved so destroy can still run.
+// Terraform removes generated artifacts under infrastructure/terraform/environments
+// (all envs if terraformEnv is empty); terraform.tfstate is preserved so destroy can still run.
 func Terraform(ctx context.Context, projectRoot, terraformEnv string, logger *slog.Logger) error {
 	logger = logutil.OrNop(logger)
 	logger.Info("cleanup: terraform artifacts")
@@ -47,9 +45,8 @@ func Terraform(ctx context.Context, projectRoot, terraformEnv string, logger *sl
 	return nil
 }
 
-// terraformFilesToRemove lists the generated Terraform artefacts that cleanup
-// may delete. terraform.tfstate is intentionally absent: it must survive so
-// that destroy can still run against existing infrastructure resources.
+// terraformFilesToRemove lists cleanup targets; terraform.tfstate is
+// deliberately absent so destroy can still run.
 var terraformFilesToRemove = []string{
 	"terraform.tfvars",
 	"tfplan",
@@ -58,9 +55,8 @@ var terraformFilesToRemove = []string{
 	workspace.BootstrapStateSentinelFile,
 }
 
-// terraformCleanupDone reports whether every artifact terraform cleanup
-// removes is already absent. A single present artifact means a prior run
-// was partial and cleanup must resume.
+// terraformCleanupDone reports whether every terraform-cleanup artifact is
+// already absent (else a prior run was partial).
 func terraformCleanupDone(opts *Options) (bool, error) {
 	if opts.TerraformEnv == "" {
 		return false, nil

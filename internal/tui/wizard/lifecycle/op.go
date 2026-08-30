@@ -132,13 +132,9 @@ func (s *OpStep) renderOption(o *opChoice, selected bool) string {
 	return out
 }
 
-// Apply records the chosen operation. Choosing a non-resume op while a
-// marker exists arms Ack so the backend's foreign-marker refusal becomes an
-// explicit operator choice instead of a mid-flow error. Resume seeds the
-// marker's target so the hidden target step is not missed. Note that
-// choosing a fresh op whose kind and target happen to match the marker
-// still resumes inside the backend (beginOp's match branch) — CLI parity;
-// the resumed roll skips already-completed nodes rather than restarting.
+// Apply records the chosen operation. Choosing a non-resume op over an
+// existing marker arms Ack — the backend's foreign-marker refusal becomes
+// an explicit choice — and resume seeds the marker's target into scope.
 func (s *OpStep) Apply(_ *config.Config) error {
 	c := s.ops[s.nav.SelectedIndex()]
 	s.st.Op = c.op
@@ -157,8 +153,7 @@ func (s *OpStep) Apply(_ *config.Config) error {
 	return nil
 }
 
-// humanAge renders a duration at minute precision without the trailing
-// zero units time.Duration.String produces ("2h", not "2h0m0s").
+// humanAge renders duration at minute precision, unlike time.Duration.String ("2h", not "2h0m0s").
 func humanAge(d time.Duration) string {
 	if d < time.Minute {
 		return "under a minute"

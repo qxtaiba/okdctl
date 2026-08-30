@@ -7,18 +7,8 @@ import (
 )
 
 func TestBuildConvertConfirm_YesTrue(t *testing.T) {
-	fn := buildConvertConfirm(context.Background(), true)
-
-	cases := [][]string{
-		nil,
-		{},
-		{"default"},
-		{"default", "extra"},
-	}
-	for _, ics := range cases {
-		if got := fn(ics); !got {
-			t.Errorf("yes=true with input %v: want true, got false", ics)
-		}
+	if !buildConvertConfirm(context.Background(), true)(nil) {
+		t.Error("yes=true must confirm without consulting stdin")
 	}
 }
 

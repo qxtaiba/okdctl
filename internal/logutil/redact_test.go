@@ -9,12 +9,8 @@ import (
 	"testing"
 )
 
-func TestRedactableStderr_TruncatesLongOutput(t *testing.T) {
-	const secret = "MY_PULL_SECRET_VALUE"
-	prefix := strings.Repeat("a", 250)
-	suffix := strings.Repeat("b", 250)
-	raw := prefix + secret + suffix
-
+func stderrThroughHandler(t *testing.T, raw string) string {
+	t.Helper()
 	var buf bytes.Buffer
 	jsonLogger(&buf).Warn("subprocess failed", slog.Any("stderr", RedactableStderr(raw)))
 	m := parseOne(t, &buf)
@@ -22,21 +18,60 @@ func TestRedactableStderr_TruncatesLongOutput(t *testing.T) {
 	if !ok {
 		t.Fatalf("stderr is %T; want string", m["stderr"])
 	}
-	if strings.Contains(got, secret) {
-		t.Errorf("raw secret found in log output: %q", got)
-	}
-	if !strings.Contains(got, "[truncated]") {
-		t.Errorf("expected truncation marker in output: %q", got)
-	}
+	return got
 }
 
-func TestRedactableStderr_ShortOutputPassesThrough(t *testing.T) {
-	const msg = "permission denied"
-	var buf bytes.Buffer
-	jsonLogger(&buf).Warn("subprocess failed", slog.Any("stderr", RedactableStderr(msg)))
-	m := parseOne(t, &buf)
-	if got := m["stderr"]; got != msg {
-		t.Errorf("stderr = %v; want %q", got, msg)
+func TestRedactableStderr_ThroughHandler(t *testing.T) {
+	const secret = "MY_PULL_SECRET_VALUE"
+	cases := []struct {
+		name        string
+		raw         string
+		wantExact   string
+		wantAbsent  []string
+		wantPresent []string
+	}{
+		{
+			name:        "truncates long output",
+			raw:         strings.Repeat("a", 250) + secret + strings.Repeat("b", 250),
+			wantAbsent:  []string{secret},
+			wantPresent: []string{"[truncated]"},
+		},
+		{
+			name:      "short output passes through",
+			raw:       "permission denied",
+			wantExact: "permission denied",
+		},
+		{
+			name:        "short credential is scrubbed not passed through",
+			raw:         "token: supersecrettoken123",
+			wantAbsent:  []string{"supersecrettoken123"},
+			wantPresent: []string{Redacted},
+		},
+		{
+			name: "long text credential in windows is scrubbed with truncation",
+			raw: strings.Repeat("x", 190) + " token: headtoken " +
+				strings.Repeat("z", 100) + " password=tailpass " + strings.Repeat("y", 190),
+			wantAbsent:  []string{"headtoken", "tailpass"},
+			wantPresent: []string{"[truncated]"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := stderrThroughHandler(t, tc.raw)
+			if tc.wantExact != "" && got != tc.wantExact {
+				t.Errorf("stderr = %q; want %q", got, tc.wantExact)
+			}
+			for _, s := range tc.wantAbsent {
+				if strings.Contains(got, s) {
+					t.Errorf("credential %q found in log output: %q", s, got)
+				}
+			}
+			for _, s := range tc.wantPresent {
+				if !strings.Contains(got, s) {
+					t.Errorf("expected %q in output: %q", s, got)
+				}
+			}
+		})
 	}
 }
 
@@ -93,6 +128,26 @@ func TestRedactableStderr_ContentScrub(t *testing.T) {
 			wantIn:  "auth failed for",
 			wantOut: "eyJzdWIiOiJvcGVyYXRvciJ9",
 		},
+		{
+			name:    "json quoted key and value",
+			input:   `{"password": "hunter2"}`,
+			wantOut: "hunter2",
+		},
+		{
+			name:    "json compact quoted key",
+			input:   `"token":"abc123"`,
+			wantOut: "abc123",
+		},
+		{
+			name:    "quoted value with spaces",
+			input:   `password="my secret phrase"`,
+			wantOut: "my secret phrase",
+		},
+		{
+			name:    "single-quoted value with spaces",
+			input:   `api_key='spaced out value'`,
+			wantOut: "spaced out value",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -137,47 +192,6 @@ func TestKeyIsSecret(t *testing.T) {
 	}
 }
 
-func TestRedactableStderr_ShortCredentialIsScrubbedNotPassedThrough(t *testing.T) {
-	raw := "token: supersecrettoken123"
-	var buf bytes.Buffer
-	jsonLogger(&buf).Warn("subprocess failed", slog.Any("stderr", RedactableStderr(raw)))
-	m := parseOne(t, &buf)
-	got, ok := m["stderr"].(string)
-	if !ok {
-		t.Fatalf("stderr is %T; want string", m["stderr"])
-	}
-	if strings.Contains(got, "supersecrettoken123") {
-		t.Errorf("raw token found in log output: %q", got)
-	}
-	if !strings.Contains(got, Redacted) {
-		t.Errorf("expected Redacted sentinel in output: %q", got)
-	}
-}
-
-func TestRedactableStderr_LongTextCredentialInWindowsIsScrubbedWithTruncation(t *testing.T) {
-	head := strings.Repeat("x", 190) + " token: headtoken "
-	tail := " password=tailpass " + strings.Repeat("y", 190)
-	filler := strings.Repeat("z", 100)
-	raw := head + filler + tail
-	var buf bytes.Buffer
-	jsonLogger(&buf).Warn("subprocess failed", slog.Any("stderr", RedactableStderr(raw)))
-	m := parseOne(t, &buf)
-	got, ok := m["stderr"].(string)
-	if !ok {
-		t.Fatalf("stderr is %T; want string", m["stderr"])
-	}
-	if strings.Contains(got, "headtoken") {
-		t.Errorf("head credential token found in output: %q", got)
-	}
-	if strings.Contains(got, "tailpass") {
-		t.Errorf("tail credential password found in output: %q", got)
-	}
-	if !strings.Contains(got, "[truncated]") {
-		t.Errorf("expected truncation marker in output: %q", got)
-	}
-}
-
-// jsonLogger builds a RedactHandler over a JSON sink backed by buf.
 func jsonLogger(buf *bytes.Buffer) *slog.Logger {
 	inner := slog.NewJSONHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug})
 	return slog.New(NewRedactHandler(inner))
@@ -192,21 +206,8 @@ func parseOne(t *testing.T, buf *bytes.Buffer) map[string]any {
 	return m
 }
 
-// TestRedactHandler_PasswordKeyIsRedacted covers Fix case (1): the
-// password key emits the [redacted] sentinel in place of the value.
-func TestRedactHandler_PasswordKeyIsRedacted(t *testing.T) {
-	var buf bytes.Buffer
-	jsonLogger(&buf).Info("msg", "password", "hunter2")
-	m := parseOne(t, &buf)
-	if got := m["password"]; got != Redacted {
-		t.Errorf("password = %v; want %q", got, Redacted)
-	}
-}
-
-// TestRedactHandler_CaseInsensitiveKeys covers Fix case (2): mixed-case
-// secret-key fragments still match.
-func TestRedactHandler_CaseInsensitiveKeys(t *testing.T) {
-	for _, key := range []string{"PASSWORD", "PaSsWoRd", "api_token"} {
+func TestRedactHandler_SecretKeysRedacted(t *testing.T) {
+	for _, key := range []string{"password", "PASSWORD", "PaSsWoRd", "api_token"} {
 		t.Run(key, func(t *testing.T) {
 			var buf bytes.Buffer
 			jsonLogger(&buf).Info("msg", key, "s3cr3t")
@@ -218,8 +219,6 @@ func TestRedactHandler_CaseInsensitiveKeys(t *testing.T) {
 	}
 }
 
-// TestRedactHandler_GroupRecursion covers Fix case (3): redaction
-// descends into nested slog.Group attrs.
 func TestRedactHandler_GroupRecursion(t *testing.T) {
 	var buf bytes.Buffer
 	jsonLogger(&buf).Info("msg", slog.Group("creds", "password", "hunter2"))
@@ -233,8 +232,6 @@ func TestRedactHandler_GroupRecursion(t *testing.T) {
 	}
 }
 
-// TestRedactHandler_URLUserinfoStripped covers Fix case (4): *url.URL
-// userinfo loses its password but keeps the username.
 func TestRedactHandler_URLUserinfoStripped(t *testing.T) {
 	u, err := url.Parse("https://alice:hunter2@host/path")
 	if err != nil {
@@ -253,8 +250,6 @@ func TestRedactHandler_URLUserinfoStripped(t *testing.T) {
 	}
 }
 
-// TestRedactHandler_NilURLPassesThrough covers Fix case (5): a typed-nil
-// *url.URL must not panic and must pass through as a typed-nil *url.URL.
 func TestRedactHandler_NilURLPassesThrough(t *testing.T) {
 	defer func() {
 		if p := recover(); p != nil {
@@ -272,10 +267,7 @@ func TestRedactHandler_NilURLPassesThrough(t *testing.T) {
 	}
 }
 
-// TestRedactHandler_URLStringUserinfoStripped covers the plain-string path:
-// an endpoint logged as a string (not *url.URL) under a url/endpoint-class key
-// must still have its userinfo password stripped, since no key-based rule fires
-// on "endpoint" and the string never reaches redactAny's *url.URL case.
+// Covers the plain-string path, which never reaches redactAny's *url.URL case.
 func TestRedactHandler_URLStringUserinfoStripped(t *testing.T) {
 	cases := []struct {
 		name string
@@ -300,17 +292,6 @@ func TestRedactHandler_URLStringUserinfoStripped(t *testing.T) {
 	}
 }
 
-func TestRedactableArgv_PlainTokensPassThrough(t *testing.T) {
-	argv := RedactableArgv([]string{"install", "--verbose", "--output=json"})
-	got, ok := argv.Redacted().(string)
-	if !ok {
-		t.Fatalf("Redacted() returned %T, want string", argv.Redacted())
-	}
-	if got != "install --verbose --output=json" {
-		t.Errorf("argv = %q; want %q", got, "install --verbose --output=json")
-	}
-}
-
 func TestRedactableArgv_SecretTokenScrubbed(t *testing.T) {
 	cases := []struct {
 		tok  string
@@ -332,12 +313,17 @@ func TestRedactableArgv_SecretTokenScrubbed(t *testing.T) {
 	}
 }
 
-func TestRedactableArgv_SpaceSeparatedSecretScrubbed(t *testing.T) {
+func TestRedactableArgv_Redacted(t *testing.T) {
 	cases := []struct {
 		name string
 		argv []string
 		want string
 	}{
+		{
+			name: "plain tokens pass through",
+			argv: []string{"install", "--verbose", "--output=json"},
+			want: "install --verbose --output=json",
+		},
 		{
 			name: "double-dash flag with following value",
 			argv: []string{"install", "--token", "abc123"},
@@ -394,13 +380,11 @@ func TestRedactableArgv_HandlerDispatch(t *testing.T) {
 	}
 }
 
-// redactor satisfies the inline interface{ Redacted() any } that
-// redactAny matches at redact.go:107.
+// redactor implements Redacted() any for redactAny's dispatch test.
 type redactor struct{ public string }
 
 func (r redactor) Redacted() any { return r.public }
 
-// TestRedactHandler_RedactedInterfaceHonored covers Fix case (6).
 func TestRedactHandler_RedactedInterfaceHonored(t *testing.T) {
 	v := redactor{public: "safe-value"}
 	var buf bytes.Buffer
@@ -411,8 +395,7 @@ func TestRedactHandler_RedactedInterfaceHonored(t *testing.T) {
 	}
 }
 
-// credStub mirrors the production ProxmoxCredentials shape: a struct with a
-// secret field, plus Redacted() any that omits it.
+// credStub mirrors ProxmoxCredentials: a secret field plus Redacted() any that omits it.
 type credStub struct {
 	Endpoint string
 	Password string
@@ -427,9 +410,6 @@ func (c *credStub) Redacted() any {
 	return safeCredStub{Endpoint: c.Endpoint}
 }
 
-// TestRedactHandler_StructFieldsStrippedViaBenignKey covers the failure mode
-// where a credential struct passed under a benign key like "creds" must
-// have its secret fields stripped via Redacted().
 func TestRedactHandler_StructFieldsStrippedViaBenignKey(t *testing.T) {
 	cred := &credStub{Endpoint: "https://host:8006", Password: "hunter2"}
 	var buf bytes.Buffer
@@ -460,8 +440,6 @@ func TestRedactHandler_NilRedactablePassesThrough(t *testing.T) {
 	}
 }
 
-// TestRedactHandler_WithAttrsRedacts covers Fix case (7): attrs added
-// via logger.With are redacted before reaching the inner sink.
 func TestRedactHandler_WithAttrsRedacts(t *testing.T) {
 	var buf bytes.Buffer
 	logger := jsonLogger(&buf).With("password", "hunter2")
@@ -472,8 +450,6 @@ func TestRedactHandler_WithAttrsRedacts(t *testing.T) {
 	}
 }
 
-// TestRedactHandler_WithGroupPropagates covers Fix case (8): keys
-// inside a group from WithGroup still get redacted.
 func TestRedactHandler_WithGroupPropagates(t *testing.T) {
 	var buf bytes.Buffer
 	logger := jsonLogger(&buf).WithGroup("grp")
@@ -485,45 +461,5 @@ func TestRedactHandler_WithGroupPropagates(t *testing.T) {
 	}
 	if got := grp["password"]; got != Redacted {
 		t.Errorf("grp.password = %v; want %q", got, Redacted)
-	}
-}
-
-func TestRedactableStderr_QuotedShapes(t *testing.T) {
-	cases := []struct {
-		name    string
-		input   string
-		wantOut string
-	}{
-		{
-			name:    "json quoted key and value",
-			input:   `{"password": "hunter2"}`,
-			wantOut: "hunter2",
-		},
-		{
-			name:    "json compact quoted key",
-			input:   `"token":"abc123"`,
-			wantOut: "abc123",
-		},
-		{
-			name:    "quoted value with spaces",
-			input:   `password="my secret phrase"`,
-			wantOut: "my secret phrase",
-		},
-		{
-			name:    "single-quoted value with spaces",
-			input:   `api_key='spaced out value'`,
-			wantOut: "spaced out value",
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := scrubStderrText(tc.input)
-			if strings.Contains(got, tc.wantOut) {
-				t.Errorf("scrubStderrText(%q) = %q; credential %q must be absent", tc.input, got, tc.wantOut)
-			}
-			if !strings.Contains(got, Redacted) {
-				t.Errorf("scrubStderrText(%q) = %q; expected Redacted sentinel", tc.input, got)
-			}
-		})
 	}
 }

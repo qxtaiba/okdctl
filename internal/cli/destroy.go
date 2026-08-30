@@ -50,15 +50,12 @@ var (
 	destroyOnly           string
 )
 
-// destroyTargetRE matches valid terraform resource addresses for OKD VMs.
-// Anchored to prevent partial matches that would silently widen scope.
+// destroyTargetRE matches allowed VM resource addresses; anchored so a partial
+// match can't silently widen scope.
 var destroyTargetRE = regexp.MustCompile(
 	`^module\.okd_cluster\.proxmox_virtual_environment_vm\.(bootstrap|master|worker)(\[\d+\])?$`,
 )
 
-// expandOnlyFlag converts --only into the equivalent --target list for the
-// given cluster topology. Workers and masters use count-indexed addresses;
-// bootstrap is always index 0.
 func expandOnlyFlag(only string, cfg *config.Config) ([]string, error) {
 	const prefix = "module.okd_cluster.proxmox_virtual_environment_vm."
 	var targets []string
@@ -103,11 +100,8 @@ func validateDestroyTargets(targets []string, cfg *config.Config) error {
 					"must match module.okd_cluster.proxmox_virtual_environment_vm.{bootstrap|master|worker}[<n>]", t),
 			}
 		}
-		role, roleErr := nodetypes.ParseNodeRole(m[1])
-		if roleErr != nil {
-			// destroyTargetRE already restricts m[1] to bootstrap|master|worker.
-			continue
-		}
+		// destroyTargetRE already restricts m[1] to bootstrap|master|worker.
+		role, _ := nodetypes.ParseNodeRole(m[1])
 		bracket := m[2]
 		if bracket == "" {
 			continue
@@ -194,21 +188,19 @@ func init() {
 	})
 }
 
-// validateDestroyFlagCombos rejects flag combinations that are individually
-// valid but not sensible together; all exit 64 (EX_USAGE).
+// validateDestroyFlagCombos rejects individually-valid but nonsensical flag
+// combos; all exit 64 (EX_USAGE).
 func validateDestroyFlagCombos(cfg *config.Config) error {
-	// --target/--only without --confirm-cluster lets a typo silently scope a
-	// destroy; require an explicit cluster-name acknowledgement regardless of --yes.
+	// --target/--only requires --confirm-cluster regardless of --yes, so a typo
+	// can't silently scope a destroy.
 	if len(destroyTargets) > 0 && destroyConfirmCluster == "" {
 		return &errtypes.UsageError{
 			Msg: fmt.Sprintf("--target/--only requires --confirm-cluster=%q to guard against targeted destroys on the wrong cluster", cfg.Cluster.Name),
 		}
 	}
-	// A provided --confirm-cluster must match regardless of --yes. Without
-	// this, an interactive scoped destroy skips the typed-name prompt (it
-	// assumes --confirm-cluster already acknowledged the cluster) and would
-	// proceed on a bare 'y' even when the flag names the wrong cluster —
-	// confirmClusterMatches only validates the value on the --yes path.
+	// Must match regardless of --yes: an interactive scoped destroy skips the
+	// typed-name prompt, so a bare 'y' would otherwise proceed against the
+	// wrong cluster.
 	if destroyConfirmCluster != "" && destroyConfirmCluster != cfg.Cluster.Name {
 		return &errtypes.UsageError{
 			Msg: fmt.Sprintf("--confirm-cluster %q does not match config cluster %q; refusing destroy",
@@ -237,9 +229,8 @@ func validateDestroyFlagCombos(cfg *config.Config) error {
 	return nil
 }
 
-// confirmDestroyInteractive runs the two-stage interactive gate: exact
-// cluster-name typing (unscoped runs only — scoped runs already passed
-// --confirm-cluster) followed by the y/N prompt.
+// confirmDestroyInteractive runs the two-stage gate: typed cluster name
+// (unscoped runs only) then y/N.
 func confirmDestroyInteractive(ctx context.Context, cfg *config.Config) (bool, error) {
 	if len(destroyTargets) == 0 {
 		nameConfirmed, err := promptForClusterNameConfirmation(ctx, cfg.Cluster.Name, "type cluster name to confirm destroy: ")
@@ -250,9 +241,9 @@ func confirmDestroyInteractive(ctx context.Context, cfg *config.Config) (bool, e
 	return promptForConfirmation(ctx, "proceed with destroy? [y/N]: ")
 }
 
-// buildDestroyOptions assembles destroy.Options from the destroy flag set.
-// A scoped run (--target/--only) forces the cleanup/firewall/iso steps off
-// so bastion-wide teardown never runs against a still-running control plane.
+// buildDestroyOptions forces cleanup/firewall/iso off for a scoped
+// (--target/--only) run so bastion-wide teardown never hits a still-running
+// control plane.
 func buildDestroyOptions(cfg *config.Config, projectRoot string) destroy.Options {
 	skipCleanup := destroySkipCleanup
 	skipFirewall := destroySkipFirewall
@@ -306,9 +297,7 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	logutil.Warn("this will destroy cluster and all associated resources", logutil.LF("cluster", cfg.Cluster.Name))
 
 	// Resolved ahead of the confirmation gates so an in-flight node-op marker
-	// is surfaced before the operator confirms (with --yes it still lands in
-	// the log as a warning). Destroy proceeds either way — the teardown covers
-	// whatever partial work the interrupted op left in terraform state.
+	// is surfaced before the operator confirms.
 	projectRoot, err := resolveProjectRootOrDie()
 	if err != nil {
 		return err
@@ -342,10 +331,8 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	}
 	defer lock.Release()
 
-	// Destroy writes .tfstate + logs into <projectRoot>/okd-install before
-	// tearing down. On partial/cancelled runs the workdir may survive
-	// root-owned; restore invoking-user ownership at exit so the user can
-	// inspect or retry.
+	// A partial/cancelled run may leave the workdir root-owned; restore
+	// invoking-user ownership at exit.
 	workDir := workspace.WorkDir(projectRoot)
 	defer func() {
 		if chownErr := system.ChownTreeToInvokingUser(workDir); chownErr != nil {
@@ -378,9 +365,8 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-// runDestroyDryRun runs terraform plan -destroy so the operator can preview what
-// would be removed. Returns *errtypes.ConfigError on plan failure so the process
-// exits 2.
+// runDestroyDryRun runs terraform plan -destroy to preview removal; a plan
+// failure returns *errtypes.ConfigError (exit 2).
 func runDestroyDryRun(ctx context.Context, cfg *config.Config) error {
 	creds, err := handleCredentials(cfg)
 	if err != nil {
@@ -426,9 +412,7 @@ func runDestroyDryRun(ctx context.Context, cfg *config.Config) error {
 }
 
 // announceDestroyNonTerraformActions lists the irreversible non-terraform
-// actions an unscoped destroy also performs, which the terraform-only plan
-// above cannot show. Gated on the same scoped-run logic buildDestroyOptions
-// applies: a scoped --target/--only run skips all of them, so it lists nothing.
+// actions an unscoped destroy also performs; a scoped run lists nothing.
 func announceDestroyNonTerraformActions() {
 	if len(destroyTargets) > 0 {
 		logutil.Info("dry-run: scoped destroy skips iso removal, host cleanup, and firewall rules (unscoped destroy only)")

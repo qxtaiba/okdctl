@@ -1,10 +1,5 @@
 ---
 schemaVersion: "v2"
-
-# Minimal Single-Node Cluster Configuration
-# ==========================================
-# This configuration creates a minimal single-node cluster
-# perfect for testing and development.
 ---
 cluster:
   name: minimal
@@ -25,7 +20,7 @@ topology:
     count: 1
     cpu: 4
     memory_mb: 8192 # 8 GB
-    disk_gb: 50 # 50 GB
+    disk_gb: 50
   workers:
     count: 0 # No workers - control plane runs workloads
     cpu: 0

@@ -7,33 +7,34 @@ import (
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 )
 
-func TestPlanPreview_Clean(t *testing.T) {
-	got := PlanPreview(nil)
-	for _, want := range []string{"PLAN PREVIEW", "no drift"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("clean plan preview missing %q:\n%s", want, got)
-		}
-	}
-	if strings.Contains(got, "drift detected") {
-		t.Errorf("clean plan preview must not claim drift:\n%s", got)
-	}
-}
-
-func TestPlanPreview_Drifted(t *testing.T) {
-	changes := []terraform.ResourceChange{
+func TestPlanPreview(t *testing.T) {
+	drift := []terraform.ResourceChange{
 		{Address: "module.okd_cluster.proxmox_virtual_environment_vm.worker[2]", Action: terraform.PlanActionUpdate},
 		{Address: "module.okd_cluster.proxmox_virtual_environment_vm.worker[3]", Action: terraform.PlanActionDelete},
 	}
-	got := PlanPreview(changes)
-	for _, want := range []string{
-		"PLAN PREVIEW", "drift detected", "2 pending change(s)",
-		"worker[2]", "worker[3]", "update", "delete",
-	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("drifted plan preview missing %q:\n%s", want, got)
-		}
+	cases := []struct {
+		name    string
+		changes []terraform.ResourceChange
+		want    []string
+		absent  string
+	}{
+		{"clean", nil, []string{"PLAN PREVIEW", "no drift"}, "drift detected"},
+		{"drifted", drift, []string{
+			"PLAN PREVIEW", "drift detected", "2 pending change(s)",
+			"worker[2]", "worker[3]", "update", "delete",
+		}, "no drift"},
 	}
-	if strings.Contains(got, "no drift") {
-		t.Errorf("drifted plan preview must not claim clean:\n%s", got)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := PlanPreview(tc.changes)
+			for _, want := range tc.want {
+				if !strings.Contains(got, want) {
+					t.Errorf("%s plan preview missing %q:\n%s", tc.name, want, got)
+				}
+			}
+			if strings.Contains(got, tc.absent) {
+				t.Errorf("%s plan preview must not contain %q:\n%s", tc.name, tc.absent, got)
+			}
+		})
 	}
 }

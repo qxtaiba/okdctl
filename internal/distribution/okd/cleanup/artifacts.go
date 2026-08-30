@@ -16,9 +16,7 @@ import (
 
 var criticalPaths = []string{"/", "/etc", "/var", "/usr", "/usr/local", "/bin", "/sbin", "/lib", "/home", "/root", "/boot", "/dev", "/proc", "/sys"}
 
-// refuseCriticalPath aborts if path resolves to a root-of-system location.
-// Defense-in-depth against a config-file typo pointing cleanup at the wrong
-// target. Returns nil for safe paths.
+// refuseCriticalPath rejects root-of-system paths — defense against a config typo.
 func refuseCriticalPath(path string) error {
 	if slices.Contains(criticalPaths, filepath.Clean(path)) {
 		return fmt.Errorf("refusing to remove critical system path: %s", path)
@@ -26,14 +24,8 @@ func refuseCriticalPath(path string) error {
 	return nil
 }
 
-// SafeRemoveWithLogger removes a file or directory if it exists, logging
-// failures via the provided logger. Returns nil if the path didn't exist or
-// was removed successfully. Runs as root under the re-exec model so there
-// is no fallback path to worry about.
-//
-// Refuses critical system paths and symlinks, returning a ConfigError with the
-// path left untouched; callers must not read a non-nil return as an OS-level
-// failure — it can mean the removal was declined by policy.
+// SafeRemoveWithLogger removes path if it exists, refusing critical system
+// paths and symlinks. A non-nil return may mean policy declined removal, not an OS-level failure.
 func SafeRemoveWithLogger(ctx context.Context, path, description string, logger *slog.Logger) error {
 	logger = logutil.OrNop(logger)
 	if err := refuseCriticalPath(path); err != nil {
@@ -69,18 +61,8 @@ func SafeRemoveWithLogger(ctx context.Context, path, description string, logger 
 }
 
 // WorkDirectory removes all generated artifacts under workDir, including
-// workDir itself. Best-effort: failures accumulate into the returned joined
-// error rather than aborting early.
-//
-// retainClusterConfig preserves cluster-config (auth/kubeconfig and
-// auth/kubeadmin-password — the only admin credentials) and the workDir
-// root that contains it; everything else is still removed. Callers set it
+// workDir itself, best-effort. retainClusterConfig preserves cluster-config
 // when terraform state says the cluster is still live.
-//
-// All Full-sequence steps that follow this one (webServer, haproxy,
-// dnsmasq, terraform, packages, ignition-certs) reference paths outside
-// workDir, so a partial-strip from a mid-run crash does not break
-// subsequent cleanup steps.
 func WorkDirectory(ctx context.Context, workDir string, retainClusterConfig bool, logger *slog.Logger) error {
 	if _, err := os.Stat(workDir); errors.Is(err, os.ErrNotExist) {
 		return nil

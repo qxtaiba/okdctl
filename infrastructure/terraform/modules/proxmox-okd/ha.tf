@@ -1,25 +1,7 @@
-# high availability (opt-in, ha_enabled)
-# Provisions Proxmox HA-manager resources for the master VMs declared in
-# main.tf so a PVE-node failure relocates masters onto surviving nodes
-# instead of leaving them down until manual intervention, with anti-affinity
-# keeping masters spread across nodes.
-#
-# Interaction with main.tf's per-VM startup{} block: startup{} (order,
-# up_delay, down_delay) is enforced by pvestatd on local node boot only and
-# always applies. Once a resource is added to the HA manager (this file),
-# HA supersedes startup{} for anything HA-triggered — a failover relocation
-# does not replay startup{} ordering on the target node.
-#
-# Interaction with okdctl's own power management (cluster stop/start, resize
-# power-cycle, snapshot rollback): the HA request-state below starts as
-# "started", and the CRM enforces the request-state, not terraform. When
-# okdctl powers a VM off out-of-band the request-state diverges;
-# ignore_changes on state keeps that divergence out of `okdctl plan` (no
-# false drift) and out of the next apply (which would otherwise power a
-# deliberately-stopped master back on). It does NOT stop the CRM itself from
-# reacting to an out-of-band shutdown — that interaction is unverified on a
-# live PVE9 cluster, which is why okdctl cluster stop/start warn when
-# ha_enabled is set.
+# Opt-in (ha_enabled): HA-manages master VMs with anti-affinity spreading
+# across proxmox nodes. Supersedes main.tf's startup{} ordering on failover;
+# CRM behavior on an out-of-band shutdown is unverified on PVE9 (hence the
+# stop/start warnings when enabled).
 
 data "proxmox_version" "current" {
   count = var.ha_enabled ? 1 : 0
@@ -32,15 +14,9 @@ data "proxmox_version" "current" {
   }
 }
 
-# The for_each value dereferences the master VM resource, so every haresource
-# instance records a whole-resource dependency on every master (masters use
-# count, not for_each — no per-instance edge exists). A master-scoped
-# terraform destroy therefore cannot cleanly drop one master's HA membership:
-# it either fans the removal across all masters or orphans the vm:<id> CRM
-# entry, and neither shows in a scoped plan. prevent_destroy on the master
-# resource blocks that path until an operator applies the override escape
-# hatch (see main.tf). A clean per-instance edge needs masters migrated from
-# count to for_each — a state-address change tracked for audit-state-and-recovery.
+# for_each dereferences all masters (count-based, not for_each), so a
+# master-scoped destroy fans across all masters or orphans the vm:<id> CRM
+# entry; prevent_destroy (main.tf) blocks that until the override is used.
 resource "proxmox_haresource" "master" {
   for_each = var.ha_enabled ? { for idx, name in local.masters : name => proxmox_virtual_environment_vm.master[idx].vm_id } : {}
 
@@ -49,18 +25,15 @@ resource "proxmox_haresource" "master" {
   resource_id = "vm:${each.value}"
   state       = "started"
 
-  # state is a REQUEST to the CRM, and okdctl legitimately changes the live
-  # power state out-of-band (cluster stop, resize power-cycle, snapshot
-  # rollback). Tracking it would report every stopped cluster as drift and
-  # make the next apply power deliberately-stopped masters back on.
+  # state is a CRM request; tracking it would false-drift against okdctl's
+  # out-of-band power ops.
   lifecycle {
     ignore_changes = [state]
   }
 }
 
-# rule is prefixed with cluster_name because it is a PVE-cluster-wide
-# identifier, not scoped to this terraform state — multiple okd clusters on
-# the same proxmox cluster must not collide on the same ha rule name.
+# rule is prefixed with cluster_name (PVE-cluster-wide id) so multiple okd
+# clusters don't collide.
 resource "proxmox_harule" "master_anti_affinity" {
   count = var.ha_enabled ? 1 : 0
 

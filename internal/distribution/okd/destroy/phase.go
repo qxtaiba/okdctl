@@ -23,17 +23,15 @@ type Options struct {
 	SkipCleanup   bool
 	SkipFirewall  bool
 
-	// TerraformTargets limits terraform destroy to specific resource addresses.
-	// When non-empty only the named resources (and their dependents) are destroyed.
+	// TerraformTargets, when non-empty, limits destroy to these resource
+	// addresses (and their dependents).
 	TerraformTargets []string
 
-	// RemovePackages removes system packages installed during setup.
-	// When true, packages like haproxy, httpd, dnsmasq, etc. will be uninstalled.
+	// RemovePackages uninstalls setup-installed packages (haproxy, httpd, dnsmasq, etc).
 	RemovePackages bool
 
-	// KeepISOs skips removal of the base coreos iso and per-node custom
-	// isos from the Proxmox host. Useful when chaining a destroy with an
-	// immediate re-deploy.
+	// KeepISOs skips ISO removal from the Proxmox host; useful when chaining a
+	// destroy with an immediate re-deploy.
 	KeepISOs bool
 }
 
@@ -48,10 +46,8 @@ func NewOptions(cfg *config.Config, projectRoot string) Options {
 
 // Phase drives the destroy flow: terraform destroy, host-file cleanup,
 // firewall teardown, and ISO removal. Unlike setup/install/postinstall it
-// deliberately exposes no StepDefs listing: Provisioner.DeploySteps covers
-// only the phases deploy runs, and the authoritative destroy preview is
-// the terraform destroy plan (okdctl destroy --dry-run), not a static
-// step list.
+// exposes no StepDefs listing — the authoritative destroy preview is the
+// terraform destroy plan (okdctl destroy --dry-run), not a static step list.
 type Phase struct {
 	phase.BasePhase
 }
@@ -63,10 +59,9 @@ func New(opts ...phase.BasePhaseOption) *Phase {
 	return &Phase{BasePhase: bp}
 }
 
-// Execute tears down the cluster. User confirmation is the CLI layer's
+// Execute tears down the cluster; user confirmation is the CLI layer's
 // responsibility before this is called. cfg must be the same cfg passed to
-// NewOptions — opts was derived from it and the two are not re-validated
-// for consistency here.
+// NewOptions — the two are not re-validated for consistency here.
 func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) ([]distribution.StepResult, error) {
 	p.Log.Info("destroy: starting cluster teardown")
 	p.Log.Info("destroy: this will permanently remove all vms and generated files")

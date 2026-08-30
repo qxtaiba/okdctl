@@ -14,15 +14,15 @@ import (
 // consistent color and badge treatment.
 type OptionStyle int
 
-// OptionStyle values, all mapped from releases.ReleaseType by
-// steps/distribution_loader.go::releaseTypeToOptionStyle.
+// OptionStyle values map from releases.ReleaseType via
+// distribution_loader.go::releaseTypeToOptionStyle; getTitleStyle renders the color.
 const (
-	OptionStyleDefault       OptionStyle = iota
-	OptionStyleLatestStable              // Green - latest stable release
-	OptionStyleStable                    // Cyan - stable release
-	OptionStylePreview                   // Yellow/amber - preview/prerelease
-	OptionStyleLatestPreview             // Yellow with badge - latest preview
-	OptionStyleLTS                       // Cyan/blue - long-term support
+	OptionStyleDefault OptionStyle = iota
+	OptionStyleLatestStable
+	OptionStyleStable
+	OptionStylePreview
+	OptionStyleLatestPreview
+	OptionStyleLTS
 )
 
 // Option is a single styled entry in a Selector.
@@ -42,10 +42,8 @@ type Selector struct {
 	focused              bool
 	dropdownScrollOffset int
 
-	// cachedStyles is a lazily-initialised cache of the lipgloss.Style objects
-	// used when rendering options. Caching is safe because tui.Color* values
-	// are only mutated during tui package init (via the high-contrast env
-	// vars) and never change thereafter.
+	// cachedStyles caches option render styles; safe since tui.Color* only
+	// changes during package init.
 	cachedStyles *optionStyles
 }
 
@@ -85,8 +83,7 @@ func (s *Selector) SelectedIndex() int {
 	return s.selected
 }
 
-// SetSelectedByID moves the selection to the first option whose ID matches.
-// Unknown IDs are silently ignored.
+// SetSelectedByID moves selection to the first matching ID; unknown IDs are ignored.
 func (s *Selector) SetSelectedByID(id string) {
 	for i, opt := range s.options {
 		if opt.ID == id {
@@ -175,7 +172,7 @@ func (s *Selector) View() string {
 			isSelected := i == s.selected
 			isLast := i == len(s.options)-1
 			showConnector := !isLast && !s.options[i+1].InDropdown
-			optView := s.renderOption(opt, isSelected, showConnector)
+			optView := s.renderOptionWithPrefix(opt, isSelected, showConnector, "")
 			lines = append(lines, optView)
 			i++
 		} else {
@@ -187,10 +184,6 @@ func (s *Selector) View() string {
 	}
 
 	return strings.Join(lines, "\n")
-}
-
-func (s *Selector) renderOption(opt *Option, selected, showConnector bool) string {
-	return s.renderOptionWithPrefix(opt, selected, showConnector, "")
 }
 
 func (s *Selector) renderOptionWithPrefix(opt *Option, selected, showConnector bool, prefix string) string {
@@ -261,8 +254,7 @@ func (s *CompactSelector) SetFocused(focused bool) {
 	s.focused = focused
 }
 
-// SetWrap controls whether up/down navigation wraps past the list ends.
-// Selectors wrap by default.
+// SetWrap controls whether up/down wraps past the list ends (wraps by default).
 func (s *CompactSelector) SetWrap(wrap bool) {
 	s.noWrap = !wrap
 }

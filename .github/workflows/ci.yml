@@ -8,7 +8,6 @@ on:
 permissions:
   contents: read
 jobs:
-  # Go
   lint-go:
     runs-on: ubuntu-latest
     steps:
@@ -78,7 +77,6 @@ jobs:
             git status docs/cli/ >&2
             exit 1
           fi
-  # YAML
   lint-yaml:
     runs-on: ubuntu-latest
     steps:
@@ -92,7 +90,6 @@ jobs:
           YAMLFMT_VERSION: v0.21.0
         run: go install github.com/google/yamlfmt/cmd/yamlfmt@${YAMLFMT_VERSION}
       - run: yamlfmt -lint .
-  # Infrastructure
   validate-terraform:
     runs-on: ubuntu-latest
     steps:
@@ -136,7 +133,6 @@ jobs:
           scan-ref: infrastructure/terraform
           # trivy-action defaults to exit-code 0; keep tfsec's fail-on-findings gate
           exit-code: "1"
-  # Shell
   lint-shell:
     runs-on: ubuntu-latest
     steps:

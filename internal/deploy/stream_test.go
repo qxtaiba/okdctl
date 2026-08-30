@@ -13,9 +13,8 @@ func TestStreamWriters_NoSinkLeavesDefaults(t *testing.T) {
 	}
 }
 
-// TestStreamWriters_DefaultRoutesToSinkOnly proves the firehose lands in the
-// log sink verbatim (zero diagnostic loss) and does not go to a TTY writer,
-// while a milestone line is still recognized.
+// Proves the firehose reaches the sink verbatim (including milestone lines)
+// without also going to a TTY writer.
 func TestStreamWriters_DefaultRoutesToSinkOnly(t *testing.T) {
 	var sink bytes.Buffer
 	_, se := streamWriters(&sink, false)
@@ -32,8 +31,7 @@ func TestStreamWriters_DefaultRoutesToSinkOnly(t *testing.T) {
 	}
 }
 
-// TestStreamWriters_VerboseTeesToStderrAndSink proves --verbose keeps the raw
-// stream while still persisting everything to the sink.
+// Proves --verbose keeps the raw stream while still persisting everything to the sink.
 func TestStreamWriters_VerboseTeesToStderrAndSink(t *testing.T) {
 	var sink bytes.Buffer
 	_, se := streamWriters(&sink, true)

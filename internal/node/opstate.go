@@ -1,8 +1,7 @@
-// Package node implements okdctl's node-lifecycle primitives — worker removal,
-// per-role resize, and the cluster-compaction orchestrator — on top of the
-// terraform.Executor (VM mutations) and cluster.Client (Kubernetes lifecycle)
-// layers. Every mutating step is fronted by a guard and recorded in an on-disk
-// op marker so an interrupted op is safe to re-run.
+// Package node implements okdctl's node-lifecycle primitives — removal, resize,
+// and compaction — atop terraform.Executor and cluster.Client.
+// Every mutating step is guarded and recorded in an on-disk marker so an
+// interrupted op is safe to re-run.
 package node
 
 import (
@@ -15,16 +14,13 @@ import (
 	"github.com/qxtaiba/okdctl/internal/marker"
 )
 
-// OpMarkerFileName is the per-op state marker written under the work directory,
-// mirroring deploy's StateFileName. It records the in-flight node op so a
-// crashed run resumes with context and leaves a drained node cordoned.
+// OpMarkerFileName is the per-op state marker filename under the work
+// directory, mirroring deploy's StateFileName. It lets a crashed run resume
+// with context and leaves a drained node cordoned.
 const OpMarkerFileName = ".okdctl-node-op.json"
 
 const opStateSchemaV1 = "v1"
 
-// Shared literals used across the node-lifecycle verbs: the terraform count
-// variable, the default drain/operation timeout, and the ClusterError wrap
-// labels reused by every verb's ListNodes and persist-topology steps.
 const (
 	tfVarWorkerCount    = "worker_count"
 	defaultDrainTimeout = "10m"
@@ -35,11 +31,9 @@ const (
 // Op identifies which node-lifecycle verb is in flight.
 type Op string
 
-// Node-lifecycle op identifiers recorded in the marker. OpSnapshot is its own
-// identifier, distinct from OpRemove, precisely so a snapshot's cordon/drain
-// can never be mistaken for an in-flight remove by anything that later keys
-// off Op equality — snapshots are bounded, non-resumable ops and must not
-// borrow another op's resume identity.
+// Node-lifecycle op identifiers recorded in the marker; OpSnapshot is distinct
+// from OpRemove so its bounded cordon/drain can't be mistaken for an in-flight
+// remove.
 const (
 	OpRemove   Op = "remove"
 	OpResize   Op = "resize"
@@ -50,9 +44,9 @@ const (
 	OpAdd      Op = "add"
 )
 
-// Step names the mutating step the marker was written before. Steps are
-// idempotent, so resume re-runs from the recorded step without harm; the value
-// exists for operator-facing diagnostics and to signal "left cordoned".
+// Step names the mutating step the marker was written before.
+// Steps are idempotent, so resume safely re-runs from the recorded step; the
+// value also drives operator diagnostics.
 type Step string
 
 // Mutating steps a marker can be written before; used for resume diagnostics.
@@ -67,19 +61,17 @@ const (
 	StepShutdown   Step = "shutdown"
 	StepPowerOn    Step = "power-on"
 
-	// node add's own step sequence; StepTFApply above is reused for the
-	// worker_count apply. Ignition teardown is a plain defer that never calls
-	// markStep (it must run on every exit path, not just a resumed one), so
-	// there is no corresponding StepIgnitionDown.
+	// node add's own steps: StepTFApply is reused for the count apply; no
+	// StepIgnitionDown because teardown is a defer that must run on every exit,
+	// not just resumed ones.
 	StepBuildISO   Step = "build-iso"
 	StepUploadISO  Step = "upload-iso"
 	StepIgnitionUp Step = "ignition-up"
 	StepWaitJoin   Step = "wait-join"
 )
 
-// opState is the marker payload. The envelope's ClusterName guards against a
-// marker left in a directory later reused for a different cluster (mirrors
-// deployState).
+// opState is the marker payload; Envelope.ClusterName guards against a marker
+// left by a different cluster (mirrors deployState).
 type opState struct {
 	marker.Envelope
 
@@ -90,9 +82,8 @@ type opState struct {
 
 var opMarkerFile = marker.File{Label: "node op", Version: opStateSchemaV1}
 
-// markStep writes the op marker before a mutating step runs. A write failure is
-// fatal to the op: without the marker an interrupted run loses its resume
-// context and the leave-cordoned guarantee.
+// markStep writes the op marker before a mutating step; a write failure is
+// fatal — losing it loses resume context and the leave-cordoned guarantee.
 func markStep(path string, op Op, target string, step Step, runID, clusterName string) error {
 	s := &opState{Op: op, Target: target, Step: step}
 	if err := opMarkerFile.Write(path, s, runID, clusterName); err != nil {
@@ -101,9 +92,8 @@ func markStep(path string, op Op, target string, step Step, runID, clusterName s
 	return nil
 }
 
-// readOpState reads the marker, returning nil when absent or when it fails
-// the cluster-name guard (empty or mismatching names are treated as absent —
-// the same reject posture as deploy's resume marker).
+// readOpState returns nil when the marker is absent or fails the cluster-name
+// guard (same reject posture as deploy's resume marker).
 func readOpState(path, clusterName string) (*opState, error) {
 	var s opState
 	found, err := opMarkerFile.Read(path, &s)
@@ -131,8 +121,8 @@ func markerPath(workDir string) string {
 }
 
 // OpMarker is the read-only view of an in-flight node op exposed to
-// non-mutating callers (`okdctl node list`). It mirrors opState's fields
-// without exposing the marker's on-disk JSON shape as public API.
+// non-mutating callers like `okdctl node list`. It mirrors opState's fields
+// without exposing the marker's on-disk JSON shape.
 type OpMarker struct {
 	Op          Op
 	Target      string
@@ -142,11 +132,10 @@ type OpMarker struct {
 	Timestamp   time.Time
 }
 
-// CompletedAddResidue reports whether the marker is the residue of a
-// fully-completed add batch rather than an in-flight op: AddWorkers persists
-// the widened worker count only after every node joined, so a marker whose
-// target index precedes workerCount can only mean the batch finished and the
-// process died before the marker was cleared.
+// CompletedAddResidue reports whether the marker is residue from a
+// fully-completed add batch rather than an in-flight op. AddWorkers persists
+// the widened worker count only after every node joins, so a target index below
+// workerCount means the batch finished before the marker was cleared.
 func (m *OpMarker) CompletedAddResidue(workerCount int) bool {
 	if m.Op != OpAdd {
 		return false
@@ -155,10 +144,10 @@ func (m *OpMarker) CompletedAddResidue(workerCount int) bool {
 	return ok && idx < workerCount
 }
 
-// ReadOpMarker reads the op marker under workDir, returning nil when no op is
-// in flight (no marker file, or a marker left by a different cluster). Safe to
-// call without holding the run lock: the marker is written via AtomicWrite, so
-// a concurrent writer never leaves a partial read.
+// ReadOpMarker returns nil when no op is in flight — no marker file, or one
+// left by a different cluster. It's safe to call without the run lock: the
+// marker is written via AtomicWrite, so a concurrent writer never leaves a
+// partial read.
 func ReadOpMarker(workDir, clusterName string) (*OpMarker, error) {
 	s, err := readOpState(markerPath(workDir), clusterName)
 	if err != nil {

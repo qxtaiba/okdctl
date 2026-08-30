@@ -16,7 +16,7 @@ type captureHandler struct {
 }
 
 func (h captureHandler) Enabled(context.Context, slog.Level) bool { return true }
-func (h captureHandler) Handle(_ context.Context, r slog.Record) error { //nolint:gocritic // hugeParam: slog.Handler interface requires value receiver
+func (h captureHandler) Handle(_ context.Context, r slog.Record) error { //nolint:gocritic // hugeParam: slog.Handler passes slog.Record by value
 	*h.records = append(*h.records, capturedRecord{level: r.Level, msg: r.Message})
 	return nil
 }

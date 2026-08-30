@@ -24,6 +24,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
+// lifecycleInterruptedMsg is shared so runNodeManage's tea-failure path and
+// reportLifecycleOutcome present identical guidance.
+const lifecycleInterruptedMsg = "execution was interrupted mid-operation; the op marker records the in-flight step — re-run 'okdctl node manage' (or the matching node verb) to resume"
+
 var nodeManageCmd = &cobra.Command{
 	Use:   "manage",
 	Short: "Interactively manage node lifecycle (resize / add / remove)",
@@ -50,8 +54,8 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	// The wizard owns the terminal from here on; no line-owner spinner or
-	// download progress bar may render beneath the AltScreen.
+	// The wizard owns the terminal from here on; no spinner/progress bar may
+	// render beneath the AltScreen.
 	logutil.SetProgressBarsEnabled(false)
 
 	env, err := prepareNodeOpsEnv(ctx, cfg, true)
@@ -70,8 +74,8 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	// opCtx is cancelled by the execution screen's graceful-cancel path
-	// (first ctrl+c); the backend unwinds and leaves its resume marker.
+	// opCtx is cancelled by the execution screen's graceful-cancel path (first
+	// ctrl+c); the backend unwinds and leaves its resume marker.
 	opCtx, cancelOp := context.WithCancel(ctx)
 	defer cancelOp()
 
@@ -97,26 +101,31 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 		},
 	}
 
-	result, err := wizard.RunFlow(ctx, lifecycle.NewSteps(st, hooks), cfg, lifecycleChrome())
+	// Swaps the context badge to the cluster name — the lifecycle flow operates
+	// an existing cluster, not a distribution choice.
+	chrome := wizard.FlowChrome{
+		Tagline: "okd over proxmox, the easy way",
+		Badge:   func(c *config.Config) string { return c.Cluster.Name },
+	}
+	result, err := wizard.RunFlow(ctx, lifecycle.NewSteps(st, hooks), cfg, chrome)
 	if err != nil {
-		// A tea failure mid-execution must still surface the resume marker,
-		// not read as a configuration problem.
+		// A tea failure mid-execution must still surface the resume marker, not
+		// read as a configuration problem.
 		if st.Started && !st.Executed {
-			return &errtypes.ClusterError{Msg: "execution was interrupted mid-operation; the op marker records the in-flight step — re-run 'okdctl node manage' (or the matching node verb) to resume", Err: err}
+			return &errtypes.ClusterError{Msg: lifecycleInterruptedMsg, Err: err}
 		}
 		return &errtypes.ConfigError{Msg: "lifecycle wizard", Err: err}
 	}
 	return reportLifecycleOutcome(cmd, result, st)
 }
 
-// reportLifecycleOutcome maps the wizard's terminal state to a truthful
-// exit: "no changes made" is only ever printed when execution never
-// started; a run interrupted mid-execution surfaces the resume marker and
-// exits non-zero instead of claiming a clean state.
+// reportLifecycleOutcome maps wizard terminal state to a truthful exit; an
+// interrupted mid-execution run exits non-zero instead of claiming a clean
+// state.
 func reportLifecycleOutcome(cmd *cobra.Command, result wizard.Result, st *lifecycle.State) error {
 	switch {
 	case st.Started && !st.Executed:
-		return &errtypes.ClusterError{Msg: "execution was interrupted mid-operation; the op marker records the in-flight step — re-run 'okdctl node manage' (or the matching node verb) to resume"}
+		return &errtypes.ClusterError{Msg: lifecycleInterruptedMsg}
 	case st.Executed && st.Result != nil:
 		return st.Result
 	case st.Executed:
@@ -130,11 +139,9 @@ func reportLifecycleOutcome(cmd *cobra.Command, result wizard.Result, st *lifecy
 	}
 }
 
-// executeLifecycleOp runs the wizard-approved operation inside the TUI's
-// AltScreen: progress flows over the event channel (Reporter spans +
-// OnStep transitions) and slog goes to the okdctl.log sink only. Consent
-// was granted on the preview/confirm screens, so the runner's ConfirmFunc
-// only cross-checks that the world still matches the approved plan.
+// executeLifecycleOp runs the wizard-approved op inside the AltScreen;
+// ConfirmFunc only cross-checks the world still matches the plan already
+// approved on the preview screen.
 func executeLifecycleOp(opCtx context.Context, cmd *cobra.Command, cfg *config.Config, env *nodeOpsEnv, st *lifecycle.State, events chan<- lifecycle.ExecEvent) error {
 	rc, err := env.newRunner(cmd, cfg, "manage", nodeConsent{}, fileOnlySlog(), subprocSink())
 	if err != nil {
@@ -163,9 +170,8 @@ func executeLifecycleOp(opCtx context.Context, cmd *cobra.Command, cfg *config.C
 	return nil
 }
 
-// subprocSink is where the setup executor's subprocess streams (scp, ISO
-// tooling) go while the wizard owns the terminal: the okdctl.log sink, or
-// discard when no sink opened.
+// subprocSink routes subprocess streams to the okdctl.log sink while the wizard
+// owns the terminal, or discards when no sink is open.
 func subprocSink() io.Writer {
 	if runLogSink == nil {
 		return io.Discard
@@ -173,8 +179,8 @@ func subprocSink() io.Writer {
 	return runLogSink
 }
 
-// fileOnlySlog returns a redact-wrapped slog writing only to the okdctl.log
-// sink — never stderr, which the AltScreen wizard owns during execution.
+// fileOnlySlog writes only to the okdctl.log sink, never stderr, which the
+// AltScreen wizard owns during execution.
 func fileOnlySlog() *slog.Logger {
 	if runLogSink == nil {
 		return logutil.NopLogger
@@ -182,8 +188,8 @@ func fileOnlySlog() *slog.Logger {
 	return slog.New(logutil.NewRedactHandler(slog.NewTextHandler(runLogSink, nil)))
 }
 
-// runLifecycleOp dispatches the wizard-collected operation onto the
-// runner, merging the host-probe budget the same way the flag verbs do.
+// runLifecycleOp dispatches the wizard-collected op onto the runner, merging
+// the host-probe budget the same way the flag verbs do.
 func runLifecycleOp(ctx context.Context, rc *nodeRunnerCtx, st *lifecycle.State) error {
 	switch st.Op {
 	case node.OpResize:
@@ -197,12 +203,9 @@ func runLifecycleOp(ctx context.Context, rc *nodeRunnerCtx, st *lifecycle.State)
 	}
 }
 
-// resizeOptsFromWizard merges the wizard-collected resize dimensions with the
-// read-only Proxmox probe results the flag verb (runNodeResize) also feeds
-// Resize, so the memory and datastore guards are armed the same way
-// regardless of entry point. A dropped merge here would leave the guard it
-// backs disarmed for every TUI-driven resize while the flag verb stayed
-// protected.
+// resizeOptsFromWizard arms the memory and datastore guards for TUI-driven
+// resizes with the same probe results runNodeResize feeds the flag verb; a
+// dropped merge here disarms them for every wizard resize.
 func resizeOptsFromWizard(rc *nodeRunnerCtx, st *lifecycle.State) node.ResizeOptions {
 	opts := lifecycle.ResizeOptionsFrom(st)
 	opts.HostTotalMiB, opts.HostAllocatedMiB = rc.HostTotalMiB, rc.HostAllocatedMiB
@@ -210,20 +213,10 @@ func resizeOptsFromWizard(rc *nodeRunnerCtx, st *lifecycle.State) node.ResizeOpt
 	return opts
 }
 
-// addOptsFromWizard mirrors resizeOptsFromWizard for node add, which only
-// carries the memory-budget probe (add never resizes a disk).
+// addOptsFromWizard mirrors resizeOptsFromWizard for node add, which carries
+// only the memory-budget probe.
 func addOptsFromWizard(rc *nodeRunnerCtx, st *lifecycle.State) node.AddOptions {
 	opts := lifecycle.AddOptionsFrom(st)
 	opts.HostTotalMiB, opts.HostAllocatedMiB = rc.HostTotalMiB, rc.HostAllocatedMiB
 	return opts
-}
-
-// lifecycleChrome keeps the shared brand tagline but swaps the context
-// badge to the cluster name — the lifecycle flow operates an existing
-// cluster rather than assembling a distribution choice.
-func lifecycleChrome() wizard.FlowChrome {
-	return wizard.FlowChrome{
-		Tagline: "okd over proxmox, the easy way",
-		Badge:   func(c *config.Config) string { return c.Cluster.Name },
-	}
 }

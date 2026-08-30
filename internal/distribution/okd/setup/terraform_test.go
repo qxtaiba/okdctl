@@ -11,10 +11,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
-// TestGenerateTerraformVars_RemovesBootstrapSentinel locks the deploy-only
-// bootstrap resurrection contract: GenerateTerraformVars must delete the
-// postinstall sentinel before rendering, or a stale bootstrap_enabled=false
-// override silently skips the bootstrap VM on redeploy.
 func TestGenerateTerraformVars_RemovesBootstrapSentinel(t *testing.T) {
 	root := t.TempDir()
 	cfg := config.DefaultConfig()

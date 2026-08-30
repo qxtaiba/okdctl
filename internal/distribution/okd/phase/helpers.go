@@ -8,17 +8,15 @@ import (
 	"github.com/qxtaiba/okdctl/internal/netutil"
 )
 
-// WarnOnError returns an OnError callback that logs a warning with the given
-// message prefix followed by the error.
+// WarnOnError returns an OnError callback that logs msg and err at Warn.
 func WarnOnError(logger *slog.Logger, msg string) func(error) {
 	return func(err error) {
 		logger.Warn(msg, "err", err)
 	}
 }
 
-// ResolveClusterVIP resolves the kube-vip address from config: either the
-// explicit Networking.Bastion.VIP value or the .10 derivation from
-// Networking.StaticIP.Start.
+// ResolveClusterVIP resolves the kube-vip address, preferring the explicit
+// Bastion.VIP over the StaticIP.Start-derived default.
 func ResolveClusterVIP(cfg *config.Config) (string, error) {
 	vip, err := netutil.ResolveVIP(cfg.Networking.Bastion.VIP, cfg.Networking.StaticIP.Start)
 	if err != nil {

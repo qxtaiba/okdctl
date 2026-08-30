@@ -1,7 +1,7 @@
 // Package hostssh runs commands on the Proxmox host as root over SSH:
-// generic command execution, pvesh queries, and CoreOS ISO cleanup.
-// Policy of record: all SSH operations use SSHRunArgv (argv-mode) except
-// the single sanctioned sh -c call site in RemoveFCOSISOFromProxmox.
+// command execution, pvesh queries, and CoreOS ISO cleanup. Policy: every
+// SSH op uses SSHRunArgv except the single sanctioned sh -c call in
+// RemoveFCOSISOFromProxmox.
 package hostssh
 
 import (
@@ -13,9 +13,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/executor"
 )
 
-// ProxmoxBareHost strips any port suffix or URL scheme from the host so the
-// result can be passed directly to ssh. Proxmox hosts in config may appear as
-// "host:8006" or "https://host".
+// ProxmoxBareHost strips any port suffix or URL scheme so the result can be
+// passed directly to ssh (config may store "host:8006" or "https://host").
 func ProxmoxBareHost(host string) string {
 	if idx := strings.Index(host, "://"); idx != -1 {
 		host = host[idx+3:]
@@ -28,15 +27,13 @@ func ProxmoxBareHost(host string) string {
 	return host
 }
 
-// sshRun runs a single command on root@host over SSH. It is unexported: the
-// only sanctioned string-mode (sh -c) call site is RemoveFCOSISOFromProxmox
-// in this package, so the shell-injection policy is compiler-enforced rather
-// than prose-enforced. New cross-package SSH operations use SSHRunArgv.
+// sshRun runs a single command on root@host over SSH; it's unexported so
+// RemoveFCOSISOFromProxmox stays the only sh -c call site, making the
+// shell-injection policy compiler-enforced. New cross-package operations
+// use SSHRunArgv.
 //
-// When knownHostsPath is non-empty the connection enforces strict host-key
-// checking against that file. When empty, accept-new TOFU applies —
-// preserving current behaviour. Non-zero exit codes do not produce an error;
-// only transport failures do.
+// knownHostsPath non-empty enforces strict host-key checking; empty applies
+// accept-new TOFU. Only transport failures error — non-zero exit codes don't.
 func sshRun(ctx context.Context, exec *executor.Executor, host, knownHostsPath, cmd string) (*executor.Result, error) {
 	args := sshBaseArgs(host, knownHostsPath)
 	args = append(args, cmd)
@@ -47,17 +44,13 @@ func sshRun(ctx context.Context, exec *executor.Executor, host, knownHostsPath, 
 	return result, nil
 }
 
-// SSHRunArgv passes each argv element to ssh as a separate non-option
-// argument. ssh(1) joins the trailing args with spaces and sends one
-// command string to the remote login shell — argv mode does NOT bypass
-// the shell. Callers MUST still validate every atom semantically before
-// calling (pveshRun is the canonical example); as a fail-closed backstop,
-// any atom containing a character outside [A-Za-z0-9@%+=:,./_-] is
-// rejected here before ssh runs, so an unvalidated future caller cannot
-// reintroduce remote injection.
+// SSHRunArgv passes each argv element to ssh as a separate argument; ssh(1)
+// still space-joins them into one command string for the remote shell, so
+// argv mode does NOT bypass it. Callers MUST validate every atom themselves
+// (pveshRun is the canonical example) — as a fail-closed backstop, any atom
+// outside [A-Za-z0-9@%+=:,./_-] is rejected here first.
 //
-// When knownHostsPath is non-empty the connection enforces strict host-key
-// checking. When empty, accept-new TOFU applies.
+// knownHostsPath non-empty enforces strict host-key checking; empty applies accept-new TOFU.
 func SSHRunArgv(ctx context.Context, exec *executor.Executor, host, knownHostsPath string, argv ...string) (*executor.Result, error) {
 	if err := validateArgvAtoms(argv); err != nil {
 		return nil, fmt.Errorf("ssh %s: %w", host, err)
@@ -72,9 +65,8 @@ func SSHRunArgv(ctx context.Context, exec *executor.Executor, host, knownHostsPa
 }
 
 // sshRunOutput is sshRun with full stdout capture (Executor.RunOutput)
-// instead of the ring-truncated tail, for callers that parse stdout as
-// JSON or another format sensitive to truncation. Same non-zero-exit and
-// shell-injection semantics as sshRun; likewise unexported.
+// instead of the ring-truncated tail, for callers parsing stdout as JSON;
+// same semantics as sshRun.
 func sshRunOutput(ctx context.Context, exec *executor.Executor, host, knownHostsPath, cmd string) (*executor.Result, error) {
 	args := sshBaseArgs(host, knownHostsPath)
 	args = append(args, cmd)
@@ -86,8 +78,8 @@ func sshRunOutput(ctx context.Context, exec *executor.Executor, host, knownHosts
 }
 
 // SSHRunArgvOutput is SSHRunArgv with full stdout capture (Executor.RunOutput)
-// instead of the ring-truncated tail, for callers that parse stdout as JSON.
-// Same non-zero-exit, argv-mode, and shell-safe-atom semantics as SSHRunArgv.
+// instead of the ring-truncated tail, for JSON-parsing callers; same
+// semantics as SSHRunArgv.
 func SSHRunArgvOutput(ctx context.Context, exec *executor.Executor, host, knownHostsPath string, argv ...string) (*executor.Result, error) {
 	if err := validateArgvAtoms(argv); err != nil {
 		return nil, fmt.Errorf("ssh %s: %w", host, err)
@@ -101,12 +93,10 @@ func SSHRunArgvOutput(ctx context.Context, exec *executor.Executor, host, knownH
 	return result, nil
 }
 
-// validateArgvAtoms fails closed on any atom the remote login shell could
-// reinterpret after ssh's space-join: only alphanumerics plus @%+=:,./_-
-// (the shlex-safe set) are allowed, and empty atoms are rejected because
-// they vanish in the join. Errors name the atom index and offending rune
-// but never the atom itself, in case a future caller passes
-// credential-bearing material.
+// validateArgvAtoms fails closed on any atom outside the shlex-safe set
+// [A-Za-z0-9@%+=:,./_-]; empty atoms are rejected too since they vanish in
+// ssh's space-join. Errors name the atom's index and offending rune but
+// never the atom itself, in case it carries credential material.
 func validateArgvAtoms(argv []string) error {
 	for i, atom := range argv {
 		if atom == "" {
@@ -133,12 +123,10 @@ func argvAtomSafeRune(r rune) bool {
 	return false
 }
 
-// sshBaseArgs builds the ssh option flags and remote user@host token.
-// Strict mode is used when knownHostsPath is set; accept-new otherwise.
-// ConnectTimeout bounds connection establishment so a blackholed Proxmox
-// host fails in seconds rather than stalling for the kernel TCP timeout on
-// every one-shot pvesh/iso-cleanup call; ctx cancel remains the interactive
-// escape hatch for the connected phase.
+// sshBaseArgs builds the ssh option flags and user@host token — strict mode
+// when knownHostsPath is set, accept-new otherwise. ConnectTimeout bounds
+// connection setup so a blackholed host fails in seconds instead of the
+// kernel TCP timeout; ctx cancel remains the escape hatch once connected.
 func sshBaseArgs(host, knownHostsPath string) []string {
 	if knownHostsPath != "" {
 		return []string{

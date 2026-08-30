@@ -25,23 +25,17 @@ const (
 	certKeyName       = "server.key"
 )
 
-// IgnitionCertPaths returns the on-disk paths for the ignition server cert
-// and private key under projectRoot.
+// IgnitionCertPaths returns the on-disk cert and private-key paths under projectRoot.
 func IgnitionCertPaths(projectRoot string) (certPath, keyPath string) {
 	dir := filepath.Join(projectRoot, certDirName)
 	return filepath.Join(dir, certFileName), filepath.Join(dir, certKeyName)
 }
 
 // EnsureIgnitionCert returns the PEM-encoded cert and key for the ignition
-// HTTPS server. If a valid unexpired cert covering ip already exists on disk
-// it is reused; otherwise a new ECDSA P-256 self-signed cert is generated
-// and written atomically.
-//
-// The returned cert doubles as the CA: it is embedded into each node's
-// live ISO via `coreos-installer iso customize --ignition-ca`, so nodes
-// trust the HTTPS ignition server during first-boot without any external
-// PKI. A self-signed leaf is sufficient because the cert is only presented
-// to the single trust anchor baked into the ISO.
+// HTTPS server, reusing a valid unexpired cert covering ip or generating a
+// new ECDSA P-256 self-signed one. The cert doubles as the CA embedded into
+// each node's ISO via --ignition-ca, so a self-signed leaf suffices since
+// it's presented only to that one baked-in trust anchor.
 func EnsureIgnitionCert(projectRoot, ip string) (certPEM, keyPEM []byte, err error) {
 	certPath, keyPath := IgnitionCertPaths(projectRoot)
 
@@ -131,10 +125,8 @@ func generateSelfSignedCert(certPath, keyPath, ip string) (certPEM, keyPEM []byt
 	if err := system.EnsureDir(dir); err != nil {
 		return nil, nil, fmt.Errorf("ensure cert dir: %w", err)
 	}
-	// The project root is owned by the unprivileged invoking user while this
-	// runs as root post-re-exec; os.Chmod follows a symlink pre-planted at the
-	// cert dir and would tighten an attacker-chosen target instead. Refuse a
-	// symlink first, matching the refusals in system/fs.go.
+	// Runs as root over a path the unprivileged invoker owns; os.Chmod follows
+	// a pre-planted symlink, so refuse one first, matching system/fs.go.
 	if info, err := os.Lstat(dir); err != nil {
 		return nil, nil, fmt.Errorf("lstat cert dir: %w", err)
 	} else if info.Mode()&os.ModeSymlink != 0 {

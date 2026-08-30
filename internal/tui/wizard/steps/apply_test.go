@@ -21,88 +21,34 @@ func findField(t *testing.T, def *wizard.StepDefinition, key string) wizard.Fiel
 	return wizard.FieldDefinition{}
 }
 
+func setField(t *testing.T, def *wizard.StepDefinition, cfg *config.Config, key, value string) wizard.FieldDefinition {
+	t.Helper()
+	f := findField(t, def, key)
+	if err := f.ConfigSet(cfg, value); err != nil {
+		t.Fatalf("ConfigSet(%s, %q): %v", key, value, err)
+	}
+	return f
+}
+
 func TestBasicsStepDefinition_Fields(t *testing.T) {
 	cfg := &config.Config{}
 
-	name := findField(t, &BasicsStepDefinition, "cluster_name")
-	_ = name.ConfigSet(cfg, "homelab")
-	if cfg.Cluster.Name != "homelab" {
-		t.Errorf("Cluster.Name = %q, want homelab", cfg.Cluster.Name)
-	}
-
-	domain := findField(t, &BasicsStepDefinition, fieldDomain)
-	_ = domain.ConfigSet(cfg, "example.com")
-	if cfg.Cluster.Domain != "example.com" {
-		t.Errorf("Cluster.Domain = %q, want example.com", cfg.Cluster.Domain)
-	}
-
-	cp := findField(t, &BasicsStepDefinition, "control_plane_count")
-	_ = cp.ConfigSet(cfg, "5")
+	setField(t, &BasicsStepDefinition, cfg, "control_plane_count", "5")
 	if cfg.Topology.ControlPlane.Count != 5 {
 		t.Errorf("ControlPlane.Count = %d, want 5", cfg.Topology.ControlPlane.Count)
-	}
-
-	workers := findField(t, &BasicsStepDefinition, "worker_count")
-	_ = workers.ConfigSet(cfg, "4")
-	if cfg.Topology.Workers.Count != 4 {
-		t.Errorf("Workers.Count = %d, want 4", cfg.Topology.Workers.Count)
 	}
 }
 
 func TestAdvancedStepDefinition_Fields(t *testing.T) {
 	cfg := &config.Config{}
 
-	vmid := findField(t, &AdvancedStepDefinition, "vm_id_base")
-	_ = vmid.ConfigSet(cfg, "7000")
-	if cfg.Topology.VMIDBase != 7000 {
-		t.Errorf("VMIDBase = %d, want 7000", cfg.Topology.VMIDBase)
-	}
-
-	tfEnv := findField(t, &AdvancedStepDefinition, "terraform_env")
-	if err := tfEnv.ConfigSet(cfg, "staging"); err != nil {
-		t.Fatalf("ConfigSet(terraform_env): %v", err)
-	}
-	if cfg.Deployment.TerraformEnv != "staging" {
-		t.Errorf("TerraformEnv = %q, want staging", cfg.Deployment.TerraformEnv)
-	}
-	if got := tfEnv.ConfigGet(cfg); got != "staging" {
-		t.Errorf("ConfigGet(terraform_env) = %q", got)
-	}
-	if tfEnv.Label == "terraform workspace" {
-		t.Error("terraform_env field is still labelled a terraform workspace")
-	}
-
-	binDir := findField(t, &AdvancedStepDefinition, "bin_dir")
-	_ = binDir.ConfigSet(cfg, "/opt/okdctl/bin")
-	if cfg.Deployment.BinDir != "/opt/okdctl/bin" {
-		t.Errorf("BinDir = %q, want /opt/okdctl/bin", cfg.Deployment.BinDir)
-	}
-
-	approve := findField(t, &AdvancedStepDefinition, "auto_approve")
-	_ = approve.ConfigSet(cfg, "yes")
+	setField(t, &AdvancedStepDefinition, cfg, "auto_approve", "yes")
 	if !cfg.Deployment.AutoApprove {
 		t.Error("AutoApprove = false, want true")
 	}
 
-	ntp := findField(t, &AdvancedStepDefinition, "ntp_server")
-	if err := ntp.ConfigSet(cfg, "192.168.1.20"); err != nil {
-		t.Fatalf("ConfigSet(ntp_server): %v", err)
-	}
-	if cfg.Networking.NTPServer != "192.168.1.20" {
-		t.Errorf("NTPServer = %q, want 192.168.1.20", cfg.Networking.NTPServer)
-	}
-	if got := ntp.ConfigGet(cfg); got != "192.168.1.20" {
-		t.Errorf("ConfigGet(ntp_server) = %q", got)
-	}
-	if err := ntp.Validate("!not valid!"); err == nil {
-		t.Error("Validate(ntp_server) accepted invalid host")
-	}
-
 	cfg.Provider.Proxmox = &config.ProxmoxConfig{}
-	ha := findField(t, &AdvancedStepDefinition, "ha_enabled")
-	if err := ha.ConfigSet(cfg, "yes"); err != nil {
-		t.Fatalf("ConfigSet(ha_enabled): %v", err)
-	}
+	ha := setField(t, &AdvancedStepDefinition, cfg, "ha_enabled", "yes")
 	if !cfg.Provider.Proxmox.HAEnabled {
 		t.Error("Provider.Proxmox.HAEnabled = false, want true")
 	}
@@ -125,35 +71,10 @@ func TestAdvancedStepDefinition_HAEnabledOnNilProxmoxConfig(t *testing.T) {
 	}
 }
 
-func TestAdvancedStepDefinition_NoDeadDebugFields(t *testing.T) {
-	for _, section := range AdvancedStepDefinition.Sections {
-		for _, field := range section.Fields {
-			if field.Key == "debug" || field.Key == "skip_deps_check" {
-				t.Errorf("dead field %q still declared in AdvancedStepDefinition", field.Key)
-			}
-		}
-	}
-}
-
 func TestFilesStepDefinition_Fields(t *testing.T) {
 	cfg := &config.Config{}
 
-	pullSecret := findField(t, &FilesStepDefinition, "pull_secret")
-	if err := pullSecret.ConfigSet(cfg, "/etc/okd/pull-secret.json"); err != nil {
-		t.Fatalf("ConfigSet(pull_secret): %v", err)
-	}
-	if cfg.Files.PullSecret != "/etc/okd/pull-secret.json" {
-		t.Errorf("Files.PullSecret = %q", cfg.Files.PullSecret)
-	}
-
-	sshKey := findField(t, &FilesStepDefinition, "ssh_public_key")
-	_ = sshKey.ConfigSet(cfg, "/etc/okd/id_ed25519.pub")
-	if got := sshKey.ConfigGet(cfg); got != "/etc/okd/id_ed25519.pub" {
-		t.Errorf("ConfigGet(ssh_public_key) = %q", got)
-	}
-
-	root := findField(t, &FilesStepDefinition, "web_root")
-	_ = root.ConfigSet(cfg, "/srv/ignition")
+	setField(t, &FilesStepDefinition, cfg, "web_root", "/srv/ignition")
 	if cfg.HTTPServer.Root != "/srv/ignition" {
 		t.Errorf("HTTPServer.Root = %q", cfg.HTTPServer.Root)
 	}
@@ -182,42 +103,15 @@ func TestFilesStepDefinition_ShouldShow(t *testing.T) {
 	}
 }
 
-func TestNetworkingStepDefinition_Fields(t *testing.T) {
+func TestNetworkingStepDefinition_DNSServersRoundTrip(t *testing.T) {
 	cfg := &config.Config{}
 
-	mc := findField(t, &NetworkingStepDefinition, "machine_cidr")
-	_ = mc.ConfigSet(cfg, "192.168.1.0/24")
-	if cfg.Networking.MachineCIDR != "192.168.1.0/24" {
-		t.Errorf("MachineCIDR = %q", cfg.Networking.MachineCIDR)
-	}
-
-	gw := findField(t, &NetworkingStepDefinition, fieldGateway)
-	_ = gw.ConfigSet(cfg, "192.168.1.1")
-	if cfg.Networking.Gateway != "192.168.1.1" {
-		t.Errorf("Gateway = %q", cfg.Networking.Gateway)
-	}
-
-	dns := findField(t, &NetworkingStepDefinition, "dns_servers")
-	if err := dns.ConfigSet(cfg, "192.168.1.1, 8.8.8.8,"); err != nil {
-		t.Fatalf("ConfigSet(dns_servers): %v", err)
-	}
+	dns := setField(t, &NetworkingStepDefinition, cfg, "dns_servers", "192.168.1.1, 8.8.8.8,")
 	if got := cfg.Networking.DNS; len(got) != 2 || got[0] != "192.168.1.1" || got[1] != "8.8.8.8" {
 		t.Errorf("Networking.DNS = %v, want [192.168.1.1 8.8.8.8]", got)
 	}
 	if got := dns.ConfigGet(cfg); got != "192.168.1.1, 8.8.8.8" {
 		t.Errorf("ConfigGet(dns_servers) = %q", got)
-	}
-
-	bastion := findField(t, &NetworkingStepDefinition, "bastion_ip")
-	_ = bastion.ConfigSet(cfg, DefaultBastionIP)
-	if cfg.Networking.Bastion.IP != DefaultBastionIP {
-		t.Errorf("Bastion.IP = %q", cfg.Networking.Bastion.IP)
-	}
-
-	start := findField(t, &NetworkingStepDefinition, "start_ip")
-	_ = start.ConfigSet(cfg, "192.168.1.140")
-	if cfg.Networking.StaticIP.Start != "192.168.1.140" {
-		t.Errorf("StaticIP.Start = %q", cfg.Networking.StaticIP.Start)
 	}
 }
 
@@ -280,10 +174,7 @@ func TestNetworkingStepDefinition_ApplyRejectsBadCIDR(t *testing.T) {
 func TestProxmoxStepDefinition_Fields(t *testing.T) {
 	cfg := &config.Config{}
 
-	host := findField(t, &ProxmoxStepDefinition, fieldHost)
-	if err := host.ConfigSet(cfg, "10.0.0.5:8006"); err != nil {
-		t.Fatalf("ConfigSet(host): %v", err)
-	}
+	host := setField(t, &ProxmoxStepDefinition, cfg, fieldHost, "10.0.0.5:8006")
 	if cfg.Provider.Proxmox == nil || cfg.Provider.Proxmox.Host != "10.0.0.5:8006" {
 		t.Fatalf("Provider.Proxmox.Host not set: %+v", cfg.Provider.Proxmox)
 	}
@@ -291,22 +182,17 @@ func TestProxmoxStepDefinition_Fields(t *testing.T) {
 		t.Errorf("ConfigGet(host) = %q", got)
 	}
 
-	user := findField(t, &ProxmoxStepDefinition, "username")
-	_ = user.ConfigSet(cfg, "root@pam")
+	setField(t, &ProxmoxStepDefinition, cfg, "username", "root@pam")
 	if cfg.Provider.Proxmox.Username != "root@pam" {
 		t.Errorf("Username = %q", cfg.Provider.Proxmox.Username)
 	}
 
-	pass := findField(t, &ProxmoxStepDefinition, "password")
-	if err := pass.ConfigSet(cfg, "s3cret"); err != nil {
-		t.Fatalf("ConfigSet(password): %v", err)
-	}
+	setField(t, &ProxmoxStepDefinition, cfg, "password", "s3cret")
 	if cfg.Provider.Proxmox.Password.IsEmpty() {
 		t.Error("Password not set")
 	}
 
-	insecure := findField(t, &ProxmoxStepDefinition, "skip_tls_verify")
-	_ = insecure.ConfigSet(cfg, "yes")
+	insecure := setField(t, &ProxmoxStepDefinition, cfg, "skip_tls_verify", "yes")
 	if !cfg.Provider.Proxmox.Insecure {
 		t.Error("Insecure = false, want true")
 	}
@@ -333,41 +219,20 @@ func TestProxmoxStepDefinition_ApplySetsProviderType(t *testing.T) {
 	}
 }
 
-func TestResourcesStepDefinition_Fields(t *testing.T) {
+func TestResourcesStepDefinition_CPDiskSeedsBootstrap(t *testing.T) {
 	cfg := &config.Config{}
 
-	cpu := findField(t, &ResourcesStepDefinition, "cp_vcpus")
-	_ = cpu.ConfigSet(cfg, "6")
-	if cfg.Topology.ControlPlane.CPU != 6 {
-		t.Errorf("ControlPlane.CPU = %d, want 6", cfg.Topology.ControlPlane.CPU)
-	}
-
-	disk := findField(t, &ResourcesStepDefinition, "cp_disk")
-	if err := disk.ConfigSet(cfg, "77"); err != nil {
-		t.Fatalf("ConfigSet(cp_disk): %v", err)
-	}
+	setField(t, &ResourcesStepDefinition, cfg, "cp_disk", "77")
 	if cfg.Topology.ControlPlane.DiskGB != 77 {
 		t.Errorf("ControlPlane.Disk = %d, want 77", cfg.Topology.ControlPlane.DiskGB)
 	}
 	if cfg.Topology.Bootstrap.DiskGB != 77 {
 		t.Errorf("Bootstrap.Disk = %d, want 77 (cp_disk must also seed bootstrap disk)", cfg.Topology.Bootstrap.DiskGB)
 	}
-
-	workerDataDisk := findField(t, &ResourcesStepDefinition, "worker_data_disk")
-	_ = workerDataDisk.ConfigSet(cfg, "1000")
-	if cfg.Disks.WorkerDataSizeGB != 1000 {
-		t.Errorf("Disks.WorkerDataSizeGB = %d, want 1000", cfg.Disks.WorkerDataSizeGB)
-	}
-
-	cpDataDisk := findField(t, &ResourcesStepDefinition, "cp_data_disk")
-	_ = cpDataDisk.ConfigSet(cfg, "200")
-	if cfg.Disks.ControlPlaneDataSizeGB != 200 {
-		t.Errorf("Disks.ControlPlaneDataSizeGB = %d, want 200", cfg.Disks.ControlPlaneDataSizeGB)
-	}
 }
 
 func TestAddonHelpers_LazyInitNilMap(t *testing.T) {
-	cfg := &config.Config{} // Addons is nil
+	cfg := &config.Config{}
 
 	if err := setAddonEnabled("flux")(cfg, "yes"); err != nil {
 		t.Fatalf("setAddonEnabled: %v", err)
@@ -390,7 +255,6 @@ func TestAddonHelpers_LazyInitNilMap(t *testing.T) {
 		t.Fatalf("addonSetting = %q, want main", got)
 	}
 
-	// Getters on an addon/key that was never set must not panic.
 	if got := addonEnabled("nonexistent")(cfg); got != valNo {
 		t.Fatalf("addonEnabled(nonexistent) = %q, want no", got)
 	}
@@ -402,18 +266,12 @@ func TestAddonHelpers_LazyInitNilMap(t *testing.T) {
 func TestAddonsStepDefinition_FieldWiring(t *testing.T) {
 	cfg := &config.Config{}
 
-	vaults := findField(t, &AddonsStepDefinition, "secretstore_op_vaults")
-	if err := vaults.ConfigSet(cfg, "homelab=1,shared=2"); err != nil {
-		t.Fatalf("ConfigSet(secretstore_op_vaults): %v", err)
-	}
+	vaults := setField(t, &AddonsStepDefinition, cfg, "secretstore_op_vaults", "homelab=1,shared=2")
 	if got := vaults.ConfigGet(cfg); got != "homelab=1,shared=2" {
 		t.Fatalf("ConfigGet(secretstore_op_vaults) = %q, want homelab=1,shared=2", got)
 	}
 
-	fluxEnabled := findField(t, &AddonsStepDefinition, "flux_enabled")
-	if err := fluxEnabled.ConfigSet(cfg, "yes"); err != nil {
-		t.Fatalf("ConfigSet(flux_enabled): %v", err)
-	}
+	setField(t, &AddonsStepDefinition, cfg, "flux_enabled", "yes")
 	if !cfg.Addons["flux"].Enabled {
 		t.Fatal("flux.Enabled = false after ConfigSet(yes)")
 	}

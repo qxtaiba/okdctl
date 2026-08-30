@@ -13,8 +13,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
-// goosLinux dedupes the "linux" literal across the systemctl-gated tests
-// below (goconst flags 3+ occurrences).
+// goosLinux dedupes the "linux" literal so goconst doesn't flag 3+ occurrences.
 const goosLinux = "linux"
 
 func apacheCfg(webRoot string) *config.Config {
@@ -23,9 +22,37 @@ func apacheCfg(webRoot string) *config.Config {
 	return cfg
 }
 
-// fakeSystemctl writes an executable systemctl stub that appends its argv to
-// calls.log and prepends its dir to PATH, mirroring
-// phase/teardown_test.go's fakeTeardownBin pattern.
+func writeIgnitionFixture(t *testing.T, dir string, names ...string) {
+	t.Helper()
+	for _, name := range names {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(`{"ignition":{"version":"3.4.0"}}`), 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+}
+
+func mustDeployToWebServer(t *testing.T, clusterDir, webRoot string) {
+	t.Helper()
+	p := newTestPhase(t)
+	if err := p.DeployToWebServer(t.Context(), apacheCfg(webRoot), clusterDir); err != nil {
+		t.Fatalf("DeployToWebServer: %v", err)
+	}
+}
+
+func assertFileContainsAll(t *testing.T, path, label string, wants ...string) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", label, err)
+	}
+	for _, want := range wants {
+		if !strings.Contains(string(data), want) {
+			t.Errorf("%s missing %q; got:\n%s", label, want, data)
+		}
+	}
+}
+
 func fakeSystemctl(t *testing.T, script string) (callLog string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -50,27 +77,16 @@ func TestTeardownIgnitionServer_StopsUnconditionallyAndVerifies(t *testing.T) {
 		t.Fatalf("clean teardown must return nil: %v", err)
 	}
 
-	calls, err := os.ReadFile(callLog)
-	if err != nil {
-		t.Fatalf("read call log: %v", err)
-	}
-	// The stop is NOT gated on an is-active probe: teardown runs under a
-	// detached post-cancel ctx where a failing probe would silently skip the
-	// stop and leave the pull-secret window open.
-	for _, want := range []string{"stop httpd", "disable httpd", "is-active --quiet httpd"} {
-		if !strings.Contains(string(calls), want) {
-			t.Errorf("systemctl calls missing %q; got:\n%s", want, calls)
-		}
-	}
+	assertFileContainsAll(t, callLog, "systemctl calls",
+		"stop httpd", "disable httpd", "is-active --quiet httpd")
 }
 
 func TestTeardownIgnitionServer_ReportsStillActive(t *testing.T) {
 	if runtime.GOOS != goosLinux {
 		t.Skip("systemctl branches are linux-only; darwin takes the GOOS gate")
 	}
-	// Every call "succeeds", including the post-stop is-active verify — the
-	// service survived the stop, so teardown must fail loudly rather than let
-	// node add report success while the pull secret is still served.
+	// Every systemctl call "succeeds", including the post-stop is-active
+	// check, simulating httpd surviving the stop.
 	fakeSystemctl(t, "exit 0")
 
 	p := newTestPhase(t)
@@ -90,18 +106,8 @@ func TestDeployToWebServer_IgnitionFilesLandAt0640(t *testing.T) {
 
 	clusterDir := t.TempDir()
 	webRoot := t.TempDir()
-
-	for _, name := range IgnitionFilenames {
-		path := filepath.Join(clusterDir, name)
-		if err := os.WriteFile(path, []byte(`{"ignition":{"version":"3.4.0"}}`), 0o600); err != nil {
-			t.Fatalf("write %s: %v", name, err)
-		}
-	}
-
-	p := newTestPhase(t)
-	if err := p.DeployToWebServer(t.Context(), apacheCfg(webRoot), clusterDir); err != nil {
-		t.Fatalf("DeployToWebServer: %v", err)
-	}
+	writeIgnitionFixture(t, clusterDir, IgnitionFilenames...)
+	mustDeployToWebServer(t, clusterDir, webRoot)
 
 	ignitionDir := filepath.Join(webRoot, "ignition")
 	di, err := os.Stat(ignitionDir)
@@ -128,18 +134,8 @@ func TestDeployToWebServer_AbsentFilesSkipped(t *testing.T) {
 	webRoot := t.TempDir()
 
 	present := IgnitionFilenames[0]
-	if err := os.WriteFile(
-		filepath.Join(clusterDir, present),
-		[]byte(`{"ignition":{"version":"3.4.0"}}`),
-		0o600,
-	); err != nil {
-		t.Fatalf("write %s: %v", present, err)
-	}
-
-	p := newTestPhase(t)
-	if err := p.DeployToWebServer(t.Context(), apacheCfg(webRoot), clusterDir); err != nil {
-		t.Fatalf("DeployToWebServer: %v", err)
-	}
+	writeIgnitionFixture(t, clusterDir, present)
+	mustDeployToWebServer(t, clusterDir, webRoot)
 
 	ignitionDir := filepath.Join(webRoot, "ignition")
 	if _, err := os.Stat(filepath.Join(ignitionDir, present)); err != nil {
@@ -157,15 +153,7 @@ func TestDeployToWebServer_AuthFilesNotCopied(t *testing.T) {
 	clusterDir := t.TempDir()
 	webRoot := t.TempDir()
 
-	for _, name := range IgnitionFilenames {
-		if err := os.WriteFile(
-			filepath.Join(clusterDir, name),
-			[]byte(`{"ignition":{"version":"3.4.0"}}`),
-			0o600,
-		); err != nil {
-			t.Fatalf("write %s: %v", name, err)
-		}
-	}
+	writeIgnitionFixture(t, clusterDir, IgnitionFilenames...)
 
 	authFiles := []string{"auth/kubeconfig", "kubeadmin-password"}
 	if err := os.MkdirAll(filepath.Join(clusterDir, "auth"), 0o700); err != nil {
@@ -181,10 +169,7 @@ func TestDeployToWebServer_AuthFilesNotCopied(t *testing.T) {
 		}
 	}
 
-	p := newTestPhase(t)
-	if err := p.DeployToWebServer(t.Context(), apacheCfg(webRoot), clusterDir); err != nil {
-		t.Fatalf("DeployToWebServer: %v", err)
-	}
+	mustDeployToWebServer(t, clusterDir, webRoot)
 
 	ignitionDir := filepath.Join(webRoot, "ignition")
 	for _, rel := range authFiles {
@@ -205,43 +190,27 @@ func redirectVhostDir(t *testing.T) string {
 }
 
 func TestConfigureApacheHTTPS_RendersVhost(t *testing.T) {
+	wantVhost := func(listen string) string {
+		return "<VirtualHost " + listen + `:443>
+  SSLEngine on
+  SSLCertificateFile    /root/okd/certs/ignition/server.crt
+  SSLCertificateKeyFile /root/okd/certs/ignition/server.key
+  DocumentRoot /var/www/html
+  <Directory "/var/www/html/ignition">
+    Options None
+    AllowOverride None
+    Require all granted
+  </Directory>
+</VirtualHost>
+`
+	}
 	cases := []struct {
 		name   string
 		bindIP string
 		want   string
 	}{
-		{
-			name:   "no bind IP listens on all interfaces",
-			bindIP: "",
-			want: `<VirtualHost *:443>
-  SSLEngine on
-  SSLCertificateFile    /root/okd/certs/ignition/server.crt
-  SSLCertificateKeyFile /root/okd/certs/ignition/server.key
-  DocumentRoot /var/www/html
-  <Directory "/var/www/html/ignition">
-    Options None
-    AllowOverride None
-    Require all granted
-  </Directory>
-</VirtualHost>
-`,
-		},
-		{
-			name:   "bind IP scopes the listen address",
-			bindIP: "192.168.1.20",
-			want: `<VirtualHost 192.168.1.20:443>
-  SSLEngine on
-  SSLCertificateFile    /root/okd/certs/ignition/server.crt
-  SSLCertificateKeyFile /root/okd/certs/ignition/server.key
-  DocumentRoot /var/www/html
-  <Directory "/var/www/html/ignition">
-    Options None
-    AllowOverride None
-    Require all granted
-  </Directory>
-</VirtualHost>
-`,
-		},
+		{"no bind IP listens on all interfaces", "", wantVhost("*")},
+		{"bind IP scopes the listen address", "192.168.1.20", wantVhost("192.168.1.20")},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -277,15 +246,7 @@ func TestConfigureApacheHTTPS_DebianEnablesModAndConf(t *testing.T) {
 		t.Fatalf("configureApacheHTTPS: %v", err)
 	}
 
-	calls, err := os.ReadFile(logPath)
-	if err != nil {
-		t.Fatalf("a2 tools not invoked: %v", err)
-	}
-	for _, want := range []string{"a2enmod ssl", "a2enconf ignition-ssl"} {
-		if !strings.Contains(string(calls), want) {
-			t.Errorf("a2 calls missing %q; got:\n%s", want, calls)
-		}
-	}
+	assertFileContainsAll(t, logPath, "a2 calls", "a2enmod ssl", "a2enconf ignition-ssl")
 }
 
 func TestConfigureApache_WiresVhostServiceAndIgnitionDir(t *testing.T) {
@@ -304,29 +265,12 @@ func TestConfigureApache_WiresVhostServiceAndIgnitionDir(t *testing.T) {
 		t.Fatalf("ConfigureApache: %v", err)
 	}
 
-	conf, err := os.ReadFile(filepath.Join(vhostDir, "ignition-ssl.conf"))
-	if err != nil {
-		t.Fatalf("vhost conf not written: %v", err)
-	}
-	for _, want := range []string{
+	assertFileContainsAll(t, filepath.Join(vhostDir, "ignition-ssl.conf"), "vhost conf",
 		"<VirtualHost 127.0.0.1:443>",
 		"SSLCertificateFile    /root/okd/certs/ignition/server.crt",
-		"DocumentRoot " + webRoot,
-	} {
-		if !strings.Contains(string(conf), want) {
-			t.Errorf("vhost conf missing %q; got:\n%s", want, conf)
-		}
-	}
-
-	calls, err := os.ReadFile(callLog)
-	if err != nil {
-		t.Fatalf("read systemctl log: %v", err)
-	}
-	for _, want := range []string{"enable httpd", "start httpd"} {
-		if !strings.Contains(string(calls), want) {
-			t.Errorf("systemctl calls missing %q; got:\n%s", want, calls)
-		}
-	}
+		"DocumentRoot "+webRoot,
+	)
+	assertFileContainsAll(t, callLog, "systemctl calls", "enable httpd", "start httpd")
 
 	fi, err := os.Stat(filepath.Join(webRoot, "ignition"))
 	if err != nil {

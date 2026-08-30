@@ -12,11 +12,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
-// CleanupBootstrap destroys the bootstrap VM by re-applying terraform with bootstrap_enabled=false.
-// Uses -target to scope the operation to the bootstrap resource only, preventing
-// unintended side effects on other resources (e.g., workers being shut down).
-// Re-running after the VM is already gone is a no-op: terraform reports zero
-// changes and apply succeeds cleanly.
+// CleanupBootstrap destroys the bootstrap VM via a scoped terraform apply
+// (bootstrap_enabled=false, -target). Safe to re-run once the VM is gone.
 func (p *Phase) CleanupBootstrap(ctx context.Context, cfg *config.Config, opts *Options) error {
 	terraformDir := workspace.TerraformEnvDir(opts.ProjectRoot, opts.TerraformEnv)
 
@@ -36,9 +33,7 @@ func (p *Phase) CleanupBootstrap(ctx context.Context, cfg *config.Config, opts *
 	p.Log.Info("bootstrap: planning vm destruction")
 	planFile := "bootstrap-destroy.tfplan"
 	planPath := filepath.Join(terraformDir, planFile)
-	// Always sweep the plan file at function exit. Without this a plan
-	// or apply error left the .tfplan in place; the next bootstrap-destroy
-	// run would refuse to overwrite it or re-use stale targets.
+	// Removed on exit — a leftover plan file blocks reuse on the next run.
 	defer func() {
 		if err := system.SafeRemove(planPath); err != nil {
 			p.Log.Warn("bootstrap: plan file cleanup failed", "err", err)
@@ -57,15 +52,11 @@ func (p *Phase) CleanupBootstrap(ctx context.Context, cfg *config.Config, opts *
 		return &errtypes.ClusterError{Msg: "bootstrap: state snapshot failed", Err: snapErr}
 	}
 
-	// Write the sentinel before apply so a crash between apply-success and
-	// file-write cannot leave the VM destroyed but tfvars still claiming
-	// bootstrap_enabled=true (which would trigger re-creation on the next plan).
-	// If apply fails, the sentinel is harmless: terraform state still tracks the
-	// VM as present, so the next plan is a correct retry.
+	// Written before apply so a crash never leaves tfvars claiming the VM
+	// should exist while state says otherwise (which would trigger re-creation).
 	statePath := filepath.Join(terraformDir, workspace.BootstrapStateSentinelFile)
 	if err := system.AtomicWriteString(statePath, `{"bootstrap_enabled": false}`, 0o600); err != nil {
-		// State-write during cluster lifecycle → ClusterError (exit 4), not
-		// ConfigError; bootstrap-state.auto.tfvars.json is managed by okdctl, not the user.
+		// ClusterError not ConfigError: file is okdctl-managed, not user-authored.
 		return &errtypes.ClusterError{Msg: "bootstrap: write state override", Err: err}
 	}
 

@@ -15,7 +15,22 @@ import (
 	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
-func seedCredentialWorkDir(t *testing.T) string {
+const liveStateBody = `{"version":4,"resources":[{"type":"proxmox_virtual_environment_vm"}]}`
+
+func seedStateFile(t *testing.T, projectRoot, body string) string {
+	t.Helper()
+	envDir := filepath.Join(projectRoot, "infrastructure", "terraform", "environments", "production")
+	if err := os.MkdirAll(envDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tfstate := filepath.Join(envDir, "terraform.tfstate")
+	if err := os.WriteFile(tfstate, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return tfstate
+}
+
+func guardScenario(t *testing.T, stateBody string) (string, *Options) {
 	t.Helper()
 	workDir := t.TempDir()
 	authDir := filepath.Join(workDir, "cluster-config", "auth")
@@ -30,22 +45,9 @@ func seedCredentialWorkDir(t *testing.T) string {
 	if err := os.MkdirAll(filepath.Join(workDir, "downloads"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	return workDir
-}
-
-func seedStateFile(t *testing.T, projectRoot, body string) {
-	t.Helper()
-	envDir := filepath.Join(projectRoot, "infrastructure", "terraform", "environments", "production")
-	if err := os.MkdirAll(envDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(envDir, "terraform.tfstate"), []byte(body), 0o600); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func credentialGuardOpts(workDir, projectRoot string) *Options {
-	return &Options{
+	projectRoot := t.TempDir()
+	seedStateFile(t, projectRoot, stateBody)
+	opts := &Options{
 		BaseOptions: phase.BaseOptions{
 			WorkDir:      workDir,
 			ProjectRoot:  projectRoot,
@@ -53,18 +55,12 @@ func credentialGuardOpts(workDir, projectRoot string) *Options {
 		},
 		Kind: WorkOnly,
 	}
+	return workDir, opts
 }
 
-// TestExecute_LiveStatePreservesClusterCredentials locks the blocker fix:
-// a Full/WorkOnly cleanup against populated terraform state must not delete
-// cluster-config (the only copy of kubeconfig/kubeadmin-password) while the
-// VMs it grants access to are still deployed.
+// Regression guard: live terraform state must not cost the cluster its only credentials.
 func TestExecute_LiveStatePreservesClusterCredentials(t *testing.T) {
-	workDir := seedCredentialWorkDir(t)
-	projectRoot := t.TempDir()
-	seedStateFile(t, projectRoot, `{"version":4,"resources":[{"type":"proxmox_virtual_environment_vm"}]}`)
-
-	opts := credentialGuardOpts(workDir, projectRoot)
+	workDir, opts := guardScenario(t, liveStateBody)
 	h := &testutil.CaptureHandler{}
 
 	if err := executeWithRecorder(context.Background(), opts, slog.New(h), nil); err != nil {
@@ -84,11 +80,7 @@ func TestExecute_LiveStatePreservesClusterCredentials(t *testing.T) {
 }
 
 func TestExecute_ForceCredentialWipeRemovesEverything(t *testing.T) {
-	workDir := seedCredentialWorkDir(t)
-	projectRoot := t.TempDir()
-	seedStateFile(t, projectRoot, `{"version":4,"resources":[{"type":"proxmox_virtual_environment_vm"}]}`)
-
-	opts := credentialGuardOpts(workDir, projectRoot)
+	workDir, opts := guardScenario(t, liveStateBody)
 	opts.ForceCredentialWipe = true
 
 	if err := executeWithRecorder(context.Background(), opts, logutil.NopLogger, nil); err != nil {
@@ -100,11 +92,7 @@ func TestExecute_ForceCredentialWipeRemovesEverything(t *testing.T) {
 }
 
 func TestExecute_EmptyStateWipesWorkDir(t *testing.T) {
-	workDir := seedCredentialWorkDir(t)
-	projectRoot := t.TempDir()
-	seedStateFile(t, projectRoot, `{"version":4,"resources":[]}`)
-
-	opts := credentialGuardOpts(workDir, projectRoot)
+	workDir, opts := guardScenario(t, `{"version":4,"resources":[]}`)
 	if err := executeWithRecorder(context.Background(), opts, logutil.NopLogger, nil); err != nil {
 		t.Fatalf("cleanup with destroyed state errored: %v", err)
 	}
@@ -113,15 +101,10 @@ func TestExecute_EmptyStateWipesWorkDir(t *testing.T) {
 	}
 }
 
-// TestExecute_CorruptStateFailsClosed: corrupt state cannot vouch that the
-// cluster is destroyed, so the credential wipe is refused with a diagnostic
-// instead of proceeding (or silently succeeding).
+// Corrupt state can't vouch the cluster is gone, so credential wipe is refused,
+// not silently allowed.
 func TestExecute_CorruptStateFailsClosed(t *testing.T) {
-	workDir := seedCredentialWorkDir(t)
-	projectRoot := t.TempDir()
-	seedStateFile(t, projectRoot, "not-json")
-
-	opts := credentialGuardOpts(workDir, projectRoot)
+	workDir, opts := guardScenario(t, "not-json")
 	err := executeWithRecorder(context.Background(), opts, logutil.NopLogger, nil)
 	if err == nil {
 		t.Fatal("cleanup with corrupt terraform state must fail closed")

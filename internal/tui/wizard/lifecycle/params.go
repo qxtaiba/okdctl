@@ -1,6 +1,7 @@
 package lifecycle
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -18,14 +19,12 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
 )
 
-// Drain-mode select options; the wording carries the semantics so the
-// choice is informed at selection time, not only in the preview.
+// Drain-mode option wording carries the semantics, informing the choice at selection time.
 const (
 	drainModeDefault = "cordon + drain (default)"
 	drainModeSkip    = "skip drain — restart pods in place"
 
-	// sectionDisruption titles the drain/timeout form section and labels
-	// the matching preview entry.
+	// sectionDisruption titles the drain/timeout section and the matching preview entry.
 	sectionDisruption = "disruption"
 
 	defaultDrainTimeout = "10m"
@@ -39,9 +38,8 @@ type ParamsStep struct {
 	wizard.BaseStep
 	st    *State
 	inner *wizard.MultiSectionForm
-	// builtFor records which op the form was built for: the step instance
-	// survives esc-back-and-repick, so a cached form for a different op
-	// would validate the wrong fields and Apply through nil pointers.
+	// builtFor guards against a stale form: esc-back-and-repick would
+	// otherwise validate/Apply through nil pointers for the wrong op.
 	builtFor node.Op
 
 	memField          *components.InputField
@@ -63,9 +61,9 @@ func NewParamsStep(st *State) *ParamsStep {
 	}
 }
 
-// ShouldShow always shows the step: the backend does not persist an
-// interrupted op's parameters, so a resume must re-collect them (the
-// resize refuses zero sizing and remove would drain unbounded otherwise).
+// ShouldShow always shows the step: an interrupted op's parameters are not
+// persisted, so resume must re-collect them (resize refuses zero sizing,
+// remove would drain unbounded).
 func (s *ParamsStep) ShouldShow(_ *config.Config) bool {
 	return true
 }
@@ -147,8 +145,6 @@ func (s *ParamsStep) buildDisruptionFields() {
 	s.timeoutField.Validator = validateDuration
 }
 
-// resizeRole resolves the role whose sizing the resize mutates: the scoped
-// role, or the single target node's role from the live list.
 func (s *ParamsStep) resizeRole() nodetypes.NodeRole {
 	if s.st.Scope.Role != "" {
 		return s.st.Scope.Role
@@ -158,8 +154,7 @@ func (s *ParamsStep) resizeRole() nodetypes.NodeRole {
 			return n.Role
 		}
 	}
-	// Resume skips the target step, so the live list is empty; the node
-	// name itself carries the role (cluster naming: <cluster>-masterN).
+	// Resume has no live list; the node name itself carries the role (<cluster>-masterN).
 	if strings.Contains(s.st.Scope.Node, "master") {
 		return nodetypes.RoleMaster
 	}
@@ -207,16 +202,14 @@ func (s *ParamsStep) currentDiskGB() int {
 
 func (s *ParamsStep) fields() []components.FormField {
 	var out []components.FormField
-	for _, f := range []components.FormField{s.memField, s.cpuField, s.diskField, s.countField, s.timeoutField, s.drainModeField, s.forceStorageField} {
-		switch v := f.(type) {
-		case *components.InputField:
-			if v != nil {
-				out = append(out, v)
-			}
-		case *components.SelectField:
-			if v != nil {
-				out = append(out, v)
-			}
+	for _, f := range []*components.InputField{s.memField, s.cpuField, s.diskField, s.countField, s.timeoutField} {
+		if f != nil {
+			out = append(out, f)
+		}
+	}
+	for _, f := range []*components.SelectField{s.drainModeField, s.forceStorageField} {
+		if f != nil {
+			out = append(out, f)
 		}
 	}
 	return out
@@ -313,7 +306,7 @@ func intValue(f *components.InputField) int {
 func validatePositiveInt(v string) error {
 	n, err := strconv.Atoi(strings.TrimSpace(v))
 	if err != nil || n < 1 {
-		return fmt.Errorf("must be a whole number >= 1")
+		return errors.New("must be a whole number >= 1")
 	}
 	return nil
 }
@@ -321,7 +314,7 @@ func validatePositiveInt(v string) error {
 func validateNonNegativeInt(v string) error {
 	n, err := strconv.Atoi(strings.TrimSpace(v))
 	if err != nil || n < 0 {
-		return fmt.Errorf("must be a whole number >= 0")
+		return errors.New("must be a whole number >= 0")
 	}
 	return nil
 }
@@ -329,7 +322,7 @@ func validateNonNegativeInt(v string) error {
 func validateMemoryMB(v string) error {
 	n, err := strconv.Atoi(strings.TrimSpace(v))
 	if err != nil || n < 0 {
-		return fmt.Errorf("must be a whole number >= 0")
+		return errors.New("must be a whole number >= 0")
 	}
 	if n > 0 && n < okdMinMemoryMB {
 		return fmt.Errorf("okd minimum is %d mb (or 0 to keep current)", okdMinMemoryMB)
@@ -339,7 +332,7 @@ func validateMemoryMB(v string) error {
 
 func validateDuration(v string) error {
 	if _, err := time.ParseDuration(strings.TrimSpace(v)); err != nil {
-		return fmt.Errorf("must be a duration like 10m or 1h")
+		return errors.New("must be a duration like 10m or 1h")
 	}
 	return nil
 }

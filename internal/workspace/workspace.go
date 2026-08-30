@@ -7,9 +7,9 @@ package workspace
 
 import "path/filepath"
 
-// WorkDirName is the per-project workdir okdctl creates under the project
-// root for run artifacts (install-config, manifests, ignition, downloaded
-// tools). system.isAllowedChownRoot reads it for the chown-back allowlist.
+// WorkDirName is the per-project workdir for run artifacts (install-config,
+// manifests, ignition, downloaded tools); system.isAllowedChownRoot reads
+// it for the chown-back allowlist.
 const WorkDirName = "okd-install"
 
 // DefaultTerraformEnv names the embedded Terraform environment that ships in
@@ -17,9 +17,9 @@ const WorkDirName = "okd-install"
 const DefaultTerraformEnv = "production"
 
 // BootstrapStateSentinelFile is the auto-loaded tfvars override postinstall
-// writes after the bootstrap VM is destroyed. Terraform loads *.auto.tfvars.json
-// after terraform.tfvars, so cleanup and setup must remove this file before any
-// subsequent deploy so bootstrap_enabled=true takes effect again.
+// writes after the bootstrap VM is destroyed; since Terraform loads
+// *.auto.tfvars.json after terraform.tfvars, cleanup/setup must remove it
+// before any redeploy or bootstrap_enabled=true won't take effect.
 const BootstrapStateSentinelFile = "bootstrap-state.auto.tfvars.json"
 
 // WorkDir returns the per-project work directory (<projectRoot>/okd-install).
@@ -42,9 +42,9 @@ func TerraformEnvDir(projectRoot, env string) string {
 }
 
 // TerraformModuleDir returns the materialized proxmox-okd module directory
-// (<projectRoot>/infrastructure/terraform/modules/proxmox-okd). The
-// terraform.Executor's stale-override guard derives the same path relative
-// to TerraformEnvDir; the two must stay in lockstep.
+// (<projectRoot>/infrastructure/terraform/modules/proxmox-okd);
+// terraform.Executor's stale-override guard derives the same path and the
+// two must stay in lockstep.
 func TerraformModuleDir(projectRoot string) string {
 	return filepath.Join(projectRoot, "infrastructure", "terraform", "modules", "proxmox-okd")
 }

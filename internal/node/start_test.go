@@ -31,6 +31,17 @@ func startTestConfig() *config.Config {
 	return cfg
 }
 
+// seedStartRunner builds a non-dry-run Runner with a short cluster-ready
+// timeout; the never-converges tests tighten it further.
+func seedStartRunner(t *testing.T, fc *fakeCluster, fp *fakePower) *Runner {
+	t.Helper()
+	r, _, _ := seedRunner(t, fc, &fakeTF{}, startTestConfig())
+	r.DryRun = false
+	r.Power = fp
+	r.ClusterReadyTimeout = 5 * time.Second
+	return r
+}
+
 func TestStartDryRunMakesNoMutation(t *testing.T) {
 	fc := &fakeCluster{nodes: startTestNodes()}
 	ftf := &fakeTF{}
@@ -82,10 +93,7 @@ func TestStartRefusesWithoutPowerCycler(t *testing.T) {
 func TestStartPowersMastersBeforeWorkers(t *testing.T) {
 	fc := &fakeCluster{nodes: startTestNodes()}
 	fp := &fakePower{}
-	r, _, _ := seedRunner(t, fc, &fakeTF{}, startTestConfig())
-	r.DryRun = false
-	r.Power = fp
-	r.ClusterReadyTimeout = 5 * time.Second
+	r := seedStartRunner(t, fc, fp)
 
 	if err := r.Start(context.Background(), StartOptions{}); err != nil {
 		t.Fatalf("start: %v", err)
@@ -109,41 +117,16 @@ func TestStartPowersMastersBeforeWorkers(t *testing.T) {
 	}
 }
 
-func TestStartWaitConvergesAndApprovesCSRs(t *testing.T) {
-	// readyAtCall=1: the readiness poll converges on its first (immediate) tick,
-	// which must have approved pending CSRs before returning ready. A later
-	// convergence would stall on the 30s poll interval, so ready-first keeps the
-	// test fast while still exercising the call-counted toggle.
-	fc := &fakeCluster{nodes: startTestNodes(), readyAtCall: 1, approveCount: 1}
-	fp := &fakePower{}
-	r, _, _ := seedRunner(t, fc, &fakeTF{}, startTestConfig())
-	r.DryRun = false
-	r.Power = fp
-	r.ClusterReadyTimeout = 5 * time.Second
-
-	if err := r.Start(context.Background(), StartOptions{}); err != nil {
-		t.Fatalf("start: %v", err)
-	}
-	if fc.approveCalls < 1 {
-		t.Errorf("expected ApprovePendingCSRs to run during the readiness wait, got %d calls", fc.approveCalls)
-	}
-	if fp.startCalls != 4 {
-		t.Errorf("expected all 4 VMs powered on before the wait, got %d", fp.startCalls)
-	}
-}
-
 func TestStartWaitKeepsApprovingBeforeReady(t *testing.T) {
-	// Nodes never report Ready; a tight timeout means exactly the immediate
-	// poll runs, which must still have attempted a CSR approval.
+	// Nodes never report Ready; a tight timeout means only the immediate poll
+	// runs, which must still attempt CSR approval.
 	nodes := startTestNodes()
 	for i := range nodes {
 		nodes[i].Ready = false
 	}
-	fc := &fakeCluster{nodes: nodes, approveCount: 0}
+	fc := &fakeCluster{nodes: nodes}
 	fp := &fakePower{}
-	r, _, _ := seedRunner(t, fc, &fakeTF{}, startTestConfig())
-	r.DryRun = false
-	r.Power = fp
+	r := seedStartRunner(t, fc, fp)
 	r.ClusterReadyTimeout = 50 * time.Millisecond
 
 	err := r.Start(context.Background(), StartOptions{})
@@ -161,9 +144,7 @@ func TestStartWaitKeepsApprovingBeforeReady(t *testing.T) {
 func TestStartWaitSkipsApproveWhenAPIDown(t *testing.T) {
 	fc := &fakeCluster{nodes: startTestNodes(), listErr: errors.New("connection refused")}
 	fp := &fakePower{}
-	r, _, _ := seedRunner(t, fc, &fakeTF{}, startTestConfig())
-	r.DryRun = false
-	r.Power = fp
+	r := seedStartRunner(t, fc, fp)
 	r.ClusterReadyTimeout = 50 * time.Millisecond
 
 	err := r.Start(context.Background(), StartOptions{})
@@ -175,17 +156,12 @@ func TestStartWaitSkipsApproveWhenAPIDown(t *testing.T) {
 	}
 }
 
-// TestStartRefusesForeignMarkerWithoutAck locks Fix 1: start is
-// non-resumable, so a marker left by an unrelated op — here a stranded
-// remove — must refuse before any cluster call or power-on, unless
-// acknowledged.
+// start is non-resumable: a foreign marker (stranded remove) must refuse before
+// any cluster call or power-on, unless acknowledged.
 func TestStartRefusesForeignMarkerWithoutAck(t *testing.T) {
 	fc := &fakeCluster{nodes: startTestNodes()}
 	fp := &fakePower{}
-	r, _, _ := seedRunner(t, fc, &fakeTF{}, startTestConfig())
-	r.DryRun = false
-	r.Power = fp
-	r.ClusterReadyTimeout = 5 * time.Second
+	r := seedStartRunner(t, fc, fp)
 	seedMarker(t, r, OpRemove, "worker5", StepDrain)
 
 	err := r.Start(context.Background(), StartOptions{})

@@ -21,30 +21,26 @@ import (
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
-// Default gates for node-lifecycle waits. NodeReadyTimeout bounds the wait for
-// a resized/rejoined node to report Ready; EtcdGateTimeout bounds the pre/post
-// etcd-quorum health gate around a control-plane mutation.
+// Default gates: NodeReadyTimeout bounds a node's Ready wait; EtcdGateTimeout
+// bounds the pre/post etcd-quorum gate.
 const (
 	DefaultNodeReadyTimeout = 15 * time.Minute
 	DefaultEtcdGateTimeout  = 10 * time.Minute
-	// DefaultCephGateTimeout is generous: a rebalance after an OSD host is
-	// power-cycled or removed can take a while to return all PGs to active+clean.
+	// DefaultCephGateTimeout is generous: an OSD rebalance can take a while to reach active+clean.
 	DefaultCephGateTimeout = 30 * time.Minute
-	// DefaultClusterReadyTimeout bounds cluster start's wait for every node to
-	// report Ready, ticking ApprovePendingCSRs each poll so kubelet certificate
-	// rotation never stalls the wait unattended.
+	// DefaultClusterReadyTimeout bounds cluster start's Ready wait, ticking
+	// ApprovePendingCSRs each poll so cert rotation doesn't stall it.
 	DefaultClusterReadyTimeout = 30 * time.Minute
-	// DefaultSnapshotTaskTimeout bounds how long a snapshot create/rollback/
-	// delete waits for its async pvesh task to reach status=stopped.
+	// DefaultSnapshotTaskTimeout bounds a snapshot create/rollback/delete's
+	// wait for its async pvesh task.
 	DefaultSnapshotTaskTimeout = 5 * time.Minute
-	// hostMemoryReserveMiB is the hypervisor headroom the memory-budget guard
-	// keeps free when projecting a resize (ZFS ARC, host services).
+	// hostMemoryReserveMiB is hypervisor headroom (ZFS ARC, host services) the
+	// memory-budget guard keeps free.
 	hostMemoryReserveMiB = 2048
 )
 
-// clusterClient is the slice of cluster.Client the node ops drive. Defined as
-// an interface so tests can substitute a call-recording fake (proving, e.g.,
-// that a dry-run performs no cordon/drain) without a live cluster.
+// clusterClient is the slice of cluster.Client node ops drive, as an interface
+// so tests can substitute a call-recording fake.
 type clusterClient interface {
 	ListNodes(ctx context.Context) ([]cluster.NodeDetail, error)
 	Cordon(ctx context.Context, node string) error
@@ -61,10 +57,8 @@ type clusterClient interface {
 	SignerNotAfter(ctx context.Context) (time.Time, error)
 }
 
-// vmPowerCycler stops→starts a VM through the Proxmox API. An interface so a
-// resize test can record the call without a live hypervisor. nil means no
-// Proxmox credentials were wired — resize then refuses rather than silently
-// leaving the memory change unrealized.
+// vmPowerCycler stops→starts a VM via the Proxmox API; nil (no credentials)
+// makes resize refuse rather than leave a change unrealized.
 type vmPowerCycler interface {
 	PowerCycleVM(ctx context.Context, node string, vmid int) error
 	ShutdownVM(ctx context.Context, node string, vmid int) error
@@ -72,17 +66,14 @@ type vmPowerCycler interface {
 }
 
 // diskGrower grows a node's OS filesystem into a freshly-grown virtual disk
-// (SCSI rescan → growpart → xfs_growfs), in-guest via `oc debug`. An
-// interface so a resize test records the call without a cluster. nil means
-// no grower is wired — a disk resize then refuses up front rather than
-// applying a Proxmox-level grow the guest never realizes.
+// (SCSI rescan, growpart, xfs_growfs) in-guest via `oc debug`; nil refuses a
+// disk resize up front rather than applying a grow the guest never realizes.
 type diskGrower interface {
 	GrowOSDisk(ctx context.Context, node string) error
 }
 
-// snapshotClient mirrors package hostssh's pvesh-backed snapshot primitives
-// as an interface so a test can substitute a call-recording fake without a
-// live Proxmox host, the same role vmPowerCycler plays for the REST API.
+// snapshotClient mirrors hostssh's pvesh-backed snapshot primitives as an
+// interface, so tests can substitute a call-recording fake.
 type snapshotClient interface {
 	CreateSnapshot(ctx context.Context, p *hostssh.RemoteISOParams, vmid int, name, description string, timeout time.Duration) error
 	ListSnapshots(ctx context.Context, p *hostssh.RemoteISOParams, vmid int) ([]hostssh.SnapshotInfo, error)
@@ -91,8 +82,8 @@ type snapshotClient interface {
 	VMAgentEnabled(ctx context.Context, p *hostssh.RemoteISOParams, vmid int) (bool, error)
 }
 
-// HostsshSnapshotClient is the production snapshotClient, delegating each
-// call straight through to package hostssh's pvesh primitives.
+// HostsshSnapshotClient is the production snapshotClient, delegating to package
+// hostssh's pvesh primitives.
 type HostsshSnapshotClient struct{}
 
 // CreateSnapshot implements snapshotClient via hostssh.CreateSnapshot.
@@ -133,32 +124,24 @@ type terraformExec interface {
 }
 
 // isoProvisioner is the slice of provision.Provisioner node add drives to
-// build and upload the new node's custom CoreOS ISO. Both calls are already
-// count-generic and fingerprint/checksum-skip unchanged nodes, so node add
-// reuses them as-is rather than a dedicated single-node build path. An
-// interface so a test can substitute a call-recording fake without shelling
-// out to coreos-installer/scp.
+// build/upload the ISO; an interface so tests avoid shelling out.
 type isoProvisioner interface {
 	BuildCustomISOs(ctx context.Context, cfg *config.Config, opts provision.Options) error
 	UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Config, opts provision.Options) error
 }
 
-// ignitionServer is the slice of provision.Provisioner node add drives to expose
-// worker.ign over HTTPS for the join window. An interface so a test can
-// substitute a call-recording fake without touching httpd. A teardown error
-// means httpd may still be serving the pull secret; the caller must surface
-// it loudly rather than swallow it.
+// ignitionServer exposes worker.ign over HTTPS for the join window; a teardown
+// error means httpd may still be serving the pull secret — callers must surface
+// it loudly.
 type ignitionServer interface {
 	ReviveIgnitionServer(ctx context.Context, cfg *config.Config, projectRoot, clusterDir string) error
 	TeardownIgnitionServer(ctx context.Context) error
 }
 
-// Runner drives node-lifecycle ops against one cluster. TF mutates VMs;
-// Cluster runs the Kubernetes lifecycle. ConfigPath and the derived env
-// directory are persisted on each op so a later full deploy reconciles to the
-// same topology. projectRoot/workDir/envDir are unexported so the derived-path
-// invariant NewRunner establishes (workDir/envDir derive from projectRoot)
-// cannot be skewed by a post-construction field assignment.
+// Runner drives node-lifecycle ops against one cluster: TF mutates VMs, Cluster
+// runs the Kubernetes lifecycle, and ConfigPath persists topology for later deploys
+// to reconcile against. projectRoot/workDir/envDir are unexported so NewRunner's
+// derive-from-root invariant can't be skewed by a later field assignment.
 type Runner struct {
 	Cluster     clusterClient
 	TF          terraformExec
@@ -172,49 +155,43 @@ type Runner struct {
 	Log         *slog.Logger
 	Reporter    logutil.ProgressReporter
 
-	// Power performs the post-resize hypervisor power-cycle. nil when no
-	// Proxmox credentials are available; a resize then fails safe.
+	// Power performs the post-resize power-cycle; nil (no Proxmox credentials) makes resize fail safe.
 	Power vmPowerCycler
 
-	// Disk realizes an OS-disk grow inside the guest. nil fails disk
-	// resizes safe, mirroring Power for memory/cpu.
+	// Disk realizes an OS-disk grow inside the guest; nil fails disk resizes closed, mirroring Power.
 	Disk diskGrower
 
-	// Proxmox carries the pvesh-over-SSH connection params snapshot ops use.
-	// nil when no Proxmox SSH access is wired — snapshot ops then fail closed
-	// the same way Power does for resize.
+	// Proxmox carries the pvesh-over-SSH params snapshot ops use; nil fails
+	// closed the same way Power does for resize.
 	Proxmox *hostssh.RemoteISOParams
 
 	// Snapshot is the pvesh-backed client snapshot ops drive; an interface so
 	// tests can record calls without a live hypervisor.
 	Snapshot snapshotClient
 
-	// SnapshotTaskTimeout bounds how long a snapshot create/rollback/delete
-	// waits for its async pvesh task to complete.
+	// SnapshotTaskTimeout bounds a snapshot create/rollback/delete's wait for its async pvesh task.
 	SnapshotTaskTimeout time.Duration
 
-	// ISO and Ignition drive node add's ISO build/upload and ignition-server
-	// revive (node add only; zero/nil for every other op). Provision carries
-	// the workDir/projectRoot roots those calls resolve artifacts from.
+	// ISO/Ignition drive node add's ISO build/upload and ignition-server revive
+	// (zero/nil for every other op); Provision carries their artifact roots.
 	ISO       isoProvisioner
 	Ignition  ignitionServer
 	Provision provision.Options
 
-	// Confirm gates each mutating op between guards/preflight and the first
-	// mutation; nil auto-approves (tests, non-interactive callers that gate
-	// elsewhere). Preview renders the dry-run plan; nil falls back to slog.
+	// Confirm gates each mutating op before the first mutation (nil
+	// auto-approves); Preview renders the dry-run plan (nil falls back to
+	// slog).
 	Confirm ConfirmFunc
 	Preview PreviewFunc
 
-	// OnStep, when non-nil, observes each mutating step just before its
-	// marker is written — the structured progress feed the TUI execution
-	// screen consumes. Purely observational; errors never flow back.
+	// OnStep, when non-nil, observes each step just before its marker is
+	// written (the TUI execution-screen feed); purely observational, errors
+	// never flow back.
 	OnStep func(target string, step Step)
 
-	// preConsented suppresses the confirm gate for ops composed under a consent
-	// already granted at a higher level (compact's RemoveWorker/Resize inner
-	// calls). Set for the duration of the composed sequence and restored after;
-	// see Compact.
+	// preConsented suppresses the confirm gate for ops composed under a
+	// higher-level consent (compact's inner RemoveWorker/Resize calls); see
+	// Compact.
 	preConsented bool
 
 	NodeReadyTimeout    time.Duration
@@ -222,18 +199,16 @@ type Runner struct {
 	CephGateTimeout     time.Duration
 	ClusterReadyTimeout time.Duration
 
-	// tfEnv is the terraform environment name captured by WithTerraformEnv;
-	// NewRunner resolves it against projectRoot into envDir after all
-	// options have applied, so option ordering does not matter.
+	// tfEnv is the terraform env name from WithTerraformEnv; NewRunner resolves
+	// it into envDir after all options apply, so order doesn't matter.
 	tfEnv string
 }
 
 // RunnerOption configures optional Runner wiring in NewRunner, mirroring the
-// okd.New / addon.NewManager option style.
+// okd.New/addon.NewManager option style.
 type RunnerOption func(*Runner)
 
-// WithProjectRoot sets the project root the work and terraform env
-// directories derive from.
+// WithProjectRoot sets the project root the work and terraform env directories derive from.
 func WithProjectRoot(root string) RunnerOption {
 	return func(r *Runner) { r.projectRoot = root }
 }
@@ -243,8 +218,7 @@ func WithConfigPath(path string) RunnerOption {
 	return func(r *Runner) { r.ConfigPath = path }
 }
 
-// WithTerraformEnv selects the terraform environment whose directory node
-// ops plan and apply in.
+// WithTerraformEnv selects the terraform environment whose directory node ops plan and apply in.
 func WithTerraformEnv(env string) RunnerOption {
 	return func(r *Runner) { r.tfEnv = env }
 }
@@ -259,9 +233,8 @@ func WithLogger(log *slog.Logger) RunnerOption {
 	return func(r *Runner) { r.Log = log }
 }
 
-// NewRunner wires a Runner with derived work/env directories and default
-// timeouts. Required collaborators (cluster client, terraform executor,
-// config) are positional; everything else arrives via options.
+// NewRunner wires a Runner with derived directories and default timeouts; core
+// collaborators are positional, everything else via options.
 func NewRunner(cl *cluster.Client, tf *terraform.Executor, cfg *config.Config, opts ...RunnerOption) *Runner {
 	r := &Runner{
 		Cluster:             cl,
@@ -294,11 +267,9 @@ func (r *Runner) mark(op Op, target string, step Step) error {
 	return markStep(r.marker(), op, target, step, r.RunID, r.Cfg.Cluster.Name)
 }
 
-// startProgress starts r.Reporter for desc, unless dry-run — a dry-run must
-// stay visually silent even for gates that run ahead of the dry-run branch
-// (e.g. compact's pre-flight etcd check), so the check lives here once
-// rather than at every call site. Reporter is nil-safe: Runner values built
-// directly (tests) skip NewRunner's NopProgressReporter default.
+// startProgress starts r.Reporter for desc unless dry-run (also silences gates
+// ahead of the dry-run branch, e.g. compact's preflight etcd check); nil-safe
+// for direct Runner values.
 func (r *Runner) startProgress(desc string) (stop func()) {
 	if r.DryRun {
 		return func() {}
@@ -309,15 +280,9 @@ func (r *Runner) startProgress(desc string) (stop func()) {
 	return r.Reporter(desc)
 }
 
-// persistTopology saves okdctl.yaml (the authoritative topology) BEFORE
-// re-rendering terraform.tfvars (the derived artifact). The order is an
-// invariant, not an accident: a crash between the two writes must leave config
-// ahead of tfvars, because the next deploy or node op re-renders tfvars from
-// config and converges. The reverse order would leave tfvars at the new
-// topology over a stale config, and the next unscoped auto-approved apply would
-// revert the just-persisted change (deleting an added worker, undoing a resize)
-// with no gate. WriteTerraformVars preserves the bootstrap sentinel (unlike
-// deploy's GenerateTerraformVars) so a re-render cannot resurrect the bootstrap
+// persistTopology saves okdctl.yaml before re-rendering tfvars, so a crash
+// leaves config ahead of tfvars for reconciliation; WriteTerraformVars
+// preserves the bootstrap sentinel so re-render can't resurrect the bootstrap
 // VM.
 func (r *Runner) persistTopology() error {
 	if err := config.NewLoader().Save(r.Cfg, r.ConfigPath); err != nil {
@@ -329,14 +294,9 @@ func (r *Runner) persistTopology() error {
 	return nil
 }
 
-// nodeOpPlanVars merges the caller's plan-time overrides onto the post-deploy
-// invariants every node op asserts: the bootstrap VM is gone and workers run.
-// Passed as -var (highest precedence, above terraform.tfvars and auto-tfvars) so
-// a stale terraform.tfvars bootstrap_enabled=true can't inject a bootstrap-create
-// into the targeted plan, and the module's start_workers_immediately=false
-// default can't plan a running worker to stopped. Either would trip the
-// single-change gate or, on apply, stop a healthy VM. planVars override these on
-// a key collision.
+// nodeOpPlanVars merges planVars onto post-deploy invariants (bootstrap gone,
+// workers running) as -var overrides, so stale tfvars or module defaults can't
+// sneak into the targeted plan.
 func nodeOpPlanVars(planVars map[string]string) map[string]string {
 	vars := map[string]string{
 		"bootstrap_enabled":         "false",
@@ -346,25 +306,10 @@ func nodeOpPlanVars(planVars map[string]string) map[string]string {
 	return vars
 }
 
-// planTargeted runs a single-resource targeted plan with the node-op invariant
-// vars plus planVars and gates it to exactly (address, want). On success it
-// returns the saved plan's path and a cleanup func the caller MUST invoke once
-// done — after any apply, since Apply consumes the saved plan. On any error the
-// plan file is already removed and the returned cleanup is a no-op.
-//
-// An empty plan normally means the gate refused the change (the variable
-// never reached the module). But an empty plan is also what a resumed re-run
-// produces once the apply already landed, so an empty plan additionally
-// checks state via StateHasResource and classifies it with
-// terraform.EmptyPlanMeansAlreadyAtTarget. That extra state read only happens
-// on the empty-plan path, never on the happy path of a single matching change.
-//
-// A delete is classified unconditionally: an empty delete plan with the
-// address absent from state is unambiguously "already gone". An update is
-// classified as already-at-target ONLY when resuming: on a fresh run an empty
-// update plan means the variable never reached the module (a -var plumbing
-// regression), which must stay fatal rather than be silently reported as
-// "already resized".
+// planTargeted plans (address, want) with node-op invariant vars; callers MUST
+// invoke the returned cleanup after any apply. An empty plan means refused, or
+// (only when resuming) already-landed — a delete is classified unconditionally;
+// on a fresh run an empty update plan is a fatal -var regression, not success.
 func (r *Runner) planTargeted(ctx context.Context, address string, want terraform.PlanAction, planVars map[string]string, resuming bool) (planPath string, alreadyAtTarget bool, cleanup func(), err error) {
 	noop := func() {}
 	if err := r.TF.Init(ctx); err != nil {
@@ -412,11 +357,9 @@ func (r *Runner) planTargeted(ctx context.Context, address string, want terrafor
 	return planPath, false, cleanup, nil
 }
 
-// targetedApply plans a single-resource change, gates the plan to exactly
-// (address, want), snapshots state, and applies the saved plan. A gate failure
-// aborts before any mutation. planVars are plan-time -var overrides so the
-// preview is truthful without persisting terraform.tfvars — the dry-run path
-// relies on this to show the intended change while writing nothing to disk.
+// targetedApply plans, gates to (address, want), snapshots state, and applies;
+// a gate failure aborts before any mutation, and planVars keep dry-run previews
+// truthful without writing tfvars.
 func (r *Runner) targetedApply(ctx context.Context, address string, want terraform.PlanAction, planVars map[string]string, resuming bool) error {
 	stop := r.startProgress(fmt.Sprintf("applying terraform change to %s", address))
 	defer stop()
@@ -429,11 +372,8 @@ func (r *Runner) targetedApply(ctx context.Context, address string, want terrafo
 
 	if alreadyAtTarget {
 		if want == terraform.PlanActionDelete && !resuming {
-			// A fresh delete landing here means terraform state has no record
-			// of the resource. That is the expected shape after an
-			// acknowledged partial remove, but it is also exactly what a
-			// lost/mismatched state file produces — in which case the VM still
-			// exists and reporting a quiet success would strand it unmanaged.
+			// Expected after an acknowledged partial remove, but also what a lost/mismatched
+			// state file produces — in which case the VM still exists and a quiet success would strand it.
 			r.Log.Warn("node: terraform state has no record of this resource — treating it as already destroyed; if the vm still exists in proxmox, the workspace state is wrong and this result must not be trusted",
 				"tf_address", address)
 		} else {
@@ -463,14 +403,13 @@ func (r *Runner) targetedApply(ctx context.Context, address string, want terrafo
 }
 
 // waitEtcdHealthy blocks until the etcd quorum is healthy or the gate times
-// out. It is the mandatory pre/post gate around any control-plane mutation.
+// out; it is the mandatory pre/post gate around any control-plane mutation.
 func (r *Runner) waitEtcdHealthy(ctx context.Context, phase string) error {
 	stop := r.startProgress(fmt.Sprintf("waiting for etcd health (%s)", phase))
 	defer stop()
 
-	// lastReason holds the structural h.Reason (okdctl-authored, safe for Msg);
-	// lastErr holds the probe error itself so its identity stays in the Unwrap
-	// chain rather than being stringified into Msg.
+	// lastReason is okdctl-authored text safe for Msg; lastErr is the probe
+	// error kept for Unwrap, never stringified into Msg.
 	var (
 		lastReason string
 		lastErr    error
@@ -493,9 +432,8 @@ func (r *Runner) waitEtcdHealthy(ctx context.Context, phase string) error {
 	return nil
 }
 
-// healthGateMsg renders a health-gate failure message from okdctl-authored
-// text only: the structural reason is appended when present, and the probe
-// error (if any) rides the ClusterError.Err chain rather than the message.
+// healthGateMsg renders a failure message from okdctl-authored text only; the
+// probe error (if any) rides ClusterError.Err rather than the message.
 func healthGateMsg(subsystem, phase, reason string) string {
 	msg := fmt.Sprintf("%s health gate (%s) failed", subsystem, phase)
 	if reason != "" {
@@ -504,8 +442,6 @@ func healthGateMsg(subsystem, phase, reason string) string {
 	return msg
 }
 
-// vmTarget resolves the Proxmox node name and QEMU vmid for a role/index
-// pair so power-cycle/shutdown/start calls address the right VM.
 func (r *Runner) vmTarget(role nodetypes.NodeRole, index int) (node string, vmid int) {
 	if r.Cfg.Provider.Proxmox != nil {
 		node = r.Cfg.Provider.Proxmox.Node
@@ -513,9 +449,8 @@ func (r *Runner) vmTarget(role nodetypes.NodeRole, index int) (node string, vmid
 	return node, nodetypes.VMID(r.Cfg, role, index)
 }
 
-// resolveVMID resolves target's cluster node name to its Proxmox vmid, role,
-// and current Ready status via ListNodes, so snapshot ops can address the
-// right VM without callers re-deriving the terraform index themselves.
+// resolveVMID resolves target's node name to vmid/role/Ready via ListNodes, so
+// snapshot ops address the right VM without re-deriving the tf index.
 func (r *Runner) resolveVMID(ctx context.Context, target string) (vmid int, role nodetypes.NodeRole, ready bool, err error) {
 	nodes, err := r.Cluster.ListNodes(ctx)
 	if err != nil {
@@ -535,12 +470,9 @@ func (r *Runner) resolveVMID(ctx context.Context, target string) (vmid int, role
 	return 0, "", false, &errtypes.ConfigError{Msg: fmt.Sprintf("node %q not found in cluster; run 'okdctl node list' to list nodes", target)}
 }
 
-// powerCycleVM stops→starts the VM backing a resized node so bpg/proxmox's
-// config-only memory change actually takes effect (see PowerCycler). It fails
-// closed: without a wired power-cycler the resize cannot be realized, so the
-// caller surfaces the error and re-runs to retry. The node is left as the
-// current step found it — cordoned on the drain path, untouched under
-// --skip-drain — so the message must not assume a cordon.
+// powerCycleVM stops→starts the VM so the config-only memory change takes
+// effect; the node stays as the current step left it, so errors must not assume
+// a cordon.
 func (r *Runner) powerCycleVM(ctx context.Context, role nodetypes.NodeRole, index int) error {
 	stop := r.startProgress("power-cycling vm to realize the new sizing")
 	defer stop()
@@ -554,10 +486,8 @@ func (r *Runner) powerCycleVM(ctx context.Context, role nodetypes.NodeRole, inde
 	return nil
 }
 
-// waitCephHealthy blocks until rook-ceph is structurally healthy (mons in
-// quorum, OSDs up/in, PGs active+clean) or the gate times out. Clusters without
-// a rook-ceph toolbox are treated as not-applicable and pass immediately, so
-// the gate is a no-op on non-Ceph clusters.
+// waitCephHealthy blocks until rook-ceph is healthy (quorum, OSDs up/in, PGs
+// active+clean) or times out; a no-op without a rook-ceph toolbox.
 func (r *Runner) waitCephHealthy(ctx context.Context, phase string) error {
 	stop := r.startProgress("waiting for ceph health (" + phase + ")")
 	defer stop()
@@ -591,7 +521,7 @@ func (r *Runner) waitCephHealthy(ctx context.Context, phase string) error {
 	return nil
 }
 
-// waitNodeReady blocks until node reports Ready. Used after a resize apply so
+// waitNodeReady blocks until node reports Ready; used after a resize apply so
 // the next control-plane step never proceeds against a rebooting node.
 func (r *Runner) waitNodeReady(ctx context.Context, node string) error {
 	stop := r.startProgress(fmt.Sprintf("waiting for node %s to become ready", node))

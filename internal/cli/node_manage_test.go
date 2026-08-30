@@ -24,11 +24,6 @@ func outcomeCmd() (*cobra.Command, *bytes.Buffer) {
 	return cmd, &out
 }
 
-// TestRunLifecycleOpRejectsUnknownOp locks the dispatch table's default arm:
-// an unrecognized op must fail as a *errtypes.UsageError (exit 64) rather than
-// silently no-op or run the wrong destructive branch against the target. The
-// three real ops route to RemoveWorker/Resize/AddWorkers, exercised end-to-end
-// by the node package's remove/resize/add tests.
 func TestRunLifecycleOpRejectsUnknownOp(t *testing.T) {
 	rc := &nodeRunnerCtx{runner: &node.Runner{}}
 	st := &lifecycle.State{Op: node.Op("bogus")}

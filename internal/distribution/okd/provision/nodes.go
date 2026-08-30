@@ -5,9 +5,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
 
-// BuildNodeList returns the ordered list of nodes (bootstrap, masters,
-// workers) with IPs allocated from the static-IP start, projected from
-// nodetypes.ClusterNodes — the single owner of the IP-offset arithmetic.
+// BuildNodeList returns the ordered nodes (bootstrap, masters, workers) with
+// IPs allocated from the static-IP start, projected from nodetypes.ClusterNodes.
 func BuildNodeList(cfg *config.Config) ([]NodeInfo, error) {
 	enum, err := nodetypes.ClusterNodes(cfg)
 	if err != nil {

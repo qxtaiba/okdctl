@@ -34,11 +34,15 @@ func masterResizePlan() *node.OpPlan {
 	}
 }
 
-func TestPreviewExecuteSetsProceedAndCompletes(t *testing.T) {
-	st := &State{
+func resizePreviewState() *State {
+	return &State{
 		Cfg: config.DefaultConfig(), Op: node.OpResize,
 		Scope: node.ResizeScope{Role: nodetypes.RoleMaster},
 	}
+}
+
+func TestPreviewExecuteSetsProceedAndCompletes(t *testing.T) {
+	st := resizePreviewState()
 	s := previewWith(t, st, masterResizePlan(), nil)
 	if st.Plan == nil {
 		t.Fatal("dry-run plan must be captured into state")
@@ -59,10 +63,7 @@ func TestPreviewExecuteSetsProceedAndCompletes(t *testing.T) {
 }
 
 func TestPreviewExitWithoutChanges(t *testing.T) {
-	st := &State{
-		Cfg: config.DefaultConfig(), Op: node.OpResize,
-		Scope: node.ResizeScope{Role: nodetypes.RoleMaster},
-	}
+	st := resizePreviewState()
 	s := previewWith(t, st, masterResizePlan(), nil)
 	pressActionDown(s) // execute -> back
 	pressActionDown(s) // back -> exit
@@ -76,11 +77,7 @@ func TestPreviewExitWithoutChanges(t *testing.T) {
 }
 
 func TestPreviewBackReturnsToParameters(t *testing.T) {
-	st := &State{
-		Cfg: config.DefaultConfig(), Op: node.OpResize,
-		Scope: node.ResizeScope{Role: nodetypes.RoleMaster},
-	}
-	s := previewWith(t, st, masterResizePlan(), nil)
+	s := previewWith(t, resizePreviewState(), masterResizePlan(), nil)
 	pressActionDown(s) // execute -> back
 	_, cmd := s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if cmd == nil {

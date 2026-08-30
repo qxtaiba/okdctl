@@ -26,9 +26,6 @@ func TestDiskCache_RoundTrip(t *testing.T) {
 	}
 }
 
-// TestDiskCache_SchemaMismatchDiscarded locks the schema gate: a cache
-// written by a binary with a different (or missing) schema field is treated
-// like corruption and discarded, never served with a drifted shape.
 func TestDiskCache_SchemaMismatchDiscarded(t *testing.T) {
 	f := cacheFetcher(t)
 

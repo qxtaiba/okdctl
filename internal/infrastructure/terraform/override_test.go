@@ -12,9 +12,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/executor"
 )
 
-// seedWorkspaceLayout builds the pinned workspace shape (environments/<env>
-// and modules/proxmox-okd sharing a terraform root) and returns the env and
-// module directories.
+// seedWorkspaceLayout builds the pinned environments/modules workspace shape and returns both dirs.
 func seedWorkspaceLayout(t *testing.T) (envDir, moduleDir string) {
 	t.Helper()
 	root := t.TempDir()
@@ -68,9 +66,6 @@ func TestWriteDestroyOverride_MissingModuleDir(t *testing.T) {
 	}
 }
 
-// TestExecutor_StaleOverrideBlocksNonDestroy locks the fail-closed side: a
-// leftover destroy override refuses every non-destroy plan/apply before
-// terraform runs, naming the file.
 func TestExecutor_StaleOverrideBlocksNonDestroy(t *testing.T) {
 	envDir, moduleDir := seedWorkspaceLayout(t)
 	overridePath, err := WriteDestroyOverride(moduleDir)
@@ -106,9 +101,6 @@ func TestExecutor_StaleOverrideBlocksNonDestroy(t *testing.T) {
 	}
 }
 
-// TestExecutor_DestroySessionRunsWithOverride locks the destroy side: with
-// the override in place (as the destroy phase writes it), destroy plans and
-// destroy runs proceed.
 func TestExecutor_DestroySessionRunsWithOverride(t *testing.T) {
 	envDir, moduleDir := seedWorkspaceLayout(t)
 	if _, err := WriteDestroyOverride(moduleDir); err != nil {

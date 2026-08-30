@@ -11,14 +11,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// chronyMachineConfigRoles are the MachineConfig pools chrony must target —
-// the MCO applies pool-scoped configs only to matching nodes, so shipping
-// only "master" would leave workers on their unmanaged default chrony.conf.
+// chronyMachineConfigRoles must include both pools; the MCO applies pool-scoped
+// configs only to matching nodes.
 var chronyMachineConfigRoles = []string{string(nodetypes.RoleMaster), string(nodetypes.RoleWorker)}
 
-// generateChronyManifests writes a chrony MachineConfig for each node pool,
-// pointed at cfg.Networking.NTPServer (defaulting to the bastion's ignition
-// server IP when unset).
 func (p *Phase) generateChronyManifests(cfg *config.Config, clusterDir string) error {
 	server := cfg.Networking.NTPServer
 	if server == "" {

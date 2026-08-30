@@ -12,8 +12,7 @@ import (
 )
 
 // fakeTeardownBin writes an executable shell script that appends its argv to
-// callLog and prepends its dir to PATH, mirroring the kubectl_test.go stub
-// pattern.
+// callLog and prepends its dir to PATH.
 func fakeTeardownBin(t *testing.T, name, script string) (callLog string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -90,8 +89,7 @@ func TestReleaseVIPChecksDefaultInterface(t *testing.T) {
 	if !strings.Contains(calls, "route show default") {
 		t.Errorf("expected default-route lookup; got:\n%s", calls)
 	}
-	// The stub reports no addresses on eth0, so removal stops at the
-	// presence check — asserting the no-op contract when the vip is absent.
+	// stub reports no addresses on eth0, so removal stops at the presence check.
 	if !strings.Contains(calls, "addr show dev eth0") {
 		t.Errorf("expected vip presence check on eth0; got:\n%s", calls)
 	}

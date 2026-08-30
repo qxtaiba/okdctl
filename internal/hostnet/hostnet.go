@@ -15,12 +15,9 @@ import (
 	"github.com/qxtaiba/okdctl/internal/executor"
 )
 
-// validConnectionNameRegex is the allowlist for nmcli connection names:
-// the realistic NetworkManager name space (alphanumerics, space, dot,
-// underscore, slash, colon for aliases like br0:1, hyphen, up to 128
-// chars), rejecting everything else including all shell metacharacters.
-// The explicit leading-dash refusal closes CWE-88: nmcli treats a
-// leading-dash token as a property selector in argv position.
+// validConnectionNameRegex allowlists nmcli connection-name characters,
+// rejecting shell metacharacters; the leading-dash refusal separately
+// closes CWE-88 (nmcli treats a leading dash as a property selector).
 var validConnectionNameRegex = regexp.MustCompile(`^[A-Za-z0-9 ._/:-]{1,128}$`)
 
 func validateConnectionName(name string) error {
@@ -36,11 +33,9 @@ func validateConnectionName(name string) error {
 	return nil
 }
 
-// validInterfaceNameRegex allowlists Linux network-device names, which the
-// kernel caps at 15 characters (IFNAMSIZ-1) and forbids whitespace and '/'
-// in. Combined with validateInterfaceName's leading-dash refusal it closes
-// CWE-88 for the argv positions iface reaches (ip addr show dev, nmcli
-// device reapply), mirroring the connection-name posture.
+// validInterfaceNameRegex allowlists Linux device names (kernel-capped at 15
+// chars, IFNAMSIZ-1); combined with the leading-dash refusal it closes
+// CWE-88 for the argv positions iface reaches.
 var validInterfaceNameRegex = regexp.MustCompile(`^[A-Za-z0-9._:@-]{1,15}$`)
 
 func validateInterfaceName(name string) error {
@@ -85,14 +80,8 @@ func RemoveSecondaryIP(ctx context.Context, ip, iface string) error {
 	}
 
 	if err := executor.RunCaptured(ctx, "nmcli", "device", "reapply", iface); err != nil {
-		// The profile was already modified; without a compensating re-add the
-		// persistent config and the running device silently diverge until the
-		// next reconnect. Restore the profile, and if even that fails name the
-		// divergence so the operator knows the profile no longer matches the
-		// runtime state. A ctx cancellation is the likeliest cause of the
-		// reapply failure, so the restore runs on a detached, bounded context:
-		// reusing the (probably dead) ctx would make exec refuse to start the
-		// compensating command exactly when the rollback matters most.
+		// Reapply failure diverges the profile from the device; roll back on a
+		// detached ctx since cancellation is the likely cause.
 		restoreCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		defer cancel()
 		if restoreErr := executor.RunCaptured(restoreCtx, "nmcli", "connection", "modify", conn, "+ipv4.addresses", ip+"/32"); restoreErr != nil {
@@ -104,10 +93,9 @@ func RemoveSecondaryIP(ctx context.Context, ip, iface string) error {
 	return nil
 }
 
-// ipAssignedToDevice reports whether addr is currently assigned to iface,
-// decoding `ip -j addr show` rather than substring-matching human output.
-// Structured decode avoids the prefix/suffix false positives a raw
-// strings.Contains(ip+"/") match invites (10.0.0.1 vs 110.0.0.1/24).
+// ipAssignedToDevice decodes `ip -j addr show` rather than
+// substring-matching human output, avoiding prefix/suffix false positives
+// (10.0.0.1 vs 110.0.0.1/24).
 func ipAssignedToDevice(ctx context.Context, addr netip.Addr, iface string) (bool, error) {
 	output, err := executor.OutputCaptured(ctx, "ip", "-j", "addr", "show", "dev", iface)
 	if err != nil {
@@ -132,9 +120,8 @@ func ipAssignedToDevice(ctx context.Context, addr netip.Addr, iface string) (boo
 }
 
 // ActiveConnection returns the name of the first active non-loopback
-// NetworkManager connection. The name is scraped from nmcli output, so it
-// is validated against the connection-name allowlist before it can reach
-// any nmcli argv position.
+// NetworkManager connection, validated against the allowlist before it can
+// reach any nmcli argv position.
 func ActiveConnection(ctx context.Context) (string, error) {
 	out, err := executor.OutputCaptured(ctx, "nmcli", "-t", "-f", "NAME", "connection", "show", "--active")
 	if err != nil {

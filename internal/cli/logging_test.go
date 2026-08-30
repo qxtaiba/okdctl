@@ -12,10 +12,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-// TestOpenLogFileRefusesSymlink locks the fix that makes --log-file
-// refuse a symlinked path so a pre-sudo attacker cannot redirect
-// root-authored log lines onto an arbitrary file between the invoking-
-// user run and the sudo re-exec.
 func TestOpenLogFileRefusesSymlink(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "real.log")
@@ -37,8 +33,6 @@ func TestOpenLogFileRefusesSymlink(t *testing.T) {
 	}
 }
 
-// TestOpenLogFileAcceptsRegularFile covers the positive path so the
-// symlink refusal doesn't silently break normal --log-file usage.
 func TestOpenLogFileAcceptsRegularFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "ok.log")
@@ -56,9 +50,8 @@ func TestOpenLogFileAcceptsRegularFile(t *testing.T) {
 	_ = f.Close()
 }
 
-// resetLoggingState snapshots the package-level logging globals mutated by
-// configureLogging and restores them (plus the tui logger outputs) when the
-// test finishes, so file-sink tests do not bleed into other tests.
+// resetLoggingState snapshots and restores logging globals so file-sink tests
+// don't bleed into each other.
 func resetLoggingState(t *testing.T) {
 	t.Helper()
 	prevLogFile, prevFormat, prevLevel := logFile, logFormat, logLevel
@@ -97,10 +90,6 @@ func TestWantsDefaultLogSink(t *testing.T) {
 	}
 }
 
-// TestConfigureLogging_DefaultSinkRedacts locks the B21 contract: deploy
-// creates <workspace>/okdctl.log without any flag, and the file sink sits
-// behind the same RedactHandler pipeline as stderr, so a secret-keyed attr
-// never lands in the persistent log.
 func TestConfigureLogging_DefaultSinkRedacts(t *testing.T) {
 	resetLoggingState(t)
 	dir := t.TempDir()
@@ -116,8 +105,7 @@ func TestConfigureLogging_DefaultSinkRedacts(t *testing.T) {
 		t.Fatal("logFileCloser not set for default sink")
 	}
 
-	// Error always emits regardless of level, so it exercises the redaction
-	// pipeline on the file sink independent of the deploy-family Info/Warn policy.
+	// Error always emits regardless of level, independent of the deploy-family Info/Warn policy.
 	logutil.Error("connect failed", logutil.LF("password", "hunter2"), logutil.LF("cluster", "prod"))
 
 	data, err := os.ReadFile(runLogPath)
@@ -136,10 +124,7 @@ func TestConfigureLogging_DefaultSinkRedacts(t *testing.T) {
 	}
 }
 
-// TestConfigureLogging_DeployMilestonesSurviveNonTTY locks T24's non-TTY
-// contract: stderr is piped under `go test`, so configureLogging auto-selects
-// json — but deploy-family flows must NOT SuppressInfo, so a milestone still
-// emits at Info and a degraded-operator notice still emits at Warn.
+// stderr is piped under go test, so configureLogging auto-selects json here.
 func TestConfigureLogging_DeployMilestonesSurviveNonTTY(t *testing.T) {
 	resetLoggingState(t)
 	dir := t.TempDir()
@@ -165,9 +150,6 @@ func TestConfigureLogging_DeployMilestonesSurviveNonTTY(t *testing.T) {
 	}
 }
 
-// TestConfigureLogging_LogFilePrecedence locks the flag contract: an
-// explicit --log-file replaces the default workspace sink, so exactly one
-// file destination is ever active.
 func TestConfigureLogging_LogFilePrecedence(t *testing.T) {
 	resetLoggingState(t)
 	dir := t.TempDir()
@@ -188,8 +170,6 @@ func TestConfigureLogging_LogFilePrecedence(t *testing.T) {
 	}
 }
 
-// TestConfigureLogging_NoDefaultSinkForReadOnlyCmds locks the scope rule:
-// commands outside deploy/destroy/cleanup must not start writing files.
 func TestConfigureLogging_NoDefaultSinkForReadOnlyCmds(t *testing.T) {
 	resetLoggingState(t)
 	dir := t.TempDir()

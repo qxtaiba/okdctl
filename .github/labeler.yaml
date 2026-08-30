@@ -4,17 +4,12 @@ area/cli:
       - any-glob-to-any-file:
           - cmd/**/*
           - internal/**/*
-          - pkg/**/*
           - go.mod
           - go.sum
 area/terraform:
   - changed-files:
       - any-glob-to-any-file:
           - infrastructure/terraform/**/*
-area/flux:
-  - changed-files:
-      - any-glob-to-any-file:
-          - kubernetes/**/*
 area/automation:
   - changed-files:
       - any-glob-to-any-file:

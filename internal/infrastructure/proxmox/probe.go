@@ -17,10 +17,8 @@ import (
 // defaultProbeTimeout bounds every read in a single ProbeHost call.
 const defaultProbeTimeout = 15 * time.Second
 
-// ProbeOptions carries the read-only Proxmox API probe inputs. Password /
-// APIToken are the caller's credential bytes; the caller owns Zeroize. Node is
-// the Proxmox node the cluster VMs run on; Datastores are the storage names to
-// report headroom for (typically os_storage + data_storage).
+// ProbeOptions carries the read-only Proxmox probe inputs; Password/APIToken
+// are caller-owned bytes the caller must Zeroize.
 type ProbeOptions struct {
 	Endpoint   string
 	Username   string
@@ -32,10 +30,8 @@ type ProbeOptions struct {
 	Timeout    time.Duration
 }
 
-// redactedProbeOptions is the safe projection of ProbeOptions returned by
-// Redacted(). It omits Password and APIToken so any code path that formats
-// the options — including slog's redactAny switch — cannot reach the secret
-// bytes.
+// redactedProbeOptions is ProbeOptions without Password/APIToken, safe to
+// format (slog's redactAny).
 type redactedProbeOptions struct {
 	Endpoint   string
 	Username   string
@@ -45,8 +41,7 @@ type redactedProbeOptions struct {
 	Timeout    time.Duration
 }
 
-// Redacted returns a struct containing only the non-secret fields of o,
-// satisfying the interface{ Redacted() any } that logutil.redactAny detects.
+// Redacted returns o's non-secret fields, for the logutil.redactAny interface.
 func (o *ProbeOptions) Redacted() any {
 	if o == nil {
 		return nil
@@ -61,8 +56,7 @@ func (o *ProbeOptions) Redacted() any {
 	}
 }
 
-// String masks secret fields so accidental %v / %s / log calls can't leak
-// the password or token.
+// String masks secret fields so accidental %v/%s/log calls can't leak them.
 func (o *ProbeOptions) String() string {
 	if o == nil {
 		return "ProbeOptions(nil)"
@@ -70,22 +64,18 @@ func (o *ProbeOptions) String() string {
 	return fmt.Sprintf("%+v", o.Redacted())
 }
 
-// DatastoreInfo is one datastore's capacity, used to judge headroom for
-// double-provisioning during a Ceph migration.
+// DatastoreInfo is a datastore's capacity, used to judge Ceph-migration headroom.
 type DatastoreInfo struct {
 	Name       string
 	TotalBytes uint64
 	AvailBytes uint64
 }
 
-// HostProbe is the read-only snapshot ProbeHost returns. GuestAllocatedBytes is
-// the sum of configured memory across running guests on Node (the over-commit
-// figure the memory-budget guard needs); HostMemUsedBytes is the node's live
-// usage, reported for context but not used by the guard.
+// HostProbe is the read-only snapshot ProbeHost returns; GuestAllocatedBytes
+// sums running-guest memory on Node for the memory-budget over-commit guard.
 type HostProbe struct {
 	Node                string
 	HostMemTotalBytes   uint64
-	HostMemUsedBytes    uint64
 	GuestAllocatedBytes uint64
 	Datastores          []DatastoreInfo
 }
@@ -98,11 +88,9 @@ func (h *HostProbe) GuestAllocatedMiB() int { return bytesToMiB(h.GuestAllocated
 
 func bytesToMiB(b uint64) int { return int(b / (1024 * 1024)) } //nolint:gosec // G115: MiB-scale value fits int
 
-// ProbeHost reads host memory, guest memory allocation, and datastore capacity
-// from the Proxmox API. It performs ONLY reads — no VM mutation — so it does not
-// violate the "all Proxmox mutations flow through terraform" invariant. It runs
-// from the bastion over HTTPS (the SSH/pvesh path is denied there), reusing the
-// go-proxmox wiring the wizard discovery uses.
+// ProbeHost reads host memory, guest allocation, and datastore capacity via
+// the Proxmox API — read-only (exempt from terraform-only mutations) over
+// HTTPS since the bastion has no SSH path to Proxmox.
 func ProbeHost(ctx context.Context, opts *ProbeOptions) (*HostProbe, error) {
 	timeout := opts.Timeout
 	if timeout <= 0 {
@@ -111,7 +99,10 @@ func ProbeHost(ctx context.Context, opts *ProbeOptions) (*HostProbe, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	client, err := newProbeClient(opts, timeout)
+	if opts.Node == "" {
+		return nil, fmt.Errorf("proxmox probe: node is required")
+	}
+	client, err := newProxmoxClient(opts.Endpoint, opts.Username, opts.Password, opts.APIToken, opts.Insecure, timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +111,7 @@ func ProbeHost(ctx context.Context, opts *ProbeOptions) (*HostProbe, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list proxmox nodes: %w", err)
 	}
-	total, used, err := selectNodeMem(nodes, opts.Node)
+	total, err := selectNodeMem(nodes, opts.Node)
 	if err != nil {
 		return nil, err
 	}
@@ -137,12 +128,10 @@ func ProbeHost(ctx context.Context, opts *ProbeOptions) (*HostProbe, error) {
 	probe := &HostProbe{
 		Node:                opts.Node,
 		HostMemTotalBytes:   total,
-		HostMemUsedBytes:    used,
 		GuestAllocatedBytes: sumRunningGuestMem(resources, opts.Node),
 	}
 
-	// Per-datastore reads are best-effort: one unreadable store must not sink
-	// the whole probe, so a failing Storage lookup is skipped, not fatal.
+	// Per-datastore reads are best-effort: a failing lookup is skipped, not fatal.
 	node, err := client.Node(ctx, opts.Node)
 	if err == nil {
 		for _, name := range dedupe(opts.Datastores) {
@@ -161,11 +150,8 @@ func ProbeHost(ctx context.Context, opts *ProbeOptions) (*HostProbe, error) {
 	return probe, nil
 }
 
-// VMPowerStates reads the power state of the given QEMU vmids from the
-// cluster resources listing — one read call over the same client path
-// ProbeHost uses. VMs absent from the listing (destroyed out of band) are
-// omitted from the result. opts.Node is not required: the listing is
-// cluster-wide.
+// VMPowerStates reads vmids' power state from the cluster-wide resources
+// listing (opts.Node is not required); absent VMs are omitted, not defaulted.
 func VMPowerStates(ctx context.Context, opts *ProbeOptions, vmids []int) (map[int]nodetypes.VMState, error) {
 	timeout := opts.Timeout
 	if timeout <= 0 {
@@ -189,8 +175,8 @@ func VMPowerStates(ctx context.Context, opts *ProbeOptions, vmids []int) (map[in
 	return mapVMStates(resources, vmids), nil
 }
 
-// mapVMStates folds the qemu entries matching vmids onto the VMState wire
-// vocabulary; status strings outside it map to StateUnknown.
+// mapVMStates maps qemu entries in vmids to the VMState vocabulary;
+// unrecognized statuses become StateUnknown.
 func mapVMStates(resources proxmox.ClusterResources, vmids []int) map[int]nodetypes.VMState {
 	want := make(map[uint64]bool, len(vmids))
 	for _, id := range vmids {
@@ -212,18 +198,8 @@ func mapVMStates(resources proxmox.ClusterResources, vmids []int) map[int]nodety
 	return states
 }
 
-func newProbeClient(opts *ProbeOptions, timeout time.Duration) (*proxmox.Client, error) {
-	if opts.Node == "" {
-		return nil, fmt.Errorf("proxmox probe: node is required")
-	}
-	return newProxmoxClient(opts.Endpoint, opts.Username, opts.Password, opts.APIToken, opts.Insecure, timeout)
-}
-
-// newProxmoxClient builds a read/operational go-proxmox client shared by the
-// host probe and the power-cycler. Token auth is the headless bastion
-// default. go-proxmox needs the token split into id=secret; the credential
-// []byte becomes an immutable Go string inside the client that Zeroize cannot
-// reach — bounded to the single call, the caller still wipes its own copy.
+// newProxmoxClient builds the shared go-proxmox client; the credential
+// becomes an immutable Go string Zeroize can't reach, bounded to this call.
 func newProxmoxClient(endpoint, username string, password, apiToken []byte, insecure bool, timeout time.Duration) (*proxmox.Client, error) {
 	if endpoint == "" {
 		return nil, fmt.Errorf("proxmox client: endpoint is required")
@@ -258,30 +234,25 @@ func newProxmoxClient(endpoint, username string, password, apiToken []byte, inse
 
 var insecureTLSWarnOnce sync.Once
 
-// warnInsecureTLS surfaces a long-forgotten insecure:true once per process —
-// PowerCycler builds a client per operation, so per-call warnings would be
-// noise. It logs via slog.Default, which the cli rebinds to the
-// RedactHandler-backed logger; no logger threads through the credential
-// options structs, and widening them for one warning is not worth it.
+// warnInsecureTLS logs insecure:true once per process (PowerCycler builds a
+// client per call) via slog.Default rather than threading a logger through.
 func warnInsecureTLS(endpoint string) {
 	insecureTLSWarnOnce.Do(func() {
 		slog.Warn("proxmox tls verification disabled (insecure: true)", "endpoint", endpoint)
 	})
 }
 
-// selectNodeMem returns the physical and live-used memory of the named node.
-func selectNodeMem(nodes proxmox.NodeStatuses, name string) (total, used uint64, err error) {
+func selectNodeMem(nodes proxmox.NodeStatuses, name string) (uint64, error) {
 	for _, n := range nodes {
 		if n.Node == name {
-			return n.MaxMem, n.Mem, nil
+			return n.MaxMem, nil
 		}
 	}
-	return 0, 0, fmt.Errorf("proxmox probe: node %q not found in cluster", name)
+	return 0, fmt.Errorf("proxmox probe: node %q not found in cluster", name)
 }
 
-// sumRunningGuestMem sums configured memory (MaxMem) across running qemu guests
-// on node. Configured memory, not live usage, is the over-commit figure: a VM
-// can touch its full ceiling at any time, so the budget must plan for it.
+// sumRunningGuestMem sums configured memory (not live usage) across running
+// qemu guests on node — the over-commit figure a VM could touch at any time.
 func sumRunningGuestMem(resources proxmox.ClusterResources, node string) uint64 {
 	var total uint64
 	for _, r := range resources {
@@ -305,10 +276,8 @@ func dedupe(names []string) []string {
 	return out
 }
 
-// APIBaseURL normalizes endpoint (https scheme by default, trailing slashes
-// trimmed) and appends the /api2/json API root. It is the single place the
-// suffix is written; every go-proxmox client (probe, power-cycler, wizard
-// discovery) builds its base URL here.
+// APIBaseURL normalizes endpoint (https default, trailing slash trimmed) and
+// appends /api2/json; every go-proxmox client builds its base URL here.
 func APIBaseURL(endpoint string) string {
 	return normalizeEndpoint(endpoint) + "/api2/json"
 }

@@ -47,16 +47,14 @@ func (st *SectionStyles) KVPair(label, value string) string {
 	return st.Label.Render(label) + st.Value.Render(value)
 }
 
-// KVEntry describes one label/value line within a section. When Skip is
-// true, the entry is omitted entirely (not rendered as blank).
+// KVEntry describes one label/value line; Skip omits it entirely rather than rendering blank.
 type KVEntry struct {
 	Label string
 	Value string
 	Skip  bool
 }
 
-// RenderSection emits a titled block of KVEntry lines. Returns "" if every
-// entry is skipped — lets callers short-circuit whole sections by filtering.
+// RenderSection emits a titled block of KVEntry lines, or "" if every entry is skipped.
 func RenderSection(st *SectionStyles, title string, entries []KVEntry) string {
 	visible := entries[:0:0]
 	for _, e := range entries {

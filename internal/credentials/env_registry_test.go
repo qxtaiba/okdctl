@@ -13,24 +13,18 @@ import (
 type zeroizeDiscipline int
 
 const (
-	// deferredZeroize: the body must defer Zeroize/ZeroizeEnv on the
-	// credentials receiver AND defer ZeroizeEnv on the distinct executor
-	// built with the env slice, after the .Env() call.
+	// deferredZeroize requires deferred Zeroize on the creds receiver and
+	// deferred ZeroizeEnv on the executor built from the env slice.
 	deferredZeroize zeroizeDiscipline = iota
-	// manualZeroize: the env-bearing object escapes into a longer-lived
-	// owner so a literal defer is impossible; the body must still call
-	// ZeroizeEnv on that object (a receiver other than the credentials)
-	// after the .Env() call, covering its early-error paths.
+	// manualZeroize requires a non-deferred ZeroizeEnv call on the
+	// env-bearing object, covering early-error paths.
 	manualZeroize
-	// callerOwnedZeroize: a constructor whose return value carries the env;
-	// every caller owns the defer, so the body itself carries no Zeroize.
+	// callerOwnedZeroize: the caller owns the defer; the body carries none.
 	callerOwnedZeroize
 )
 
-// allowedEnvCallSites is the registry of ProxmoxCredentials.Env() call
-// sites, keyed "repo/relative/path.go:FuncName". Adding a call site means
-// verifying its ZeroizeEnv hygiene per the Env doc comment and recording
-// the discipline here.
+// allowedEnvCallSites registers each ProxmoxCredentials.Env() call site
+// (keyed "path.go:FuncName") with its verified Zeroize discipline.
 var allowedEnvCallSites = map[string]zeroizeDiscipline{
 	"internal/cli/destroy.go:runDestroyDryRun":        deferredZeroize,
 	"internal/cli/helpers.go:runTerraformPlanPreview": deferredZeroize,
@@ -53,13 +47,8 @@ type zeroizeCall struct {
 	pos      token.Pos
 }
 
-// TestEnvCallSiteRegistry enforces the bounded-credential-lifetime
-// convention statically: every non-test call of a zero-argument .Env()
-// method must appear in allowedEnvCallSites, and each allowed site must
-// honor its recorded Zeroize discipline. Matching is syntactic (no type
-// resolution), which over-approximates — an unrelated Env() method would
-// also trip the registry and force a human look, the fail-closed direction
-// for a credential tripwire.
+// Matching is syntactic (no type resolution) and over-approximates on
+// purpose — fail-closed for a credential tripwire.
 func TestEnvCallSiteRegistry(t *testing.T) {
 	sites := collectEnvCallSites(t, findRepoRoot(t))
 	if len(sites) == 0 {
@@ -88,10 +77,6 @@ func TestEnvCallSiteRegistry(t *testing.T) {
 	}
 }
 
-// TestZeroizeDisciplineChecks pins the checker itself against fixture
-// bodies: each degenerate variant (executor defer missing, defer placed
-// before the env slice exists, creds defer missing) must be reported, so
-// the registry test cannot be satisfied by an unrelated Zeroize call.
 func TestZeroizeDisciplineChecks(t *testing.T) {
 	const deferredOK = `package p
 func run() {

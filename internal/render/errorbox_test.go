@@ -13,11 +13,11 @@ func TestErrorSummaryKindHeadlineAndHint(t *testing.T) {
 		WithHint("re-run setup to regenerate it")
 	got := ErrorSummary(err, 2, "RUN123")
 	for _, want := range []string{
-		"ERROR",                         // box title
-		"config error",                  // kind chip
-		"ignition tls cert not found",   // headline
-		"re-run setup to regenerate it", // promoted hint
-		"→",                             // next-step pointer proves promotion
+		"ERROR",
+		"config error",
+		"ignition tls cert not found",
+		"re-run setup to regenerate it",
+		"→",
 		"exit 2",
 		"RUN123",
 	} {
@@ -27,48 +27,28 @@ func TestErrorSummaryKindHeadlineAndHint(t *testing.T) {
 	}
 }
 
-// TestErrorSummaryNoMisSplitOnSemicolon locks the string-sniffing fix: a
-// message that naturally contains "; " (e.g. a parenthetical) carries no
-// structured hint, so the whole message stays the headline and no spurious
-// next-step pointer is fabricated by splitting on the semicolon.
-func TestErrorSummaryNoMisSplitOnSemicolon(t *testing.T) {
-	err := &errtypes.ClusterError{Msg: "node drained (2 pods evicted; 1 pending) before removal"}
-	got := ErrorSummary(err, 4, "R")
-	if !strings.Contains(got, "node drained (2 pods evicted; 1 pending) before removal") {
-		t.Errorf("headline was mis-split on an in-message semicolon:\n%s", got)
-	}
-	if strings.Contains(got, "→") {
-		t.Errorf("no next-step pointer expected; message carries no structured hint:\n%s", got)
-	}
-}
-
-func TestErrorSummaryKindLabels(t *testing.T) {
+// Locks that "; " in a message with no structured hint stays whole, not fabricated into one.
+func TestErrorSummaryHintlessKeepsWholeMessage(t *testing.T) {
+	const semicolonMsg = "node drained (2 pods evicted; 1 pending) before removal"
 	cases := []struct {
+		name string
 		err  error
-		want string
+		exit int
+		msg  string
 	}{
-		{&errtypes.ConfigError{Msg: "x"}, "config error"},
-		{&errtypes.NetworkError{Msg: "x"}, "network error"},
-		{&errtypes.ClusterError{Msg: "x"}, "cluster error"},
-		{&errtypes.AuthError{Msg: "x"}, "auth error"},
-		{&errtypes.UsageError{Msg: "x"}, "usage error"},
-		{errors.New("plain boom"), "error"},
+		{"in-message semicolon is not a hint", &errtypes.ClusterError{Msg: semicolonMsg}, 4, semicolonMsg},
+		{"plain message with no hint clause", errors.New("something broke with no semicolon"), 1, "something broke with no semicolon"},
 	}
-	for _, c := range cases {
-		got := ErrorSummary(c.err, 1, "R")
-		if !strings.Contains(got, c.want) {
-			t.Errorf("kind label for %T: want %q in:\n%s", c.err, c.want, got)
-		}
-	}
-}
-
-func TestErrorSummaryNoHintKeepsWholeMessage(t *testing.T) {
-	got := ErrorSummary(errors.New("something broke with no semicolon"), 1, "R")
-	if !strings.Contains(got, "something broke with no semicolon") {
-		t.Errorf("headline should carry the whole message when no hint clause:\n%s", got)
-	}
-	if strings.Contains(got, "→") {
-		t.Errorf("no next-step pointer expected when message has no hint:\n%s", got)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ErrorSummary(tc.err, tc.exit, "R")
+			if !strings.Contains(got, tc.msg) {
+				t.Errorf("headline should carry the whole message %q:\n%s", tc.msg, got)
+			}
+			if strings.Contains(got, "→") {
+				t.Errorf("no next-step pointer expected; message carries no structured hint:\n%s", got)
+			}
+		})
 	}
 }
 

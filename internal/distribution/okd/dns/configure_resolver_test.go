@@ -12,8 +12,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
-// setResolverProbes overrides the NetworkManager/systemd-resolved activity
-// probes, which are hard-gated off by runtime.GOOS on non-Linux dev hosts.
+// setResolverProbes overrides the NM/resolved probes, which are
+// runtime.GOOS-gated off on non-Linux dev hosts.
 func setResolverProbes(t *testing.T, nmActive bool, activeServices map[string]bool) {
 	t.Helper()
 	origNM, origSvc := isNetworkManagerActiveFn, isServiceActiveFn
@@ -33,8 +33,6 @@ func redirectResolvedConf(t *testing.T) string {
 	return resolvedConf
 }
 
-// installRecordingBin plants a fake bin that appends its argv to a log file
-// and returns the log path for later assertions.
 func installRecordingBin(t *testing.T, name, extra string) string {
 	t.Helper()
 	logPath := filepath.Join(t.TempDir(), name+".log")
@@ -71,9 +69,6 @@ func TestConfigureSystemResolver_InvalidFallbackDNSRefused(t *testing.T) {
 	}
 }
 
-// TestConfigureSystemResolver_NetworkManagerPath locks the exact nmcli argv
-// the forward path issues: DNS override to local dnsmasq plus fallbacks,
-// auto-DNS off, then connection re-up.
 func TestConfigureSystemResolver_NetworkManagerPath(t *testing.T) {
 	setResolverProbes(t, true, nil)
 	nmcliLog := installRecordingBin(t, "nmcli",
@@ -102,9 +97,6 @@ func TestConfigureSystemResolver_NetworkManagerPath(t *testing.T) {
 	}
 }
 
-// TestConfigureSystemResolver_SystemdResolvedPath locks the drop-in install:
-// exact [Resolve] content, world-readable-but-not-writable mode, and the
-// follow-up daemon restart.
 func TestConfigureSystemResolver_SystemdResolvedPath(t *testing.T) {
 	setResolverProbes(t, false, map[string]bool{"systemd-resolved": true})
 	confPath := redirectResolvedConf(t)
@@ -135,9 +127,6 @@ func TestConfigureSystemResolver_SystemdResolvedPath(t *testing.T) {
 	}
 }
 
-// TestConfigureSystemResolver_NetworkManagerUpFailureReverts asserts that a
-// failed `connection up` reverts the profile to the captured DNS rather than
-// leaving the host pinned at a possibly-dead 127.0.0.1, and names the revert.
 func TestConfigureSystemResolver_NetworkManagerUpFailureReverts(t *testing.T) {
 	setResolverProbes(t, true, nil)
 	nmcliLog := installRecordingBin(t, "nmcli",
@@ -160,9 +149,6 @@ func TestConfigureSystemResolver_NetworkManagerUpFailureReverts(t *testing.T) {
 	}
 }
 
-// TestConfigureSystemResolver_SystemdRestartFailureRemovesDropIn asserts that a
-// failed systemd-resolved restart removes the drop-in so the host falls back to
-// its prior resolver instead of a dead one.
 func TestConfigureSystemResolver_SystemdRestartFailureRemovesDropIn(t *testing.T) {
 	setResolverProbes(t, false, map[string]bool{"systemd-resolved": true})
 	confPath := redirectResolvedConf(t)

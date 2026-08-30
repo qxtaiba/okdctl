@@ -49,7 +49,7 @@ type FieldDefinition struct {
     Default  string
     Help     string
     Type     FieldType   // see FieldType constants in datadriven.go
-    Options  []string    // populated only when Type == FieldTypeSelect
+    Options  []string    // used by FieldTypeSelect and FieldTypeMultiSelect
     Required bool
     Validate func(string) error
 

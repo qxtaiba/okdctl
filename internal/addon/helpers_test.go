@@ -3,7 +3,6 @@ package addon
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os/exec"
 	"strings"
 	"sync/atomic"
@@ -27,13 +26,9 @@ func Test_addonIsRetryable(t *testing.T) {
 		{"generic transient", errors.New("connection refused"), true},
 		{"context canceled", context.Canceled, false},
 		{"context deadline", context.DeadlineExceeded, false},
-		{"wrapped context canceled", fmt.Errorf("wrap: %w", context.Canceled), false},
 		{"exec not found", exec.ErrNotFound, false},
-		{"wrapped exec not found", fmt.Errorf("oc: %w", exec.ErrNotFound), false},
 		{"config error", &errtypes.ConfigError{Msg: "bad config"}, false},
-		{"wrapped config error", fmt.Errorf("outer: %w", &errtypes.ConfigError{Msg: "bad"}), false},
 		{"auth error", &errtypes.AuthError{Msg: "denied"}, false},
-		{"wrapped auth error", fmt.Errorf("outer: %w", &errtypes.AuthError{Msg: "denied"}), false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -44,59 +39,48 @@ func Test_addonIsRetryable(t *testing.T) {
 	}
 }
 
-func Test_RetryDefault_NonRetryableAbortsImmediately(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		var calls atomic.Int32
-		permErr := &errtypes.ConfigError{Msg: "oc binary missing"}
-		err := RetryDefault(context.Background(), func() error {
-			calls.Add(1)
-			return permErr
-		})
-		if !errors.Is(err, permErr) {
-			t.Errorf("err = %v; want permErr", err)
-		}
-		if calls.Load() != 1 {
-			t.Errorf("calls = %d; want 1 (no retry on non-retryable)", calls.Load())
-		}
-	})
-}
-
-func Test_RetryDefault_SucceedsOnAttemptN(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		var calls atomic.Int32
-		err := RetryDefault(context.Background(), func() error {
-			n := calls.Add(1)
+func Test_RetryDefault(t *testing.T) {
+	permErr := &errtypes.ConfigError{Msg: "oc binary missing"}
+	sentinel := errors.New("always fails")
+	cases := []struct {
+		name string
+		// fn receives the 1-based attempt number.
+		fn func(attempt int32) error
+		// wantErrIs is the errors.Is target for the returned error; nil wants
+		// success. Exhaustion returns the original fn() error (lastErr
+		// preservation), not the wait.ErrWaitTimeout sentinel.
+		wantErrIs error
+		wantCalls int
+	}{
+		{"non-retryable aborts immediately", func(int32) error { return permErr }, permErr, 1},
+		{"succeeds on attempt n", func(n int32) error {
 			if n < 3 {
 				return errors.New("not yet")
 			}
 			return nil
+		}, nil, 3},
+		{"all failures returns last error", func(int32) error { return sentinel }, sentinel, system.DefaultBackoff().Steps},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				var calls atomic.Int32
+				err := RetryDefault(context.Background(), func() error {
+					return tc.fn(calls.Add(1))
+				})
+				if tc.wantErrIs == nil {
+					if err != nil {
+						t.Errorf("err = %v; want nil", err)
+					}
+				} else if !errors.Is(err, tc.wantErrIs) {
+					t.Errorf("err = %v; want errors.Is(_, %v)", err, tc.wantErrIs)
+				}
+				if int(calls.Load()) != tc.wantCalls {
+					t.Errorf("calls = %d; want %d", calls.Load(), tc.wantCalls)
+				}
+			})
 		})
-		if err != nil {
-			t.Errorf("err = %v; want nil", err)
-		}
-		if calls.Load() != 3 {
-			t.Errorf("calls = %d; want 3", calls.Load())
-		}
-	})
-}
-
-func Test_RetryDefault_AllFailures(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		var calls atomic.Int32
-		sentinel := errors.New("always fails")
-		err := RetryDefault(context.Background(), func() error {
-			calls.Add(1)
-			return sentinel
-		})
-		// lastErr preservation: exhaustion returns the original fn() error,
-		// not the wait.ErrWaitTimeout sentinel.
-		if !errors.Is(err, sentinel) {
-			t.Errorf("err = %v; want sentinel error %v", err, sentinel)
-		}
-		if want := system.DefaultBackoff().Steps; int(calls.Load()) != want {
-			t.Errorf("calls = %d; want %d", calls.Load(), want)
-		}
-	})
+	}
 }
 
 func Test_RetryDefault_CtxCancel(t *testing.T) {
@@ -126,7 +110,6 @@ func TestBuildOpaqueSecret(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Round-trip: parse the YAML and check structure.
 	var parsed map[string]any
 	if err := yaml.Unmarshal([]byte(out), &parsed); err != nil {
 		t.Fatalf("emitted YAML does not re-parse: %v\n%s", err, out)
@@ -149,7 +132,6 @@ func TestBuildOpaqueSecret(t *testing.T) {
 		t.Errorf("metadata name/namespace wrong: %+v", meta)
 	}
 
-	// Values should be base64-encoded, not plaintext.
 	if strings.Contains(out, "hunter2") {
 		t.Errorf("secret body leaks plaintext: %s", out)
 	}

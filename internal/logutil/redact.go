@@ -13,34 +13,24 @@ import (
 // before it leaves the log sink.
 const Redacted = "[redacted]"
 
-// secretKeyFragments are substrings that, when present in a slog key
-// (case-insensitively), mark the value as a secret candidate. The list is
-// deliberately narrow — log authors know not to put plaintext credentials
-// in message text, so we only sweep structured attrs.
-//
-// Add new fragments here when a new credential domain appears (e.g.
-// "private_key", "access_key"). Substring match: "token" already covers
-// "auth_token", "bearer_token", "refresh_token", etc. "key" and "auth"
-// stay out deliberately — they would over-redact public_key, oauth_flow,
-// and similar non-secret names. stderrScrubRe is built from this slice, so
-// additions extend both the attr sweep and the stderr scrub.
+// secretKeyFragments are case-insensitive substrings marking a slog key's
+// value as a secret candidate. Deliberately narrow: "key"/"auth" stay out to
+// avoid over-redacting public_key/oauth_flow-style names. stderrScrubRe is
+// built from this slice — add new fragments here, not there.
 var secretKeyFragments = []string{
 	"password", "token", "secret", "api_key", "apikey",
 	"credential", "passphrase", "authorization",
 }
 
-// RedactHandler wraps an inner slog.Handler and rewrites attr values that
-// look like credentials — *url.URL values carrying userinfo, or any type
-// implementing Redacted() any — and rewrites attrs whose keys match
-// secretKeyFragments to the Redacted sentinel. InstallHandler wraps every
-// facade sink in it, so every slog caller inherits the sweep without
-// touching call sites.
+// RedactHandler wraps an inner slog.Handler, rewriting attrs whose keys match
+// secretKeyFragments to the Redacted sentinel, and rewriting credential-shaped
+// values (*url.URL with userinfo, any Redacted() any implementer).
+// InstallHandler wraps every facade sink in it, so no call site can opt out.
 //
 // Credential types (e.g. ProxmoxCredentials) MUST implement Redacted() any
-// and return a struct that omits all secret fields. This is the only
-// mechanism that protects credentials passed under a benign slog key such
-// as slog.Any("creds", &credentials.ProxmoxCredentials{...}); key-based
-// redaction alone cannot protect them.
+// omitting all secret fields — the only protection for credentials logged
+// under a benign key (slog.Any("creds", &ProxmoxCredentials{})); key-based
+// redaction alone can't catch them.
 type RedactHandler struct {
 	inner slog.Handler
 }
@@ -56,7 +46,7 @@ func (h *RedactHandler) Enabled(ctx context.Context, lvl slog.Level) bool {
 }
 
 // Handle rewrites every Attr on the record before delegating.
-func (h *RedactHandler) Handle(ctx context.Context, r slog.Record) error { //nolint:gocritic // hugeParam: slog.Handler interface requires value receiver
+func (h *RedactHandler) Handle(ctx context.Context, r slog.Record) error { //nolint:gocritic // hugeParam: slog.Handler passes slog.Record by value
 	redacted := slog.NewRecord(r.Time, r.Level, r.Message, r.PC)
 	r.Attrs(func(a slog.Attr) bool {
 		redacted.AddAttrs(redactAttr(a))
@@ -105,10 +95,9 @@ func redactAttr(a slog.Attr) slog.Attr {
 	}
 }
 
-// urlKeyFragments name attrs whose string value is a URL that may embed
-// userinfo. Every URL in this tree is logged as a plain string under keys like
-// url/endpoint (none of which match KeyIsSecret), so a Proxmox endpoint
-// carrying user:password@ would otherwise reach the log verbatim.
+// urlKeyFragments flags attrs whose string value may be a URL with userinfo —
+// url/endpoint keys don't match KeyIsSecret, so a Proxmox endpoint with
+// user:password@ would otherwise log verbatim.
 var urlKeyFragments = []string{"url", "uri", "endpoint"}
 
 // keyIsURLLike reports whether key names a URL-valued attr, using the same
@@ -120,10 +109,9 @@ func keyIsURLLike(key string) bool {
 	})
 }
 
-// stripURLUserinfo parses s as a URL and drops the userinfo password, mirroring
-// redactAny's *url.URL handling: the username is kept, the password removed.
-// Non-URL strings and userinfo-free URLs are returned unchanged so ordinary
-// endpoints still log in full.
+// stripURLUserinfo parses s as a URL and drops the userinfo password
+// (username kept), mirroring redactAny's *url.URL handling. Non-URL or
+// userinfo-free strings pass through unchanged.
 func stripURLUserinfo(s string) string {
 	u, err := url.Parse(s)
 	if err != nil || u.User == nil {
@@ -161,14 +149,11 @@ func redactAny(v any) any {
 	}
 }
 
-// RedactableArgv is a named slice type for process argv (os.Args[1:]). Pass
-// it as slog.Any("argv", logutil.RedactableArgv(os.Args[1:])) so RedactHandler
-// dispatches through Redacted() any rather than logging a pre-joined string.
-// Scrubbing runs before joining: any --key=value or key=value token whose key
-// matches KeyIsSecret has its value replaced with the Redacted sentinel, and
-// the value following a bare --key / -key secret flag (pflag's space-separated
-// form) is replaced too, guarding against future flags that accept
-// credentials.
+// RedactableArgv is a named slice for process argv (os.Args[1:]); pass it as
+// slog.Any("argv", RedactableArgv(...)) so RedactHandler routes it through
+// Redacted() any instead of a pre-joined string. Scrubbing (before joining)
+// replaces --key=value/key=value values and the value after a bare secret
+// flag when the key matches KeyIsSecret.
 type RedactableArgv []string
 
 // Redacted scrubs credential-bearing tokens in the argv slice and returns
@@ -209,12 +194,10 @@ func bareSecretFlag(tok string) bool {
 	return !strings.Contains(name, "=") && KeyIsSecret(name)
 }
 
-// RedactableStderr is a named string type for subprocess stderr text. Pass
-// it as slog.Any("stderr", rs) — the attr is then KindAny and routes through
-// RedactHandler's Redacted() any dispatch instead of leaving the raw string
-// unbounded. The handler emits at most a head/tail excerpt, preventing
-// multi-kilobyte auth diagnostics or registry-config snippets from reaching
-// the log sink verbatim.
+// RedactableStderr is a named string type for subprocess stderr text; pass
+// it as slog.Any("stderr", rs) to route it through RedactHandler's
+// Redacted() any dispatch (KindAny) instead of an unbounded raw string —
+// the handler emits at most a head/tail excerpt.
 type RedactableStderr string
 
 // stderrScrubRe matches credential key–value pairs in these shapes:
@@ -224,8 +207,7 @@ type RedactableStderr string
 //	"key": "value"       (JSON diagnostics; quoted values may contain spaces)
 //	Authorization: Bearer <token>
 //
-// Built from secretKeyFragments so the stderr scrub and the attr key-sweep
-// share one denylist. Over-redaction is acceptable; under-redaction is not.
+// Shares secretKeyFragments' denylist. Over-redaction is acceptable; under-redaction is not.
 var stderrScrubRe = regexp.MustCompile(
 	`(?i)((?:` + strings.Join(secretKeyFragments, "|") + `)` +
 		`(?:["']?\s*[:=]\s*(?:Bearer\s+)?))("[^"]*"|'[^']*'|\S+)`,
@@ -236,33 +218,27 @@ var stderrScrubRe = regexp.MustCompile(
 // stderrScrubRe to anchor on, so they get their own pass.
 var jwtScrubRe = regexp.MustCompile(`\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+`)
 
-// scrubStderrText masks credential values in s. Coverage is shape-based:
-// key-adjacent values (stderrScrubRe) and bare JWTs (jwtScrubRe). A secret
-// with neither shape — a bare base64 blob, prose-embedded value — is NOT
-// detected; the head/tail truncation window in RedactableStderr.Redacted is
-// the only bound on such text.
+// scrubStderrText masks shape-based credential values: key-adjacent pairs
+// (stderrScrubRe) and bare JWTs (jwtScrubRe). A secret in neither shape (bare
+// base64, prose-embedded) is NOT detected — RedactableStderr.Redacted's
+// head/tail truncation is the only bound on such text.
 func scrubStderrText(s string) string {
 	s = stderrScrubRe.ReplaceAllString(s, "${1}"+Redacted)
 	return jwtScrubRe.ReplaceAllString(s, Redacted)
 }
 
-// ScrubSecrets masks credential-shaped values in s — key-adjacent pairs
-// (key=value, key: value, quoted JSON pairs, Authorization: Bearer <token>)
-// and bare JWTs — with the same shape-based coverage bound as
-// scrubStderrText. Exported for writer-side scrubbing of streamed
-// subprocess output headed to persistent sinks (the install log that
-// debug-bundle archives), where RedactHandler never sees the bytes.
+// ScrubSecrets masks credential-shaped values in s with the same shape-based
+// coverage as scrubStderrText. Exported for writer-side scrubbing of streamed
+// subprocess output (the install log debug-bundle archives) that never
+// passes through RedactHandler.
 func ScrubSecrets(s string) string {
 	return scrubStderrText(s)
 }
 
-// Redacted masks credential values matching key=value, key: value,
-// Authorization: Bearer <token>, or bare-JWT shapes, then returns at most
-// the first 200 and last 200 bytes joined by a truncation marker when the
-// scrubbed text exceeds 400 characters. Scrubbing runs before truncation so
-// a window cut can never split a key and leave its value exposed in the
-// retained tail. The guarantee is "key-shaped secrets and JWTs masked,
-// output bounded" — not "all secret-looking tokens detected".
+// Redacted scrubs credential shapes (see stderrScrubRe/jwtScrubRe), then caps
+// output to a 200-byte head/tail excerpt past 400 chars — scrubbing before
+// truncation so a window cut can't split a key and leak its value. Guarantee:
+// key-shaped secrets and JWTs masked, output bounded — not all secrets detected.
 func (s RedactableStderr) Redacted() any {
 	const half = 200
 	r := scrubStderrText(string(s))

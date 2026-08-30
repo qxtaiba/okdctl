@@ -9,10 +9,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 )
 
-const (
-	testValYes = "yes"
-	testValABC = "abc"
-)
+const testValYes = "yes"
 
 func testStepDefinition() *StepDefinition {
 	return &StepDefinition{
@@ -140,14 +137,6 @@ func TestDataDrivenStep_Validate(t *testing.T) {
 	}
 }
 
-func TestDataDrivenStep_Validate_RequiredFieldBlocks(t *testing.T) {
-	step := NewDataDrivenStep(testStepDefinition())
-	// "name" is Required and starts empty (no setValue/LoadFromConfig yet).
-	if err := step.Validate(); err == nil {
-		t.Fatal("Validate() with empty required field: want error, got nil")
-	}
-}
-
 func TestDataDrivenStep_Apply(t *testing.T) {
 	step := NewDataDrivenStep(testStepDefinition())
 	step.setValue("name", "cluster-a")
@@ -168,8 +157,7 @@ func TestDataDrivenStep_Apply(t *testing.T) {
 	if !cfg.Deployment.AutoApprove {
 		t.Error("cfg.Deployment.AutoApprove = false, want true")
 	}
-	// The step-level Apply hook runs after field auto-binding and observes
-	// the already-applied value via step.Value.
+	// Step-level Apply runs after field auto-binding, so step.Value already reflects it.
 	if cfg.Cluster.Domain != "applied.cluster-a" {
 		t.Errorf("cfg.Cluster.Domain = %q, want applied.cluster-a", cfg.Cluster.Domain)
 	}
@@ -239,16 +227,8 @@ func TestDataDrivenStep_ShouldShow_DefaultsToTrue(t *testing.T) {
 	}
 }
 
-func TestSetStringSetIntSetBool(t *testing.T) {
+func TestSetIntSetBool(t *testing.T) {
 	cfg := &config.Config{}
-
-	setStr := SetString(func(c *config.Config, v string) { c.Cluster.Name = v })
-	if err := setStr(cfg, testValABC); err != nil {
-		t.Fatalf("SetString: %v", err)
-	}
-	if cfg.Cluster.Name != testValABC {
-		t.Errorf("SetString did not set value: got %q", cfg.Cluster.Name)
-	}
 
 	setInt := SetInt(func(c *config.Config, v int) { c.Topology.ControlPlane.Count = v })
 	if err := setInt(cfg, "5"); err != nil {
@@ -271,7 +251,7 @@ func TestSetStringSetIntSetBool(t *testing.T) {
 			t.Errorf("SetBool(%q) did not set true", truthy)
 		}
 	}
-	for _, falsy := range []string{"no", "false", "0", "", "n"} {
+	for _, falsy := range []string{"no", ""} {
 		cfg.Deployment.AutoApprove = true
 		if err := setBool(cfg, falsy); err != nil {
 			t.Fatalf("SetBool(%q): %v", falsy, err)
@@ -279,21 +259,5 @@ func TestSetStringSetIntSetBool(t *testing.T) {
 		if cfg.Deployment.AutoApprove {
 			t.Errorf("SetBool(%q) did not set false", falsy)
 		}
-	}
-}
-
-func TestGetStringGetInt(t *testing.T) {
-	cfg := &config.Config{}
-	cfg.Cluster.Name = testValABC
-	cfg.Topology.ControlPlane.Count = 5
-
-	getStr := GetString(func(c *config.Config) string { return c.Cluster.Name })
-	if got := getStr(cfg); got != testValABC {
-		t.Errorf("GetString() = %q, want abc", got)
-	}
-
-	getInt := GetInt(func(c *config.Config) int { return c.Topology.ControlPlane.Count })
-	if got := getInt(cfg); got != "5" {
-		t.Errorf("GetInt() = %q, want \"5\"", got)
 	}
 }

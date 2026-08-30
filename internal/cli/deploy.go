@@ -33,8 +33,7 @@ var (
 	deployAcknowledgeInterrupted bool
 )
 
-// Seams for TTY-free tests of the runDeploy glue; production never
-// reassigns them.
+// Seams for TTY-free tests; production never reassigns them.
 var (
 	runWizardFn     = runWizardWithMode
 	deployExecuteFn = deploy.Execute
@@ -80,10 +79,9 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 	out := cmd.OutOrStdout()
 
-	// Deploy self-initializes the workspace: the embedded Terraform sources
-	// are materialized before the wizard or any phase code so an empty
-	// directory works. Write-once — a source checkout or hand-edited HCL is
-	// never overwritten (see deploy.MaterializeTerraform).
+	// Materializes the embedded Terraform sources write-once; a source checkout
+	// or hand-edited HCL is never overwritten (see
+	// deploy.MaterializeTerraform).
 	projectRoot, err := resolveWorkspaceRoot()
 	if err != nil {
 		return err
@@ -103,9 +101,7 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	// Resolve the config file path: --output-file wins when explicitly set;
-	// otherwise honour --config when the caller provided it; fall back to the
-	// --output-file default ("okdctl.yaml") which matches --config's default.
+	// --output-file wins when explicit; otherwise --config; both default to "okdctl.yaml".
 	if !cmd.Flags().Changed(flagOutputFile) && cmd.Root().PersistentFlags().Changed(flagConfig) {
 		deployOutputFile = cfgFile
 	}
@@ -147,12 +143,8 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 		})
 	}
 
-	// --yes carries the same assume-yes meaning as every sibling command:
-	// perform the operation without interaction. It requires a config that
-	// already exists on disk — deploying compiled-in defaults unattended
-	// would be a footgun, and 66 (config missing) tells scripts exactly why —
-	// plus the destroy-grade --confirm-cluster guard so a scripted deploy in
-	// the wrong directory cannot target the wrong cluster.
+	// --yes requires an existing config (deploying compiled-in defaults
+	// unattended is a footgun) plus --confirm-cluster.
 	if deployYes {
 		if !configExists {
 			return &errtypes.ConfigError{
@@ -182,7 +174,6 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 
 	cfg = result.Config
 
-	// Guarantee secrets are cleared from the config struct, even on panic.
 	defer clearConfigCredentials(cfg)
 
 	if err := withProjectLock(projectRoot, "deploy", func() error {
@@ -197,17 +188,16 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 			return err
 		}
 	case wizard.ActionExit:
-		showExitSummary(deployOutputFile, out)
+		fmt.Fprintln(out)
+		logutil.Info("configuration saved", logutil.LF("path", deployOutputFile))
 	}
 
 	return nil
 }
 
-// runDeployDryRun previews a deploy: runs a terraform plan preview and lists
-// every phase step. Requires terraform.tfvars from a prior setup run; absent
-// tfvars causes plan failure and exits 2. Always exits 0 when the preview
-// itself succeeds, even when the plan reports drift — 'okdctl plan' is the
-// drift-gating surface for scripts; dry-run is a human-facing preview.
+// runDeployDryRun previews a deploy via terraform plan and phase step listing;
+// it exits 0 even when the plan reports drift ('okdctl plan' is the
+// drift-gating surface).
 func runDeployDryRun(ctx context.Context, cfg *config.Config, w io.Writer) error {
 	projectRoot, err := resolveWorkspaceRoot()
 	if err != nil {
@@ -231,10 +221,8 @@ func runDeployDryRun(ctx context.Context, cfg *config.Config, w io.Writer) error
 	return nil
 }
 
-// deployDryRunSteps returns the ID/Name for every step across setup, install,
-// and postinstall phases in execution order, derived from the live phase
-// StepDefs via okd.Provisioner.DeploySteps so this listing cannot drift from
-// what deploy actually runs.
+// deployDryRunSteps derives the step listing from live phase StepDefs so it
+// cannot drift from what deploy actually runs.
 func deployDryRunSteps(cfg *config.Config, projectRoot string) []render.DryRunStep {
 	deploySteps := okd.New(okd.WithProjectRoot(projectRoot), okd.WithLogger(logutil.SimpleLogger())).DeploySteps(cfg)
 	out := make([]render.DryRunStep, len(deploySteps))
@@ -244,11 +232,9 @@ func deployDryRunSteps(cfg *config.Config, projectRoot string) []render.DryRunSt
 	return out
 }
 
-// withProjectLock runs fn while holding the project runlock. runDeploy uses
-// it to serialize its shared-file write windows (terraform materialization,
-// okdctl.yaml, okdctl.env) against concurrent okdctl invocations while
-// keeping the interactive wizard outside the lock; deploy.Execute takes the
-// lock again for the deployment itself.
+// withProjectLock serializes shared-file writes against concurrent okdctl
+// invocations; deploy.Execute re-acquires the lock separately for the
+// deployment itself.
 func withProjectLock(projectRoot, verb string, fn func() error) error {
 	lock, err := runlock.Acquire(projectRoot, verb)
 	if err != nil {
@@ -258,10 +244,8 @@ func withProjectLock(projectRoot, verb string, fn func() error) error {
 	return fn()
 }
 
-// persistWizardConfig persists wizard output in a fixed order: credentials
-// go to the .env sidecar first, then the in-memory secrets are cleared, and
-// only then is the YAML saved — so credential bytes can never reach
-// okdctl.yaml. TestPersistWizardConfig_SecretHygiene pins this ordering.
+// persistWizardConfig writes credentials to the .env sidecar, clears them, then
+// saves YAML — in that order, so credential bytes never reach okdctl.yaml.
 func persistWizardConfig(cfg *config.Config, path string, w io.Writer) error {
 	if err := writeCredentialsEnv(cfg, path); err != nil {
 		return fmt.Errorf("save credentials: %w", err)
@@ -283,15 +267,8 @@ func saveConfig(cfg *config.Config, path string, w io.Writer) error {
 	return nil
 }
 
-// deployGateScope is the hard pre-flight gate for runFullDeployment, scoped
-// to the surfaces deploy renders: provider fields flow verbatim into
-// terraform.tfvars HCL literals; the bastion identity (Bastion.IP,
-// StaticIP.DNS, HTTPServer.IgnitionServerIP) flows into apache's bind
-// address and every node's static-ip kernel args; HTTPServer.Root is
-// interpolated into the apache vhost (httpRootUnsafe); the CIDRs flow
-// verbatim into install-config rendering. Required and enum scopes are
-// included because validateProvider no-ops on a non-proxmox type string —
-// a bogus type must not bypass the gate.
+// deployGateScope covers every render surface plus required/enums, so a bogus
+// provider type can't bypass validateProvider's no-op.
 const deployGateScope = config.ScopeRequired | config.ScopeEnums | config.ScopeProvider |
 	config.ScopeAdvancedNetworking | config.ScopeNetworking | config.ScopeHTTPServer
 
@@ -300,8 +277,8 @@ func runFullDeployment(ctx context.Context, cfg *config.Config, w io.Writer) err
 		return runDeployDryRun(ctx, cfg, w)
 	}
 
-	// Resolve the workspace root before the gate so validation's
-	// terraform-env directory check sees the same path materialization uses.
+	// Resolved before the gate so validation's terraform-env check sees the
+	// same path materialization uses.
 	projectRoot, err := resolveWorkspaceRoot()
 	if err != nil {
 		return err
@@ -311,8 +288,7 @@ func runFullDeployment(ctx context.Context, cfg *config.Config, w io.Writer) err
 		return err
 	}
 
-	// Hard gate before any phase code: a hand-edited config must be
-	// rejected here, not warn-and-proceed like saveConfig does.
+	// Hard gate: a hand-edited config is rejected here, not warn-and-proceed like saveConfig.
 	gate := config.ValidationOptions{Scope: deployGateScope, ProjectRoot: projectRoot}
 	if result := config.ValidateWithOptions(cfg, gate); !result.IsValid() {
 		return &errtypes.ConfigError{Msg: "config validation failed", Err: result}
@@ -343,11 +319,6 @@ func runFullDeployment(ctx context.Context, cfg *config.Config, w io.Writer) err
 	}, w)
 }
 
-func showExitSummary(path string, w io.Writer) {
-	fmt.Fprintln(w)
-	logutil.Info("configuration saved", logutil.LF("path", path))
-}
-
 func writeCredentialsEnv(cfg *config.Config, configPath string) error {
 	if cfg.Provider.Proxmox == nil {
 		return nil
@@ -358,8 +329,7 @@ func writeCredentialsEnv(cfg *config.Config, configPath string) error {
 		return nil
 	}
 
-	// Resolve the normalized endpoint (adds https:// and :8006 as needed)
-	// so the .env file is self-contained for Proxmox connection.
+	// Resolve the normalized endpoint so the .env file is self-contained.
 	resolved := credentials.GetProxmoxCredentials(cfg)
 
 	creds := &credentials.ProxmoxCredentials{
@@ -380,8 +350,8 @@ func writeCredentialsEnv(cfg *config.Config, configPath string) error {
 	return nil
 }
 
-// clearConfigCredentials wipes the in-memory credential bytes so they are
-// never serialized to YAML and do not linger as Go strings on the heap.
+// clearConfigCredentials zeroizes credential bytes so they are never serialized
+// or left lingering on the heap.
 func clearConfigCredentials(cfg *config.Config) {
 	if cfg.Provider.Proxmox == nil {
 		return

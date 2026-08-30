@@ -16,21 +16,20 @@ type SnapshotCreateOptions struct {
 	Description  string
 	DrainTimeout string
 	SkipDrain    bool
-	// Acknowledge overrides a stranded marker left by any other in-flight op —
-	// snapshot is non-resumable, so unlike compact it has no inner op to
-	// exempt; see Runner.refuseForeignMarker.
+	// Acknowledge overrides a stranded marker from any in-flight op; snapshot
+	// is non-resumable so nothing is exempt (see refuseForeignMarker).
 	Acknowledge bool
 }
 
 // SnapshotRollbackOptions tunes a node snapshot rollback.
 type SnapshotRollbackOptions struct {
-	// Acknowledge overrides a stranded marker left by any other in-flight op;
-	// see SnapshotCreateOptions.Acknowledge.
+	// Acknowledge overrides a stranded marker from any in-flight op; see
+	// SnapshotCreateOptions.Acknowledge.
 	Acknowledge bool
 }
 
-// defaultSnapshotName generates a letter-led, pve-configid-valid name for a
-// caller that did not supply one.
+// defaultSnapshotName generates a letter-led, pve-configid-valid name for
+// callers that didn't supply one.
 func defaultSnapshotName() string {
 	return "okdctl-" + time.Now().UTC().Format("20060102-150405")
 }
@@ -43,14 +42,9 @@ func (r *Runner) snapshotTimeout() time.Duration {
 }
 
 // CreateSnapshot snapshots target's disks via pvesh, cordoning and draining
-// first when the node is Ready and the caller has not asked to skip it — a
-// NotReady node is snapshotted directly, since cordoning teaches nothing new
-// and a drain would only spin with nowhere to reschedule its pods. Every
-// snapshot is disk-only: qemu-guest-agent is disabled fleet-wide (or its
-// state could not be probed), so the operator is warned it is
-// crash-consistent rather than equivalent to a clean shutdown — unconditionally,
-// including under dry-run. Returns the name actually used: opts.Name, or an
-// auto-generated timestamped name when opts.Name is empty.
+// first unless the node is NotReady or the caller skips it. It returns the name
+// used (opts.Name, or an auto-generated one) and always warns that the snapshot
+// is crash-consistent only, since qemu-guest-agent is disabled fleet-wide.
 func (r *Runner) CreateSnapshot(ctx context.Context, target string, opts SnapshotCreateOptions) (_ string, err error) {
 	if r.Proxmox == nil {
 		return "", &errtypes.ClusterError{Msg: "snapshot needs Proxmox SSH access, but no Proxmox host is configured"}
@@ -87,15 +81,10 @@ func (r *Runner) CreateSnapshot(ctx context.Context, target string, opts Snapsho
 		if derr := r.cordonAndDrain(ctx, OpSnapshot, target, opts.DrainTimeout, role == nodetypes.RoleMaster, Step("")); derr != nil {
 			return "", derr
 		}
-		// Uncordon runs whether the snapshot below succeeds or fails, so a
-		// snapshot failure never leaves the node needlessly unschedulable on
-		// top of the original problem. If the snapshot itself succeeded and
-		// this uncordon then fails, that failure becomes the op's result —
-		// the caller must know the node is unexpectedly still cordoned. Only
-		// a clean uncordon clears the OpSnapshot marker cordonAndDrain wrote:
-		// a failure leaves it in place (matching remove/resize precedent) as
-		// an operator-visible "left cordoned" trail, correctly attributed to
-		// snapshot rather than misread as a stuck remove.
+		// Uncordon always runs; a post-snapshot-success uncordon failure
+		// becomes the result, and only a clean uncordon clears the OpSnapshot
+		// marker — a failure leaves an operator-visible cordoned trail
+		// attributed to snapshot, not a stuck remove.
 		defer func() {
 			if uerr := r.Cluster.Uncordon(ctx, target); uerr != nil {
 				if err == nil {
@@ -124,8 +113,8 @@ func (r *Runner) CreateSnapshot(ctx context.Context, target string, opts Snapsho
 	return name, nil
 }
 
-// ListSnapshots returns target's Proxmox snapshots. Read-only; runs the same
-// under dry-run and the real path.
+// ListSnapshots returns target's Proxmox snapshots; read-only, so it runs the
+// same under dry-run and the real path.
 func (r *Runner) ListSnapshots(ctx context.Context, target string) ([]hostssh.SnapshotInfo, error) {
 	if r.Proxmox == nil {
 		return nil, &errtypes.ClusterError{Msg: "snapshot list needs Proxmox SSH access, but no Proxmox host is configured"}
@@ -141,17 +130,11 @@ func (r *Runner) ListSnapshots(ctx context.Context, target string) ([]hostssh.Sn
 	return snapshots, nil
 }
 
-// RollbackSnapshot restores target's disks to snapname; pvesh passes -start 1,
-// so the VM is powered back on regardless of its prior power state. A master
-// rollback is quorum-sensitive — a crash-consistent snapshot can leave etcd's
-// Raft term or rook-ceph's OSD state stale relative to peers that kept
-// running — so the op refuses to even start against an already-unhealthy
-// quorum (pre-gate, real runs only: a dry-run must never block on a gate whose
-// purpose is to wait) and re-verifies health before returning the node to
-// service (post-gate). Any failure from cordonAndDrain onward leaves the node
-// cordoned and returns that failure as the op's result — including the final
-// uncordon, so the command never exits clean while the node is actually left
-// cordoned; only a fully clean run clears the OpSnapshot marker.
+// RollbackSnapshot restores target's disks to snapname and powers the VM back
+// on regardless of its prior power state. For masters it gates on
+// etcd/rook-ceph health before and after, since a crash-consistent snapshot can
+// leave their state stale relative to peers; any failure after cordonAndDrain
+// leaves the node cordoned and is returned as the result.
 func (r *Runner) RollbackSnapshot(ctx context.Context, target, snapname string, opts SnapshotRollbackOptions) error {
 	if r.Proxmox == nil {
 		return &errtypes.ClusterError{Msg: "snapshot rollback needs Proxmox SSH access, but no Proxmox host is configured"}
@@ -225,9 +208,7 @@ func (r *Runner) RollbackSnapshot(ctx context.Context, target, snapname string, 
 	return nil
 }
 
-// DeleteSnapshot removes snapname from target. It does not touch VM power
-// state or cordon status — deleting a snapshot artifact has no effect on the
-// running guest.
+// DeleteSnapshot removes snapname from target; it does not touch VM power state or cordon status.
 func (r *Runner) DeleteSnapshot(ctx context.Context, target, snapname string) error {
 	if r.Proxmox == nil {
 		return &errtypes.ClusterError{Msg: "snapshot delete needs Proxmox SSH access, but no Proxmox host is configured"}

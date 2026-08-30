@@ -11,23 +11,9 @@ import (
 	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
-// installFakePkgTools writes controllable fake binaries into a TempDir and
-// prepends it to PATH for the duration of the test. It returns the path of
-// an argv log that dnf and apt-get append each invocation to (one line of
-// space-joined args per call), so tests can assert what the package tool
-// was — or was not — invoked with. The path is embedded in the scripts
-// because executor.RunCaptured strips non-allowlisted env vars.
-//
-// Behaviour:
-//
-//	rpm      exits 1 when its last argument is "notinstalled", else 0.
-//	dpkg     exits 0; stdout is "ii  <arg>"; if arg == "rcpkg" stdout is
-//	         "rc  rcpkg" (simulating a stale removed entry).
-//	dnf      logs argv, always exits 0.
-//	apt-get  logs argv, always exits 0.
-//
-// eval "last=\$$#" retrieves the last positional argument portably under
-// POSIX sh (dash on Debian/Ubuntu CI), avoiding the bash-only ${@: -1}.
+// installFakePkgTools installs fake dnf/apt-get/rpm/dpkg on PATH and returns
+// the argv log path (env-embedded since RunCaptured strips non-allowlisted
+// vars).
 func installFakePkgTools(t *testing.T) string {
 	t.Helper()
 	argvLog := filepath.Join(t.TempDir(), "argv.log")
@@ -44,8 +30,7 @@ func installFakePkgTools(t *testing.T) string {
 	return argvLog
 }
 
-// readArgvLog returns the argv log contents, or "" when the package tool
-// was never invoked (log file absent).
+// readArgvLog returns the argv log contents, or "" if never invoked.
 func readArgvLog(t *testing.T, path string) string {
 	t.Helper()
 	data, err := os.ReadFile(path)
@@ -58,48 +43,28 @@ func readArgvLog(t *testing.T, path string) string {
 	return string(data)
 }
 
-func TestIsInstalled_RHEL(t *testing.T) {
+func TestIsInstalled(t *testing.T) {
 	installFakePkgTools(t)
-	m := NewPackageManager(OS{Family: FamilyRHEL}, logutil.NopLogger)
 
 	tests := []struct {
+		family Family
 		pkg    string
 		wantOK bool
 	}{
-		{"installed-pkg", true},
-		{"notinstalled", false},
+		{FamilyRHEL, "installed-pkg", true},
+		{FamilyRHEL, "notinstalled", false},
+		{FamilyDebian, "present-pkg", true},
+		{FamilyDebian, "rcpkg", false},
 	}
 	for _, tc := range tests {
+		m := NewPackageManager(OS{Family: tc.family}, logutil.NopLogger)
 		ok, err := m.isInstalled(context.Background(), tc.pkg)
 		if err != nil {
-			t.Errorf("isInstalled(%q): unexpected error: %v", tc.pkg, err)
+			t.Errorf("%s isInstalled(%q): unexpected error: %v", tc.family, tc.pkg, err)
 			continue
 		}
 		if ok != tc.wantOK {
-			t.Errorf("isInstalled(%q) = %v; want %v", tc.pkg, ok, tc.wantOK)
-		}
-	}
-}
-
-func TestIsInstalled_Debian(t *testing.T) {
-	installFakePkgTools(t)
-	m := NewPackageManager(OS{Family: FamilyDebian}, logutil.NopLogger)
-
-	tests := []struct {
-		pkg    string
-		wantOK bool
-	}{
-		{"present-pkg", true},
-		{"rcpkg", false},
-	}
-	for _, tc := range tests {
-		ok, err := m.isInstalled(context.Background(), tc.pkg)
-		if err != nil {
-			t.Errorf("isInstalled(%q): unexpected error: %v", tc.pkg, err)
-			continue
-		}
-		if ok != tc.wantOK {
-			t.Errorf("isInstalled(%q) = %v; want %v", tc.pkg, ok, tc.wantOK)
+			t.Errorf("%s isInstalled(%q) = %v; want %v", tc.family, tc.pkg, ok, tc.wantOK)
 		}
 	}
 }
@@ -116,48 +81,27 @@ func TestIsInstalled_LookPathError(t *testing.T) {
 	}
 }
 
-func TestRemove_EmptyInput(t *testing.T) {
-	argvLog := installFakePkgTools(t)
-	m := NewPackageManager(OS{Family: FamilyRHEL}, logutil.NopLogger)
-	if err := m.Remove(context.Background(), nil); err != nil {
-		t.Fatalf("Remove(nil): unexpected error: %v", err)
+func TestRemove(t *testing.T) {
+	cases := []struct {
+		name     string
+		packages []string
+		wantArgv string // "" means the package tool must never run
+	}{
+		{"empty input", nil, ""},
+		{"all uninstalled", []string{"notinstalled"}, ""},
+		{"installed package", []string{"installed-pkg"}, "remove -y installed-pkg\n"},
+		{"mixed packages", []string{"notinstalled", "installed-pkg"}, "remove -y installed-pkg\n"},
 	}
-	if got := readArgvLog(t, argvLog); got != "" {
-		t.Errorf("Remove(nil) invoked dnf: %q; want no invocation", got)
-	}
-}
-
-func TestRemove_AllUninstalled(t *testing.T) {
-	argvLog := installFakePkgTools(t)
-	m := NewPackageManager(OS{Family: FamilyRHEL}, logutil.NopLogger)
-	if err := m.Remove(context.Background(), []string{"notinstalled"}); err != nil {
-		t.Fatalf("Remove(all-uninstalled): unexpected error: %v", err)
-	}
-	if got := readArgvLog(t, argvLog); got != "" {
-		t.Errorf("Remove(all-uninstalled) invoked dnf: %q; want no invocation", got)
-	}
-}
-
-func TestRemove_InstalledPackage(t *testing.T) {
-	argvLog := installFakePkgTools(t)
-	m := NewPackageManager(OS{Family: FamilyRHEL}, logutil.NopLogger)
-	if err := m.Remove(context.Background(), []string{"installed-pkg"}); err != nil {
-		t.Fatalf("Remove(installed): unexpected error: %v", err)
-	}
-	want := "remove -y installed-pkg\n"
-	if got := readArgvLog(t, argvLog); got != want {
-		t.Errorf("dnf argv log = %q; want %q", got, want)
-	}
-}
-
-func TestRemove_MixedPackages(t *testing.T) {
-	argvLog := installFakePkgTools(t)
-	m := NewPackageManager(OS{Family: FamilyRHEL}, logutil.NopLogger)
-	if err := m.Remove(context.Background(), []string{"notinstalled", "installed-pkg"}); err != nil {
-		t.Fatalf("Remove(mixed): unexpected error: %v", err)
-	}
-	want := "remove -y installed-pkg\n"
-	if got := readArgvLog(t, argvLog); got != want {
-		t.Errorf("dnf argv log = %q; want %q", got, want)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			argvLog := installFakePkgTools(t)
+			m := NewPackageManager(OS{Family: FamilyRHEL}, logutil.NopLogger)
+			if err := m.Remove(context.Background(), tc.packages); err != nil {
+				t.Fatalf("Remove(%v): unexpected error: %v", tc.packages, err)
+			}
+			if got := readArgvLog(t, argvLog); got != tc.wantArgv {
+				t.Errorf("dnf argv log = %q; want %q", got, tc.wantArgv)
+			}
+		})
 	}
 }

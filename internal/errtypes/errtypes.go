@@ -1,15 +1,5 @@
-// Package errtypes defines the typed error hierarchy used by okdctl.
-// exitCodeFor in internal/cli/root.go maps each type to a structured exit code:
-// ConfigError=2, NetworkError=3, ClusterError=4, AuthError=5, UsageError=64.
-//
-// The taxonomy intentionally has no transient/recoverable concept. Failures
-// such as a VIP certificate not yet rotated or a CSR still pending are
-// classified as ClusterError (exit 4) until a retry-aware consumer exists
-// that needs to distinguish them from permanently-degraded states. Introducing
-// a TransientError type is deferred until that consumer lands. Until then,
-// three sites carry ad-hoc retry classification that TransientError will
-// consolidate: infrastructure/proxmox/proxmox.go::initIsRetryable,
-// addon/helpers.go::addonIsRetryable, download/retry.go::isRetryable.
+// Package errtypes defines okdctl's typed error hierarchy; exitCodeFor
+// (cli/root.go) maps each type to an exit code (Config=2, Network=3, Cluster=4, Auth=5, Usage=64).
 package errtypes
 
 import (
@@ -18,37 +8,28 @@ import (
 	"fmt"
 )
 
-// ErrConfigMissing is wrapped inside a ConfigError when the config file does
-// not exist on disk. exitCodeFor maps it to 66 (EX_NOINPUT).
+// ErrConfigMissing is wrapped in ConfigError when the config file is missing;
+// exitCodeFor maps it to 66 (EX_NOINPUT).
 var ErrConfigMissing = errors.New("config file not found")
 
-// ErrPullSecretInvalid is wrapped inside an AuthError when the pull secret
-// file exists but contains invalid JSON. exitCodeFor maps it to 65 (EX_DATAERR).
+// ErrPullSecretInvalid is wrapped in AuthError when the pull secret file has
+// invalid JSON; exitCodeFor maps it to 65 (EX_DATAERR).
 var ErrPullSecretInvalid = errors.New("pull secret is not valid JSON")
 
-// ErrSudoMissing is wrapped inside an AuthError when sudo cannot be located
-// on PATH. exitCodeFor maps it to 71 (EX_OSERR).
+// ErrSudoMissing is wrapped in AuthError when sudo isn't found on PATH;
+// exitCodeFor maps it to 71 (EX_OSERR).
 var ErrSudoMissing = errors.New("sudo not found")
 
-// ErrWaitTimeout marks a poll-loop timeout raised by system.WaitFor's own
-// opts.Timeout, as opposed to a deadline set on the caller's context. It
-// wraps context.DeadlineExceeded so existing errors.Is matchers keep
-// working; match ErrWaitTimeout to single out poll timeouts specifically.
+// ErrWaitTimeout marks a poll-loop timeout from WaitFor's own opts.Timeout
+// (not the caller's ctx deadline); it wraps context.DeadlineExceeded so errors.Is still matches.
 var ErrWaitTimeout = fmt.Errorf("wait timeout: %w", context.DeadlineExceeded)
 
-// HintAppender is implemented by error types that can carry an extra
-// next-step hint without changing their concrete type — and therefore
-// without changing exitCodeFor's exit-code classification. The hint is
-// stored structurally (a separate field), not concatenated onto Msg, so
-// render.ErrorSummary reads it back via Describe rather than re-splitting
-// Error() on "; ". All five categories implement it uniformly;
-// terraform.Executor.WithLockHint is the only caller today.
+// HintAppender lets an error type carry a next-step hint without changing its
+// type or exit code; the hint is a separate field so Describe reads it back structurally.
 type HintAppender interface {
 	WithHint(hint string) error
 }
 
-// appendHint combines an existing hint with a new one; multiple hints
-// accumulate joined by "; ". The empty existing case returns hint verbatim.
 func appendHint(existing, hint string) string {
 	if existing == "" {
 		return hint
@@ -56,9 +37,8 @@ func appendHint(existing, hint string) string {
 	return existing + "; " + hint
 }
 
-// withHintSuffix appends "; <hint>" to s for the Error() log surface, leaving
-// s untouched when hint is empty. The hint lives in a struct field, not Msg,
-// so this suffix is the only place display text and hint are concatenated.
+// withHintSuffix appends "; <hint>" to s for Error(), the only place hint and
+// message text are concatenated.
 func withHintSuffix(s, hint string) string {
 	if hint == "" {
 		return s
@@ -66,22 +46,9 @@ func withHintSuffix(s, hint string) string {
 	return s + "; " + hint
 }
 
-// ConfigError wraps a configuration-related failure (missing file, parse
-// error, validation failure). Unwrap chains to the underlying error so
-// errors.Is checks on wrapped sentinels (e.g. os.ErrNotExist) still work.
-//
-// Error() surfaces only Msg. The inner Err is reachable via Unwrap
-// (so errors.Is / errors.As walks to wrapped sentinels) but never
-// string-interpolated — a credential-bearing inner error cannot leak
-// past logutil.RedactHandler through the .Error() path. The same
-// redaction invariant applies to NetworkError, ClusterError, AuthError.
-//
-// Msg must never include credentials. Construction-site scanning enforces
-// password and api_key fragments via TestMsgFieldNoCredentialInterpolation;
-// the broader "tokens / secrets" axis is enforced only by reviewer
-// discipline because those substrings collide with benign descriptive
-// words ("pull secret", "csrf token"). Pass credential-bearing context only
-// through Err so it stays in the Unwrap chain and out of Error().
+// ConfigError wraps a configuration failure. Msg must never contain
+// credentials — Error() surfaces only Msg, never Err; pass credential-bearing
+// context through Err only. Same contract applies to NetworkError, ClusterError, AuthError.
 type ConfigError struct {
 	Msg  string
 	Err  error
@@ -94,8 +61,7 @@ func (e *ConfigError) Error() string {
 
 func (e *ConfigError) Unwrap() error { return e.Err }
 
-// WithHint returns a copy of e carrying hint as structured next-step text;
-// e itself is left unmodified and Msg is not touched. Implements HintAppender.
+// WithHint returns a copy of e carrying hint; e is left unmodified. Implements HintAppender.
 func (e *ConfigError) WithHint(hint string) error {
 	c := *e
 	c.hint = appendHint(e.hint, hint)
@@ -116,17 +82,15 @@ func (e *NetworkError) Error() string {
 
 func (e *NetworkError) Unwrap() error { return e.Err }
 
-// WithHint returns a copy of e carrying hint as structured next-step text;
-// e itself is left unmodified and Msg is not touched. Implements HintAppender.
+// WithHint returns a copy of e carrying hint; e is left unmodified. Implements HintAppender.
 func (e *NetworkError) WithHint(hint string) error {
 	c := *e
 	c.hint = appendHint(e.hint, hint)
 	return &c
 }
 
-// ClusterError wraps a cluster-level failure (oc/kubectl command failure,
-// API unreachable, install-monitor timeout).
-// Msg must never include credentials; see ConfigError for the full contract.
+// ClusterError wraps a cluster-level failure (oc/kubectl failure, API
+// unreachable, install-monitor timeout); see ConfigError for the Msg/credential contract.
 type ClusterError struct {
 	Msg  string
 	Err  error
@@ -139,20 +103,16 @@ func (e *ClusterError) Error() string {
 
 func (e *ClusterError) Unwrap() error { return e.Err }
 
-// WithHint returns a copy of e carrying hint as structured next-step text;
-// e itself is left unmodified and Msg is not touched. Implements HintAppender.
+// WithHint returns a copy of e carrying hint; e is left unmodified. Implements HintAppender.
 func (e *ClusterError) WithHint(hint string) error {
 	c := *e
 	c.hint = appendHint(e.hint, hint)
 	return &c
 }
 
-// AuthError wraps an authentication or privilege-escalation failure
-// (missing sudo, insecure credential file, proxmox token rejected).
-// Msg must never include credentials; see ConfigError for the full contract.
-// Path carries a filesystem path when the failure originates from a
-// permission check; it is structured so RedactHandler can apply uniform
-// path policy without re-parsing Msg.
+// AuthError wraps an auth/privilege-escalation failure; Msg follows
+// ConfigError's credential contract, and Path stays separate so RedactHandler
+// applies uniform policy.
 type AuthError struct {
 	Msg  string
 	Path string
@@ -170,18 +130,16 @@ func (e *AuthError) Error() string {
 
 func (e *AuthError) Unwrap() error { return e.Err }
 
-// WithHint returns a copy of e carrying hint as structured next-step text;
-// e itself is left unmodified and Msg is not touched. Implements HintAppender.
+// WithHint returns a copy of e carrying hint; e is left unmodified. Implements HintAppender.
 func (e *AuthError) WithHint(hint string) error {
 	c := *e
 	c.hint = appendHint(e.hint, hint)
 	return &c
 }
 
-// UsageError wraps a command-line flag-parse failure. exitCodeFor maps it to
-// 64 (EX_USAGE per BSD sysexits.h). SetFlagErrorFunc returns this instead of
-// calling os.Exit so Execute's deferred logFileCloser.Close() runs first.
-// Msg must never include credentials; see ConfigError for the full contract.
+// UsageError wraps a command-line flag-parse failure (exitCodeFor: 64, EX_USAGE).
+// SetFlagErrorFunc returns this instead of calling os.Exit so Execute's
+// deferred logFileCloser.Close() still runs.
 type UsageError struct {
 	Msg  string
 	Err  error
@@ -194,16 +152,15 @@ func (e *UsageError) Error() string {
 
 func (e *UsageError) Unwrap() error { return e.Err }
 
-// WithHint returns a copy of e carrying hint as structured next-step text;
-// e itself is left unmodified and Msg is not touched. Implements HintAppender.
+// WithHint returns a copy of e carrying hint; e is left unmodified. Implements HintAppender.
 func (e *UsageError) WithHint(hint string) error {
 	c := *e
 	c.hint = appendHint(e.hint, hint)
 	return &c
 }
 
-// Kind enumerates the top-level errtypes categories for display and
-// exit-code classification. KindUnknown covers untyped errors (exit 1).
+// Kind enumerates the errtypes categories for display and exit-code
+// classification; KindUnknown covers untyped errors (exit 1).
 type Kind int
 
 // Kind values, in exitCodeFor's documented precedence order.
@@ -234,11 +191,9 @@ func (k Kind) Label() string {
 	}
 }
 
-// ExitCode returns the BSD-sysexits code for the category tier only:
-// Config=2, Network=3, Cluster=4, Auth=5, Usage=64, Unknown=1. It does NOT
-// encode the sentinel tier (ErrConfigMissing=66, ErrPullSecretInvalid=65,
-// ErrSudoMissing=71); exitCodeFor checks those sentinels ahead of the
-// category tier.
+// ExitCode returns the BSD-sysexits code for the category tier (Config=2,
+// Network=3, Cluster=4, Auth=5, Usage=64, Unknown=1). It excludes the sentinel
+// tier (66/65/71); exitCodeFor checks those first.
 func (k Kind) ExitCode() int {
 	switch k {
 	case KindConfig:
@@ -256,20 +211,19 @@ func (k Kind) ExitCode() int {
 	}
 }
 
-// Display is the render-facing decomposition of a typed error: the category
-// Kind, the human Message with no category prefix and no hint suffix, and the
-// optional next-step Hint. render.ErrorSummary consumes it to lay out the
-// error box without re-parsing Error() or string-splitting on "; ".
+// Display is the render-facing decomposition of a typed error into Kind, a
+// prefix/suffix-free Message, and an optional Hint. render.ErrorSummary
+// consumes it directly, without re-parsing Error() or splitting on "; ".
 type Display struct {
 	Kind    Kind
 	Message string
 	Hint    string
 }
 
-// Describe decomposes err into its Display parts, walking the Unwrap chain in
+// Describe decomposes err into Display parts, walking the Unwrap chain in
 // exitCodeFor's precedence order (Config > Network > Cluster > Auth > Usage).
-// ok is false when err is not (and does not wrap) a known category, in which
-// case the caller should render Kind.Label() ("error") with err.Error().
+// ok is false for an unknown category; the caller should then render
+// Kind.Label() ("error") with err.Error().
 func Describe(err error) (Display, bool) {
 	var cfg *ConfigError
 	if errors.As(err, &cfg) {
@@ -298,10 +252,8 @@ func Describe(err error) (Display, bool) {
 	return Display{}, false
 }
 
-// Classify reports the Kind of err, the single classifier the render layer
-// and exitCodeFor consume in place of hand-written errors.As ladders. It
-// shares Describe's precedence order; ok is false for untyped errors
-// (KindUnknown). It intentionally does not inspect the sentinel tier.
+// Classify reports the Kind of err using Describe's precedence order; ok is
+// false for untyped errors.
 func Classify(err error) (Kind, bool) {
 	d, ok := Describe(err)
 	return d.Kind, ok

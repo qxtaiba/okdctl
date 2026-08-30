@@ -8,19 +8,17 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
-// MilestoneKind classifies a recognized openshift-install progress line. The
-// stream firehose routes to the log file by default; a small set of milestone
-// lines are promoted to the operator-facing TTY.
+// MilestoneKind classifies a recognized openshift-install progress line
+// promoted to the operator-facing TTY.
 type MilestoneKind int
 
 const (
-	// MilestoneBootstrapComplete marks "It is now safe to remove the
-	// bootstrap resources" — the control plane has taken over from bootstrap.
+	// MilestoneBootstrapComplete marks openshift-install's bootstrap-complete line.
 	MilestoneBootstrapComplete MilestoneKind = iota + 1
 	// MilestoneInstallComplete marks "Install complete!".
 	MilestoneInstallComplete
-	// MilestoneOperatorDegraded marks a "Cluster operator <name> Degraded is
-	// True" line; Operator carries the operator name.
+	// MilestoneOperatorDegraded marks a cluster-operator-degraded line, with
+	// Operator carrying the operator name.
 	MilestoneOperatorDegraded
 )
 
@@ -31,19 +29,16 @@ type Milestone struct {
 	Operator string
 }
 
-// Matched against the log-level-prefixed logrus output openshift-install
-// emits under `wait-for ... --log-level=debug`. Kept as substring matches so
-// the timestamp/level prefix (which differs between text and debug formats)
-// does not need to be modelled.
+// Substring-matched against logrus debug output; no need to model the
+// timestamp/level prefix.
 var (
 	reBootstrapComplete = regexp.MustCompile(`It is now safe to remove the bootstrap resources`)
 	reInstallComplete   = regexp.MustCompile(`Install complete!`)
 	reOperatorDegraded  = regexp.MustCompile(`[Cc]luster operator (\S+) Degraded is True`)
 )
 
-// ParseMilestone reports whether line is a recognized milestone. The two
-// completion milestones win over a degraded match on the same line (they never
-// co-occur in practice, but the ordering keeps the result deterministic).
+// ParseMilestone reports whether line is a recognized milestone; completion
+// milestones win over a degraded match on the same line.
 func ParseMilestone(line string) (Milestone, bool) {
 	switch {
 	case reBootstrapComplete.MatchString(line):
@@ -57,33 +52,21 @@ func ParseMilestone(line string) (Milestone, bool) {
 	return Milestone{}, false
 }
 
-// milestoneScanMax caps the in-flight line buffer: a stream that never emits
-// a newline (carriage-return progress bars) is flushed to dst in scrubbed
-// chunks of this size instead of growing the buffer without bound.
+// milestoneScanMax caps the in-flight line buffer; a newline-less stream is
+// flushed in chunks of this size instead of growing unbounded.
 const milestoneScanMax = 64 * 1024
 
-// milestoneWriter line-buffers the stream, scans each complete line for
-// milestones, and persists it to dst only after logutil.ScrubSecrets has
-// masked credential-shaped values. dst is the workspace okdctl.log that
-// debug-bundle archives into the operator-shared tarball, and
-// openshift-install prints the kubeadmin console password on the
-// install-complete line — this writer is the last point where that line can
-// be scrubbed before it becomes shareable. A trailing partial line stays
-// buffered until its newline arrives (openshift-install's logrus output is
-// newline-terminated, so at most one incomplete line is lost at process
-// exit). Each recognized milestone is handed to notify, which the caller
-// wires to the TTY log. notify may be called from the os/exec copy
-// goroutine, so it must be safe for concurrent use when the same notify
-// backs both a stdout and a stderr writer.
+// milestoneWriter scrubs secrets via logutil.ScrubSecrets before writing dst
+// (okdctl.log is archived). notify may run concurrently with the exec copy
+// goroutine and must tolerate that.
 type milestoneWriter struct {
 	dst    io.Writer
 	notify func(Milestone)
 	buf    []byte
 }
 
-// NewMilestoneWriter wraps dst so streamed subprocess output is persisted to
-// dst with credential-shaped values scrubbed, while openshift-install
-// milestones are surfaced via notify.
+// NewMilestoneWriter wraps dst, scrubbing streamed output and reporting
+// milestones via notify.
 func NewMilestoneWriter(dst io.Writer, notify func(Milestone)) io.Writer {
 	return &milestoneWriter{dst: dst, notify: notify}
 }
@@ -105,9 +88,8 @@ func (w *milestoneWriter) Write(p []byte) (int, error) {
 		out = append(out, '\n')
 	}
 	if len(w.buf) > milestoneScanMax {
-		// A secret straddling this chunk boundary could evade the scrub;
-		// accepted — it requires a newline-less stream past 64 KiB, which
-		// openshift-install's line-oriented logging never produces.
+		// A secret straddling this boundary could evade scrubbing; accepted
+		// since output is line-oriented.
 		out = append(out, logutil.ScrubSecrets(string(w.buf))...)
 		w.buf = w.buf[:0]
 	}

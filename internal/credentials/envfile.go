@@ -16,21 +16,18 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// errEnvFileAlreadyLoaded is wrapped inside the ConfigError LoadEnvFile
-// returns when called a second time with a path different from the
-// first call, so callers can errors.Is it instead of string-matching Msg.
+// errEnvFileAlreadyLoaded lets callers errors.Is the second-call failure
+// instead of string-matching Msg.
 var errEnvFileAlreadyLoaded = errors.New("env file already loaded with different path")
 
-// ErrEnvFileUnknownKey is wrapped inside the ConfigError LoadEnvFile returns
-// when the .env carries a key outside the PROXMOX_VE_* allowlist, so a typo or
-// an attempt to smuggle TF_/KUBE/OC_ variables into every subprocess is a
-// visible failure rather than a silent promotion into the process environment.
+// ErrEnvFileUnknownKey is returned when the .env file contains a key outside
+// the PROXMOX_VE_* allowlist, so a typo or a smuggled TF_/KUBE/OC_ variable
+// fails loudly instead of silently reaching every subprocess.
 var ErrEnvFileUnknownKey = errors.New("env file contains an unrecognized key")
 
-// envFileAllowedKeys is the exact set of keys promoted from the .env file into
-// the process environment. It is an allowlist by design: keys under TF_, KUBE,
-// PROXMOX_, HELM_, or OC_ prefixes would otherwise pass DefaultEnvAllowlist and
-// reach every subprocess, including terraform under the sudo re-exec.
+// envFileAllowedKeys is an explicit allowlist: without it, TF_/KUBE/PROXMOX_/
+// HELM_/OC_-prefixed keys would pass DefaultEnvAllowlist into every
+// subprocess, including terraform under the sudo re-exec.
 var envFileAllowedKeys = map[string]bool{
 	envProxmoxEndpoint: true,
 	envProxmoxUsername: true,
@@ -39,21 +36,16 @@ var envFileAllowedKeys = map[string]bool{
 	envProxmoxInsecure: true,
 }
 
-// loadOnce guards against concurrent or repeated calls to LoadEnvFile.
-// The global process environment is shared mutable state: without this
-// guard, a "getenv empty → setenv" sequence races against any other
-// goroutine touching the same key. The .env file is intentionally a
-// per-process artefact — callers that pass a different path on a second
-// invocation silently get the first path's result, which is preferred
-// over letting multiple sources mutate the environment.
+// loadOnce guards against concurrent/repeated LoadEnvFile calls — env
+// mutation isn't goroutine-safe, and a second call with a different path
+// silently reuses the first result.
 var (
 	loadOnce   sync.Once
 	loadErr    error
 	loadedPath string
 )
 
-// EnvFilePath derives the .env path from a config path
-// (e.g. "okdctl.yaml" becomes "okdctl.env").
+// EnvFilePath derives the .env path from a config path (e.g. "okdctl.yaml" becomes "okdctl.env").
 func EnvFilePath(configPath string) string {
 	if strings.HasSuffix(configPath, ".yaml") {
 		return strings.TrimSuffix(configPath, ".yaml") + ".env"
@@ -64,17 +56,13 @@ func EnvFilePath(configPath string) string {
 	return configPath + ".env"
 }
 
-// WriteEnvFile persists credentials in KEY=VALUE format compatible with
-// standard .env tooling, with 0600 permissions.
-//
-// Content is built via bytes.Buffer so the credential bytes are appended
-// directly without creating an intermediate immutable string copy. The
-// buffer is zeroed after AtomicWrite returns so the in-memory residue
-// doesn't outlive the write.
+// WriteEnvFile persists credentials in KEY=VALUE format with 0600
+// permissions. The buffer is zeroed after write so credential residue
+// doesn't outlive the call.
 func WriteEnvFile(path string, creds *ProxmoxCredentials) error {
-	// Refuse symlinks: an attacker-planted symlink at the .env path would
-	// redirect credential bytes to an attacker-chosen target. Lstat the
-	// path before writing; a missing file is the normal first-write case.
+	// Refuse symlinks: a pre-planted symlink would redirect credential bytes
+	// to an attacker-chosen target; a missing file here is the normal
+	// first-write case.
 	if info, err := os.Lstat(path); err == nil {
 		if info.Mode()&os.ModeSymlink != 0 {
 			return &errtypes.AuthError{
@@ -91,19 +79,14 @@ func WriteEnvFile(path string, creds *ProxmoxCredentials) error {
 
 	data := buildEnvFileBody(creds)
 	err := system.AtomicWrite(path, data, 0o600)
-	// Zero the buffer's backing store so the credential bytes don't
-	// linger after the file write completes.
 	clear(data)
 	return err
 }
 
-// buildEnvFileBody serialises creds into KEY=VALUE format. The caller owns
-// the returned slice and must clear it after use.
-//
-// The buffer is preallocated to the exact final size so it never reallocates
-// after the first secret byte is written: a mid-write grow would orphan an
-// un-zeroed copy of the password/token in the old backing array, which
-// WriteEnvFile's clear() can no longer reach.
+// buildEnvFileBody serialises creds into KEY=VALUE format; the caller must
+// clear() the returned slice. The buffer is preallocated to its exact final
+// size so a mid-write grow can't orphan an un-zeroed secret copy in the old
+// backing array.
 func buildEnvFileBody(creds *ProxmoxCredentials) []byte {
 	const header = "# Proxmox credentials (managed by okdctl)\n" +
 		"# This file has restricted permissions (0600). Do not commit to git.\n"
@@ -154,19 +137,10 @@ func buildEnvFileBody(creds *ProxmoxCredentials) []byte {
 	return buf.Bytes()
 }
 
-// LoadEnvFile loads a .env file into the process environment.
-// Already-set variables are NOT overwritten (shell env takes precedence).
-// Missing files are silently ignored.
-//
-// LoadEnvFile is guarded by a sync.Once: the underlying work runs at most
-// once per process regardless of how many times (or with which paths) it
-// is invoked. Subsequent calls return the first call's error. This is
-// intentional — mutating os.Environ from multiple sources is a footgun,
-// and the .env file is a per-process resource.
-//
-// A non-nil return always means credentials were not loaded. Callers must
-// treat any error as fatal and abort the operation rather than proceeding
-// with potentially missing credentials.
+// LoadEnvFile loads a .env file into the process environment once per
+// process (guarded by sync.Once); already-set variables are not overwritten
+// and a missing file is not an error. A non-nil return means nothing was
+// loaded — callers must treat it as fatal.
 func LoadEnvFile(path string) error {
 	loadOnce.Do(func() {
 		loadedPath = path
@@ -181,20 +155,16 @@ func LoadEnvFile(path string) error {
 	return loadErr
 }
 
-// loadEnvFileOnce is not safe to call concurrently and must only be
-// invoked via the LoadEnvFile sync.Once.
+// loadEnvFileOnce is not concurrency-safe; call only via LoadEnvFile's
+// sync.Once.
 func loadEnvFileOnce(path string) error {
-	// Refuse to load a .env that any other user can read. Proxmox tokens
-	// end up in here — a world-readable file defeats the whole point of
-	// moving secrets out of YAML. Open with O_NOFOLLOW first, then derive the
-	// permission decision from f.Stat() and read the contents from that same
-	// descriptor: binding the check and the read to one inode closes the
-	// TOCTOU window an os.Stat-then-os.Open pair leaves open, and O_NOFOLLOW
-	// refuses a symlinked path just as WriteEnvFile's Lstat does.
+	// O_NOFOLLOW binds the permission check and read to one inode, closing
+	// the TOCTOU window an os.Stat-then-Open pair leaves open, and refuses a
+	// symlinked .env just like WriteEnvFile's Lstat.
 	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil // missing .env is not an error
+			return nil
 		}
 		return &errtypes.ConfigError{Msg: fmt.Sprintf("open env file %s", path), Err: err}
 	}
@@ -221,7 +191,6 @@ func loadEnvFileOnce(path string) error {
 		return err
 	}
 
-	// Shell environment takes precedence: set only keys that are absent.
 	for k, v := range pairs {
 		if _, exists := os.LookupEnv(k); !exists {
 			_ = os.Setenv(k, v)
@@ -230,10 +199,9 @@ func loadEnvFileOnce(path string) error {
 	return nil
 }
 
-// rejectUnknownEnvKeys fails when pairs carries any key outside
-// envFileAllowedKeys, naming the offenders so a typo surfaces instead of being
-// silently dropped. It sets nothing — a non-nil return leaves the environment
-// untouched, matching LoadEnvFile's "error means nothing loaded" contract.
+// rejectUnknownEnvKeys names offending keys and, on error, leaves the
+// environment untouched — matching LoadEnvFile's "error means nothing
+// loaded" contract.
 func rejectUnknownEnvKeys(path string, pairs map[string]string) error {
 	var rejected []string
 	for k := range pairs {
@@ -252,9 +220,8 @@ func rejectUnknownEnvKeys(path string, pairs map[string]string) error {
 	}
 }
 
-// parseDotEnv reads key=value pairs from r. Blank lines and lines whose first
-// non-space character is '#' are skipped; lines without '=' return an error.
-// Surrounding single or double quotes are stripped from values.
+// parseDotEnv reads key=value pairs from r, skipping blank/comment lines and
+// stripping surrounding quotes from values.
 func parseDotEnv(r io.Reader) (map[string]string, error) {
 	pairs := make(map[string]string)
 	sc := bufio.NewScanner(r)

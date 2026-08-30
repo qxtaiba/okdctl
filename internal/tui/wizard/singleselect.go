@@ -7,14 +7,11 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
 )
 
-// SingleSelect owns the key loop shared by wizard steps whose entire
-// interaction is one single-select list: a confirm key emits
-// StepCompleteMsg, up/down/j/k delegate to the wrapped CompactSelector,
-// and the optional OnNav hook runs after every navigation key (regardless
-// of selector focus, matching the historical step behavior).
+// SingleSelect owns the key loop for single-select wizard steps: confirm
+// emits StepCompleteMsg, up/down/j/k delegate to the selector, and OnNav
+// runs after every navigation key.
 type SingleSelect struct {
-	// OnNav, when non-nil, runs after every navigation key with the new
-	// selection index and the option count.
+	// OnNav, when non-nil, runs after every nav key with the new index and option count.
 	OnNav func(index, total int) tea.Cmd
 
 	selector *components.CompactSelector

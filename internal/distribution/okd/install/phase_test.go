@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +13,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/testutil"
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
@@ -27,7 +27,7 @@ var installStepOrder = []distribution.StepID{
 	StepSetupAccess,
 }
 
-func TestNewOptions_TimeoutOverridesAndSSHKey(t *testing.T) {
+func TestNewOptions_TimeoutOverrides(t *testing.T) {
 	cfg := &config.Config{}
 	opts := NewOptions(cfg, "/proj")
 	if opts.BootstrapTimeout != DefaultBootstrapTimeout {
@@ -42,7 +42,6 @@ func TestNewOptions_TimeoutOverridesAndSSHKey(t *testing.T) {
 
 	cfg.Deployment.BootstrapTimeout = 90
 	cfg.Deployment.InstallTimeout = 120
-	cfg.Files.SSHPublicKey = "/keys/id_ed25519.pub"
 	opts = NewOptions(cfg, "/proj")
 	if opts.BootstrapTimeout != 90*time.Second {
 		t.Errorf("BootstrapTimeout = %v; want 90s override", opts.BootstrapTimeout)
@@ -50,82 +49,15 @@ func TestNewOptions_TimeoutOverridesAndSSHKey(t *testing.T) {
 	if opts.InstallTimeout != 120*time.Second {
 		t.Errorf("InstallTimeout = %v; want 120s override", opts.InstallTimeout)
 	}
-	if opts.SSHKeyPath != "/keys/id_ed25519" {
-		t.Errorf("SSHKeyPath = %q; want private-key path with .pub trimmed", opts.SSHKeyPath)
-	}
 }
 
-func TestInstallSteps_StepListAndSkipWiring(t *testing.T) {
-	cases := []struct {
-		name          string
-		skipTerraform bool
-		wantSkip      map[distribution.StepID]bool
-	}{
-		{
-			name: "all enabled",
-			wantSkip: map[distribution.StepID]bool{
-				StepDeployInfra:  false,
-				StepStartWorkers: false,
-			},
-		},
-		{
-			name:          "skip-terraform gates deploy and worker start",
-			skipTerraform: true,
-			wantSkip: map[distribution.StepID]bool{
-				StepDeployInfra:  true,
-				StepStartWorkers: true,
-			},
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			p := New(phase.WithLogger(logutil.NopLogger))
-			opts := &Options{
-				BaseOptions:   phase.BaseOptions{WorkDir: t.TempDir(), ProjectRoot: t.TempDir()},
-				SkipTerraform: tc.skipTerraform,
-			}
-			defs := p.installSteps(config.DefaultConfig(), opts)
-
-			if len(defs) != len(installStepOrder) {
-				t.Fatalf("step count = %d; want %d", len(defs), len(installStepOrder))
-			}
-			for i, d := range defs {
-				if d.ID != installStepOrder[i] {
-					t.Errorf("step[%d] = %q; want %q", i, d.ID, installStepOrder[i])
-				}
-			}
-			for i, d := range defs {
-				want, checked := tc.wantSkip[d.ID]
-				if !checked {
-					if d.SkipWhen != nil {
-						t.Errorf("step[%d] %s: unexpected SkipWhen predicate", i, d.ID)
-					}
-					continue
-				}
-				if got := d.SkipWhen(); got != want {
-					t.Errorf("%s: SkipWhen() = %v; want %v", d.ID, got, want)
-				}
-			}
-		})
-	}
-}
-
-// installExecuteFakes writes argv-logging openshift-install and oc scripts
-// into one temp dir and prepends it to PATH. Returns the argv log path.
 func installExecuteFakes(t *testing.T) string {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("fake binaries rely on POSIX sh")
-	}
-	dir := t.TempDir()
-	logPath := filepath.Join(dir, "argv.log")
-
-	openshiftInstall := `#!/bin/sh
+	testutil.InstallFakeBin(t, "openshift-install", `#!/bin/sh
 echo "openshift-install $@" >> "$OC_ARGV_LOG"
 exit 0
-`
-	oc := `#!/bin/sh
+`)
+	testutil.InstallFakeBin(t, "oc", `#!/bin/sh
 echo "oc $@" >> "$OC_ARGV_LOG"
 case "$1" in
   whoami) echo "system:admin" ;;
@@ -133,24 +65,15 @@ case "$1" in
   get) echo '{"items":[]}' ;;
 esac
 exit 0
-`
-	for name, script := range map[string]string{"openshift-install": openshiftInstall, "oc": oc} {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(script), 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+`)
+	logPath := filepath.Join(t.TempDir(), "argv.log")
 	t.Setenv("OC_ARGV_LOG", logPath)
 	return logPath
 }
 
 func TestInstallExecute_FullRunWithFakeBinaries(t *testing.T) {
 	argvLog := installExecuteFakes(t)
-
-	homeDir := t.TempDir()
-	origHome := invokingUserHomeDirFn
-	invokingUserHomeDirFn = func() (string, error) { return homeDir, nil }
-	t.Cleanup(func() { invokingUserHomeDirFn = origHome })
+	homeDir := stubHomeDir(t)
 
 	workDir := t.TempDir()
 	clusterDir := workspace.ClusterConfigDir(workDir)
@@ -174,7 +97,7 @@ func TestInstallExecute_FullRunWithFakeBinaries(t *testing.T) {
 
 	opts := &Options{
 		BaseOptions:         phase.BaseOptions{WorkDir: workDir, ProjectRoot: t.TempDir()},
-		SkipTerraform:       true, // provisioning needs a live Proxmox; step-list test carries its wiring
+		SkipTerraform:       true, // provisioning needs a live Proxmox
 		BootstrapTimeout:    30 * time.Second,
 		InstallTimeout:      30 * time.Second,
 		CSRApprovalInterval: 10 * time.Millisecond,

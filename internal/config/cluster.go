@@ -1,11 +1,8 @@
 // Package config defines the YAML-serializable deployment schema for okdctl.
-// Serialization uses sigs.k8s.io/yaml, which maps json struct tags to YAML key names.
-// Only json tags are authoritative; maintain no separate yaml tags.
+// Serialization uses sigs.k8s.io/yaml, mapping json struct tags to YAML keys.
 package config
 
-// Schema version markers for okdctl.yaml. The loader accepts only
-// SchemaVersionCurrent; bump it only when the schema makes a breaking
-// change.
+// Schema version markers for okdctl.yaml; bump only on a breaking change.
 const (
 	SchemaVersionV2 = "v2"
 
@@ -44,18 +41,16 @@ type DistributionConfig struct {
 type TopologyConfig struct {
 	ControlPlane NodeConfig `json:"control_plane"`
 	Workers      NodeConfig `json:"workers"`
-	// Bootstrap sizes the single ephemeral pivot VM of the OKD install:
-	// Count must be 1 (or omitted), omitted CPU/MemoryMB inherit the
-	// control-plane values, and DiskGB is not independently settable —
-	// the VM always uses the control-plane OS disk size.
+	// Bootstrap sizes the single ephemeral pivot VM: Count must be 1 (or
+	// omitted); CPU/MemoryMB default to control-plane; DiskGB always
+	// matches the control-plane OS disk.
 	Bootstrap NodeConfig `json:"bootstrap,omitzero"`
 	VMIDBase  int        `json:"vm_id_base,omitempty"`
 }
 
 // NodeConfig configures the count and per-node resources for a node group.
-// DiskGB sizes the root/OS disk only; the optional extra data disk is sized
-// per group in DisksConfig, and per-VM Proxmox placement lives in
-// ProxmoxConfig.ControlPlaneNodes / WorkerNodes.
+// DiskGB sizes only the root/OS disk — extra data disks live in DisksConfig,
+// and per-VM placement in ProxmoxConfig.ControlPlaneNodes/WorkerNodes.
 type NodeConfig struct {
 	Count    int `json:"count"`
 	CPU      int `json:"cpu"`
@@ -76,24 +71,21 @@ type NetworkingConfig struct {
 	StaticIP StaticIPConfig `json:"static_ip,omitzero"`
 	Bastion  BastionConfig  `json:"bastion,omitzero"`
 
-	// NTPServer is the chrony source shipped to every master/worker node via
-	// MachineConfig. Empty means "use the bastion" (HTTPServer.IgnitionServerIP) —
-	// the bastion is already reachable from every node and needs no extra
-	// firewall opening.
+	// NTPServer is the chrony source for master/worker MachineConfig; empty
+	// uses HTTPServer.IgnitionServerIP.
 	NTPServer string `json:"ntp_server,omitempty"`
 }
 
 // StaticIPConfig describes the static address plan for cluster nodes.
 type StaticIPConfig struct {
-	// Start is the bootstrap node's IP, not merely the first free address:
-	// masters and workers allocate sequentially from Start+1, and the API
-	// VIP derives from it (last octet .10) unless bastion.vip overrides.
-	// It must not equal a live host such as the Proxmox host or the
-	// ignition server — the bootstrap VM would ARP-fight it.
+	// Start is the bootstrap node's IP (not the first free address):
+	// masters/workers allocate from Start+1, and the API VIP derives as
+	// .10 unless bastion.vip overrides. It must not equal a live host or
+	// the bootstrap VM ARP-fights it.
 	Start string `json:"start"`
-	// Netmask is derived from machine_cidr at load time; a YAML value is
-	// overwritten. The field persists only to carry the dotted form
-	// consumed by kernel args and HAProxy/dnsmasq templates.
+	// Netmask is derived from machine_cidr at load time — a YAML value is
+	// overwritten; persisted only to carry the dotted form for kernel args
+	// and HAProxy/dnsmasq templates.
 	Netmask   string `json:"netmask"`
 	Interface string `json:"interface"`
 	DNS       string `json:"dns"`
@@ -124,9 +116,7 @@ type ProviderConfig struct {
 	Proxmox *ProxmoxConfig `json:"proxmox,omitempty"`
 }
 
-// ProxmoxConfig configures the Proxmox VE provider. Credential fields carry
-// json:"-" and are populated from env/config separately — never persisted
-// to okdctl.yaml.
+// ProxmoxConfig configures the Proxmox VE provider.
 type ProxmoxConfig struct {
 	Host        string `json:"host"`
 	Node        string `json:"node"`
@@ -136,10 +126,8 @@ type ProxmoxConfig struct {
 	Bridge      string `json:"bridge,omitempty"`
 	FCOSIso     string `json:"fcos_iso,omitempty"`
 
-	// Credentials are injected from okdctl.env / environment variables via
-	// internal/credentials, never persisted in the YAML config. All three
-	// fields carry `json:"-"` so sigs.k8s.io/yaml excludes them from both
-	// load and save.
+	// Credentials come from internal/credentials (okdctl.env/env vars),
+	// never persisted; json:"-" excludes them from load and save.
 	Username string      `json:"-"`
 	Password SecretBytes `json:"-"`
 	APIToken SecretBytes `json:"-"`
@@ -151,33 +139,26 @@ type ProxmoxConfig struct {
 	CPUType            string              `json:"cpu_type,omitempty"`
 	AdditionalNetworks []AdditionalNetwork `json:"additional_networks,omitempty"`
 	NUMAEnabled        bool                `json:"numa_enabled,omitempty"`
-	// HAEnabled provisions Proxmox HA-manager anti-affinity for master VMs
-	// (requires PVE 9+; see infrastructure/terraform/modules/proxmox-okd/ha.tf).
+	// HAEnabled provisions Proxmox HA-manager anti-affinity for masters
+	// (requires PVE 9+; see proxmox-okd/ha.tf).
 	HAEnabled bool `json:"ha_enabled,omitempty"`
-	// ControlPlaneNodes and WorkerNodes assign each VM by index to a
-	// Proxmox node. A list shorter than the group's topology count pads
-	// with Node for the remaining VMs; a longer list fails validation.
-	// Downstream keeps OKD's "master" vocabulary: these render into the
-	// master_target_nodes / worker_target_nodes terraform vars.
+	// ControlPlaneNodes/WorkerNodes assign VMs by index to a Proxmox node
+	// (short lists pad with Node, long ones fail validation); rendered into
+	// terraform's master_target_nodes/worker_target_nodes vars.
 	ControlPlaneNodes []string `json:"control_plane_nodes,omitempty"`
 	WorkerNodes       []string `json:"worker_nodes,omitempty"`
-	// SSHHostFingerprint pins the Proxmox host's SSH key in standard
-	// SHA256:<base64> format (from ssh-keygen -lf or the Proxmox UI). When
-	// set, every SSH connection is verified and refused on mismatch. When
-	// unset, accept-new TOFU applies and the observed fingerprints are
-	// logged at WARN so the operator can pin one.
+	// SSHHostFingerprint pins the Proxmox host key (SHA256:<base64> from
+	// ssh-keygen -lf); set means mismatches are refused, unset means
+	// accept-new TOFU with the fingerprint logged at WARN.
 	SSHHostFingerprint string `json:"ssh_host_fingerprint,omitempty"`
-	// RequirePinnedFingerprint fails closed when SSHHostFingerprint is not
-	// set: sshpin.Verify returns an AuthError instead of the WARN+TOFU
-	// fallback. Intended for security-sensitive deploys. Default false
-	// preserves existing accept-new behaviour.
+	// RequirePinnedFingerprint fails closed when SSHHostFingerprint is unset
+	// (sshpin.Verify returns AuthError instead of WARN+TOFU); default false
+	// preserves accept-new.
 	RequirePinnedFingerprint bool `json:"require_pinned_fingerprint,omitempty"`
 }
 
-// redactedProxmoxConfig is the safe projection of ProxmoxConfig returned by
-// Redacted(). It omits Username, Password, and APIToken so a slog.Any call
-// carrying a *ProxmoxConfig cannot reach those fields through RedactHandler's
-// interface dispatch.
+// redactedProxmoxConfig is ProxmoxConfig's Redacted() projection, omitting
+// Username/Password/APIToken so slog.Any can't reach them via RedactHandler.
 type redactedProxmoxConfig struct {
 	Host                     string
 	Node                     string
@@ -199,8 +180,7 @@ type redactedProxmoxConfig struct {
 	RequirePinnedFingerprint bool
 }
 
-// Redacted returns a struct containing only the non-credential fields of p,
-// satisfying the interface{ Redacted() any } that logutil.redactAny detects.
+// Redacted returns p's non-credential fields for logutil.redactAny.
 func (p *ProxmoxConfig) Redacted() any {
 	if p == nil {
 		return nil
@@ -261,13 +241,10 @@ func (c *Config) TerraformEnvName() string {
 	return defaultTerraformEnv
 }
 
-// DisksConfig sizes the optional extra disks attached to each node in a
-// group: the Ceph/storage data disk per role, and the dedicated ceph
-// mon-store disk on control-plane nodes. The root/OS disk is sized by
-// topology.<group>.disk_gb (NodeConfig.DiskGB); per-VM placement lives in
-// provider.proxmox. A size of 0 omits the disk — and because every render
-// of terraform.tfvars emits these values, zeroing one after initial apply
-// makes terraform destroy that disk.
+// DisksConfig sizes the optional extra disks per node group (data disk per
+// role, ceph mon-store on control-plane); the OS disk is
+// topology.<group>.disk_gb. A size of 0 omits the disk — zeroing one after
+// apply makes terraform destroy it on the next run.
 type DisksConfig struct {
 	WorkerDataSizeGB       int `json:"worker_data_size_gb"`
 	ControlPlaneDataSizeGB int `json:"control_plane_data_size_gb"`

@@ -9,15 +9,11 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-// presented wraps an error whose failure the command has already rendered as a
-// rich box (deploy's FailureSummary/InterruptSummary). The top-level handler
-// checks IsPresented to avoid stacking a second, generic error box on top.
-// Unwrap keeps the chain intact so errors.As exit-code classification still
-// walks to the underlying errtypes value.
+// presented wraps an error already rendered as a rich box; Unwrap keeps
+// errors.As reaching the underlying errtypes value.
 type presented struct{ err error }
 
-// Presented marks err as already surfaced to the user by a command-owned box.
-// Returns nil when err is nil.
+// Presented marks err as already surfaced by a command-owned box; nil in, nil out.
 func Presented(err error) error {
 	if err == nil {
 		return nil
@@ -29,23 +25,14 @@ func (p *presented) Error() string { return p.err.Error() }
 func (p *presented) Unwrap() error { return p.err }
 
 // IsPresented reports whether err (or anything it wraps) was already rendered
-// by a command-owned failure box.
+// by a command-owned box.
 func IsPresented(err error) bool {
 	var p *presented
 	return errors.As(err, &p)
 }
 
-// ErrorSummary renders a command error inside the same boxed chrome the deploy
-// summaries use, skinned red. It reads the errtypes Kind for the headline
-// chip, wraps the structured message, promotes the structured hint to a
-// next-step line, and footers the exit code and run_id for bug reports. This
-// gives an ordinary node/status failure the same designed treatment a deploy
-// failure already gets, instead of a raw "[ERROR] command failed err=…" line.
-//
-// Both the chip and the hint come from errtypes.Describe, never from
-// re-parsing Error(): an untyped error renders under a plain "error" chip with
-// its whole message as the headline, and a message that naturally contains
-// "; " is no longer mis-split into a spurious hint.
+// ErrorSummary renders err in the deploy-summary boxed chrome, using
+// errtypes.Describe (never re-parsed Error() text) for the kind and hint.
 func ErrorSummary(err error, exitCode int, runID string) string {
 	kind, headline, hint := describeError(err)
 
@@ -77,9 +64,8 @@ func ErrorSummary(err error, exitCode int, runID string) string {
 	return "\n" + tui.BoxedSectionAccent(sb.String(), "error", tui.DefaultBoxWidth, tui.ColorError) + "\n"
 }
 
-// describeError decomposes err into the box's kind chip, headline, and
-// optional next-step hint via errtypes.Describe. Untyped errors fall back to a
-// plain "error" chip with the whole message as the headline and no hint.
+// describeError decomposes err via errtypes.Describe, falling back to a plain
+// "error" chip for untyped errors.
 func describeError(err error) (kind, headline, hint string) {
 	if d, ok := errtypes.Describe(err); ok {
 		return d.Kind.Label(), strings.TrimSpace(d.Message), strings.TrimSpace(d.Hint)
@@ -87,9 +73,8 @@ func describeError(err error) (kind, headline, hint string) {
 	return "error", strings.TrimSpace(err.Error()), ""
 }
 
-// wrapText greedy-wraps s to width columns, hard-splitting any single token
-// (a long path or terraform address) that exceeds width so the box never
-// overflows its budget. Returns at least one line.
+// wrapText greedy-wraps s to width columns, hard-splitting tokens that exceed
+// it; returns at least one line.
 func wrapText(s string, width int) []string {
 	width = max(width, 1)
 	var lines []string

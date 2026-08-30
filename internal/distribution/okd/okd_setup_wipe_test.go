@@ -15,12 +15,9 @@ import (
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
-// The setup phase's own steps run real host operations (package installs,
-// service control), so these tests exercise only the pre-phase contract:
-// guardLiveCluster runs before the wipe, a failed pre-deploy cleanup aborts
-// with a ClusterError, and the wipe-vs-retain decision Setup delegates to
-// cleanup (WorkOnly with ForceCredentialWipe = FreshDeploy). They never let
-// Setup fall through to setupPhase.Execute.
+// These tests exercise only the pre-phase contract (guard, cleanup abort,
+// wipe-vs-retain) since Setup's real phase steps touch the host; none reach
+// setupPhase.Execute.
 
 func seedEmptyTFState(t *testing.T, projectRoot string) {
 	t.Helper()
@@ -75,9 +72,6 @@ func exists(t *testing.T, path string) bool {
 	return false
 }
 
-// TestSetupRefusesLiveClusterBeforeWipe locks that a populated terraform state
-// makes Setup refuse before touching the work directory: guardLiveCluster runs
-// ahead of the wipe, so credentials and generated artifacts survive intact.
 func TestSetupRefusesLiveClusterBeforeWipe(t *testing.T) {
 	root := t.TempDir()
 	workDir := filepath.Join(root, workspace.WorkDirName)
@@ -102,9 +96,6 @@ func TestSetupRefusesLiveClusterBeforeWipe(t *testing.T) {
 	}
 }
 
-// TestSetupCleanupIncompleteAborts locks that a failed pre-deploy cleanup
-// surfaces as a *errtypes.ClusterError naming the incomplete cleanup rather
-// than proceeding into the setup phase.
 func TestSetupCleanupIncompleteAborts(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root bypasses the directory permission that forces the cleanup failure")
@@ -114,9 +105,8 @@ func TestSetupCleanupIncompleteAborts(t *testing.T) {
 	if err := os.MkdirAll(workDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// A 0o500 subdir holding a file cannot have that file unlinked, so
-	// os.RemoveAll on the downloads tree fails and the work-dir step reports
-	// an incomplete cleanup. No terraform state ⇒ guardLiveCluster passes.
+	// 0o500 on the parent blocks unlinking the file inside, so RemoveAll
+	// fails and the cleanup step reports incomplete.
 	locked := filepath.Join(workDir, "downloads", "locked")
 	if err := os.MkdirAll(locked, 0o755); err != nil {
 		t.Fatal(err)
@@ -141,16 +131,12 @@ func TestSetupCleanupIncompleteAborts(t *testing.T) {
 	}
 }
 
-// TestSetupWipeDecision exercises the wipe-vs-retain matrix through the same
-// cleanup delegation Setup uses: WorkOnly with ForceCredentialWipe wired from
-// FreshDeploy. Populated state without force preserves credentials; empty
-// state or an explicit force wipes everything including auth.
 func TestSetupWipeDecision(t *testing.T) {
 	tests := []struct {
 		name         string
 		seedState    func(t *testing.T, projectRoot string)
-		forceWipe    bool // mirrors SetupOpts.FreshDeploy
-		wantRetained bool // auth + work dir survive
+		forceWipe    bool
+		wantRetained bool
 	}{
 		{
 			name:         "populated state no force retains credentials",
@@ -192,7 +178,7 @@ func TestSetupWipeDecision(t *testing.T) {
 				t.Fatalf("Cleanup: %v", err)
 			}
 
-			// Generated artifacts are always removed regardless of retention.
+			// downloads is always wiped regardless of retention.
 			if exists(t, downloads) {
 				t.Errorf("downloads survived; want it wiped")
 			}

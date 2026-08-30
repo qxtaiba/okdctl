@@ -9,10 +9,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
 
-// OperatorHealth summarizes ClusterOperator conditions across the cluster.
-// Degraded and Progressing hold the operator names in each state; Available
-// counts operators reporting Available=True over Total. A stable cluster has
-// both name slices empty and Available == Total.
+// OperatorHealth summarizes ClusterOperator conditions.
+// Stable means Degraded and Progressing are both empty and Available == Total.
 type OperatorHealth struct {
 	Degraded    []string
 	Progressing []string
@@ -20,10 +18,8 @@ type OperatorHealth struct {
 	Total       int
 }
 
-// ClusterOperatorHealth reports Degraded and Progressing ClusterOperators plus
-// an available/total count from `oc get clusteroperators -o json`. Day-2 health
-// probes read this to distinguish a stable cluster from one mid-rollout
-// (Progressing) or carrying a broken operator (Degraded).
+// ClusterOperatorHealth reports Degraded/Progressing ClusterOperators and an
+// available/total count from `oc get clusteroperators -o json`.
 func (c *Client) ClusterOperatorHealth(ctx context.Context) (OperatorHealth, error) {
 	data, err := c.getJSONChecked(ctx, "get cluster operators", "get", "clusteroperators", "-o", "json")
 	if err != nil {

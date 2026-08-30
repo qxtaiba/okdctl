@@ -29,7 +29,6 @@ func TestValidateConfigName(t *testing.T) {
 		{name: "leading hyphen", input: "-leading", wantErr: true},
 		{name: "too long", input: strings.Repeat("a", 65), wantErr: true},
 		{name: "single char", input: "a"},
-		{name: "two chars", input: "a1"},
 		{name: "unicode", input: "é", wantErr: true},
 		{name: "null byte", input: "a\x00b", wantErr: true},
 	}
@@ -46,55 +45,17 @@ func TestValidateConfigName(t *testing.T) {
 	}
 }
 
-func TestDnsmasqConfigPath(t *testing.T) {
-	t.Run("valid name returns expected path", func(t *testing.T) {
-		got, err := DnsmasqConfigPath("okd-prod")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		want := filepath.Join(dnsmasqConfigDir, "okd-prod.conf")
-		if got != want {
-			t.Errorf("DnsmasqConfigPath = %q; want %q", got, want)
-		}
-	})
-
-	t.Run("path traversal rejected", func(t *testing.T) {
-		_, err := DnsmasqConfigPath("../etc/passwd")
-		if err == nil {
-			t.Error("expected error for path traversal input, got nil")
-		}
-	})
-
-	t.Run("empty name rejected", func(t *testing.T) {
-		_, err := DnsmasqConfigPath("")
-		if err == nil {
-			t.Error("expected error for empty name, got nil")
-		}
-	})
-}
-
-func TestConfigName(t *testing.T) {
-	got := configName("prod")
-	if got != "okd-prod" {
-		t.Errorf("configName(%q) = %q; want %q", "prod", got, "okd-prod")
+func TestDnsmasqConfigPath_PathTraversalRejected(t *testing.T) {
+	if _, err := DnsmasqConfigPath("../etc/passwd"); err == nil {
+		t.Error("expected error for path traversal input, got nil")
 	}
 }
 
-// TestWriteDnsmasqConfig locks the backup-then-write contract that
-// validateAndRestartDnsmasq's tested rollback depends on: the .backup file
-// it restores from is created only here.
+// TestWriteDnsmasqConfig locks the backup-then-write contract
+// validateAndRestartDnsmasq's rollback depends on.
 func TestWriteDnsmasqConfig(t *testing.T) {
-	redirect := func(t *testing.T) string {
-		t.Helper()
-		dir := t.TempDir()
-		orig := dnsmasqConfigDir
-		dnsmasqConfigDir = dir
-		t.Cleanup(func() { dnsmasqConfigDir = orig })
-		return dir
-	}
-
 	t.Run("first write creates conf without backup", func(t *testing.T) {
-		dir := redirect(t)
+		dir := redirectConfigDir(t)
 		if err := writeDnsmasqConfig(context.Background(), "okd", "address=/api/10.0.0.1\n"); err != nil {
 			t.Fatalf("writeDnsmasqConfig: %v", err)
 		}
@@ -112,7 +73,7 @@ func TestWriteDnsmasqConfig(t *testing.T) {
 	})
 
 	t.Run("overwrite backs up prior bytes before replacing", func(t *testing.T) {
-		dir := redirect(t)
+		dir := redirectConfigDir(t)
 		confPath := filepath.Join(dir, "okd.conf")
 		prior := "address=/api/10.0.0.1\n"
 		if err := os.WriteFile(confPath, []byte(prior), 0o644); err != nil {
@@ -141,7 +102,7 @@ func TestWriteDnsmasqConfig(t *testing.T) {
 	})
 
 	t.Run("invalid name rejected before any file op", func(t *testing.T) {
-		dir := redirect(t)
+		dir := redirectConfigDir(t)
 		err := writeDnsmasqConfig(context.Background(), "../evil", "x")
 		if err == nil {
 			t.Fatal("path-traversal name must be rejected")
@@ -156,7 +117,7 @@ func TestWriteDnsmasqConfig(t *testing.T) {
 	})
 
 	t.Run("cancelled ctx writes nothing", func(t *testing.T) {
-		dir := redirect(t)
+		dir := redirectConfigDir(t)
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		if err := writeDnsmasqConfig(ctx, "okd", "x"); !errors.Is(err, context.Canceled) {

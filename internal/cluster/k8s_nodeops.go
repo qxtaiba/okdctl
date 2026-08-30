@@ -12,10 +12,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
 
-// DrainOptions tunes a node drain. Force allows eviction of pods not managed
-// by a controller (bare pods); without it drain refuses such pods. Timeout is
-// passed verbatim to `oc adm drain --timeout` (e.g. "10m"); empty means no
-// client-side timeout.
+// DrainOptions tunes a node drain: Force evicts pods not owned by a
+// controller; empty Timeout means no client-side timeout.
 type DrainOptions struct {
 	Force            bool
 	Timeout          string
@@ -23,8 +21,7 @@ type DrainOptions struct {
 	IgnoreDaemonsets bool
 }
 
-// Cordon marks node unschedulable via `oc adm cordon`. Idempotent: cordoning
-// an already-cordoned node exits 0.
+// Cordon marks node unschedulable via `oc adm cordon`; idempotent.
 func (c *Client) Cordon(ctx context.Context, node string) error {
 	if err := c.runCheck(ctx, "adm", "cordon", node); err != nil {
 		return &errtypes.ClusterError{Msg: fmt.Sprintf("cordon node %s", node), Err: err}
@@ -32,7 +29,7 @@ func (c *Client) Cordon(ctx context.Context, node string) error {
 	return nil
 }
 
-// Uncordon marks node schedulable again via `oc adm uncordon`. Idempotent.
+// Uncordon marks node schedulable again via `oc adm uncordon`; idempotent.
 func (c *Client) Uncordon(ctx context.Context, node string) error {
 	if err := c.runCheck(ctx, "adm", "uncordon", node); err != nil {
 		return &errtypes.ClusterError{Msg: fmt.Sprintf("uncordon node %s", node), Err: err}
@@ -40,9 +37,8 @@ func (c *Client) Uncordon(ctx context.Context, node string) error {
 	return nil
 }
 
-// Drain evicts pods off node via `oc adm drain`. It always cordons first
-// (drain's own behavior), so calling Cordon beforehand only makes the intent
-// explicit. Re-running against an already-drained node is a no-op.
+// Drain evicts pods off node via `oc adm drain`, which cordons first;
+// re-running against an already-drained node is a no-op.
 func (c *Client) Drain(ctx context.Context, node string, opts DrainOptions) error {
 	args := []string{"adm", "drain", node}
 	if opts.IgnoreDaemonsets {
@@ -63,9 +59,8 @@ func (c *Client) Drain(ctx context.Context, node string, opts DrainOptions) erro
 	return nil
 }
 
-// DeleteNode removes the Node object via `oc delete node --ignore-not-found`,
-// so a re-run after the object is already gone succeeds. This deletes only the
-// Kubernetes registration; the VM teardown is a separate terraform step.
+// DeleteNode removes the Node object via `oc delete node --ignore-not-found`
+// (idempotent); it deletes only the k8s registration, not the VM.
 func (c *Client) DeleteNode(ctx context.Context, node string) error {
 	if err := c.runCheck(ctx, "delete", "node", node, "--ignore-not-found"); err != nil {
 		return &errtypes.ClusterError{Msg: fmt.Sprintf("delete node %s", node), Err: err}
@@ -74,8 +69,8 @@ func (c *Client) DeleteNode(ctx context.Context, node string) error {
 }
 
 // SetMastersSchedulable patches the cluster Scheduler so control-plane nodes
-// accept regular workloads (or stop accepting them). Required before draining
-// the last workers in a compaction so pods and ingress have somewhere to land.
+// accept (or stop accepting) regular workloads — required before draining the
+// last workers in a compaction.
 func (c *Client) SetMastersSchedulable(ctx context.Context, schedulable bool) error {
 	patch := fmt.Sprintf(`{"spec":{"mastersSchedulable":%t}}`, schedulable)
 	if err := c.runCheck(ctx, "patch", "schedulers.config.openshift.io", "cluster",
@@ -106,9 +101,8 @@ func parseMastersSchedulable(data []byte) (bool, error) {
 	return s.Spec.MastersSchedulable, nil
 }
 
-// NodeDetail is the projected identity of a cluster node used by lifecycle
-// guards: name, role, readiness, and the trailing-integer index parsed from
-// the name (worker2 → 2), which maps a node to its terraform count index.
+// NodeDetail is a cluster node's projected identity — name, role, readiness —
+// used by lifecycle guards.
 type NodeDetail struct {
 	Name  string
 	Role  nodetypes.NodeRole
@@ -160,18 +154,17 @@ func parseNodeList(data []byte) ([]NodeDetail, error) {
 	return out, nil
 }
 
-// PodPlacement is a pod's identity and the node it is scheduled on, used by
-// storage/ingress guards to decide whether removing a node destroys data or
-// strands ingress.
+// PodPlacement is a pod's identity and scheduled node, used by storage/
+// ingress guards to detect whether removing a node destroys data or strands
+// ingress.
 type PodPlacement struct {
 	Name      string
 	Namespace string
 	NodeName  string
 }
 
-// PodsForSelector lists pods matching selector and their node placement.
-// namespace "" queries all namespaces (`-A`); selector is a label selector
-// (e.g. "app=rook-ceph-osd"), empty for none.
+// PodsForSelector lists pods matching selector and their node placement;
+// namespace "" queries all namespaces, selector "" matches all pods.
 func (c *Client) PodsForSelector(ctx context.Context, namespace, selector string) ([]PodPlacement, error) {
 	args := []string{"get", "pods"}
 	if namespace == "" {
@@ -217,9 +210,7 @@ func parsePodPlacements(data []byte) ([]PodPlacement, error) {
 	return out, nil
 }
 
-// Apply applies a manifest via `oc apply -f -`, feeding it on stdin. cluster
-// had no stdin primitive before this; node-lifecycle's compact-ingress step is
-// the first non-phase caller that needs one.
+// Apply applies a manifest via `oc apply -f -`, feeding it on stdin.
 func (c *Client) Apply(ctx context.Context, manifest []byte) error {
 	result, err := c.exec.RunWithStdin(ctx, string(manifest), c.CLI, "apply", "-f", "-")
 	if err != nil {
@@ -231,11 +222,8 @@ func (c *Client) Apply(ctx context.Context, manifest []byte) error {
 	return nil
 }
 
-// NodeIndex extracts the trailing integer of a node name (worker2 → 2, true).
-// okdctl VMs are numbered per role, so the suffix is the terraform count index;
-// a name with no trailing digits returns (0, false). Kubernetes reports nodes
-// by FQDN (grappleberry-worker0.grappleberry.k8s.local), so the domain is
-// stripped first — the index lives in the trailing digits of the first label.
+// NodeIndex extracts the trailing integer from a node name (worker2 → 2, true).
+// The domain is stripped first since kubernetes reports nodes by FQDN.
 func NodeIndex(name string) (int, bool) {
 	if dot := strings.IndexByte(name, '.'); dot != -1 {
 		name = name[:dot]

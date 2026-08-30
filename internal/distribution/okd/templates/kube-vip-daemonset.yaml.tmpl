@@ -1,9 +1,6 @@
-# =============================================================================
-# kube-vip DaemonSet - ARP mode for API server VIP
-# =============================================================================
-# Injected at install time. Runs on control plane nodes and manages the VIP
-# via ARP announcements with leader election.
-# =============================================================================
+# kube-vip DaemonSet (ARP mode) for the API server VIP. Injected at install
+# time; runs on control plane nodes and manages the VIP via ARP announcements
+# with leader election.
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:

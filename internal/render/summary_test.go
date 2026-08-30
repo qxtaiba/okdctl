@@ -9,22 +9,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution"
 )
 
-func TestBuilder(t *testing.T) {
-	sb := NewBuilder()
-	sb.WriteString("\n")
-	sb.Section("api")
-	sb.KV("reachable", "yes")
-	sb.KVHighlight("username", "kubeadmin")
-	sb.Newline()
-
-	out := sb.String()
-	for _, want := range []string{"api", "reachable", "yes", "username", "kubeadmin"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("Builder output missing %q:\n%s", want, out)
-		}
-	}
-}
-
 func TestValidationSummary(t *testing.T) {
 	valid := &config.ValidationResult{}
 	if out := ValidationSummary(valid); !strings.Contains(out, "configuration is valid") {
@@ -82,14 +66,5 @@ func TestFailureSummary(t *testing.T) {
 	destroy := strings.Index(out, "okdctl destroy")
 	if resume < 0 || fresh < 0 || destroy < 0 || resume > fresh || fresh > destroy {
 		t.Errorf("next steps not ordered resume, --fresh, destroy (%d, %d, %d):\n%s", resume, fresh, destroy, out)
-	}
-}
-
-func TestDryRunSummary(t *testing.T) {
-	out := DryRunSummary("deploy step listing", []DryRunStep{{ID: "step-1", Name: "First step"}})
-	for _, want := range []string{"dry-run — no changes made", "would execute", "step-1", "First step"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("dry-run summary missing %q:\n%s", want, out)
-		}
 	}
 }

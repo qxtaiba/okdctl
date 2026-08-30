@@ -152,8 +152,8 @@ func TestDestroyGradeVerbPolicy(t *testing.T) {
 		"start":   false,
 	}
 	for verb, exp := range want {
-		if got := destroyGradeVerb(verb); got != exp {
-			t.Errorf("destroyGradeVerb(%q) = %v, want %v", verb, got, exp)
+		if got := destroyGradeVerbs[verb]; got != exp {
+			t.Errorf("destroyGradeVerbs[%q] = %v, want %v", verb, got, exp)
 		}
 	}
 }
@@ -165,7 +165,7 @@ func TestDestroyGradeVerbPolicy(t *testing.T) {
 func TestDestroyGradeVerbsDenyBareYes(t *testing.T) {
 	for _, verb := range []string{"remove", "compact"} {
 		t.Run(verb, func(t *testing.T) {
-			if !destroyGradeVerb(verb) {
+			if !destroyGradeVerbs[verb] {
 				t.Fatalf("%s must be a destroy-grade verb for this test to be meaningful", verb)
 			}
 			testStdinReader = strings.NewReader("y\n")
@@ -173,7 +173,7 @@ func TestDestroyGradeVerbsDenyBareYes(t *testing.T) {
 
 			rc := &nodeRunnerCtx{}
 			var errW bytes.Buffer
-			hook := nodeConfirmHook(rc, nodeConsent{twoStage: destroyGradeVerb(verb)}, "prod", &errW)
+			hook := nodeConfirmHook(rc, nodeConsent{twoStage: destroyGradeVerbs[verb]}, "prod", &errW)
 
 			ok, err := hook(context.Background(), &node.OpPlan{Op: node.OpRemove, Cluster: "prod"})
 			if err != nil {

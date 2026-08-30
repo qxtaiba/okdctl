@@ -1,7 +1,5 @@
-// Package main is the entry point for the okdctl binary, which deploys
-// OKD clusters on Proxmox. Root-rejection policy lives in internal/cli
-// (ensureRoot) so it can distinguish commands that require root from those
-// that do not.
+// Package main is the okdctl binary entry point; root-rejection policy lives in
+// internal/cli (ensureRoot).
 package main
 
 import (
@@ -22,12 +20,8 @@ func main() {
 	cli.Execute()
 }
 
-// preflight runs startup checks that must happen before the cobra command
-// tree runs. It intentionally lives in main() rather than init() so tui
-// output is available when reporting errors. Signal handling is installed
-// inside cli.Execute; a Ctrl-C during preflight exits via the default
-// SIGINT disposition (no summary printed), which is acceptable given
-// preflight's sub-second runtime.
+// preflight runs pre-cobra startup checks; lives in main() (not init()) so tui
+// output is available when reporting errors.
 func preflight() {
 	// Warn before OKDCTL_BIN_DIR is silently dropped downstream.
 	if v := os.Getenv("OKDCTL_BIN_DIR"); v != "" {

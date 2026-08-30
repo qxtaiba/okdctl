@@ -1,30 +1,26 @@
 package secretstore
 
-// Settings is the typed representation of the secretstore addon's
-// settings map. Exactly one of OnePassword, Vault, or Bitwarden is non-nil
-// after a successful DecodeSettings call, matching the active Provider.
+// Settings is the typed representation of the secretstore addon's settings map.
+// Exactly one of OnePassword, Vault, or Bitwarden is non-nil after
+// decodeSettings, matching Provider.
 type Settings struct {
 	Provider    providerKind
-	SecretsDir  string
 	OnePassword *onePasswordSettings
 	Vault       *vaultSettings
 	Bitwarden   *bitwardenSettings
 }
 
-// onePasswordSettings holds decoded settings for the onepassword provider.
 type onePasswordSettings struct {
 	ConnectHost string
 	Vaults      map[string]int
 }
 
-// vaultSettings holds decoded settings for the vault provider.
 type vaultSettings struct {
 	Server  string
 	Path    string
 	Version string
 }
 
-// bitwardenSettings holds decoded settings for the bitwarden provider.
 type bitwardenSettings struct {
 	OrganizationID string
 	ProjectID      string
@@ -33,20 +29,14 @@ type bitwardenSettings struct {
 	SDKServerURL   string
 }
 
-// decodeSettings converts the flat settings map into a Settings value,
-// populating only the sub-struct for the active provider. An error is
-// returned only when the onepassword vault CSV is malformed. Install and
-// ValidateSettings call this directly instead of the exported
-// DecodeSettings so neither needs an unchecked type assertion on any.
+// decodeSettings converts the settings map into Settings for the active
+// provider; it errors only on a malformed onepassword vault CSV.
 func (s *secretStore) decodeSettings(settings map[string]string) (Settings, error) {
 	prov := providerKind(settings[SettingProvider])
 	if prov == "" {
 		prov = providerOnepassword
 	}
-	ts := Settings{
-		Provider:   prov,
-		SecretsDir: settingOrDefault(settings, SettingSecretsDir, defaultSecretsDir),
-	}
+	ts := Settings{Provider: prov}
 	switch prov {
 	case providerOnepassword:
 		vaults, err := parseOnepasswordVaults(settings[SettingOnepasswordVaults])
@@ -73,10 +63,4 @@ func (s *secretStore) decodeSettings(settings map[string]string) (Settings, erro
 		}
 	}
 	return ts, nil
-}
-
-// DecodeSettings satisfies addon.ConfigurableAddon; see decodeSettings for
-// the typed path used internally by this package.
-func (s *secretStore) DecodeSettings(settings map[string]string) (any, error) {
-	return s.decodeSettings(settings)
 }

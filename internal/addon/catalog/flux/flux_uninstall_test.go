@@ -15,9 +15,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
-// installFakeTools writes fake helm and oc binaries to a TempDir and prepends
-// the dir to PATH. Each binary appends its argv as a colon-separated line to
-// the file at $ARGV_LOG when set, then exits with $EXIT_CODE (default 0).
+// installFakeTools installs fake helm/oc binaries that log argv to $ARGV_LOG and exit $EXIT_CODE.
 func installFakeTools(t *testing.T) {
 	t.Helper()
 	script := "#!/bin/sh\n[ -n \"$ARGV_LOG\" ] && printf '%s\\n' \"$(basename \"$0\"):$*\" >> \"$ARGV_LOG\"\nexit \"${EXIT_CODE:-0}\"\n"
@@ -90,11 +88,7 @@ func TestUninstall_FailuresDoNotAbort(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("PATH override semantics differ on windows")
 	}
-	// Empty PATH so helm/oc cannot be resolved — each Run returns a real
-	// exec lookup error. warnOnErr also fires on non-zero exit codes (Run
-	// folds those into Result with a nil error); the exit-code branch is
-	// covered separately below. This exercises the warnOnErr branch 3
-	// times and proves the sequence does not abort early.
+	// Empty PATH so helm/oc cannot be resolved.
 	t.Setenv("PATH", t.TempDir())
 	h := &testutil.CaptureHandler{}
 	env := &addon.Environment{
@@ -113,13 +107,9 @@ func TestUninstall_FailuresDoNotAbort(t *testing.T) {
 	}
 }
 
-// TestUninstall_NonZeroExitWarns locks the exit-code half of warnOnErr:
-// Run returns a nil error for a non-zero helm/oc exit, so Uninstall must
-// inspect Result.ExitCode to notice the failure at all.
+// TestUninstall_NonZeroExitWarns locks that Uninstall inspects Result.ExitCode,
+// since Run returns nil on a non-zero exit.
 func TestUninstall_NonZeroExitWarns(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("PATH override semantics differ on windows")
-	}
 	argvLog := filepath.Join(t.TempDir(), "argv.log")
 	installFakeTools(t)
 	h := &testutil.CaptureHandler{}

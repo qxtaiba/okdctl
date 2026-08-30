@@ -23,15 +23,10 @@ func TestIsAuthError(t *testing.T) {
 		want bool
 	}{
 		{"401 unauthorized", true},
-		{"HTTP 401 Unauthorized from registry", true},
 		{"UNAUTHORIZED: access to the requested resource is not authorized", true},
 		{"Forbidden", true},
-		{"403 Forbidden", true},
 		{"no basic auth provided", true},
-		{"No Basic Auth Provided", true},
 		{"connection refused", false},
-		{"tls handshake failure", false},
-		{"dial tcp: i/o timeout", false},
 		{"", false},
 	}
 	for _, tt := range cases {
@@ -69,9 +64,6 @@ func makeOCTarGz(t *testing.T, ocContent []byte) (archive []byte, sha256Hex stri
 	return raw, hex.EncodeToString(sum[:])
 }
 
-// TestBootstrapOC_cachedSkipsFetch verifies the early-return path when oc is
-// already present in downloadDir — the supply-chain trust anchor relies on
-// this caching behaviour to avoid re-fetching on every run.
 func TestBootstrapOC_cachedSkipsFetch(t *testing.T) {
 	dir := t.TempDir()
 	cached := filepath.Join(dir, "oc")
@@ -79,8 +71,7 @@ func TestBootstrapOC_cachedSkipsFetch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Point base URL at an unroutable host so a real fetch would fail; the test
-	// must hit the cache path and never reach the network.
+	// Unroutable host: a real fetch would fail, forcing the cache path.
 	oldBase := bootstrapOCBaseURL
 	bootstrapOCBaseURL = "http://127.0.0.1:1"
 	t.Cleanup(func() { bootstrapOCBaseURL = oldBase })

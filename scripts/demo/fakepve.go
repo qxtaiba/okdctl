@@ -1,6 +1,5 @@
-// Command fakepve serves a canned Proxmox VE API over self-signed HTTPS on
-// 127.0.0.1:8006 so the README demo recording exercises real wizard
-// discovery without a hypervisor. Demo tooling only — never shipped.
+// Command fakepve serves a canned Proxmox VE API over self-signed HTTPS for
+// demo recordings, without a hypervisor. Demo tooling only — never shipped.
 package main
 
 import (

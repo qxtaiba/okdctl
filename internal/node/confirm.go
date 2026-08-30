@@ -8,16 +8,12 @@ import (
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
 
-// ErrDeclined reports that an operator declined a mutating node op at its
-// confirmation gate. Ops return it — rather than a nil error — so a composing
-// caller (compact) can never mistake a decline for success; standalone CLI
-// callers map it back to a clean exit. errors.Is-comparable.
+// ErrDeclined reports an operator's decline at the confirmation gate, never nil
+// so a composing caller can't mistake it for success.
 var ErrDeclined = errors.New("operation declined at confirmation")
 
-// PlanNode is one node's line in an OpPlan: the terraform action queued against
-// it plus the read-only guard findings that bear on the operator's decision.
-// A non-nil Blocked means the plan would refuse this node (compact reports every
-// worker's verdict; remove/resize abort before building a blocked plan).
+// PlanNode is one node's line in an OpPlan: its queued terraform action plus guard findings.
+// A non-nil Blocked means the plan would refuse this node.
 type PlanNode struct {
 	Name      string
 	Role      nodetypes.NodeRole
@@ -28,9 +24,8 @@ type PlanNode struct {
 	Blocked   error
 }
 
-// OpPlan is the read-only summary a node op hands to its confirm/preview hooks
-// after guards and preflight pass and before any mutation, so the CLI can render
-// an informed prompt or a dry-run box. Nodes are in execution order.
+// OpPlan is the read-only summary a node op hands to confirm/preview hooks before any mutation.
+// Nodes are in execution order.
 type OpPlan struct {
 	Op                 Op
 	Cluster            string
@@ -43,8 +38,8 @@ type OpPlan struct {
 	IngressReplicas    int
 }
 
-// DestroysData reports whether the plan deletes a VM, taking its data disk with
-// it — the irreversible case the confirmation box flags in amber.
+// DestroysData reports whether the plan deletes a VM (and its data disk) — the
+// case the confirmation box flags in amber.
 func (p *OpPlan) DestroysData() bool {
 	for i := range p.Nodes {
 		if p.Nodes[i].Action == terraform.PlanActionDelete {
@@ -54,23 +49,16 @@ func (p *OpPlan) DestroysData() bool {
 	return false
 }
 
-// ConfirmFunc gates a mutating node op. It runs after the op's read-only guards
-// and preflight pass and before any mutation; returning (false, nil) aborts and
-// the op reports ErrDeclined, while a non-nil error propagates. It never runs in
-// dry-run, and it is invoked with no progress span open so an interactive prompt
-// never fights a spinner.
+// ConfirmFunc gates a mutating op between preflight and the first mutation:
+// (false, nil) aborts with ErrDeclined, a non-nil error propagates. It never
+// runs in dry-run or with a progress span open.
 type ConfirmFunc func(ctx context.Context, plan *OpPlan) (bool, error)
 
-// PreviewFunc renders a dry-run summary of plan. It never gates and never runs
-// outside dry-run.
+// PreviewFunc renders a dry-run summary of plan; it never gates and never runs outside dry-run.
 type PreviewFunc func(plan *OpPlan)
 
-// confirm runs the op's consent gate. Once a composing op (compact) has taken
-// top-level consent it sets preConsented, so inner RemoveWorker/Resize calls
-// run under that single grant instead of re-prompting mid-teardown: a mistyped
-// name or Ctrl-C at an inner prompt must not abort a half-executed sequence,
-// and — with the gate suppressed — an inner decline is impossible by
-// construction (ErrDeclined is the belt to that suspenders).
+// confirm suppresses the gate when preConsented (set by a composing op like
+// compact), avoiding re-prompts mid-teardown.
 func (r *Runner) confirm(ctx context.Context, plan *OpPlan) (bool, error) {
 	if r.preConsented {
 		return true, nil
@@ -87,11 +75,8 @@ func (r *Runner) preview(plan *OpPlan) {
 	}
 }
 
-// confirmOrDecline runs the consent gate and, on a decline, logs cancelMsg with
-// kv and returns ErrDeclined so a composing caller can never mistake a decline
-// for success. A confirm error propagates; consent (or a suppressed gate)
-// returns nil. Callers keep their own dry-run/resume guards around this call —
-// those differ per op and are part of each op's resume contract.
+// confirmOrDecline returns ErrDeclined (logging cancelMsg) on decline or a
+// confirm error; callers own their dry-run/resume guards around this call.
 func (r *Runner) confirmOrDecline(ctx context.Context, plan *OpPlan, cancelMsg string, kv ...any) error {
 	proceed, err := r.confirm(ctx, plan)
 	if err != nil {

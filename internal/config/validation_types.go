@@ -5,9 +5,8 @@ import (
 	"strings"
 )
 
-// Minimum resource thresholds. The *Generic values are used when no
-// distribution-specific floor applies; OKD-specific floors apply when the
-// distribution is set to OKD.
+// Minimum resource thresholds: *Generic has no distribution-specific floor;
+// OKD-specific floors apply when distribution is OKD.
 const (
 	MinCPUGeneric      = 1
 	MinMemoryMBGeneric = 1024
@@ -23,15 +22,12 @@ const (
 	MinDiskGBWorkerOKD   = 50
 )
 
-// DefaultVMIDBase is the VMID assigned to the first cluster VM. Config
-// seeding and the proxmox post-apply enumeration probe both use this value;
-// keeping them in sync here prevents the probe heuristic from silently
-// inverting if the default ever changes.
+// DefaultVMIDBase is the VMID assigned to the first cluster VM; config
+// seeding and the proxmox post-apply probe both read it so they can't drift apart.
 const DefaultVMIDBase = 6000
 
 // DefaultOSDiskGB is the OS-disk size applied when topology.control_plane.
-// disk_gb is 0. Terraform var rendering (provision.getDiskSizes) and the
-// bootstrap disk validator both derive from it.
+// disk_gb is 0; terraform rendering and the bootstrap disk validator both derive from it.
 const DefaultOSDiskGB = 50
 
 // ValidationError describes a single config validation failure.
@@ -70,11 +66,8 @@ func (r *ValidationResult) Error() string {
 	return strings.Join(msgs, "; ")
 }
 
-// ValidationScope is a bitmask selecting which validators
-// ValidateWithOptions runs. ScopeAll enables every validator; deploy's
-// pre-flight gate (see cli.deployGateScope) combines the scopes covering
-// its render surfaces to reject a hand-edited config before any phase code
-// runs, without paying for the full validator set on every keystroke.
+// ValidationScope is a bitmask selecting which validators ValidateWithOptions
+// runs; ScopeAll enables every validator.
 type ValidationScope uint64
 
 // Validation scope flags. Combine with bitwise-OR.
@@ -101,10 +94,8 @@ func (s ValidationScope) HasScope(flag ValidationScope) bool {
 // ValidationOptions controls which validators run.
 type ValidationOptions struct {
 	Scope ValidationScope
-	// ProjectRoot anchors filesystem checks (the terraform environments
-	// dir). Empty resolves against the process cwd; deploy passes its
-	// resolved workspace root so validation and materialization agree
-	// when okdctl is invoked from a subdirectory.
+	// ProjectRoot anchors filesystem checks (terraform environments dir);
+	// empty resolves against cwd.
 	ProjectRoot string
 }
 
@@ -122,12 +113,18 @@ var validators = []validatorEntry{
 	{ScopeResources, validateResources},
 	{ScopeProvider, validateProvider},
 	{ScopeHTTPServer, validateHTTPServer},
-	{ScopeDistribution, validateDistribution},
+	{ScopeDistribution, ValidateOKDConfig},
 	{ScopeFiles, validateFiles},
 	{ScopeDeployment, validateDeployment},
 }
 
-func runValidators(cfg *Config, opts ValidationOptions) *ValidationResult {
+// Validate runs all validators against cfg; for scoped validation use ValidateWithOptions.
+func (cfg *Config) Validate() *ValidationResult {
+	return ValidateWithOptions(cfg, ValidationOptions{Scope: ScopeAll})
+}
+
+// ValidateWithOptions runs the validator set selected by opts.Scope.
+func ValidateWithOptions(cfg *Config, opts ValidationOptions) *ValidationResult {
 	result := &ValidationResult{}
 
 	if cfg == nil {
@@ -146,16 +143,4 @@ func runValidators(cfg *Config, opts ValidationOptions) *ValidationResult {
 	}
 
 	return result
-}
-
-// Validate runs all validators against cfg. For scoped validation use
-// ValidateWithOptions.
-func (cfg *Config) Validate() *ValidationResult {
-	return ValidateWithOptions(cfg, ValidationOptions{Scope: ScopeAll})
-}
-
-// ValidateWithOptions runs the validator set selected by opts.Scope and
-// returns the accumulated ValidationResult.
-func ValidateWithOptions(cfg *Config, opts ValidationOptions) *ValidationResult {
-	return runValidators(cfg, opts)
 }

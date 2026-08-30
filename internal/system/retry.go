@@ -21,11 +21,11 @@ func DefaultBackoff() wait.Backoff {
 	}
 }
 
-// Retry runs op under wait.ExponentialBackoffWithContext using backoff b.
-// retryable classifies each op failure: false aborts immediately, true
-// consumes another backoff step. On exhaustion Retry returns the last op
-// error rather than wait's internal timeout sentinel; a ctx
-// cancellation/deadline error from op itself is returned as-is.
+// Retry runs op under wait.ExponentialBackoffWithContext using backoff b,
+// calling retryable(err) to decide whether each failure aborts (false) or
+// consumes another step (true). On exhaustion it returns the last op error
+// instead of wait's internal timeout sentinel, except a ctx
+// cancellation/deadline error from op itself, which passes through unchanged.
 func Retry(ctx context.Context, b wait.Backoff, retryable func(error) bool, op func(ctx context.Context) error) error {
 	var lastErr error
 	err := wait.ExponentialBackoffWithContext(ctx, b, func(ctx context.Context) (bool, error) {

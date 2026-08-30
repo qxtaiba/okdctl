@@ -3,7 +3,7 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Process annotated dependencies in YAML, shell scripts, and env files",
+      "description": "Process annotated dependencies in YAML, shell, env, and Makefile files",
       "managerFilePatterns": [
         "/\\.env$/",
         "/\\.sh$/",
@@ -17,17 +17,6 @@
         "datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n.+(:\\s|=)(&\\S+\\s)?\"?(?<currentValue>[^\"\\s]+)\"?"
       ],
       "datasourceTemplate": "{{#if datasource}}{{{datasource}}}{{else}}github-releases{{/if}}"
-    },
-    {
-      "customType": "regex",
-      "description": "Process OCI repository references",
-      "managerFilePatterns": [
-        "/\\.yaml$/"
-      ],
-      "matchStrings": [
-        "oci://(?<depName>[^:]+):(?<currentValue>\\S+)"
-      ],
-      "datasourceTemplate": "docker"
     }
   ]
 }

@@ -9,10 +9,7 @@ import (
 )
 
 func TestIsBootstrapDNS(t *testing.T) {
-	dir := t.TempDir()
-	origDir := dnsmasqConfigDir
-	dnsmasqConfigDir = dir
-	defer func() { dnsmasqConfigDir = origDir }()
+	dir := redirectConfigDir(t)
 
 	cfg := &config.Config{}
 	cfg.Cluster.Name = "okd"

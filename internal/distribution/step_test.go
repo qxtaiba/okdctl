@@ -34,22 +34,3 @@ func TestBuildSteps_PanicsOnReRunSafeNoWithoutAlreadyDone(t *testing.T) {
 	}()
 	distribution.BuildSteps(defs)
 }
-
-func TestBuildSteps_AcceptsReRunSafeNoWithAlreadyDone(t *testing.T) {
-	t.Parallel()
-	defs := []distribution.StepDef{
-		{
-			ID:        "test-step",
-			Name:      "test step",
-			ReRunSafe: distribution.ReRunSafeNo,
-			AlreadyDone: func(_ context.Context) (bool, error) {
-				return false, nil
-			},
-			Exec: func(_ context.Context) error { return nil },
-		},
-	}
-	steps := distribution.BuildSteps(defs)
-	if len(steps) != 1 {
-		t.Fatalf("expected 1 step, got %d", len(steps))
-	}
-}

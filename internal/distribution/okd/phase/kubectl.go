@@ -11,17 +11,16 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// oc returns a cluster.Client wrapping the phase's own executor so every
-// Oc* method below funnels its actual invocation and transport-error
-// formatting through cluster.Client instead of a second hand-rolled copy.
-// See install.Phase.SetupKubeconfig for how KUBECONFIG reaches p.Exec.
+// oc wraps the phase's executor in a cluster.Client so every Oc* method
+// below shares one invocation/error-formatting path; see
+// install.Phase.SetupKubeconfig for how KUBECONFIG reaches p.Exec.
 func (p *BasePhase) oc() *cluster.Client {
 	return cluster.New(cluster.WithExecutor(p.Exec), cluster.WithCLI("oc"), cluster.WithLogger(p.Log))
 }
 
-// OcResourceExists returns true if `oc get <args...>` produces non-empty
-// output, wrapping transport errors with errPrefix. --no-headers and
-// --ignore-not-found are appended automatically.
+// OcResourceExists reports whether `oc get <args...>` (with --no-headers
+// --ignore-not-found appended) exits 0 with non-empty stdout, wrapping
+// transport errors with errPrefix.
 func (p *BasePhase) OcResourceExists(ctx context.Context, errPrefix string, args ...string) (bool, error) {
 	full := append([]string{"get"}, args...)
 	full = append(full, "--no-headers", "--ignore-not-found")
@@ -32,10 +31,8 @@ func (p *BasePhase) OcResourceExists(ctx context.Context, errPrefix string, args
 	return result.ExitCode == 0 && strings.TrimSpace(result.Stdout) != "", nil
 }
 
-// OcOutputFull runs `oc <args...>` once with full stdout buffering (up to
-// 4 MiB) and returns trimmed stdout. Returns an error when output is
-// truncated — callers that machine-parse large JSON payloads must use this
-// instead of OcOutput to guarantee an untruncated stream.
+// OcOutputFull runs `oc <args...>` once, buffering up to 4 MiB of stdout,
+// and errors instead of silently returning a truncated payload.
 func (p *BasePhase) OcOutputFull(ctx context.Context, args ...string) (string, error) {
 	stdout, truncated, err := p.oc().GetJSON(ctx, args...)
 	if err != nil {
@@ -48,9 +45,8 @@ func (p *BasePhase) OcOutputFull(ctx context.Context, args ...string) (string, e
 }
 
 // OcOutput runs `oc <args...>` once and returns trimmed stdout. A non-zero
-// exit code is returned as an *executor.ExitError (callers can errors.As to
-// inspect ExitCode) unless ctx is cancelled, in which case the ctx error
-// propagates so SIGINT maps to exit 130.
+// exit code returns an *executor.ExitError unless ctx is cancelled, in which
+// case the ctx error propagates so SIGINT maps to exit 130.
 func (p *BasePhase) OcOutput(ctx context.Context, args ...string) (string, error) {
 	result, err := p.oc().Run(ctx, args...)
 	if err != nil {
@@ -73,18 +69,14 @@ func (p *BasePhase) OcApply(ctx context.Context, manifest []byte) error {
 	return p.oc().Apply(ctx, manifest)
 }
 
-// OcPollOutput polls `oc <args...>` at the WaitFor default interval (30s)
-// until predicate matches the trimmed stdout, and returns the first
-// matching value. timeout bounds the wait.
+// OcPollOutput polls `oc <args...>` every 30s until predicate matches
+// trimmed stdout, returning the first match within timeout.
 func (p *BasePhase) OcPollOutput(ctx context.Context, prefix, desc string, timeout time.Duration, predicate func(stdout string) bool, args ...string) (string, error) {
 	return p.OcPollOutputInterval(ctx, prefix, desc, timeout, 0, predicate, args...)
 }
 
-// OcPollOutputInterval is the test-injection seam used by phase/kubectl_test.go
-// to override the default polling cadence. Production code MUST use OcPollOutput,
-// which fixes interval=0 (immediate first probe). Renaming or deleting this
-// method requires updating phase/kubectl_test.go. Retained as scaffolding;
-// do not delete without a replacement test-injection path.
+// OcPollOutputInterval is the test seam for polling cadence; production
+// code MUST use OcPollOutput, which fixes interval=0 (immediate first probe).
 func (p *BasePhase) OcPollOutputInterval(ctx context.Context, prefix, desc string, timeout, interval time.Duration, predicate func(stdout string) bool, args ...string) (string, error) {
 	var captured string
 	opts := system.DefaultWaitForOptions()
@@ -94,10 +86,8 @@ func (p *BasePhase) OcPollOutputInterval(ctx context.Context, prefix, desc strin
 	}
 	opts.Logger = p.Log
 	err := system.WaitFor(ctx, prefix, desc, func(ctx context.Context) bool {
-		// Client.Run returns a nil Result on transport failure, unlike
-		// executor.Run's always-non-nil contract. Run under WaitFor's probe
-		// ctx (deadline = Timeout+probeGrace) so a hung oc dies at the poll
-		// deadline instead of the unbounded outer ctx.
+		// Result is nil on transport failure here (unlike executor.Run); ctx
+		// is WaitFor's probe deadline so a hung oc can't outlive it.
 		result, runErr := p.oc().Run(ctx, args...)
 		if runErr != nil || result.ExitCode != 0 {
 			return false

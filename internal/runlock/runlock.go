@@ -1,8 +1,7 @@
-// Package runlock provides a process-level advisory lock for okdctl
-// operations that mutate shared project state. The lock is flock-based
-// so the kernel releases it automatically on fd close — including SIGKILL —
-// eliminating the PID-reuse race of pure pid-file schemes. On NFS pre-v4
-// flock is advisory only and may not enforce mutual exclusion across hosts.
+// Package runlock provides a process-level advisory lock, flock-based so
+// the kernel releases it on fd close (including SIGKILL), avoiding the
+// PID-reuse race of pid-file schemes. On NFS pre-v4, flock is advisory
+// only and may not enforce exclusion across hosts.
 package runlock
 
 import (
@@ -27,21 +26,17 @@ type Lock struct {
 	f *os.File
 }
 
-// Acquire opens <projectRoot>/.okdctl.lock and takes an exclusive
-// non-blocking flock. On success it writes human-readable diagnostics
-// into the file and returns a *Lock. On conflict it reads the file body
-// and returns a *errtypes.ConfigError naming the holder.
-// Warn records emitted here route through slog.Default(); callers that
-// bypass cli.Execute must install logutil.RedactHandler first (see
-// internal/version/updatecheck.go for the same contract).
+// Acquire opens <projectRoot>/.okdctl.lock, takes an exclusive
+// non-blocking flock, and returns a *Lock, or a *errtypes.ConfigError
+// naming the holder on conflict. Warn records route through
+// slog.Default(); callers bypassing cli.Execute must install
+// logutil.RedactHandler first.
 func Acquire(projectRoot, verb string) (*Lock, error) {
 	path := filepath.Join(projectRoot, lockFile)
 
-	// Refuse a symlink at the lock path and open with O_NOFOLLOW so a symlink
-	// planted between lstat and open still loses the race. Needed because
-	// Acquire runs as root under the deploy/destroy sudo re-exec model and a
-	// pre-sudo attacker could otherwise redirect the root-owned write via a
-	// planted symlink.
+	// Refuse a symlink at the lock path (O_NOFOLLOW closes the lstat->open
+	// TOCTOU race) — Acquire runs as root under sudo re-exec, so a pre-sudo
+	// attacker could otherwise redirect the root-owned write via a symlink.
 	if info, err := os.Lstat(path); err == nil {
 		if info.Mode()&os.ModeSymlink != 0 {
 			return nil, &errtypes.ConfigError{
@@ -97,14 +92,9 @@ func Acquire(projectRoot, verb string) (*Lock, error) {
 	return &Lock{f: f}, nil
 }
 
-// chownToSudoInvoker hands the lockfile back to the invoking user after a
-// root acquisition. deploy/destroy re-exec under sudo, so root creates the
-// 0600 lockfile, but the --dry-run variants skip elevation and must reopen
-// the same never-unlinked file as the non-root user — without the chown
-// that open fails EACCES. Runs on every root acquisition, not only create,
-// so a file left root-owned by an earlier run is handed back too. The euid
-// guard skips the chown when SUDO_UID/SUDO_GID leak into a non-root env,
-// where chowning to another uid would fail EPERM.
+// chownToSudoInvoker hands the root-created lockfile back to the invoking
+// user so --dry-run (non-root) can reopen it; the euid guard skips this
+// when SUDO_UID/SUDO_GID leak into a non-root env, which would EPERM.
 func chownToSudoInvoker(path string) error {
 	if os.Geteuid() != 0 {
 		return nil
@@ -112,9 +102,8 @@ func chownToSudoInvoker(path string) error {
 	return system.ChownToInvokingUser(path)
 }
 
-// crossHostHint returns a non-empty advisory string when the HOST= field
-// parsed from body differs from localHost, indicating an NFSv3 cross-host
-// stale-lock situation where kernel flock does not propagate.
+// crossHostHint flags a HOST= mismatch as a likely NFSv3 cross-host stale
+// lock, where flock doesn't propagate.
 func crossHostHint(body, localHost string) string {
 	for field := range strings.FieldsSeq(body) {
 		val, ok := strings.CutPrefix(field, "HOST=")
@@ -130,12 +119,10 @@ func crossHostHint(body, localHost string) string {
 	return ""
 }
 
-// Release truncates the diagnostics and closes the fd, which surrenders the
-// flock. The lockfile is left in place so all Acquire calls always flock the
-// same stable inode — removing and recreating it would reintroduce the flock
-// inode race (B flocks the unlinked inode after A's close; C flocks the new
-// inode; both then hold "the lock" on different inodes).
-// Release is a no-op on a nil receiver or a zero-value Lock.
+// Release truncates the diagnostics and closes the fd, surrendering the
+// flock; the lockfile is left in place since removing it would reintroduce
+// the flock inode race across concurrent Acquire calls. No-op on a nil
+// receiver or zero-value Lock.
 func (l *Lock) Release() {
 	if l == nil || l.f == nil {
 		return

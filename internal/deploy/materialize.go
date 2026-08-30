@@ -11,14 +11,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// MaterializeTerraform writes the embedded Terraform sources (the
-// proxmox-okd module and production environment, provider lock file
-// included) under root so a packaged binary can deploy from an empty
-// directory. Policy is write-once per file: anything already present — a
-// source checkout, a prior run, or user-modified HCL — is never
-// overwritten; only missing files are created. Returns the paths it
-// created. Under sudo the tree is chown'd back to the invoking user so it
-// stays inspectable and removable without root.
+// MaterializeTerraform writes the embedded Terraform sources under root so a
+// packaged binary can deploy from an empty directory; existing files are
+// never overwritten, only missing ones are created. Under sudo, the tree is
+// chown'd back to the invoking user.
 func MaterializeTerraform(root string) ([]string, error) {
 	var created []string
 	err := fs.WalkDir(infrastructure.TerraformFS, ".", func(path string, d fs.DirEntry, walkErr error) error {
@@ -29,8 +25,8 @@ func MaterializeTerraform(root string) ([]string, error) {
 			return nil
 		}
 		target := filepath.Join(root, "infrastructure", filepath.FromSlash(path))
-		// Lstat, not Stat: a symlink (even dangling) counts as existing so
-		// the write can never chase or replace an operator-planted link.
+		// Lstat, not Stat: a symlink (even dangling) counts as existing, so
+		// the write never chases or replaces an operator-planted link.
 		if _, statErr := os.Lstat(target); statErr == nil {
 			return nil
 		} else if !errors.Is(statErr, fs.ErrNotExist) {
@@ -49,11 +45,8 @@ func MaterializeTerraform(root string) ([]string, error) {
 	if err != nil {
 		return created, fmt.Errorf("materialize terraform sources: %w", err)
 	}
-	// Only touch the manifest and re-chown when this run actually created
-	// files: a repeat deploy — or `deploy --dry-run` — against a settled root
-	// writes nothing and leaves any existing manifest alone. A run that did
-	// create files re-stamps, replacing recorded hashes for files it did not
-	// write this run.
+	// Only touch the manifest/chown when this run created files — a repeat
+	// deploy or dry-run against a settled root leaves any existing manifest alone.
 	if len(created) > 0 {
 		if err := stampRootManifest(root, nodeOpsRootFormat); err != nil {
 			return created, fmt.Errorf("stamp terraform root: %w", err)

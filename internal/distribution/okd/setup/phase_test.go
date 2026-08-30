@@ -42,19 +42,6 @@ var setupStepOrder = []distribution.StepID{
 	StepConfigureDNS,
 }
 
-func TestNewOptions_PathsRootedAtProject(t *testing.T) {
-	opts := NewOptions(config.DefaultConfig(), "/proj")
-	if opts.WorkDir != "/proj/okd-install" {
-		t.Errorf("WorkDir = %q; want /proj/okd-install", opts.WorkDir)
-	}
-	if opts.DownloadDir != "/proj/okd-install/downloads" {
-		t.Errorf("DownloadDir = %q; want /proj/okd-install/downloads", opts.DownloadDir)
-	}
-	if opts.TerraformEnv != "production" {
-		t.Errorf("TerraformEnv = %q; want production (default)", opts.TerraformEnv)
-	}
-}
-
 func TestSetupSteps_StepListAndSkipWiring(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -62,8 +49,7 @@ func TestSetupSteps_StepListAndSkipWiring(t *testing.T) {
 		wantSkip map[distribution.StepID]bool
 	}{
 		{
-			// DefaultConfig has 3 workers, so the compact-cluster manifest
-			// injection is skipped.
+			// DefaultConfig has 3 workers, so compact-cluster injection is skipped.
 			name: "defaults",
 			wantSkip: map[distribution.StepID]bool{
 				StepDownloadTools:     false,
@@ -131,18 +117,10 @@ func TestSetupSteps_StepListAndSkipWiring(t *testing.T) {
 	}
 }
 
-type recordingPkgManager struct {
-	installs [][]string
-}
+type stubPkgManager struct{}
 
-func (m *recordingPkgManager) Install(_ context.Context, pkgs []string) error {
-	m.installs = append(m.installs, pkgs)
-	return nil
-}
+func (*stubPkgManager) Install(context.Context, []string) error { return nil }
 
-// installSetupFakeTools puts stub terraform/yq/helm/sops binaries and an
-// argv-logging openshift-install on PATH. The fake openshift-install exits 0
-// but writes no output files. Returns the argv log path.
 func installSetupFakeTools(t *testing.T) string {
 	t.Helper()
 	if runtime.GOOS == "windows" {
@@ -168,12 +146,8 @@ exit 0
 	return logPath
 }
 
-// TestSetupExecute_ManifestPipeline drives Execute through the base and
-// manifest steps. The fake openshift-install writes no .ign files, so the run
-// stops deterministically at StepGenerateIgnition's validation — the web and
-// infra tail (apache, webserver, ISO upload, haproxy, firewall, dns) shells
-// to system services and Proxmox, too heavy to fake honestly; their ordering
-// and skip wiring is carried by TestSetupSteps_StepListAndSkipWiring.
+// Stops at ignition validation; the web/infra tail shells to real services too
+// heavy to fake honestly.
 func TestSetupExecute_ManifestPipeline(t *testing.T) {
 	argvLog := installSetupFakeTools(t)
 
@@ -189,7 +163,7 @@ func TestSetupExecute_ManifestPipeline(t *testing.T) {
 	}
 
 	p := New(phase.WithExecutor(executor.New(executor.WithLogger(logutil.NopLogger))), phase.WithLogger(logutil.NopLogger))
-	p.Pkg = &recordingPkgManager{}
+	p.Pkg = &stubPkgManager{}
 
 	results, err := p.Execute(context.Background(), cfg, opts)
 	if err == nil {

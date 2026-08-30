@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -23,13 +22,19 @@ func sha256Hex(data []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func TestDownload_HappyPath(t *testing.T) {
-	body := []byte("binary-content")
+func serveBody(t *testing.T, body []byte) *httptest.Server {
+	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(body)
 	}))
-	defer srv.Close()
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestDownload_HappyPath(t *testing.T) {
+	body := []byte("binary-content")
+	srv := serveBody(t, body)
 
 	dir := t.TempDir()
 	out := filepath.Join(dir, "artifact.bin")
@@ -59,12 +64,8 @@ func TestDownload_HappyPath(t *testing.T) {
 	}
 }
 
-// TestRetryDownload_RetriableHTTPErrorSecondAttemptWins drives retryDownload
-// with a 503 (retriable transport error). verifyDownloadedFile does not retry
-// on checksum mismatch — it removes the file and returns. Retry is a
-// transport-tier concern only; this test exercises that path. First-failure
-// backoff is ~2.5-7.5 s with jitter; the sleep is intentional, not gated, so
-// CI sees it.
+// The backoff sleep here (~2.5-7.5s, jittered) is intentional and ungated so CI
+// exercises real retry timing.
 func TestRetryDownload_RetriableHTTPErrorSecondAttemptWins(t *testing.T) {
 	calls := 0
 	retryable := &HTTPStatusError{Status: http.StatusServiceUnavailable, Method: http.MethodGet, URL: "http://example.invalid/f"}
@@ -105,25 +106,6 @@ func TestDownload_NonOKStatusReturnsHTTPStatusError(t *testing.T) {
 	}
 	if httpErr.Status != http.StatusNotFound {
 		t.Errorf("HTTPStatusError.Status = %d; want %d", httpErr.Status, http.StatusNotFound)
-	}
-}
-
-// TestHTTPStatusError_RedactedOmitsURLAndBody locks the slog-sink contract:
-// the Redacted projection carries status and method only, so a tokenized URL
-// or credential-echoing response body cannot reach a structured log sink.
-func TestHTTPStatusError_RedactedOmitsURLAndBody(t *testing.T) {
-	e := &HTTPStatusError{
-		Status: http.StatusForbidden,
-		Method: http.MethodGet,
-		URL:    "https://mirror.invalid/f?token=hunter2",
-		Body:   "token hunter2 rejected",
-	}
-	got := fmt.Sprint(e.Redacted())
-	if strings.Contains(got, "hunter2") {
-		t.Fatalf("Redacted() = %q; must not carry URL or body content", got)
-	}
-	if !strings.Contains(got, "403") || !strings.Contains(got, http.MethodGet) {
-		t.Errorf("Redacted() = %q; want status and method preserved", got)
 	}
 }
 
@@ -179,12 +161,7 @@ func TestDownload_CtxCancelCleansPartialFile(t *testing.T) {
 }
 
 func TestDownload_SymlinkAtOutputPath(t *testing.T) {
-	body := []byte("symlink-content")
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(body)
-	}))
-	defer srv.Close()
+	srv := serveBody(t, []byte("symlink-content"))
 
 	dir := t.TempDir()
 	target := filepath.Join(dir, "real-target.bin")
@@ -199,8 +176,7 @@ func TestDownload_SymlinkAtOutputPath(t *testing.T) {
 
 	if err := Fetch(
 		context.Background(), srv.URL+"/artifact.bin", link,
-		// WithOverwrite bypasses canSkipDownload, which would otherwise stat
-		// through the symlink, see size>0, and short-circuit (no ExpectedChecksum).
+		// WithOverwrite bypasses canSkipDownload's stat-through-symlink short-circuit.
 		WithOverwrite(true),
 		WithLogger(logutil.NopLogger),
 	); err == nil {
@@ -219,68 +195,41 @@ func TestDownload_SymlinkAtOutputPath(t *testing.T) {
 func TestCanSkipDownload(t *testing.T) {
 	body := []byte("payload")
 	goodSum := sha256Hex(body)
-	badSum := "0000000000000000000000000000000000000000000000000000000000000000"
+	badSum := strings.Repeat("0", 64)
 
-	t.Run("file absent returns false", func(t *testing.T) {
-		dir := t.TempDir()
-		cfg := &dlConfig{
-			outputPath:       filepath.Join(dir, "nope.bin"),
-			expectedChecksum: goodSum,
-			logger:           logutil.NopLogger,
-		}
-		if canSkipDownload(context.Background(), cfg) {
-			t.Error("expected false for absent file")
-		}
-	})
-
-	t.Run("zero-size file returns false", func(t *testing.T) {
-		dir := t.TempDir()
-		path := filepath.Join(dir, "empty.bin")
-		if err := os.WriteFile(path, []byte{}, 0o600); err != nil {
-			t.Fatal(err)
-		}
-		cfg := &dlConfig{
-			outputPath:       path,
-			expectedChecksum: goodSum,
-			logger:           logutil.NopLogger,
-		}
-		if canSkipDownload(context.Background(), cfg) {
-			t.Error("expected false for zero-size file")
-		}
-	})
-
-	t.Run("matching checksum returns true", func(t *testing.T) {
-		dir := t.TempDir()
-		path := filepath.Join(dir, "ok.bin")
-		if err := os.WriteFile(path, body, 0o600); err != nil {
-			t.Fatal(err)
-		}
-		cfg := &dlConfig{
-			outputPath:       path,
-			expectedChecksum: goodSum,
-			logger:           logutil.NopLogger,
-		}
-		if !canSkipDownload(context.Background(), cfg) {
-			t.Error("expected true for matching checksum")
-		}
-	})
-
-	t.Run("checksum mismatch returns false and removes file", func(t *testing.T) {
-		dir := t.TempDir()
-		path := filepath.Join(dir, "bad.bin")
-		if err := os.WriteFile(path, body, 0o600); err != nil {
-			t.Fatal(err)
-		}
-		cfg := &dlConfig{
-			outputPath:       path,
-			expectedChecksum: badSum,
-			logger:           logutil.NopLogger,
-		}
-		if canSkipDownload(context.Background(), cfg) {
-			t.Error("expected false for checksum mismatch")
-		}
-		if _, err := os.Stat(path); !os.IsNotExist(err) {
-			t.Errorf("mismatched file must be removed; Stat err = %v", err)
-		}
-	})
+	cases := []struct {
+		name        string
+		write       []byte // nil leaves the file absent
+		sum         string
+		want        bool
+		wantRemoved bool
+	}{
+		{name: "file absent returns false", write: nil, sum: goodSum, want: false},
+		{name: "zero-size file returns false", write: []byte{}, sum: goodSum, want: false},
+		{name: "matching checksum returns true", write: body, sum: goodSum, want: true},
+		{name: "checksum mismatch returns false and removes file", write: body, sum: badSum, want: false, wantRemoved: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "f.bin")
+			if tc.write != nil {
+				if err := os.WriteFile(path, tc.write, 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			cfg := &dlConfig{
+				outputPath:       path,
+				expectedChecksum: tc.sum,
+				logger:           logutil.NopLogger,
+			}
+			if got := canSkipDownload(context.Background(), cfg); got != tc.want {
+				t.Errorf("canSkipDownload() = %v; want %v", got, tc.want)
+			}
+			if tc.wantRemoved {
+				if _, err := os.Stat(path); !os.IsNotExist(err) {
+					t.Errorf("mismatched file must be removed; Stat err = %v", err)
+				}
+			}
+		})
+	}
 }

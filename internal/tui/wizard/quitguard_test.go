@@ -21,8 +21,8 @@ func TestQuitGuardInterceptsCtrlC(t *testing.T) {
 	m := NewModel([]WizardStep{g}, config.DefaultConfig())
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 
-	updated, _ := m.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
-	if updated.(*Model).quitting {
+	m = update(t, m, tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+	if m.quitting {
 		t.Fatal("guarded step must prevent quit on first ctrl+c")
 	}
 	if g.calls != 1 {
@@ -30,16 +30,16 @@ func TestQuitGuardInterceptsCtrlC(t *testing.T) {
 	}
 
 	g.intercepts = false
-	updated, _ = updated.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
-	if !updated.(*Model).quitting {
+	m = update(t, m, tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+	if !m.quitting {
 		t.Fatal("once the guard declines, ctrl+c must quit")
 	}
 }
 
 func TestUnguardedStepQuitsOnCtrlC(t *testing.T) {
 	m := NewModel([]WizardStep{newNopStep()}, config.DefaultConfig())
-	updated, _ := m.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
-	if !updated.(*Model).quitting {
+	m = update(t, m, tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+	if !m.quitting {
 		t.Fatal("steps without QuitGuard must keep the immediate-quit behavior")
 	}
 }
@@ -57,14 +57,14 @@ func TestBackGuardInterceptsEsc(t *testing.T) {
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m.currentStep = 1
 
-	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
-	if updated.(*Model).currentStep != 1 {
+	m = update(t, m, tea.KeyPressMsg{Code: tea.KeyEscape})
+	if m.currentStep != 1 {
 		t.Fatal("guarded step must prevent esc navigation")
 	}
 
 	g.intercepts = false
-	updated, _ = updated.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
-	if updated.(*Model).currentStep != 0 {
+	m = update(t, m, tea.KeyPressMsg{Code: tea.KeyEscape})
+	if m.currentStep != 0 {
 		t.Fatal("once the guard declines, esc must navigate back")
 	}
 }

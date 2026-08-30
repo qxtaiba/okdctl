@@ -14,26 +14,23 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// RetryDefault retries fn under system.DefaultBackoff(). Permanent failures
-// (typed config/auth errors, missing binary, ctx cancellation) abort
-// immediately; transient failures consume the full backoff budget.
+// RetryDefault retries fn under system.DefaultBackoff(); permanent failures
+// (config/auth errors, missing binary, ctx cancellation) abort immediately,
+// others consume the full budget.
 func RetryDefault(ctx context.Context, fn func() error) error {
 	return system.Retry(ctx, system.DefaultBackoff(), addonIsRetryable, func(context.Context) error {
 		return fn()
 	})
 }
 
-// addonIsRetryable reports whether err should trigger another retry attempt.
-// Permanent failures — typed config/auth errors, missing binary, context
-// cancellation — return false so the caller aborts immediately. Transient
-// executor failures (non-zero exit, connection errors) return true.
+// addonIsRetryable classifies permanent failures (config/auth errors,
+// missing binary, ctx cancellation) as non-retryable.
 func addonIsRetryable(err error) bool {
 	if err == nil {
 		return false
 	}
-	// A system.WaitFor poll timeout wraps DeadlineExceeded but is transient,
-	// not caller cancellation; classify it retryable before the ctx arm below
-	// so a poll timeout inside a retry closure does not abort the budget.
+	// ErrWaitTimeout wraps DeadlineExceeded but is transient; check it
+	// before the ctx arm below.
 	if errors.Is(err, errtypes.ErrWaitTimeout) {
 		return true
 	}
@@ -51,9 +48,8 @@ func addonIsRetryable(err error) bool {
 	return !errors.As(err, &authErr)
 }
 
-// BuildOpaqueSecret returns a Kubernetes Secret manifest YAML of type Opaque.
-// Values in data are raw bytes; they are base64-encoded on marshal by the
-// k8s Secret type.
+// BuildOpaqueSecret returns a Kubernetes Secret manifest YAML of type
+// Opaque; values in data are raw bytes, base64-encoded on marshal.
 func BuildOpaqueSecret(namespace, name string, data map[string][]byte) (string, error) {
 	s := corev1.Secret{
 		TypeMeta: metav1.TypeMeta{
@@ -77,15 +73,13 @@ func BuildOpaqueSecret(namespace, name string, data map[string][]byte) (string, 
 // EnsureNamespace checks whether a Kubernetes namespace exists and creates it
 // if missing, using the default addon retry policy.
 func EnsureNamespace(ctx context.Context, env *Environment, namespace string) error {
-	// Announce the create once: a transient create failure replays the closure,
-	// so log at Info on the first attempt and demote identical retries to Debug
-	// per the monitor.go poll-loop log-once convention.
+	// Log at Info once; demote retries to Debug per the poll-loop log-once
+	// convention (monitor.go).
 	logged := false
 	return RetryDefault(ctx, func() error {
 		result, err := env.Exec.Run(ctx, "oc", "get", "namespace", namespace)
 		if err != nil {
-			// Exec-level failure (command not found, connection refused) —
-			// don't attempt create, let retry handle it.
+			// Exec-level failure — skip create, let retry handle it.
 			return fmt.Errorf("cannot reach cluster to check namespace %s: %w", namespace, err)
 		}
 		if result.ExitCode == 0 {

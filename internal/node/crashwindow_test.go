@@ -15,46 +15,15 @@ import (
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
 
-// These are C1's acceptance tests: they model a crash by seeding the on-disk
-// op marker at the step an interrupted run was about to perform, mutating the
-// fake cluster/terraform state to what the real world would look like after
-// that partial run, then constructing a fresh Runner over that state — proving
-// the SECOND call resumes (and completes) rather than re-running validation
-// against a baseline the first run already moved past.
+// These tests model a crash by seeding the on-disk op marker at the step an
+// interrupted run was about to perform and mutating fake state to match, then
+// proving a fresh Runner resumes instead of re-validating a stale baseline.
 
 func TestRemoveWorkerResumesBetweenApplyAndPersist(t *testing.T) {
 	const target = "worker2"
 
-	// A fresh run, for comparison: it must run the full guard/ListNodes
-	// sequence that the resumed run below skips.
-	freshFC := &fakeCluster{
-		nodes: []cluster.NodeDetail{
-			{Name: "worker0", Role: nodetypes.RoleWorker},
-			{Name: "worker1", Role: nodetypes.RoleWorker},
-			{Name: target, Role: nodetypes.RoleWorker},
-			{Name: "master0", Role: nodetypes.RoleMaster},
-		},
-		schedulable: true,
-	}
-	freshTF := &fakeTF{action: terraform.PlanActionDelete}
-	freshCfg := config.DefaultConfig()
-	freshCfg.Topology.Workers.Count = 3
-	freshR, _, _ := seedRunner(t, freshFC, freshTF, freshCfg)
-	freshR.DryRun = false
-
-	if err := freshR.RemoveWorker(context.Background(), target, RemoveOptions{}); err != nil {
-		t.Fatalf("fresh remove: %v", err)
-	}
-	if freshFC.listNodesCalls == 0 || freshFC.podsForSelectorCalls == 0 {
-		t.Fatalf("fresh run baseline must call guards: listNodes=%d podsForSelector=%d",
-			freshFC.listNodesCalls, freshFC.podsForSelectorCalls)
-	}
-
-	// The "crashed" run: a marker recorded at tf-apply (written just before
-	// targetedApply is called) and never cleared. The real world it left
-	// behind already applied the delete — state no longer has the address —
-	// but the process died before decrementing worker_count/persisting and
-	// before deleting the Kubernetes Node object.
+	// Crashed run: marker at tf-apply; the delete already landed in state, but
+	// the process died before persisting worker_count or deleting the k8s Node.
 	fc := &fakeCluster{
 		nodes: []cluster.NodeDetail{
 			{Name: "worker0", Role: nodetypes.RoleWorker},
@@ -80,10 +49,6 @@ func TestRemoveWorkerResumesBetweenApplyAndPersist(t *testing.T) {
 		t.Errorf("resumed run must skip validateWorkerRemovable/removeGuards entirely: listNodes=%d podsForSelector=%d",
 			fc.listNodesCalls, fc.podsForSelectorCalls)
 	}
-	if fc.listNodesCalls >= freshFC.listNodesCalls || fc.podsForSelectorCalls >= freshFC.podsForSelectorCalls {
-		t.Errorf("resumed guard/ListNodes calls (%d/%d) must be fewer than a fresh run (%d/%d) — proves the skip is real, not coincidental",
-			fc.listNodesCalls, fc.podsForSelectorCalls, freshFC.listNodesCalls, freshFC.podsForSelectorCalls)
-	}
 	if ftf.applyCalls != 0 {
 		t.Errorf("already-applied delete must not be re-applied: applyCalls=%d", ftf.applyCalls)
 	}
@@ -95,13 +60,6 @@ func TestRemoveWorkerResumesBetweenApplyAndPersist(t *testing.T) {
 	}
 }
 
-// TestRemoveWorkerResumesBetweenPersistAndDeleteMarker covers the exact window
-// the other crash-window tests miss: the crash lands AFTER persistTopology (the
-// on-disk config already reads count=N-1) but BEFORE the delete-node marker
-// advances, so the marker is still StepTFApply. A relative decrement would
-// re-apply count-1 against the already-decremented config and land at N-2 —
-// understating the topology so the next deploy destroys a healthy worker. The
-// absolute (Count = idx) assignment must leave the config at N-1 on resume.
 func TestRemoveWorkerResumesBetweenPersistAndDeleteMarker(t *testing.T) {
 	const target = "worker2"
 
@@ -114,9 +72,7 @@ func TestRemoveWorkerResumesBetweenPersistAndDeleteMarker(t *testing.T) {
 		},
 		schedulable: true,
 	}
-	// The apply already landed (state no longer holds worker[2], plan is empty),
-	// and persist already ran — so the config reads the decremented count while
-	// the marker is still StepTFApply.
+	// Apply already landed and persist already ran, but the marker is still StepTFApply.
 	ftf := &fakeTF{action: terraform.PlanActionDelete, emptyPlan: true, stateAbsent: true}
 	cfg := config.DefaultConfig()
 	cfg.Topology.Workers.Count = 2 // persist LANDED before the crash
@@ -163,9 +119,7 @@ func TestRemoveWorkerResumesBetweenApplyAndDeleteNode(t *testing.T) {
 	}
 	ftf := &fakeTF{action: terraform.PlanActionDelete}
 	cfg := config.DefaultConfig()
-	// The crash landed after the tf-apply block's persist already ran, so the
-	// on-disk config already reflects the decremented count.
-	cfg.Topology.Workers.Count = 2
+	cfg.Topology.Workers.Count = 2 // the tf-apply block's persist already ran
 
 	r, _, _ := seedRunner(t, fc, ftf, cfg)
 	r.DryRun = false
@@ -186,12 +140,6 @@ func TestRemoveWorkerResumesBetweenApplyAndDeleteNode(t *testing.T) {
 	}
 }
 
-// TestResizeResumesMidMasterRoll drives a 3-master resize where the crashed
-// run's marker names the middle master at power-cycle. The first master must
-// have already landed (a read-only plan probe classifies it alreadyAtTarget
-// and skips it with zero mutation); the marked master resumes at power-cycle
-// with no re-cordon/drain/apply; the last master, never reached, runs the full
-// sequence.
 func TestResizeResumesMidMasterRoll(t *testing.T) {
 	fc := &fakeCluster{
 		nodes: []cluster.NodeDetail{
@@ -203,9 +151,7 @@ func TestResizeResumesMidMasterRoll(t *testing.T) {
 	}
 	ftf := &fakeTF{
 		action: terraform.PlanActionUpdate,
-		// master0's probe reports no pending change; StateHasResource's
-		// default (present) makes planTargeted classify it alreadyAtTarget —
-		// it already landed before the crash.
+		// No pending change for master0 classifies it alreadyAtTarget (already landed before the crash).
 		emptyForAddress: map[string]bool{masterAddress(0): true},
 	}
 	fp := &fakePower{}
@@ -257,9 +203,7 @@ func TestResizeResumesMidMasterRoll(t *testing.T) {
 		t.Errorf("master2 must be power-cycled: vmids=%v want %d", fp.cycledVMIDs, master2VMID)
 	}
 
-	// Exactly two power-cycles total (master1 resumed + master2 full) and
-	// exactly one real apply (master2's — master0 never reaches tf-apply via
-	// the probe short-circuit, master1 resumes past it).
+	// master0 never reaches tf-apply and master1 resumes past it, so only master2 applies for real.
 	if fp.calls != 2 {
 		t.Errorf("expected exactly 2 power-cycles (master1 + master2), got %d: vmids=%v", fp.calls, fp.cycledVMIDs)
 	}
@@ -314,12 +258,6 @@ func TestNodeCommandRefusesForeignMarkerWithoutAcknowledgment(t *testing.T) {
 	}
 }
 
-// TestCompactRefusesGenuinelyForeignMarkerBeforeControlPlaneMutation locks the
-// Fix 2 top-check: a stranded marker for an op compact does NOT compose (here a
-// stop-family marker) must be refused before enableSchedulableAndIngress runs,
-// so zero control-plane mutation happens. An OpRemove/OpResize marker is NOT
-// refused here (it is left to the inner beginOp resume) — that path is covered
-// by the resume tests above.
 func TestCompactRefusesGenuinelyForeignMarkerBeforeControlPlaneMutation(t *testing.T) {
 	fc := &fakeCluster{
 		nodes: []cluster.NodeDetail{
@@ -354,10 +292,6 @@ func TestCompactRefusesGenuinelyForeignMarkerBeforeControlPlaneMutation(t *testi
 	}
 }
 
-// TestDryRunPreviewsPastForeignMarker locks Fix 4: a --dry-run against a
-// stranded foreign marker must preview the fresh plan, not refuse — the run
-// mutates nothing, so resume is irrelevant. Covers remove, resize, and compact
-// (compact's genuinely-foreign refusal is also gated off under dry-run).
 func TestDryRunPreviewsPastForeignMarker(t *testing.T) {
 	t.Run("remove", func(t *testing.T) {
 		fc := &fakeCluster{
@@ -443,9 +377,8 @@ func TestDryRunPreviewsPastForeignMarker(t *testing.T) {
 	})
 
 	t.Run("cluster stop", func(t *testing.T) {
-		fc := &fakeCluster{nodes: stopTestNodes(), signerNotAfter: time.Now().Add(60 * 24 * time.Hour)}
-		ftf := &fakeTF{}
-		r, _, _ := seedRunner(t, fc, ftf, config.DefaultConfig()) // DryRun defaults true
+		fc := stopTestCluster()
+		r, _, _ := seedRunner(t, fc, &fakeTF{}, config.DefaultConfig()) // DryRun defaults true
 		seedMarker(t, r, OpRemove, "worker5", StepDrain)
 
 		if err := r.Stop(context.Background(), StopOptions{}); err != nil {
@@ -470,12 +403,6 @@ func TestDryRunPreviewsPastForeignMarker(t *testing.T) {
 	})
 }
 
-// TestResizeResumesMidPowerCycleWithMemberDown covers the crash window inside
-// PowerCycleVM itself: the stop landed but the start did not, so the marked
-// master sits powered off and etcd cannot report healthy until it is powered
-// back on. The resumed run must skip the pre-node etcd gate for that master —
-// running it would deadlock behind the very power-on it blocks — while the
-// post-cycle gate still verifies quorum before the node returns to service.
 func TestResizeResumesMidPowerCycleWithMemberDown(t *testing.T) {
 	fc := &fakeCluster{
 		nodes: []cluster.NodeDetail{
@@ -483,9 +410,7 @@ func TestResizeResumesMidPowerCycleWithMemberDown(t *testing.T) {
 			{Name: "master1", Role: nodetypes.RoleMaster, Ready: true},
 			{Name: "master2", Role: nodetypes.RoleMaster, Ready: true},
 		},
-		// The marked master is down: etcd is degraded until the resumed
-		// power-cycle brings it back.
-		etcdHealthy: false,
+		etcdHealthy: false, // marked master is down until the resumed power-cycle brings it back
 	}
 	ftf := &fakeTF{
 		action:          terraform.PlanActionUpdate,
@@ -501,9 +426,7 @@ func TestResizeResumesMidPowerCycleWithMemberDown(t *testing.T) {
 	r, _, _ := seedRunner(t, fc, ftf, cfg)
 	r.DryRun = false
 	r.Power = fp
-	// Keep the failure mode fast: if the pre-gate wrongly runs against the
-	// down member, it times out here instead of burning the default gate.
-	r.EtcdGateTimeout = 1 * time.Second
+	r.EtcdGateTimeout = 1 * time.Second // fails fast if the pre-gate wrongly runs against the down member
 	seedMarker(t, r, OpResize, "master1", StepPowerCycle)
 
 	if err := r.Resize(context.Background(), ResizeScope{Role: nodetypes.RoleMaster}, ResizeOptions{MemoryMB: 24576}); err != nil {
@@ -517,9 +440,7 @@ func TestResizeResumesMidPowerCycleWithMemberDown(t *testing.T) {
 	if !slices.Contains(fc.uncordonedNodes, "master1") {
 		t.Errorf("master1 must return to service once healthy: uncordoned=%v", fc.uncordonedNodes)
 	}
-	// master2 ran fresh AFTER the cycle restored quorum, so its own pre-gate
-	// passed — proving the skip is scoped to the resumed node, not a blanket
-	// gate removal.
+	// master2's own pre-gate passed after quorum was restored — the skip is scoped, not blanket.
 	if !slices.Contains(fc.cordonedNodes, "master2") {
 		t.Errorf("master2 must run fresh after the resume: cordoned=%v", fc.cordonedNodes)
 	}

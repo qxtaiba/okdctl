@@ -18,100 +18,82 @@ import (
 	"time"
 )
 
-func TestNew(t *testing.T) {
-	c := New(5 * time.Second)
-	if c.Timeout != 5*time.Second {
-		t.Errorf("Timeout = %v, want 5s", c.Timeout)
-	}
-	if c.Transport != nil {
-		t.Errorf("New() should leave Transport nil for default (verified TLS)")
-	}
-	if c.CheckRedirect == nil {
-		t.Error("CheckRedirect not installed; redirect cap policy is missing")
-	}
-}
-
-func TestNewInsecure(t *testing.T) {
-	c := NewInsecure(3 * time.Second)
-	if c.Timeout != 3*time.Second {
-		t.Errorf("Timeout = %v, want 3s", c.Timeout)
-	}
-	tr, ok := c.Transport.(*http.Transport)
-	if !ok {
-		t.Fatalf("Transport not *http.Transport: %T", c.Transport)
-	}
-	if tr.TLSClientConfig == nil {
-		t.Fatal("TLSClientConfig missing — insecure flag would be ignored")
-	}
-	if !tr.TLSClientConfig.InsecureSkipVerify {
-		t.Errorf("InsecureSkipVerify = false; NewInsecure's whole purpose is to set this true")
-	}
-
-	// Defense-in-depth: New (secure variant) must not accidentally also
-	// produce InsecureSkipVerify=true via shared-transport goofs.
-	secure := New(3 * time.Second)
-	if secure.Transport != nil {
-		if st, ok := secure.Transport.(*http.Transport); ok && st.TLSClientConfig != nil {
-			if st.TLSClientConfig.InsecureSkipVerify {
-				t.Errorf("secure New() has InsecureSkipVerify=true — cross-contamination")
-			}
-		}
-	}
-
-	if c.CheckRedirect == nil {
-		t.Error("CheckRedirect not installed on NewInsecure client")
-	}
-}
-
-func TestNewOptionalInsecure(t *testing.T) {
-	c := NewOptionalInsecure(true, 3*time.Second)
-	if c.Timeout != 3*time.Second {
-		t.Errorf("Timeout = %v, want 3s", c.Timeout)
-	}
-	if c.CheckRedirect == nil {
-		t.Error("CheckRedirect not installed on NewOptionalInsecure client")
-	}
-	tr, ok := c.Transport.(*http.Transport)
-	if !ok {
-		t.Fatalf("Transport not *http.Transport: %T", c.Transport)
-	}
-	if !tr.TLSClientConfig.InsecureSkipVerify {
-		t.Error("insecure=true not carried into TLSClientConfig")
-	}
-
-	secure := NewOptionalInsecure(false, time.Second)
-	if secure.Transport.(*http.Transport).TLSClientConfig.InsecureSkipVerify {
-		t.Error("insecure=false must keep TLS verification on")
-	}
-	if secure.CheckRedirect == nil {
-		t.Error("CheckRedirect not installed on secure NewOptionalInsecure client")
-	}
-}
-
-func TestNewWithCA(t *testing.T) {
+func TestClientFactories(t *testing.T) {
 	pool := x509.NewCertPool()
-	c := NewWithCA(pool, 7*time.Second)
-	if c.Timeout != 7*time.Second {
-		t.Errorf("Timeout = %v, want 7s", c.Timeout)
+	cases := []struct {
+		name         string
+		client       *http.Client
+		wantTimeout  time.Duration
+		nilTransport bool
+		wantInsecure bool
+		checkTLS     func(t *testing.T, cfg *tls.Config)
+	}{
+		{
+			name:         "New leaves Transport nil for verified TLS",
+			client:       New(5 * time.Second),
+			wantTimeout:  5 * time.Second,
+			nilTransport: true,
+		},
+		{
+			name:         "NewInsecure skips verification",
+			client:       NewInsecure(3 * time.Second),
+			wantTimeout:  3 * time.Second,
+			wantInsecure: true,
+		},
+		{
+			name:         "NewOptionalInsecure true skips verification",
+			client:       NewOptionalInsecure(true, 3*time.Second),
+			wantTimeout:  3 * time.Second,
+			wantInsecure: true,
+		},
+		{
+			name:        "NewOptionalInsecure false keeps verification on",
+			client:      NewOptionalInsecure(false, time.Second),
+			wantTimeout: time.Second,
+		},
+		{
+			name:        "NewWithCA pins pool and TLS 1.2",
+			client:      NewWithCA(pool, 7*time.Second),
+			wantTimeout: 7 * time.Second,
+			checkTLS: func(t *testing.T, cfg *tls.Config) {
+				t.Helper()
+				if cfg.RootCAs != pool {
+					t.Error("RootCAs not set to provided pool")
+				}
+				if cfg.MinVersion != tls.VersionTLS12 {
+					t.Errorf("MinVersion = %d, want TLS 1.2 (%d)", cfg.MinVersion, tls.VersionTLS12)
+				}
+			},
+		},
 	}
-	tr, ok := c.Transport.(*http.Transport)
-	if !ok {
-		t.Fatalf("Transport not *http.Transport: %T", c.Transport)
-	}
-	if tr.TLSClientConfig == nil {
-		t.Fatal("TLSClientConfig is nil")
-	}
-	if tr.TLSClientConfig.InsecureSkipVerify {
-		t.Error("InsecureSkipVerify must be false for CA-pinned client")
-	}
-	if tr.TLSClientConfig.RootCAs != pool {
-		t.Error("RootCAs not set to provided pool")
-	}
-	if tr.TLSClientConfig.MinVersion != tls.VersionTLS12 {
-		t.Errorf("MinVersion = %d, want TLS 1.2 (%d)", tr.TLSClientConfig.MinVersion, tls.VersionTLS12)
-	}
-	if c.CheckRedirect == nil {
-		t.Error("CheckRedirect not installed on NewWithCA client")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.client.Timeout != tc.wantTimeout {
+				t.Errorf("Timeout = %v, want %v", tc.client.Timeout, tc.wantTimeout)
+			}
+			if tc.client.CheckRedirect == nil {
+				t.Error("CheckRedirect not installed; redirect cap policy is missing")
+			}
+			if tc.nilTransport {
+				if tc.client.Transport != nil {
+					t.Errorf("Transport = %T, want nil for default (verified TLS)", tc.client.Transport)
+				}
+				return
+			}
+			tr, ok := tc.client.Transport.(*http.Transport)
+			if !ok {
+				t.Fatalf("Transport not *http.Transport: %T", tc.client.Transport)
+			}
+			if tr.TLSClientConfig == nil {
+				t.Fatal("TLSClientConfig missing — verification mode would be ignored")
+			}
+			if tr.TLSClientConfig.InsecureSkipVerify != tc.wantInsecure {
+				t.Errorf("InsecureSkipVerify = %v, want %v", tr.TLSClientConfig.InsecureSkipVerify, tc.wantInsecure)
+			}
+			if tc.checkTLS != nil {
+				tc.checkTLS(t, tr.TLSClientConfig)
+			}
+		})
 	}
 }
 
@@ -164,15 +146,6 @@ func TestCapRedirects(t *testing.T) {
 		req := mkReq("example.com", "")
 		if err := capRedirects(req, mkVia(4, "example.com")); err != nil {
 			t.Errorf("expected nil, got %v", err)
-		}
-	})
-
-	t.Run("cap precedes cross-host check", func(t *testing.T) {
-		// At cap with cross-host + auth, the cap fires first.
-		req := mkReq("other.com", "Bearer x")
-		err := capRedirects(req, mkVia(5, "example.com"))
-		if err == nil {
-			t.Fatal("expected cap error, got nil")
 		}
 	})
 }

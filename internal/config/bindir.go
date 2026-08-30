@@ -10,10 +10,9 @@ import (
 // DefaultBinDir is where setup installs okd/terraform/yq/helm/sops.
 const DefaultBinDir = "/usr/local/bin"
 
-// ResolveBinDir returns the tool-install directory: OKDCTL_BIN_DIR env >
-// cfg.Deployment.BinDir > DefaultBinDir. cfg may be nil; non-absolute values
-// and values containing a `..` element fall through. See BinDirOrDefault
-// for the full three-function surface rationale.
+// ResolveBinDir returns the tool-install directory, preferring OKDCTL_BIN_DIR
+// over cfg.Deployment.BinDir over DefaultBinDir. cfg may be nil; non-absolute
+// or `..`-containing values fall through to the next source.
 func ResolveBinDir(cfg *Config) string {
 	if v := envBinDir(); v != "" {
 		return v
@@ -26,9 +25,8 @@ func ResolveBinDir(cfg *Config) string {
 	return DefaultBinDir
 }
 
-// PreflightBinDir returns the env-only bin dir (OKDCTL_BIN_DIR > DefaultBinDir);
-// the config is not yet parsed when main.preflight runs. See BinDirOrDefault
-// for the full three-function surface rationale.
+// PreflightBinDir returns OKDCTL_BIN_DIR or DefaultBinDir; the config is not
+// parsed yet when main.preflight runs.
 func PreflightBinDir() string {
 	if v := envBinDir(); v != "" {
 		return v
@@ -36,14 +34,8 @@ func PreflightBinDir() string {
 	return DefaultBinDir
 }
 
-// BinDirOrDefault returns s when non-empty, else DefaultBinDir.
-// Scaffolding: together with PreflightBinDir and ResolveBinDir this forms
-// the three-function bin-dir-resolution surface; each function
-// consults a different input source (struct field, env+config, env-only). Call
-// sites in setup and cleanup use BinDirOrDefault as defense-in-depth — the
-// field is already populated by ResolveBinDir at construction, but the explicit
-// fallback documents that zero-value is safe and makes the resolution path
-// auditable at each call site without tracing back to the constructor.
+// BinDirOrDefault returns s when non-empty, else DefaultBinDir. Defense in
+// depth: call sites already pass a value resolved by ResolveBinDir.
 func BinDirOrDefault(s string) string {
 	if s == "" {
 		return DefaultBinDir

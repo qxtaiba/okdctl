@@ -29,8 +29,8 @@ var welcomeOptions = []struct {
 	{"start fresh", "create a new configuration"},
 }
 
-// WelcomeStep is the wizard's entry screen, offering deploy/edit/fresh
-// options when an existing config is present.
+// WelcomeStep is the wizard's entry screen, offering deploy/edit/fresh options
+// when a config already exists.
 type WelcomeStep struct {
 	wizard.BaseStep
 	configExists bool
@@ -49,9 +49,9 @@ func NewWelcomeStep() *WelcomeStep {
 	}
 }
 
-// newWelcomeSelect builds the step's navigation: a clamped (non-wrapping)
-// list over the deploy/edit/fresh options, or a single "get started" entry
-// on the blank onboarding branch. Space confirms alongside enter.
+// newWelcomeSelect builds a clamped (non-wrapping) selector over
+// deploy/edit/fresh, or a single "get started" entry; space confirms alongside
+// enter.
 func newWelcomeSelect(configExists bool) *wizard.SingleSelect {
 	options := []string{"get started"}
 	if configExists {
@@ -65,8 +65,8 @@ func newWelcomeSelect(configExists bool) *wizard.SingleSelect {
 	return wizard.NewSingleSelect(wizard.StepIDWelcome, selector, "enter", " ")
 }
 
-// SetConfigExists tells the step whether an okdctl.yaml exists so it can
-// offer the deploy/edit/fresh branch instead of the blank onboarding branch.
+// SetConfigExists tells the step whether okdctl.yaml exists, switching between
+// the deploy/edit/fresh and blank onboarding branches.
 func (s *WelcomeStep) SetConfigExists(exists bool) {
 	s.configExists = exists
 	if exists {
@@ -151,8 +151,8 @@ func (s *WelcomeStep) Validate() error {
 	return nil
 }
 
-// Apply resets cfg to the package defaults when the user picked
-// WelcomeModeFresh on top of an existing configuration.
+// Apply resets cfg to package defaults when the user picked WelcomeModeFresh
+// over an existing configuration.
 func (s *WelcomeStep) Apply(cfg *config.Config) error {
 	if s.GetMode() == WelcomeModeFresh && s.configExists {
 		freshCfg := config.DefaultConfig()
@@ -184,8 +184,7 @@ func (s *WelcomeStep) GetSelectedAction() wizard.Action {
 	return wizard.ActionExit
 }
 
-// ShouldExitEarly reports whether the user chose deploy-now, which skips
-// the rest of the wizard steps.
+// ShouldExitEarly reports whether the user chose deploy-now, skipping the rest of the wizard.
 func (s *WelcomeStep) ShouldExitEarly() bool {
 	return s.GetMode() == WelcomeModeDeploy
 }

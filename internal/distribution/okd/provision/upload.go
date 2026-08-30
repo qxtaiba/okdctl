@@ -18,8 +18,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// remoteISO256 runs sha256sum on remotePath/filename over SSH and returns the
-// hex digest. Any SSH or parse failure returns ("", err).
+// remoteISO256 runs sha256sum on remotePath/filename over SSH, returning the
+// hex digest; any SSH or parse failure returns ("", err).
 func remoteISO256(ctx context.Context, exec *executor.Executor, host, knownHostsPath, remotePath, filename string) (string, error) {
 	if err := hostssh.ValidateISODir(remotePath); err != nil {
 		return "", fmt.Errorf("remoteISO256: %w", err)
@@ -42,9 +42,8 @@ func remoteISO256(ctx context.Context, exec *executor.Executor, host, knownHosts
 	return fields[0], nil
 }
 
-// isoUploadNeeded returns false when the remote file's sha256 matches the
-// local file. Any error (SSH transport, parse, local hash failure) returns
-// true so the caller falls back to uploading.
+// isoUploadNeeded returns false only when the remote sha256 matches the
+// local file; any error fails open to true so the caller re-uploads.
 func isoUploadNeeded(ctx context.Context, exec *executor.Executor, host, knownHostsPath, remotePath, localPath string) bool {
 	localHash, err := download.CalculateChecksum(ctx, localPath)
 	if err != nil {
@@ -83,18 +82,15 @@ func calculateTotalSize(files []string) int64 {
 	return totalSize
 }
 
-// proxmoxSCPUser is fixed: ISO uploads target /var/lib/vz, writable only
-// by root on a stock Proxmox VE install.
+// proxmoxSCPUser is fixed to root: ISO uploads target /var/lib/vz, writable
+// only by root on a stock Proxmox VE install.
 const proxmoxSCPUser = "root"
 
-// uploadISOsViaSCP scps the given ISOs to the Proxmox host one file at a time.
-// Callers pass a pre-filtered list, so no per-file freshness re-check happens
-// here. Per-file invocations mean a SIGINT or network drop mid-batch leaves
-// already-uploaded files intact; the next run resumes only the corrupt tail.
-// When knownHostsPath is non-empty the scp call enforces strict host-key
-// checking against that file, matching sshBaseArgs policy in hostssh/ssh.go.
-// An empty path falls back to accept-new TOFU, preserving behaviour for
-// operators without a configured fingerprint.
+// uploadISOsViaSCP scps the pre-filtered ISOs to the Proxmox host one file at
+// a time, so a SIGINT or network drop mid-batch leaves already-uploaded
+// files intact and the next run resumes only the tail. A non-empty
+// knownHostsPath enforces strict host-key checking; empty falls back to
+// accept-new TOFU.
 func uploadISOsViaSCP(ctx context.Context, cmdRunner *executor.Executor, isoFiles []string, host, remotePath, knownHostsPath string) error {
 	var baseArgs []string
 	if knownHostsPath != "" {
@@ -116,17 +112,16 @@ func uploadISOsViaSCP(ctx context.Context, cmdRunner *executor.Executor, isoFile
 		}
 		args := append(slices.Clone(baseArgs), f, dest)
 		if err := cmdRunner.RunInteractive(ctx, "scp", args...); err != nil {
-			return fmt.Errorf("scp %s failed: %w", filepath.Base(f), err)
+			return fmt.Errorf("scp %s: %w", filepath.Base(f), err)
 		}
 	}
 	return nil
 }
 
-// UploadCustomISOsToProxmox uploads the custom ISOs that differ from the
-// remote copies (sha256-compared over SSH) to Proxmox storage, batched into
-// scp calls; unchanged ISOs are skipped and an all-current set uploads
-// nothing. It verifies the pinned SSH host key first (sshpin.Verify) and hard-
-// fails on mismatch when a fingerprint is required.
+// UploadCustomISOsToProxmox uploads only the custom ISOs that differ from
+// the remote copies (sha256-compared over SSH), skipping unchanged ones. It
+// verifies the pinned SSH host key first and hard-fails on mismatch when a
+// fingerprint is required.
 func (p *Provisioner) UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Config, opts Options) error {
 	if cfg.Provider.Proxmox == nil {
 		return &errtypes.ConfigError{Msg: msgProxmoxProviderRequired}
@@ -182,9 +177,8 @@ func (p *Provisioner) UploadCustomISOsToProxmox(ctx context.Context, cfg *config
 
 // ISOUploadAlreadyDone returns true when every local ISO has an identical
 // sha256 on the Proxmox host. Any SSH failure or absent Proxmox config
-// conservatively returns (false, nil) — the conservative-not-done choice
-// lets Exec surface the real failure rather than silently skipping the
-// upload.
+// conservatively returns (false, nil), so Exec runs and surfaces the real
+// failure.
 func (p *Provisioner) ISOUploadAlreadyDone(ctx context.Context, cfg *config.Config, opts Options) (bool, error) {
 	if cfg.Provider.Proxmox == nil {
 		return false, nil
@@ -194,8 +188,6 @@ func (p *Provisioner) ISOUploadAlreadyDone(ctx context.Context, cfg *config.Conf
 		return false, nil
 	}
 	isoFiles, err := collectISOFiles(isoDir)
-	// Conservative: any error or empty list means "not done" so Exec runs and
-	// surfaces the real failure mode.
 	if err != nil || len(isoFiles) == 0 {
 		return false, nil //nolint:nilerr // intentional: caller treats false as "Exec must run"
 	}

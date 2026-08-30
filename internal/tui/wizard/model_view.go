@@ -10,8 +10,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-// View implements tea.Model; it renders header, viewport, scroll
-// indicator, optional error banner, and footer into a bordered box.
+// View implements tea.Model, rendering header, viewport, scroll indicator,
+// optional error banner, and footer into a bordered box.
 func (m *Model) View() tea.View {
 	v := tea.View{AltScreen: true}
 
@@ -40,17 +40,10 @@ func (m *Model) View() tea.View {
 		content.WriteString("\n")
 	}
 
-	// renderFooter prepends the scroll indicator to the help bar so the
-	// scroll-indicator line doubles as the footer's top divider — one row
-	// of vertical real estate instead of two.
 	content.WriteString(m.renderFooter())
 
-	// In lipgloss v2, Style.Width(N) sets OUTER width — the border is
-	// counted INSIDE N, so the content area is N - 2. Pass contentWidth + 2
-	// as the .Width() argument so the inner content area equals contentWidth
-	// (what every render*() helper sizes itself to). Without this offset,
-	// every full-width line wraps by 2 chars and the wraps push the bottom
-	// of the box off the visible terminal.
+	// lipgloss v2 Width(N) counts the border inside N — pass contentWidth+2 or
+	// full-width lines clip by 2 chars.
 	innerWidth := m.contentWidth()
 	if innerWidth < minWidth {
 		innerWidth = minWidth
@@ -64,12 +57,7 @@ func (m *Model) View() tea.View {
 	return v
 }
 
-// contentWidth is the inner content area inside the wizard's border —
-// what header/viewport/scrollIndicator/footer must size themselves to.
-// It accounts for outerHorizontalPadding (4) and wizardBorderHorizontal (2).
-// View() passes contentWidth + wizardBorderHorizontal to WizardBorderStyle's
-// .Width() because in lipgloss v2 that argument is the OUTER width (border
-// inclusive); both sides agree on what fits.
+// contentWidth is the inner content area every header/viewport/footer helper sizes itself to.
 func (m *Model) contentWidth() int {
 	width := m.width - outerHorizontalPadding - wizardBorderHorizontal
 	if width < 60 {
@@ -115,7 +103,7 @@ func (m *Model) syncViewportContent() {
 
 	var content strings.Builder
 
-	if d, ok := step.(DescribedStep); ok {
+	if d, ok := step.(displayTitler); ok {
 		if displayTitle := d.DisplayTitle(); displayTitle != "" {
 			content.WriteString(m.renderStepTitle(displayTitle))
 			content.WriteString("\n\n")

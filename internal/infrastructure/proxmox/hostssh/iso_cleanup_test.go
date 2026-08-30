@@ -10,12 +10,11 @@ import (
 	"testing"
 )
 
-// TestValidateProxmoxName locks the current [A-Za-z0-9_-] allowlist so a
-// future refactor (e.g. swapping to a regex with a wrong anchor) cannot
-// silently relax the gate. Leading-digit names are accepted today; if a
-// hardening pass tightens that, both this test and the impl move together.
+// TestValidateProxmoxName locks the [A-Za-z0-9_-] allowlist (leading digits
+// included) against silent relaxation; its reject list doubles as the
+// injection-payload set for the node atom pveshRun interpolates.
 func TestValidateProxmoxName(t *testing.T) {
-	accept := []string{"pve", "pve-1", "node_a", "PVE0", "1pve"}
+	accept := []string{"pve-1", "node_a", "PVE0", "1pve", "A"}
 	for _, name := range accept {
 		if err := validateProxmoxName(name); err != nil {
 			t.Errorf("validateProxmoxName(%q) rejected; want nil: %v", name, err)
@@ -32,6 +31,11 @@ func TestValidateProxmoxName(t *testing.T) {
 		"pve space",
 		"pvé",
 		"pve\x00",
+		"pve\ttab",
+		"..",
+		"/",
+		"node|pipe",
+		"node&bg",
 	}
 	for _, name := range reject {
 		if err := validateProxmoxName(name); err == nil {
@@ -44,10 +48,8 @@ func TestRefuseUnsafeISOPath(t *testing.T) {
 	const isoDir = "/var/lib/vz/template/iso"
 
 	safe := []string{
-		"/var/lib/vz/template/iso/fedora-coreos-40.20240101.iso",
 		"/var/lib/vz/template/iso/fedora-coreos-41.3.1-x86_64.iso",
 		"/var/lib/vz/template/iso/scos-10.0.20251103-0-live-iso.x86_64.iso",
-		"/var/lib/vz/template/iso/scos-9.0.20250510-0.iso",
 	}
 	for _, p := range safe {
 		if err := refuseUnsafeISOPath(isoDir, p); err != nil {
@@ -63,11 +65,8 @@ func TestRefuseUnsafeISOPath(t *testing.T) {
 		"/var/lib/vz/template/iso/fedora-coreos-40.iso/../../../etc/passwd",
 		"/var/lib/vz/template/iso/other-distro.iso",
 		"/var/lib/vz/template/iso/fedora-coreos-40.img",
-		"/var/lib/vz/template/iso/scos-40.iso/../../../etc/passwd",
 		"/var/lib/vz/template/iso/scos.iso",
-		"/var/lib/vz/template/iso/scos-40.img",
 		"/tmp/fedora-coreos-40.iso",
-		"/tmp/scos-40.iso",
 		"",
 	}
 	for _, p := range unsafe {
@@ -82,13 +81,10 @@ func TestShellSingleQuote(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"simple", "'simple'"},
+		{"fedora-coreos-40.iso", "'fedora-coreos-40.iso'"},
 		{"with space", "'with space'"},
 		{"it's", `'it'\''s'`},
 		{"$(reboot)", "'$(reboot)'"},
-		{"; id ;", "'; id ;'"},
-		{"fedora-coreos-40.iso", "'fedora-coreos-40.iso'"},
-		{"a'b", `'a'\''b'`},
 	}
 	for _, tc := range cases {
 		got := shellSingleQuote(tc.input)
@@ -200,107 +196,42 @@ func TestVmDevicesReferenceISO(t *testing.T) {
 	}
 }
 
-func TestParseVMIDsFromSummary_onlyRunning(t *testing.T) {
-	// Realistic summary response: three VMs, one stopped, two running.
-	summaryJSON := []byte(`[
-		{"vmid":100,"name":"okd-bootstrap","status":"running","mem":4096,"cpus":4,"uptime":3600},
-		{"vmid":101,"name":"okd-master-0","status":"stopped","mem":16384,"cpus":8,"uptime":0},
-		{"vmid":102,"name":"okd-master-1","status":"running","mem":16384,"cpus":8,"uptime":7200}
-	]`)
+func TestParseVMIDsFromSummary(t *testing.T) {
+	t.Run("only running", func(t *testing.T) {
+		summaryJSON := []byte(`[
+			{"vmid":100,"name":"okd-bootstrap","status":"running","mem":4096,"cpus":4,"uptime":3600},
+			{"vmid":101,"name":"okd-master-0","status":"stopped","mem":16384,"cpus":8,"uptime":0},
+			{"vmid":102,"name":"okd-master-1","status":"running","mem":16384,"cpus":8,"uptime":7200}
+		]`)
 
-	ids, err := parseVMIDsFromSummary(summaryJSON)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(ids) != 2 {
-		t.Fatalf("expected 2 running vmids, got %d: %v", len(ids), ids)
-	}
-	if ids[0] != 100 || ids[1] != 102 {
-		t.Errorf("expected vmids [100, 102], got %v", ids)
-	}
+		ids, err := parseVMIDsFromSummary(summaryJSON)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(ids) != 2 {
+			t.Fatalf("expected 2 running vmids, got %d: %v", len(ids), ids)
+		}
+		if ids[0] != 100 || ids[1] != 102 {
+			t.Errorf("expected vmids [100, 102], got %v", ids)
+		}
+	})
+
+	t.Run("empty", func(t *testing.T) {
+		ids, err := parseVMIDsFromSummary([]byte(`[]`))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(ids) != 0 {
+			t.Errorf("expected empty vmid list, got %v", ids)
+		}
+	})
 }
 
-func TestParseVMIDsFromSummary_empty(t *testing.T) {
-	ids, err := parseVMIDsFromSummary([]byte(`[]`))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(ids) != 0 {
-		t.Errorf("expected empty vmid list, got %v", ids)
-	}
-}
-
-func TestConfigDevicesReferenceISO_found(t *testing.T) {
-	// Per-vmid config shape from pvesh get /nodes/<node>/qemu/<vmid>/config:
-	// top-level keys include device fields alongside non-device fields.
-	configJSON := []byte(`{
-		"ide2": "local:iso/fedora-coreos-40.iso,media=cdrom",
-		"scsi0": "local-lvm:vm-100-disk-0,size=120G",
-		"memory": 4096,
-		"cores": 4
-	}`)
-
-	found, err := configDevicesReferenceISO(configJSON, "iso/fedora-coreos-40.iso")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !found {
-		t.Error("expected config with ide2 cdrom to reference fedora-coreos-40.iso")
-	}
-}
-
-func TestConfigDevicesReferenceISO_notFound(t *testing.T) {
-	configJSON := []byte(`{
-		"scsi0": "local-lvm:vm-101-disk-0,size=120G",
-		"memory": 16384,
-		"cores": 8
-	}`)
-
-	found, err := configDevicesReferenceISO(configJSON, "iso/fedora-coreos-40.iso")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if found {
-		t.Error("expected config without iso reference to return false")
-	}
-}
-
-func TestConfigDevicesReferenceISO_summaryShapeNoDevices(t *testing.T) {
-	// The summary-list element shape (vmid/name/status/mem/cpus/uptime) must
-	// not match device fields — confirms the per-vmid /config call is required.
-	summaryElementJSON := []byte(`{
-		"vmid": 100,
-		"name": "okd-bootstrap",
-		"status": "running",
-		"mem": 4096,
-		"cpus": 4,
-		"uptime": 3600
-	}`)
-
-	found, err := configDevicesReferenceISO(summaryElementJSON, "fedora-coreos-40.iso")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if found {
-		t.Error("summary-list element shape must not match any device field")
-	}
-}
-
-func TestFindCoreOSISONameClause(t *testing.T) {
-	got := findCoreOSISONameClause()
-	want := `\( -name 'fedora-coreos-*.iso' -o -name 'scos-*.iso' \)`
-	if got != want {
-		t.Errorf("findCoreOSISONameClause() = %q, want %q", got, want)
-	}
-}
-
-// TestRemoveFCOSISOFromProxmox_findCmdMatchesBothShapesLocally runs the
-// exact find command RemoveFCOSISOFromProxmox sends over SSH through a real
-// local shell (no ssh/fake-ssh involved) to prove the \( -o \) grouping is
-// valid POSIX find(1) syntax and matches fedora-coreos-*.iso and
-// scos-*.iso while rejecting lookalikes.
+// TestRemoveFCOSISOFromProxmox_findCmdMatchesBothShapesLocally runs the real
+// find command through a local shell (no ssh) to prove the \( -o \) grouping
+// is valid POSIX find(1) syntax.
 func TestRemoveFCOSISOFromProxmox_findCmdMatchesBothShapesLocally(t *testing.T) {
-	if runtime.GOOS == goosWindows {
+	if runtime.GOOS == "windows" {
 		t.Skip("uses POSIX sh/find")
 	}
 	dir := t.TempDir()

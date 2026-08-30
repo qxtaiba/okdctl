@@ -14,27 +14,23 @@ import (
 // RemoveOptions tunes a worker removal.
 type RemoveOptions struct {
 	// ForceStorage permits removal even when the worker holds rook-ceph OSDs
-	// (whose CEPH-DATA disk is destroyed with the VM).
+	// (destroying their CEPH-DATA disk).
 	ForceStorage bool
 	SkipDrain    bool
 	DrainTimeout string
-	// Acknowledge overrides a stranded marker left by a different op/target so
-	// RemoveWorker proceeds fresh instead of refusing; see beginOp.
+	// Acknowledge overrides a stranded marker from a different op/target so
+	// RemoveWorker proceeds fresh; see beginOp.
 	Acknowledge bool
 }
 
-// RemoveWorker removes the named worker: guards, cordon, drain, targeted
-// terraform delete (plan-gated to exactly worker[N-1]), then Kubernetes node
-// delete. It does not touch HAProxy — the completion log points the operator
-// at the manual backend-refresh steps instead. On any failure the node is
-// left cordoned. Only the highest-numbered worker is removable (count-index
-// rule). An interrupted run resumes at its recorded step (see beginOp),
-// skipping the guards/confirm gate — they assume a clean baseline that no
-// longer holds once a prior attempt has partially mutated the cluster.
+// RemoveWorker removes the named worker: guards, cordon, drain, a targeted
+// terraform delete (gated to worker[N-1]), then Kubernetes node delete; HAProxy
+// is untouched. Failure leaves the node cordoned; a resumed run re-enters at
+// its recorded step (see beginOp), skipping guards/confirm since a prior
+// partial run breaks their clean-baseline assumption.
 func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOptions) error {
-	// A dry-run previews a fresh plan and mutates nothing, so resume is
-	// irrelevant: skip beginOp entirely so a stranded foreign marker previews
-	// rather than refusing.
+	// Dry-run mutates nothing, so resume is irrelevant: skip beginOp so a
+	// stranded marker previews rather than refuses.
 	var marker *OpMarker
 	if !r.DryRun {
 		var err error
@@ -50,9 +46,9 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 	}
 
 	workerCount := r.Cfg.Topology.Workers.Count
-	// A digit-less target must fail here rather than silently parse to idx 0:
-	// the resume path skips validateWorkerRemovable, and idx drives both the
-	// terraform address and the worker_count persist below.
+	// A digit-less target must fail here (not silently parse to idx 0): resume
+	// skips validateWorkerRemovable, and idx drives the tf address and
+	// worker_count persist below.
 	idx, ok := cluster.NodeIndex(target)
 	if !ok {
 		return &errtypes.ConfigError{Msg: fmt.Sprintf("cannot derive a terraform index from node name %q", target)}
@@ -65,7 +61,7 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 			return &errtypes.ClusterError{Msg: msgListNodes, Err: err}
 		}
 		if err := validateWorkerRemovable(nodes, target, workerCount); err != nil {
-			return &errtypes.ConfigError{Msg: err.Error(), Err: err}
+			return err
 		}
 		osdHere, ingressHere, err = r.removeGuards(ctx, nodes, target, opts.ForceStorage)
 		if err != nil {
@@ -87,13 +83,8 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 		}},
 	}
 
-	// worker[idx] leaves the config exactly when worker_count drops to idx (the
-	// workers 0..idx-1 remain). Using idx directly is absolute, so a resumed
-	// re-run over an already-decremented config computes the same target rather
-	// than decrementing again. On a fresh run idx == workerCount-1 (the
-	// removable-worker guard enforces it), so the delete preview is unchanged;
-	// persisting is forbidden in dry-run, so this override also drives a
-	// truthful preview without a config write.
+	// countVars uses idx directly (absolute, not a decrement) so a resumed
+	// re-run over an already-decremented config computes the same target.
 	countVars := map[string]string{tfVarWorkerCount: strconv.Itoa(idx)}
 
 	if r.DryRun {
@@ -120,13 +111,8 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 			return err
 		}
 
-		// Persist only after the apply has verifiably landed (real apply or an
-		// already-at-target resume). The assignment is absolute (Count = idx,
-		// the removed worker's stable index), not a relative decrement, so a
-		// crash after this persist but before the delete-node marker advances
-		// re-runs it as a no-op on resume rather than decrementing a second time
-		// and understating the topology (which would destroy a healthy worker on
-		// the next deploy).
+		// Count = idx is absolute, so a crash between this persist and the
+		// delete-node marker re-runs as a no-op instead of double-decrementing.
 		r.Cfg.Topology.Workers.Count = idx
 		if err := r.persistTopology(); err != nil {
 			return &errtypes.ClusterError{Msg: msgPersistTopology, Err: err}
@@ -142,10 +128,8 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 		return err
 	}
 
-	// If the removed worker held OSDs (--force-storage / compaction), destroying
-	// its CEPH-DATA disk triggers a rebalance. Wait for structural Ceph health
-	// before returning so a compact loop never starts draining the next worker
-	// while a replica is still missing. No-op on non-Ceph clusters.
+	// Destroying an OSD's disk triggers a rebalance; wait for Ceph health so a
+	// compact loop never drains mid-recovery.
 	if err := r.waitCephHealthy(ctx, "post-remove-"+target); err != nil {
 		return err
 	}
@@ -159,11 +143,7 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 	return nil
 }
 
-// cordonAndDrain cordons then drains node, writing an op marker (under op — the
-// caller's identity, not a hardcoded one, so a snapshot and a remove sharing
-// this helper never leave a marker the other could be mistaken for) before each
-// step, and gating each step via resumeStep so a run resuming exactly at
-// StepDrain (cordon already landed before the crash) re-runs only the drain.
+// cordonAndDrain cordons then drains node, marking each step under the caller's own op.
 func (r *Runner) cordonAndDrain(ctx context.Context, op Op, node, timeout string, force bool, resumeStep Step) error {
 	stop := r.startProgress(fmt.Sprintf("cordoning and draining %s", node))
 	defer stop()
@@ -180,10 +160,8 @@ func (r *Runner) cordonAndDrain(ctx context.Context, op Op, node, timeout string
 			Force:            force,
 			Timeout:          timeout,
 		}); err != nil {
-			// remove/resize resume their own marker on a plain re-run; a
-			// snapshot op refuses its own marker as foreign, so its retry
-			// advice must name the acknowledge flag or it sends the operator
-			// into a refusal loop.
+			// snapshot refuses its own marker as foreign, so its retry advice
+			// must name --acknowledge-interrupted-op.
 			retry := "re-run to retry"
 			if op == OpSnapshot {
 				retry = "re-run with --acknowledge-interrupted-op to retry"
@@ -194,10 +172,8 @@ func (r *Runner) cordonAndDrain(ctx context.Context, op Op, node, timeout string
 	})
 }
 
-// removeGuards runs the read-only storage and ingress guards for a worker
-// removal with a single pod fetch per selector, returning the OSD and router
-// pods on target so the confirmation box can report them without re-querying.
-// A blocked guard returns its refusal; the pod slices are then unused.
+// removeGuards runs the read-only storage/ingress guards, returning target's
+// OSD/router pods so confirm can reuse them.
 func (r *Runner) removeGuards(ctx context.Context, nodes []cluster.NodeDetail, target string, force bool) (osdHere, ingressHere []string, err error) {
 	osdPods, err := r.Cluster.PodsForSelector(ctx, "", "app=rook-ceph-osd")
 	if err != nil {

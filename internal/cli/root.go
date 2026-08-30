@@ -1,15 +1,5 @@
-// Package cli wires together the cobra command tree and drives the
-// top-level event loop. Process exit codes follow a documented contract:
-// config error=2, network error=3, cluster error=4, auth error=5
-// (includes invoked-as-root rejection via AuthError), doctor warn-only=6
-// (see errDoctorWarn), plan drift detected=7 (see errPlanDrift), config file
-// not found=66 (EX_NOINPUT), invalid pull secret JSON=65 (EX_DATAERR), sudo
-// not found=71 (EX_OSERR), unknown-flag error=64 (EX_USAGE, via
-// SetFlagErrorFunc; arg-count violations via wrapArgValidators), internal
-// panic=70 (EX_SOFTWARE, via execute's recover), other error=1 (includes
-// unknown subcommands and mutually-exclusive-flag conflicts which cobra
-// surfaces outside the flag-parser), SIGINT=130, SIGTERM=143, success=0.
-// See docs/cli/exit-codes.md for the full taxonomy table.
+// Package cli wires the cobra command tree and drives the top-level event
+// loop; exit codes follow the taxonomy in docs/cli/exit-codes.md.
 package cli
 
 import (
@@ -35,11 +25,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/version"
 )
 
-// cfgFile is package-scope state managed by cobra PersistentFlags. It is
-// populated once by the root command's --config flag and read directly by
-// config-consuming subcommand RunE handlers. This is the standard cobra
-// pattern; threading it through function parameters would fight the
-// framework.
+// cfgFile is cobra-managed state from --config; passing it as a param would fight cobra's pattern.
 var cfgFile string
 
 var (
@@ -50,18 +36,15 @@ var (
 	logVerbose bool
 )
 
-// startLogged records that PersistentPreRunE emitted the "okdctl: started"
-// bookend, keeping the deferred "okdctl: finished" line symmetric.
+// startLogged records that the "okdctl: started" bookend fired, keeping "finished" symmetric.
 var startLogged bool
 
-// preflightWarns holds warning closures registered before cli.Execute
-// runs. PersistentPreRunE drains the slice after configureLogging so every
-// warning uses the fully-configured formatter (text or JSON).
+// preflightWarns holds pre-Execute warnings; PersistentPreRunE drains them
+// after configureLogging so they use the final formatter.
 var preflightWarns []func()
 
-// DeferWarn enqueues fn to be called by PersistentPreRunE after
-// configureLogging completes. Use this for warnings generated before
-// cli.Execute is invoked (e.g. in main.preflight).
+// DeferWarn enqueues fn for PersistentPreRunE to call after configureLogging,
+// for warnings raised before cli.Execute (e.g. main.preflight).
 func DeferWarn(fn func()) {
 	preflightWarns = append(preflightWarns, fn)
 }
@@ -83,9 +66,8 @@ per 24h, cached locally); set OKDCTL_NO_UPDATE_CHECK=1 to disable.`,
 		if err := configureLogging(cmd); err != nil {
 			return err
 		}
-		// Logged here rather than in execute() so the line honors --quiet,
-		// --log-format, and the piped-stderr auto-switch, symmetric with the
-		// post-configuration "okdctl: finished" bookend.
+		// logged here (not execute()) so it honors --quiet/--log-format/the
+		// piped-stderr auto-switch, symmetric with "finished"
 		logutil.Info("okdctl: started", logutil.LF("argv", logutil.RedactableArgv(os.Args[1:])))
 		startLogged = true
 		for _, fn := range preflightWarns {
@@ -96,9 +78,8 @@ per 24h, cached locally); set OKDCTL_NO_UPDATE_CHECK=1 to disable.`,
 	},
 }
 
-// Execute is the process-level entry point. It wires the default slog logger,
-// runs the cobra tree, flushes any log file, and exits with the exit code
-// computed by execute().
+// Execute wires the default slog logger, runs the cobra tree, flushes the log
+// file, and exits with execute()'s code.
 func Execute() {
 	slog.SetDefault(logutil.SimpleLogger())
 	wrapArgValidators(rootCmd)
@@ -109,12 +90,9 @@ func Execute() {
 	os.Exit(code)
 }
 
-// wrapArgValidators wraps every command's positional-arg validator so a
-// violation surfaces as UsageError (exit 64, EX_USAGE) instead of cobra's
-// bare error (exit 1), keeping arg-count failures consistent with the
-// unknown-flag path installed by SetFlagErrorFunc. Hand-rolled validators
-// that already return UsageError pass through unchanged. Runs once from
-// Execute, after every init() has registered its commands.
+// wrapArgValidators wraps each Args validator so violations surface as
+// UsageError (exit 64) instead of cobra's exit-1; existing UsageErrors pass
+// through unchanged.
 func wrapArgValidators(cmd *cobra.Command) {
 	if fn := cmd.Args; fn != nil {
 		cmd.Args = func(c *cobra.Command, args []string) error {
@@ -138,8 +116,8 @@ func execute() (code int) {
 	tui.SetRunID(rand.Text())
 	start := time.Now()
 	defer func() {
-		// Gated on startLogged so help/version paths that never reach
-		// PersistentPreRunE do not log a "finished" without a "started".
+		// gated on startLogged so help/version paths (which skip
+		// PersistentPreRunE) don't log "finished" without "started"
 		if !startLogged {
 			return
 		}
@@ -150,11 +128,9 @@ func execute() (code int) {
 		)
 	}()
 
-	// Recover panics into exit 70 (EX_SOFTWARE): the Go runtime's own panic
-	// exit code is 2, which the published taxonomy reserves for ConfigError,
-	// and an unrecovered panic would also skip Execute's logFileCloser flush.
-	// Registered after the bookend defer so it runs first on unwind and the
-	// bookend logs the real exit code.
+	// recovers panics into exit 70 (not Go's default 2, reserved for
+	// ConfigError); registered after the bookend defer so it runs first on
+	// unwind.
 	defer func() {
 		r := recover()
 		if r == nil {
@@ -169,15 +145,14 @@ func execute() (code int) {
 		}
 	}()
 
-	// Roll our own signal handling so we can tell SIGINT (→130) apart from
-	// SIGTERM (→143). signal.NotifyContext would collapse them.
+	// custom signal handling distinguishes SIGINT(130) from SIGTERM(143);
+	// signal.NotifyContext would collapse them
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 	defer func() {
 		signal.Stop(sigCh)
-		// Close after Stop so the receiver's !ok branch returns on the
-		// happy path. Without this, the goroutine blocks on sigCh until
-		// process exit — a bounded leak but still a leak.
+		// close after Stop so the receiver's !ok branch returns cleanly;
+		// otherwise it blocks until process exit (bounded leak)
 		close(sigCh)
 	}()
 
@@ -204,21 +179,11 @@ func execute() (code int) {
 	return 0
 }
 
-// signalLoop runs the two-strike shutdown handler in execute()'s goroutine.
-// First signal: store, cancel, and print the escape-hatch hint. Second
-// signal: exit(143) if it was SIGTERM, exit(130) otherwise — matching the
-// documented taxonomy (130=SIGINT, 143=SIGTERM). The user has explicitly
-// asked for a hard kill, so deferred cleanup (logFileCloser.Close) is
-// intentionally bypassed. On the happy path execute()'s defer close(sigCh)
-// fires after signal.Stop, causing the second receive to observe !ok and
-// return cleanly (bounded goroutine leak).
-// close(sigCh) ordering after signal.Stop is load-bearing for the
-// bounded-leak contract; do not move or remove without re-deriving it.
+// signalLoop is the two-strike handler: first signal cancels and warns, second
+// exits 143/130 bypassing cleanup since the user asked for a hard kill.
 func signalLoop(sigCh <-chan os.Signal, cancel context.CancelFunc, caughtSig *atomic.Value, exit func(int)) {
-	// A panic in this okdctl-owned goroutine would otherwise crash the runtime
-	// with Go's fixed exit status 2, which the taxonomy reserves for
-	// ConfigError. Convert it to 70 (EX_SOFTWARE) like execute()'s main-goroutine
-	// recover.
+	// converts a panic here to exit 70 (like execute()'s recover), since an
+	// unrecovered one would use Go's exit 2, reserved for ConfigError
 	defer func() {
 		if r := recover(); r != nil {
 			logutil.Error("internal error: panic in signal handler", logutil.LF("panic", fmt.Sprint(r)))
@@ -266,13 +231,9 @@ func printUpdateNotice(ch <-chan version.CheckResult) {
 	fmt.Fprintln(os.Stderr, tui.MutedStyle.Render("  curl -sSfL https://raw.githubusercontent.com/qxtaiba/okdctl/develop/scripts/install.sh | bash"))
 }
 
-// announceFailure surfaces a command failure. On a human TTY (text format) it
-// renders the boxed ErrorSummary — the same designed chrome the deploy
-// summaries use — unless the command already rendered its own failure box
-// (render.IsPresented). On the machine surface (piped/JSON) it keeps the
-// structured "command failed" log line so 2>&1 consumers and the file sink
-// see err through logutil.RedactHandler, which scrubs credentials in the
-// chain — logutil.Error(err.Error()) would stringify before the handler sees it.
+// announceFailure renders the boxed ErrorSummary on a TTY, else logs "command
+// failed" structured so RedactHandler can scrub credentials (stringifying err
+// first would bypass it).
 func announceFailure(err error) {
 	if logutil.ProgressBarsEnabled() && !render.IsPresented(err) {
 		fmt.Fprint(os.Stderr, render.ErrorSummary(err, exitCodeFor(err), logutil.RunID()))
@@ -285,27 +246,20 @@ func announceFailure(err error) {
 	}
 }
 
-// shouldAnnounceFailure reports whether execute() should print its generic
-// "command failed" line for err. errDoctorWarn and errPlanDrift represent
-// benign non-zero outcomes (doctor warn-only, plan drift found), not actual
-// failures, so both are excluded — each command already prints its own
-// result summary and a second, contradictory "command failed" line would
-// mislead an operator reading the log.
+// shouldAnnounceFailure reports whether to print "command failed", excluding
+// errDoctorWarn/errPlanDrift since each already summarizes itself.
 func shouldAnnounceFailure(err error) bool {
 	return !errors.Is(err, errDoctorWarn) && !errors.Is(err, errPlanDrift)
 }
 
-// signalExitCode reports whether err was caused by a caught OS signal and,
-// if so, returns the corresponding exit code (130 for SIGINT, 143 for SIGTERM).
-// When no signal was received, handled is false and the caller resolves the
-// exit code via exitCodeFor.
+// signalExitCode reports the exit code for a caught signal (130 SIGINT, 143
+// SIGTERM); handled is false when none was caught.
 func signalExitCode(caughtSig *atomic.Value, err error) (int, bool) {
 	if caughtSig.Load() == nil {
 		return 0, false
 	}
-	// Only context.Canceled: the root ctx is WithCancel (no deadline), so a
-	// signal-driven cancel() can never surface as DeadlineExceeded. Accepting
-	// it here would misattribute a self-imposed poll timeout to the signal.
+	// only context.Canceled: the root ctx has no deadline, so accepting
+	// DeadlineExceeded here would misattribute a poll timeout to the signal
 	if !errors.Is(err, context.Canceled) {
 		return 0, false
 	}
@@ -315,19 +269,13 @@ func signalExitCode(caughtSig *atomic.Value, err error) (int, bool) {
 	return 130, true
 }
 
-// exitCodeFor maps err to the documented BSD-sysexits exit code. Sentinel
-// errors (66/65/71) outrank every category below, and within categories the
-// check order below is the precedence order: a category type found anywhere
-// in the error chain wins over a different category type wrapping it,
-// regardless of which is the outermost wrap. Precedence is Config(2) >
-// Network(3) > Cluster(4) > Auth(5) > Usage(64). See docs/cli/exit-codes.md.
+// exitCodeFor maps err to the documented BSD-sysexits code. Precedence is
+// sentinel > Config(2) > Network(3) > Cluster(4) > Auth(5) > Usage(64)
+// regardless of wrap order; see docs/cli/exit-codes.md.
 func exitCodeFor(err error) int {
 	if err == nil {
 		return 0
 	}
-	// Granular BSD sysexits sentinels take precedence over the broad typed
-	// error categories below; a sentinel wrapped inside a ConfigError or
-	// AuthError must resolve to the specific code, not the category code.
 	if errors.Is(err, errtypes.ErrConfigMissing) {
 		return 66
 	}
@@ -337,10 +285,9 @@ func exitCodeFor(err error) int {
 	if errors.Is(err, errtypes.ErrSudoMissing) {
 		return 71
 	}
-	// errDoctorWarn and errPlanDrift are cli-local sentinels, not errtypes
-	// categories — each carries its own dedicated code rather than folding
-	// into ConfigError(2) so a warn-only doctor run or a drift-only plan
-	// stays distinguishable from a real failure.
+	// errDoctorWarn/errPlanDrift are cli-local sentinels with their own codes,
+	// not folded into ConfigError(2), so they stay distinguishable from real
+	// failures
 	if errors.Is(err, errDoctorWarn) {
 		return 6
 	}
@@ -364,17 +311,16 @@ func exitCodeFor(err error) int {
 		return 5
 	}
 	var usageErr *errtypes.UsageError
-	// 64 = EX_USAGE (BSD sysexits.h): command-line usage error. Returned by
-	// SetFlagErrorFunc via UsageError so deferred closes run before exit.
+	// 64 = EX_USAGE (BSD sysexits.h); returned via UsageError so deferred
+	// closes run before process exit
 	if errors.As(err, &usageErr) {
 		return 64
 	}
 	return 1
 }
 
-// versionOutput is the machine-readable shape emitted by
-// `okdctl version --output=json`. Field names match the ldflags variables
-// in internal/version/version.go; see docs/cli/json-schema.md.
+// versionOutput is the machine-readable shape for "okdctl version
+// --output=json"; fields match internal/version/version.go's ldflags vars.
 type versionOutput struct {
 	Version   string `json:"version"`
 	GitCommit string `json:"git_commit"`
@@ -385,9 +331,8 @@ type versionOutput struct {
 
 var versionOutputFlag string
 
-// versionCmd prints the same template as the --version flag. Exists so
-// `okdctl version` works alongside `okdctl --version` (kubectl/docker/gh
-// all expose both).
+// versionCmd exists so "okdctl version" works alongside "okdctl --version"
+// (kubectl/docker/gh pattern).
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print version, git commit, build date",
@@ -418,9 +363,8 @@ pinning or scripted comparisons (see docs/cli/json-schema.md).`,
 	},
 }
 
-// versionText renders the build identity with the dotted-leader convention
-// used by every other okdctl surface, instead of the stray "Key:" colons the
-// stock cobra version template emits.
+// versionText renders build identity with okdctl's dotted-leader convention
+// instead of cobra's stock "Key:" colons.
 func versionText() string {
 	const keyCol = 16
 	rows := [][2]string{
@@ -445,17 +389,16 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&logFormat, flagLogFormat, "text", "log output format: text (TTY default) | json (auto-selected when stderr is piped)")
 	_ = rootCmd.RegisterFlagCompletionFunc(flagLogFormat,
 		cobra.FixedCompletions([]string{outputText, outputJSON}, cobra.ShellCompDirectiveNoFileComp))
-	// DefValue is blanked so --help does not print '(default "text")', which
-	// would contradict the auto-switch prose above. Do not remove without also
-	// updating the flag's Usage string to describe the TTY-vs-pipe contract.
+	// DefValue is blanked so --help doesn't print '(default "text")',
+	// contradicting the auto-switch prose; keep in sync with the flag's Usage
+	// string
 	rootCmd.PersistentFlags().Lookup(flagLogFormat).DefValue = ""
 	rootCmd.PersistentFlags().StringVar(&logFile, flagLogFile, "", "write log output to this file in addition to stderr (replaces the default okdctl.log sink of deploy/destroy/cleanup)")
 	rootCmd.PersistentFlags().BoolVarP(&logQuiet, flagQuiet, "q", false, "suppress info/warn logs (alias for --log-level=error)")
 	rootCmd.PersistentFlags().BoolVarP(&logVerbose, flagVerbose, "v", false, "enable debug logging (alias for --log-level=debug)")
 	rootCmd.MarkFlagsMutuallyExclusive(flagQuiet, flagVerbose)
 
-	// Return UsageError instead of os.Exit so Execute's deferred
-	// logFileCloser.Close() runs before the process exits.
+	// returns UsageError instead of os.Exit so Execute's deferred logFileCloser.Close() still runs
 	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 		logutil.Error("flag error", logutil.LF("err", err))
 		return &errtypes.UsageError{Msg: err.Error(), Err: err}

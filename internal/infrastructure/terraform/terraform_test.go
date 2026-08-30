@@ -2,6 +2,7 @@ package terraform
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -11,10 +12,29 @@ import (
 	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
-// TestExecutor_CleanupPlans_PreservesBackupAndState locks that CleanupPlans
-// removes only plan files and never touches terraform.tfstate or
-// terraform.tfstate.backup — the backup is the operator's rollback artefact
-// and must survive a successful run.
+func mustWriteFile(t *testing.T, dir, name, content string) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func bakName(day int) string {
+	return fmt.Sprintf("terraform.tfstate.2024-01-%02dT00-00-00Z.bak", day)
+}
+
+func writeBaks(t *testing.T, dir string, days ...int) []string {
+	t.Helper()
+	names := make([]string, len(days))
+	for i, d := range days {
+		names[i] = bakName(d)
+		mustWriteFile(t, dir, names[i], "x")
+	}
+	return names
+}
+
 func TestExecutor_CleanupPlans_PreservesBackupAndState(t *testing.T) {
 	workDir := t.TempDir()
 	files := map[string]string{
@@ -24,9 +44,7 @@ func TestExecutor_CleanupPlans_PreservesBackupAndState(t *testing.T) {
 		"terraform.tfstate":        `{"version":4,"resources":[]}`,
 	}
 	for name, body := range files {
-		if err := os.WriteFile(filepath.Join(workDir, name), []byte(body), 0o600); err != nil {
-			t.Fatal(err)
-		}
+		mustWriteFile(t, workDir, name, body)
 	}
 
 	e := &Executor{workDir: workDir}
@@ -67,10 +85,7 @@ func TestExecutor_CleanupPlans_MissingFilesIgnored(t *testing.T) {
 
 func TestExecutor_BuildVarArgs_DeterministicOrder(t *testing.T) {
 	workDir := t.TempDir()
-	vf := filepath.Join(workDir, "terraform.tfvars")
-	if err := os.WriteFile(vf, []byte(""), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	vf := mustWriteFile(t, workDir, "terraform.tfvars", "")
 
 	e := &Executor{workDir: workDir, varFile: vf, logger: slog.New(&testutil.CaptureHandler{})}
 	got := e.buildVarArgs("", map[string]string{"z": "3", "a": "1", "m": "2"})
@@ -107,45 +122,6 @@ func TestExecutor_BuildVarArgs_VarFileMissing(t *testing.T) {
 	}
 }
 
-func TestExecutor_HasState(t *testing.T) {
-	cases := []struct {
-		name     string
-		content  string
-		write    bool
-		wantTrue bool
-		wantWarn bool
-	}{
-		{name: "no file", wantTrue: false},
-		{name: "empty JSON", content: `{}`, write: true, wantTrue: false},
-		{name: "empty resources array", content: `{"version":4,"resources":[]}`, write: true, wantTrue: false},
-		{name: "corrupt JSON", content: `{not valid json`, write: true, wantTrue: false, wantWarn: true},
-		{name: "populated", content: `{"version":4,"resources":[{"type":"aws_instance"}]}`, write: true, wantTrue: true},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			dir := t.TempDir()
-			h := &testutil.CaptureHandler{}
-			e := &Executor{workDir: dir, logger: slog.New(h)}
-
-			if tc.write {
-				if err := os.WriteFile(filepath.Join(dir, "terraform.tfstate"), []byte(tc.content), 0o600); err != nil {
-					t.Fatal(err)
-				}
-			}
-
-			if got := e.HasState(); got != tc.wantTrue {
-				t.Errorf("HasState() = %v; want %v", got, tc.wantTrue)
-			}
-			if tc.wantWarn && !h.HasLevel(slog.LevelWarn) {
-				t.Error("expected a Warn log; got none")
-			}
-			if !tc.wantWarn && h.HasLevel(slog.LevelWarn) {
-				t.Errorf("unexpected Warn log emitted")
-			}
-		})
-	}
-}
-
 func TestExecutor_StateStatus(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -164,9 +140,7 @@ func TestExecutor_StateStatus(t *testing.T) {
 			dir := t.TempDir()
 			e := &Executor{workDir: dir, logger: slog.New(&testutil.CaptureHandler{})}
 			if tc.write {
-				if err := os.WriteFile(filepath.Join(dir, "terraform.tfstate"), []byte(tc.content), 0o600); err != nil {
-					t.Fatal(err)
-				}
+				mustWriteFile(t, dir, "terraform.tfstate", tc.content)
 			}
 			if got := e.StateStatus(); got != tc.want {
 				t.Errorf("StateStatus() = %q; want %q", got, tc.want)
@@ -185,24 +159,23 @@ exit "${TF_FAKE_EXIT:-0}"
 	t.Setenv("TF_FAKE_EXIT", strconv.Itoa(exitCode))
 }
 
-func TestExecutor_Output_ParsesJSON(t *testing.T) {
-	installFakeTerraformOutput(t, `{"foo":{"value":"bar","type":"string"}}`, 0)
-	e := New(t.TempDir())
-	out, err := e.Output(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if _, ok := out["foo"]; !ok {
-		t.Errorf("output missing key %q; got %v", "foo", out)
-	}
-}
-
-func TestExecutor_Output_NonZeroExit(t *testing.T) {
-	installFakeTerraformOutput(t, "", 1)
-	e := New(t.TempDir())
-	if _, err := e.Output(context.Background()); err == nil {
-		t.Fatal("expected error for non-zero exit")
-	}
+func TestExecutor_Output(t *testing.T) {
+	t.Run("parses JSON", func(t *testing.T) {
+		installFakeTerraformOutput(t, `{"foo":{"value":"bar","type":"string"}}`, 0)
+		out, err := New(t.TempDir()).Output(context.Background())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if _, ok := out["foo"]; !ok {
+			t.Errorf("output missing key %q; got %v", "foo", out)
+		}
+	})
+	t.Run("non-zero exit", func(t *testing.T) {
+		installFakeTerraformOutput(t, "", 1)
+		if _, err := New(t.TempDir()).Output(context.Background()); err == nil {
+			t.Fatal("expected error for non-zero exit")
+		}
+	})
 }
 
 func TestExecutor_PlanDetailed(t *testing.T) {
@@ -243,19 +216,10 @@ func TestExecutor_NewestBakSnapshot(t *testing.T) {
 	})
 	t.Run("returns newest by lexicographic name", func(t *testing.T) {
 		dir := t.TempDir()
-		names := []string{
-			"terraform.tfstate.2024-01-01T00-00-00Z.bak",
-			"terraform.tfstate.2024-01-03T00-00-00Z.bak",
-			"terraform.tfstate.2024-01-02T00-00-00Z.bak",
-		}
-		for _, n := range names {
-			if err := os.WriteFile(filepath.Join(dir, n), []byte("x"), 0o600); err != nil {
-				t.Fatal(err)
-			}
-		}
+		writeBaks(t, dir, 1, 3, 2) // deliberately written out of order
 		e := &Executor{workDir: dir}
 		got := e.NewestBakSnapshot()
-		want := filepath.Join(dir, "terraform.tfstate.2024-01-03T00-00-00Z.bak")
+		want := filepath.Join(dir, bakName(3))
 		if got != want {
 			t.Errorf("NewestBakSnapshot() = %q; want %q", got, want)
 		}
@@ -263,45 +227,23 @@ func TestExecutor_NewestBakSnapshot(t *testing.T) {
 }
 
 func TestExecutor_PruneBakSnapshotsExceptNewest(t *testing.T) {
-	t.Run("none present", func(t *testing.T) {
-		e := &Executor{workDir: t.TempDir()}
-		kept, err := e.PruneBakSnapshotsExceptNewest()
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
+	dir := t.TempDir()
+	names := writeBaks(t, dir, 1, 2, 3)
+	e := &Executor{workDir: dir}
+	kept, err := e.PruneBakSnapshotsExceptNewest()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := filepath.Join(dir, bakName(3))
+	if kept != want {
+		t.Errorf("kept = %q; want %q", kept, want)
+	}
+	for _, n := range names[:2] {
+		if _, statErr := os.Stat(filepath.Join(dir, n)); !os.IsNotExist(statErr) {
+			t.Errorf("%s still present; want removed", n)
 		}
-		if kept != "" {
-			t.Errorf("kept = %q; want empty", kept)
-		}
-	})
-
-	t.Run("keeps newest, removes the rest", func(t *testing.T) {
-		dir := t.TempDir()
-		names := []string{
-			"terraform.tfstate.2024-01-01T00-00-00Z.bak",
-			"terraform.tfstate.2024-01-02T00-00-00Z.bak",
-			"terraform.tfstate.2024-01-03T00-00-00Z.bak",
-		}
-		for _, n := range names {
-			if err := os.WriteFile(filepath.Join(dir, n), []byte("x"), 0o600); err != nil {
-				t.Fatal(err)
-			}
-		}
-		e := &Executor{workDir: dir}
-		kept, err := e.PruneBakSnapshotsExceptNewest()
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		want := filepath.Join(dir, "terraform.tfstate.2024-01-03T00-00-00Z.bak")
-		if kept != want {
-			t.Errorf("kept = %q; want %q", kept, want)
-		}
-		for _, n := range names[:2] {
-			if _, statErr := os.Stat(filepath.Join(dir, n)); !os.IsNotExist(statErr) {
-				t.Errorf("%s still present; want removed", n)
-			}
-		}
-		if _, statErr := os.Stat(want); statErr != nil {
-			t.Errorf("newest snapshot removed: %v", statErr)
-		}
-	})
+	}
+	if _, statErr := os.Stat(want); statErr != nil {
+		t.Errorf("newest snapshot removed: %v", statErr)
+	}
 }

@@ -16,19 +16,14 @@ const (
 	minHeight = 24
 
 	headerHeight = 3 // logo + tagline + step indicator
-	// footer is 2 rows: scroll-indicator/divider + help bar. The
-	// scroll-indicator now doubles as the footer's top-border divider so
-	// what was previously a separate scrollIndicatorHeight row plus a
-	// footerHeight=2 BorderTop+helpBar collapses into a single 2-row block.
+	// footer is 2 rows: the scroll-indicator line (also the top divider) + the help bar.
 	footerHeight         = 2
 	outerVerticalPadding = 4 // wizard border (2) + outer padding (2)
 
-	// outerHorizontalPadding is the horizontal cells consumed by
-	// OuterContainerStyle.Padding(1, 2): 2 left + 2 right.
+	// outerHorizontalPadding: OuterContainerStyle.Padding(1, 2) = 2 left + 2 right.
 	outerHorizontalPadding = 4
 
-	// wizardBorderHorizontal is the horizontal cells consumed by
-	// WizardBorderStyle.Border(): 1 left + 1 right.
+	// wizardBorderHorizontal: WizardBorderStyle.Border() = 1 left + 1 right.
 	wizardBorderHorizontal = 2
 
 	fixedLayoutOverhead = headerHeight + footerHeight + outerVerticalPadding
@@ -46,6 +41,12 @@ type centerable interface {
 	IsCentered() bool
 }
 
+// displayTitler is implemented by steps with prompt text above the content;
+// empty DisplayTitle skips rendering.
+type displayTitler interface {
+	DisplayTitle() string
+}
+
 // Model is the bubbletea model backing the configuration wizard.
 type Model struct {
 	width  int
@@ -57,10 +58,8 @@ type Model struct {
 	steps       []WizardStep
 	currentStep int
 
-	// returnToReview is set when the review screen jumps to an edit step
-	// (JumpToStepMsg) and cleared once that step is confirmed or escaped;
-	// while set, goToNextStep/goToPreviousStep route back to the review
-	// step instead of the normal forward/backward step.
+	// returnToReview: set on a review jump (JumpToStepMsg), cleared on confirm/escape;
+	// while set, next/previous route to review.
 	returnToReview bool
 
 	config *config.Config
@@ -86,15 +85,12 @@ type Action string
 
 // Actions the user can pick at the wizard's terminal step.
 const (
-	ActionDeploy    Action = "deploy"
-	ActionPreflight Action = "preflight"
-	ActionExit      Action = "exit"
+	ActionDeploy Action = "deploy"
+	ActionExit   Action = "exit"
 )
 
-// KeyMap binds wizard-level actions to keystrokes: quit, back-navigation,
-// and viewport scrolling. Everything else (field navigation, selection,
-// confirm) is handled inside the active step; per-step help is contributed
-// via the HelpProvider interface.
+// KeyMap binds wizard-level actions (quit, back, scroll) to keystrokes;
+// everything else is handled inside the active step.
 type KeyMap struct {
 	Back     key.Binding
 	Quit     key.Binding
@@ -133,16 +129,14 @@ func defaultKeyMap() KeyMap {
 	}
 }
 
-// NewModel constructs a wizard Model bound to cfg with the configure
-// wizard's default chrome. steps must be non-empty; the first step is
-// focused and sized to the terminal.
+// NewModel constructs a wizard Model bound to cfg with the default chrome.
+// steps must be non-empty.
 func NewModel(steps []WizardStep, cfg *config.Config) *Model {
 	return NewFlowModel(steps, cfg, DefaultChrome())
 }
 
-// NewFlowModel constructs a wizard Model with flow-specific chrome, so a
-// second top-level flow can rebrand the tagline and context badge without
-// forking the header rendering.
+// NewFlowModel constructs a wizard Model with flow-specific chrome, letting
+// a second top-level flow rebrand tagline/badge without forking rendering.
 func NewFlowModel(steps []WizardStep, cfg *config.Config, chrome FlowChrome) *Model {
 	w, h := getTerminalSize()
 
@@ -185,13 +179,10 @@ func getTerminalSize() (width, height int) {
 
 // Init implements tea.Model; it fires the first step's Init command.
 func (m *Model) Init() tea.Cmd {
-	var cmds []tea.Cmd
-
 	if len(m.steps) > 0 {
-		cmds = append(cmds, m.steps[m.currentStep].Init())
+		return m.steps[m.currentStep].Init()
 	}
-
-	return tea.Batch(cmds...)
+	return nil
 }
 
 // Update processes wizard-level messages (navigation, resize, quit) and
@@ -287,8 +278,7 @@ func (m *Model) Result() Result {
 	return m.result
 }
 
-// Config returns the live config being assembled. Steps mutate it in place
-// via their Apply hooks.
+// Config returns the live config being assembled; steps mutate it in place via their Apply hooks.
 func (m *Model) Config() *config.Config {
 	return m.config
 }

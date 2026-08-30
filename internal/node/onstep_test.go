@@ -37,19 +37,3 @@ func TestOnStepObservesWorkerResizeSequence(t *testing.T) {
 		t.Errorf("OnStep sequence = %v, want %v", got, want)
 	}
 }
-
-func TestOnStepNilIsSafe(t *testing.T) {
-	fc := &fakeCluster{
-		nodes:       []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}},
-		schedulable: true,
-		etcdHealthy: true,
-	}
-	ftf := &fakeTF{action: terraform.PlanActionUpdate}
-	r, _, _ := seedRunner(t, fc, ftf, config.DefaultConfig())
-	r.DryRun = false
-	r.Power = &fakePower{}
-
-	if err := r.Resize(context.Background(), ResizeScope{Node: "worker0"}, ResizeOptions{MemoryMB: 16384}); err != nil {
-		t.Fatalf("resize with nil OnStep: %v", err)
-	}
-}

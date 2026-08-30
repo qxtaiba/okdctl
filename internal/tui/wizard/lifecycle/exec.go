@@ -34,8 +34,7 @@ type execRow struct {
 type nodeProgress struct {
 	name string
 	rows []execRow
-	// extra collects unmatched Reporter descriptions verbatim so a new
-	// backend step degrades visibly instead of silently.
+	// extra: unmatched Reporter descriptions — degrades visibly instead of silently.
 	extra []string
 }
 
@@ -149,8 +148,8 @@ func (s *ExecStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 			return s, func() tea.Msg { return wizard.StepCompleteMsg{StepID: StepIDExec} }
 		}
 		s.applyEvent(&msg.ev)
-		listen := s.listen()
-		return s, listen
+		cmd := s.listen()
+		return s, cmd
 
 	case spinner.TickMsg:
 		if !s.finished {
@@ -162,7 +161,6 @@ func (s *ExecStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	return s, nil
 }
 
-// applyEvent attributes an event to a node and flips the matched row.
 func (s *ExecStep) applyEvent(ev *ExecEvent) {
 	if len(s.nodes) == 0 {
 		return
@@ -185,18 +183,17 @@ func (s *ExecStep) applyEvent(ev *ExecEvent) {
 	case ev.Done:
 		np.rows[row].status = rowDone
 		np.rows[row].took = ev.Took
-		s.markEarlierRowsDone(np, row)
+		markEarlierRowsDone(np, row)
 	default:
 		if np.rows[row].status == rowPending {
 			np.rows[row].status = rowRunning
 		}
-		s.markEarlierRowsDone(np, row)
+		markEarlierRowsDone(np, row)
 	}
 }
 
-// markEarlierRowsDone commits every row before the active one: the backend
-// runs rows strictly in order, so activity on row N proves rows < N ended.
-func (s *ExecStep) markEarlierRowsDone(np *nodeProgress, active int) {
+// markEarlierRowsDone marks earlier rows done: the backend runs rows strictly in order.
+func markEarlierRowsDone(np *nodeProgress, active int) {
 	for i := range active {
 		if np.rows[i].status == rowRunning || np.rows[i].status == rowPending {
 			np.rows[i].status = rowDone
@@ -216,8 +213,6 @@ func (s *ExecStep) nodeIndexFor(ev *ExecEvent) int {
 	return -1
 }
 
-// finishRows settles the checklist at the end of the run: success marks
-// everything done, failure marks the in-flight row failed.
 func (s *ExecStep) finishRows(err error) {
 	for i := range s.nodes {
 		for j := range s.nodes[i].rows {

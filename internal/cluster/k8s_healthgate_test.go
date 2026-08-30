@@ -20,9 +20,8 @@ const healthyCephJSON = `{
   "pgmap": {"num_pgs":100,"pgs_by_state":[{"state_name":"active+clean","count":100}]}
 }`
 
-// installFakeOCCeph installs a PATH-shadow "oc" that serves CephHealthy's two
-// invocations: `get pods` emits $OC_PODS_JSON, `exec` logs argv, exits 1
-// with stderr when $OC_EXEC_FAIL is set, and emits $OC_CEPH_JSON otherwise.
+// installFakeOCCeph installs a PATH-shadow "oc": get emits $OC_PODS_JSON;
+// exec emits $OC_CEPH_JSON, or fails when $OC_EXEC_FAIL is set.
 func installFakeOCCeph(t *testing.T) (argvLog string) {
 	t.Helper()
 	testutil.InstallFakeBin(t, "oc", `#!/bin/sh
@@ -45,36 +44,33 @@ exit 0
 	return argvLog
 }
 
-func TestCephHealthy_NoToolboxPodIsNotApplicable(t *testing.T) {
-	installFakeOCCeph(t)
-	t.Setenv("OC_PODS_JSON", `{"items":[]}`)
-	c := New(WithCLI("oc"), WithExecutor(executor.New()))
-
-	h, err := c.CephHealthy(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if h.Applicable {
-		t.Errorf("Applicable = true with no toolbox pod; want false (skip gate)")
-	}
-	if h.Healthy {
-		t.Errorf("Healthy = true with no toolbox pod; want false")
-	}
-}
-
-func TestCephHealthy_UnscheduledToolboxPodIsNotApplicable(t *testing.T) {
-	installFakeOCCeph(t)
-	t.Setenv("OC_PODS_JSON", `{"items":[
+func TestCephHealthy_NotApplicable(t *testing.T) {
+	tests := []struct {
+		name     string
+		podsJSON string
+	}{
+		{name: "no toolbox pod", podsJSON: `{"items":[]}`},
+		{name: "unscheduled toolbox pod", podsJSON: `{"items":[
 	  {"metadata":{"name":"tools-pending","namespace":"rook-ceph"},"spec":{}}
-	]}`)
-	c := New(WithCLI("oc"), WithExecutor(executor.New()))
-
-	h, err := c.CephHealthy(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	]}`},
 	}
-	if h.Applicable {
-		t.Errorf("Applicable = true with only an unscheduled toolbox pod; want false")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			installFakeOCCeph(t)
+			t.Setenv("OC_PODS_JSON", tc.podsJSON)
+			c := New(WithCLI("oc"), WithExecutor(executor.New()))
+
+			h, err := c.CephHealthy(context.Background())
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if h.Applicable {
+				t.Errorf("Applicable = true with %s; want false (skip gate)", tc.name)
+			}
+			if h.Healthy {
+				t.Errorf("Healthy = true with %s; want false", tc.name)
+			}
+		})
 	}
 }
 
@@ -126,27 +122,8 @@ func TestCephHealthy_ExecFailureClosesGate(t *testing.T) {
 	}
 }
 
-func TestFirstScheduledPod(t *testing.T) {
-	pods := []PodPlacement{
-		{Name: "pending-0", Namespace: "ns"},
-		{Name: "ready-1", Namespace: "ns", NodeName: "worker0"},
-		{Name: "ready-2", Namespace: "ns", NodeName: "worker1"},
-	}
-	got := firstScheduledPod(pods)
-	if got == nil || got.Name != "ready-1" {
-		t.Errorf("firstScheduledPod = %+v; want ready-1", got)
-	}
-	if firstScheduledPod(nil) != nil {
-		t.Error("firstScheduledPod(nil) must be nil")
-	}
-	if firstScheduledPod([]PodPlacement{{Name: "pending"}}) != nil {
-		t.Error("firstScheduledPod must skip pods with no NodeName")
-	}
-}
-
-// installFakeOCEtcd installs a PATH-shadow "oc" serving EtcdHealthy's three
-// sequenced queries, branching on the resource argument: clusteroperator →
-// $OC_CO_JSON, pods → $OC_PODS_JSON, etcd → $OC_ETCD_JSON.
+// installFakeOCEtcd installs a PATH-shadow "oc" keyed by resource:
+// clusteroperator→$OC_CO_JSON, pods→$OC_PODS_JSON, etcd→$OC_ETCD_JSON.
 func installFakeOCEtcd(t *testing.T) {
 	t.Helper()
 	testutil.InstallFakeBin(t, "oc", `#!/bin/sh

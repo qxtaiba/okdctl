@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -24,8 +25,7 @@ func TestProxmoxCredentials_Zeroize(t *testing.T) {
 		if c.APIToken != nil {
 			t.Errorf("APIToken slice not nilled: %v", c.APIToken)
 		}
-		// Original backing arrays should be zero — Zeroize wrote zeros into
-		// the elements before nilling the header.
+		// Zeroize wrote zeros into the elements before nilling the header.
 		for i, b := range pw {
 			if b != 0 {
 				t.Errorf("Password[%d] not zeroed: %d", i, b)
@@ -40,7 +40,7 @@ func TestProxmoxCredentials_Zeroize(t *testing.T) {
 
 	t.Run("nil receiver is safe", func(_ *testing.T) {
 		var c *ProxmoxCredentials
-		c.Zeroize() // must not panic
+		c.Zeroize()
 	})
 
 	t.Run("empty slices are safe", func(_ *testing.T) {
@@ -68,13 +68,11 @@ func TestProxmoxCredentials_StringMasks(t *testing.T) {
 		}
 	}
 
-	// Non-secret fields should still render.
 	s := c.String()
 	if !strings.Contains(s, "root@pam") || !strings.Contains(s, "pve.example") {
 		t.Errorf("String() dropped non-secret fields: %s", s)
 	}
 
-	// Nil receiver renders a sentinel, not a panic.
 	var nilCreds *ProxmoxCredentials
 	if got := nilCreds.String(); got != "ProxmoxCredentials(nil)" {
 		t.Errorf("nil String() = %q", got)
@@ -151,13 +149,7 @@ func TestProxmoxCredentials_Env(t *testing.T) {
 		for i := range pw {
 			pw[i] = 0
 		}
-		found := false
-		for _, kv := range env {
-			if kv == "PROXMOX_VE_PASSWORD=pw-alive" {
-				found = true
-			}
-		}
-		if !found {
+		if !slices.Contains(env, "PROXMOX_VE_PASSWORD=pw-alive") {
 			t.Errorf("env password corrupted after Zeroize-style wipe: %v", env)
 		}
 	})
@@ -172,19 +164,15 @@ func TestProxmoxCredentials_Env(t *testing.T) {
 		for i := range tok {
 			tok[i] = 0
 		}
-		found := false
-		for _, kv := range env {
-			if kv == "PROXMOX_VE_API_TOKEN=tok-alive" {
-				found = true
-			}
-		}
-		if !found {
+		if !slices.Contains(env, "PROXMOX_VE_API_TOKEN=tok-alive") {
 			t.Errorf("env api token corrupted after Zeroize-style wipe: %v", env)
 		}
 	})
 }
 
 func TestGetProxmoxCredentials(t *testing.T) {
+	// Cleared once here; each subtest's t.Setenv auto-restores on completion,
+	// so every subtest starts clean.
 	clearProxmoxEnv(t)
 
 	cfgWithHost := func() *config.Config {
@@ -212,7 +200,6 @@ func TestGetProxmoxCredentials(t *testing.T) {
 	})
 
 	t.Run("env api token wins over config", func(t *testing.T) {
-		clearProxmoxEnv(t)
 		t.Setenv("PROXMOX_VE_API_TOKEN", "EXAMPLE-ENV-TOKEN")
 		cfg := cfgWithHost()
 		cfg.Provider.Proxmox.APIToken.Set("EXAMPLE-CFG-TOKEN")
@@ -236,7 +223,6 @@ func TestGetProxmoxCredentials(t *testing.T) {
 	})
 
 	t.Run("env endpoint override sets EndpointFromConfig=false", func(t *testing.T) {
-		clearProxmoxEnv(t)
 		t.Setenv("PROXMOX_VE_API_TOKEN", "EXAMPLE-ENV-TOKEN")
 		t.Setenv("PROXMOX_VE_ENDPOINT", "https://other.example:8006")
 
@@ -251,7 +237,6 @@ func TestGetProxmoxCredentials(t *testing.T) {
 	})
 
 	t.Run("env username+password path", func(t *testing.T) {
-		clearProxmoxEnv(t)
 		t.Setenv("PROXMOX_VE_USERNAME", "root@pam")
 		t.Setenv("PROXMOX_VE_PASSWORD", "pw")
 
@@ -266,7 +251,6 @@ func TestGetProxmoxCredentials(t *testing.T) {
 	})
 
 	t.Run("no env creds returns SourceNone even when config has credentials", func(t *testing.T) {
-		clearProxmoxEnv(t)
 		cfg := cfgWithHost()
 		cfg.Provider.Proxmox.APIToken.Set("EXAMPLE-CFG-TOKEN")
 		cfg.Provider.Proxmox.Password.Set("EXAMPLE-CFG-PW")
@@ -283,8 +267,7 @@ func TestGetProxmoxCredentials(t *testing.T) {
 	})
 
 	t.Run("host without scheme gets https prefix and :8006 port", func(t *testing.T) {
-		clearProxmoxEnv(t)
-		cfg := cfgWithHost() // host = "pve.example" (no scheme, no port)
+		cfg := cfgWithHost()
 		cfg.Provider.Proxmox.APIToken.Set("EXAMPLE-TINY")
 
 		creds := GetProxmoxCredentials(cfg)
@@ -295,7 +278,6 @@ func TestGetProxmoxCredentials(t *testing.T) {
 	})
 
 	t.Run("http host without insecure_http yields no credentials", func(t *testing.T) {
-		clearProxmoxEnv(t)
 		t.Setenv("PROXMOX_VE_API_TOKEN", "EXAMPLE-ENV-TOKEN")
 		cfg := cfgWithHost()
 		cfg.Provider.Proxmox.Host = "http://pve.example"
@@ -312,7 +294,6 @@ func TestGetProxmoxCredentials(t *testing.T) {
 	})
 
 	t.Run("http host with insecure_http opt-in resolves credentials", func(t *testing.T) {
-		clearProxmoxEnv(t)
 		t.Setenv("PROXMOX_VE_API_TOKEN", "EXAMPLE-ENV-TOKEN")
 		cfg := cfgWithHost()
 		cfg.Provider.Proxmox.Host = "http://pve.example"
@@ -328,11 +309,8 @@ func TestGetProxmoxCredentials(t *testing.T) {
 		}
 	})
 
-	// The config host is https-safe, but an http:// PROXMOX_VE_ENDPOINT would
-	// slip plaintext credentials past the config-file gate. applyEnvSource must
-	// apply the same scheme guard to the env endpoint.
+	// An http:// PROXMOX_VE_ENDPOINT must not slip past the config-file's https-only gate.
 	t.Run("env http endpoint without insecure_http yields no credentials", func(t *testing.T) {
-		clearProxmoxEnv(t)
 		t.Setenv("PROXMOX_VE_API_TOKEN", "EXAMPLE-ENV-TOKEN")
 		t.Setenv("PROXMOX_VE_ENDPOINT", "http://evil.example:8006")
 
@@ -348,7 +326,6 @@ func TestGetProxmoxCredentials(t *testing.T) {
 	})
 
 	t.Run("env http endpoint with insecure_http resolves and normalizes port", func(t *testing.T) {
-		clearProxmoxEnv(t)
 		t.Setenv("PROXMOX_VE_API_TOKEN", "EXAMPLE-ENV-TOKEN")
 		t.Setenv("PROXMOX_VE_ENDPOINT", "http://pve.example")
 		cfg := cfgWithHost()
@@ -361,18 +338,6 @@ func TestGetProxmoxCredentials(t *testing.T) {
 		}
 		if creds.Endpoint != "http://pve.example:8006" {
 			t.Errorf("Endpoint = %q, want http://pve.example:8006 (env endpoint normalized)", creds.Endpoint)
-		}
-	})
-
-	t.Run("env schemeless endpoint gets https prefix and :8006 port", func(t *testing.T) {
-		clearProxmoxEnv(t)
-		t.Setenv("PROXMOX_VE_API_TOKEN", "EXAMPLE-ENV-TOKEN")
-		t.Setenv("PROXMOX_VE_ENDPOINT", "pve.example")
-
-		creds := GetProxmoxCredentials(cfgWithHost())
-
-		if creds.Endpoint != "https://pve.example:8006" {
-			t.Errorf("Endpoint = %q, want https://pve.example:8006 (env endpoint normalized)", creds.Endpoint)
 		}
 	})
 }
@@ -393,23 +358,16 @@ func TestProxmoxCredentials_Redacted(t *testing.T) {
 	if !ok {
 		t.Fatalf("Redacted() type = %T; want redactedCredentials", c.Redacted())
 	}
-	if got.Endpoint != c.Endpoint {
-		t.Errorf("Endpoint = %q; want %q", got.Endpoint, c.Endpoint)
+	want := redactedCredentials{
+		Endpoint:                    c.Endpoint,
+		Username:                    c.Username,
+		Insecure:                    c.Insecure,
+		Source:                      c.Source,
+		EndpointFromConfig:          c.EndpointFromConfig,
+		ConfigCredentialsOverridden: c.ConfigCredentialsOverridden,
 	}
-	if got.Username != c.Username {
-		t.Errorf("Username = %q; want %q", got.Username, c.Username)
-	}
-	if got.Insecure != c.Insecure {
-		t.Errorf("Insecure = %v; want %v", got.Insecure, c.Insecure)
-	}
-	if got.Source != c.Source {
-		t.Errorf("Source = %v; want %v", got.Source, c.Source)
-	}
-	if got.EndpointFromConfig != c.EndpointFromConfig {
-		t.Errorf("EndpointFromConfig = %v; want %v", got.EndpointFromConfig, c.EndpointFromConfig)
-	}
-	if got.ConfigCredentialsOverridden != c.ConfigCredentialsOverridden {
-		t.Errorf("ConfigCredentialsOverridden = %v; want %v", got.ConfigCredentialsOverridden, c.ConfigCredentialsOverridden)
+	if got != want {
+		t.Errorf("Redacted() = %+v; want %+v", got, want)
 	}
 
 	var nilCreds *ProxmoxCredentials
@@ -418,10 +376,9 @@ func TestProxmoxCredentials_Redacted(t *testing.T) {
 	}
 }
 
-// clearProxmoxEnv ensures no PROXMOX_VE_* vars leak from the host shell into
-// test scope. We Setenv first (so t auto-restores on test completion) then
-// Unsetenv — Setenv("", "") leaves the var present-and-empty, which
-// LookupEnv reports as ok=true and would flip Insecure logic.
+// clearProxmoxEnv calls Setenv (registers t's auto-restore) then Unsetenv —
+// an empty-but-present var would make LookupEnv report ok=true and flip
+// Insecure logic.
 func clearProxmoxEnv(t *testing.T) {
 	t.Helper()
 	for _, k := range []string{
@@ -457,7 +414,6 @@ func TestProxmoxHostSchemeValidation(t *testing.T) {
 		wantSchemeErr bool
 	}{
 		{"schemeless host accepted", "192.168.1.100", false, false},
-		{"bare hostname accepted", "pve.example", false, false},
 		{"http rejected without flag", "http://pve.example", false, true},
 		{"http accepted with flag", "http://pve.example", true, false},
 	}

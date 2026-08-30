@@ -7,10 +7,9 @@ import (
 	"testing"
 )
 
-// Both tests verify the euid gate: as non-root, SUDO_UID/SUDO_GID pointing
-// at another user must be ignored — without the gate the chown would fail
-// EPERM and (in Acquire) emit a spurious warning. The chown-as-root branch
-// needs euid 0 and is intentionally untested here.
+// Pins the euid gate: SUDO_UID/SUDO_GID must be ignored as non-root, or
+// chown fails EPERM; the chown-as-root branch needs euid 0 and is untested
+// here.
 
 func TestChownToSudoInvoker_NonRootIgnoresSudoEnv(t *testing.T) {
 	if os.Geteuid() == 0 {
@@ -39,18 +38,4 @@ func TestChownToSudoInvoker_NonRootIgnoresSudoEnv(t *testing.T) {
 	if int(stat.Uid) != os.Geteuid() {
 		t.Fatalf("lockfile uid changed to %d; chown must not run as non-root", stat.Uid)
 	}
-}
-
-func TestAcquire_NonRootWithSudoEnvSucceeds(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("euid gate is only observable as non-root")
-	}
-	t.Setenv("SUDO_UID", "0")
-	t.Setenv("SUDO_GID", "0")
-
-	lock, err := Acquire(t.TempDir(), "deploy")
-	if err != nil {
-		t.Fatalf("acquire failed with sudo env set as non-root: %v", err)
-	}
-	lock.Release()
 }

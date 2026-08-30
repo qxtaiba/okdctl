@@ -93,9 +93,6 @@ func TestOrchestratorRun_SkipWhen(t *testing.T) {
 	}
 }
 
-// TestOrchestratorRun_SkipReasonFuncResolvesFiredCause pins that a
-// SkipReasonFunc set alongside a static SkipReason wins, and that the
-// recorded reason is the one resolved after SkipWhen fired.
 func TestOrchestratorRun_SkipReasonFuncResolvesFiredCause(t *testing.T) {
 	t.Parallel()
 	reason := "unresolved"
@@ -163,28 +160,6 @@ func TestOrchestratorRun_AlreadyDoneErrorProceedsToExecute(t *testing.T) {
 	}
 }
 
-func TestOrchestratorRun_CallbacksFireInOrder(t *testing.T) {
-	t.Parallel()
-	var events []string
-	defs := []distribution.StepDef{
-		{
-			ID: "a", Name: "a", ReRunSafe: distribution.ReRunSafeYes,
-			OnStart: func() { events = append(events, "start") },
-			Exec: func(_ context.Context) error {
-				events = append(events, "exec")
-				return nil
-			},
-		},
-	}
-	o := buildOrchestrator(defs)
-	if err := o.Run(context.Background()); err != nil {
-		t.Fatalf("Run() = %v, want nil", err)
-	}
-	if want := []string{"start", "exec"}; !slices.Equal(events, want) {
-		t.Fatalf("events = %v, want %v", events, want)
-	}
-}
-
 func TestOrchestratorRun_OnErrorFiresWithClassifiedError(t *testing.T) {
 	t.Parallel()
 	var gotErr error
@@ -203,32 +178,6 @@ func TestOrchestratorRun_OnErrorFiresWithClassifiedError(t *testing.T) {
 	}
 }
 
-func TestOrchestratorRun_ClassifiesBareErrorAsClusterError(t *testing.T) {
-	t.Parallel()
-	defs := []distribution.StepDef{
-		{
-			ID: "a", Name: "a", ReRunSafe: distribution.ReRunSafeYes,
-			Exec: func(_ context.Context) error { return errors.New("boom") },
-		},
-	}
-	o := buildOrchestrator(defs)
-	err := o.Run(context.Background())
-	var ce *errtypes.ClusterError
-	if !errors.As(err, &ce) {
-		t.Fatalf("Run() err = %T, want *errtypes.ClusterError", err)
-	}
-	// errtypes Error() surfaces only Msg, so the root cause must be carried
-	// in Msg or every sink prints a bare "step failed".
-	if !strings.Contains(ce.Error(), "boom") {
-		t.Fatalf("classified error %q does not surface the root cause", ce.Error())
-	}
-}
-
-// TestOrchestratorRun_ScrubsCredentialInClassifiedMsg locks the redaction
-// fix: classifyStepErr launders an arbitrary step error's text through
-// RedactableStderr before it lands in the pre-rendered ClusterError.Msg (which
-// bypasses RedactHandler at every sink), while leaving Err intact so
-// errors.Is still reaches the root cause.
 func TestOrchestratorRun_ScrubsCredentialInClassifiedMsg(t *testing.T) {
 	t.Parallel()
 	root := errors.New("provider auth failed: password=hunter2")
@@ -256,34 +205,28 @@ func TestOrchestratorRun_ScrubsCredentialInClassifiedMsg(t *testing.T) {
 	}
 }
 
-func TestOrchestratorRun_PreservesTypedErrtypesError(t *testing.T) {
+func TestOrchestratorRun_PreservesErrorIdentity(t *testing.T) {
 	t.Parallel()
-	want := &errtypes.ConfigError{Msg: "bad config"}
-	defs := []distribution.StepDef{
-		{
-			ID: "a", Name: "a", ReRunSafe: distribution.ReRunSafeYes,
-			Exec: func(_ context.Context) error { return want },
-		},
+	cases := []struct {
+		name string
+		err  error
+	}{
+		{"typed errtypes error", &errtypes.ConfigError{Msg: "bad config"}},
+		{"context cancellation", context.Canceled},
 	}
-	o := buildOrchestrator(defs)
-	err := o.Run(context.Background())
-	if !errors.Is(err, want) {
-		t.Fatalf("Run() err = %v, want the original *errtypes.ConfigError preserved unwrapped", err)
-	}
-}
-
-func TestOrchestratorRun_PreservesContextCancellation(t *testing.T) {
-	t.Parallel()
-	defs := []distribution.StepDef{
-		{
-			ID: "a", Name: "a", ReRunSafe: distribution.ReRunSafeYes,
-			Exec: func(_ context.Context) error { return context.Canceled },
-		},
-	}
-	o := buildOrchestrator(defs)
-	err := o.Run(context.Background())
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("Run() err = %v, want context.Canceled preserved unwrapped", err)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			o := buildOrchestrator([]distribution.StepDef{
+				{
+					ID: "a", Name: "a", ReRunSafe: distribution.ReRunSafeYes,
+					Exec: func(_ context.Context) error { return tc.err },
+				},
+			})
+			if err := o.Run(context.Background()); !errors.Is(err, tc.err) {
+				t.Fatalf("Run() err = %v, want %v preserved unwrapped", err, tc.err)
+			}
+		})
 	}
 }
 

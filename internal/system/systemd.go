@@ -2,7 +2,7 @@ package system
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"runtime"
 
 	"github.com/qxtaiba/okdctl/internal/executor"
@@ -10,14 +10,11 @@ import (
 
 const osLinux = "linux"
 
-// ServiceAction names a systemctl verb. Values are passed to systemctl
-// verbatim so they must stay lowercase and syntactically valid, with one
-// exception: ManageService maps ServiceStatus to `is-active` (see there).
+// ServiceAction names a systemctl verb, passed to systemctl verbatim. One
+// exception: ManageService rewrites ServiceStatus to `is-active`.
 type ServiceAction string
 
-// ServiceActions passable to ManageService. Each maps to a systemctl
-// subcommand verbatim except ServiceStatus, which ManageService rewrites to
-// `is-active`.
+// ServiceActions passable to ManageService.
 const (
 	ServiceEnable  ServiceAction = "enable"
 	ServiceDisable ServiceAction = "disable"
@@ -28,26 +25,20 @@ const (
 	ServiceStatus  ServiceAction = "status"
 )
 
-// ManageService invokes systemctl for the given service on Linux. Non-Linux
-// hosts get an error rather than a silent no-op so callers don't assume the
-// action took effect. ServiceStatus is rewritten to `is-active` — an
-// exit-code probe suitable for programmatic gating — rather than the
-// human-readable `status` report, which pages and returns non-zero for
-// inactive-but-healthy units.
+// ManageService invokes systemctl for the given service on Linux, erroring
+// on other platforms rather than silently no-op-ing. ServiceStatus is
+// rewritten to `is-active`, an exit-code probe for programmatic gating,
+// instead of the human-readable `status` report which pages and returns
+// non-zero for healthy-but-inactive units.
 func ManageService(ctx context.Context, action ServiceAction, serviceName string) error {
 	if runtime.GOOS != osLinux {
-		return fmt.Errorf("systemd services are only supported on Linux")
+		return errors.New("systemd services are only supported on Linux")
 	}
 
-	actionStr := string(action)
-
-	switch action {
-	case ServiceStatus:
+	if action == ServiceStatus {
 		return executor.RunCaptured(ctx, "systemctl", "is-active", serviceName)
-
-	default:
-		return executor.RunCaptured(ctx, "systemctl", actionStr, serviceName)
 	}
+	return executor.RunCaptured(ctx, "systemctl", string(action), serviceName)
 }
 
 // IsServiceActive reports whether systemctl considers the service running.

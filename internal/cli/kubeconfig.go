@@ -80,10 +80,8 @@ func runKubeconfig(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-// mergeKubeconfig merges srcData into the first path listed in $KUBECONFIG,
-// falling back to ~/.kube/config. Clusters, users, and contexts are merged
-// by name; existing entries are not overwritten. current-context is set from
-// src only when the destination has no current-context set.
+// mergeKubeconfig merges by name into $KUBECONFIG (or ~/.kube/config) without
+// overwriting existing entries; current-context is set from src only if unset.
 func mergeKubeconfig(srcData []byte) error {
 	dest := mergeTargetPath()
 
@@ -146,13 +144,12 @@ func mergeTargetPath() string {
 	return filepath.Join(home, ".kube", "config")
 }
 
-// kubeEntry is one element of a kubeconfig named list (clusters, users, or
-// contexts). json.RawMessage values preserve all fields — including unknown
-// extension keys — byte-for-byte through marshal→merge→marshal.
+// kubeEntry is one element of a kubeconfig named list; RawMessage values
+// preserve all fields (incl. unknown keys) through marshal→merge→marshal.
 type kubeEntry = map[string]json.RawMessage
 
-// toKubeEntries converts the raw []any produced by sigs.k8s.io/yaml into a
-// typed slice via a JSON round-trip so each field is captured verbatim.
+// toKubeEntries converts sigs.k8s.io/yaml's raw []any into a typed slice via a
+// JSON round-trip so each field is captured verbatim.
 func toKubeEntries(v any) []kubeEntry {
 	if v == nil {
 		return nil
@@ -168,8 +165,7 @@ func toKubeEntries(v any) []kubeEntry {
 	return entries
 }
 
-// fromKubeEntries converts a typed slice back to []any for storage in the
-// top-level map[string]any and marshalling by sigs.k8s.io/yaml.
+// fromKubeEntries converts a typed slice back to []any for marshalling by sigs.k8s.io/yaml.
 func fromKubeEntries(entries []kubeEntry) any {
 	if entries == nil {
 		return nil
@@ -185,7 +181,6 @@ func fromKubeEntries(entries []kubeEntry) any {
 	return out
 }
 
-// namedEntries returns the set of names present in a typed entry slice.
 func namedEntries(items []kubeEntry) map[string]struct{} {
 	result := make(map[string]struct{}, len(items))
 	for _, item := range items {
@@ -197,8 +192,7 @@ func namedEntries(items []kubeEntry) map[string]struct{} {
 	return result
 }
 
-// mergeNamedList appends entries from src into dest, skipping any src entry
-// whose name already appears in dest.
+// mergeNamedList appends src entries into dest, skipping names already present in dest.
 func mergeNamedList(dest, src []kubeEntry) []kubeEntry {
 	if len(src) == 0 {
 		return dest

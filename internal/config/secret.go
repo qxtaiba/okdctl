@@ -1,23 +1,15 @@
 package config
 
-// SecretBytes wraps a credential as []byte so the backing array can be
-// overwritten with Zeroize once consumed. A Go string cannot be zeroized:
-// its backing bytes remain on the heap until GC. SecretBytes lets the
-// wizard store the captured credential in a mutable buffer and lets the
-// deploy/destroy defer chain wipe it when done.
+// SecretBytes wraps a credential as []byte, not string, so Zeroize can
+// overwrite it before GC. The wizard fills it on capture; deploy/destroy
+// wipes it via defer.
 type SecretBytes struct {
 	b []byte
 }
 
-// Set copies the string bytes into an owned []byte. Any previous backing
-// array is zeroized first so a re-Set call does not leak the old secret.
-// The argument string itself still lives on the heap until GC — the wizard
-// input pipeline is the inherent capture boundary.
-//
-// Authorised production caller: internal/tui/wizard/steps (password field
-// ConfigSet callback). Tests may call Set to seed fixture state. No other
-// production package should call Set; the credentials layer reads secrets
-// from env vars and assigns []byte directly to ProxmoxCredentials.
+// Set copies v into an owned []byte, zeroizing any prior backing array first
+// so a re-Set can't leak the old secret. Only the wizard's password-field
+// callback calls this in production; internal/credentials assigns []byte directly.
 func (s *SecretBytes) Set(v string) {
 	clear(s.b)
 	s.b = []byte(v)
@@ -45,8 +37,7 @@ func (s SecretBytes) String() string {
 	return "[redacted]"
 }
 
-// Redacted satisfies the interface that logutil.RedactHandler detects
-// for opaque-typed values.
+// Redacted satisfies the interface logutil.RedactHandler detects for opaque-typed values.
 func (s SecretBytes) Redacted() any {
 	return "[redacted]"
 }

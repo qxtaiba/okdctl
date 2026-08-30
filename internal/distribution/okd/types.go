@@ -2,9 +2,7 @@ package okd
 
 import "github.com/qxtaiba/okdctl/internal/nodetypes"
 
-// ClusterStatus is a read-only snapshot of an OKD cluster: lifecycle phase,
-// API reachability, per-node health, operator degradation count, and addon
-// health results.
+// ClusterStatus is a read-only snapshot of an OKD cluster's state.
 type ClusterStatus struct {
 	Phase             ClusterPhase  `json:"phase"`
 	APIReachable      bool          `json:"api_reachable"`
@@ -21,8 +19,6 @@ type AddonStatus struct {
 }
 
 // Label returns the user-visible health string for text output.
-// Healthy → "healthy"; unhealthy with an error → "degraded";
-// zero-value (not in verify results) → "not enabled".
 func (a AddonStatus) Label() string {
 	switch {
 	case a.Healthy:
@@ -58,20 +54,8 @@ const (
 
 // NodeStatus is one cluster node's projected identity and health.
 type NodeStatus struct {
-	Name       string                    `json:"name"`
-	Role       nodetypes.NodeRole        `json:"role"`
-	Ready      bool                      `json:"ready"`
-	Status     nodetypes.NodeStatusPhase `json:"status,omitempty"`
-	Version    string                    `json:"version,omitempty"`
-	InternalIP string                    `json:"internal_ip,omitempty"`
-	Conditions []Condition               `json:"conditions,omitempty"`
-}
-
-// Condition mirrors the k8s condition shape but carries project-local
-// ConditionType/Status values from internal/nodetypes.
-type Condition struct {
-	Type    nodetypes.ConditionType   `json:"type"`
-	Status  nodetypes.ConditionStatus `json:"status"`
-	Reason  string                    `json:"reason,omitempty"`
-	Message string                    `json:"message,omitempty"`
+	Name   string                    `json:"name"`
+	Role   nodetypes.NodeRole        `json:"role"`
+	Ready  bool                      `json:"ready"`
+	Status nodetypes.NodeStatusPhase `json:"status,omitempty"`
 }

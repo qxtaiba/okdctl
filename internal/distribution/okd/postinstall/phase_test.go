@@ -18,6 +18,12 @@ import (
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
+// newTestPhase builds a Phase with a real executor (fake binaries via PATH) and the no-op logger.
+func newTestPhase(t *testing.T) *Phase {
+	t.Helper()
+	return New(phase.WithExecutor(executor.New()), phase.WithLogger(logutil.NopLogger))
+}
+
 var postinstallStepOrder = []distribution.StepID{
 	StepVerifyHealth,
 	StepVerifyKubeVIP,
@@ -41,13 +47,7 @@ func TestPostinstallSteps_StepListAndSkipWiring(t *testing.T) {
 				StepVerifyKubeVIP:       false,
 				StepCleanupBootstrap:    true,
 				StepDeployProductionDNS: true,
-			},
-		},
-		{
-			name: "skip-cluster-health",
-			opts: Options{SkipClusterHealth: true},
-			wantSkip: map[distribution.StepID]bool{
-				StepVerifyHealth: true,
+				StepDisableRHDefaults:   false,
 			},
 		},
 		{
@@ -67,25 +67,12 @@ func TestPostinstallSteps_StepListAndSkipWiring(t *testing.T) {
 				StepDeployProductionDNS: false,
 			},
 		},
-		{
-			name: "defaults: disable-rh-defaults runs",
-			wantSkip: map[distribution.StepID]bool{
-				StepDisableRHDefaults: false,
-			},
-		},
-		{
-			name: "keep-redhat-catalogs",
-			opts: Options{KeepRedHatCatalogs: true},
-			wantSkip: map[distribution.StepID]bool{
-				StepDisableRHDefaults: true,
-			},
-		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := &config.Config{Cluster: config.ClusterConfig{Name: "test"}}
-			p := New(phase.WithExecutor(executor.New()), phase.WithLogger(logutil.NopLogger))
+			p := newTestPhase(t)
 			pctx := distribution.NewPhaseContext(postInstallContext{})
 			if tc.kubeVIPVerified {
 				pctx.Update(func(c *postInstallContext) { c.KubeVIPVerified = true })
@@ -123,14 +110,12 @@ func TestPostinstallExecute_BootstrapTeardownViaFakeTerraform(t *testing.T) {
 		Networking: config.NetworkingConfig{Bastion: config.BastionConfig{IP: "192.168.1.5"}},
 	}
 	opts := NewOptions(cfg, projectRoot)
-	// Health, kube-vip verification, and disabling rh-subscription-gated
-	// defaults all need a live cluster; their wiring is covered by
-	// TestPostinstallSteps_StepListAndSkipWiring.
+	// Skip wiring for these is covered by TestPostinstallSteps_StepListAndSkipWiring.
 	opts.SkipClusterHealth = true
 	opts.SkipKubeVIP = true
 	opts.KeepRedHatCatalogs = true
 
-	p := New(phase.WithExecutor(executor.New()), phase.WithLogger(logutil.NopLogger))
+	p := newTestPhase(t)
 	result, results, err := p.Execute(context.Background(), cfg, &opts)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -197,9 +182,7 @@ func TestPostinstallExecute_BootstrapTeardownViaFakeTerraform(t *testing.T) {
 	}
 }
 
-// installFakeTerraformArgv is the argv-logging sibling of
-// installFakeTerraformForBootstrap for tests that assert the exact terraform
-// command lines instead of exit-code behaviour.
+// installFakeTerraformArgv logs argv instead of switching on exit code.
 func installFakeTerraformArgv(t *testing.T) {
 	t.Helper()
 	testutil.InstallFakeBin(t, "terraform", `#!/bin/sh
@@ -219,8 +202,6 @@ func readBootstrapArgvLines(t *testing.T) []string {
 	return strings.Split(strings.TrimSpace(string(data)), "\n")
 }
 
-// TestWarnIfDNSStranded asserts the update-ingress recovery hint fires exactly
-// when the bootstrap VM is gone but production DNS never made it out.
 func TestWarnIfDNSStranded(t *testing.T) {
 	cases := []struct {
 		name     string

@@ -1,7 +1,6 @@
 package nodetypes
 
-// ConditionType and ConditionStatus mirror the Kubernetes status.conditions
-// shape (Type / Status).
+// ConditionType mirrors the Kubernetes status.conditions[*].type field.
 type ConditionType string
 
 // Condition type values mirroring standard Kubernetes conditions.
@@ -22,8 +21,8 @@ const (
 	ConditionStatusUnknown ConditionStatus = "Unknown"
 )
 
-// NodeStatusPhase is the reported status of a node (the value a caller
-// would print — distinct from the detailed Conditions slice).
+// NodeStatusPhase is the reported status of a node — the value a caller would
+// print, distinct from the detailed Conditions slice.
 type NodeStatusPhase string
 
 // Node status-phase values surfaced when reporting node health.

@@ -6,11 +6,9 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 )
 
-// StepID is an opaque identifier used within the wizard runtime to identify
-// a specific WizardStep instance (for StepCompleteMsg routing, InsertStepAfter
-// lookups, and similar). It is distinct from StepType (see config.go), which
-// names entries in the external factory registry used when constructing a
-// wizard from a Config.
+// StepID identifies a specific WizardStep instance at runtime (for
+// StepCompleteMsg routing and similar), distinct from StepType (config.go)
+// which names factory-registry entries.
 type StepID string
 
 // Built-in StepID values for each wizard step in DefaultConfig.
@@ -61,8 +59,8 @@ type ResizableStep interface {
 	SetSize(width, height int)
 }
 
-// AutoCompletingStep marks steps that complete without user interaction.
-// Steps that auto-complete are skipped when navigating backward with ESC.
+// AutoCompletingStep marks steps that complete without user interaction; they
+// are skipped when navigating back with ESC.
 type AutoCompletingStep interface {
 	AutoCompletes() bool
 }
@@ -72,29 +70,17 @@ type HelpProvider interface {
 	ShortHelp() []KeyBinding
 }
 
-// QuitGuard is implemented by steps that must intercept ctrl+c — e.g. a
-// live-execution step that turns the first press into a graceful cancel.
-// InterceptQuit returning true consumes the keypress; false lets the
-// wizard quit normally.
+// QuitGuard is implemented by steps that must intercept ctrl+c (e.g. graceful
+// cancel on first press); returning true consumes the keypress, false quits normally.
 type QuitGuard interface {
 	InterceptQuit() bool
 }
 
-// BackGuard is implemented by steps that must intercept esc — e.g. a
-// live-execution step that is forward-only: navigating away would orphan
-// its event pump mid-mutation. InterceptBack returning true consumes the
-// keypress; false lets the wizard navigate back normally.
+// BackGuard is implemented by forward-only steps that must intercept esc
+// (navigating away would orphan an in-flight mutation); true consumes the
+// keypress, false navigates back normally.
 type BackGuard interface {
 	InterceptBack() bool
-}
-
-// DescribedStep is implemented by steps that supply descriptive header text.
-type DescribedStep interface {
-	Description() string
-
-	// DisplayTitle returns the prompt text above the step content.
-	// Return empty string to skip title rendering.
-	DisplayTitle() string
 }
 
 // KeyBinding is a key/help pair used in the wizard footer.
@@ -117,18 +103,11 @@ type BaseStep struct {
 
 // NewBaseStep returns a BaseStep with the given id, title, and description.
 func NewBaseStep(id StepID, title, description string) BaseStep {
-	return BaseStep{
-		id:          id,
-		title:       title,
-		description: description,
-		width:       80,
-		height:      24,
-	}
+	return NewBaseStepWithDisplayTitle(id, title, "", description)
 }
 
 // NewBaseStepWithDisplayTitle returns a BaseStep with a separate
-// displayTitle (shown above the step body) in addition to title (shown in
-// the progress indicator).
+// displayTitle (above the step body) plus title (in the progress indicator).
 func NewBaseStepWithDisplayTitle(id StepID, title, displayTitle, description string) BaseStep {
 	return BaseStep{
 		id:           id,
@@ -146,20 +125,12 @@ func (b *BaseStep) ID() StepID { return b.id }
 // Title returns the progress-indicator title.
 func (b *BaseStep) Title() string { return b.title }
 
-// DisplayTitle returns the title shown above the step body.
+// DisplayTitle returns the title shown above the step body; an empty
+// string skips title rendering.
 func (b *BaseStep) DisplayTitle() string { return b.displayTitle }
-
-// Description returns the step's descriptive header text.
-func (b *BaseStep) Description() string { return b.description }
 
 // IsFocused reports whether the step currently owns input focus.
 func (b *BaseStep) IsFocused() bool { return b.focused }
-
-// Width returns the step's current inner width in terminal columns.
-func (b *BaseStep) Width() int { return b.width }
-
-// Height returns the step's current inner height in terminal rows.
-func (b *BaseStep) Height() int { return b.height }
 
 // ShouldShow always returns true; override in concrete steps to skip.
 func (b *BaseStep) ShouldShow(_ *config.Config) bool {
@@ -188,8 +159,7 @@ func (b *BaseStep) ShortHelp() []KeyBinding {
 	}
 }
 
-// AutoCompletes reports whether the step auto-advances without user input;
-// the default is false. Override in steps that complete themselves.
+// AutoCompletes reports whether the step auto-advances without user input; default false.
 func (b *BaseStep) AutoCompletes() bool {
 	return false
 }
@@ -203,9 +173,8 @@ type StepCompleteMsg struct {
 // StepBackMsg signals that the wizard should step back one position.
 type StepBackMsg struct{}
 
-// ErrorSetMsg signals an error that should be displayed in the wizard's
-// footer. Emitted from the wizard core when a ConfigApplier returns an error
-// during step transitions (see goToNextStep).
+// ErrorSetMsg signals an error to display in the wizard's footer, emitted
+// when a ConfigApplier returns an error during a step transition.
 type ErrorSetMsg struct {
 	Error error
 }
@@ -217,35 +186,30 @@ type FocusChangedMsg struct {
 	TotalFields int
 }
 
-// ConfigSyncMsg requests the wizard to call step.Apply(cfg) on the active
-// step *without* advancing — used so a step can publish a tentative
-// selection (e.g. for a status badge) while the user is still on the step.
+// ConfigSyncMsg requests step.Apply(cfg) on the active step without
+// advancing, so a step can publish a tentative selection (e.g. a status
+// badge) while still focused.
 type ConfigSyncMsg struct {
 	StepID StepID
 }
 
-// JumpTarget pairs a StepID with the 1-based digit used to jump to it from
-// the review screen. Digits are compacted: a step hidden by ShouldShow
-// consumes no digit, so later entries shift down rather than leaving a gap.
+// JumpTarget pairs a StepID with the 1-based digit that jumps to it from
+// review. Digits are compacted: a ShouldShow-hidden step consumes none.
 type JumpTarget struct {
 	StepID StepID
 	Digit  int
 }
 
-// ReviewJumper is implemented by the review step. JumpOrder declares, in
-// on-screen order, which steps its section headers may route a digit
-// keypress to; the wizard model compacts that list against each target's
-// current ShouldShow result and delivers the result via SetJumpTargets
-// every time the step regains focus.
+// ReviewJumper is implemented by the review step. JumpOrder declares which
+// steps section headers may route a digit to; the wizard delivers the
+// ShouldShow-compacted result via SetJumpTargets on every focus.
 type ReviewJumper interface {
 	JumpOrder() []StepID
 	SetJumpTargets(targets []JumpTarget)
 }
 
-// JumpToStepMsg requests the wizard navigate directly to the named step,
-// bypassing the normal forward/backward sequence. The wizard remembers the
-// jump: confirming or escaping the target step returns straight back to the
-// review screen instead of replaying the steps in between.
+// JumpToStepMsg jumps directly to the named step; confirming or escaping
+// it there returns straight to review instead of replaying steps between.
 type JumpToStepMsg struct {
 	StepID StepID
 }

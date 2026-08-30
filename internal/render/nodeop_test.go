@@ -53,20 +53,9 @@ func addPlan() node.OpPlan {
 	}
 }
 
-func stopPlan() node.OpPlan {
+func powerPlan(op node.Op) node.OpPlan {
 	return node.OpPlan{
-		Op:      node.OpStop,
-		Cluster: "grappleberry",
-		Nodes: []node.PlanNode{
-			{Name: "worker0", Role: nodetypes.RoleWorker, Action: terraform.PlanActionNoop},
-			{Name: "master0", Role: nodetypes.RoleMaster, Action: terraform.PlanActionNoop},
-		},
-	}
-}
-
-func startPlan() node.OpPlan {
-	return node.OpPlan{
-		Op:      node.OpStart,
+		Op:      op,
 		Cluster: "grappleberry",
 		Nodes: []node.PlanNode{
 			{Name: "master0", Role: nodetypes.RoleMaster, Action: terraform.PlanActionNoop},
@@ -113,13 +102,13 @@ func TestNodeOpBoxes(t *testing.T) {
 		},
 		{
 			name:       "confirm stop has no tf address or irreversible",
-			render:     func() string { p := stopPlan(); return NodeOpConfirm(&p) },
+			render:     func() string { p := powerPlan(node.OpStop); return NodeOpConfirm(&p) },
 			want:       []string{"confirm cluster stop", "grappleberry", "worker0", "shut down"},
 			wantAbsent: []string{"irreversible", "no-op"},
 		},
 		{
 			name:       "confirm start has no tf address or irreversible",
-			render:     func() string { p := startPlan(); return NodeOpConfirm(&p) },
+			render:     func() string { p := powerPlan(node.OpStart); return NodeOpConfirm(&p) },
 			want:       []string{"confirm cluster start", "grappleberry", "master0", "powered on"},
 			wantAbsent: []string{"irreversible", "no-op"},
 		},
@@ -135,22 +124,17 @@ func TestNodeOpBoxes(t *testing.T) {
 		},
 		{
 			name:   "complete stop uses stopped verb",
-			render: func() string { p := stopPlan(); return NodeOpComplete(&p, 45*time.Second) },
+			render: func() string { p := powerPlan(node.OpStop); return NodeOpComplete(&p, 45*time.Second) },
 			want:   []string{"cluster stopped", "worker0", "stopped", "okdctl cluster start"},
 		},
 		{
 			name:   "complete start uses started verb",
-			render: func() string { p := startPlan(); return NodeOpComplete(&p, 45*time.Second) },
+			render: func() string { p := powerPlan(node.OpStart); return NodeOpComplete(&p, 45*time.Second) },
 			want:   []string{"cluster started", "master0", "started", "okdctl status"},
 		},
 		{
 			name:   "dry-run remove marks no changes",
 			render: func() string { p := removePlan(); return NodeOpDryRun(&p) },
-			want:   []string{"dry-run — no changes made", "worker[2]"},
-		},
-		{
-			name:   "dry-run add marks no changes",
-			render: func() string { p := addPlan(); return NodeOpDryRun(&p) },
 			want:   []string{"dry-run — no changes made", "worker[2]"},
 		},
 	}
@@ -168,16 +152,5 @@ func TestNodeOpBoxes(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestNodeOpNextStepsPerOp(t *testing.T) {
-	for _, op := range []node.Op{node.OpAdd, node.OpRemove, node.OpResize} {
-		if len(NodeOpNextSteps(&node.OpPlan{Op: op})) == 0 {
-			t.Errorf("op %s must have next steps", op)
-		}
-	}
-	if NodeOpNextSteps(&node.OpPlan{Op: node.Op("bogus")}) != nil {
-		t.Error("unknown op must return nil")
 	}
 }

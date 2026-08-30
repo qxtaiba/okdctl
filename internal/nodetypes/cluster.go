@@ -8,16 +8,16 @@ import (
 	"github.com/qxtaiba/okdctl/internal/netutil"
 )
 
-// ClusterNode is one VM in the cluster topology: role, per-role index, and
-// the static IP allocated from the configured start address.
+// ClusterNode is one VM in the cluster topology: role, per-role index, and the
+// static IP allocated from the configured start address.
 type ClusterNode struct {
 	Role  NodeRole
 	Index int
 	IP    string
 }
 
-// Name returns the role-scoped node name ("bootstrap", "master0",
-// "worker1") used for ISO filenames and DNS/HAProxy backend entries.
+// Name returns the role-scoped node name ("bootstrap", "master0", "worker1")
+// used for ISO filenames and DNS/HAProxy backend entries.
 func (n ClusterNode) Name() string {
 	if n.Role == RoleBootstrap {
 		return string(n.Role)
@@ -25,19 +25,16 @@ func (n ClusterNode) Name() string {
 	return fmt.Sprintf("%s%d", n.Role, n.Index)
 }
 
-// PrefixedName returns the cluster-scoped VM name ("<cluster>-master0"),
-// the single encoding of the <cluster>-<node> contract shared by the
-// Terraform vm names and the DNS host entries.
+// PrefixedName returns the cluster-scoped VM name ("<cluster>-master0"), the
+// single encoding shared by Terraform VM names and DNS host entries.
 func (n ClusterNode) PrefixedName(clusterName string) string {
 	return clusterName + "-" + n.Name()
 }
 
-// ClusterNodes enumerates cfg's topology in provisioning order — bootstrap,
-// masters, then workers — with IPs offset sequentially from the static-IP
-// start (bootstrap = start, master i = start+1+i, workers follow the
-// masters). It is the single owner of this offset arithmetic; the range is
-// validated against the machine CIDR up front when one is configured, so
-// callers fail before any per-node calculation.
+// ClusterNodes enumerates cfg's topology in provisioning order (bootstrap,
+// masters, workers) with IPs offset sequentially from the static-IP start. The
+// machine CIDR, when configured, is validated up front so callers fail before
+// any per-node calculation.
 func ClusterNodes(cfg *config.Config) ([]ClusterNode, error) {
 	startIP := cfg.Networking.StaticIP.Start
 

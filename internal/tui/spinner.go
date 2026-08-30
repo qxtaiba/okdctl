@@ -13,17 +13,10 @@ import (
 
 var spinnerFrames = []string{"⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"}
 
-// StartSpinner renders a live spinner line to stderr during a long-running
-// operation. Returns a no-op stop function when logutil.ProgressBarsEnabled is
-// false — see that predicate for the full gate. The returned stop function
-// clears the spinner line and blocks until the rendering goroutine has exited
-// — call it before printing any output that must appear below the spinner
-// position.
-//
-// While the spinner is active it registers as the line owner (see
-// lineowner.go): the stderr log handler erases the spinner line before every
-// record, so log lines never land on a half-painted frame; the spinner
-// repaints on its next tick.
+// StartSpinner renders a live spinner to stderr during a long operation,
+// returning a no-op stop when logutil.ProgressBarsEnabled is false. stop
+// clears the line and blocks until the goroutine exits — call it before
+// printing output that must appear below the spinner.
 func StartSpinner(ctx context.Context, desc string) func() {
 	if !logutil.ProgressBarsEnabled() {
 		return func() {}
@@ -31,12 +24,10 @@ func StartSpinner(ctx context.Context, desc string) func() {
 	return startSpinner(ctx, desc, os.Stderr)
 }
 
-// StartStatusLine renders a spinner whose description can be replaced in place
-// while it runs — the install monitor uses it to surface live cluster-operator
-// and CSR counts on one owned line. Returns a set func to update the detail
-// and a stop func with StartSpinner's teardown semantics. Both are no-ops when
-// logutil.ProgressBarsEnabled is false, so callers invoke them
-// unconditionally.
+// StartStatusLine renders a spinner whose description can be replaced while
+// running (live operator/CSR counts); returns set/stop funcs sharing
+// StartSpinner's teardown semantics, both no-op when ProgressBarsEnabled is
+// false.
 func StartStatusLine(ctx context.Context, desc string) (set func(string), stop func()) {
 	if !logutil.ProgressBarsEnabled() {
 		return func(string) {}, func() {}
@@ -62,8 +53,8 @@ func runSpinner(ctx context.Context, sp *spinner) func() {
 	lineReg.register(sp)
 
 	go func() {
-		// LIFO teardown: release (final clear + deregister) runs before done
-		// closes, so a caller unblocked by <-done sees a cleared line.
+		// LIFO teardown: release runs before done closes, so <-done sees a
+		// cleared line.
 		defer close(done)
 		defer lineReg.release(sp)
 		ticker := time.NewTicker(120 * time.Millisecond)
@@ -93,13 +84,13 @@ type spinner struct {
 	frame int
 }
 
-// clearLine implements lineOwner. The caller holds the line lock.
+// clearLine implements lineOwner; the caller holds the line lock.
 func (s *spinner) clearLine() {
 	_, _ = fmt.Fprint(s.w, "\r\x1b[2K")
 }
 
-// setDesc replaces the spinner's description under the line lock so a repaint
-// never reads a half-written desc; the change shows on the next tick.
+// setDesc replaces desc under the line lock so a repaint never reads a
+// half-written value; shows on the next tick.
 func (s *spinner) setDesc(d string) {
 	lineReg.paint(s, func() { s.desc = d })
 }

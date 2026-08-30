@@ -7,10 +7,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
-// PendingCSRs returns CSRs whose status.conditions slice is empty, which
-// is how the kube-controller-manager represents a request that has neither
-// been approved nor denied. An Approved or Denied CSR carries at least one
-// condition entry and is excluded.
+// PendingCSRs returns CSRs whose status.conditions is empty — the
+// kube-controller-manager's representation of neither approved nor denied.
 func (c *Client) PendingCSRs(ctx context.Context) ([]CSR, error) {
 	data, err := c.getJSONChecked(ctx, "get csrs", "get", "csr", "-o", "json")
 	if err != nil {

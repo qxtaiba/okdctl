@@ -27,9 +27,6 @@ const (
 	fixtureAPIToken = "root@pam!ci=s3cret-token-bytes"
 )
 
-// resetDeployState zeroes the deploy command's package-level flag variables
-// and seams, restoring caller-time values on cleanup, mirroring
-// resetDestroyFlags.
 func resetDeployState(t *testing.T) {
 	t.Helper()
 	savedOutputFile, savedConfirm := deployOutputFile, deployConfirmCluster
@@ -53,10 +50,8 @@ func resetDeployState(t *testing.T) {
 	deployCmd.SetOut(io.Discard)
 }
 
-// isolateProxmoxEnv pins every credential env var to the empty string so
-// runFullDeployment's LoadEnvFile pass can never plant values that outlive
-// the test (LoadEnvFile skips keys that already exist, and t.Setenv
-// restores them).
+// isolateProxmoxEnv blanks credential env vars so LoadEnvFile (which skips
+// existing keys) can't leak real values into the test.
 func isolateProxmoxEnv(t *testing.T) {
 	t.Helper()
 	for _, k := range []string{
@@ -67,7 +62,6 @@ func isolateProxmoxEnv(t *testing.T) {
 	}
 }
 
-// wizardCapture records what runDeploy handed the wizard seam.
 type wizardCapture struct {
 	called       bool
 	cfg          *config.Config
@@ -94,9 +88,8 @@ func forbidWizard(t *testing.T) {
 	}
 }
 
-// executeCapture records the deployExecuteFn seam's invocation. credsValid
-// snapshots opts.Credentials.IsValid() at call time, because the caller's
-// deferred Zeroize wipes the credential bytes before the test can assert.
+// executeCapture snapshots credsValid at call time because the caller's
+// deferred Zeroize wipes credential bytes before assertions run.
 type executeCapture struct {
 	called     bool
 	cfg        *config.Config
@@ -134,11 +127,6 @@ func seedDeployConfig(t *testing.T) {
 	}
 }
 
-// TestPersistWizardConfig_SecretHygiene pins the save-pipeline ordering:
-// credentials reach the .env sidecar (0600), the in-memory secrets are
-// cleared, and the saved YAML carries zero credential bytes (the json:"-"
-// tags on the credential fields are the primary YAML guard). Reordering
-// the clear before the sidecar write fails this test.
 func TestPersistWizardConfig_SecretHygiene(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "okdctl.yaml")
@@ -306,10 +294,6 @@ func TestRunDeploy_WizardErrorIsConfigError(t *testing.T) {
 	}
 }
 
-// TestRunDeploy_WizardSaveExitPersistsConfigAndSidecar drives the full
-// post-wizard save pipeline through runDeploy: the wizard-returned config's
-// credentials land in okdctl.env (0600), okdctl.yaml holds none of them,
-// and the deployment engine is not invoked on the exit action.
 func TestRunDeploy_WizardSaveExitPersistsConfigAndSidecar(t *testing.T) {
 	resetDeployState(t)
 	t.Chdir(t.TempDir())
@@ -400,9 +384,6 @@ func TestRunDeploy_WelcomeModeDeploySkipsSave(t *testing.T) {
 	}
 }
 
-// TestRunDeploy_DryRunShortCircuitsBeforeWizard verifies --dry-run previews
-// the plan and step listing without constructing the wizard or the
-// deployment engine.
 func TestRunDeploy_DryRunShortCircuitsBeforeWizard(t *testing.T) {
 	resetDeployState(t)
 	isolateProxmoxEnv(t)
@@ -426,10 +407,6 @@ func TestRunDeploy_DryRunShortCircuitsBeforeWizard(t *testing.T) {
 	}
 }
 
-// TestRunDeploy_HeadlessGuard pins the non-interactive contract:
-// 'deploy --yes --confirm-cluster <name>' executes the deployment engine
-// without constructing the wizard; --yes alone, or with a mismatched name,
-// refuses before any deploy work.
 func TestRunDeploy_HeadlessGuard(t *testing.T) {
 	t.Run("--yes without --confirm-cluster names the required flag", func(t *testing.T) {
 		resetDeployState(t)
@@ -497,21 +474,7 @@ func TestRunDeploy_HeadlessGuard(t *testing.T) {
 	})
 }
 
-// TestDeployConfirmClusterFlagContract mirrors the sibling-command checks:
-// --confirm-cluster is registered and stays long-form only.
-func TestDeployConfirmClusterFlagContract(t *testing.T) {
-	f := deployCmd.Flags().Lookup("confirm-cluster")
-	if f == nil {
-		t.Fatal("deploy must register --confirm-cluster")
-	}
-	if f.Shorthand != "" {
-		t.Error("--confirm-cluster must stay long-form only (not in the shorthand allowlist)")
-	}
-}
-
-// writeNodeOpMarker plants a node-op marker under <root>/okd-install using
-// the on-disk v1 wire shape, mirroring the node package's own raw-marker
-// fixtures.
+// writeNodeOpMarker writes a raw v1-schema marker, mirroring the node package's own fixtures.
 func writeNodeOpMarker(t *testing.T, root, clusterName, op, target, step string) {
 	t.Helper()
 	workDir := filepath.Join(root, "okd-install")
@@ -526,12 +489,6 @@ func writeNodeOpMarker(t *testing.T, root, clusterName, op, target, step string)
 	}
 }
 
-// TestRunDeploy_InFlightNodeOpGuard pins deploy's counterpart to the node
-// verbs' foreign-marker guard: an in-flight node op for this cluster refuses
-// the deploy (naming op, target, and the override flag), the sibling-named
-// --acknowledge-interrupted-op overrides it, and a marker from a different
-// cluster never triggers it (the marker primitive's Trusted guard scopes by
-// cluster name).
 func TestRunDeploy_InFlightNodeOpGuard(t *testing.T) {
 	headless := func(t *testing.T) string {
 		t.Helper()
@@ -593,8 +550,7 @@ func TestRunDeploy_InFlightNodeOpGuard(t *testing.T) {
 	t.Run("completed add-batch residue does not trigger the guard", func(t *testing.T) {
 		root := headless(t)
 		exec := stubExecute(t)
-		// worker0 sits below the persisted worker count (3), so the batch it
-		// belonged to completed; only marker cleanup was interrupted.
+		// worker0 sits below the persisted worker count (3); its batch already completed.
 		writeNodeOpMarker(t, root, "prod", "add", "worker0", "wait-join")
 
 		if err := runDeploy(deployCmd, nil); err != nil {

@@ -10,11 +10,9 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-// MultiSelectField renders a checklist of options where any number may be
-// toggled. Value returns selected items as a comma-separated string;
-// SetValue parses the same format. Use space to toggle and j/k to move the
-// cursor (bare up/down are consumed by DataDrivenStep for inter-field
-// navigation, same constraint as SelectField's left/right keys).
+// MultiSelectField renders a checklist; Value/SetValue use a comma-separated
+// format. Space toggles, j/k moves — up/down are reserved by DataDrivenStep
+// for navigation, same constraint as SelectField's left/right.
 type MultiSelectField struct {
 	Label   string
 	Help    string
@@ -45,8 +43,7 @@ func (f *MultiSelectField) Value() string {
 	return strings.Join(parts, ",")
 }
 
-// SetValue marks each option present in the comma-separated value as
-// selected.
+// SetValue marks each option present in the comma-separated value as selected.
 func (f *MultiSelectField) SetValue(value string) {
 	f.selected = make([]bool, len(f.Options))
 	if value == "" {

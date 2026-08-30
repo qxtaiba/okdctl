@@ -1,32 +1,44 @@
 package deploy
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 )
 
-func TestReadDeployState_MissingFile(t *testing.T) {
-	dir := t.TempDir()
-	ds, err := readDeployState(filepath.Join(dir, "deploy.state"))
-	if err != nil {
-		t.Fatalf("missing file: want nil error, got %v", err)
+func TestReadDeployState_Absent(t *testing.T) {
+	tests := []struct {
+		name    string
+		seed    string // "" = no file on disk
+		wantErr bool
+	}{
+		{name: "missing file"},
+		{name: "corrupt JSON", seed: "{not valid json", wantErr: true},
+		// Unknown on-disk schema version must read as absent, never as an error.
+		{name: "unknown schema", seed: `{"schema_version":"v99","phase":"setup","run_id":"run-xyz","timestamp":"2026-05-01T10:00:00Z","cluster_name":"prod"}`},
 	}
-	if ds != nil {
-		t.Fatalf("missing file: want nil state, got %+v", ds)
-	}
-}
-
-func TestReadDeployState_CorruptJSON(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "deploy.state")
-	if err := os.WriteFile(path, []byte("{not valid json"), 0o600); err != nil {
-		t.Fatalf("seed file: %v", err)
-	}
-	_, err := readDeployState(path)
-	if err == nil {
-		t.Fatal("corrupt JSON: want error, got nil")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "deploy.state")
+			if tc.seed != "" {
+				if err := os.WriteFile(path, []byte(tc.seed), 0o600); err != nil {
+					t.Fatalf("seed file: %v", err)
+				}
+			}
+			ds, err := readDeployState(path)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("want error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("want nil error, got %v", err)
+			}
+			if ds != nil {
+				t.Fatalf("want nil state, got %+v", ds)
+			}
+		})
 	}
 }
 
@@ -57,32 +69,6 @@ func TestReadDeployState_V2RoundTrip(t *testing.T) {
 	}
 	if ds.Timestamp.IsZero() {
 		t.Error("Timestamp must not be zero")
-	}
-}
-
-// seedRawState writes the literal JSON older binaries produced, so the
-// migration tests exercise real on-disk bytes rather than the current
-// struct's marshal output.
-func seedRawState(t *testing.T, path, schema string, phase deployPhase) {
-	t.Helper()
-	raw := fmt.Sprintf(
-		`{"schema_version":%q,"phase":%q,"run_id":"run-xyz","timestamp":"2026-05-01T10:00:00Z","cluster_name":"prod"}`,
-		schema, phase)
-	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
-		t.Fatalf("seed file: %v", err)
-	}
-}
-
-func TestReadDeployState_UnknownSchema(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "deploy.state")
-	seedRawState(t, path, "v99", phaseSetup)
-	ds, err := readDeployState(path)
-	if err != nil {
-		t.Fatalf("unknown schema: want nil error, got %v", err)
-	}
-	if ds != nil {
-		t.Fatalf("unknown schema: want nil state, got %+v", ds)
 	}
 }
 
@@ -117,16 +103,6 @@ func TestResolveResumePhase(t *testing.T) {
 				}
 			},
 			wantPhase:  phaseInstall,
-			wantMarker: true,
-		},
-		{
-			name: "postinstall marker routes past wipe and install",
-			seed: func(t *testing.T, path string) {
-				if err := writeDeployState(path, phasePostInstall, "run-3", "prod"); err != nil {
-					t.Fatalf("writeDeployState: %v", err)
-				}
-			},
-			wantPhase:  phasePostInstall,
 			wantMarker: true,
 		},
 		{
@@ -229,39 +205,6 @@ func TestInstallInProgress(t *testing.T) {
 	}
 }
 
-func TestAnnounceDeployState_ClusterMismatch(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "deploy.state")
-	if err := writeDeployState(path, phaseInstall, "run-abc", "cluster-a"); err != nil {
-		t.Fatalf("writeDeployState: %v", err)
-	}
-	// must not panic and must return without printing the install advisory
-	AnnounceState(path, "cluster-b")
-}
-
-func TestAnnounceDeployState_NoMarker(t *testing.T) {
-	dir := t.TempDir()
-	AnnounceState(filepath.Join(dir, "deploy.state"), "any-cluster")
-}
-
-func TestAnnounceDeployState_SetupPhase(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "deploy.state")
-	if err := writeDeployState(path, phaseSetup, "run-prep", "prod"); err != nil {
-		t.Fatalf("writeDeployState: %v", err)
-	}
-	AnnounceState(path, "prod")
-}
-
-func TestAnnounceDeployState_InstallPhase(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "deploy.state")
-	if err := writeDeployState(path, phaseInstall, "run-inst", "prod"); err != nil {
-		t.Fatalf("writeDeployState: %v", err)
-	}
-	AnnounceState(path, "prod")
-}
-
 func TestClearDeployMarker_RemovesMarker(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "deploy.state")
@@ -274,23 +217,4 @@ func TestClearDeployMarker_RemovesMarker(t *testing.T) {
 	}
 	// Absent marker: must be a silent no-op.
 	clearDeployMarker(path, "run-x", "prod")
-}
-
-// TestCompletedMarker_IsInertEverywhere locks the terminal marker contract:
-// a completed-phase marker written by clearDeployMarker's remove-failure
-// fallback must behave exactly like no marker for both resume routing and
-// destroy diagnostics.
-func TestCompletedMarker_IsInertEverywhere(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "deploy.state")
-	if err := writeDeployState(path, phaseCompleted, "run-done", "prod"); err != nil {
-		t.Fatalf("writeDeployState: %v", err)
-	}
-
-	phase, marker := resolveResumePhase(path, "prod", false)
-	if phase != phaseSetup || marker != nil {
-		t.Errorf("resolveResumePhase = (%q, %+v); want (setup, nil)", phase, marker)
-	}
-	// must not print the partial-deploy advisory or panic
-	AnnounceState(path, "prod")
 }

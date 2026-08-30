@@ -2,26 +2,19 @@ package tui
 
 import "testing"
 
-// hasOwner reports whether a line owner is currently registered. Test-only
-// helper: production code never queries ownership, so this lives beside the
-// tests rather than in lineowner.go.
+// hasOwner is test-only; production code never queries ownership.
 func (r *lineRegistry) hasOwner() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.owner != nil
 }
 
-// noopOwner carries a name so distinct instances are distinct pointers — a
-// pointer to a zero-size struct may compare equal to another, which would
-// defeat the owner-identity guard under test.
+// noopOwner carries a name so distinct instances are distinct pointers
+// (zero-size structs can alias).
 type noopOwner struct{ name string }
 
 func (*noopOwner) clearLine() {}
 
-// TestLineRegistry_PaintGuardsOnOwner proves paint runs the repaint only for
-// the current owner: after a second owner registers (the spinner a step body
-// spawns while the checklist is registered), the displaced owner's paint is a
-// no-op so it cannot overwrite the active owner's line.
 func TestLineRegistry_PaintGuardsOnOwner(t *testing.T) {
 	var reg lineRegistry
 	a := &noopOwner{name: "a"}

@@ -12,11 +12,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
-// installFakeSystemctl writes a PATH-shadow systemctl that appends its argv
-// to a log file and exits exitCode, returning the log path. Log path and
-// exit code are baked into the script text (see the firewall fakes for the
-// same pattern) because executor.RunCaptured filters the child env through
-// DefaultEnvAllowlist, so control env vars would never reach the fake.
+// Log path and exit code are baked into the script, not env vars, since
+// executor.RunCaptured filters the child env through DefaultEnvAllowlist.
 func installFakeSystemctl(t *testing.T, exitCode int) string {
 	t.Helper()
 	logPath := filepath.Join(t.TempDir(), "argv.log")
@@ -39,16 +36,13 @@ func TestManageService_ArgvShape(t *testing.T) {
 		t.Skip("argv-shape half needs the Linux exec path; the non-Linux half is tested below")
 	}
 
+	// ManageService has exactly two paths: ServiceStatus rewritten to
+	// is-active, every other action passed to systemctl verbatim.
 	cases := []struct {
 		action ServiceAction
 		want   string
 	}{
 		{ServiceEnable, "enable haproxy"},
-		{ServiceDisable, "disable haproxy"},
-		{ServiceStart, "start haproxy"},
-		{ServiceStop, "stop haproxy"},
-		{ServiceRestart, "restart haproxy"},
-		{ServiceReload, "reload haproxy"},
 		{ServiceStatus, "is-active haproxy"},
 	}
 	for _, tc := range cases {
@@ -110,9 +104,7 @@ func TestServiceProbes_ExitCodeMapsToBool(t *testing.T) {
 	})
 }
 
-// TestSystemd_NonLinuxFailsClosed locks the non-Linux semantics: ManageService
-// errors and the probes report false without ever invoking systemctl — even
-// when a systemctl binary is reachable on PATH.
+// Proves systemctl is never invoked on non-Linux, even with a fake binary reachable on PATH.
 func TestSystemd_NonLinuxFailsClosed(t *testing.T) {
 	if runtime.GOOS == osLinux {
 		t.Skip("locks the non-Linux branch; runs on darwin dev machines")

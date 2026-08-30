@@ -14,23 +14,13 @@ import (
 	"github.com/qxtaiba/okdctl/internal/executor"
 )
 
-// rootRequiredCmds lists subcommand names that perform privileged operations
-// (writing to /etc, /usr/local/bin, /var/www/html, managing systemd units,
-// configuring firewalls). When invoked without euid=0, the CLI re-execs
-// itself under sudo before cobra's RunE fires so the body runs single-UID.
-//
-// Matching walks the cobra parent chain, so a future nested layout like
-// `okdctl cluster deploy` still triggers the gate as long as `deploy`
-// stays in this slice.
+// rootRequiredCmds lists subcommands needing sudo re-exec; matching walks the
+// parent chain so nested layouts still trigger the gate.
 var rootRequiredCmds = []string{cmdNameDeploy, cmdNameDestroy, cmdNameCleanup, "update-ingress"}
 
-// annotationValueTrue is the canonical truthy value for cobra annotations
-// (e.g. requiresRoot). Cobra annotations are map[string]string, so callers
-// must compare against a string; this constant is the single source of truth.
 const annotationValueTrue = "true"
 
-// lookPath is the exec.LookPath indirection used by ensureRoot.
-// Tests replace it with a stub to avoid real PATH lookups.
+// lookPath is exec.LookPath, indirected so tests can stub it.
 var lookPath = exec.LookPath
 
 type elevAction int
@@ -41,9 +31,8 @@ const (
 	elevElevate                   // must re-exec under sudo
 )
 
-// requiresRoot returns true if cmd carries the requiresRoot annotation or
-// any ancestor is in rootRequiredCmds. --dry-run escapes the gate so
-// `okdctl destroy --dry-run` prints the preview without a sudo prompt.
+// requiresRoot reports whether cmd or any ancestor requires root; --dry-run
+// always escapes the gate.
 func requiresRoot(cmd *cobra.Command) bool {
 	if dry, err := cmd.Flags().GetBool(flagDryRun); err == nil && dry {
 		return false
@@ -59,8 +48,6 @@ func requiresRoot(cmd *cobra.Command) bool {
 	return false
 }
 
-// elevationDecision returns the action ensureRoot should take for the given
-// command and effective UID.
 func elevationDecision(cmd *cobra.Command, euid int) elevAction {
 	needsRoot := requiresRoot(cmd)
 	if euid == 0 {
@@ -75,18 +62,10 @@ func elevationDecision(cmd *cobra.Command, euid int) elevAction {
 	return elevElevate
 }
 
-// ensureRoot is wired into the root cobra command's PersistentPreRunE.
-// Policy:
-//
-//	euid=0 ∧  requiresRoot → allow (re-exec'd process running the privileged body)
-//	euid=0 ∧ !requiresRoot → reject (e.g. `sudo okdctl status`)
-//	euid≠0 ∧  requiresRoot → re-exec under sudo
-//	euid≠0 ∧ !requiresRoot → allow
-//
-// OKDCTL_WIZARD_DEMO=1 skips the re-exec so the README demo recording
-// (scripts/demo/record.sh) can drive the wizard without a sudo prompt;
-// privileged deploy steps still fail without root, so the knob cannot
-// silently degrade a real deploy.
+// ensureRoot backs PersistentPreRunE's elevation gate: euid=0 allows only if
+// requiresRoot, euid≠0 re-execs via sudo if requiresRoot else allows.
+// OKDCTL_WIZARD_DEMO=1 skips the re-exec for the demo; privileged steps
+// still require root, so the knob can't silently degrade a real deploy.
 func ensureRoot(cmd *cobra.Command) error {
 	if os.Getenv(wizardDemoEnv) != "" {
 		return nil
@@ -112,12 +91,7 @@ func ensureRoot(cmd *cobra.Command) error {
 		return &errtypes.ConfigError{Msg: "resolve own binary", Err: err}
 	}
 	args := append([]string{"sudo", "--", self}, os.Args[1:]...)
-	// args are forwarded to sudo as an argv slice (no shell interpolation),
-	// and the `--` separator pins the binary. cobra validated the args
-	// before this PreRunE runs; callers cannot inject flags into sudo itself.
-	//
-	// Filter the environment to the same allowlist used by Executor
-	// subprocesses so unrelated tokens (AWS, GCP, shell plumbing) do not
-	// reach the privileged re-exec'd process.
+	// argv-only exec (no shell); env filtered to Executor's allowlist so extra
+	// secrets/tokens don't reach the re-exec'd process.
 	return syscall.Exec(sudoPath, args, executor.FilterParentEnv(executor.DefaultEnvAllowlist)) //nolint:gosec // argv slice, no shell
 }

@@ -15,21 +15,17 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
-// rollbackTimeout bounds one addon's rollback Uninstall when the install it
-// compensates for failed.
+// rollbackTimeout bounds a rollback Uninstall after a failed install.
 const rollbackTimeout = 2 * time.Minute
 
-// rollbackCtx derives a detached bounded context for a rollback Uninstall:
-// the install may have failed because ctx was cancelled, and an Uninstall
-// under a cancelled ctx dies before it starts, stranding a half-installed
-// addon (see internal/node/add.go ignition teardown for the pattern).
+// rollbackCtx detaches from ctx so Uninstall still runs when ctx
+// cancellation caused the install failure (pattern: internal/node/add.go).
 func rollbackCtx(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.WithoutCancel(ctx), rollbackTimeout)
 }
 
 // Manager drives the addon lifecycle: resolving dependencies, installing in
-// order, verifying, and rolling back on failure. Construct via NewManager
-// with functional options.
+// order, verifying, and rolling back on failure.
 type Manager struct {
 	cfg         *config.Config
 	exec        *executor.Executor
@@ -45,7 +41,7 @@ func WithExecutor(exec *executor.Executor) Option {
 	return func(m *Manager) { m.exec = exec }
 }
 
-// WithLogger attaches a logger. Nil resolves to NopLogger.
+// WithLogger attaches a logger, defaulting nil to NopLogger.
 func WithLogger(l *slog.Logger) Option {
 	return func(m *Manager) { m.logger = logutil.OrNop(l) }
 }
@@ -56,9 +52,9 @@ func WithProjectRoot(root string) Option {
 	return func(m *Manager) { m.projectRoot = root }
 }
 
-// NewManager constructs a Manager bound to cfg with options applied in order.
-// A nil logger is tolerated and resolved to NopLogger so the body can log
-// unconditionally — matches the nil-safety contract of phase.NewBasePhase.
+// NewManager constructs a Manager bound to cfg with options applied in
+// order; a nil logger resolves to NopLogger, matching phase.NewBasePhase's
+// nil-safety contract.
 func NewManager(cfg *config.Config, opts ...Option) *Manager {
 	m := &Manager{cfg: cfg}
 	for _, opt := range opts {
@@ -73,9 +69,9 @@ func NewManager(cfg *config.Config, opts ...Option) *Manager {
 	return m
 }
 
-// InstallAll resolves and installs all enabled addons in dependency order.
-// Independent addons are attempted even if an earlier addon fails; addons
-// whose dependency failed are skipped.
+// InstallAll resolves and installs all enabled addons in dependency order;
+// independent addons still run after an earlier failure, but addons whose
+// dependency failed are skipped.
 func (m *Manager) InstallAll(ctx context.Context) error {
 	enabled := Enabled(m.cfg)
 	if len(enabled) == 0 {
@@ -100,8 +96,7 @@ func (m *Manager) InstallAll(ctx context.Context) error {
 	for _, a := range ordered {
 		info := a.Info()
 		// Bare ctx.Err so cli/root.go::signalExitCode resolves SIGINT→130
-		// without a typed wrap; once any addon fails errs is non-empty and
-		// this branch is unreachable — L110 joins ctxErr into the aggregate.
+		// without a typed wrap.
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -135,8 +130,8 @@ func (m *Manager) InstallAll(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-// installAndVerify runs Install + Verify for a single addon.
-// Verify failure fails the install — the addon is rolled back by the caller.
+// installAndVerify runs Install + Verify for one addon; a Verify failure
+// fails the install (caller rolls back).
 func (m *Manager) installAndVerify(ctx context.Context, a Addon) (*Environment, error) {
 	info := a.Info()
 	m.logger.Info("addons: installing addon", "addon", info.Name)
@@ -167,14 +162,9 @@ func (m *Manager) firstFailedDep(deps []string, failed map[string]bool) string {
 	return ""
 }
 
-// InstallOne installs a single addon plus any missing dependencies.
-//
-// Rollback semantics differ from InstallAll: this method is all-or-nothing.
-// If any addon in the resolved dependency closure fails to install, every
-// previously-installed addon in this call is uninstalled in reverse order
-// and the method returns the aggregated error. InstallAll, by contrast, uses
-// per-addon continuation: a failed addon is rolled back in isolation while
-// unrelated addons continue installing.
+// InstallOne installs a single addon plus its missing dependencies; unlike
+// InstallAll's per-addon rollback, any failure here unwinds every addon
+// installed in this call, in reverse order.
 func (m *Manager) InstallOne(ctx context.Context, name string) error {
 	a := Get(name)
 	if a == nil {
@@ -226,16 +216,15 @@ func (m *Manager) InstallOne(ctx context.Context, name string) error {
 	return nil
 }
 
-// VerifyResult is one addon's verify outcome. Err is nil on success.
+// VerifyResult is one addon's verify outcome; Err is nil on success.
 type VerifyResult struct {
 	Name string
 	Err  error
 }
 
-// VerifyAll runs Verify on every enabled addon and returns one result per
-// addon plus an aggregated error built from any failures. Iteration does
-// not stop on the first failure — callers receive results for every addon
-// that was attempted before context cancellation.
+// VerifyAll runs Verify on every enabled addon, returning one result per
+// addon plus an aggregated error; iteration continues past failures,
+// stopping only on context cancellation.
 func (m *Manager) VerifyAll(ctx context.Context) ([]VerifyResult, error) {
 	enabled := Enabled(m.cfg)
 	results := make([]VerifyResult, 0, len(enabled))
@@ -307,7 +296,6 @@ func (m *Manager) dependsOn(addonName, target string, visited map[string]bool) b
 	return false
 }
 
-// collectWithDeps returns the addon and all its transitive dependencies.
 func (m *Manager) collectWithDeps(a Addon) ([]Addon, error) {
 	seen := make(map[string]bool)
 	var result []Addon

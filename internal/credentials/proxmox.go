@@ -1,10 +1,7 @@
-// Package credentials owns the Proxmox credential lifecycle. Password and
-// APIToken are []byte (not string) so callers can defer Zeroize() to wipe
-// them after use; ProxmoxCredentials.Redacted() satisfies the
-// interface{ Redacted() any } that logutil.RedactHandler detects, ensuring
-// structured slog attrs never leak secret bytes. Call LoadEnvFile before
-// GetProxmoxCredentials — credentials are resolved from env vars only;
-// config-file credentials are not a fallback.
+// Package credentials owns the Proxmox credential lifecycle: secret fields
+// are []byte so callers can Zeroize them, and Redacted() keeps them out of
+// structured logs. Call LoadEnvFile before GetProxmoxCredentials —
+// credentials resolve from env vars only, never the config file.
 package credentials
 
 import (
@@ -16,10 +13,9 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 )
 
-// Proxmox env-var names consumed by the bpg/proxmox terraform provider and
-// read by GetProxmoxCredentials. Writes (envfile.go) and reads (proxmox.go)
-// must use the same identifiers — a typo on either side silently breaks
-// env-file round-trip, so both sites reference these constants.
+// Proxmox env-var names consumed by the bpg/proxmox terraform provider;
+// envfile.go writes and proxmox.go reads must share these constants to
+// avoid a silent round-trip break.
 const (
 	envProxmoxEndpoint = "PROXMOX_VE_ENDPOINT"
 	envProxmoxUsername = "PROXMOX_VE_USERNAME"
@@ -28,8 +24,7 @@ const (
 	envProxmoxInsecure = "PROXMOX_VE_INSECURE"
 )
 
-// Source tracks where a credential came from so the CLI can warn on mixed-
-// provenance situations (env overriding config silently).
+// Source tracks where a credential came from so the CLI can warn on mixed-provenance situations.
 type Source int
 
 const (
@@ -47,20 +42,11 @@ func (s Source) String() string {
 	return "not found"
 }
 
-// ProxmoxCredentials holds Proxmox authentication material. Password and
-// APIToken are []byte (not string) so they can be wiped with Zeroize once
-// the caller is done — Go strings are immutable and can't be overwritten,
-// which leaves secrets lingering in memory and in any stray %+v dump.
-//
-// EndpointFromConfig and ConfigCredentialsOverridden surface credential
-// provenance mismatches that would otherwise be silent:
-//   - EndpointFromConfig is true when Source == SourceEnv but the endpoint
-//     fell back to the config file because PROXMOX_VE_ENDPOINT was unset.
-//   - ConfigCredentialsOverridden is true when both the environment and
-//     the config file held credentials and the environment won.
-//
-// The caller is expected to warn on either flag so operators are not
-// surprised by "credentials from env" messages hiding a mixed source.
+// ProxmoxCredentials holds Proxmox authentication material; Password and
+// APIToken are []byte so they can be wiped with Zeroize rather than
+// lingering as immutable strings. EndpointFromConfig and
+// ConfigCredentialsOverridden surface silent provenance mismatches the
+// caller should warn on.
 type ProxmoxCredentials struct {
 	Endpoint                    string
 	Username                    string
@@ -77,16 +63,14 @@ func (c *ProxmoxCredentials) IsValid() bool {
 	return (c.Username != "" && len(c.Password) > 0) || len(c.APIToken) > 0
 }
 
-// UseAPIToken reports whether API-token auth should be used. Callers branch
-// on this to decide between basic-auth (username+password) and bearer-token
-// flows without inspecting the token field directly.
+// UseAPIToken reports whether an API token is present — token auth wins
+// over username/password when it is.
 func (c *ProxmoxCredentials) UseAPIToken() bool {
 	return len(c.APIToken) > 0
 }
 
-// Zeroize overwrites the secret byte slices with zeros and nils them out.
-// Call this (typically via defer) once the credentials have been consumed —
-// e.g. after Env() has been snapshotted for a subprocess.
+// Zeroize overwrites the secret byte slices with zeros and nils them. Call
+// it (typically via defer) after Env() has been snapshotted for a subprocess.
 func (c *ProxmoxCredentials) Zeroize() {
 	if c == nil {
 		return
@@ -97,11 +81,8 @@ func (c *ProxmoxCredentials) Zeroize() {
 	c.APIToken = nil
 }
 
-// redactedCredentials is the safe projection of ProxmoxCredentials returned
-// by Redacted(). It omits Password and APIToken so that any code path that
-// receives a ProxmoxCredentials value — including slog's redactAny switch —
-// cannot reach the secret bytes. Future safe fields belong here; future
-// secret fields must be omitted.
+// redactedCredentials is the safe Redacted() projection: omits Password and
+// APIToken so slog's redactAny switch never reaches secret bytes.
 type redactedCredentials struct {
 	Endpoint                    string
 	Username                    string
@@ -111,10 +92,9 @@ type redactedCredentials struct {
 	ConfigCredentialsOverridden bool
 }
 
-// Redacted returns a struct that contains only the non-secret fields of c,
-// satisfying the interface{ Redacted() any } that logutil.redactAny detects.
-// This makes credential redaction structural: new secret fields default to
-// absent from the safe view unless explicitly added here.
+// Redacted returns only the non-secret fields of c, satisfying the
+// interface{ Redacted() any } that logutil.redactAny detects — new secret
+// fields default to absent from this view unless explicitly added.
 func (c *ProxmoxCredentials) Redacted() any {
 	if c == nil {
 		return nil
@@ -129,8 +109,7 @@ func (c *ProxmoxCredentials) Redacted() any {
 	}
 }
 
-// String masks secret fields so accidental %v / %s / log calls can't leak
-// the password or token.
+// String masks secret fields so accidental %v/%s/log calls can't leak the password or token.
 func (c *ProxmoxCredentials) String() string {
 	if c == nil {
 		return "ProxmoxCredentials(nil)"
@@ -143,21 +122,12 @@ func (c *ProxmoxCredentials) GoString() string {
 	return c.String()
 }
 
-// Env returns credential env vars for subprocess execution, avoiding
-// modification of the global process environment.
-//
-// os/exec requires []string for cmd.Env, so each secret byte slice is
-// converted to an immutable Go string that Zeroize cannot overwrite. The
-// strings live as long as any struct that stores the slice (Executor.Env,
-// Provider.env, Provisioner.pendingEnv) — typically the caller's function
-// frame, not just cmd.Run. Callers MUST pass the result directly to a
-// WithEnv option in the same frame as defer Zeroize() and MUST NOT pass
-// the slice to anything that outlives the current call stack (goroutine,
-// cache, persistent config). The source []byte fields remain wipeable.
-//
-// Call sites are enforced statically by TestEnvCallSiteRegistry
-// (env_registry_test.go): every non-test call must appear in its
-// allowedEnvCallSites map with the site's Zeroize discipline recorded.
+// Env returns credential env vars for subprocess execution without
+// touching the global process environment. The returned strings are
+// immutable copies that Zeroize cannot wipe, so callers MUST pass the
+// result directly into a WithEnv option in the same frame as defer
+// Zeroize() and MUST NOT let it outlive the call stack (goroutine, cache,
+// persistent config). TestEnvCallSiteRegistry enforces this statically.
 func (c *ProxmoxCredentials) Env() []string {
 	if !c.IsValid() {
 		return nil
@@ -183,8 +153,7 @@ func (c *ProxmoxCredentials) Env() []string {
 }
 
 // configHasCredentials reports whether the config file carries a full
-// credential set (API token or username+password). Used to detect when
-// environment credentials silently override a populated config.
+// credential set (API token or username+password).
 func configHasCredentials(px *config.ProxmoxConfig) bool {
 	if !px.APIToken.IsEmpty() {
 		return true
@@ -192,11 +161,11 @@ func configHasCredentials(px *config.ProxmoxConfig) bool {
 	return px.Username != "" && !px.Password.IsEmpty()
 }
 
-// normalizeEndpoint applies the scheme guard and defaults shared by a config
-// host and PROXMOX_VE_ENDPOINT: an http:// endpoint is refused unless allowHTTP
-// (the insecure_http opt-in), a schemeless host gains an https:// prefix, and a
-// portless host defaults to :8006. ok is false only when an http:// endpoint is
-// refused, in which case the caller must not attach plaintext credentials.
+// normalizeEndpoint applies the scheme guard shared by a config host and
+// PROXMOX_VE_ENDPOINT: http:// is refused unless allowHTTP, schemeless hosts
+// get an https:// prefix, and portless hosts default to :8006. ok is false
+// only on a refused http:// endpoint — the caller must not attach plaintext
+// credentials then.
 func normalizeEndpoint(host string, allowHTTP bool) (endpoint string, ok bool) {
 	if strings.HasPrefix(host, "http://") && !allowHTTP {
 		return "", false
@@ -212,9 +181,9 @@ func normalizeEndpoint(host string, allowHTTP bool) (endpoint string, ok bool) {
 }
 
 // applyEnvSource records env provenance and, when PROXMOX_VE_ENDPOINT is set,
-// re-resolves the endpoint through the same scheme guard as the config host.
-// It returns false when the env endpoint is http:// without the insecure_http
-// opt-in — the config-file gate would otherwise be bypassed by an env override.
+// re-resolves it through the same scheme guard as the config host; returns
+// false when http:// lacks the insecure_http opt-in, so an env override
+// can't bypass the config-file gate.
 func applyEnvSource(creds *ProxmoxCredentials, configHadCreds, allowHTTP bool) bool {
 	creds.Source = SourceEnv
 	creds.ConfigCredentialsOverridden = configHadCreds
@@ -233,15 +202,11 @@ func applyEnvSource(creds *ProxmoxCredentials, configHadCreds, allowHTTP bool) b
 	return true
 }
 
-// GetProxmoxCredentials resolves credentials with priority:
-// 1. Environment variables (incl. .env file), 2. Config file (legacy).
-//
-// When env credentials are used, two provenance flags surface mismatches
-// the caller should warn about:
-//   - EndpointFromConfig: PROXMOX_VE_ENDPOINT was unset, so the endpoint
-//     still comes from the config file (mixed source).
-//   - ConfigCredentialsOverridden: the config file also held credentials
-//     and they were silently ignored in favour of the environment.
+// GetProxmoxCredentials resolves credentials from environment variables
+// (including a loaded .env file) only — config-file credentials are not a
+// fallback. Two provenance flags, EndpointFromConfig and
+// ConfigCredentialsOverridden, surface silent mismatches the caller should
+// warn about.
 func GetProxmoxCredentials(cfg *config.Config) *ProxmoxCredentials {
 	creds := &ProxmoxCredentials{
 		Source: SourceNone,
@@ -257,9 +222,8 @@ func GetProxmoxCredentials(cfg *config.Config) *ProxmoxCredentials {
 		return creds
 	}
 
-	// Validators reject http:// without the insecure_http opt-in at config
-	// load; enforce it here too so an http endpoint never receives plaintext
-	// credentials via a caller that skipped validation.
+	// Validators already reject http:// without insecure_http; enforce it here
+	// too in case a caller skipped validation.
 	endpoint, ok := normalizeEndpoint(host, px.InsecureHTTP)
 	if !ok {
 		return creds
@@ -269,29 +233,25 @@ func GetProxmoxCredentials(cfg *config.Config) *ProxmoxCredentials {
 
 	configHadCreds := configHasCredentials(px)
 
-	if token := os.Getenv(envProxmoxAPIToken); token != "" {
+	token := os.Getenv(envProxmoxAPIToken)
+	username, password := os.Getenv(envProxmoxUsername), os.Getenv(envProxmoxPassword)
+	switch {
+	case token != "":
 		creds.APIToken = []byte(token)
-		if !applyEnvSource(creds, configHadCreds, px.InsecureHTTP) {
-			creds.Zeroize()
-			return &ProxmoxCredentials{Source: SourceNone}
-		}
-		return creds
-	}
-
-	if username, password := os.Getenv(envProxmoxUsername), os.Getenv(envProxmoxPassword); username != "" && password != "" {
+	case username != "" && password != "":
 		creds.Username = username
 		creds.Password = []byte(password)
-		if !applyEnvSource(creds, configHadCreds, px.InsecureHTTP) {
-			creds.Zeroize()
-			return &ProxmoxCredentials{Source: SourceNone}
-		}
+	default:
+		// Config-file credentials are not a fallback — env/.env-only avoids
+		// leaving password/token string residue in heap for the Config's
+		// lifetime; configHasCredentials only reads the fields to set the
+		// provenance flag.
 		return creds
 	}
 
-	// Config-file credentials are NO LONGER a fallback. The okdctl design is
-	// env/.env-only so string residue of px.Password / px.APIToken does not
-	// linger in heap for the Config's lifetime. configHasCredentials still
-	// reads the fields to set ConfigCredentialsOverridden (a provenance flag,
-	// not a credential copy).
+	if !applyEnvSource(creds, configHadCreds, px.InsecureHTTP) {
+		creds.Zeroize()
+		return &ProxmoxCredentials{Source: SourceNone}
+	}
 	return creds
 }

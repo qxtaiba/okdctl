@@ -13,8 +13,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
-// MetricsRecorder receives per-step and overall-run observations from the
-// Orchestrator. Implementations must be safe for concurrent use.
+// MetricsRecorder receives per-step/run observations from Orchestrator;
+// implementations must be concurrency-safe.
 type MetricsRecorder interface {
 	StepStarted(id StepID)
 	StepFinished(result *StepResult)
@@ -27,18 +27,14 @@ func (nopMetricsRecorder) StepStarted(StepID)           {}
 func (nopMetricsRecorder) StepFinished(*StepResult)     {}
 func (nopMetricsRecorder) DeployFinished(time.Duration) {}
 
-// stepLogSuppressor is an optional MetricsRecorder capability: a recorder that
-// renders its own per-step narration (e.g. a live TTY checklist) returns true
-// so the Orchestrator demotes its step Info lines to Debug — the two must not
-// both narrate the same step on the terminal.
+// stepLogSuppressor: a recorder with its own step narration returns true to
+// demote Orchestrator's Info logs to Debug, avoiding double narration.
 type stepLogSuppressor interface {
 	SuppressStepLog() bool
 }
 
-// Orchestrator runs a sequence of steps built by BuildSteps, recording
-// per-step outcomes. Stops on the first fatal failure (per StepDef.NonFatal);
-// non-fatal failures log a warning and continue. Safe to snapshot Results
-// concurrently with Run.
+// Orchestrator runs steps from BuildSteps, stopping at the first fatal
+// failure (StepDef.NonFatal); Results can be read concurrently with Run.
 type Orchestrator struct {
 	mu           sync.RWMutex
 	steps        []*builtStep
@@ -48,8 +44,8 @@ type Orchestrator struct {
 	suppressStep bool
 }
 
-// NewOrchestrator returns an Orchestrator seeded with the given steps and a
-// NopLogger. Use SetLogger to attach a real logger before Run.
+// NewOrchestrator returns an Orchestrator with steps and a NopLogger; call
+// SetLogger before Run to attach a real logger.
 func NewOrchestrator(steps ...*builtStep) *Orchestrator {
 	return &Orchestrator{
 		steps:   steps,
@@ -59,14 +55,12 @@ func NewOrchestrator(steps ...*builtStep) *Orchestrator {
 	}
 }
 
-// SetLogger attaches a logger. Nil is tolerated and resolved to NopLogger
-// via logutil.OrNop.
+// SetLogger attaches a logger, resolving nil to NopLogger via logutil.OrNop.
 func (o *Orchestrator) SetLogger(logger *slog.Logger) {
 	o.logger = logutil.OrNop(logger)
 }
 
-// SetMetricsRecorder attaches a metrics recorder. Nil resolves to the nop
-// recorder so callers never need a nil guard.
+// SetMetricsRecorder attaches a recorder, resolving nil to a nop implementation.
 func (o *Orchestrator) SetMetricsRecorder(rec MetricsRecorder) {
 	if rec == nil {
 		o.rec = nopMetricsRecorder{}
@@ -81,9 +75,8 @@ func (o *Orchestrator) SetMetricsRecorder(rec MetricsRecorder) {
 	}
 }
 
-// stepInfo logs a per-step milestone at Info, or at Debug when the attached
-// recorder renders its own checklist — the demoted lines still reach
-// okdctl.log through the recorder's sink mirror, not this logger.
+// stepInfo logs at Info, or Debug when the recorder self-narrates — demoted
+// lines still reach okdctl.log via the recorder's sink mirror.
 func (o *Orchestrator) stepInfo(msg string, args ...any) {
 	if o.suppressStep {
 		o.logger.Debug(msg, args...)
@@ -92,10 +85,8 @@ func (o *Orchestrator) stepInfo(msg string, args ...any) {
 	o.logger.Info(msg, args...)
 }
 
-// Run executes each step in order, honoring ctx cancellation between steps.
-// Returns the first fatal-step error (or ctx.Err on cancel), nil otherwise.
-// Per-step results are recorded in Results even on cancellation so callers
-// can render a partial-progress summary.
+// Run executes each step in order, honoring ctx cancellation; it returns the
+// first fatal-step error (or ctx.Err) and records results even on cancellation.
 func (o *Orchestrator) Run(ctx context.Context) error {
 	o.mu.Lock()
 	o.results = make([]StepResult, 0, len(o.steps))
@@ -130,17 +121,15 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 	return nil
 }
 
-// Results returns a snapshot of step results collected so far. Safe to call
-// concurrently with Run; the returned slice is a copy.
+// Results returns a snapshot copy of results so far; safe to call concurrently with Run.
 func (o *Orchestrator) Results() []StepResult {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 	return slices.Clone(o.results)
 }
 
-// classifyStepErr wraps a bare step error in ClusterError so the cli layer
-// maps it to exit 4 instead of the exit-1 default. Already-typed errtypes
-// values and context cancellation/deadline errors are returned unchanged.
+// classifyStepErr wraps a bare error in ClusterError (exit 4, not exit 1);
+// typed errtypes and ctx cancel/deadline errors pass through unchanged.
 func classifyStepErr(err error) error {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return err
@@ -155,12 +144,8 @@ func classifyStepErr(err error) error {
 	if errors.As(err, &ce) || errors.As(err, &ne) || errors.As(err, &cfge) || errors.As(err, &ae) || errors.As(err, &ue) {
 		return err
 	}
-	// errtypes Error() surfaces only Msg, so a generic Msg would drop the
-	// root cause from every sink (failure box, structured log, run log). But
-	// Msg is pre-rendered text that bypasses logutil.RedactHandler, so the
-	// arbitrary step error's .Error() is laundered through RedactableStderr —
-	// key-shaped secrets and JWTs masked, output bounded — before it lands in
-	// Msg. Err stays untouched so errors.Is/As and exitCodeFor keep walking.
+	// Msg bypasses RedactHandler, so err.Error() is laundered through
+	// RedactableStderr before landing in Msg; Err stays untouched for errors.Is/As.
 	scrubbed := fmt.Sprint(logutil.RedactableStderr(err.Error()).Redacted())
 	return &errtypes.ClusterError{Msg: "step failed: " + scrubbed, Err: err}
 }
@@ -218,7 +203,6 @@ func (o *Orchestrator) executeStep(ctx context.Context, step *builtStep) StepRes
 		return r
 	}
 
-	step.OnComplete()
 	r := StepResult{
 		StepID:    step.ID(),
 		Success:   true,

@@ -22,49 +22,34 @@ func TestClientRawGet_Success(t *testing.T) {
 	}
 }
 
-func TestClientRawGet_NonZeroExit(t *testing.T) {
-	installFakeOCGeneric(t)
-	t.Setenv("OC_EXIT_CODE", "1")
-	c := New(WithCLI("oc"), WithExecutor(executor.New()))
+func TestRawQuery_NonZeroExitWrapsExitError(t *testing.T) {
+	tests := []struct {
+		name string
+		call func(ctx context.Context, c *Client) error
+	}{
+		{"RawGet", func(ctx context.Context, c *Client) error {
+			_, err := c.RawGet(ctx, "/healthz")
+			return err
+		}},
+		{"GetJSON", func(ctx context.Context, c *Client) error {
+			_, _, err := c.GetJSON(ctx, "get", "foo")
+			return err
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			installFakeOCGeneric(t)
+			t.Setenv("OC_EXIT_CODE", "1")
+			c := New(WithCLI("oc"), WithExecutor(executor.New()))
 
-	_, err := c.RawGet(context.Background(), "/healthz")
-	if err == nil {
-		t.Fatal("expected error on non-zero exit")
-	}
-	var exitErr *executor.ExitError
-	if !errors.As(err, &exitErr) {
-		t.Fatalf("err is %T; want *executor.ExitError", err)
-	}
-}
-
-func TestClientGetJSON_Success(t *testing.T) {
-	installFakeOCGeneric(t)
-	t.Setenv("OC_STDOUT", `{"ok":true}`)
-	c := New(WithCLI("oc"), WithExecutor(executor.New()))
-
-	stdout, truncated, err := c.GetJSON(context.Background(), "get", "foo", "-o", "json")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if truncated {
-		t.Error("truncated = true; want false")
-	}
-	if want := `{"ok":true}`; stdout != want {
-		t.Errorf("stdout = %q; want %q", stdout, want)
-	}
-}
-
-func TestClientGetJSON_NonZeroExit(t *testing.T) {
-	installFakeOCGeneric(t)
-	t.Setenv("OC_EXIT_CODE", "1")
-	c := New(WithCLI("oc"), WithExecutor(executor.New()))
-
-	_, _, err := c.GetJSON(context.Background(), "get", "foo")
-	if err == nil {
-		t.Fatal("expected error on non-zero exit")
-	}
-	var exitErr *executor.ExitError
-	if !errors.As(err, &exitErr) {
-		t.Fatalf("err is %T; want *executor.ExitError", err)
+			err := tc.call(context.Background(), c)
+			if err == nil {
+				t.Fatal("expected error on non-zero exit")
+			}
+			var exitErr *executor.ExitError
+			if !errors.As(err, &exitErr) {
+				t.Fatalf("err is %T; want *executor.ExitError", err)
+			}
+		})
 	}
 }

@@ -13,10 +13,8 @@ import (
 )
 
 // EtcdHealth summarizes the etcd quorum's fitness for a one-at-a-time
-// control-plane mutation. Healthy is true only when the etcd ClusterOperator
-// is Available and neither Degraded nor Progressing, every etcd pod is Ready,
-// and no static-pod revision rollout is in flight. Reason names the first
-// failing check for operator-facing messages.
+// control-plane mutation: Healthy requires an Available/stable
+// ClusterOperator, all pods Ready, and no rollout in flight.
 type EtcdHealth struct {
 	Healthy         bool
 	OperatorOK      bool
@@ -26,9 +24,9 @@ type EtcdHealth struct {
 	Reason          string
 }
 
-// EtcdHealthy probes the etcd ClusterOperator, the openshift-etcd pods, and the
-// etcd resource's rollout condition. A master resize/removal MUST gate on this
-// before and after each node so quorum is never mutated mid-rollout.
+// EtcdHealthy probes the operator, pods, and rollout condition. A master
+// resize/removal MUST gate on this before and after each node so quorum is
+// never mutated mid-rollout.
 func (c *Client) EtcdHealthy(ctx context.Context) (EtcdHealth, error) {
 	coRaw, err := c.getJSONChecked(ctx, "get etcd operator", "get", "clusteroperator", "etcd", "-o", "json")
 	if err != nil {
@@ -79,12 +77,8 @@ func (c *Client) EtcdHealthy(ctx context.Context) (EtcdHealth, error) {
 	return h, nil
 }
 
-// getJSONChecked runs an `oc get ... -o json` style query and returns its
-// stdout only after checking both failure modes a JSON caller must guard
-// against: a non-zero exit and a truncated (size-capped) capture, which would
-// otherwise parse as valid-but-incomplete JSON. msgPrefix becomes the
-// ClusterError's Msg, in the caller's own "verb noun" convention (e.g. "list
-// nodes", "get csrs").
+// getJSONChecked returns stdout after checking exit code and truncation — a
+// truncated capture would otherwise parse as valid-but-incomplete JSON.
 func (c *Client) getJSONChecked(ctx context.Context, msgPrefix string, args ...string) ([]byte, error) {
 	result, err := c.runOutput(ctx, args...)
 	if err != nil {
@@ -107,9 +101,8 @@ type k8sCondition struct {
 	Status string `json:"status"`
 }
 
-// parseOperatorAvailableStable reports whether a ClusterOperator is Available
-// with Degraded and Progressing both false — the "stable" state a quorum
-// mutation requires.
+// parseOperatorAvailableStable reports Available=true, Degraded=false,
+// Progressing=false — the "stable" state a quorum mutation requires.
 func parseOperatorAvailableStable(data []byte) (bool, error) {
 	var co struct {
 		Status struct {
@@ -133,8 +126,6 @@ func parseOperatorAvailableStable(data []byte) (bool, error) {
 	return available && !degraded && !progressing, nil
 }
 
-// parsePodsReady counts pods whose Ready condition is True over the total,
-// from a `get pods -o json` list.
 func parsePodsReady(data []byte) (ready, total int, err error) {
 	var pl struct {
 		Items []struct {

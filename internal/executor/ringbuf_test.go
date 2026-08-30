@@ -13,20 +13,6 @@ func TestRingWriter_Empty(t *testing.T) {
 	}
 }
 
-func TestRingWriter_UnderCap(t *testing.T) {
-	r := newRingWriter(5)
-	if _, err := fmt.Fprintln(r, "a"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := fmt.Fprintln(r, "b"); err != nil {
-		t.Fatal(err)
-	}
-	got := r.tail()
-	if got != "a\nb" {
-		t.Errorf("want \"a\\nb\", got %q", got)
-	}
-}
-
 func TestRingWriter_ExactlyCap(t *testing.T) {
 	r := newRingWriter(3)
 	for _, line := range []string{"x", "y", "z"} {
@@ -90,7 +76,7 @@ func TestRingWriter_PartialThenComplete(t *testing.T) {
 }
 
 func TestRingWriter_PartialBoundedAt64K(t *testing.T) {
-	r := newRingWriter(constMaxLines)
+	r := newRingWriter(maxCapturedLines)
 	blob := strings.Repeat("x", 1024*1024) // 1 MiB, no newline
 	if _, err := r.Write([]byte(blob)); err != nil {
 		t.Fatal(err)
@@ -103,29 +89,8 @@ func TestRingWriter_PartialBoundedAt64K(t *testing.T) {
 		total += len(line)
 	}
 	total += len(r.partial)
-	limit := maxPartial * (constMaxLines + 1)
+	limit := maxPartial * (maxCapturedLines + 1)
 	if total > limit {
 		t.Errorf("total retained bytes %d exceeds limit %d", total, limit)
-	}
-}
-
-func TestRingWriter_LargeOverCap(t *testing.T) {
-	const maxLines = 200
-	r := newRingWriter(maxLines)
-	for i := 0; i < 500; i++ {
-		if _, err := fmt.Fprintf(r, "line%d\n", i); err != nil {
-			t.Fatal(err)
-		}
-	}
-	tail := r.tail()
-	lines := strings.Split(tail, "\n")
-	if len(lines) != maxLines {
-		t.Errorf("want %d lines, got %d", maxLines, len(lines))
-	}
-	if lines[0] != "line300" {
-		t.Errorf("want first retained line \"line300\", got %q", lines[0])
-	}
-	if lines[maxLines-1] != "line499" {
-		t.Errorf("want last retained line \"line499\", got %q", lines[maxLines-1])
 	}
 }

@@ -1,9 +1,7 @@
 // Package platform detects the host Linux family (RHEL vs Debian) from
-// /etc/os-release and exposes family-specific knobs — Apache paths,
-// service naming, CoreOS/download architecture strings — plus the
-// PackageManager abstraction (single Manager type driven by per-family
-// binary names: dnf/rpm on RHEL, apt-get/dpkg on Debian) so provisioning
-// code can stay distribution-agnostic.
+// /etc/os-release and exposes family-specific knobs (Apache paths, service
+// names, CoreOS arch, package manager) so provisioning code stays
+// distribution-agnostic.
 package platform
 
 import (
@@ -60,8 +58,8 @@ var debianIDs = map[string]bool{
 }
 
 // DetectOrDefault returns the detected OS, falling back to
-// OS{Family: FamilyRHEL, ID: "unknown"} and warning via logger when
-// detection fails. A nil logger is treated as no-op.
+// OS{Family: FamilyRHEL, ID: "unknown"} and warning via logger (nil-safe)
+// on failure.
 func DetectOrDefault(logger *slog.Logger) OS {
 	detected, err := Detect()
 	if err != nil {
@@ -154,9 +152,8 @@ func (o OS) ApacheUser() string {
 	return "apache"
 }
 
-// ApacheVhostConfDir returns the directory where drop-in vhost conf files
-// land. On RHEL conf.d is auto-included by httpd.conf; on Debian the conf
-// is activated via a2enconf.
+// ApacheVhostConfDir returns the drop-in vhost conf dir — auto-included via
+// conf.d on RHEL, activated via a2enconf on Debian.
 func (o OS) ApacheVhostConfDir() string {
 	if o.Family == FamilyDebian {
 		return "/etc/apache2/conf-available"

@@ -13,26 +13,20 @@ import (
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
-// defaultStartMonitorCmd starts "openshift-install wait-for install-complete"
-// via the canonical Executor.StartStreamed, sharing buildEnv/cancelSignal/
-// WaitDelay with every other subprocess this phase runs. The executor's
-// stdout/stderr are wired by deploy to the persistent log file (the TTY shows
-// the curated status line instead); --verbose tees them back to the terminal.
+// defaultStartMonitorCmd starts wait-for install-complete; --verbose tees output to the terminal.
 func (p *Phase) defaultStartMonitorCmd(ctx context.Context, clusterDir string) (done <-chan error, kill func(), err error) {
 	return p.Exec.StartStreamed(ctx, "openshift-install", "wait-for", "install-complete", "--dir", clusterDir, "--log-level=debug")
 }
 
-// timeoutNextSteps names the diagnosis surfaces for a wait timeout: the
-// openshift-install debug log, one representative oc probe, and the okdctl
-// bundle collector. Embedded in timeout error messages so the operator sees
-// them wherever the error surfaces — the message is the contract.
+// timeoutNextSteps names diagnosis surfaces embedded in timeout error messages
+// — the message text is the contract.
 func timeoutNextSteps(clusterDir string) string {
 	return fmt.Sprintf("check %s, inspect the cluster with 'oc --kubeconfig %s get clusteroperators', or collect diagnostics with 'okdctl debug-bundle'",
 		filepath.Join(clusterDir, ".openshift_install.log"), workspace.KubeconfigPath(clusterDir))
 }
 
-// WaitForBootstrap runs "openshift-install wait-for bootstrap-complete",
-// bounded by opts.BootstrapTimeout, streaming output to the current TTY.
+// WaitForBootstrap runs wait-for bootstrap-complete, bounded by
+// opts.BootstrapTimeout, streaming to the TTY.
 func (p *Phase) WaitForBootstrap(ctx context.Context, clusterDir string, opts *Options) error {
 	ctx, cancel := context.WithTimeout(ctx, opts.BootstrapTimeout)
 	defer cancel()
@@ -42,18 +36,15 @@ func (p *Phase) WaitForBootstrap(ctx context.Context, clusterDir string, opts *O
 	stopSpinner()
 	if err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			// Preserve cancellation identity through the typed error so
-			// callers can errors.Is(err, context.DeadlineExceeded) to
-			// distinguish "we ran out of budget" from "command failed".
+			// Preserve cancellation identity so callers can errors.Is(err, context.DeadlineExceeded).
 			return &errtypes.ClusterError{
 				Msg: fmt.Sprintf("bootstrap timed out after %v — %s", opts.BootstrapTimeout, timeoutNextSteps(clusterDir)),
 				Err: ctx.Err(),
 			}
 		}
 		if errors.Is(ctx.Err(), context.Canceled) {
-			// Bare wrap intentional: cli/root.go::signalExitCode walks the chain
-			// via errors.Is(err, context.Canceled) before exitCodeFor runs,
-			// mapping SIGINT→130 / SIGTERM→143 without a typed error.
+			// Bare wrap intentional: preserves context.Canceled for
+			// cli/root.go::signalExitCode (SIGINT→130/SIGTERM→143).
 			return fmt.Errorf("bootstrap cancelled: %w", ctx.Err())
 		}
 		return &errtypes.ClusterError{Msg: "bootstrap failed", Err: err}
@@ -63,25 +54,20 @@ func (p *Phase) WaitForBootstrap(ctx context.Context, clusterDir string, opts *O
 	return nil
 }
 
-// csrApprover is the subset of cluster.Client MonitorInstallation uses.
-// Accepting the interface instead of the concrete type lets tests inject a
-// stub without a real kubeconfig.
+// csrApprover is the subset of cluster.Client MonitorInstallation uses, letting
+// tests inject a stub.
 type csrApprover interface {
 	ApprovePendingCSRs(ctx context.Context) (int, error)
 }
 
-// operatorCounter is the optional cluster-operator-health surface a real
-// cluster.Client satisfies. MonitorInstallation type-asserts the approver for
-// it; a stub approver that omits it simply drops the operator count from the
-// status line (the CSR count still shows).
+// operatorCounter is the optional cluster-operator-health surface; a stub
+// approver that omits it just drops the count from the status line.
 type operatorCounter interface {
 	ClusterOperatorHealth(ctx context.Context) (cluster.OperatorHealth, error)
 }
 
-// operatorStatusDetail builds the status-line detail from the live
-// cluster-operator count and the running CSR-approval total. A missing counter
-// or a transient count failure (API not yet reachable) degrades to the CSR
-// count alone rather than blanking the line.
+// operatorStatusDetail builds the status line; a missing or failing counter
+// degrades to the CSR count alone rather than blanking the line.
 func operatorStatusDetail(ctx context.Context, counter operatorCounter, csrs int) string {
 	if counter != nil {
 		if h, err := counter.ClusterOperatorHealth(ctx); err == nil && h.Total > 0 {
@@ -91,9 +77,9 @@ func operatorStatusDetail(ctx context.Context, counter operatorCounter, csrs int
 	return fmt.Sprintf("%d CSRs approved", csrs)
 }
 
-// MonitorInstallation watches the post-bootstrap install until all cluster
-// operators are Available, bounded by opts.InstallTimeout. If approver is
-// nil a real cluster.Client is constructed from clusterDir/auth/kubeconfig.
+// MonitorInstallation watches the post-bootstrap install until all operators
+// are Available, bounded by opts.InstallTimeout. A nil approver builds a
+// real cluster.Client from clusterDir/auth/kubeconfig.
 func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts *Options, approver csrApprover) error {
 	ctx, cancel := context.WithTimeout(ctx, opts.InstallTimeout)
 	defer cancel()
@@ -144,9 +130,8 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 					}
 				}
 				if errors.Is(ctx.Err(), context.Canceled) {
-					// Bare wrap intentional: cli/root.go::signalExitCode walks the
-					// chain via errors.Is(err, context.Canceled) before exitCodeFor
-					// runs, mapping SIGINT→130 / SIGTERM→143 without a typed error.
+					// Bare wrap intentional: preserves context.Canceled for
+					// cli/root.go::signalExitCode (SIGINT→130/SIGTERM→143).
 					return fmt.Errorf("installation cancelled: %w", ctx.Err())
 				}
 				return &errtypes.ClusterError{Msg: "installation failed", Err: err}
@@ -176,9 +161,8 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 
 		case <-ctx.Done():
 			if errors.Is(ctx.Err(), context.Canceled) {
-				// Bare wrap intentional: cli/root.go::signalExitCode walks the chain
-				// via errors.Is(err, context.Canceled) before exitCodeFor runs,
-				// mapping SIGINT→130 / SIGTERM→143 without a typed error.
+				// Bare wrap intentional: preserves context.Canceled for
+				// cli/root.go::signalExitCode (SIGINT→130/SIGTERM→143).
 				return fmt.Errorf("installation cancelled: %w", ctx.Err())
 			}
 			return &errtypes.ClusterError{

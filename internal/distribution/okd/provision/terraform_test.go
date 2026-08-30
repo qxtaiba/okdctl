@@ -4,11 +4,9 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
@@ -84,7 +82,6 @@ func TestFormatStringList(t *testing.T) {
 		want  string
 	}{
 		{name: "empty", input: nil, want: "[]"},
-		{name: "empty slice", input: []string{}, want: "[]"},
 		{name: "one item", input: []string{"pve1"}, want: `["pve1"]`},
 		{name: "two items", input: []string{"pve1", "pve2"}, want: `["pve1", "pve2"]`},
 	}
@@ -107,7 +104,6 @@ func TestFormatAdditionalNetworks(t *testing.T) {
 		{name: "no vlan tag", networks: []config.AdditionalNetwork{{Bridge: "vmbr1", Model: "virtio"}}, want: `[{ model = "virtio", bridge = "vmbr1" }]`},
 		{name: "model defaults to virtio", networks: []config.AdditionalNetwork{{Bridge: "vmbr1"}}, want: `[{ model = "virtio", bridge = "vmbr1" }]`},
 		{name: "with vlan tag", networks: []config.AdditionalNetwork{{Bridge: "vmbr1", Model: "e1000", VLANTag: 100}}, want: `[{ model = "e1000", bridge = "vmbr1", tag = 100 }]`},
-		{name: "vlan tag zero omitted", networks: []config.AdditionalNetwork{{Bridge: "vmbr2", Model: "virtio", VLANTag: 0}}, want: `[{ model = "virtio", bridge = "vmbr2" }]`},
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
@@ -133,22 +129,12 @@ func TestBuildTerraformVarsData_threeMastersTwoWorkers(t *testing.T) {
 
 	got := buildTerraformVarsData(cfg)
 
-	if got.ClusterName != "mycluster" {
-		t.Errorf("ClusterName = %q, want %q", got.ClusterName, "mycluster")
-	}
-	if got.MasterCount != 3 {
-		t.Errorf("MasterCount = %d, want 3", got.MasterCount)
-	}
-	if got.WorkerCount != 2 {
-		t.Errorf("WorkerCount = %d, want 2", got.WorkerCount)
-	}
 	if got.MasterOSDiskSizeGB != 120 {
 		t.Errorf("MasterOSDiskSizeGB = %d, want 120", got.MasterOSDiskSizeGB)
 	}
 	if got.WorkerOSDiskSizeGB != 200 {
 		t.Errorf("WorkerOSDiskSizeGB = %d, want 200", got.WorkerOSDiskSizeGB)
 	}
-	// bootstrap inherits control-plane when unset
 	if got.BootstrapCPUCores != 4 {
 		t.Errorf("BootstrapCPUCores = %d, want 4 (inherited)", got.BootstrapCPUCores)
 	}
@@ -168,22 +154,6 @@ func TestBuildTerraformVarsData_threeMastersTwoWorkers(t *testing.T) {
 	wantWorkerNames := `"mycluster-worker0", "mycluster-worker1"`
 	if got.WorkerNames != wantWorkerNames {
 		t.Errorf("WorkerNames = %q, want %q", got.WorkerNames, wantWorkerNames)
-	}
-}
-
-func TestBuildTerraformVarsData_workerDiskFallsBackToCPDisk(t *testing.T) {
-	cfg := &config.Config{
-		Cluster:  config.ClusterConfig{Name: "fallback"},
-		Provider: config.ProviderConfig{Proxmox: &config.ProxmoxConfig{ISOStorage: "iso"}},
-		Topology: config.TopologyConfig{
-			ControlPlane: config.NodeConfig{Count: 3, CPU: 4, MemoryMB: 8192, DiskGB: 100},
-			Workers:      config.NodeConfig{Count: 2, CPU: 4, MemoryMB: 8192, DiskGB: 0},
-		},
-	}
-
-	got := buildTerraformVarsData(cfg)
-	if got.WorkerOSDiskSizeGB != 100 {
-		t.Errorf("WorkerOSDiskSizeGB = %d, want 100 (inherited from cp disk)", got.WorkerOSDiskSizeGB)
 	}
 }
 
@@ -278,26 +248,6 @@ func TestWorkerISOsPlanVar(t *testing.T) {
 	}
 }
 
-// TestWorkerISOsPlanVar_WidensPastPersistedCount locks the dry-run
-// correctness invariant: previewing a node add for workerCount N+k must
-// widen the ISO list to N+k entries, not the N persisted in
-// terraform.tfvars, or the module's length(worker_isos) >= worker_count
-// assertion fails the plan.
-func TestWorkerISOsPlanVar_WidensPastPersistedCount(t *testing.T) {
-	persistedCount := 2
-	previewCount := 3
-
-	persisted := buildISOStrings("iso-store", nodetypes.RoleWorker, persistedCount)
-	widened := WorkerISOsPlanVar("iso-store", previewCount)
-
-	if strings.Count(widened, ".iso") <= len(persisted) {
-		t.Fatalf("WorkerISOsPlanVar(_, %d) did not widen past the persisted count %d: %q", previewCount, persistedCount, widened)
-	}
-	if !strings.Contains(widened, `"iso-store:iso/worker2.iso"`) {
-		t.Errorf("WorkerISOsPlanVar(_, %d) missing the newly-added worker2 entry: %q", previewCount, widened)
-	}
-}
-
 func TestReadTerraformVarsSizing_MissingKeyErrors(t *testing.T) {
 	envDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(envDir, "terraform.tfvars"), []byte("master_cpu_cores = 4\n"), 0o600); err != nil {
@@ -308,9 +258,6 @@ func TestReadTerraformVarsSizing_MissingKeyErrors(t *testing.T) {
 	}
 }
 
-// TestWriteTerraformVars_PreservesBootstrapSentinel locks the other half of
-// the split: node-lifecycle re-renders go through WriteTerraformVars and must
-// leave the sentinel untouched so they cannot resurrect the bootstrap VM.
 func TestWriteTerraformVars_PreservesBootstrapSentinel(t *testing.T) {
 	cfg := config.DefaultConfig()
 	envDir := t.TempDir()

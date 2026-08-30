@@ -1,13 +1,7 @@
 #!/usr/bin/env bash
-# Enforces per-package statement-coverage floors defined in
-# .github/coverage-floors.conf. Coverage is covered/total statements per
-# package computed from the raw profile (mode: set) — not a per-function
-# mean, which overweights trivial one-line functions.
-# A floored package missing from the profile is a hard failure so the
-# gate cannot be bypassed by deleting a package's tests.
-# Logic lives in POSIX awk so the script runs under macOS bash 3.2
-# (no associative arrays) as well as CI's bash 5 + mawk.
-# Runs after: go test -coverprofile=coverage.out ./...
+# Coverage = covered/total statements per package, not per-function mean; a
+# floored package missing from the profile fails. POSIX awk only (bash 3.2, mawk).
+# Run after: go test -coverprofile=coverage.out ./...
 set -euo pipefail
 
 FLOORS_FILE="$(dirname "$0")/../coverage-floors.conf"
@@ -42,9 +36,7 @@ FNR == NR {
   next
 }
 
-# Second file: coverage profile. Skip the "mode:" header; remaining lines
-# are "<file>:<range> <numStmts> <hitCount>". A block is covered when its
-# hit count is non-zero.
+# Second file: coverage profile lines "<file>:<range> numStmts hitCount"; hitCount>0 = covered.
 FNR == 1 { next }
 {
   pkg = $1

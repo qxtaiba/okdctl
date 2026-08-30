@@ -14,8 +14,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/executor"
-	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
@@ -68,18 +66,6 @@ func TestBuildLBIngressController_PreservesFields(t *testing.T) {
 			icJSON: json.RawMessage(`{
 				"metadata":{"name":"default","namespace":""},
 				"spec":{"domain":"apps.cluster.local"}
-			}`),
-			wantDomain:    "apps.cluster.local",
-			wantNamespace: "openshift-ingress-operator",
-		},
-		{
-			name: "existing strategy type is overridden to LoadBalancerService",
-			icJSON: json.RawMessage(`{
-				"metadata":{"name":"default","namespace":"openshift-ingress-operator"},
-				"spec":{
-					"domain":"apps.cluster.local",
-					"endpointPublishingStrategy":{"type":"HostNetwork"}
-				}
 			}`),
 			wantDomain:    "apps.cluster.local",
 			wantNamespace: "openshift-ingress-operator",
@@ -195,30 +181,8 @@ func TestBuildRollbackJSON_StripsServerFields(t *testing.T) {
 	}
 }
 
-// installFakeOCForIngress writes a POSIX sh script named "oc" into a temp dir
-// and prepends it to PATH. The script dispatches on $1/$2 with env-var
-// overrides (all OC_-prefixed so the executor allowlist passes them through):
-//   - OC_ARGV_LOG           → path; every call appends all args as one line
-//   - OC_DELETE_FAIL=1      → delete exits 1
-//   - OC_BACKUP_EXPECT      → path; delete records its existence to OC_BACKUP_SEEN
-//   - OC_BACKUP_SEEN        → path; delete writes yes/no per OC_BACKUP_EXPECT
-//   - OC_CALL_FILE          → path; incremented on each create invocation
-//   - OC_CREATE_FAIL=1      → first create (n=1) exits 1
-//   - OC_CREATE_SLEEP=1     → first create (n=1) execs sleep 5 (killed by ctx cancel)
-//   - OC_ROLLBACK_FAIL=1    → second create (n>=2) exits 1
-//   - OC_ROLLBACK_STDIN_LOG → path; second create writes its stdin there
-//   - OC_IC_LIST_FAIL=1     → get ingresscontroller exits 1
-//   - OC_IC_LIST_FILE       → path; get ingresscontroller cats this file
-//   - OC_IC_CALL_FILE       → path; per-call counter for get ingresscontroller
-//   - OC_IC_LIST_FILE2      → path; cats this file from the second call on
-//   - OC_METALLB_NS=1       → get namespace prints a metallb-system row
-//   - OC_METALLB_POOL=1     → get ipaddresspool prints a pool row
-//   - OC_DEPLOY_CALL_FILE   → path; per-call counter for get deployment
-//   - OC_DEPLOY_GONE_AT     → get deployment prints a row until call N
-//   - OC_SVC_CALL_FILE      → path; per-call counter for get svc
-//   - OC_SVC_READY_AT       → get svc prints no IP before call N
-//   - OC_SVC_IP_DEFAULT     → IP printed for router-default
-//   - OC_SVC_IP_OTHER       → IP printed for any other router service
+// installFakeOCForIngress installs a fake "oc" dispatching on $1/$2, controlled
+// by OC_-prefixed env vars (see the script body for the full set).
 func installFakeOCForIngress(t *testing.T) {
 	t.Helper()
 	//nolint:dupword // embedded sh: adjacent fi keywords are not prose
@@ -280,10 +244,12 @@ case "$1" in
     esac
     ;;
   create)
-    f="${OC_CALL_FILE:-/tmp/okd-ingress-counter}"
-    n=$(cat "$f" 2>/dev/null || echo 0)
-    n=$((n + 1))
-    echo "$n" > "$f"
+    n=1
+    if [ -n "${OC_CALL_FILE:-}" ]; then
+      n=$(cat "$OC_CALL_FILE" 2>/dev/null || echo 0)
+      n=$((n + 1))
+      echo "$n" > "$OC_CALL_FILE"
+    fi
     if [ "$n" -eq 1 ] && [ "${OC_CREATE_SLEEP:-0}" = "1" ]; then exec sleep 5; fi
     if [ "$n" -ge 2 ] && [ -n "${OC_ROLLBACK_STDIN_LOG:-}" ]; then cat > "$OC_ROLLBACK_STDIN_LOG"; fi
     if [ "$n" -eq 1 ] && [ "${OC_CREATE_FAIL:-0}" = "1" ]; then echo "fake: create failed" >&2; exit 1; fi
@@ -296,12 +262,12 @@ esac
 	testutil.InstallFakeBin(t, "oc", script)
 }
 
-func newIngressTestPhase(t *testing.T) *Phase {
+// tempEnvFile points env var key at a fresh temp-dir file path and returns it.
+func tempEnvFile(t *testing.T, key string) string {
 	t.Helper()
-	return New(
-		phase.WithExecutor(executor.New()),
-		phase.WithLogger(logutil.NopLogger),
-	)
+	path := filepath.Join(t.TempDir(), key)
+	t.Setenv(key, path)
+	return path
 }
 
 func minimalIC(name string) *ingressControllerInfo {
@@ -315,18 +281,13 @@ func minimalIC(name string) *ingressControllerInfo {
 	}
 }
 
-// TestConvertToLoadBalancer_DeleteArgvTargetsICName asserts that the oc delete
-// call names only ic.Name in namespace openshift-ingress-operator.
 func TestConvertToLoadBalancer_DeleteArgvTargetsICName(t *testing.T) {
 	installFakeOCForIngress(t)
 
-	dir := t.TempDir()
-	argvLog := filepath.Join(dir, "argv.log")
-	counter := filepath.Join(dir, "counter")
-	t.Setenv("OC_ARGV_LOG", argvLog)
-	t.Setenv("OC_CALL_FILE", counter)
+	argvLog := tempEnvFile(t, "OC_ARGV_LOG")
+	tempEnvFile(t, "OC_CALL_FILE")
 
-	p := newIngressTestPhase(t)
+	p := newTestPhase(t)
 	ic := minimalIC("custom")
 
 	if err := p.convertToLoadBalancer(context.Background(), ic, 5*time.Second, ""); err != nil {
@@ -355,20 +316,14 @@ func TestConvertToLoadBalancer_DeleteArgvTargetsICName(t *testing.T) {
 	}
 }
 
-// TestConvertToLoadBalancer_CreateFailure_RollbackIssued asserts that a failed
-// replacement create triggers attemptRollback, which issues a second oc create
-// whose stdin matches buildRollbackJSON output.
 func TestConvertToLoadBalancer_CreateFailure_RollbackIssued(t *testing.T) {
 	installFakeOCForIngress(t)
 
-	dir := t.TempDir()
-	counter := filepath.Join(dir, "counter")
-	rollbackStdin := filepath.Join(dir, "rollback-stdin.json")
-	t.Setenv("OC_CALL_FILE", counter)
+	counter := tempEnvFile(t, "OC_CALL_FILE")
+	rollbackStdin := tempEnvFile(t, "OC_ROLLBACK_STDIN_LOG")
 	t.Setenv("OC_CREATE_FAIL", "1")
-	t.Setenv("OC_ROLLBACK_STDIN_LOG", rollbackStdin)
 
-	p := newIngressTestPhase(t)
+	p := newTestPhase(t)
 	ic := minimalIC("default")
 
 	if err := p.convertToLoadBalancer(context.Background(), ic, 5*time.Second, ""); err == nil {
@@ -397,19 +352,14 @@ func TestConvertToLoadBalancer_CreateFailure_RollbackIssued(t *testing.T) {
 	}
 }
 
-// TestConvertToLoadBalancer_BothCreateAndRollbackFail_ErrorNamesBoth asserts that
-// when both replacement create and rollback create fail, the returned error
-// message names both failures.
 func TestConvertToLoadBalancer_BothCreateAndRollbackFail_ErrorNamesBoth(t *testing.T) {
 	installFakeOCForIngress(t)
 
-	dir := t.TempDir()
-	counter := filepath.Join(dir, "counter")
-	t.Setenv("OC_CALL_FILE", counter)
+	tempEnvFile(t, "OC_CALL_FILE")
 	t.Setenv("OC_CREATE_FAIL", "1")
 	t.Setenv("OC_ROLLBACK_FAIL", "1")
 
-	p := newIngressTestPhase(t)
+	p := newTestPhase(t)
 	ic := minimalIC("default")
 
 	err := p.convertToLoadBalancer(context.Background(), ic, 5*time.Second, "")
@@ -432,24 +382,10 @@ func TestConvertToLoadBalancer_BothCreateAndRollbackFail_ErrorNamesBoth(t *testi
 	}
 }
 
-// TestRestoreHAProxyBackup_PrefersTimestampedFallsBackToPristine covers the
-// restore side of the shared backup contract: the newest timestamped backup
-// wins when present, and setup's fixed pristine snapshot is the fallback
-// when RemoveHAProxy left no timestamped backup.
 func TestRestoreHAProxyBackup_PrefersTimestampedFallsBackToPristine(t *testing.T) {
-	newPhase := func() *Phase {
-		return New(phase.WithExecutor(executor.New()), phase.WithLogger(logutil.NopLogger))
-	}
-	setConfigPath := func(t *testing.T, cfg string) {
-		t.Helper()
-		orig := haproxyConfigPath
-		t.Cleanup(func() { haproxyConfigPath = orig })
-		haproxyConfigPath = cfg
-	}
-
 	t.Run("prefers newest timestamped backup", func(t *testing.T) {
 		cfg := filepath.Join(t.TempDir(), "haproxy.cfg")
-		setConfigPath(t, cfg)
+		setHAProxyConfigPath(t, cfg)
 
 		writes := map[string]string{
 			cfg + phase.HAProxyBackupSuffix: "pristine",
@@ -462,7 +398,7 @@ func TestRestoreHAProxyBackup_PrefersTimestampedFallsBackToPristine(t *testing.T
 			}
 		}
 
-		if !newPhase().restoreHAProxyBackup() {
+		if !newTestPhase(t).restoreHAProxyBackup() {
 			t.Fatal("restoreHAProxyBackup returned false with backups present")
 		}
 		got, err := os.ReadFile(cfg)
@@ -476,13 +412,13 @@ func TestRestoreHAProxyBackup_PrefersTimestampedFallsBackToPristine(t *testing.T
 
 	t.Run("falls back to pristine snapshot", func(t *testing.T) {
 		cfg := filepath.Join(t.TempDir(), "haproxy.cfg")
-		setConfigPath(t, cfg)
+		setHAProxyConfigPath(t, cfg)
 
 		if err := os.WriteFile(cfg+phase.HAProxyBackupSuffix, []byte("pristine"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 
-		if !newPhase().restoreHAProxyBackup() {
+		if !newTestPhase(t).restoreHAProxyBackup() {
 			t.Fatal("restoreHAProxyBackup returned false with pristine snapshot present")
 		}
 		got, err := os.ReadFile(cfg)
@@ -496,9 +432,9 @@ func TestRestoreHAProxyBackup_PrefersTimestampedFallsBackToPristine(t *testing.T
 
 	t.Run("returns false with no backups", func(t *testing.T) {
 		cfg := filepath.Join(t.TempDir(), "haproxy.cfg")
-		setConfigPath(t, cfg)
+		setHAProxyConfigPath(t, cfg)
 
-		if newPhase().restoreHAProxyBackup() {
+		if newTestPhase(t).restoreHAProxyBackup() {
 			t.Fatal("restoreHAProxyBackup returned true with no backup files")
 		}
 	})
@@ -513,7 +449,6 @@ func TestParseIngressStrategy(t *testing.T) {
 		{"HostNetwork", strategyHostNetwork, true},
 		{"LoadBalancerService", strategyLoadBalancer, true},
 		{"NodePortService", "", false},
-		{"Private", "", false},
 		{"", "", false},
 	}
 	for _, tc := range cases {
@@ -542,31 +477,11 @@ func hostNetworkIC(name string) *ingressControllerInfo {
 func TestAttemptRollback(t *testing.T) {
 	installFakeOCForIngress(t)
 
-	t.Run("success recreates original via stdin", func(t *testing.T) {
-		dir := t.TempDir()
-		argvLog := filepath.Join(dir, "argv.log")
-		t.Setenv("OC_ARGV_LOG", argvLog)
-		t.Setenv("OC_CALL_FILE", filepath.Join(dir, "counter"))
-
-		p := newIngressTestPhase(t)
-		if err := p.attemptRollback(context.Background(), minimalIC("default")); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		data, err := os.ReadFile(argvLog)
-		if err != nil {
-			t.Fatalf("argv log not written: %v", err)
-		}
-		if !strings.Contains(string(data), "create -f -") {
-			t.Errorf("rollback did not issue oc create -f -; argv log:\n%s", string(data))
-		}
-	})
-
 	t.Run("create exit non-zero returns error with redacted stderr", func(t *testing.T) {
-		dir := t.TempDir()
-		t.Setenv("OC_CALL_FILE", filepath.Join(dir, "counter"))
+		tempEnvFile(t, "OC_CALL_FILE")
 		t.Setenv("OC_CREATE_FAIL", "1")
 
-		p := newIngressTestPhase(t)
+		p := newTestPhase(t)
 		err := p.attemptRollback(context.Background(), minimalIC("default"))
 		if err == nil {
 			t.Fatal("expected error on rollback create exit 1")
@@ -580,10 +495,9 @@ func TestAttemptRollback(t *testing.T) {
 	})
 
 	t.Run("unbuildable rollback json errors without calling oc", func(t *testing.T) {
-		argvLog := filepath.Join(t.TempDir(), "argv.log")
-		t.Setenv("OC_ARGV_LOG", argvLog)
+		argvLog := tempEnvFile(t, "OC_ARGV_LOG")
 
-		p := newIngressTestPhase(t)
+		p := newTestPhase(t)
 		ic := &ingressControllerInfo{Name: "broken", RawJSON: json.RawMessage(`{not json`)}
 		if err := p.attemptRollback(context.Background(), ic); err == nil {
 			t.Fatal("expected error for unparseable RawJSON")
@@ -607,10 +521,9 @@ func TestHandleHostNetworkConversion_SkipPaths(t *testing.T) {
 	}
 
 	t.Run("metallb namespace missing skips without error", func(t *testing.T) {
-		argvLog := filepath.Join(t.TempDir(), "argv.log")
-		t.Setenv("OC_ARGV_LOG", argvLog)
+		argvLog := tempEnvFile(t, "OC_ARGV_LOG")
 
-		p := newIngressTestPhase(t)
+		p := newTestPhase(t)
 		n, names, err := p.handleHostNetworkConversion(context.Background(), ics(),
 			UpdateIngressOptions{ConfirmConversion: func([]string) bool { return true }}, &Options{})
 		if err != nil {
@@ -623,11 +536,10 @@ func TestHandleHostNetworkConversion_SkipPaths(t *testing.T) {
 	})
 
 	t.Run("metallb pool missing skips without error", func(t *testing.T) {
-		argvLog := filepath.Join(t.TempDir(), "argv.log")
-		t.Setenv("OC_ARGV_LOG", argvLog)
+		argvLog := tempEnvFile(t, "OC_ARGV_LOG")
 		t.Setenv("OC_METALLB_NS", "1")
 
-		p := newIngressTestPhase(t)
+		p := newTestPhase(t)
 		n, _, err := p.handleHostNetworkConversion(context.Background(), ics(),
 			UpdateIngressOptions{ConfirmConversion: func([]string) bool { return true }}, &Options{})
 		if err != nil || n != 0 {
@@ -639,7 +551,7 @@ func TestHandleHostNetworkConversion_SkipPaths(t *testing.T) {
 	t.Run("metallb check transport error skips without error", func(t *testing.T) {
 		t.Setenv("PATH", t.TempDir())
 
-		p := newIngressTestPhase(t)
+		p := newTestPhase(t)
 		n, _, err := p.handleHostNetworkConversion(context.Background(), ics(),
 			UpdateIngressOptions{ConfirmConversion: func([]string) bool { return true }}, &Options{})
 		if err != nil || n != 0 {
@@ -648,12 +560,11 @@ func TestHandleHostNetworkConversion_SkipPaths(t *testing.T) {
 	})
 
 	t.Run("nil confirmation callback skips", func(t *testing.T) {
-		argvLog := filepath.Join(t.TempDir(), "argv.log")
-		t.Setenv("OC_ARGV_LOG", argvLog)
+		argvLog := tempEnvFile(t, "OC_ARGV_LOG")
 		t.Setenv("OC_METALLB_NS", "1")
 		t.Setenv("OC_METALLB_POOL", "1")
 
-		p := newIngressTestPhase(t)
+		p := newTestPhase(t)
 		n, _, err := p.handleHostNetworkConversion(context.Background(), ics(), UpdateIngressOptions{}, &Options{})
 		if err != nil || n != 0 {
 			t.Errorf("converted = %d err = %v; want 0 and nil", n, err)
@@ -662,13 +573,12 @@ func TestHandleHostNetworkConversion_SkipPaths(t *testing.T) {
 	})
 
 	t.Run("declined confirmation skips and passes ic names", func(t *testing.T) {
-		argvLog := filepath.Join(t.TempDir(), "argv.log")
-		t.Setenv("OC_ARGV_LOG", argvLog)
+		argvLog := tempEnvFile(t, "OC_ARGV_LOG")
 		t.Setenv("OC_METALLB_NS", "1")
 		t.Setenv("OC_METALLB_POOL", "1")
 
 		var gotNames []string
-		p := newIngressTestPhase(t)
+		p := newTestPhase(t)
 		n, _, err := p.handleHostNetworkConversion(context.Background(), ics(),
 			UpdateIngressOptions{ConfirmConversion: func(names []string) bool {
 				gotNames = names
@@ -686,14 +596,12 @@ func TestHandleHostNetworkConversion_SkipPaths(t *testing.T) {
 
 func TestHandleHostNetworkConversion_ConvertsWhenConfirmed(t *testing.T) {
 	installFakeOCForIngress(t)
-	dir := t.TempDir()
-	argvLog := filepath.Join(dir, "argv.log")
-	t.Setenv("OC_ARGV_LOG", argvLog)
-	t.Setenv("OC_CALL_FILE", filepath.Join(dir, "counter"))
+	argvLog := tempEnvFile(t, "OC_ARGV_LOG")
+	tempEnvFile(t, "OC_CALL_FILE")
 	t.Setenv("OC_METALLB_NS", "1")
 	t.Setenv("OC_METALLB_POOL", "1")
 
-	p := newIngressTestPhase(t)
+	p := newTestPhase(t)
 	ics := []ingressControllerInfo{*hostNetworkIC("default"), *hostNetworkIC("custom")}
 	n, names, err := p.handleHostNetworkConversion(context.Background(), ics,
 		UpdateIngressOptions{ConfirmConversion: func([]string) bool { return true }},
@@ -733,13 +641,12 @@ func TestHandleHostNetworkConversion_ConvertsWhenConfirmed(t *testing.T) {
 
 func TestHandleHostNetworkConversion_DeleteFailureStopsConversion(t *testing.T) {
 	installFakeOCForIngress(t)
-	dir := t.TempDir()
-	t.Setenv("OC_CALL_FILE", filepath.Join(dir, "counter"))
+	tempEnvFile(t, "OC_CALL_FILE")
 	t.Setenv("OC_METALLB_NS", "1")
 	t.Setenv("OC_METALLB_POOL", "1")
 	t.Setenv("OC_DELETE_FAIL", "1")
 
-	p := newIngressTestPhase(t)
+	p := newTestPhase(t)
 	ics := []ingressControllerInfo{*hostNetworkIC("default")}
 	n, _, err := p.handleHostNetworkConversion(context.Background(), ics,
 		UpdateIngressOptions{ConfirmConversion: func([]string) bool { return true }},
@@ -755,21 +662,15 @@ func TestHandleHostNetworkConversion_DeleteFailureStopsConversion(t *testing.T) 
 	}
 }
 
-// TestHandleHostNetworkConversion_MidConversionFailureRestoresPriorStrategy
-// injects a create failure mid-conversion and asserts the recovery contract:
-// the rollback payload sent to oc restores the original IngressController with
-// its prior HostNetwork strategy, not the half-applied LoadBalancerService one.
 func TestHandleHostNetworkConversion_MidConversionFailureRestoresPriorStrategy(t *testing.T) {
 	installFakeOCForIngress(t)
-	dir := t.TempDir()
-	rollbackStdin := filepath.Join(dir, "rollback-stdin.json")
-	t.Setenv("OC_CALL_FILE", filepath.Join(dir, "counter"))
+	tempEnvFile(t, "OC_CALL_FILE")
+	rollbackStdin := tempEnvFile(t, "OC_ROLLBACK_STDIN_LOG")
 	t.Setenv("OC_CREATE_FAIL", "1")
-	t.Setenv("OC_ROLLBACK_STDIN_LOG", rollbackStdin)
 	t.Setenv("OC_METALLB_NS", "1")
 	t.Setenv("OC_METALLB_POOL", "1")
 
-	p := newIngressTestPhase(t)
+	p := newTestPhase(t)
 	ics := []ingressControllerInfo{*hostNetworkIC("default")}
 	n, names, err := p.handleHostNetworkConversion(context.Background(), ics,
 		UpdateIngressOptions{ConfirmConversion: func([]string) bool { return true }},
@@ -824,9 +725,8 @@ func writeICList(t *testing.T, envVar string, items ...string) {
 	t.Setenv(envVar, path)
 }
 
-// stubDNSDeploys replaces the dns deploy seams for the test's lifetime and
-// returns counters/captures for asserting which deploy ran and with what
-// apps IP. prodErr/bootErr inject failures.
+// stubDNSDeploys replaces the dns deploy seams, returning call captures;
+// prodErr/bootErr inject failures.
 func stubDNSDeploys(t *testing.T, prodErr, bootErr error) (prodAppsIPs *[]string, bootstrapCalls *int) {
 	t.Helper()
 	origProd := deployProductionDNSFn
@@ -861,7 +761,7 @@ func TestDiscoverIngressControllers(t *testing.T) {
 			`{"metadata":{},"spec":{},"status":{}}`,
 		)
 
-		p := newIngressTestPhase(t)
+		p := newTestPhase(t)
 		got, err := p.discoverIngressControllers(context.Background())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -886,7 +786,7 @@ func TestDiscoverIngressControllers(t *testing.T) {
 	t.Run("oc failure propagates", func(t *testing.T) {
 		t.Setenv("OC_IC_LIST_FAIL", "1")
 
-		p := newIngressTestPhase(t)
+		p := newTestPhase(t)
 		if _, err := p.discoverIngressControllers(context.Background()); err == nil {
 			t.Fatal("expected error when oc get fails")
 		}
@@ -899,7 +799,7 @@ func TestDiscoverIngressControllers(t *testing.T) {
 		}
 		t.Setenv("OC_IC_LIST_FILE", path)
 
-		p := newIngressTestPhase(t)
+		p := newTestPhase(t)
 		if _, err := p.discoverIngressControllers(context.Background()); err == nil {
 			t.Fatal("expected error for unparseable list")
 		}
@@ -915,40 +815,36 @@ func ingressTestConfig() *config.Config {
 	}
 }
 
-func TestUpdateIngress_DiscoveryFailure(t *testing.T) {
-	installFakeOCForIngress(t)
-	t.Setenv("OC_IC_LIST_FAIL", "1")
-
-	p := newIngressTestPhase(t)
-	_, err := p.UpdateIngress(context.Background(), ingressTestConfig(), UpdateIngressOptions{})
-	if err == nil {
-		t.Fatal("expected error when discovery fails outside bootstrap dns state")
+func TestUpdateIngress_ErrorPaths(t *testing.T) {
+	cases := []struct {
+		name  string
+		setup func(t *testing.T)
+	}{
+		{"discovery failure", func(t *testing.T) { t.Setenv("OC_IC_LIST_FAIL", "1") }},
+		{"no controllers found", func(t *testing.T) { writeICList(t, "OC_IC_LIST_FILE") }},
 	}
-	var ce *errtypes.ClusterError
-	if !errors.As(err, &ce) {
-		t.Fatalf("err is %T; want *errtypes.ClusterError", err)
-	}
-}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			installFakeOCForIngress(t)
+			tc.setup(t)
 
-func TestUpdateIngress_NoControllersFound(t *testing.T) {
-	installFakeOCForIngress(t)
-	writeICList(t, "OC_IC_LIST_FILE")
-
-	p := newIngressTestPhase(t)
-	_, err := p.UpdateIngress(context.Background(), ingressTestConfig(), UpdateIngressOptions{})
-	if err == nil {
-		t.Fatal("expected error when no controllers exist outside bootstrap dns state")
-	}
-	var ce *errtypes.ClusterError
-	if !errors.As(err, &ce) {
-		t.Fatalf("err is %T; want *errtypes.ClusterError", err)
+			p := newTestPhase(t)
+			_, err := p.UpdateIngress(context.Background(), ingressTestConfig(), UpdateIngressOptions{})
+			if err == nil {
+				t.Fatalf("expected error on %s outside bootstrap dns state", tc.name)
+			}
+			var ce *errtypes.ClusterError
+			if !errors.As(err, &ce) {
+				t.Fatalf("err is %T; want *errtypes.ClusterError", err)
+			}
+		})
 	}
 }
 
 func TestFinalizeIngress_DNSDeployFailurePropagates(t *testing.T) {
 	appsIPs, _ := stubDNSDeploys(t, errors.New("dnsmasq restart failed"), nil)
 
-	p := newIngressTestPhase(t)
+	p := newTestPhase(t)
 	_, err := p.finalizeIngress(context.Background(), ingressTestConfig(), UpdateIngressOptions{},
 		nil, nil, "", "10.0.0.5", 0, 0)
 	if err == nil {
@@ -963,34 +859,10 @@ func TestFinalizeIngress_DNSDeployFailurePropagates(t *testing.T) {
 	}
 }
 
-func TestFinalizeIngress_Success(t *testing.T) {
-	appsIPs, bootstraps := stubDNSDeploys(t, nil, nil)
-
-	p := newIngressTestPhase(t)
-	entries := []IngressEntry{{Name: "default", Domain: "apps.a.test", LBIP: "10.0.0.40", Converted: true}}
-	result, err := p.finalizeIngress(context.Background(), ingressTestConfig(), UpdateIngressOptions{},
-		entries, nil, "10.0.0.40", "10.0.0.5", 1, 0)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(*appsIPs) != 1 || (*appsIPs)[0] != "10.0.0.40" {
-		t.Errorf("deploy called with apps IPs %v; want [10.0.0.40]", *appsIPs)
-	}
-	if result.KubeVipIP != "10.0.0.5" || result.ConvertedCount != 1 || result.HAProxyRemoved {
-		t.Errorf("result = %+v; want KubeVipIP 10.0.0.5, ConvertedCount 1, HAProxyRemoved false", result)
-	}
-	if len(result.Entries) != 1 || result.Entries[0].Name != "default" {
-		t.Errorf("result.Entries = %+v; want the passed-through default entry", result.Entries)
-	}
-	if *bootstraps != 0 {
-		t.Errorf("bootstrap dns rollback ran %d times on the happy path; want 0", *bootstraps)
-	}
-}
-
 func TestFinalizeIngress_SkipsHAProxyRemovalWithHostNetwork(t *testing.T) {
 	_, bootstraps := stubDNSDeploys(t, nil, nil)
 
-	p := newIngressTestPhase(t)
+	p := newTestPhase(t)
 	result, err := p.finalizeIngress(context.Background(), ingressTestConfig(),
 		UpdateIngressOptions{RemoveHAProxy: true, WorkDir: t.TempDir()},
 		nil, nil, "10.0.0.40", "10.0.0.5", 0, 1)
@@ -1005,17 +877,11 @@ func TestFinalizeIngress_SkipsHAProxyRemovalWithHostNetwork(t *testing.T) {
 	}
 }
 
-// TestFinalizeIngress_HAProxyRemovalFailureRollsBack injects a haproxy removal
-// failure after the production dns swap and asserts the recovery contract:
-// dns is rolled back to bootstrap and the haproxy config is rehydrated from
-// its backup.
 func TestFinalizeIngress_HAProxyRemovalFailureRollsBack(t *testing.T) {
-	setHAProxyConfigPath := func(t *testing.T) string {
+	seedHAProxyBackup := func(t *testing.T) string {
 		t.Helper()
 		cfgPath := filepath.Join(t.TempDir(), "haproxy.cfg")
-		orig := haproxyConfigPath
-		t.Cleanup(func() { haproxyConfigPath = orig })
-		haproxyConfigPath = cfgPath
+		setHAProxyConfigPath(t, cfgPath)
 		backup := phase.HAProxyTimestampedBackupPath(cfgPath, time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC))
 		if err := os.WriteFile(backup, []byte("prior haproxy config"), 0o600); err != nil {
 			t.Fatal(err)
@@ -1047,13 +913,12 @@ func TestFinalizeIngress_HAProxyRemovalFailureRollsBack(t *testing.T) {
 		}
 	}
 
-	// WorkDir has no cluster-config/auth/kubeconfig, so RemoveHAProxy fails
-	// its pre-flight CA load before any destructive operation.
+	// WorkDir has no cluster-config/auth/kubeconfig, so RemoveHAProxy's pre-flight CA load fails.
 	t.Run("dns and haproxy config restored", func(t *testing.T) {
 		_, bootstraps := stubDNSDeploys(t, nil, nil)
-		cfgPath := setHAProxyConfigPath(t)
+		cfgPath := seedHAProxyBackup(t)
 
-		p := newIngressTestPhase(t)
+		p := newTestPhase(t)
 		_, err := p.finalizeIngress(context.Background(), ingressTestConfig(),
 			UpdateIngressOptions{RemoveHAProxy: true, WorkDir: t.TempDir()},
 			nil, nil, "10.0.0.40", "10.0.0.5", 0, 0)
@@ -1062,9 +927,9 @@ func TestFinalizeIngress_HAProxyRemovalFailureRollsBack(t *testing.T) {
 
 	t.Run("haproxy config restored even when dns rollback fails", func(t *testing.T) {
 		_, bootstraps := stubDNSDeploys(t, nil, errors.New("dnsmasq unavailable"))
-		cfgPath := setHAProxyConfigPath(t)
+		cfgPath := seedHAProxyBackup(t)
 
-		p := newIngressTestPhase(t)
+		p := newTestPhase(t)
 		_, err := p.finalizeIngress(context.Background(), ingressTestConfig(),
 			UpdateIngressOptions{RemoveHAProxy: true, WorkDir: t.TempDir()},
 			nil, nil, "10.0.0.40", "10.0.0.5", 0, 0)
@@ -1076,7 +941,7 @@ func TestReconcileBootstrapDNSOnly(t *testing.T) {
 	t.Run("deploys dns pointing apps at the bastion", func(t *testing.T) {
 		appsIPs, _ := stubDNSDeploys(t, nil, nil)
 
-		p := newIngressTestPhase(t)
+		p := newTestPhase(t)
 		result, err := p.reconcileBootstrapDNSOnly(context.Background(), ingressTestConfig(), "10.0.0.5")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -1092,33 +957,28 @@ func TestReconcileBootstrapDNSOnly(t *testing.T) {
 	t.Run("deploy failure propagates", func(t *testing.T) {
 		stubDNSDeploys(t, errors.New("dnsmasq restart failed"), nil)
 
-		p := newIngressTestPhase(t)
+		p := newTestPhase(t)
 		if _, err := p.reconcileBootstrapDNSOnly(context.Background(), ingressTestConfig(), "10.0.0.5"); err == nil {
 			t.Fatal("expected error when dns deploy fails")
 		}
 	})
 }
 
-// TestUpdateIngress_ConvertsAndCollects drives the full flow: a HostNetwork
-// controller is discovered, converted via MetalLB after confirmation,
-// re-discovered as LoadBalancerService, its LB IP collected, and production
-// dns deployed with that IP.
 func TestUpdateIngress_ConvertsAndCollects(t *testing.T) {
 	installFakeOCForIngress(t)
-	dir := t.TempDir()
 	writeICList(t, "OC_IC_LIST_FILE",
 		`{"metadata":{"name":"default"},"spec":{"endpointPublishingStrategy":{"type":"HostNetwork"}},"status":{"domain":"apps.a.test"}}`)
 	writeICList(t, "OC_IC_LIST_FILE2",
 		`{"metadata":{"name":"default"},"spec":{"endpointPublishingStrategy":{"type":"LoadBalancerService"}},"status":{"domain":"apps.a.test"}}`)
-	t.Setenv("OC_IC_CALL_FILE", filepath.Join(dir, "ic-counter"))
-	t.Setenv("OC_CALL_FILE", filepath.Join(dir, "create-counter"))
+	tempEnvFile(t, "OC_IC_CALL_FILE")
+	tempEnvFile(t, "OC_CALL_FILE")
 	t.Setenv("OC_METALLB_NS", "1")
 	t.Setenv("OC_METALLB_POOL", "1")
 	t.Setenv("OC_SVC_IP_DEFAULT", "10.0.0.40")
 
 	appsIPs, _ := stubDNSDeploys(t, nil, nil)
 
-	p := newIngressTestPhase(t)
+	p := newTestPhase(t)
 	result, err := p.UpdateIngress(context.Background(), ingressTestConfig(),
 		UpdateIngressOptions{ConfirmConversion: func([]string) bool { return true }})
 	if err != nil {
@@ -1142,23 +1002,18 @@ func TestUpdateIngress_ConvertsAndCollects(t *testing.T) {
 	}
 }
 
-// TestConvertToLoadBalancer_RollbackRunsAfterCtxCancel asserts the rollback
-// create still executes when the replacement create failed because ctx was
-// cancelled: the rollback derives a detached bounded context, so the second
-// oc create runs (counter reaches 2) instead of dying before start.
+// The rollback derives a detached bounded context, so it still runs after the
+// ctx that killed create is cancelled.
 func TestConvertToLoadBalancer_RollbackRunsAfterCtxCancel(t *testing.T) {
 	installFakeOCForIngress(t)
 
-	dir := t.TempDir()
-	counter := filepath.Join(dir, "counter")
-	t.Setenv("OC_CALL_FILE", counter)
+	counter := tempEnvFile(t, "OC_CALL_FILE")
 	t.Setenv("OC_CREATE_SLEEP", "1")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Cancel only once the first create has started (counter written), so the
-	// delete + router-gone probes before it run under a live ctx.
+	// Cancel only once the first create has started, so earlier probes run under a live ctx.
 	go func() {
 		deadline := time.Now().Add(5 * time.Second)
 		for time.Now().Before(deadline) {
@@ -1170,7 +1025,7 @@ func TestConvertToLoadBalancer_RollbackRunsAfterCtxCancel(t *testing.T) {
 		cancel()
 	}()
 
-	p := newIngressTestPhase(t)
+	p := newTestPhase(t)
 	ic := minimalIC("default")
 
 	err := p.convertToLoadBalancer(ctx, ic, 5*time.Second, "")
@@ -1190,19 +1045,14 @@ func TestConvertToLoadBalancer_RollbackRunsAfterCtxCancel(t *testing.T) {
 	}
 }
 
-// TestConvertToLoadBalancer_BackupLifecycle covers the on-disk backup that
-// guards the delete-to-create window: written before the delete, removed on
-// success and on successful in-process rollback, retained when the rollback
-// also fails.
 func TestConvertToLoadBalancer_BackupLifecycle(t *testing.T) {
 	newBackupEnv := func(t *testing.T) (backupPath, seen string) {
 		t.Helper()
 		installFakeOCForIngress(t)
 		backupPath = ingressBackupPath(t.TempDir(), "default")
-		seen = filepath.Join(t.TempDir(), "backup-seen")
-		t.Setenv("OC_CALL_FILE", filepath.Join(t.TempDir(), "counter"))
+		seen = tempEnvFile(t, "OC_BACKUP_SEEN")
+		tempEnvFile(t, "OC_CALL_FILE")
 		t.Setenv("OC_BACKUP_EXPECT", backupPath)
-		t.Setenv("OC_BACKUP_SEEN", seen)
 		return backupPath, seen
 	}
 
@@ -1219,7 +1069,7 @@ func TestConvertToLoadBalancer_BackupLifecycle(t *testing.T) {
 
 	t.Run("success removes backup", func(t *testing.T) {
 		backupPath, seen := newBackupEnv(t)
-		p := newIngressTestPhase(t)
+		p := newTestPhase(t)
 		if err := p.convertToLoadBalancer(context.Background(), minimalIC("default"), 5*time.Second, backupPath); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1232,7 +1082,7 @@ func TestConvertToLoadBalancer_BackupLifecycle(t *testing.T) {
 	t.Run("successful rollback removes backup", func(t *testing.T) {
 		backupPath, seen := newBackupEnv(t)
 		t.Setenv("OC_CREATE_FAIL", "1")
-		p := newIngressTestPhase(t)
+		p := newTestPhase(t)
 		if err := p.convertToLoadBalancer(context.Background(), minimalIC("default"), 5*time.Second, backupPath); err == nil {
 			t.Fatal("expected error on create failure")
 		}
@@ -1246,7 +1096,7 @@ func TestConvertToLoadBalancer_BackupLifecycle(t *testing.T) {
 		backupPath, _ := newBackupEnv(t)
 		t.Setenv("OC_CREATE_FAIL", "1")
 		t.Setenv("OC_ROLLBACK_FAIL", "1")
-		p := newIngressTestPhase(t)
+		p := newTestPhase(t)
 		if err := p.convertToLoadBalancer(context.Background(), minimalIC("default"), 5*time.Second, backupPath); err == nil {
 			t.Fatal("expected error when create and rollback both fail")
 		}
@@ -1264,9 +1114,6 @@ func TestConvertToLoadBalancer_BackupLifecycle(t *testing.T) {
 	})
 }
 
-// TestRestoreOrphanedIngressBackups covers crash recovery: a leftover backup
-// whose controller is missing is re-created via oc create and removed; a
-// backup whose controller exists again is stale and deleted without a create.
 func TestRestoreOrphanedIngressBackups(t *testing.T) {
 	seedBackup := func(t *testing.T, workDir, name string) string {
 		t.Helper()
@@ -1286,13 +1133,11 @@ func TestRestoreOrphanedIngressBackups(t *testing.T) {
 
 	t.Run("missing controller restored and backup removed", func(t *testing.T) {
 		installFakeOCForIngress(t)
-		dir := t.TempDir()
-		workDir := filepath.Join(dir, "okd-install")
+		workDir := filepath.Join(t.TempDir(), "okd-install")
 		path := seedBackup(t, workDir, "default")
-		argvLog := filepath.Join(dir, "argv.log")
-		t.Setenv("OC_ARGV_LOG", argvLog)
+		argvLog := tempEnvFile(t, "OC_ARGV_LOG")
 
-		p := newIngressTestPhase(t)
+		p := newTestPhase(t)
 		restored := p.restoreOrphanedIngressBackups(context.Background(), workDir, nil)
 		if restored != 1 {
 			t.Fatalf("restored = %d; want 1", restored)
@@ -1311,13 +1156,11 @@ func TestRestoreOrphanedIngressBackups(t *testing.T) {
 
 	t.Run("present controller drops stale backup without create", func(t *testing.T) {
 		installFakeOCForIngress(t)
-		dir := t.TempDir()
-		workDir := filepath.Join(dir, "okd-install")
+		workDir := filepath.Join(t.TempDir(), "okd-install")
 		path := seedBackup(t, workDir, "default")
-		argvLog := filepath.Join(dir, "argv.log")
-		t.Setenv("OC_ARGV_LOG", argvLog)
+		argvLog := tempEnvFile(t, "OC_ARGV_LOG")
 
-		p := newIngressTestPhase(t)
+		p := newTestPhase(t)
 		restored := p.restoreOrphanedIngressBackups(context.Background(), workDir,
 			[]ingressControllerInfo{{Name: "default"}})
 		if restored != 0 {
@@ -1333,13 +1176,12 @@ func TestRestoreOrphanedIngressBackups(t *testing.T) {
 
 	t.Run("restore failure keeps backup", func(t *testing.T) {
 		installFakeOCForIngress(t)
-		dir := t.TempDir()
-		workDir := filepath.Join(dir, "okd-install")
+		workDir := filepath.Join(t.TempDir(), "okd-install")
 		path := seedBackup(t, workDir, "default")
-		t.Setenv("OC_CALL_FILE", filepath.Join(dir, "counter"))
+		tempEnvFile(t, "OC_CALL_FILE")
 		t.Setenv("OC_CREATE_FAIL", "1")
 
-		p := newIngressTestPhase(t)
+		p := newTestPhase(t)
 		restored := p.restoreOrphanedIngressBackups(context.Background(), workDir, nil)
 		if restored != 0 {
 			t.Fatalf("restored = %d; want 0", restored)

@@ -17,29 +17,24 @@ import (
 
 // CompactOptions tunes cluster compaction.
 type CompactOptions struct {
-	// IngressReplicas sets the compact IngressController replica count (masters
-	// serve ingress once workers are gone).
+	// IngressReplicas: compact IngressController replica count (masters serve
+	// ingress once workers are gone)
 	IngressReplicas int
-	// GrowMasterMemoryMB, when > 0, resizes each master after the workers are
-	// removed, interleaved so growth never precedes freeing a worker.
+	// GrowMasterMemoryMB > 0 resizes masters after removal, interleaved so
+	// growth never precedes a freed worker
 	GrowMasterMemoryMB int
 	ForceStorage       bool
-	// Host memory budget, from a read-only Proxmox probe; zero skips the check.
+	// Host memory budget (read-only Proxmox probe); zero skips the check
 	HostTotalMiB     int
 	HostAllocatedMiB int
-	// Acknowledge overrides a stranded marker left by a different op/target,
-	// threaded into every inner RemoveWorker/Resize call; see beginOp. A marker
-	// from an op compact does NOT compose (anything but OpRemove/OpResize) is
-	// refused up front, before any control-plane mutation. An OpRemove/OpResize
-	// marker is left to the inner op's own beginOp resume path — it is
-	// indistinguishable from compact's own in-flight inner op (one cluster per
-	// workdir), so refusing it would break compact's own resume.
+	// Acknowledge overrides a stranded marker from a different op/target,
+	// threaded into every inner RemoveWorker/Resize call. Only OpRemove/OpResize
+	// markers pass through unrefused (may be compact's own in-flight inner op);
+	// any other op family is refused up front.
 	Acknowledge bool
 }
 
-// compactVerdict is one worker's read-only preflight result. osds/ingress are
-// the pods on the worker (informational; ingress is remediated by compact
-// itself), blocked is a storage-guard or plan-gate refusal (nil = clear).
+// compactVerdict is one worker's read-only preflight result (blocked nil = clear).
 type compactVerdict struct {
 	node    string
 	index   int
@@ -48,9 +43,8 @@ type compactVerdict struct {
 	blocked error
 }
 
-// compactPreflight aggregates the read-only preflight across every worker plus
-// the interleaved-grow memory projection. blockErr is the first refusal (a
-// worker guard or the memory budget); nil means the whole plan is clear.
+// compactPreflight aggregates preflight results across workers plus the memory
+// projection; blockErr nil means clear.
 type compactPreflight struct {
 	verdicts []compactVerdict
 	memErr   error
@@ -59,33 +53,15 @@ type compactPreflight struct {
 
 // Compact consolidates the cluster onto its control plane: make masters
 // schedulable, apply the compact IngressController, then remove workers
-// top-down — interleaving an optional master grow after each removal so the
-// memory budget is respected (a freed worker precedes a grown master). It
-// composes RemoveWorker and Resize; it adds no new mutation mechanics.
-//
-// Every worker guard (rook-ceph OSD presence, per-worker delete plan gate) and
-// the memory-budget projection run in a read-only preflight BEFORE the control
-// plane is made schedulable — a refusal on the third worker must not leave the
-// cluster half-mutated. --dry-run runs the same preflight and prints the ordered
-// action list with per-node verdicts, mutating nothing.
-//
-// The pre-flight etcd gate blocks (up to EtcdGateTimeout) only on the real
-// path. Under --dry-run it degrades to a single non-blocking probe reported as
-// a verdict line, so a preview against a degraded quorum still prints instead
-// of hanging on a gate whose whole purpose is to wait.
-//
-// Compact records no op marker of its own: RemoveWorker and Resize each
-// record OpRemove/OpResize against the node they are mutating, so a crash
-// mid-loop leaves a marker naming that node, not compact. A re-run repeats
-// the read-only preflight and the idempotent schedulable/ingress step, then
-// reaches the same worker (or master) whose own beginOp resumes it at its
-// recorded step. The control-plane prep (SetMastersSchedulable + compact
-// ingress) is idempotent and reversible, so running it ahead of the inner
-// resume is safe; a marker from an op compact does not compose is refused
-// before that prep (see refuseForeignMarkerBeforeCompact).
+// top-down, interleaving an optional master grow after each removal.
+// It records no op marker of its own — RemoveWorker/Resize record
+// OpRemove/OpResize against the node they mutate, so a crash resumes via the
+// inner op's own marker.
 func (r *Runner) Compact(ctx context.Context, opts CompactOptions) error {
 	if !r.DryRun {
-		if err := r.refuseForeignMarkerBeforeCompact(opts.Acknowledge); err != nil {
+		// OpRemove/OpResize markers are left to the inner op's own resume; any
+		// other op family is refused here before mutation.
+		if err := r.refuseForeignMarker(opts.Acknowledge, OpRemove, OpResize); err != nil {
 			return err
 		}
 		if err := r.waitEtcdHealthy(ctx, "compact-preflight"); err != nil {
@@ -109,7 +85,7 @@ func (r *Runner) Compact(ctx context.Context, opts CompactOptions) error {
 
 	if r.DryRun {
 		r.preview(&plan)
-		r.reportCompactPlan(ctx, workers, masters, pf, opts)
+		r.reportCompactPlan(ctx, masters, pf, opts)
 		return pf.blockErr
 	}
 	if pf.blockErr != nil {
@@ -120,9 +96,8 @@ func (r *Runner) Compact(ctx context.Context, opts CompactOptions) error {
 		return err
 	}
 
-	// The inner RemoveWorker/Resize calls run under the consent granted above;
-	// suppress their gates so no mid-teardown prompt can abort a half-executed
-	// sequence and no inner decline can be conflated with success.
+	// Suppress inner gates: consent was already granted above, so no
+	// mid-teardown prompt can abort a half-executed sequence.
 	r.preConsented = true
 	defer func() { r.preConsented = false }()
 
@@ -143,9 +118,8 @@ func (r *Runner) Compact(ctx context.Context, opts CompactOptions) error {
 		if opts.HostAllocatedMiB > 0 {
 			allocated -= workerMem
 		}
-		// Interleave: after freeing a worker, grow the next master so allocation
-		// never peaks above the pre-compaction commitment; the freed worker's
-		// memory is discounted from the budget passed to the grow.
+		// Interleave: grow the next master after freeing a worker so allocation
+		// never peaks above pre-compaction levels.
 		if opts.GrowMasterMemoryMB > 0 && masterGrows < len(masters) && i < len(masters) {
 			if err := r.growMaster(ctx, masters[masterGrows], allocated, opts); err != nil {
 				return err
@@ -154,7 +128,6 @@ func (r *Runner) Compact(ctx context.Context, opts CompactOptions) error {
 		}
 	}
 
-	// Grow any remaining masters once all workers are gone.
 	for ; opts.GrowMasterMemoryMB > 0 && masterGrows < len(masters); masterGrows++ {
 		if err := r.growMaster(ctx, masters[masterGrows], allocated, opts); err != nil {
 			return err
@@ -171,20 +144,16 @@ func (r *Runner) Compact(ctx context.Context, opts CompactOptions) error {
 	return nil
 }
 
-// runPreflightCompact wraps preflightCompact in one reporter span covering
-// the whole N-worker plan-gate sequence, rather than a spinner flickering
-// per worker.
+// runPreflightCompact wraps preflightCompact in one reporter span rather than a
+// spinner flickering per worker.
 func (r *Runner) runPreflightCompact(ctx context.Context, workers, masters []string, opts CompactOptions) (compactPreflight, error) {
 	stop := r.startProgress(fmt.Sprintf("gating removal plan for %d worker node(s)", len(workers)))
 	defer stop()
 	return r.preflightCompact(ctx, workers, masters, opts)
 }
 
-// preflightCompact runs the read-only guards for every worker (storage +
-// per-worker delete plan gate) and the interleaved-grow memory projection,
-// mutating nothing. Storage is the guard compact does NOT resolve; ingress is
-// remediated by compact itself (masters made schedulable + compact
-// IngressController) so it is reported per worker, not blocked here.
+// preflightCompact runs read-only guards per worker plus the memory projection;
+// storage blocks, ingress is remediated by compact itself.
 func (r *Runner) preflightCompact(ctx context.Context, workers, masters []string, opts CompactOptions) (compactPreflight, error) {
 	osdPods, err := r.Cluster.PodsForSelector(ctx, "", "app=rook-ceph-osd")
 	if err != nil {
@@ -221,22 +190,8 @@ func (r *Runner) preflightCompact(ctx context.Context, workers, masters []string
 	return pf, nil
 }
 
-// refuseForeignMarkerBeforeCompact refuses (unless ack) when an on-disk marker
-// records an op compact does not compose. Compact drives OpRemove and OpResize
-// through its inner calls, and a stranded marker for either is indistinguishable
-// from compact's own in-flight inner op (one cluster per workdir) — refusing it
-// would break compact's own resume, so those are left to the inner beginOp. A
-// marker from any other op family is unambiguously foreign and refused here,
-// ahead of the idempotent control-plane prep, so a genuinely-unrelated op is
-// never overwritten without an explicit acknowledgement.
-func (r *Runner) refuseForeignMarkerBeforeCompact(ack bool) error {
-	return r.refuseForeignMarker(ack, OpRemove, OpResize)
-}
-
-// assertWorkerDeletable plan-gates the delete of worker[idx] without applying:
-// worker[idx] leaves the config when worker_count drops to idx, so the plan-time
-// -var override drives the count down exactly as the real removal loop will,
-// one step per prior removal. The saved plan is dropped immediately (gate-only).
+// assertWorkerDeletable plan-gates deleting worker[idx] via a plan-time -var
+// override, without applying; the saved plan is dropped immediately.
 func (r *Runner) assertWorkerDeletable(ctx context.Context, idx int) error {
 	countVars := map[string]string{tfVarWorkerCount: strconv.Itoa(idx)}
 	_, _, cleanup, err := r.planTargeted(ctx, workerAddress(idx), terraform.PlanActionDelete, countVars, false)
@@ -244,10 +199,8 @@ func (r *Runner) assertWorkerDeletable(ctx context.Context, idx int) error {
 	return err
 }
 
-// projectCompactMemory refuses the plan when the interleaved master grows would
-// exceed the host memory budget. It projects the peak allocation reached across
-// the whole remove-then-grow sequence (a freed worker precedes each grow). No
-// grow or no probe is not an error — a missing probe degrades to a warning.
+// projectCompactMemory refuses the plan if interleaved master grows would
+// exceed the host memory budget; a missing probe only warns.
 func (r *Runner) projectCompactMemory(numWorkers, numMasters int, opts CompactOptions) error {
 	if opts.GrowMasterMemoryMB <= 0 {
 		return nil
@@ -264,15 +217,11 @@ func (r *Runner) projectCompactMemory(numWorkers, numMasters int, opts CompactOp
 		opts.GrowMasterMemoryMB,
 		numWorkers, numMasters,
 	)
-	if err := validateMemoryBudget(opts.HostTotalMiB, opts.HostAllocatedMiB, peak-opts.HostAllocatedMiB); err != nil {
-		return &errtypes.ConfigError{Msg: err.Error(), Err: err}
-	}
-	return nil
+	return validateMemoryBudget(opts.HostTotalMiB, opts.HostAllocatedMiB, peak-opts.HostAllocatedMiB)
 }
 
-// growMaster resizes one master to the compact grow target, passing the
-// worker-discounted host allocation so the resize budget guard sees the memory
-// freed by the workers removed so far rather than the pre-compaction total.
+// growMaster resizes a master using the worker-discounted host allocation so
+// the budget guard sees memory already freed.
 func (r *Runner) growMaster(ctx context.Context, master string, allocatedMiB int, opts CompactOptions) error {
 	if err := r.Resize(ctx, ResizeScope{Node: master}, ResizeOptions{
 		MemoryMB:         opts.GrowMasterMemoryMB,
@@ -285,10 +234,8 @@ func (r *Runner) growMaster(ctx context.Context, master string, allocatedMiB int
 	return nil
 }
 
-// compactHybridError explains the mixed state left when a worker removal fails
-// mid-compact: the control plane is already schedulable with compact ingress
-// applied but only some workers are gone. Re-running compact is safe — already
-// removed workers stay gone.
+// compactHybridError explains a mid-compact failure: the control plane is
+// already schedulable with only some workers removed; re-running is safe.
 func (r *Runner) compactHybridError(removed, total int, failedNode string, cause error) error {
 	return fmt.Errorf(
 		"compact: remove worker %s (%d of %d workers already removed; the control plane is already schedulable with the compact IngressController applied — resolve the cause and re-run 'okdctl cluster compact' to remove the remaining %d worker(s), already-removed workers stay gone): %w",
@@ -296,9 +243,8 @@ func (r *Runner) compactHybridError(removed, total int, failedNode string, cause
 	)
 }
 
-// compactPlan builds the informed-confirmation summary from the preflight
-// verdicts: one worker delete per verdict (in removal order) carrying its OSD /
-// ingress placement and any guard/plan refusal, plus the master-grow target.
+// compactPlan builds the confirmation summary from preflight verdicts: one
+// worker delete per verdict plus the master-grow target.
 func compactPlan(pf compactPreflight, clusterName string, opts CompactOptions) OpPlan {
 	nodes := make([]PlanNode, 0, len(pf.verdicts))
 	for i := range pf.verdicts {
@@ -323,19 +269,13 @@ func compactPlan(pf compactPreflight, clusterName string, opts CompactOptions) O
 	}
 }
 
-// reportCompactPlan prints the ordered dry-run action list with per-node
-// verdicts: the control-plane step, each worker removal (with its OSD/ingress
-// placement and gate verdict), and the interleaved master grows.
-func (r *Runner) reportCompactPlan(ctx context.Context, workers, masters []string, pf compactPreflight, opts CompactOptions) {
-	replicas := opts.IngressReplicas
-	if replicas <= 0 {
-		replicas = 2
-	}
+// reportCompactPlan prints the ordered dry-run action list with per-node verdicts.
+func (r *Runner) reportCompactPlan(ctx context.Context, masters []string, pf compactPreflight, opts CompactOptions) {
 	r.Log.Info("node: dry-run — compact plan (no changes made)",
-		"workers_to_remove", len(workers), "masters", len(masters), "grow_master_mb", opts.GrowMasterMemoryMB)
+		"workers_to_remove", len(pf.verdicts), "masters", len(masters), "grow_master_mb", opts.GrowMasterMemoryMB)
 	r.reportEtcdDryRunVerdict(ctx)
 	r.Log.Info("node: dry-run — step: make control plane schedulable and apply compact ingress",
-		"ingress_replicas", replicas)
+		"ingress_replicas", compactIngressReplicas(opts.IngressReplicas))
 
 	masterGrows := 0
 	for i, v := range pf.verdicts {
@@ -361,10 +301,8 @@ func (r *Runner) reportCompactPlan(ctx context.Context, workers, masters []strin
 	}
 }
 
-// reportEtcdDryRunVerdict runs a single non-blocking etcd probe and prints it
-// as a dry-run verdict line. Unlike the real path's waitEtcdHealthy gate it
-// never blocks and never fails the preview: a degraded quorum is surfaced so
-// the operator knows the real compact would wait for it up to EtcdGateTimeout.
+// reportEtcdDryRunVerdict runs one non-blocking etcd probe for the dry-run
+// preview, unlike the real path's blocking waitEtcdHealthy gate.
 func (r *Runner) reportEtcdDryRunVerdict(ctx context.Context) {
 	h, err := r.Cluster.EtcdHealthy(ctx)
 	switch {
@@ -383,13 +321,19 @@ func (r *Runner) reportEtcdDryRunVerdict(ctx context.Context) {
 	}
 }
 
+// compactIngressReplicas defaults non-positive replicas to 2.
+func compactIngressReplicas(replicas int) int {
+	if replicas <= 0 {
+		return 2
+	}
+	return replicas
+}
+
 func (r *Runner) enableSchedulableAndIngress(ctx context.Context, replicas int) error {
 	if err := r.Cluster.SetMastersSchedulable(ctx, true); err != nil {
 		return err
 	}
-	if replicas <= 0 {
-		replicas = 2
-	}
+	replicas = compactIngressReplicas(replicas)
 	manifest, err := templates.RenderCompactIngress(templates.CompactIngressData{Replicas: replicas})
 	if err != nil {
 		return &errtypes.ClusterError{Msg: "render compact ingress", Err: err}
@@ -409,10 +353,8 @@ func mastersByIndexAsc(nodes []cluster.NodeDetail, log *slog.Logger) []string {
 	return namesByIndex(nodes, nodetypes.RoleMaster, true, log)
 }
 
-// namesByIndex silently drops any node whose name has no numeric suffix from
-// the returned plan (cluster.NodeIndex can't place it); log warns per node so
-// a hand-added or oddly named worker doesn't vanish from a compact plan
-// without a trace.
+// namesByIndex drops nodes without a numeric-suffix name (can't be placed),
+// warning per node so none vanish silently.
 func namesByIndex(nodes []cluster.NodeDetail, role nodetypes.NodeRole, ascending bool, log *slog.Logger) []string {
 	type ni struct {
 		name string

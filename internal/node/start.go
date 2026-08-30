@@ -12,23 +12,16 @@ import (
 
 // StartOptions tunes a cluster start.
 type StartOptions struct {
-	// Acknowledge overrides a stranded marker left by any other in-flight
-	// op — start is non-resumable and composes nothing, so unlike compact it
-	// has no inner op to exempt; see Runner.refuseForeignMarker.
+	// Acknowledge overrides a stranded marker from any in-flight op; start is
+	// non-resumable and composes nothing, unlike compact (see
+	// refuseForeignMarker).
 	Acknowledge bool
 }
 
-// Start powers the cluster back on: every master first (as one batch, no
-// inter-master ready-wait), then every worker, then waits for all nodes to
-// report Ready while approving kubelet CSRs each poll, and finally uncordons.
-//
-// Node enumeration is CONFIG-DRIVEN, not ListNodes: the Kubernetes API is
-// hosted by the very control-plane VMs Start has not powered on yet, so the
-// synthetic names master0..N-1 / worker0..N-1 come from cfg.Topology counts.
-// Masters power on as one batch because etcd needs a quorum majority up before
-// any single member is healthy — waiting on master0 alone would hang forever.
-// Only once the API is reachable (after the readiness wait) does Start switch
-// to real ListNodes names for the uncordon.
+// Start powers the cluster back on: masters first as one batch, then workers,
+// then waits for Ready while approving kubelet CSRs, then uncordons. Node
+// enumeration is config-driven (not ListNodes) until the readiness wait
+// confirms the API — hosted by the very control-plane VMs — is up.
 func (r *Runner) Start(ctx context.Context, opts StartOptions) error {
 	if !r.DryRun {
 		if r.Power == nil {
@@ -84,9 +77,8 @@ func (r *Runner) Start(ctx context.Context, opts StartOptions) error {
 	return nil
 }
 
-// syntheticNodeNames enumerates the role0..count-1 names owned by
-// nodetypes.ClusterNode.Name so cluster start can enumerate nodes from
-// config before the API that would list them is up.
+// syntheticNodeNames enumerates role0..count-1 names from config, since the API
+// that would list them isn't up yet.
 func syntheticNodeNames(role nodetypes.NodeRole, count int) []string {
 	names := make([]string, count)
 	for i := range count {
@@ -95,10 +87,8 @@ func syntheticNodeNames(role nodetypes.NodeRole, count int) []string {
 	return names
 }
 
-// powerOnRole starts every VM of a role as one batch — sequential StartVM calls
-// with no ready-wait between them. A per-node wait here would deadlock the
-// control plane: etcd only forms a quorum once a majority of masters are up, so
-// blocking on the first master before starting the rest can never converge.
+// powerOnRole starts every VM of a role as one batch; waiting on the first
+// master would deadlock, since etcd needs quorum majority up first.
 func (r *Runner) powerOnRole(ctx context.Context, role nodetypes.NodeRole, count int, desc string) error {
 	if count == 0 {
 		return nil
@@ -115,12 +105,9 @@ func (r *Runner) powerOnRole(ctx context.Context, role nodetypes.NodeRole, count
 	return nil
 }
 
-// waitClusterReadyWithCSRApproval blocks until every node reports Ready or the
-// gate times out, approving pending kubelet CSRs on each poll so a cluster
-// restarted after its kubelet client certs rotated can rejoin unattended. The
-// two failure modes have independent log-once gates (ListNodes when the API is
-// still coming up, ApprovePendingCSRs when the API is up but CSR listing hiccups)
-// so neither floods the log across the full timeout window.
+// waitClusterReadyWithCSRApproval blocks until every node is Ready, approving
+// pending kubelet CSRs each poll so rotated certs can rejoin unattended;
+// List/Approve failures use independent log-once gates.
 func (r *Runner) waitClusterReadyWithCSRApproval(ctx context.Context) error {
 	stop := r.startProgress("waiting for cluster to become ready")
 	defer stop()
@@ -164,9 +151,8 @@ func (r *Runner) waitClusterReadyWithCSRApproval(ctx context.Context) error {
 	return nil
 }
 
-// uncordonAll returns every node to service after a start, addressing them by
-// their real ListNodes names — safe here because the readiness wait has already
-// confirmed the API is up.
+// uncordonAll returns every node to service via real ListNodes names, safe once
+// the readiness wait confirms the API is up.
 func (r *Runner) uncordonAll(ctx context.Context) error {
 	stop := r.startProgress("uncordoning all nodes")
 	defer stop()

@@ -3,6 +3,7 @@
 package components
 
 import (
+	"errors"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -13,8 +14,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-// FormField is the interface that all form field types must implement
-// to be usable in an InputGroup.
+// FormField is the interface all form field types must implement to be
+// usable in an InputGroup.
 type FormField interface {
 	Value() string
 	SetValue(value string)
@@ -42,8 +43,7 @@ type InputField struct {
 	err     error
 }
 
-// NewInputField builds a plain-text InputField with the given label and
-// placeholder.
+// NewInputField builds a plain-text InputField from label and placeholder.
 func NewInputField(label, placeholder string) *InputField {
 	ti := textinput.New()
 	ti.Placeholder = placeholder
@@ -94,16 +94,12 @@ func (f *InputField) Blur() {
 // SetWidth resizes the input field, reserving border and padding space.
 func (f *InputField) SetWidth(width int) {
 	f.width = width
-	inputWidth := width - 4 // border (2) + padding (2)
-	if inputWidth < 20 {
-		inputWidth = 20
-	}
+	inputWidth := max(width-4, 20) // border (2) + padding (2)
 	f.input.SetWidth(inputWidth)
 }
 
-// Validate runs the field's Required check and Validator. For password
-// fields the raw value is scrubbed from validator error messages before
-// return so secrets cannot leak through the UI.
+// Validate runs the Required check and Validator; for password fields the
+// raw value is scrubbed from error messages so secrets can't leak.
 func (f *InputField) Validate() error {
 	if f.Required && strings.TrimSpace(f.input.Value()) == "" {
 		f.err = errRequired
@@ -112,15 +108,12 @@ func (f *InputField) Validate() error {
 	if f.Validator != nil {
 		value := f.input.Value()
 		f.err = f.Validator(value)
-		// A custom validator may interpolate the raw value into its error
-		// message. For password fields, wrap the error so its message is
-		// rewritten without leaking the secret, while preserving the wrap
-		// chain via Unwrap().
+		// Wraps a validator's error for password fields so its message can't
+		// leak the raw value, while preserving Unwrap().
 		if f.Password && f.err != nil && value != "" {
 			var msg string
-			// strings.ReplaceAll with a very short value would mangle
-			// unrelated characters (e.g. value "a" destroys every "a" in
-			// the message). Fall back to a generic message in that case.
+			// Short values (e.g. "a") would mangle unrelated chars via
+			// ReplaceAll; fall back to a generic message instead.
 			if len(value) >= 4 {
 				msg = strings.ReplaceAll(f.err.Error(), value, "***")
 			} else {
@@ -154,10 +147,8 @@ func (f *InputField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 // View renders the field: label, input box, and any validation error.
 // Password fields mask the value and scrub it from error text.
 func (f *InputField) View() string {
-	// Never render f.input.Value() directly when f.Password is true —
-	// rely on textinput's EchoMode to mask it in any rendered frame.
-	// Any code path below that surfaces text to the user (labels, hints,
-	// errors) must scrub the raw value for password fields.
+	// Never render f.input.Value() directly when Password is true; rely on
+	// EchoMode, and scrub raw value on every text path below.
 	labelStyle := lipgloss.NewStyle().
 		Foreground(tui.ColorSlate300)
 
@@ -195,8 +186,8 @@ func (f *InputField) View() string {
 	if f.err != nil {
 		errStyle := lipgloss.NewStyle().Foreground(tui.ColorError)
 		errText := strings.ToLower(f.err.Error())
-		// Scrub the raw value from error messages on password fields so a
-		// validator that interpolates the input can never leak the secret.
+		// Scrub the raw value from password-field error messages so an
+		// interpolating validator can't leak it.
 		if f.Password {
 			if v := f.input.Value(); v != "" {
 				errText = strings.ReplaceAll(errText, strings.ToLower(v), "<redacted>")
@@ -208,14 +199,9 @@ func (f *InputField) View() string {
 	return result
 }
 
-type requiredError struct{}
+var errRequired = errors.New("this field is required")
 
-func (e requiredError) Error() string { return "this field is required" }
-
-var errRequired = requiredError{}
-
-// scrubbedError wraps a validator error so its user-visible message can be
-// rewritten without losing the original via Unwrap().
+// scrubbedError wraps a validator error, rewriting the visible message while keeping Unwrap().
 type scrubbedError struct {
 	msg   string
 	inner error
@@ -224,8 +210,8 @@ type scrubbedError struct {
 func (e *scrubbedError) Error() string { return e.msg }
 func (e *scrubbedError) Unwrap() error { return e.inner }
 
-// InputGroup is an ordered collection of FormFields with a single focus
-// cursor. It handles tab/shift-tab traversal and aggregate validation.
+// InputGroup is an ordered collection of FormFields sharing one focus
+// cursor; handles tab/shift-tab traversal and aggregate validation.
 type InputGroup struct {
 	fields []FormField
 
@@ -322,13 +308,13 @@ func (g *InputGroup) Previous() tea.Cmd {
 
 // Validate returns the collected errors from each field's Validate.
 func (g *InputGroup) Validate() []error {
-	var errors []error
+	var errs []error
 	for _, f := range g.fields {
 		if err := f.Validate(); err != nil {
-			errors = append(errors, err)
+			errs = append(errs, err)
 		}
 	}
-	return errors
+	return errs
 }
 
 // Update handles group-level navigation keys (tab, shift-tab) and forwards

@@ -18,10 +18,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
-// resetDestroyFlags zeroes the destroy command's package-level flag variables
-// and restores the caller-time values on cleanup, so tests can exercise the
-// real validateDestroyFlagCombos/buildDestroyOptions/confirmDestroyInteractive
-// (not mirrors of them) without leaking state across tests.
 func resetDestroyFlags(t *testing.T) {
 	t.Helper()
 	savedYes, savedKeepISOs, savedDryRun := destroyYes, destroyKeepISOs, destroyDryRun
@@ -45,7 +41,7 @@ const (
 	guardTestTarget  = "module.okd_cluster.proxmox_virtual_environment_vm.worker[1]"
 )
 
-func destroyGuardConfig() *config.Config {
+func guardConfig() *config.Config {
 	cfg := config.DefaultConfig()
 	cfg.Cluster.Name = guardTestCluster
 	return cfg
@@ -53,7 +49,7 @@ func destroyGuardConfig() *config.Config {
 
 func TestValidateDestroyFlagCombos_TargetedRequiresConfirmCluster(t *testing.T) {
 	resetDestroyFlags(t)
-	cfg := destroyGuardConfig()
+	cfg := guardConfig()
 	destroyTargets = []string{guardTestTarget}
 
 	err := validateDestroyFlagCombos(cfg)
@@ -93,7 +89,7 @@ func TestValidateDestroyFlagCombos_DryRunRejectsSkipFlags(t *testing.T) {
 			destroyDryRun = true
 			tc.set()
 
-			err := validateDestroyFlagCombos(destroyGuardConfig())
+			err := validateDestroyFlagCombos(guardConfig())
 			if err == nil {
 				t.Fatal("--dry-run with skip flags must be refused")
 			}
@@ -112,7 +108,7 @@ func TestValidateDestroyFlagCombos_DryRunRejectsSkipFlags(t *testing.T) {
 
 func TestValidateDestroyFlagCombos_DryRunAloneAndPlainDestroyPass(t *testing.T) {
 	resetDestroyFlags(t)
-	cfg := destroyGuardConfig()
+	cfg := guardConfig()
 
 	if err := validateDestroyFlagCombos(cfg); err != nil {
 		t.Errorf("unscoped destroy with no flags must pass: %v", err)
@@ -123,14 +119,9 @@ func TestValidateDestroyFlagCombos_DryRunAloneAndPlainDestroyPass(t *testing.T) 
 	}
 }
 
-// TestBuildDestroyOptions_ScopedForcesBastionTeardownOff locks the scoped-
-// destroy invariant on the real buildDestroyOptions: with --target set, host
-// cleanup, firewall teardown, and ISO removal are forced off regardless of the
-// operator's flags, so a partial destroy never tears down the bastion services
-// a still-running control plane depends on.
 func TestBuildDestroyOptions_ScopedForcesBastionTeardownOff(t *testing.T) {
 	resetDestroyFlags(t)
-	cfg := destroyGuardConfig()
+	cfg := guardConfig()
 	destroyTargets = []string{guardTestTarget}
 
 	opts := buildDestroyOptions(cfg, t.TempDir())
@@ -148,7 +139,7 @@ func TestBuildDestroyOptions_ScopedForcesBastionTeardownOff(t *testing.T) {
 
 func TestBuildDestroyOptions_UnscopedPassesFlagsThrough(t *testing.T) {
 	resetDestroyFlags(t)
-	cfg := destroyGuardConfig()
+	cfg := guardConfig()
 	destroySkipFirewall = true
 	destroyKeepISOs = true
 
@@ -164,12 +155,8 @@ func TestBuildDestroyOptions_UnscopedPassesFlagsThrough(t *testing.T) {
 	}
 }
 
-// lineReader delivers exactly one line per Read call, mirroring a TTY in
-// canonical mode. promptForLine wraps the shared reader in a fresh
-// bufio.Reader on every prompt, so a plain strings.Reader carrying both
-// answers would have its second line swallowed by the first prompt's
-// buffered lookahead — exactly what happens to pasted-ahead input on a real
-// terminal, where the gate then fails closed (declines).
+// lineReader delivers one line per Read so bufio's lookahead in promptForLine
+// can't swallow the next answer.
 type lineReader struct{ lines []string }
 
 func (r *lineReader) Read(p []byte) (int, error) {
@@ -181,10 +168,6 @@ func (r *lineReader) Read(p []byte) (int, error) {
 	return copy(p, line), nil
 }
 
-// TestConfirmDestroyInteractive drives the real two-stage interactive gate:
-// an unscoped destroy demands the exact cluster name and then a y/N; a typo,
-// a bare "y" at the name stage, or a decline all abort. A scoped destroy
-// (--target already passed --confirm-cluster) skips the typed-name stage.
 func TestConfirmDestroyInteractive(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -210,7 +193,7 @@ func TestConfirmDestroyInteractive(t *testing.T) {
 			testStdinReader = &lineReader{lines: tc.input}
 			t.Cleanup(func() { testStdinReader = nil })
 
-			proceed, err := confirmDestroyInteractive(context.Background(), destroyGuardConfig())
+			proceed, err := confirmDestroyInteractive(context.Background(), guardConfig())
 			if err != nil {
 				t.Fatalf("confirmDestroyInteractive: %v", err)
 			}
@@ -221,15 +204,13 @@ func TestConfirmDestroyInteractive(t *testing.T) {
 	}
 }
 
-// seedDestroyWorkspace writes a loadable okdctl.yaml (cluster "prod") into a
-// temp project root, chdirs into it, and plants a fake terraform on PATH
-// that records a marker file if it is ever executed — the refusal paths
-// under test must never reach terraform.
+// seedDestroyWorkspace plants a fake terraform on PATH; refusal paths under
+// test must never invoke it.
 func seedDestroyWorkspace(t *testing.T) (markerPath string) {
 	t.Helper()
 	root := t.TempDir()
 	t.Chdir(root)
-	cfg := destroyGuardConfig()
+	cfg := guardConfig()
 	if err := config.NewLoader().Save(cfg, filepath.Join(root, "okdctl.yaml")); err != nil {
 		t.Fatalf("seed config: %v", err)
 	}
@@ -245,14 +226,11 @@ func mustNotRunTerraform(t *testing.T, markerPath string) {
 	}
 }
 
-// TestRunDestroy_DryRunPreviewsWithoutConfirmation drives the real dry-run
-// path end to end against a fake terraform: no prompt, no confirm flags, and
-// the preview runs init plus a -destroy plan.
 func TestRunDestroy_DryRunPreviewsWithoutConfirmation(t *testing.T) {
 	resetDestroyFlags(t)
 	root := t.TempDir()
 	t.Chdir(root)
-	if err := config.NewLoader().Save(destroyGuardConfig(), filepath.Join(root, "okdctl.yaml")); err != nil {
+	if err := config.NewLoader().Save(guardConfig(), filepath.Join(root, "okdctl.yaml")); err != nil {
 		t.Fatalf("seed config: %v", err)
 	}
 	tfDir := filepath.Join(root, "infrastructure", "terraform", "environments", "production")
@@ -281,10 +259,6 @@ func TestRunDestroy_DryRunPreviewsWithoutConfirmation(t *testing.T) {
 	}
 }
 
-// TestRunDestroy_ConfirmGateWiring locks the confirm gate INTO runDestroy:
-// the guards are unit-tested elsewhere, but deleting the
-// confirmClusterMatches call from runDestroy would previously have passed
-// the entire suite.
 func TestRunDestroy_ConfirmGateWiring(t *testing.T) {
 	t.Run("--yes without --confirm-cluster refuses", func(t *testing.T) {
 		resetDestroyFlags(t)
@@ -347,9 +321,8 @@ func TestRunDestroy_ConfirmGateWiring(t *testing.T) {
 	})
 }
 
-// captureStderrLog redirects the tui stderr logger into a buffer via the
-// same ConfigureLoggers seam resetLoggingState uses, so logutil.Warn/Info
-// output can be asserted without swapping the global facade handler.
+// captureStderrLog redirects the tui stderr logger into a buffer without
+// swapping the global handler.
 func captureStderrLog(t *testing.T) *bytes.Buffer {
 	t.Helper()
 	var buf bytes.Buffer
@@ -364,12 +337,6 @@ func captureStderrLog(t *testing.T) *bytes.Buffer {
 	return &buf
 }
 
-// TestRunDestroy_PreambleSurfacesInFlightNodeOp pins that an in-flight
-// node-op marker is warned about BEFORE the confirmation gate (the operator
-// declines at the typed-name stage and the warning has already fired), and
-// that the warning names the op and its target. The same call sits ahead of
-// confirmClusterMatches, so a --yes run gets the identical warning in its
-// log.
 func TestRunDestroy_PreambleSurfacesInFlightNodeOp(t *testing.T) {
 	resetDestroyFlags(t)
 	marker := seedDestroyWorkspace(t)
@@ -398,9 +365,6 @@ func TestRunDestroy_PreambleSurfacesInFlightNodeOp(t *testing.T) {
 	}
 }
 
-// TestAnnounceInFlightNodeOp_PlanPreamble covers the shared preview helper
-// okdctl plan wires in: a marker for this cluster warns with op/target; a
-// foreign-cluster marker stays silent.
 func TestAnnounceInFlightNodeOp_PlanPreamble(t *testing.T) {
 	cases := []struct {
 		name          string
@@ -417,7 +381,7 @@ func TestAnnounceInFlightNodeOp_PlanPreamble(t *testing.T) {
 
 			buf := captureStderrLog(t)
 
-			announceInFlightNodeOp(root, destroyGuardConfig())
+			announceInFlightNodeOp(root, guardConfig())
 
 			got := strings.Contains(buf.String(), "node op is in flight")
 			if got != tc.wantWarn {
@@ -427,10 +391,6 @@ func TestAnnounceInFlightNodeOp_PlanPreamble(t *testing.T) {
 	}
 }
 
-// TestRunDestroy_DeclinedRunWritesNoOverride pins that the transient
-// prevent_destroy override is written only after the full confirmation gate:
-// a declined destroy leaves no override behind even though the module
-// directory exists and is writable.
 func TestRunDestroy_DeclinedRunWritesNoOverride(t *testing.T) {
 	resetDestroyFlags(t)
 	marker := seedDestroyWorkspace(t)

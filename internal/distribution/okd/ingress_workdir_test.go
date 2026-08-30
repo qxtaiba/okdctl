@@ -17,12 +17,9 @@ func TestResolveIngressWorkDir(t *testing.T) {
 	}
 }
 
-// TestCLIDoesNotSetUpdateIngressWorkDir locks the call-site half of the
-// workdir invariant: runUpdateIngress must leave WorkDir unset so the
-// provisioner default (resolveIngressWorkDir) decides the path. Setting
-// WorkDir to projectRoot there pointed RemoveHAProxy at
-// <projectRoot>/cluster-config, which never exists, and every
-// non-keep-haproxy cutover rolled back after the DNS swap.
+// TestCLIDoesNotSetUpdateIngressWorkDir asserts runUpdateIngress leaves
+// WorkDir unset — setting it to projectRoot pointed RemoveHAProxy at a
+// nonexistent path and rolled back every cutover.
 func TestCLIDoesNotSetUpdateIngressWorkDir(t *testing.T) {
 	src := filepath.Join("..", "..", "cli", "update_ingress.go")
 	fset := token.NewFileSet()

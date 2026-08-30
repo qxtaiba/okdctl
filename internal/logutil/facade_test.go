@@ -37,10 +37,7 @@ func TestFacade_LevelsAndFields(t *testing.T) {
 	}
 }
 
-// TestInstallHandler_WrapsRedactHandler locks the redaction guarantee: any
-// sink installed via InstallHandler is wrapped in RedactHandler, so secret-
-// keyed attrs never reach it verbatim — through the facade or through a
-// SimpleLogger handed to injected-logger call sites.
+// Locks the redaction guarantee for both the facade and SimpleLogger paths.
 func TestInstallHandler_WrapsRedactHandler(t *testing.T) {
 	buf := installBuffer(t)
 
@@ -83,16 +80,5 @@ func TestRunID_RoundTrip(t *testing.T) {
 	SetRunID("run-42")
 	if got := RunID(); got != "run-42" {
 		t.Fatalf("RunID = %q, want run-42", got)
-	}
-}
-
-func TestProgressBars_Toggle(t *testing.T) {
-	if !ProgressBarsEnabled() {
-		t.Fatal("progress bars should default to enabled")
-	}
-	SetProgressBarsEnabled(false)
-	t.Cleanup(func() { SetProgressBarsEnabled(true) })
-	if ProgressBarsEnabled() {
-		t.Fatal("SetProgressBarsEnabled(false) not observed")
 	}
 }

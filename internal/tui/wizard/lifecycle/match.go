@@ -6,12 +6,9 @@ import (
 	"github.com/qxtaiba/okdctl/internal/node"
 )
 
-// rowCordonDrain is the gate-row label shared by the cordon and drain
-// steps; they render as one row.
+// rowCordonDrain: cordon and drain render as a single combined row.
 const rowCordonDrain = "cordon + drain"
 
-// stepRowHints maps a structured OnStep transition to the substring of the
-// gate row it belongs to.
 var stepRowHints = map[node.Step]string{
 	node.StepCordon:     rowCordonDrain,
 	node.StepDrain:      rowCordonDrain,
@@ -25,11 +22,9 @@ var stepRowHints = map[node.Step]string{
 	node.StepWaitJoin:   "wait for join",
 }
 
-// descRowHints maps a Reporter description prefix to its gate-row
-// substring, in match order (first hit wins). Prefixes track the
-// startProgress strings in internal/node — matchRow appends unmatched
-// descriptions verbatim upstream, so a renamed backend string degrades
-// visibly instead of silently.
+// descRowHints maps a Reporter prefix to its gate-row substring, in match
+// order (first hit wins); prefixes track internal/node's startProgress
+// strings, so a renamed backend string degrades visibly, not silently.
 var descRowHints = []struct{ prefix, row string }{
 	{"waiting for etcd health (pre-", "etcd health gate (pre)"},
 	{"waiting for etcd health (post-", "etcd health gate (post)"},
@@ -42,9 +37,8 @@ var descRowHints = []struct{ prefix, row string }{
 	{"waiting for ", "wait for join"},
 }
 
-// matchRow resolves an execution event to its gate-row index in rows, or
-// -1 when nothing matches. Ceph descriptions fall back to the combined
-// "uncordon + ceph" row when the standalone ceph row is absent (resize).
+// matchRow resolves an event to its row index, or -1; ceph descriptions
+// fall back to "uncordon + ceph" when the standalone row is absent (resize).
 func matchRow(rows []string, ev *ExecEvent) int {
 	if hint, ok := stepRowHints[ev.Step]; ok && ev.Step != "" {
 		return rowIndex(rows, hint)

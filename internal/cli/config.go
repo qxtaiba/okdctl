@@ -11,10 +11,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/render"
 )
 
-const cfgVerb = "config"
-
 var configCmd = &cobra.Command{
-	Use:   cfgVerb,
+	Use:   "config",
 	Short: "Inspect okdctl configuration",
 	Long:  "Show and validate the resolved okdctl configuration; start with 'config show' to see the active values.",
 }
@@ -67,9 +65,7 @@ func runConfigValidate(cmd *cobra.Command, _ []string) error {
 	if result == nil || result.IsValid() {
 		return nil
 	}
-	// Same shape as runFullDeployment's hard gate: name the failing scope in
-	// Msg and keep result in the Unwrap chain; render.ValidationSummary above
-	// is the field-level presenter.
+	// Mirrors runFullDeployment's gate shape: result stays in the Unwrap chain.
 	return &errtypes.ConfigError{Msg: "config validation failed", Err: result}
 }
 

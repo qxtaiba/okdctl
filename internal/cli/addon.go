@@ -175,9 +175,7 @@ func runAddonInstall(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	// Addon installs mutate the live cluster; hold the project runlock like
-	// every other mutating verb (deploy, node ops, update-ingress) so
-	// concurrent invocations serialize.
+	// mutates the live cluster; hold the runlock so concurrent invocations serialize
 	lock, err := runlock.Acquire(projectRoot, "addon install")
 	if err != nil {
 		return err
@@ -216,8 +214,7 @@ func runAddonUninstall(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	// Acquired after the interactive confirmation so a prompt left waiting
-	// never holds the lock against another invocation.
+	// acquired after confirmation so a waiting prompt never holds the lock
 	lock, err := runlock.Acquire(projectRoot, "addon uninstall")
 	if err != nil {
 		return err
@@ -288,9 +285,7 @@ func runAddonVerify(cmd *cobra.Command, _ []string) error {
 }
 
 func newAddonManager(cfg *config.Config, projectRoot string) *addon.Manager {
-	// Pin KUBECONFIG to the workspace admin kubeconfig: addon install/uninstall
-	// re-exec under sudo, where an unpinned oc would fall back to the invoking
-	// user's ambient kubeconfig and could mutate the wrong cluster.
+	// pin KUBECONFIG: sudo re-exec would otherwise fall back to the invoking user's kubeconfig
 	kcPath := workspace.KubeconfigPath(workspace.ClusterConfigDir(filepath.Join(projectRoot, workspace.WorkDirName)))
 	exec := executor.New(
 		executor.WithWorkDir(projectRoot),

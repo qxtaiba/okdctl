@@ -38,18 +38,18 @@ type ConfigurableAddon interface {
     Addon
     DefaultSettings() map[string]string
     ValidateSettings(settings map[string]string) []string
-    DecodeSettings(settings map[string]string) (any, error)
 }
 ```
 
 `Info` is static metadata (name, display name, dependencies, priority);
 `Install`, `Verify`, and `Uninstall` do the actual work against a live
 cluster via the `Environment` (which carries `AddonConfig`, an executor, a
-logger, and the project root). `DefaultSettings`, `ValidateSettings`, and
-`DecodeSettings` describe an addon's settings map, but no orchestrator or
-wizard code calls them polymorphically today — each addon exercises its own
-methods directly (`ValidateSettings` from its tests, an unexported typed
-`decodeSettings` from its own `Install`).
+logger, and the project root). `DefaultSettings` and `ValidateSettings`
+describe an addon's settings map. The manager calls `ValidateSettings`
+before `Install` and aborts the install on any errors; `DefaultSettings`
+has no polymorphic caller today. That leaves typed decoding to each addon:
+an unexported `decodeSettings` its own `Install` calls directly, with no
+`any` round-trip on the interface.
 
 ## Registration via init()
 
@@ -95,9 +95,11 @@ addon automatically via the registry.
 
 The post-install phase iterates enabled addons and calls their `Install`
 in dependency order, then `Verify`. On failure, `InstallAll` has
-per-addon rollback: if addon C fails, the manager attempts to uninstall
-any addons in C's dependency closure that were installed in this
-invocation, then returns the aggregated error.
+per-addon rollback: if addon C fails to install or verify, the manager
+attempts to uninstall C itself (under a bounded, cancellation-detached
+context), records the error, skips any addon that depends on C, and
+returns the aggregated error at the end. Addons that already installed
+successfully stay installed.
 
 Addon lifecycle (per addon, in dependency order):
 

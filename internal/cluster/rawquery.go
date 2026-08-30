@@ -7,8 +7,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/executor"
 )
 
-// RawGet runs `<cli> get --raw <path>` and returns trimmed stdout.
-// A non-zero exit is returned as an *executor.ExitError.
+// RawGet runs `<cli> get --raw <path>` and returns trimmed stdout; a
+// non-zero exit is an *executor.ExitError.
 func (c *Client) RawGet(ctx context.Context, path string) (string, error) {
 	result, err := c.runOutput(ctx, "get", "--raw", path)
 	if err != nil {
@@ -20,10 +20,9 @@ func (c *Client) RawGet(ctx context.Context, path string) (string, error) {
 	return strings.TrimSpace(result.Stdout), nil
 }
 
-// GetJSON runs `<cli> <args...>` with full stdout buffering and returns trimmed
-// stdout, a truncated flag, and any execution error. A non-zero exit is returned
-// as an *executor.ExitError. Callers must check truncated before unmarshalling to
-// avoid silently processing a capped JSON payload.
+// GetJSON runs `<cli> <args...>` with full stdout buffering, returning trimmed
+// stdout, a truncated flag, and any error (non-zero exit as *executor.ExitError).
+// Callers must check truncated before unmarshalling to avoid processing a capped payload.
 func (c *Client) GetJSON(ctx context.Context, args ...string) (stdout string, truncated bool, err error) {
 	result, runErr := c.runOutput(ctx, args...)
 	if runErr != nil {

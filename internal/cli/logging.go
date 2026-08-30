@@ -17,27 +17,20 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-// logFileCloser holds the open log-file handle so Execute can close it.
-// nil when no file sink is active (--log-file unset and the command has
-// no default sink).
+// logFileCloser holds the open log-file handle for Execute to close; nil when
+// no file sink is active.
 var logFileCloser io.Closer
 
-// runLogPath is the path of the active file sink (--log-file or the
-// default workspace okdctl.log); "" when no file sink is active. execute()
-// prints it on failure so the operator knows a persistent log exists.
+// runLogPath is the active file sink's path ("" if none); execute() prints it on failure.
 var runLogPath string
 
-// runLogSink is the active file sink as a plain writer; nil when no file sink
-// is active. deploy routes the openshift-install firehose here so the TTY
-// carries only the curated status line. It aliases the same handle as
-// logFileCloser — do not close it separately.
+// runLogSink aliases logFileCloser as a writer (do not close separately);
+// deploy routes the install-log firehose here so the TTY shows only the curated
+// status line.
 var runLogSink io.Writer
 
-// defaultLogSinkCmds lists the commands that tee their log stream to
-// <workspace>/okdctl.log by default. Scoped to the commands that mutate a
-// workspace; read-only commands (status, version, releases) must not start
-// writing files. Matching walks the cobra parent chain, mirroring
-// rootRequiredCmds.
+// defaultLogSinkCmds lists commands that tee logs to <workspace>/okdctl.log by
+// default; matching walks the parent chain.
 var defaultLogSinkCmds = []string{cmdNameDeploy, cmdNameDestroy, cmdNameCleanup, cmdNameManage}
 
 func wantsDefaultLogSink(cmd *cobra.Command) bool {
@@ -49,17 +42,8 @@ func wantsDefaultLogSink(cmd *cobra.Command) bool {
 	return false
 }
 
-// openLogFile refuses a symlink path via lstat, then opens with
-// O_NOFOLLOW so a symlink planted between lstat and open still loses
-// the race. Needed because configureLogging runs twice on root-required
-// commands (invoking user + sudo re-exec) and a pre-sudo attacker could
-// otherwise redirect root-authored log lines via a planted symlink.
-// Privilege contract: the path is either operator-supplied (--log-file)
-// or derived from the operator's working directory (the default
-// okdctl.log sink), and the file is opened as root post-sudo-re-exec.
-// The operator is trusted; no path-location restriction is enforced.
-// O_APPEND + 0o600 bound the risk: existing file content cannot be
-// overwritten, and callers restore invoking-user ownership where needed.
+// openLogFile lstats to refuse a symlink then opens O_NOFOLLOW, closing a
+// pre-sudo TOCTOU race on root-authored log lines.
 func openLogFile(path string) (*os.File, error) {
 	if info, err := os.Lstat(path); err == nil {
 		if info.Mode()&os.ModeSymlink != 0 {
@@ -71,14 +55,9 @@ func openLogFile(path string) (*os.File, error) {
 	return os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND|syscall.O_NOFOLLOW, 0o600)
 }
 
-// openDefaultLogSink opens <workspace>/okdctl.log for append and chowns it
-// to the invoking user. Under the sudo re-exec model the pre-sudo pass
-// creates the file as the invoking user and the root pass only appends;
-// the chown covers direct `sudo okdctl deploy` invocations where root
-// creates it. The chown goes through the open descriptor so a path swapped
-// for a symlink after open cannot redirect it. A chown failure closes the
-// sink — a root-owned 0600 log the operator cannot read afterwards is
-// worse than no file sink.
+// openDefaultLogSink opens <workspace>/okdctl.log and chowns it via the open fd
+// (TOCTOU-safe), closing the sink on chown failure instead of leaving a
+// root-owned log.
 func openDefaultLogSink() (string, *os.File, error) {
 	root, err := resolveWorkspaceRoot()
 	if err != nil {
@@ -110,10 +89,8 @@ func configureLogging(cmd *cobra.Command) error {
 		}
 		runLogPath = logFile
 	case wantsDefaultLogSink(cmd):
-		// Best-effort: a read-only or otherwise unwritable cwd must not
-		// block the run, unlike an explicit --log-file which hard-fails
-		// above. The warning is emitted after ConfigureLoggers below so
-		// it uses the fully-configured formatter.
+		// best-effort: an unwritable cwd must not block the run (unlike
+		// --log-file); warning emitted after ConfigureLoggers so it's formatted
 		runLogPath, sink, sinkErr = openDefaultLogSink()
 	}
 	if sink != nil {
@@ -123,8 +100,7 @@ func configureLogging(cmd *cobra.Command) error {
 		stderrW = io.MultiWriter(os.Stderr, sink)
 	}
 
-	// --quiet and --verbose are sugar over --log-level; mutual exclusion is
-	// enforced at flag registration so at most one is set here.
+	// --quiet/--verbose are sugar over --log-level; mutual exclusion is enforced at flag registration.
 	effectiveLevel := logLevel
 	switch {
 	case logQuiet:
@@ -135,22 +111,20 @@ func configureLogging(cmd *cobra.Command) error {
 
 	stderrIsTTY := term.IsTerminal(int(os.Stderr.Fd()))
 	stdoutIsTTY := term.IsTerminal(int(os.Stdout.Fd()))
-	// Honor https://no-color.org: NO_COLOR disables progress bars regardless of
-	// TTY detection. FORCE_COLOR is consumed by colorprofile for styling only,
-	// never at this gate.
+	// NO_COLOR (no-color.org) disables progress bars regardless of TTY;
+	// FORCE_COLOR only affects colorprofile styling, not this gate.
 	noColor := os.Getenv("NO_COLOR") != ""
 
-	// Auto-switch to json when stderr is piped and the user has not
-	// explicitly set --log-format, mirroring the progress-bar TTY gate.
+	// auto-switch to json when stderr is piped and --log-format wasn't set
+	// explicitly, mirroring the progress-bar TTY gate
 	if !cmd.Root().PersistentFlags().Changed(flagLogFormat) && !stderrIsTTY {
 		logFormat = outputJSON
 	}
 
 	progressBars := stderrIsTTY && stdoutIsTTY && logFormat != outputJSON && !noColor
 
-	// Pin the box/leader render profile to stdout's real capabilities so a
-	// piped or NO_COLOR run strips escapes from boxes the same way charm/log
-	// already strips them from level badges.
+	// pin the render profile to stdout's real capabilities so a piped/NO_COLOR
+	// run strips box escapes like charm/log strips level badges
 	tui.SetColorProfileFor(os.Stdout)
 
 	if err := tui.ConfigureLoggers(effectiveLevel, logFormat, stdoutW, stderrW, progressBars); err != nil {
@@ -159,11 +133,8 @@ func configureLogging(cmd *cobra.Command) error {
 	if sinkErr != nil {
 		logutil.Warn("default log file unavailable; continuing without persistent log", logutil.LF("err", sinkErr))
 	}
-	// Suppress Info/Warn chatter under json so status-style `2>&1 | jq`
-	// pipelines see a clean stream — but never for the deploy-family flows,
-	// whose non-TTY contract keeps milestones at Info and degraded-operator
-	// notices at Warn (json-formatted). Their firehose already goes to the log
-	// file, so what reaches stderr is the curated milestone/Warn set, not chatter.
+	// suppress Info/Warn under json for clean pipelines, except deploy-family
+	// flows which keep milestones/degraded-notices visible
 	if logFormat == outputJSON && !logVerbose && !wantsDefaultLogSink(cmd) {
 		tui.SuppressInfo()
 	}
@@ -171,8 +142,7 @@ func configureLogging(cmd *cobra.Command) error {
 }
 
 // quietForJSON raises the stderr log level to error when --output=json is
-// active and the user has not requested verbose output. Without this,
-// 2>&1 | jq pipelines see Info chatter mixed into the JSON stream.
+// active and verbose logging was not requested.
 func quietForJSON(format string) {
 	if format == outputJSON && !logVerbose {
 		tui.SuppressInfo()

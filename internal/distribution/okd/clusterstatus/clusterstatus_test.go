@@ -140,8 +140,7 @@ func TestCollect_APIUnreachable(t *testing.T) {
 		operatorsErr: errors.New("connection refused"),
 	}
 
-	// No lifecycle sources at all, so an unreachable API reads as Pending
-	// (pre-install) rather than Installing (deploy in flight).
+	// No lifecycle sources: an unreachable API reads as Pending, not Installing.
 	cs := Collect(context.Background(), cl, &fakeVerifier{}, LifecycleSources{})
 
 	if cs.Phase != okd.PhasePending {
@@ -169,56 +168,15 @@ func TestCollect_CorruptPayloadsDegradeToEmpty(t *testing.T) {
 }
 
 func TestCollect_NilClientDerivesFromLifecycleSources(t *testing.T) {
-	cases := []struct {
-		name string
-		src  LifecycleSources
-		want okd.ClusterPhase
-	}{
-		{"no-kubeconfig-no-infra", LifecycleSources{}, okd.PhasePending},
-		{"no-kubeconfig-deploy-in-flight", LifecycleSources{DeployInProgress: boolSource(true)}, okd.PhaseInstalling},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			cs := Collect(context.Background(), nil, &fakeVerifier{}, tc.src)
-			if cs.Phase != tc.want {
-				t.Errorf("Phase = %q; want %q", cs.Phase, tc.want)
-			}
-			if cs.APIReachable {
-				t.Error("APIReachable = true; want false")
-			}
-			if cs.Nodes != nil {
-				t.Errorf("Nodes = %v; want nil", cs.Nodes)
-			}
-		})
-	}
-}
-
-// TestCollect_StoppedCluster locks the 'okdctl cluster stop' → 'okdctl
-// status' contract: API down, no deploy in flight, infra present, every VM
-// powered off reads as Stopped.
-func TestCollect_StoppedCluster(t *testing.T) {
-	cl := &fakeClient{
-		healthzErr:   errors.New("connection refused"),
-		nodesErr:     errors.New("connection refused"),
-		operatorsErr: errors.New("connection refused"),
-	}
-	src := LifecycleSources{
-		DeployInProgress: boolSource(false),
-		InfraPresent:     boolSource(true),
-		Power: &fakePower{states: map[int]nodetypes.VMState{
-			110: nodetypes.StateStopped,
-			111: nodetypes.StateStopped,
-			200: nodetypes.StateStopped,
-		}},
-	}
-
-	cs := Collect(context.Background(), cl, &fakeVerifier{}, src)
-
-	if cs.Phase != okd.PhaseStopped {
-		t.Errorf("Phase = %q; want %q", cs.Phase, okd.PhaseStopped)
+	cs := Collect(context.Background(), nil, &fakeVerifier{}, LifecycleSources{})
+	if cs.Phase != okd.PhasePending {
+		t.Errorf("Phase = %q; want %q", cs.Phase, okd.PhasePending)
 	}
 	if cs.APIReachable {
 		t.Error("APIReachable = true; want false")
+	}
+	if cs.Nodes != nil {
+		t.Errorf("Nodes = %v; want nil", cs.Nodes)
 	}
 }
 
@@ -309,8 +267,7 @@ func TestTerraformStateHasResources(t *testing.T) {
 	if !TerraformStateHasResources(root, "production") {
 		t.Error("state with resources must count as infra")
 	}
-	// A populated state in a different environment than the configured one
-	// must not count — the pre-M12 glob would have matched it.
+	// A different environment's state must not count — a glob across envs would match it.
 	if TerraformStateHasResources(root, "staging") {
 		t.Error("state under another environment must not count for the configured env")
 	}

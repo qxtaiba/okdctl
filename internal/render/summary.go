@@ -1,5 +1,5 @@
-// Package render builds the boxed text summaries okdctl prints after
-// deploys, dry-runs, interruptions, and ingress updates.
+// Package render builds the boxed text summaries okdctl prints after deploys,
+// dry-runs, and interruptions.
 package render
 
 import (
@@ -18,8 +18,6 @@ const (
 	defaultKeyColWidth  = 45
 )
 
-// stepDisplayStatus is the three-state tag printed next to each step
-// line in the summary.
 type stepDisplayStatus string
 
 const (
@@ -28,8 +26,7 @@ const (
 	stepStatusFail stepDisplayStatus = "fail"
 )
 
-// stepStatusColWidth is the pad width for the status column; must equal
-// max(len(stepStatus*)) so all values align without truncation.
+// stepStatusColWidth must equal max(len(stepStatus*)) so values align without truncation.
 const stepStatusColWidth = 4
 
 func displayStatus(s *distribution.StepResult) stepDisplayStatus {
@@ -44,9 +41,6 @@ func displayStatus(s *distribution.StepResult) stepDisplayStatus {
 }
 
 // Builder accumulates aligned section/key-value lines for a boxed summary.
-// Every writer shares one layout contract: lines are indented two spaces
-// inside the box, and KV/KVHighlight dot-pad their keys against the shared
-// keyWidth/kvWidth columns so values align down the whole summary.
 type Builder struct {
 	b        strings.Builder
 	keyWidth int
@@ -96,8 +90,7 @@ type DryRunStep struct {
 	Name string
 }
 
-// DryRunSummary renders the step listing for a dry-run inside a boxed section
-// consistent with PostDeploySummary.
+// DryRunSummary renders the step listing for a dry-run, styled like PostDeploySummary.
 func DryRunSummary(title string, steps []DryRunStep) string {
 	sb := NewBuilder()
 	sb.WriteString("\n")
@@ -115,8 +108,8 @@ func DryRunSummary(title string, steps []DryRunStep) string {
 	return "\n" + tui.BoxedSectionCompact(sb.String(), title, tui.DefaultBoxWidth) + "\n"
 }
 
-// ValidationSummary renders a config validation result for CLI output,
-// listing each error with field context when present.
+// ValidationSummary renders a config validation result, listing each error with
+// field context when present.
 func ValidationSummary(result *config.ValidationResult) string {
 	var sb strings.Builder
 
@@ -137,8 +130,8 @@ func ValidationSummary(result *config.ValidationResult) string {
 	return sb.String()
 }
 
-// PostDeploySummary renders the success summary shown after a cluster deploy
-// completes, including access URLs, kubeadmin credentials, and step results.
+// PostDeploySummary renders the success summary after a cluster deploy: access
+// URLs, credentials, and step results.
 func PostDeploySummary(cfg *config.Config, result *postinstall.Result, steps []distribution.StepResult, runID string) string {
 	clusterFQDN := cfg.Cluster.Name + "." + cfg.Cluster.Domain
 	consoleURL := fmt.Sprintf("https://console-openshift-console.apps.%s", clusterFQDN)
@@ -220,9 +213,8 @@ func PostDeploySummary(cfg *config.Config, result *postinstall.Result, steps []d
 	return "\n" + tui.BoxedSectionCompact(sb.String(), "deployment complete", tui.DefaultBoxWidth) + "\n"
 }
 
-// InterruptSummary renders a partial-progress box for a Ctrl-C interruption.
-// steps is whatever the orchestrator completed before cancellation;
-// resumeCmd is the exact command the user should re-run (e.g. "okdctl deploy").
+// InterruptSummary renders a partial-progress box for a Ctrl-C interruption;
+// resumeCmd is the exact command the user should re-run.
 func InterruptSummary(steps []distribution.StepResult, resumeCmd, runID string) string {
 	sb := NewBuilder()
 	sb.WriteString("\n")
@@ -247,11 +239,8 @@ func InterruptSummary(steps []distribution.StepResult, resumeCmd, runID string) 
 	return "\n" + tui.BoxedSectionCompact(sb.String(), "interrupted", tui.DefaultBoxWidth) + "\n"
 }
 
-// FailureInfo describes a failed deploy for FailureSummary. Phase is the
-// deploy phase recorded in the on-disk marker when the failure happened, so
-// the resume line stays truthful: re-running deploy picks up from exactly
-// that phase. TeardownCmd/TeardownNote carry the phase-appropriate teardown
-// alternative (cleanup when terraform state is empty, destroy otherwise).
+// FailureInfo describes a failed deploy for FailureSummary. Phase mirrors
+// the on-disk marker phase so the resume line stays truthful.
 type FailureInfo struct {
 	Steps        []distribution.StepResult
 	Phase        string
@@ -261,9 +250,8 @@ type FailureInfo struct {
 	TeardownNote string
 }
 
-// FailureSummary renders the partial-progress box for a deploy that failed
-// mid-phase without being cancelled. Next steps lead with the resume path;
-// --fresh and teardown are listed as alternatives, in that order.
+// FailureSummary renders the partial-progress box for a mid-phase deploy
+// failure; next steps lead with resume, then --fresh, then teardown.
 func FailureSummary(f *FailureInfo) string {
 	sb := NewBuilder()
 	sb.WriteString("\n")
@@ -304,8 +292,8 @@ func failedStepID(steps []distribution.StepResult) string {
 	return ""
 }
 
-// UpdateIngressSummary renders the result of the update-ingress subcommand,
-// showing converted controllers and DNS record changes.
+// UpdateIngressSummary renders the update-ingress result: converted controllers
+// and DNS record changes.
 func UpdateIngressSummary(result *postinstall.UpdateIngressResult) string {
 	sb := NewBuilder()
 	sb.Newline()

@@ -1,14 +1,14 @@
 package addon
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
 )
 
-// Resolve returns addons in dependency-safe installation order using Kahn's algorithm.
-// Addons with no dependency relationship are ordered by priority (lower first).
-// Returns an error if there are circular dependencies or missing dependencies.
+// Resolve orders addons for installation via Kahn's algorithm, breaking ties
+// by priority (lower first). It errors on circular or missing dependencies.
 func Resolve(addons []Addon) ([]Addon, error) {
 	if len(addons) == 0 {
 		return nil, nil
@@ -63,7 +63,7 @@ func Resolve(addons []Addon) ([]Addon, error) {
 	}
 
 	if len(ordered) != len(addons) {
-		return nil, fmt.Errorf("circular dependency detected among addons")
+		return nil, errors.New("circular dependency detected among addons")
 	}
 
 	return ordered, nil

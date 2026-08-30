@@ -12,13 +12,10 @@ import (
 	"testing"
 )
 
-// TestNewInsecureCallerPolicy fails if any file both imports httputil and
-// calls a TLS-skip-capable factory (NewInsecure, NewOptionalInsecure) from
-// outside that factory's allowlisted paths. TLS-skip clients are legitimate
-// only during the bootstrap window where no cluster CA is yet available
-// (NewInsecure) or on the operator-opt-in Proxmox API paths
-// (NewOptionalInsecure); new callers must add themselves to
-// allowedPrefixes after a security review.
+// TestNewInsecureCallerPolicy fails if a file outside a factory's
+// allowlisted paths calls a TLS-skip factory (NewInsecure,
+// NewOptionalInsecure); new callers must be added to allowedPrefixes after
+// a security review.
 func TestNewInsecureCallerPolicy(t *testing.T) {
 	const importPath = "github.com/qxtaiba/okdctl/internal/httputil"
 	allowedPrefixes := map[string][]string{
@@ -87,8 +84,8 @@ func importsPath(f *ast.File, path string) bool {
 	return false
 }
 
-// calledInsecureFactories returns the gated httputil factory names (keys of
-// gated) the file calls, deduplicated.
+// calledInsecureFactories returns the gated factory names (keys of gated)
+// the file calls, deduplicated.
 func calledInsecureFactories(f *ast.File, gated map[string][]string) []string {
 	seen := map[string]bool{}
 	ast.Inspect(f, func(n ast.Node) bool {

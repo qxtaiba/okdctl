@@ -13,7 +13,7 @@ import (
 
 func TestWaitForRouterGone(t *testing.T) {
 	installFakeOCForIngress(t)
-	p := newIngressTestPhase(t)
+	p := newTestPhase(t)
 
 	t.Run("already gone returns immediately", func(t *testing.T) {
 		if err := p.waitForRouterGone(context.Background(), "default", 5*time.Second); err != nil {
@@ -56,7 +56,7 @@ func TestWaitForRouterGone(t *testing.T) {
 
 func TestWaitForServiceLB(t *testing.T) {
 	installFakeOCForIngress(t)
-	p := newIngressTestPhase(t)
+	p := newTestPhase(t)
 
 	t.Run("ip available on first probe", func(t *testing.T) {
 		t.Setenv("OC_SVC_IP_DEFAULT", "10.0.0.40")
@@ -118,7 +118,7 @@ func TestWaitForServiceLB(t *testing.T) {
 
 func TestCollectLBEntries(t *testing.T) {
 	installFakeOCForIngress(t)
-	p := newIngressTestPhase(t)
+	p := newTestPhase(t)
 
 	lbIC := func(name, domain string, converted bool) ingressControllerInfo {
 		return ingressControllerInfo{Name: name, Domain: domain, Strategy: strategyLoadBalancer, converted: converted}

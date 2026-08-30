@@ -145,12 +145,7 @@ terraform already created) unless it too is passed
 --acknowledge-interrupted-op.`,
 	Example: `  okdctl node add --yes --confirm-cluster grappleberry
   okdctl node add --count 2 --dry-run`,
-	// node add revives the ignition HTTPS server (httpd on :443, writes under
-	// /etc and serves /var/www/html) for the join window, so its body must run
-	// as root. Unlike remove/resize/list, it needs local privilege; the gate
-	// re-execs under sudo at euid!=0 instead of failing mid-op, and accepts an
-	// explicit `sudo okdctl node add`. --dry-run escapes the gate (requiresRoot
-	// short-circuits on the flag) so a preview stays promptless.
+	// revives the root-only ignition HTTPS server; elevation gate re-execs under sudo unless --dry-run
 	Annotations: map[string]string{annotationKeyRequiresRoot: annotationValueTrue},
 	Args:        cobra.NoArgs,
 	RunE:        runNodeAdd,
@@ -187,39 +182,25 @@ func init() {
 	rootCmd.AddCommand(nodeCmd)
 }
 
-// nodeConsent carries the per-command consent state buildNodeRunner needs to
-// wire the informed-confirmation flow, passed explicitly rather than read from
-// shared package globals so the node and cluster commands never alias flags.
-// twoStage requests the destroy-grade gate (typed cluster name + y/N) used by
-// the VM-destroying verbs; resize passes false for a single y/N.
+// nodeConsent is explicit (not package globals) so commands can't alias flags;
+// twoStage selects the destroy-grade typed-name+y/N gate.
 type nodeConsent struct {
 	yes      bool
 	dryRun   bool
 	twoStage bool
 }
 
-// destroyGradeVerbs is the single source of truth for which lifecycle verbs
-// escalate to the destroy-grade gate (typed cluster name + y/N). A verb
-// belongs here when it destroys a VM (or its data disk): a downgrade to the
-// bare y/N gate must not be possible by editing an inline literal at one of
-// the several RunE call sites. Verbs absent from the set use the single y/N
-// gate.
+// destroyGradeVerbs is the single source of truth for which verbs need the
+// destroy-grade gate, so a downgrade can't happen via an inline literal at a
+// RunE call site.
 var destroyGradeVerbs = map[string]bool{
 	"remove":  true,
 	"compact": true,
 }
 
-// destroyGradeVerb reports whether verb escalates to the destroy-grade gate.
-func destroyGradeVerb(verb string) bool {
-	return destroyGradeVerbs[verb]
-}
-
-// nodeRunnerCtx bundles the disposable resources a node op holds so RunE
-// bodies can defer a single cleanup. HostTotalMiB/HostAllocatedMiB/
-// DatastoreAvailGB are the read-only Proxmox memory- and datastore-budget
-// probe results (zero when the probe was skipped or failed — the guards then
-// warn instead of enforcing). captured is the plan the confirm/preview hook
-// observed, reused for the completion box.
+// nodeRunnerCtx bundles disposable node-op resources so RunE can defer a
+// single cleanup; zero Host*MiB/DatastoreAvailGB means the probe was
+// skipped or failed and the guards warn instead of enforcing.
 type nodeRunnerCtx struct {
 	runner           *node.Runner
 	release          func()
@@ -230,12 +211,11 @@ type nodeRunnerCtx struct {
 	dryRun           bool
 }
 
+// cleanup releases via the field so a later rewrap by buildNodeRunner is honoured.
 func (n *nodeRunnerCtx) cleanup() { n.release() }
 
-// complete prints the deploy-family completion box for a finished mutating op,
-// skipping dry-runs (which already printed their own box). A declined op never
-// reaches here: its RunE maps node.ErrDeclined to a clean exit before calling
-// complete. The captured==nil guard is a nil-safety backstop.
+// complete prints the completion box for a finished op, skipping dry-runs; a
+// declined op never reaches here (RunE maps ErrDeclined to a clean exit first).
 func (n *nodeRunnerCtx) complete(w io.Writer, elapsed time.Duration) {
 	if n.dryRun || n.captured == nil {
 		return
@@ -243,12 +223,9 @@ func (n *nodeRunnerCtx) complete(w io.Writer, elapsed time.Duration) {
 	fmt.Fprint(w, render.NodeOpComplete(n.captured, elapsed))
 }
 
-// nodeOpsEnv is the pre-TUI environment for node ops: project root,
-// credentials, and the read-only host probe results. It owns the
-// credentials; close zeroizes them and chowns the workdir back. Split from
-// runner construction so the lifecycle wizard can hold one env across
-// screens while building a fresh runner (and taking the run lock) per
-// dry-run/execute invocation.
+// nodeOpsEnv is the pre-TUI environment for node ops; it owns credentials
+// (close zeroizes them), split from runner construction so the wizard can hold
+// one env across screens.
 type nodeOpsEnv struct {
 	projectRoot      string
 	creds            *credentials.ProxmoxCredentials
@@ -258,13 +235,9 @@ type nodeOpsEnv struct {
 	datastoreAvailGB int
 }
 
-// close zeroizes the owned credentials and restores invoking-user ownership
-// of the workdir. node add re-execs under sudo (requiresRoot annotation), so
-// the ISOs, markers, and terraform state it writes under
-// <projectRoot>/okd-install land root-owned; chown them back at exit so the
-// operator can inspect or retry. ChownTreeToInvokingUser no-ops when SUDO_UID
-// is unset, so the non-root verbs (remove/resize/list, and any dry-run) pass
-// through it harmlessly.
+// close zeroizes credentials and chowns the workdir back to the invoking user
+// (node add's sudo re-exec leaves it root-owned); a no-op when SUDO_UID is
+// unset.
 func (e *nodeOpsEnv) close() {
 	defer e.creds.Zeroize()
 	workDir := filepath.Join(e.projectRoot, workspace.WorkDirName)
@@ -273,9 +246,8 @@ func (e *nodeOpsEnv) close() {
 	}
 }
 
-// prepareNodeOpsEnv resolves the workspace, loads credentials, and runs
-// the read-only host memory probe — everything that must happen ahead of
-// any TUI taking over the terminal.
+// prepareNodeOpsEnv resolves the workspace, loads credentials, and probes host
+// memory — everything that must happen before a TUI takes the terminal.
 func prepareNodeOpsEnv(ctx context.Context, cfg *config.Config, probeHost bool) (*nodeOpsEnv, error) {
 	projectRoot, err := resolveProjectRootOrDie()
 	if err != nil {
@@ -307,9 +279,8 @@ func prepareNodeOpsEnv(ctx context.Context, cfg *config.Config, probeHost bool) 
 	}, nil
 }
 
-// buildNodeRunner composes prepareNodeOpsEnv and newRunner for the
-// flag-driven verbs, folding the env's lifetime into the returned cleanup
-// so callers keep the single-defer contract.
+// buildNodeRunner composes prepareNodeOpsEnv and newRunner, folding the env's
+// lifetime into the returned cleanup so callers keep a single defer.
 func buildNodeRunner(cmd *cobra.Command, cfg *config.Config, verb string, consent nodeConsent, probeHost bool) (*nodeRunnerCtx, error) {
 	env, err := prepareNodeOpsEnv(cmd.Context(), cfg, probeHost)
 	if err != nil {
@@ -325,15 +296,10 @@ func buildNodeRunner(cmd *cobra.Command, cfg *config.Config, verb string, consen
 	return rc, nil
 }
 
-// newRunner wires a node.Runner under the project run lock, installing the
-// informed-confirmation hook (or the dry-run preview) from consent. log is
-// the sink for the runner AND its terraform/setup collaborators — the
-// manage flow passes a file-only logger because stderr belongs to the
-// AltScreen TUI while it runs. subprocOut, when non-nil, additionally
-// redirects the setup executor's subprocess streams (node add's scp/ISO
-// tooling) away from the terminal for the same reason; nil keeps the
-// process streams (flag verbs). The returned cleanup releases the lock and
-// zeroizes the terraform env; the credentials stay owned by the nodeOpsEnv.
+// newRunner wires a node.Runner under the run lock, routing log/subprocOut away
+// from stderr when the manage TUI owns the terminal; the returned cleanup
+// releases the lock and zeroizes the terraform env, but not credentials (owned
+// by nodeOpsEnv).
 func (e *nodeOpsEnv) newRunner(cmd *cobra.Command, cfg *config.Config, verb string, consent nodeConsent, log *slog.Logger, subprocOut io.Writer) (*nodeRunnerCtx, error) {
 	ctx := cmd.Context()
 	creds := e.creds
@@ -367,8 +333,7 @@ func (e *nodeOpsEnv) newRunner(cmd *cobra.Command, cfg *config.Config, verb stri
 	runner.Reporter = func(desc string) func() { return tui.StartSpinner(ctx, desc) }
 	runner.Disk = &node.DebugNodeGrower{Runner: cl}
 
-	// Wired unconditionally: construction is cheap (no I/O) and only node add
-	// dereferences ISO/Ignition/Provision, so every other verb simply ignores them.
+	// Wired unconditionally (cheap, no I/O); only node add dereferences ISO/Ignition/Provision.
 	provExecOpts := []executor.Option{executor.WithWorkDir(e.projectRoot)}
 	if subprocOut != nil {
 		provExecOpts = append(provExecOpts, executor.WithStdout(subprocOut), executor.WithStderr(subprocOut))
@@ -379,9 +344,8 @@ func (e *nodeOpsEnv) newRunner(cmd *cobra.Command, cfg *config.Config, verb stri
 	runner.Ignition = prov
 	runner.Provision = provision.NewOptions(e.projectRoot)
 
-	// A resize takes effect only after a Proxmox power-cycle (bpg/proxmox changes
-	// the VM config without restarting). Wire the API power-cycler whenever creds
-	// are present; resize fails safe when it is nil.
+	// A resize takes effect only after a power-cycle (bpg/proxmox changes VM
+	// config without restarting); resize fails safe when Power is nil.
 	if creds.IsValid() {
 		runner.Power = proxmox.NewPowerCycler(&proxmox.PowerCycleOptions{
 			Endpoint: creds.Endpoint,
@@ -415,11 +379,9 @@ func (e *nodeOpsEnv) newRunner(cmd *cobra.Command, cfg *config.Config, verb stri
 	return rc, nil
 }
 
-// nodeConfirmHook builds the guards-before-prompt callback: it always prints the
-// informed box (so --yes still surfaces the blast radius), then runs the gate
-// unless --yes was passed. It records the plan for the completion box. The box
-// and prompt share the stderr stream (errW) so they never interleave with piped
-// stdout data, and the hook is invoked with no spinner span open.
+// nodeConfirmHook always prints the informed box (even under --yes, so blast
+// radius is visible) before running the gate; box and prompt share stderr so
+// they never interleave with piped stdout.
 func nodeConfirmHook(rc *nodeRunnerCtx, consent nodeConsent, clusterName string, errW io.Writer) node.ConfirmFunc {
 	return func(ctx context.Context, plan *node.OpPlan) (bool, error) {
 		rc.captured = plan
@@ -431,9 +393,8 @@ func nodeConfirmHook(rc *nodeRunnerCtx, consent nodeConsent, clusterName string,
 	}
 }
 
-// runNodeGate runs the interactive consent gate: destroy-grade verbs
-// (twoStage) require the operator to type the exact cluster name before the
-// final y/N; resize needs only the y/N.
+// runNodeGate runs the typed-name+y/N gate for destroy-grade (twoStage) verbs,
+// or just y/N otherwise.
 func runNodeGate(ctx context.Context, twoStage bool, clusterName string) (bool, error) {
 	if twoStage {
 		nameOK, err := promptForClusterNameConfirmation(ctx, clusterName,
@@ -445,13 +406,9 @@ func runNodeGate(ctx context.Context, twoStage bool, clusterName string) (bool, 
 	return promptForConfirmation(ctx, "proceed? [y/N]: ")
 }
 
-// runHostBudgetProbe reads host memory and datastore headroom from the Proxmox
-// API (read-only) so the memory-budget and datastore-budget guards can
-// enforce numerically. It degrades gracefully: a probe failure or missing
-// provider config logs a warning and returns zeros, leaving both guards in
-// warn-only mode rather than blocking a resize on an unreachable probe.
-// datastoreAvailGB is the os-storage datastore's free space (matched by name
-// against px.Storage), the same store --os-disk-gb grows into.
+// runHostBudgetProbe reads host memory and os-datastore headroom for the
+// budget guards; a probe failure degrades to warn-only (zeros) instead of
+// blocking a resize.
 func runHostBudgetProbe(ctx context.Context, cfg *config.Config, creds *credentials.ProxmoxCredentials) (totalMiB, allocatedMiB, datastoreAvailGB int) {
 	px := cfg.Provider.Proxmox
 	if px == nil {
@@ -486,10 +443,8 @@ func runHostBudgetProbe(ctx context.Context, cfg *config.Config, creds *credenti
 	return probe.HostMemTotalMiB(), probe.GuestAllocatedMiB(), datastoreAvailGB
 }
 
-// ensureTerraformWorkspace fails fast with a targeted error when the
-// terraform environment dir is absent — before credentials are prompted for
-// or the run lock is taken — so a node op in a never-deployed directory
-// doesn't surface as a raw terraform chdir failure.
+// ensureTerraformWorkspace fails fast (before credentials/run lock) so a
+// never-deployed directory doesn't surface as a raw terraform chdir failure.
 func ensureTerraformWorkspace(terraformDir string) error {
 	if _, err := os.Stat(terraformDir); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -511,7 +466,7 @@ func runNodeRemove(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	consent := nodeConsent{yes: nodeYes, dryRun: nodeDryRun, twoStage: destroyGradeVerb("remove")}
+	consent := nodeConsent{yes: nodeYes, dryRun: nodeDryRun, twoStage: destroyGradeVerbs["remove"]}
 	rc, err := buildNodeRunner(cmd, cfg, "remove", consent, false)
 	if err != nil {
 		return err
@@ -551,7 +506,7 @@ func runNodeResize(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	consent := nodeConsent{yes: nodeYes, dryRun: nodeDryRun, twoStage: destroyGradeVerb("resize")}
+	consent := nodeConsent{yes: nodeYes, dryRun: nodeDryRun, twoStage: destroyGradeVerbs["resize"]}
 	rc, err := buildNodeRunner(cmd, cfg, "resize", consent, true)
 	if err != nil {
 		return err
@@ -591,7 +546,7 @@ func runNodeAdd(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	consent := nodeConsent{yes: nodeYes, dryRun: nodeDryRun, twoStage: destroyGradeVerb("add")}
+	consent := nodeConsent{yes: nodeYes, dryRun: nodeDryRun, twoStage: destroyGradeVerbs["add"]}
 	rc, err := buildNodeRunner(cmd, cfg, "add", consent, true)
 	if err != nil {
 		return err
@@ -614,7 +569,6 @@ func runNodeAdd(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-// validateAddFlags requires a positive --count.
 func validateAddFlags(count int) error {
 	if count < 1 {
 		return &errtypes.UsageError{Msg: "--count must be >= 1"}
@@ -622,9 +576,7 @@ func validateAddFlags(count int) error {
 	return nil
 }
 
-// validateResizeFlags requires at least one resize dimension: an omitted
-// --memory-mb, --cpu, or --os-disk-gb keeps the role's current value rather
-// than erroring.
+// validateResizeFlags treats 0 as omitted, keeping the role's current value.
 func validateResizeFlags(memoryMB, cpu, osDiskGB int) error {
 	if memoryMB <= 0 && cpu <= 0 && osDiskGB <= 0 {
 		return &errtypes.UsageError{Msg: "resize requires at least one of --memory-mb, --cpu, or --os-disk-gb"}

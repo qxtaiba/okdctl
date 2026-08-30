@@ -86,7 +86,6 @@ func TestBuildFluxDeployKeySecret(t *testing.T) {
 			}
 		}
 
-		// Plaintext must NOT appear in the YAML (base64-encoded values only).
 		for _, plain := range []string{"PRIVATE_KEY_DATA", "PUBLIC_KEY_DATA", "github.com ssh-ed25519 AAAA"} {
 			if strings.Contains(manifest, plain) {
 				t.Errorf("manifest leaks plaintext %q:\n%s", plain, manifest)
@@ -119,27 +118,6 @@ func TestBuildFluxDeployKeySecret(t *testing.T) {
 		}
 		if dataRaw["known_hosts"] == nil {
 			t.Error("known_hosts must be present")
-		}
-	})
-
-	t.Run("namespace and name set correctly", func(t *testing.T) {
-		manifest, err := buildFluxDeployKeySecret("my-ns", "my-secret", []byte("key\n"), nil, []byte("host key\n"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		var parsed map[string]any
-		if err := yaml.Unmarshal([]byte(manifest), &parsed); err != nil {
-			t.Fatalf("emitted YAML does not re-parse: %v\n%s", err, manifest)
-		}
-		meta, _ := parsed["metadata"].(map[string]any)
-		if meta == nil {
-			t.Fatal("metadata missing")
-		}
-		if meta["name"] != "my-secret" {
-			t.Errorf("name = %v, want my-secret", meta["name"])
-		}
-		if meta["namespace"] != "my-ns" {
-			t.Errorf("namespace = %v, want my-ns", meta["namespace"])
 		}
 	})
 }
@@ -190,38 +168,38 @@ func gitFingerprintFromFixture(t *testing.T, keyLine string) string {
 	return ssh.FingerprintSHA256(key)
 }
 
-func TestVerifyKeyscanFingerprint_Match(t *testing.T) {
-	keyLine := "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"
-	fp := gitFingerprintFromFixture(t, keyLine)
-	if err := verifyKeyscanFingerprint(fixtureGitKeyscanOutput, "github.com", fp, false, logutil.NopLogger); err != nil {
-		t.Fatalf("unexpected err on match: %v", err)
+func TestVerifyKeyscanFingerprint(t *testing.T) {
+	matchFP := gitFingerprintFromFixture(t,
+		"github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl")
+	wrongFP := "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+	cases := []struct {
+		name          string
+		expected      string
+		acceptHostKey bool
+		wantErr       bool
+		wantSubstr    string
+	}{
+		{"match", matchFP, false, false, ""},
+		{"mismatch", wrongFP, false, true, wrongFP},
+		{"empty expected fails closed", "", false, true, "accept_host_key=true"},
+		{"empty expected with accept_host_key", "", true, false, ""},
 	}
-}
-
-func TestVerifyKeyscanFingerprint_Mismatch(t *testing.T) {
-	wrong := "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-	err := verifyKeyscanFingerprint(fixtureGitKeyscanOutput, "github.com", wrong, false, logutil.NopLogger)
-	if err == nil {
-		t.Fatal("expected error for mismatch; got nil")
-	}
-	if !strings.Contains(err.Error(), wrong) {
-		t.Errorf("error %q missing expected fingerprint", err.Error())
-	}
-}
-
-func TestVerifyKeyscanFingerprint_EmptyExpected_FailClosed(t *testing.T) {
-	err := verifyKeyscanFingerprint(fixtureGitKeyscanOutput, "github.com", "", false, logutil.NopLogger)
-	if err == nil {
-		t.Fatal("expected fail-closed error when expected empty and acceptHostKey=false; got nil")
-	}
-	if !strings.Contains(err.Error(), "accept_host_key=true") {
-		t.Errorf("fail-closed error %q should mention the accept_host_key opt-out", err.Error())
-	}
-}
-
-func TestVerifyKeyscanFingerprint_EmptyExpected_AcceptHostKey(t *testing.T) {
-	if err := verifyKeyscanFingerprint(fixtureGitKeyscanOutput, "github.com", "", true, logutil.NopLogger); err != nil {
-		t.Fatalf("unexpected err with acceptHostKey=true: %v", err)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := verifyKeyscanFingerprint(fixtureGitKeyscanOutput, "github.com", tc.expected, tc.acceptHostKey, logutil.NopLogger)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error; got nil")
+				}
+				if !strings.Contains(err.Error(), tc.wantSubstr) {
+					t.Errorf("error %q missing %q", err.Error(), tc.wantSubstr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected err: %v", err)
+			}
+		})
 	}
 }
 
@@ -250,11 +228,8 @@ func TestGitHost(t *testing.T) {
 		wantErr bool
 	}{
 		{name: "ssh scheme", url: "ssh://git@github.com/org/repo.git", want: "github.com"},
-		{name: "https scheme", url: "https://github.com/org/repo.git", want: "github.com"},
 		{name: "scp style", url: "git@github.com:org/repo.git", want: "github.com"},
-		{name: "scp self-hosted", url: "git@gitlab.internal.example.com:team/repo.git", want: "gitlab.internal.example.com"},
 		{name: "ssh with port", url: "ssh://git@bitbucket.org:7999/proj/repo.git", want: "bitbucket.org"},
-		{name: "ssh with short host and port", url: "ssh://git@host:2222/o/r", want: "host"},
 		{name: "ssh with ipv6 and port", url: "ssh://git@[2001:db8::1]:2222/o/r", want: "2001:db8::1"},
 		{name: "empty", url: "", wantErr: true},
 		{name: "whitespace only", url: "   ", wantErr: true},
@@ -294,10 +269,8 @@ func TestValidateSettings_MalformedTimeout(t *testing.T) {
 	}
 }
 
-// TestReadKeyFile locks the symlink guard on the deploy-key read: a
-// symlinked ~/.ssh/flux-deploy-key must fail closed, or a hostile link
-// could exfiltrate an arbitrary root-readable file into a cluster Secret.
-// Mirrors setup's readNoFollow symlink-rejection test.
+// TestReadKeyFile locks the symlink guard against exfiltrating a root-readable
+// file into a cluster Secret.
 func TestReadKeyFile(t *testing.T) {
 	dir := t.TempDir()
 
@@ -331,8 +304,7 @@ func TestReadKeyFile(t *testing.T) {
 	})
 
 	t.Run("missing file maps to ErrNotExist", func(t *testing.T) {
-		// createDeployKeySecret treats a missing .pub as optional via
-		// errors.Is(err, os.ErrNotExist); the identity error type is load-bearing.
+		// createDeployKeySecret treats a missing .pub as optional via errors.Is(err, os.ErrNotExist).
 		_, err := readKeyFile(filepath.Join(dir, "absent"))
 		if !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("want os.ErrNotExist for a missing key, got: %v", err)

@@ -16,16 +16,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
-// invokingUser returns the user who invoked the command. When the process
-// was re-exec'd under sudo (as okdctl deploy / destroy / cleanup /
-// update-ingress do), SUDO_USER identifies the original user. Without it,
-// the current user is returned. If SUDO_USER names a user that no longer
-// exists (deleted mid-run), we fall back to the current user rather than
-// failing the deploy — a late-stage chown-back is best-effort.
-//
-// Under direct root invocation (SUDO_USER unset) this returns the root
-// user. Callers that require the original-not-root identity MUST guard
-// with os.Geteuid() == 0 before relying on the result.
+// invokingUser returns root under direct-root invocation (SUDO_USER unset);
+// callers needing the non-root identity must guard with os.Geteuid() == 0.
 func invokingUser() (*user.User, error) {
 	if name := os.Getenv("SUDO_USER"); name != "" {
 		if u, err := user.Lookup(name); err == nil {
@@ -35,15 +27,10 @@ func invokingUser() (*user.User, error) {
 	return user.Current()
 }
 
-// InvokingUserHomeDir returns the home directory of the invoking user. Use
-// this instead of os.UserHomeDir() at sites that write artifacts the user
-// must read back (kubeconfig, releases cache, .bashrc). os.UserHomeDir()
-// returns /root under sudo's default env reset, which would land files in
-// the wrong place.
-//
-// Under direct root invocation (SUDO_USER unset) this returns /root.
-// Callers that must not write artifacts to /root MUST check
-// os.Geteuid() == 0 and gate accordingly.
+// InvokingUserHomeDir returns the invoking user's home directory instead of
+// os.UserHomeDir(), which returns /root under sudo's env reset. Under direct
+// root invocation (no SUDO_USER) this also returns /root; guard with
+// os.Geteuid() == 0 if that matters to the caller.
 func InvokingUserHomeDir() (string, error) {
 	u, err := invokingUser()
 	if err != nil {
@@ -56,8 +43,8 @@ type sudoIDs struct {
 	uid, gid int
 }
 
-// invokingUserIDs returns the SUDO_UID/SUDO_GID pair, or nil if the process
-// was not re-exec'd under sudo (chown is then unnecessary).
+// invokingUserIDs returns SUDO_UID/SUDO_GID, or nil if not running under sudo
+// (chown then unnecessary).
 func invokingUserIDs() (*sudoIDs, error) {
 	uidStr := os.Getenv("SUDO_UID")
 	gidStr := os.Getenv("SUDO_GID")
@@ -75,11 +62,9 @@ func invokingUserIDs() (*sudoIDs, error) {
 	return &sudoIDs{uid: uid, gid: gid}, nil
 }
 
-// ChownToInvokingUser chowns path to SUDO_UID:SUDO_GID. Silently no-ops when
-// the process was not re-exec'd under sudo — in that case the caller is
-// already the invoking user and the file is already owned correctly.
-// Uses Lchown so a symlink planted at path between write and chown is
-// chowned itself rather than redirecting the root-run chown to its target.
+// ChownToInvokingUser chowns path to SUDO_UID:SUDO_GID via Lchown, so a
+// symlink planted between write and chown is chowned itself rather than
+// redirected. No-ops when not running under sudo.
 func ChownToInvokingUser(path string) error {
 	ids, err := invokingUserIDs()
 	if err != nil || ids == nil {
@@ -88,10 +73,9 @@ func ChownToInvokingUser(path string) error {
 	return os.Lchown(path, ids.uid, ids.gid)
 }
 
-// ChownFileToInvokingUser chowns the already-open file to SUDO_UID:SUDO_GID
-// through its descriptor, so a path swapped for a symlink after open cannot
-// redirect the chown. Silently no-ops when the process was not re-exec'd
-// under sudo.
+// ChownFileToInvokingUser chowns the open file's descriptor to
+// SUDO_UID:SUDO_GID, so a path swapped for a symlink after open can't
+// redirect the chown. No-ops when not running under sudo.
 func ChownFileToInvokingUser(f *os.File) error {
 	ids, err := invokingUserIDs()
 	if err != nil || ids == nil {
@@ -100,20 +84,14 @@ func ChownFileToInvokingUser(f *os.File) error {
 	return f.Chown(ids.uid, ids.gid)
 }
 
-// statFn is the os.Stat seam used by WriteAsInvokingUser; tests override it
-// to drive the parentExisted flag without filesystem setup.
+// statFn is the os.Stat seam WriteAsInvokingUser uses; tests override it to
+// drive parentExisted without filesystem setup.
 var statFn = os.Stat
 
 // WriteAsInvokingUser atomically writes data to path with mode, then chowns
-// the file to the invoking user (if running under sudo). If AtomicWrite had
-// to create the immediate parent directory (i.e. it didn't exist before),
-// that directory is also chowned — otherwise we leave pre-existing
-// directory ownership untouched to avoid silently chowning a directory the
-// user explicitly created with a different owner.
-//
-// Credential-bearing files (kubeconfigs, pull secrets, private keys) must
-// pass mode 0o600; a looser mode leaks secret content to other local users.
-// For copy-then-chown scenarios use CopyFileMode + ChownToInvokingUser instead.
+// the file (and, if AtomicWrite created it, the parent directory) to the
+// invoking user. Credential-bearing files must use mode 0o600 — a looser
+// mode leaks secret content to other local users.
 func WriteAsInvokingUser(path string, data []byte, mode os.FileMode) error {
 	parentDir := filepath.Dir(path)
 	parentExisted := true
@@ -132,9 +110,8 @@ func WriteAsInvokingUser(path string, data []byte, mode os.FileMode) error {
 	return nil
 }
 
-// canonicalizePath resolves symlinks to a stable form so /tmp vs
-// /private/tmp (macOS) does not split the allowlist comparison. Falls back
-// to the input on EvalSymlinks failure (e.g. path not yet on disk).
+// canonicalizePath resolves symlinks (so /tmp vs /private/tmp on macOS doesn't
+// split the allowlist), falling back to the input on failure.
 func canonicalizePath(p string) string {
 	if p == "" {
 		return p
@@ -145,12 +122,9 @@ func canonicalizePath(p string) string {
 	return p
 }
 
-// isAllowedChownRoot reports whether absPath is a permitted target for a
-// recursive chown. Guard against caller passing /etc or similar — chowntree
-// running as root would corrupt system ownership. Allowed: paths whose Base
-// is workspace.WorkDirName or "infrastructure" (the only trees okdctl
-// creates as root), any subpath of homeDir (kubeconfig install + .okdctl
-// cache), and any subpath of tmpDir (test/ephemeral flows).
+// isAllowedChownRoot guards recursive chown against paths like /etc; allowed
+// are okdctl's own WorkDir/infrastructure trees, subpaths of homeDir, and
+// subpaths of tmpDir.
 func isAllowedChownRoot(absPath, homeDir, tmpDir string) bool {
 	base := filepath.Base(absPath)
 	if base == workspace.WorkDirName || base == "infrastructure" {
@@ -168,13 +142,11 @@ func isAllowedChownRoot(absPath, homeDir, tmpDir string) bool {
 	return hasPrefix(homeDir) || hasPrefix(tmpDir)
 }
 
-// ChownTreeToInvokingUser recursively chowns root and all descendants to the
-// invoking user. No-op if the process was not re-exec'd under sudo. Errors
-// on individual entries are collected; the walk does not abort so a single
-// unreadable entry doesn't leave the rest of the tree root-owned.
-//
-// The walk runs through os.Root so directory-component symlinks cannot
-// redirect any Lchown outside the trust root.
+// ChownTreeToInvokingUser recursively chowns root and its descendants to the
+// invoking user, continuing past per-entry errors rather than aborting the
+// whole walk; a no-op when not running under sudo. The walk runs through
+// os.Root, so directory-component symlinks can't redirect a chown outside
+// the trust root.
 func ChownTreeToInvokingUser(root string) error {
 	ids, err := invokingUserIDs()
 	if err != nil || ids == nil {
@@ -213,29 +185,21 @@ func ChownTreeToInvokingUser(root string) error {
 	return errors.Join(errs...)
 }
 
-// HasPasswordlessSudo returns nil if `sudo -n true` succeeds. Callers use
-// this as an advisory pre-flight to warn the user that the next sudo
-// invocation may prompt for a password. Under the re-exec model this is
-// only called by doctor; operational paths never call it.
+// HasPasswordlessSudo returns nil if `sudo -n true` succeeds, used as an
+// advisory pre-flight before a sudo prompt might appear.
 func HasPasswordlessSudo(ctx context.Context) error {
 	cmd := exec.CommandContext(ctx, "sudo", "-n", "true")
-	// `sudo -n true` needs nothing beyond PATH. Handing it the allowlisted
-	// parent env (which deliberately keeps secret-keyed entries so okdctl can
-	// re-exec itself under sudo) would forward those credentials to a child
-	// that has no use for them; only okdctl handing the environment to itself
-	// may carry them.
+	// Minimal PATH-only env: the allowlisted parent env deliberately keeps
+	// secret-keyed entries for okdctl's own re-exec, and this child has no use for them.
 	cmd.Env = []string{"PATH=" + os.Getenv("PATH")}
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	err := cmd.Run()
-	// Mirror executor.run: a ctx-killed sudo surfaces ctx.Err() so
-	// errors.Is(err, context.Canceled/DeadlineExceeded) matchers see the
-	// cancellation, not an opaque "signal: killed" *exec.ExitError.
-	if err != nil {
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return ctxErr
-		}
+	// Mirrors executor.NewExitError: surfaces ctx.Err() on a ctx-killed sudo so
+	// errors.Is(context.Canceled/DeadlineExceeded) sees cancellation, not an opaque exec.ExitError.
+	if ctxErr := ctx.Err(); err != nil && ctxErr != nil {
+		return ctxErr
 	}
 	return err
 }

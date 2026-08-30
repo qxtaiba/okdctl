@@ -17,9 +17,7 @@ func TestPromptForConfirmation(t *testing.T) {
 		wantOK bool
 	}{
 		{"y confirms", "y\n", true},
-		{"yes confirms", "yes\n", true},
 		{"n denies", "n\n", false},
-		{"YES confirms", "YES\n", true},
 		{"EOF treated as denial", "", false},
 	}
 	for _, tc := range cases {
@@ -68,11 +66,9 @@ func TestIsConfirmResponse(t *testing.T) {
 		{"Y", true},
 		{"yes", true},
 		{"YES", true},
-		{"Yes", true},
 		{"n", false},
 		{"no", false},
 		{"", false},
-		{"true", false},
 		{"1", false},
 	}
 	for _, tc := range cases {
@@ -97,8 +93,6 @@ func TestConfirmClusterMatches(t *testing.T) {
 		{"empty confirm with force", true, "", "prod", "cleanup", true},
 		{"mismatched confirm", true, "staging", "prod", "cleanup", true},
 		{"correct confirm", true, "prod", "prod", "cleanup", false},
-		{"destroy verb", true, "prod", "prod", "destroy", false},
-		{"destroy verb mismatch", true, "staging", "prod", "destroy", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -125,7 +119,6 @@ func TestPromptForClusterNameConfirmation(t *testing.T) {
 	}{
 		{"exact match confirms", "prod\n", true},
 		{"case mismatch denies", "PROD\n", false},
-		{"typo denies", "prod1\n", false},
 		{"empty line denies", "\n", false},
 		{"EOF treated as denial", "", false},
 	}

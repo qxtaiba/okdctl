@@ -6,32 +6,25 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// TableOptions configures Table. The zero value renders a plain, uncolored
-// table with a two-space column gap.
+// TableOptions configures Table; the zero value renders a plain table with
+// a two-space gap.
 type TableOptions struct {
-	// RowStyle, when set, is consulted per data row (0-indexed, excluding the
-	// header). A true second return applies the style to the whole row —
-	// used to paint a not-ready node red. Padding is always computed on the
-	// plain cell text, so the style's zero-width escapes never shift columns.
+	// RowStyle is consulted per data row (0-indexed, excluding header); a
+	// true return styles the whole row. Padding is computed on plain text
+	// so escapes never shift columns.
 	RowStyle func(row int) (lipgloss.Style, bool)
 	// MaxColWidth middle-truncates any cell wider than the cap with an
-	// ellipsis so one long value cannot blow the width budget. Zero disables
-	// truncation.
+	// ellipsis; zero disables truncation.
 	MaxColWidth int
 	// Gap is the number of spaces between columns; zero defaults to 2.
 	Gap int
-	// PlainHeader leaves the header unstyled; by default it renders in the dim
-	// text color.
+	// PlainHeader leaves the header unstyled; by default it renders dim.
 	PlainHeader bool
 }
 
-// Table renders an aligned column table as a slice of lines: a header row
-// followed by one line per data row. Column widths come from the widest plain
-// cell (header included). It is the single table look shared by status and
-// node list; the node-op boxes keep their dotted key/value node lines, whose
-// nested annotations and full terraform addresses don't fit flat columns.
-// Lines come back un-downsampled — the Boxed* helpers gate embedded tables,
-// callers printing outside a box must Downsample each line.
+// Table renders an aligned column table as lines (header then one per row),
+// widths sized to the widest plain cell. Lines come back un-downsampled —
+// callers outside a Boxed* helper must Downsample each line themselves.
 func Table(headers []string, rows [][]string, opts TableOptions) []string {
 	gap := opts.Gap
 	if gap == 0 {
@@ -85,8 +78,8 @@ func padRightCells(s string, w int) string {
 }
 
 // truncateMiddle shortens s to maxW columns by replacing the middle with an
-// ellipsis, preserving the distinguishing head and tail (a terraform address
-// tail, a node-name suffix). maxW <= 0 returns s unchanged.
+// ellipsis, preserving the distinguishing head and tail; maxW <= 0 returns s
+// unchanged.
 func truncateMiddle(s string, maxW int) string {
 	if maxW <= 0 || lipgloss.Width(s) <= maxW {
 		return s

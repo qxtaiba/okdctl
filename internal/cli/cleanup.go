@@ -64,18 +64,8 @@ type cleanupDryRunTarget struct {
 	fields []logutil.LogField
 }
 
-// runCleanupDryRun previews exactly the targets the given kind removes. The
-// per-kind selection mirrors cleanup.cleanupSteps' switch so the preview
-// cannot drift from execution — the cleanup Phase deliberately exposes no
-// StepDefs to the CLI (see cleanup.Phase), so the switch is reproduced here.
+// runCleanupDryRun mirrors cleanup.cleanupSteps' switch so the preview cannot drift from execution.
 func runCleanupDryRun(cfg *config.Config, projectRoot string, kind cleanup.Kind) {
-	for _, t := range cleanupDryRunTargets(cfg, projectRoot, kind) {
-		logutil.Info(t.msg, t.fields...)
-	}
-	logutil.Info("dry-run: re-run without --dry-run to execute cleanup")
-}
-
-func cleanupDryRunTargets(cfg *config.Config, projectRoot string, kind cleanup.Kind) []cleanupDryRunTarget {
 	workDir := cleanupDryRunTarget{"dry-run: would remove work directory", []logutil.LogField{logutil.LF("path", workspace.WorkDir(projectRoot))}}
 	webServer := cleanupDryRunTarget{"dry-run: would remove ignition files from web server", []logutil.LogField{logutil.LF("dir", cfg.HTTPServer.Root)}}
 	haproxy := cleanupDryRunTarget{"dry-run: would stop haproxy and remove its config block", []logutil.LogField{logutil.LF("path", phase.DefaultHAProxyConfigPath)}}
@@ -85,31 +75,32 @@ func cleanupDryRunTargets(cfg *config.Config, projectRoot string, kind cleanup.K
 	packages := cleanupDryRunTarget{"dry-run: would remove packages and tool binaries", []logutil.LogField{logutil.LF("packages", cleanup.InstalledPackages()), logutil.LF("binaries", cleanup.InstalledBinaries())}}
 	ignitionCerts := cleanupDryRunTarget{"dry-run: would remove generated ignition TLS certs", []logutil.LogField{logutil.LF("path", filepath.Join(projectRoot, "certs", "ignition"))}}
 
+	var targets []cleanupDryRunTarget
 	switch kind {
 	case cleanup.Full:
-		return []cleanupDryRunTarget{workDir, webServer, haproxy, apache, dnsmasq, terraform, packages, ignitionCerts}
+		targets = []cleanupDryRunTarget{workDir, webServer, haproxy, apache, dnsmasq, terraform, packages, ignitionCerts}
 	case cleanup.WorkOnly:
-		return []cleanupDryRunTarget{workDir}
+		targets = []cleanupDryRunTarget{workDir}
 	case cleanup.WebOnly:
-		return []cleanupDryRunTarget{webServer}
+		targets = []cleanupDryRunTarget{webServer}
 	case cleanup.HAProxyOnly:
-		return []cleanupDryRunTarget{haproxy}
+		targets = []cleanupDryRunTarget{haproxy}
 	case cleanup.TerraformOnly:
-		return []cleanupDryRunTarget{terraform}
-	default:
-		return nil
+		targets = []cleanupDryRunTarget{terraform}
 	}
+	for _, t := range targets {
+		logutil.Info(t.msg, t.fields...)
+	}
+	logutil.Info("dry-run: re-run without --dry-run to execute cleanup")
 }
 
-// cleanupKindRemovesCredentials reports whether kind wipes cluster-config
-// and with it the admin credentials (kubeconfig, kubeadmin-password).
+// cleanupKindRemovesCredentials reports whether kind wipes kubeconfig/kubeadmin-password.
 func cleanupKindRemovesCredentials(kind cleanup.Kind) bool {
 	return kind == cleanup.Full || kind == cleanup.WorkOnly
 }
 
-// confirmCleanupInteractive gates a cleanup run: kinds that remove the
-// admin credentials get the same two-stage typed-cluster-name gate as
-// destroy; scoped kinds keep the single y/N prompt.
+// confirmCleanupInteractive requires typed-name confirmation for
+// credential-removing kinds; scoped kinds keep a single y/N.
 func confirmCleanupInteractive(ctx context.Context, cfg *config.Config, kind cleanup.Kind) (bool, error) {
 	if cleanupKindRemovesCredentials(kind) {
 		nameConfirmed, err := promptForClusterNameConfirmation(ctx, cfg.Cluster.Name, "type cluster name to confirm cleanup: ")
@@ -130,8 +121,7 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 
 	kind := cleanup.Kind(cleanupKind)
 	if kind.Validate() != nil {
-		// Msg-only UsageError: wrapping the ConfigError from Validate would
-		// let exitCodeFor's Config-first precedence map this to exit 2.
+		// Msg-only: wrapping Validate's ConfigError would map to exit 2 via exitCodeFor's precedence.
 		return &errtypes.UsageError{
 			Msg: fmt.Sprintf("invalid --kind %q; valid values: %s", cleanupKind, strings.Join(cleanup.KindStrings(), ", ")),
 		}

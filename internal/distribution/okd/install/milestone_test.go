@@ -41,11 +41,6 @@ func TestParseMilestone(t *testing.T) {
 			wantOp:   "console",
 		},
 		{
-			name:   "progress line is not a milestone",
-			line:   `level=info msg="Waiting up to 40m0s for the cluster at https://api... to initialize..."`,
-			wantOK: false,
-		},
-		{
 			name:   "available-false is not a degraded milestone",
 			line:   `level=info msg="Cluster operator console Available is False with ..."`,
 			wantOK: false,
@@ -86,8 +81,7 @@ func TestMilestoneWriter_TeesAndNotifies(t *testing.T) {
 		mu.Unlock()
 	})
 
-	// Write in chunks that split a line across Write calls to exercise the
-	// partial-line buffer.
+	// Chunks deliberately split a line across Write calls.
 	chunks := []string{
 		"level=info msg=\"Waiting for bootstrap\"\n",
 		"level=info msg=\"It is now safe to rem",

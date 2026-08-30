@@ -6,10 +6,10 @@ import (
 	"testing"
 )
 
-func TestReleaseTypeMarshalJSON(t *testing.T) {
+func TestReleaseTypeJSON(t *testing.T) {
 	cases := []struct {
-		rt   ReleaseType
-		want string
+		rt    ReleaseType
+		label string
 	}{
 		{ReleaseTypeStable, `"stable"`},
 		{ReleaseTypeLatestStable, `"latest-stable"`},
@@ -18,34 +18,19 @@ func TestReleaseTypeMarshalJSON(t *testing.T) {
 		{ReleaseTypeLTS, `"lts"`},
 	}
 	for _, tc := range cases {
-		got, err := json.Marshal(tc.rt)
+		b, err := json.Marshal(tc.rt)
 		if err != nil {
 			t.Fatalf("Marshal(%v): %v", tc.rt, err)
 		}
-		if string(got) != tc.want {
-			t.Errorf("Marshal(%v) = %s; want %s", tc.rt, got, tc.want)
+		if string(b) != tc.label {
+			t.Errorf("Marshal(%v) = %s; want %s", tc.rt, b, tc.label)
 		}
-	}
-}
-
-func TestReleaseTypeUnmarshalJSON(t *testing.T) {
-	cases := []struct {
-		input string
-		want  ReleaseType
-	}{
-		{`"stable"`, ReleaseTypeStable},
-		{`"latest-stable"`, ReleaseTypeLatestStable},
-		{`"preview"`, ReleaseTypePreview},
-		{`"latest-preview"`, ReleaseTypeLatestPreview},
-		{`"lts"`, ReleaseTypeLTS},
-	}
-	for _, tc := range cases {
-		var got ReleaseType
-		if err := json.Unmarshal([]byte(tc.input), &got); err != nil {
-			t.Fatalf("Unmarshal(%s): %v", tc.input, err)
+		var fromLabel ReleaseType
+		if err := json.Unmarshal([]byte(tc.label), &fromLabel); err != nil {
+			t.Fatalf("Unmarshal(%s): %v", tc.label, err)
 		}
-		if got != tc.want {
-			t.Errorf("Unmarshal(%s) = %v; want %v", tc.input, got, tc.want)
+		if fromLabel != tc.rt {
+			t.Errorf("Unmarshal(%s) = %v; want %v", tc.label, fromLabel, tc.rt)
 		}
 	}
 }
@@ -55,29 +40,6 @@ func TestReleaseTypeUnmarshalJSONUnknown(t *testing.T) {
 	err := json.Unmarshal([]byte(`"lts-preview"`), &rt)
 	if err == nil {
 		t.Errorf("expected error for unknown release type, got nil; rt=%v", rt)
-	}
-}
-
-func TestReleaseTypeRoundTrip(t *testing.T) {
-	variants := []ReleaseType{
-		ReleaseTypeStable,
-		ReleaseTypeLatestStable,
-		ReleaseTypePreview,
-		ReleaseTypeLatestPreview,
-		ReleaseTypeLTS,
-	}
-	for _, rt := range variants {
-		b, err := json.Marshal(rt)
-		if err != nil {
-			t.Fatalf("Marshal(%v): %v", rt, err)
-		}
-		var got ReleaseType
-		if err := json.Unmarshal(b, &got); err != nil {
-			t.Fatalf("Unmarshal(%s): %v", b, err)
-		}
-		if got != rt {
-			t.Errorf("round-trip(%v): got %v", rt, got)
-		}
 	}
 }
 

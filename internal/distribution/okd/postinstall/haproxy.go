@@ -23,13 +23,8 @@ var (
 	haproxyVIPTimeout = DefaultKubeVIPVIPTimeout
 )
 
-// RemoveHAProxy stops and disables HAProxy on the bastion. If vip is non-empty,
-// the API is verified via the VIP *before* any destructive operation to confirm
-// kube-vip is already handling traffic; only then is haproxy stopped, its config
-// backed up and removed, firewall rules cleared, and the secondary IP released.
-// clusterDir is the openshift-install output directory used to load the cluster CA.
-// Exported for the reserved okdctl haproxy subcommand space; the only in-tree
-// caller today is finalizeIngress in update_ingress.go.
+// RemoveHAProxy stops and disables HAProxy on the bastion; when vip is set,
+// it first verifies the API is already reachable via the VIP.
 func (p *Phase) RemoveHAProxy(ctx context.Context, vip, clusterDir string) error {
 	if vip != "" {
 		kubeconfigPath := workspace.KubeconfigPath(clusterDir)
@@ -58,8 +53,7 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip, clusterDir string) error
 		}
 		p.Log.Info("haproxy: pre-flight — api confirmed reachable via vip")
 
-		// Verify hostname resolution before stopping haproxy so the bastion's
-		// dnsmasq is confirmed to route api.* to the VIP rather than localhost.
+		// Confirms dnsmasq already routes api.* to the VIP, not localhost.
 		p.Log.Info("haproxy: pre-flight — verifying api reachable via hostname before teardown")
 		if waitErr := system.WaitForWithTimeout(ctx, "haproxy", "api-via-hostname", func(ctx context.Context) bool {
 			out, err := p.OcOutput(ctx, "get", "--raw", "/healthz")
@@ -81,7 +75,7 @@ func (p *Phase) RemoveHAProxy(ctx context.Context, vip, clusterDir string) error
 
 	p.Log.Info("haproxy: removing configuration")
 	if err := os.RemoveAll(haproxyConfigPath); err != nil {
-		p.Log.Warn("haproxy: failed to remove config", "err", err)
+		p.Log.Warn("haproxy: could not remove config", "err", err)
 	}
 
 	if err := firewall.New(firewall.WithLogger(p.Log)).RemoveRules(ctx, firewall.HAProxyFrontendPorts(), true); err != nil {

@@ -9,20 +9,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// errSnapshotExists reports a CreateSnapshot call against a name the VM
-// already has. CreateSnapshot wraps it (errors.Is) instead of surfacing the
-// raw pvesh task exitstatus string; unexported as no cross-package caller
-// branches on it today.
+// errSnapshotExists reports a duplicate snapshot name; CreateSnapshot wraps
+// it via errors.Is instead of surfacing the raw pvesh exitstatus.
 var errSnapshotExists = errors.New("snapshot already exists")
 
-// SnapshotInfo describes one QEMU snapshot as returned by
-// pvesh get /nodes/<node>/qemu/<vmid>/snapshot. ListSnapshots filters out
-// the synthetic "current" entry Proxmox uses to anchor its snapshot tree —
-// it is not a real, rollback-able or deletable snapshot.
+// SnapshotInfo describes one QEMU snapshot; ListSnapshots filters out
+// Proxmox's synthetic "current" anchor entry, which is not a real,
+// deletable snapshot.
 type SnapshotInfo struct {
 	Name        string
 	Description string
@@ -30,8 +26,7 @@ type SnapshotInfo struct {
 	Parent      string
 }
 
-// taskStatusStopped is the terminal Status value pveshWaitTask polls for;
-// ExitStatus then distinguishes a clean finish ("OK") from a failure.
+// taskStatusStopped is the terminal Status pveshWaitTask polls for; ExitStatus then says OK or not.
 const taskStatusStopped = "stopped"
 
 // taskStatus is the shape of pvesh get /nodes/<node>/tasks/<upid>/status.
@@ -60,10 +55,9 @@ func validateVMID(vmid int) error {
 	return nil
 }
 
-// ValidateSnapshotName enforces the pve-configid grammar Proxmox itself
-// requires for a snapshot name. This is the authoritative shell-injection
-// guard for every path built with the name; SSHRunArgv's shell-safe-atom
-// check (ssh.go) is only a fail-closed backstop.
+// ValidateSnapshotName enforces Proxmox's pve-configid grammar and is the
+// authoritative shell-injection guard for snapshot-name paths; SSHRunArgv's
+// atom check (ssh.go) is only a fail-closed backstop.
 func ValidateSnapshotName(name string) error {
 	if name == "" {
 		return fmt.Errorf("must not be empty")
@@ -86,19 +80,15 @@ func ValidateSnapshotName(name string) error {
 	return nil
 }
 
-// ValidateSnapshotDescription allowlist-checks an optional free-text
-// description before it reaches the remote shell as an SSHRunArgv atom.
-// Whitespace is rejected, not just control characters: SSHRunArgv joins argv
-// with spaces before handing it to the remote login shell, so a multi-word
-// value would word-split there instead of surviving as the single token
-// pvesh expects. An empty description is valid — CreateSnapshot omits
-// -description entirely when desc is "".
+// ValidateSnapshotDescription allowlist-checks an optional description
+// before it becomes an SSHRunArgv atom; whitespace is rejected because
+// SSHRunArgv's space-join would word-split a multi-word value before pvesh
+// sees it. Empty is valid: CreateSnapshot omits -description then.
 func ValidateSnapshotDescription(desc string) error {
 	if len(desc) > 200 {
 		return fmt.Errorf("must be 200 characters or fewer, got %d", len(desc))
 	}
-	// Letter/digit-first keeps a description from ever reading as a pvesh
-	// option token (`-vmstate`) on the remote command line.
+	// Letter/digit-first prevents desc from reading as a pvesh option flag (e.g. -vmstate).
 	if desc != "" {
 		first := rune(desc[0])
 		ok := (first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z') || (first >= '0' && first <= '9')
@@ -116,9 +106,8 @@ func ValidateSnapshotDescription(desc string) error {
 	return nil
 }
 
-// validateUPID rejects UPID values outside the Proxmox task-id charset,
-// guarding pveshWaitTask's status-path interpolation the same way
-// ValidateSnapshotName guards create/rollback/delete.
+// validateUPID guards pveshWaitTask's status-path interpolation the same
+// way ValidateSnapshotName guards create/rollback/delete.
 func validateUPID(upid string) error {
 	if upid == "" {
 		return fmt.Errorf("must not be empty")
@@ -133,55 +122,20 @@ func validateUPID(upid string) error {
 	return nil
 }
 
-// pveshTaskCall issues a pvesh subcommand that launches an async background
-// task (snapshot create/rollback/delete) and returns its UPID. pveshRun
-// tolerates a non-zero exit because its callers are read paths; a task
-// launch must fail loudly on rejection instead of returning whatever ended
-// up on stdout, so this checks result.ExitCode itself rather than going
-// through pveshRun. The failure routes through executor.NewExitError so
-// remote stderr is scrubbed and truncated before it can reach a log sink,
-// and a cancelled ctx keeps its context.Canceled identity. The path stays
-// out of the ExitError Command label (see TestExitErrorCommandNoArgvLeak)
-// and is carried by the wrapping message instead.
-func pveshTaskCall(ctx context.Context, p *RemoteISOParams, subcommand, path string, extra ...string) (string, error) {
-	if err := validateProxmoxName(p.Node); err != nil {
-		return "", fmt.Errorf("proxmox node %q invalid: %w", p.Node, err)
-	}
-	argv := append([]string{"pvesh", subcommand, path}, extra...)
-	argv = append(argv, "--output-format", "json")
-	result, err := SSHRunArgvOutput(ctx, p.Exec, p.Host, p.KnownHostsPath, argv...)
-	if err != nil {
-		return "", err
-	}
-	if result.ExitCode != 0 {
-		return "", fmt.Errorf("pvesh %s %s: %w", subcommand, path,
-			executor.NewExitError(ctx, "pvesh "+subcommand, result.ExitCode, result.Stderr))
-	}
-	if result.Truncated {
-		return "", fmt.Errorf("pvesh %s %s output truncated after %d bytes", subcommand, path, len(result.Stdout))
-	}
-	return result.Stdout, nil
-}
-
-func pveshCreateTaskCall(ctx context.Context, p *RemoteISOParams, path string, extra ...string) (string, error) {
-	stdout, err := pveshTaskCall(ctx, p, "create", path, extra...)
+// pveshTaskUPID launches an async pvesh task (snapshot create/rollback/
+// delete) and returns its UPID. It routes through pveshRunChecked, not
+// pveshRun, so a rejected launch fails loudly instead of returning whatever
+// landed on stdout.
+func pveshTaskUPID(ctx context.Context, p *RemoteISOParams, subcommand, path string, extra ...string) (string, error) {
+	stdout, err := pveshRunChecked(ctx, p, subcommand, path, extra...)
 	if err != nil {
 		return "", err
 	}
 	return parseUPID(stdout)
 }
 
-func pveshDeleteTaskCall(ctx context.Context, p *RemoteISOParams, path string, extra ...string) (string, error) {
-	stdout, err := pveshTaskCall(ctx, p, "delete", path, extra...)
-	if err != nil {
-		return "", err
-	}
-	return parseUPID(stdout)
-}
-
-// parseUPID decodes the JSON string a pvesh create/delete task call returns
-// and validates it before any caller interpolates it into a status-path
-// lookup.
+// parseUPID decodes and validates the UPID pvesh returns before any caller
+// interpolates it into a status-path lookup.
 func parseUPID(stdout string) (string, error) {
 	var upid string
 	if err := json.Unmarshal([]byte(stdout), &upid); err != nil {
@@ -193,11 +147,10 @@ func parseUPID(stdout string) (string, error) {
 	return upid, nil
 }
 
-// pveshWaitTask polls a pvesh background task until it reaches
-// status "stopped", then checks exitstatus. A stopped task with a
-// non-OK exitstatus is reported as a distinct error rather than folded
-// into a generic timeout, since the two failure modes need different
-// operator responses (task rejected outright vs. never finished).
+// pveshWaitTask polls until status reaches "stopped", then checks
+// exitstatus. A non-OK exitstatus is reported as its own error rather than
+// folded into a timeout, since the two failure modes need different
+// operator responses.
 func pveshWaitTask(ctx context.Context, p *RemoteISOParams, upid string, timeout time.Duration) error {
 	if err := validateUPID(upid); err != nil {
 		return fmt.Errorf("upid %q invalid: %w", upid, err)
@@ -232,12 +185,11 @@ func pveshWaitTask(ctx context.Context, p *RemoteISOParams, upid string, timeout
 	return nil
 }
 
-// CreateSnapshot snapshots vmid's disks and, if description is non-empty,
-// attaches it to the snapshot. It never passes -vmstate: the qemu-guest-agent
-// is disabled fleet-wide, so no in-VM freeze is available and a memory-state
-// snapshot would not be crash-consistent with it. Blocks until the async
-// pvesh task completes or timeout elapses. Returns an error matching
-// errSnapshotExists (errors.Is) when vmid already has a snapshot named name.
+// CreateSnapshot snapshots vmid's disks (attaching description if
+// non-empty) and blocks until the task completes or timeout elapses. It
+// never passes -vmstate — qemu-guest-agent is disabled fleet-wide, so a
+// memory-state snapshot wouldn't be crash-consistent — and returns an error
+// matching errSnapshotExists (errors.Is) if name already exists.
 func CreateSnapshot(ctx context.Context, p *RemoteISOParams, vmid int, name, description string, timeout time.Duration) error {
 	if err := validateVMID(vmid); err != nil {
 		return fmt.Errorf("vmid %d invalid: %w", vmid, err)
@@ -249,10 +201,9 @@ func CreateSnapshot(ctx context.Context, p *RemoteISOParams, vmid int, name, des
 		return fmt.Errorf("snapshot description invalid: %w", err)
 	}
 
-	// Best-effort duplicate pre-check: a definite name collision surfaces as
-	// errSnapshotExists instead of a raw pvesh task exitstatus. A failed
-	// listing is ignored rather than blocking the create — pvesh itself still
-	// rejects duplicates, and this pre-check is racy by nature anyway.
+	// Best-effort pre-check: a definite collision surfaces as errSnapshotExists;
+	// a failed listing is ignored since pvesh itself rejects duplicates and
+	// this check is racy anyway.
 	if existing, listErr := ListSnapshots(ctx, p, vmid); listErr == nil {
 		for _, s := range existing {
 			if s.Name == name {
@@ -265,7 +216,7 @@ func CreateSnapshot(ctx context.Context, p *RemoteISOParams, vmid int, name, des
 	if description != "" {
 		extra = append(extra, "-description", description)
 	}
-	upid, err := pveshCreateTaskCall(ctx, p, pveshSnapshotPath(p.Node, vmid), extra...)
+	upid, err := pveshTaskUPID(ctx, p, "create", pveshSnapshotPath(p.Node, vmid), extra...)
 	if err != nil {
 		return fmt.Errorf("create snapshot %s for vmid %d: %w", name, vmid, err)
 	}
@@ -275,8 +226,8 @@ func CreateSnapshot(ctx context.Context, p *RemoteISOParams, vmid int, name, des
 	return nil
 }
 
-// ListSnapshots returns vmid's snapshots in the order pvesh reports them;
-// Proxmox does not document that order as chronological.
+// ListSnapshots returns vmid's snapshots in pvesh's reported order, which
+// Proxmox does not document as chronological.
 func ListSnapshots(ctx context.Context, p *RemoteISOParams, vmid int) ([]SnapshotInfo, error) {
 	if err := validateVMID(vmid); err != nil {
 		return nil, fmt.Errorf("vmid %d invalid: %w", vmid, err)
@@ -313,10 +264,9 @@ func parseSnapshotList(stdout string) ([]SnapshotInfo, error) {
 	return snapshots, nil
 }
 
-// RollbackSnapshot restores vmid's disks to name and passes -start 1, which
-// auto-starts the VM once the rollback completes — including a VM that was
-// deliberately powered off beforehand. Blocks until the async pvesh task
-// completes or timeout elapses.
+// RollbackSnapshot restores vmid's disks to name, passing -start 1 so the
+// VM auto-starts after rollback (even if deliberately powered off), and
+// blocks until the task completes or timeout elapses.
 func RollbackSnapshot(ctx context.Context, p *RemoteISOParams, vmid int, name string, timeout time.Duration) error {
 	if err := validateVMID(vmid); err != nil {
 		return fmt.Errorf("vmid %d invalid: %w", vmid, err)
@@ -326,7 +276,7 @@ func RollbackSnapshot(ctx context.Context, p *RemoteISOParams, vmid int, name st
 	}
 
 	path := pveshSnapshotNamePath(p.Node, vmid, name) + "/rollback"
-	upid, err := pveshCreateTaskCall(ctx, p, path, "-start", "1")
+	upid, err := pveshTaskUPID(ctx, p, "create", path, "-start", "1")
 	if err != nil {
 		return fmt.Errorf("rollback vmid %d to snapshot %s: %w", vmid, name, err)
 	}
@@ -336,8 +286,7 @@ func RollbackSnapshot(ctx context.Context, p *RemoteISOParams, vmid int, name st
 	return nil
 }
 
-// DeleteSnapshot removes name from vmid. Blocks until the async pvesh task
-// completes or timeout elapses.
+// DeleteSnapshot removes name from vmid, blocking until the task completes or timeout elapses.
 func DeleteSnapshot(ctx context.Context, p *RemoteISOParams, vmid int, name string, timeout time.Duration) error {
 	if err := validateVMID(vmid); err != nil {
 		return fmt.Errorf("vmid %d invalid: %w", vmid, err)
@@ -346,7 +295,7 @@ func DeleteSnapshot(ctx context.Context, p *RemoteISOParams, vmid int, name stri
 		return fmt.Errorf("snapshot name %q invalid: %w", name, err)
 	}
 
-	upid, err := pveshDeleteTaskCall(ctx, p, pveshSnapshotNamePath(p.Node, vmid, name))
+	upid, err := pveshTaskUPID(ctx, p, "delete", pveshSnapshotNamePath(p.Node, vmid, name))
 	if err != nil {
 		return fmt.Errorf("delete snapshot %s for vmid %d: %w", name, vmid, err)
 	}
@@ -357,9 +306,8 @@ func DeleteSnapshot(ctx context.Context, p *RemoteISOParams, vmid int, name stri
 }
 
 // VMAgentEnabled probes vmid's live config for the qemu-guest-agent flag
-// rather than assuming it fleet-wide, so a future per-VM opt-in is picked
-// up without a code change. Callers use this to decide whether a crash-
-// consistency warning applies to a given snapshot.
+// rather than assuming it fleet-wide, so a future per-VM opt-in needs no
+// code change.
 func VMAgentEnabled(ctx context.Context, p *RemoteISOParams, vmid int) (bool, error) {
 	if err := validateVMID(vmid); err != nil {
 		return false, fmt.Errorf("vmid %d invalid: %w", vmid, err)
@@ -377,9 +325,8 @@ func VMAgentEnabled(ctx context.Context, p *RemoteISOParams, vmid int) (bool, er
 	return agentFlagEnabled(cfg.Agent), nil
 }
 
-// agentFlagEnabled parses the Proxmox qemu-agent config value, which is
-// either a bare "0"/"1" or a comma-separated property string whose first
-// segment is the enable flag (e.g. "enabled=1,fstrim_cloned_disks=1").
+// agentFlagEnabled parses Proxmox's qemu-agent value: bare "0"/"1" or a
+// comma-separated property string whose first segment is the flag.
 func agentFlagEnabled(raw string) bool {
 	first, _, _ := strings.Cut(raw, ",")
 	if v, ok := strings.CutPrefix(first, "enabled="); ok {

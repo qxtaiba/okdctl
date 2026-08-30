@@ -16,62 +16,68 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/executor"
-	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
-// TestRemoveHAProxy_EmptyVIPSkipsVerify exercises the vip=="" short-circuit
-// — both verify blocks (vip + hostname) are gated behind `if vip != ""`,
-// so the empty-vip path does no subprocess work beyond the (darwin-noop)
-// systemctl probes and the os.RemoveAll on haproxyConfigPath. Verifies the
-// new test seam (haproxyConfigPath var) works.
-func TestRemoveHAProxy_EmptyVIPSkipsVerify(t *testing.T) {
-	origConfig := haproxyConfigPath
-	t.Cleanup(func() { haproxyConfigPath = origConfig })
-	haproxyConfigPath = filepath.Join(t.TempDir(), "haproxy.cfg")
+func setHAProxyConfigPath(t *testing.T, cfg string) {
+	t.Helper()
+	orig := haproxyConfigPath
+	t.Cleanup(func() { haproxyConfigPath = orig })
+	haproxyConfigPath = cfg
+}
 
-	p := New(phase.WithExecutor(executor.New()), phase.WithLogger(logutil.NopLogger))
-	if err := p.RemoveHAProxy(context.Background(), "", t.TempDir()); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+// startHealthzTLS serves /healthz over TLS; returns its port and a kubeconfig
+// embedding the server CA.
+func startHealthzTLS(t *testing.T) (port int, kubeconfig string) {
+	t.Helper()
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/healthz" {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})
+	caData := base64.StdEncoding.EncodeToString(certPEM)
+	kubeconfig = "clusters:\n- cluster:\n    certificate-authority-data: " + caData + "\n  name: test\n"
+	return srv.Listener.Addr().(*net.TCPAddr).Port, kubeconfig
+}
+
+func pointHAProxyAtPort(t *testing.T, port int) {
+	t.Helper()
+	origPort := haproxyHealthPort
+	origTimeout := haproxyVIPTimeout
+	t.Cleanup(func() {
+		haproxyHealthPort = origPort
+		haproxyVIPTimeout = origTimeout
+	})
+	setHAProxyConfigPath(t, filepath.Join(t.TempDir(), "haproxy.cfg"))
+	haproxyHealthPort = port
+	haproxyVIPTimeout = 1 * time.Second
+}
+
+// writeAuthKubeconfig writes kubeconfig at clusterDir/auth/, matching
+// workspace.KubeconfigPath's layout.
+func writeAuthKubeconfig(t *testing.T, clusterDir, kubeconfig string) {
+	t.Helper()
+	authDir := filepath.Join(clusterDir, "auth")
+	if err := os.MkdirAll(authDir, 0o700); err != nil {
+		t.Fatalf("mkdir auth: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(authDir, "kubeconfig"), []byte(kubeconfig), 0o600); err != nil {
+		t.Fatalf("write kubeconfig: %v", err)
 	}
 }
 
-// TestRemoveHAProxy_HappyPath_ConfigFileRemoved verifies that RemoveHAProxy
-// deletes haproxyConfigPath when the file exists and vip is empty.
-func TestRemoveHAProxy_HappyPath_ConfigFileRemoved(t *testing.T) {
-	cfgFile := filepath.Join(t.TempDir(), "haproxy.cfg")
-	if err := os.WriteFile(cfgFile, []byte("# stub"), 0o644); err != nil {
-		t.Fatalf("write stub config: %v", err)
-	}
-
-	origConfig := haproxyConfigPath
-	t.Cleanup(func() { haproxyConfigPath = origConfig })
-	haproxyConfigPath = cfgFile
-
-	p := New(phase.WithExecutor(executor.New()), phase.WithLogger(logutil.NopLogger))
-	if err := p.RemoveHAProxy(context.Background(), "", t.TempDir()); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if _, err := os.Stat(cfgFile); !os.IsNotExist(err) {
-		t.Errorf("haproxy config still present after RemoveHAProxy")
-	}
-}
-
-// TestRemoveHAProxy_BackupCreated verifies that RemoveHAProxy writes a
-// timestamped backup matching the glob that cleanup/services.go uses to
-// sweep haproxy backup files during destroy.
+// Backup name must match the glob cleanup/services.go sweeps at destroy.
 func TestRemoveHAProxy_BackupCreated(t *testing.T) {
-	dir := t.TempDir()
-	cfgFile := filepath.Join(dir, "haproxy.cfg")
+	cfgFile := filepath.Join(t.TempDir(), "haproxy.cfg")
 	if err := os.WriteFile(cfgFile, []byte("frontend test\n  bind *:6443\n"), 0o644); err != nil {
 		t.Fatalf("write stub config: %v", err)
 	}
+	setHAProxyConfigPath(t, cfgFile)
 
-	origConfig := haproxyConfigPath
-	t.Cleanup(func() { haproxyConfigPath = origConfig })
-	haproxyConfigPath = cfgFile
-
-	p := New(phase.WithExecutor(executor.New()), phase.WithLogger(logutil.NopLogger))
+	p := newTestPhase(t)
 	if err := p.RemoveHAProxy(context.Background(), "", t.TempDir()); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -91,17 +97,16 @@ func TestRemoveHAProxy_BackupCreated(t *testing.T) {
 	if string(got) != "frontend test\n  bind *:6443\n" {
 		t.Errorf("backup content mismatch: %q", string(got))
 	}
+	if _, err := os.Stat(cfgFile); !os.IsNotExist(err) {
+		t.Errorf("haproxy config still present after RemoveHAProxy")
+	}
 }
 
-// TestRemoveHAProxy_ConfigRemoveAllError_DoesNotAbort verifies that an
-// os.RemoveAll failure (unwritable parent dir) is logged as a warning and
-// does not cause RemoveHAProxy to return an error.
 func TestRemoveHAProxy_ConfigRemoveAllError_DoesNotAbort(t *testing.T) {
 	if os.Getuid() == 0 {
 		t.Skip("root bypasses 0o555 perm; resilience branch unreachable as root")
 	}
-	parentDir := t.TempDir()
-	protectedDir := filepath.Join(parentDir, "protected")
+	protectedDir := filepath.Join(t.TempDir(), "protected")
 	if err := os.Mkdir(protectedDir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
@@ -113,61 +118,23 @@ func TestRemoveHAProxy_ConfigRemoveAllError_DoesNotAbort(t *testing.T) {
 		t.Fatalf("chmod protected dir: %v", err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(protectedDir, 0o755) })
+	setHAProxyConfigPath(t, cfgFile)
 
-	origConfig := haproxyConfigPath
-	t.Cleanup(func() { haproxyConfigPath = origConfig })
-	haproxyConfigPath = cfgFile
-
-	p := New(phase.WithExecutor(executor.New()), phase.WithLogger(logutil.NopLogger))
+	p := newTestPhase(t)
 	if err := p.RemoveHAProxy(context.Background(), "", t.TempDir()); err != nil {
 		t.Fatalf("RemoveHAProxy must not abort on os.RemoveAll failure; got: %v", err)
 	}
 }
 
-// TestRemoveHAProxy_KubeVIPHealthcheck verifies CA-pool handling in
-// RemoveHAProxy. With kubeconfig present, the CA-verified http.Client lets
-// the VIP /healthz check succeed and RemoveHAProxy advances to the oc
-// hostname check, returning *errtypes.ClusterError. With kubeconfig absent,
-// CA-pool retrieval fails and RemoveHAProxy MUST hard-error with
-// *errtypes.ClusterError naming the missing CA — never fall back to
-// InsecureSkipVerify.
+// CA-pool retrieval failure must hard-error, never fall back to InsecureSkipVerify.
 func TestRemoveHAProxy_KubeVIPHealthcheck(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/healthz" {
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("ok"))
-		}
-	}))
-	t.Cleanup(srv.Close)
-
-	port := srv.Listener.Addr().(*net.TCPAddr).Port
-
-	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})
-	caData := base64.StdEncoding.EncodeToString(certPEM)
-	kubeconfig := "clusters:\n- cluster:\n    certificate-authority-data: " + caData + "\n  name: test\n"
+	port, kubeconfig := startHealthzTLS(t)
 
 	dir := t.TempDir()
-	authDir := filepath.Join(dir, "auth")
-	if err := os.MkdirAll(authDir, 0o700); err != nil {
-		t.Fatalf("mkdir auth: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(authDir, "kubeconfig"), []byte(kubeconfig), 0o600); err != nil {
-		t.Fatalf("write kubeconfig: %v", err)
-	}
+	writeAuthKubeconfig(t, dir, kubeconfig)
+	pointHAProxyAtPort(t, port)
 
-	origConfig := haproxyConfigPath
-	origPort := haproxyHealthPort
-	origTimeout := haproxyVIPTimeout
-	t.Cleanup(func() {
-		haproxyConfigPath = origConfig
-		haproxyHealthPort = origPort
-		haproxyVIPTimeout = origTimeout
-	})
-	haproxyConfigPath = filepath.Join(t.TempDir(), "haproxy.cfg")
-	haproxyHealthPort = port
-	haproxyVIPTimeout = 1 * time.Second
-
-	p := New(phase.WithExecutor(executor.New()), phase.WithLogger(logutil.NopLogger))
+	p := newTestPhase(t)
 	err := p.RemoveHAProxy(context.Background(), "127.0.0.1", dir)
 
 	var networkErr *errtypes.NetworkError
@@ -181,7 +148,7 @@ func TestRemoveHAProxy_KubeVIPHealthcheck(t *testing.T) {
 
 	t.Run("hard_errors_when_kubeconfig_absent", func(t *testing.T) {
 		emptyDir := t.TempDir()
-		p2 := New(phase.WithExecutor(executor.New()), phase.WithLogger(logutil.NopLogger))
+		p2 := newTestPhase(t)
 		err2 := p2.RemoveHAProxy(context.Background(), "127.0.0.1", emptyDir)
 
 		var cluster2 *errtypes.ClusterError

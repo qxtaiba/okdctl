@@ -1,23 +1,19 @@
 #!/usr/bin/env bash
-# Regenerates docs/assets/demo.gif from docs/assets/demo.tape.
-# Run from the repo root: scripts/demo/record.sh (or `make demo`).
-#
-# Requires: vhs (brew install vhs), go. The recording drives the real
-# wizard against a local fake Proxmox API; nothing touches a hypervisor
-# and nothing deploys (the tape quits from the review screen).
+# Regenerates docs/assets/demo.gif from docs/assets/demo.tape (or `make demo`).
+# Requires vhs + go; drives the real wizard against a fake Proxmox API — nothing
+# touches a hypervisor or deploys.
 set -euo pipefail
 
 command -v vhs >/dev/null || { echo "vhs not found — brew install vhs" >&2; exit 1; }
 
 ROOT="$(git rev-parse --show-toplevel)"
 WORK="$(mktemp -d -t okdctl-demo)"
-# Guard the kill: an unset PVE_PID (die before fakepve starts) must not let
-# errexit abort the handler before rm removes $WORK (holds a throwaway ed25519
-# key + dummy pull secret). || true keeps the handler's exit status clean.
+# Guards the kill: unset PVE_PID must not abort before rm cleans $WORK under
+# errexit; || true keeps the handler's exit clean.
 trap '[ -n "${PVE_PID:-}" ] && kill "$PVE_PID" 2>/dev/null || true; rm -rf "$WORK"' EXIT
 
-# Demo home: dummy pull secret + throwaway ssh key so the files step
-# validates without touching the operator's real credentials.
+# Dummy pull secret + throwaway ssh key so the files step validates without
+# touching real credentials.
 export OKDCTL_DEMO_HOME="$WORK/home"
 mkdir -p "$OKDCTL_DEMO_HOME/.ssh"
 echo '{"auths":{"fake":{"auth":"aWQ6cGFzcwo="}}}' > "$OKDCTL_DEMO_HOME/pull-secret.json"

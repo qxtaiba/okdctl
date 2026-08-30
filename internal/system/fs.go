@@ -43,17 +43,13 @@ func EnsureDir(path string) error {
 // EnsureDirForFile creates the parent directory of filePath, including any
 // missing intermediate directories, with mode 0o755.
 func EnsureDirForFile(filePath string) error {
-	dir := filepath.Dir(filePath)
-	return EnsureDir(dir)
+	return EnsureDir(filepath.Dir(filePath))
 }
 
 // WriteTempFile creates a temp file matching pattern with mode applied at
-// open time (no create-then-chmod window), then calls writeFn with the open
-// handle. On any error the file is closed and removed before returning. On
-// success, the caller owns cleanup (typically `defer os.Remove(path)`).
-//
-// Pattern follows os.CreateTemp semantics: if it contains "*", the last "*"
-// is replaced by a random numeric suffix; otherwise the suffix is appended.
+// open time (no create-then-chmod window), calls writeFn with the open
+// handle, and removes the file on any error. On success the caller owns
+// cleanup, typically via `defer os.Remove(path)`.
 func WriteTempFile(pattern string, mode os.FileMode, writeFn func(*os.File) error) (string, error) {
 	f, err := openTempFile("", pattern, mode)
 	if err != nil {
@@ -74,9 +70,8 @@ func WriteTempFile(pattern string, mode os.FileMode, writeFn func(*os.File) erro
 	return f.Name(), nil
 }
 
-// openTempFile opens a new exclusive temp file in dir (os.TempDir() if empty)
-// with mode set at open time. Replicates os.CreateTemp's "*" substitution and
-// collision-retry behaviour without leaving a create-then-chmod window.
+// openTempFile opens an exclusive temp file with mode set at open time,
+// replicating os.CreateTemp's "*" substitution without a create-then-chmod window.
 func openTempFile(dir, pattern string, mode os.FileMode) (*os.File, error) {
 	if dir == "" {
 		dir = os.TempDir()
@@ -97,12 +92,9 @@ func openTempFile(dir, pattern string, mode os.FileMode) (*os.File, error) {
 	return nil, fmt.Errorf("could not allocate temp file in %s after 10000 tries", dir)
 }
 
-// CopyFile copies src to dst, preserving the source file's permission bits.
-// The destination is opened with the correct mode at creation time via
-// CopyFileMode, so there is no window where dst is briefly world-readable
-// under a permissive umask. For credential-bearing files (kubeconfig,
-// install-config.yaml, private keys), prefer CopyFileMode with an explicit
-// 0o600.
+// CopyFile copies src to dst, preserving the source's permission bits via
+// CopyFileMode (no window where dst is briefly world-readable). For
+// credential-bearing files, prefer CopyFileMode with an explicit 0o600 instead.
 func CopyFile(src, dst string) error {
 	info, err := os.Stat(src)
 	if err != nil {
@@ -111,15 +103,10 @@ func CopyFile(src, dst string) error {
 	return CopyFileMode(src, dst, info.Mode().Perm())
 }
 
-// CopyFileMode copies src to dst, creating dst with the given mode applied
-// at open time (before any bytes are written). This avoids the race window
-// where a file created with a permissive umask is briefly world-readable
-// before a follow-up chmod narrows it. Use this for anything sensitive —
-// kubeconfigs, credential files, private keys.
-//
-// Close errors on the destination are surfaced: a failing Close can mask an
-// unflushed buffer or fsync problem, and silently discarding it would lose
-// a durability signal.
+// CopyFileMode copies src to dst, creating dst with mode applied at open
+// time so a permissive umask never leaves it briefly world-readable. Close
+// errors on the destination are surfaced rather than discarded, since a
+// failing Close can mask an unflushed buffer or fsync problem.
 func CopyFileMode(src, dst string, mode os.FileMode) error {
 	sourceFile, err := os.Open(src)
 	if err != nil {
@@ -131,8 +118,8 @@ func CopyFileMode(src, dst string, mode os.FileMode) error {
 		return fmt.Errorf("create destination directory: %w", err)
 	}
 
-	// O_NOFOLLOW rejects a symlink at dst; under the sudo re-exec model the
-	// open runs as root, so following a symlink would write to an attacker-chosen path.
+	// O_NOFOLLOW rejects a symlink at dst; under sudo re-exec the open runs
+	// as root, so following one would write to an attacker-chosen path.
 	if info, err := os.Lstat(dst); err == nil {
 		if info.Mode()&os.ModeSymlink != 0 {
 			return &errtypes.AuthError{
@@ -171,8 +158,8 @@ func CopyFileMode(src, dst string, mode os.FileMode) error {
 		return fmt.Errorf("sync destination file: %w", err)
 	}
 
-	// If dst pre-existed with different permissions, O_CREATE won't change
-	// them — tighten via the open fd so the chmod cannot follow a symlink.
+	// O_CREATE won't change pre-existing dst permissions; chmod via the open fd
+	// instead so it can't follow a symlink.
 	if err := destFile.Chmod(mode); err != nil {
 		return fmt.Errorf("set file permissions: %w", err)
 	}
@@ -186,11 +173,9 @@ func CopyFileMode(src, dst string, mode os.FileMode) error {
 	return nil
 }
 
-// SafeRemove removes path recursively; nil if path does not exist. Unlike
-// cleanup.SafeRemoveWithLogger it applies no critical-path or symlink guard,
-// and its os.Stat existence probe follows symlinks (a dangling symlink
-// returns nil with the link left on disk); callers must pass trusted,
-// internally-constructed paths.
+// SafeRemove removes path recursively, returning nil if it doesn't already
+// exist. Unlike cleanup.SafeRemoveWithLogger it has no critical-path or
+// symlink guard, so callers must pass only trusted, internally-constructed paths.
 func SafeRemove(path string) error {
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -199,9 +184,9 @@ func SafeRemove(path string) error {
 }
 
 // ExpandPath expands a leading `~/` to the invoking user's home directory.
-// Uses InvokingUserHomeDir so that hand-edited config values like
-// `~/pull-secret.json` resolve to the shell user's home even after the
-// deploy re-execs under sudo (where os.UserHomeDir would return /root).
+// Uses InvokingUserHomeDir so hand-edited paths resolve to the shell user's
+// home even after the deploy re-execs under sudo (os.UserHomeDir would
+// return /root there).
 func ExpandPath(path string) string {
 	if strings.HasPrefix(path, "~/") {
 		if home, err := InvokingUserHomeDir(); err == nil {
@@ -211,11 +196,10 @@ func ExpandPath(path string) string {
 	return path
 }
 
-// AtomicWrite writes data to path via a temp file in the same directory,
-// created with perm at open time, fsyncs it, then renames it into place.
-// Concurrent readers see either the old file or the new file, never a
-// partial write. The rename is only atomic on the same filesystem — the
-// temp file is created next to path to guarantee that.
+// AtomicWrite writes data to path via a temp file synced and renamed into
+// place, so concurrent readers see either the old file or the new file,
+// never a partial write. The temp file is created next to path (not in
+// os.TempDir) since rename is only atomic on the same filesystem.
 func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 	if err := EnsureDirForFile(path); err != nil {
 		return fmt.Errorf("create directory: %w", err)
@@ -267,10 +251,8 @@ func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 		return fmt.Errorf("rename temp file: %w", err)
 	}
 
-	// fsync the parent so the rename's directory-entry update is crash-
-	// durable. Without this, post-crash the listing can still point at
-	// the old name — matters for kubeconfig / .env / install-config.yaml
-	// which are consumed immediately after AtomicWrite returns.
+	// fsyncs the parent so the rename survives a crash; kubeconfig/.env/
+	// install-config.yaml are read immediately after this returns.
 	if err := fsyncDir(dir); err != nil {
 		return fmt.Errorf("fsync directory: %w", err)
 	}
@@ -279,8 +261,7 @@ func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 	return nil
 }
 
-// fsyncDir opens dir read-only and calls fsync so the directory inode
-// update from a rename is crash-durable.
+// fsyncDir fsyncs dir so a preceding rename's directory-entry update is crash-durable.
 func fsyncDir(dir string) error {
 	f, err := os.OpenFile(dir, os.O_RDONLY|syscall.O_DIRECTORY, 0)
 	if err != nil {
@@ -294,8 +275,8 @@ func fsyncDir(dir string) error {
 	return closeErr
 }
 
-// AtomicWriteString is a string-typed convenience wrapper around
-// AtomicWrite; the fsync + rename invariants are the same.
+// AtomicWriteString is a string-typed convenience wrapper around AtomicWrite;
+// the fsync + rename invariants are the same.
 func AtomicWriteString(path, content string, perm os.FileMode) error {
 	return AtomicWrite(path, []byte(content), perm)
 }
@@ -312,11 +293,10 @@ func IsDirWritable(dir string) bool {
 	return true
 }
 
-// MakeExecutable adds the owner/group/other execute bits to path's existing
-// mode. Equivalent to `chmod +x` but without a subprocess. The mode read and
-// the mode write both go through one O_NOFOLLOW descriptor so they provably
-// address a single inode — no stat/chmod TOCTOU window, and a symlink at
-// path is refused rather than followed.
+// MakeExecutable adds owner/group/other execute bits to path's existing mode
+// (chmod +x without a subprocess). The read and write both go through one
+// O_NOFOLLOW descriptor, so there's no stat/chmod TOCTOU window and a
+// symlink at path is refused rather than followed.
 func MakeExecutable(path string) error {
 	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
 	if err != nil {
@@ -330,10 +310,10 @@ func MakeExecutable(path string) error {
 	return f.Chmod(info.Mode().Perm() | 0o111)
 }
 
-// ChownByName chowns path to the given user:group string. Both parts must
-// be present; numeric-only forms are rejected so config typos surface as
-// errors rather than silently chowning to UID 0. Uses Lchown so a symlink
-// planted at path is chowned itself, not its target.
+// ChownByName chowns path to a user:group spec (both parts required;
+// numeric-only forms are rejected so typos surface as errors, not a silent
+// chown to UID 0). Uses Lchown so a symlink planted at path is chowned
+// itself, not its target.
 func ChownByName(path, ownerSpec string) error {
 	userName, groupName, ok := strings.Cut(ownerSpec, ":")
 	if !ok || userName == "" || groupName == "" {

@@ -23,18 +23,17 @@ const (
 	phaseVersionSelect
 )
 
-// DistributionStep is the bubbletea step that lets the user pick an OKD
-// version, with on-demand release fetching and grouped minor/patch display.
+// DistributionStep lets the user pick an OKD version via on-demand release
+// fetching and grouped minor/patch display.
 type DistributionStep struct {
 	wizard.BaseStep
 	versionSelector *components.Selector
 	phase           selectionPhase
 	selectedVersion string
 
-	// OKD version fetching
 	versionFetcher *releases.OKDVersionFetcher
 	okdSeries      []releases.OKDReleaseSeries
-	expandedMinor  int // Which minor version is expanded (-1 = none, show only latest per minor)
+	expandedMinor  int // -1 = none expanded (show latest per minor)
 	loadingSpinner spinner.Model
 	loadError      error
 }
@@ -170,10 +169,8 @@ func (s *DistributionStep) handleNavigationKey(msg tea.KeyPressMsg) (wizard.Wiza
 	return s, tea.Batch(cmds...)
 }
 
-// syncSelectedVersion sets s.selectedVersion to whatever the cursor is on:
-// the patch version for a patch row, or the latest patch for a minor row.
-// Called after every cursor move so the live cfg / context badge tracks
-// the cursor like SelectField's Value() does (cursor IS the live pick).
+// syncSelectedVersion mirrors SelectField.Value(): latest patch for an
+// unexpanded minor row, else the cursor's exact ID.
 func (s *DistributionStep) syncSelectedVersion(selected *components.Option) {
 	if selected == nil || selected.ID == "" {
 		return

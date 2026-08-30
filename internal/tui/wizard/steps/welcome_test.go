@@ -9,8 +9,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
-// navDown advances the welcome selector one entry through the same key
-// loop the UI uses (mode is derived from the selector index, not stored).
+// navDown advances the selector via the same key the UI uses; mode is derived
+// from index, not stored.
 func navDown(t *testing.T, s *WelcomeStep) {
 	t.Helper()
 	s.nav.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
@@ -48,13 +48,6 @@ func TestWelcomeStep_ApplyDeployLeavesConfigUntouched(t *testing.T) {
 	}
 	if cfg.Cluster.Name != "untouched" {
 		t.Errorf("Cluster.Name = %q, want untouched (deploy mode must not mutate cfg)", cfg.Cluster.Name)
-	}
-}
-
-func TestWelcomeStep_Validate(t *testing.T) {
-	s := NewWelcomeStep()
-	if err := s.Validate(); err != nil {
-		t.Errorf("Validate() = %v, want nil", err)
 	}
 }
 

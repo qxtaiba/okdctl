@@ -17,9 +17,9 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// nodeISOFingerprint hashes the coreos-installer inputs for one node ISO. The
-// base ISO path (filename encodes the CoreOS version) is used instead of its
-// content to avoid hashing a multi-GB file on every invocation.
+// nodeISOFingerprint hashes the coreos-installer inputs for one node ISO,
+// using the base ISO's path (filename encodes its version) instead of
+// hashing the multi-GB file itself.
 func nodeISOFingerprint(liveKargs, destKargs []string, sshKey, basePath string) string {
 	h := sha256.New()
 	_, _ = fmt.Fprintf(
@@ -32,10 +32,10 @@ func nodeISOFingerprint(liveKargs, destKargs []string, sshKey, basePath string) 
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// BuildCustomISOs produces a per-node CoreOS ISO with coreos-installer that
-// embeds the node's ignition URL, role, and static-IP kernel arguments. A
-// node whose output ISO and .fp-<name> fingerprint both match the current
-// inputs is skipped; the fingerprint is written after a successful build.
+// BuildCustomISOs produces a per-node CoreOS ISO with coreos-installer,
+// embedding the node's ignition URL, role, and static-IP kernel arguments.
+// A node whose output ISO and .fp-<name> fingerprint both match current
+// inputs is skipped.
 func (p *Provisioner) BuildCustomISOs(ctx context.Context, cfg *config.Config, opts Options) error {
 	isoDir := filepath.Join(opts.WorkDir, "custom-isos")
 	if err := system.EnsureDir(isoDir); err != nil {
@@ -120,18 +120,9 @@ func (p *Provisioner) BuildCustomISOs(ctx context.Context, cfg *config.Config, o
 	return nil
 }
 
-func writePreInstallScript(script string) (string, error) {
-	return system.WriteTempFile("pre-install-*.sh", 0o750, func(f *os.File) error {
-		if _, err := f.WriteString(script); err != nil {
-			return fmt.Errorf("write pre-install script: %w", err)
-		}
-		return nil
-	})
-}
-
 // ignitionConfig is a narrow subset of the Ignition v3.3 spec — only the
-// fields writeInstallerTriggerIgnition emits. See
-// https://coreos.github.io/ignition/specs/v3.3.0/ for the full schema.
+// fields writeInstallerTriggerIgnition emits. Full schema:
+// https://coreos.github.io/ignition/specs/v3.3.0/
 type ignitionConfig struct {
 	Ignition ignitionMeta    `json:"ignition"`
 	Storage  ignitionStorage `json:"storage"`
@@ -165,9 +156,9 @@ type ignitionUser struct {
 	SSHAuthorizedKeys []string `json:"sshAuthorizedKeys"`
 }
 
-// writeInstallerTriggerIgnition creates a temp Ignition config that seeds
-// /etc/coreos/installer.d/ so coreos-installer.service's
-// ConditionDirectoryNotEmpty is satisfied before systemd evaluates it.
+// writeInstallerTriggerIgnition seeds /etc/coreos/installer.d/ so
+// coreos-installer.service's ConditionDirectoryNotEmpty is satisfied before
+// systemd evaluates it.
 func writeInstallerTriggerIgnition(sshKey string) (string, error) {
 	ign := ignitionConfig{
 		Ignition: ignitionMeta{Version: "3.3.0"},
@@ -230,15 +221,14 @@ func (p *Provisioner) buildNodeISO(ctx context.Context, cfg *config.Config, node
 	for _, karg := range BuildDestKargs(kargsParams) {
 		args = append(args, "--dest-karg-append", karg)
 	}
-	// --ignition-ca embeds the CA PEM into the live env's Ignition trust
-	// store, so the HTTPS fetch of the per-node .ign payload succeeds without
-	// any external PKI. The kernel command line has no equivalent karg —
-	// see coreos-installer iso customize docs.
+	// --ignition-ca embeds the CA PEM into the live env's trust store so the
+	// HTTPS .ign fetch succeeds without external PKI — there's no equivalent
+	// kernel karg.
 	args = append(args, "--ignition-ca", caCertPath)
 
-	// All nodes use a pre-install script that discovers the OS disk by serial
-	// via lsblk. Workers also get the data disk wiped; for bootstrap/masters
-	// the data serial is absent so the wipe is safely skipped.
+	// All nodes discover the OS disk by serial via lsblk; workers also wipe
+	// the data disk, safely skipped for bootstrap/masters where the data
+	// serial is absent.
 	script, err := templates.RenderPreInstall(templates.PreInstallData{
 		OSSerial:   "OS-DISK",
 		DataSerial: "CEPH-DATA",
@@ -246,16 +236,21 @@ func (p *Provisioner) buildNodeISO(ctx context.Context, cfg *config.Config, node
 	if err != nil {
 		return err
 	}
-	scriptPath, err := writePreInstallScript(script)
+	scriptPath, err := system.WriteTempFile("pre-install-*.sh", 0o750, func(f *os.File) error {
+		if _, werr := f.WriteString(script); werr != nil {
+			return fmt.Errorf("write pre-install script: %w", werr)
+		}
+		return nil
+	})
 	if err != nil {
 		return err
 	}
 	defer func() { _ = os.Remove(scriptPath) }()
 
-	// Live ignition seeds /etc/coreos/installer.d/ so coreos-installer.service
-	// starts (its ConditionDirectoryNotEmpty fires before the pre-install
-	// script can populate it). Using a karg like coreos.inst.install_dev
-	// would override the serial-based disk discovery in the pre-install script.
+	// Live ignition seeds /etc/coreos/installer.d/ so
+	// coreos-installer.service's ConditionDirectoryNotEmpty fires before the
+	// pre-install script populates it; a karg like coreos.inst.install_dev
+	// would override the serial-based disk discovery instead.
 	triggerPath, err := writeInstallerTriggerIgnition(sshKey)
 	if err != nil {
 		return err
@@ -270,7 +265,7 @@ func (p *Provisioner) buildNodeISO(ctx context.Context, cfg *config.Config, node
 
 	_, err = p.Exec.RunChecked(ctx, "coreos-installer", args...)
 	if err != nil {
-		return &errtypes.ClusterError{Msg: "coreos-installer failed", Err: err}
+		return &errtypes.ClusterError{Msg: "run coreos-installer", Err: err}
 	}
 
 	if writeErr := system.AtomicWriteString(fpFile, fp, 0o644); writeErr != nil {

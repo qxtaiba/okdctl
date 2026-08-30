@@ -8,43 +8,44 @@ import (
 	"testing"
 )
 
-// TestIsRetryable_PerAttemptTimeoutRetries locks the fix for the
-// cancellation-identity trap: net/http makes a Client.Timeout error satisfy
-// errors.Is(err, context.DeadlineExceeded), so a per-attempt HTTP deadline
-// must stay retryable rather than aborting the loop it exists for.
-func TestIsRetryable_PerAttemptTimeoutRetries(t *testing.T) {
-	timeout := fmt.Errorf("Get %q: %w", "https://mirror.invalid/f", context.DeadlineExceeded)
-	if !isRetryable(timeout) {
-		t.Fatalf("isRetryable(client-timeout) = false; want true (per-attempt HTTP deadline must retry)")
+// Locks the DeadlineExceeded-vs-Canceled retry-classification trap (see isRetryable).
+func TestIsRetryable(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "per-attempt timeout retries",
+			err:  fmt.Errorf("Get %q: %w", "https://mirror.invalid/f", context.DeadlineExceeded),
+			want: true,
+		},
+		{
+			name: "caller cancel aborts",
+			err:  fmt.Errorf("Get: %w", context.Canceled),
+			want: false,
+		},
+		{
+			name: "client error fails fast",
+			err:  &HTTPStatusError{Status: http.StatusNotFound, Method: http.MethodGet, URL: "https://mirror.invalid/f"},
+			want: false,
+		},
+		{
+			name: "server error retries",
+			err:  &HTTPStatusError{Status: http.StatusBadGateway, Method: http.MethodGet, URL: "https://mirror.invalid/f"},
+			want: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isRetryable(tc.err); got != tc.want {
+				t.Fatalf("isRetryable(%v) = %v; want %v", tc.err, got, tc.want)
+			}
+		})
 	}
 }
 
-// TestIsRetryable_CallerCancelAborts holds the must-preserve contract:
-// genuine caller cancellation (Ctrl-C) aborts immediately.
-func TestIsRetryable_CallerCancelAborts(t *testing.T) {
-	if isRetryable(fmt.Errorf("Get: %w", context.Canceled)) {
-		t.Fatalf("isRetryable(context.Canceled) = true; want false (caller cancel must abort)")
-	}
-}
-
-func TestIsRetryable_ClientErrorFailsFast(t *testing.T) {
-	notFound := &HTTPStatusError{Status: http.StatusNotFound, Method: http.MethodGet, URL: "https://mirror.invalid/f"}
-	if isRetryable(notFound) {
-		t.Fatalf("isRetryable(404) = true; want false (4xx fails fast)")
-	}
-}
-
-func TestIsRetryable_ServerErrorRetries(t *testing.T) {
-	serverErr := &HTTPStatusError{Status: http.StatusBadGateway, Method: http.MethodGet, URL: "https://mirror.invalid/f"}
-	if !isRetryable(serverErr) {
-		t.Fatalf("isRetryable(502) = false; want true")
-	}
-}
-
-// TestHTTPStatusError_ErrorScrubsURLAndBody guards the sink path a
-// NetworkError wrap defeats: Error() must strip the URL query token and mask
-// key-shaped secrets in the body so the raw string is safe wherever the wrap
-// chain is stringified.
+// Guards the sink path a NetworkError wrap defeats — Error() must scrub URL/body itself.
 func TestHTTPStatusError_ErrorScrubsURLAndBody(t *testing.T) {
 	e := &HTTPStatusError{
 		Status: http.StatusForbidden,
@@ -71,15 +72,30 @@ func TestRedactURL_Unparseable(t *testing.T) {
 	}
 }
 
-func TestHTTPStatusError_RedactedStillOmitsURLAndBody(t *testing.T) {
-	e := &HTTPStatusError{
-		Status: http.StatusForbidden,
-		Method: http.MethodGet,
-		URL:    "https://mirror.invalid/f?token=hunter2",
-		Body:   "hunter2 rejected",
+// Locks the slog-sink contract: Redacted carries status/method only.
+func TestHTTPStatusError_RedactedOmitsURLAndBody(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"body with token keyword", "token hunter2 rejected"},
+		{"body without token keyword", "hunter2 rejected"},
 	}
-	got := fmt.Sprint(e.Redacted())
-	if strings.Contains(got, "hunter2") || strings.Contains(got, "mirror.invalid") {
-		t.Fatalf("Redacted() = %q; must omit URL and body", got)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := &HTTPStatusError{
+				Status: http.StatusForbidden,
+				Method: http.MethodGet,
+				URL:    "https://mirror.invalid/f?token=hunter2",
+				Body:   tc.body,
+			}
+			got := fmt.Sprint(e.Redacted())
+			if strings.Contains(got, "hunter2") || strings.Contains(got, "mirror.invalid") {
+				t.Fatalf("Redacted() = %q; must omit URL and body", got)
+			}
+			if !strings.Contains(got, "403") || !strings.Contains(got, http.MethodGet) {
+				t.Errorf("Redacted() = %q; want status and method preserved", got)
+			}
+		})
 	}
 }

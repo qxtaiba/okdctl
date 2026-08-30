@@ -5,13 +5,10 @@ package infrastructure
 
 import "embed"
 
-// TerraformFS holds the deployable Terraform tree: the proxmox-okd module
-// and the production environment, including the committed provider lock
-// file. Paths are relative to this directory. Runtime artifacts (tfvars,
-// tfstate, .terraform/) are deliberately absent; the embed list is explicit
-// so a dirty dev checkout can never leak them into the binary.
-// TestEmbeddedTerraformMatchesDisk fails when a new source file under
-// terraform/modules or terraform/environments is missing from this list.
+// TerraformFS holds the deployable Terraform tree — the proxmox-okd module
+// and production environment, including the provider lock file. Runtime
+// artifacts (tfvars, tfstate, .terraform/) are deliberately excluded so a
+// dirty dev checkout can't leak into the binary.
 //
 //go:embed terraform/modules/proxmox-okd/main.tf
 //go:embed terraform/modules/proxmox-okd/ha.tf
