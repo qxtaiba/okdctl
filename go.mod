@@ -8,7 +8,7 @@ require (
 	charm.land/bubbles/v2 v2.2.1
 	charm.land/bubbletea/v2 v2.0.9
 	charm.land/lipgloss/v2 v2.0.6
-	charm.land/log/v2 v2.0.0
+	charm.land/log/v2 v2.0.1
 	github.com/luthermonson/go-proxmox v0.8.1
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/crypto v0.55.0
@@ -38,7 +38,7 @@ require (
 	github.com/diskfs/go-diskfs v1.9.3 // indirect
 	github.com/djherbis/times v1.6.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.1 // indirect
-	github.com/go-logfmt/logfmt v0.6.0 // indirect
+	github.com/go-logfmt/logfmt v0.6.1 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
