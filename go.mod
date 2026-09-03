@@ -11,7 +11,7 @@ require (
 	charm.land/log/v2 v2.0.0
 	github.com/luthermonson/go-proxmox v0.8.1
 	github.com/spf13/cobra v1.10.2
-	golang.org/x/crypto v0.55.0
+	golang.org/x/crypto v0.56.0
 	golang.org/x/mod v0.38.0
 	golang.org/x/term v0.45.0
 	k8s.io/api v0.37.0
