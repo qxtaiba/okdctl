@@ -1,0 +1,25 @@
+                                                                                      
+  ╭────────────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L                                                                    │  
+  │ okd over proxmox, the easy way       ●─●─●─●─●─●─●─●─●─●─● step 11 of 11       │  
+  │──────────────────────────────────────────────────────────────────────────      │  
+  │  review your configuration                                                     │  
+  │                                                                                │  
+  │  [1] cluster identity                                                          │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄            │  
+  │  name              mycluster                                                   │  
+  │  domain            k8s.local                                                   │  
+  │  distribution      OKD 4.22.0-okd-scos.7                                       │  
+  │                                                                                │  
+  │  [2] proxmox                                                                   │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄            │  
+  │  host              192.168.1.100:8006                                          │  
+  │  bootstrap node    pve                                                         │  
+  │  bridge            vmbr0                                                       │  
+  │  storage           local-lvm                                                   │  
+  │  iso storage       local                                                       │  
+  │─────────────────────── ↑ ↓  scroll down for more ─── ▸ okd 4.22.0-okd-scos.7   │  
+  │   ↑↓  select action    enter  confirm    esc  back    ctrl+c  quit             │  
+  │  1-9  jump to section                                                          │  
+  ╰────────────────────────────────────────────────────────────────────────────────╯  
+                                                                                      
