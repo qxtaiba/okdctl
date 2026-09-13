@@ -86,3 +86,32 @@ func TestMultiSelectField_ValueRoundTrip(t *testing.T) {
 		t.Fatalf("Value() after left+space = %q, want vmbr1,vmbr2", got)
 	}
 }
+
+func TestMultiSelectField_OversizedChipIsEllipsizedNotSplit(t *testing.T) {
+	f := NewMultiSelectField("additional networks", []string{"extremely-long-bridge-interface-name-that-overflows-the-box"})
+	f.SetWidth(20)
+
+	rows := strings.Split(tuitest.StripANSI(f.View()), "\n")
+	boxRows := rows[1:]
+
+	if !strings.HasPrefix(boxRows[0], "╭") {
+		t.Fatalf("box top row = %q, want to start with ╭", boxRows[0])
+	}
+	last := boxRows[len(boxRows)-1]
+	if !strings.HasPrefix(last, "╰") {
+		t.Fatalf("box bottom row = %q, want to start with ╰", last)
+	}
+	for _, r := range boxRows {
+		if got := lipgloss.Width(r); got != 20 {
+			t.Fatalf("row %q width = %d, want 20", r, got)
+		}
+	}
+
+	contentRows := boxRows[1 : len(boxRows)-1]
+	if len(contentRows) != 1 {
+		t.Fatalf("content rows = %d, want 1 (an oversized chip must not split across rows)", len(contentRows))
+	}
+	if !strings.Contains(contentRows[0], "[ ]") || !strings.Contains(contentRows[0], "…") {
+		t.Fatalf("content row = %q, want the checkbox and an ellipsized name on the same row", contentRows[0])
+	}
+}

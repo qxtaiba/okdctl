@@ -147,9 +147,15 @@ func (f *MultiSelectField) View() string {
 	return out
 }
 
+// chipCoreWidth is the width of every chip's cursor ("> " or "  ") plus
+// checkbox ("[✓]" or "[ ]") plus the space before the option name.
+const chipCoreWidth = 2 + 3 + 1
+
 // chipsContent renders every option as a cursor+checkbox+name chip, wrapping
-// chip-by-chip to a new row whenever the next chip would push the row past
-// innerWidth; a chip is never split mid-glyph.
+// at chip boundaries to a new row whenever the next chip would push the row
+// past innerWidth; a chip that alone would exceed innerWidth has its name
+// ellipsized to fit one row, since fieldBox's own lipgloss Width() re-wraps
+// (mid-word) any content line it receives that is still too wide.
 func (f *MultiSelectField) chipsContent(innerWidth int) string {
 	checkedStyle := lipgloss.NewStyle().Foreground(tui.ColorSuccess)
 	uncheckedStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
@@ -169,7 +175,12 @@ func (f *MultiSelectField) chipsContent(innerWidth int) string {
 		if i < len(f.selected) && f.selected[i] {
 			checkbox = checkedStyle.Render("[" + tui.IconSuccess + "]")
 		}
-		chip := cursor + checkbox + " " + opt
+
+		name := opt
+		if nameBudget := innerWidth - chipCoreWidth; lipgloss.Width(name) > nameBudget {
+			name = ellipsize(name, nameBudget)
+		}
+		chip := cursor + checkbox + " " + name
 		chipWidth := lipgloss.Width(chip)
 
 		if row.Len() > 0 && rowWidth+2+chipWidth > innerWidth {
@@ -188,4 +199,23 @@ func (f *MultiSelectField) chipsContent(innerWidth int) string {
 		rows = append(rows, row.String())
 	}
 	return strings.Join(rows, "\n")
+}
+
+// ellipsize rune-safely clips s to fit within maxWidth visible columns,
+// appending "…" when it clips.
+func ellipsize(s string, maxWidth int) string {
+	if maxWidth <= 0 {
+		return ""
+	}
+	if lipgloss.Width(s) <= maxWidth {
+		return s
+	}
+	runes := []rune(s)
+	for i := len(runes) - 1; i > 0; i-- {
+		candidate := string(runes[:i]) + "…"
+		if lipgloss.Width(candidate) <= maxWidth {
+			return candidate
+		}
+	}
+	return "…"
 }
