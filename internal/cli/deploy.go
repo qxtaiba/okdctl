@@ -62,7 +62,7 @@ without deploying.`,
 }
 
 func init() {
-	deployCmd.Flags().StringVar(&deployOutputFile, flagOutputFile, "okdctl.yaml", "config file to write wizard output to; reuses and reads back an existing file at this path, otherwise creates one; overrides --config when both are set")
+	deployCmd.Flags().StringVar(&deployOutputFile, flagOutputFile, "okdctl.yaml", "config file to write wizard output to (reused if present; overrides --config)")
 	deployCmd.Flags().BoolVar(&deployMinimal, "minimal", false, "use minimal defaults (single-node cluster)")
 	deployCmd.Flags().BoolVarP(&deployYes, "yes", "y", false, "skip the wizard and deploy from the existing configuration file (requires --confirm-cluster)")
 	deployCmd.Flags().StringVar(&deployConfirmCluster, "confirm-cluster", "",
@@ -71,7 +71,7 @@ func init() {
 	deployCmd.MarkFlagsMutuallyExclusive("yes", "write-config")
 	deployCmd.Flags().BoolVar(&deployDryRun, flagDryRun, false, "preview terraform plan and step listing without deploying")
 	deployCmd.Flags().BoolVar(&deployFresh, "fresh", false, "wipe the work directory even when live cluster state is detected (credentials will be lost)")
-	deployCmd.Flags().BoolVar(&deployKeepRedHatCatalogs, "keep-redhat-catalogs", false, "keep the redhat-operators, certified-operators, and redhat-marketplace OperatorHub catalogsources and the InsightsDisabled alert enabled (both require a Red Hat subscription OKD clusters don't have)")
+	deployCmd.Flags().BoolVar(&deployKeepRedHatCatalogs, "keep-redhat-catalogs", false, "keep the Red Hat OperatorHub catalogsources and the InsightsDisabled alert")
 	deployCmd.Flags().BoolVar(&deployAcknowledgeInterrupted, "acknowledge-interrupted-op", false, "deploy despite an in-flight node op marker (deploy would otherwise refuse: reconciling mid-op destroys the in-flight node)")
 }
 

@@ -144,11 +144,11 @@ dry-run previews the terraform-destroy plan; the --skip-* flags resume a
 partial terraform-destroy — the two address different failure points and
 cannot be combined (see the --dry-run incompatibility check).
 
-A scoped destroy (--target or --only) only tears down the named Terraform
-resources; host cleanup (haproxy/dnsmasq config, kubeconfig, terraform state
-files), firewall rules, and Proxmox ISO removal are skipped automatically for
-a scoped run — that bastion-wide teardown runs only on an unscoped destroy,
-so it never touches a still-running control plane.
+A scoped destroy (--target or --only, which are mutually exclusive) only tears
+down the named Terraform resources; host cleanup (haproxy/dnsmasq config,
+kubeconfig, terraform state files), firewall rules, and Proxmox ISO removal are
+skipped automatically for a scoped run — that bastion-wide teardown runs only on
+an unscoped destroy, so it never touches a still-running control plane.
 
 Master nodes ship with prevent_destroy = true in the Terraform module to
 guard against accidental etcd-quorum loss. A fully-confirmed destroy
@@ -181,7 +181,7 @@ func init() {
 	destroyCmd.Flags().StringArrayVar(&destroyTargets, flagTarget, nil,
 		"limit terraform destroy to this resource address (repeatable); must match the okd_cluster VM allowlist; scopes cleanup/firewall/iso removal off automatically")
 	destroyCmd.Flags().StringVar(&destroyOnly, flagOnly, "",
-		"scope destroy to a node group: "+strings.Join(validDestroyScopes(), ", ")+" (expands into --target; mutually exclusive with --target; scopes cleanup/firewall/iso removal off automatically)")
+		"scope destroy to a node group: "+strings.Join(validDestroyScopes(), ", ")+" (expands into --target)")
 	destroyCmd.MarkFlagsMutuallyExclusive(flagOnly, flagTarget)
 	_ = destroyCmd.RegisterFlagCompletionFunc(flagOnly, func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		return validDestroyScopes(), cobra.ShellCompDirectiveNoFileComp
