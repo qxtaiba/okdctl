@@ -439,7 +439,7 @@ func init() {
 	// contradicting the auto-switch prose; keep in sync with the flag's Usage
 	// string
 	rootCmd.PersistentFlags().Lookup(flagLogFormat).DefValue = ""
-	rootCmd.PersistentFlags().StringVar(&logFile, flagLogFile, "", "write log output to this file in addition to stderr (replaces the default okdctl.log sink of deploy/destroy/cleanup)")
+	rootCmd.PersistentFlags().StringVar(&logFile, flagLogFile, "", "also write logs to this file (replaces the default okdctl.log of deploy/destroy/cleanup)")
 	rootCmd.PersistentFlags().BoolVarP(&logQuiet, flagQuiet, "q", false, "suppress info/warn logs (alias for --log-level=error)")
 	rootCmd.PersistentFlags().BoolVarP(&logVerbose, flagVerbose, "v", false, "enable debug logging (alias for --log-level=debug)")
 	rootCmd.MarkFlagsMutuallyExclusive(flagQuiet, flagVerbose)
@@ -458,8 +458,5 @@ func init() {
 	rootCmd.AddCommand(updateIngressCmd)
 	rootCmd.AddCommand(versionCmd)
 
-	// versionText is registered as a template func rather than baked in here
-	// so --version renders after flags parse (colour gates included).
-	cobra.AddTemplateFunc("versionText", versionText)
-	rootCmd.SetVersionTemplate("{{versionText}}")
+	installHelp(rootCmd)
 }

@@ -12,11 +12,11 @@ dry-run previews the terraform-destroy plan; the --skip-* flags resume a
 partial terraform-destroy — the two address different failure points and
 cannot be combined (see the --dry-run incompatibility check).
 
-A scoped destroy (--target or --only) only tears down the named Terraform
-resources; host cleanup (haproxy/dnsmasq config, kubeconfig, terraform state
-files), firewall rules, and Proxmox ISO removal are skipped automatically for
-a scoped run — that bastion-wide teardown runs only on an unscoped destroy,
-so it never touches a still-running control plane.
+A scoped destroy (--target or --only, which are mutually exclusive) only tears
+down the named Terraform resources; host cleanup (haproxy/dnsmasq config,
+kubeconfig, terraform state files), firewall rules, and Proxmox ISO removal are
+skipped automatically for a scoped run — that bastion-wide teardown runs only on
+an unscoped destroy, so it never touches a still-running control plane.
 
 Master nodes ship with prevent_destroy = true in the Terraform module to
 guard against accidental etcd-quorum loss. A fully-confirmed destroy
@@ -50,7 +50,7 @@ okdctl destroy [flags]
       --dry-run                  preview terraform destroy plan without running destroy
   -h, --help                     help for destroy
       --keep-isos                do not remove the FCOS ISO from the Proxmox host (always true for a scoped --target/--only destroy)
-      --only string              scope destroy to a node group: vms, workers, masters, bootstrap (expands into --target; mutually exclusive with --target; scopes cleanup/firewall/iso removal off automatically)
+      --only string              scope destroy to a node group: vms, workers, masters, bootstrap (expands into --target)
       --skip-cleanup             skip host file cleanup — leaves haproxy/dnsmasq config in place (no-op with --dry-run; always true for a scoped --target/--only destroy)
       --skip-firewall            skip firewall rule cleanup (no-op with --dry-run; always true for a scoped --target/--only destroy)
       --skip-terraform           skip terraform destroy — intended for resuming after a successful terraform-destroy phase (no-op with --dry-run)
@@ -62,7 +62,7 @@ okdctl destroy [flags]
 
 ```
   -c, --config string       configuration file (default "okdctl.yaml")
-      --log-file string     write log output to this file in addition to stderr (replaces the default okdctl.log sink of deploy/destroy/cleanup)
+      --log-file string     also write logs to this file (replaces the default okdctl.log of deploy/destroy/cleanup)
       --log-format string   log output format: text (TTY default) | json (auto-selected when stderr is piped)
       --log-level string    log verbosity (debug, info, warn, error) (default "info")
       --no-color            disable colour and progress output (same as NO_COLOR=1)

@@ -30,7 +30,7 @@ okdctl releases show <version> [flags]
 
 ```
   -c, --config string       configuration file (default "okdctl.yaml")
-      --log-file string     write log output to this file in addition to stderr (replaces the default okdctl.log sink of deploy/destroy/cleanup)
+      --log-file string     also write logs to this file (replaces the default okdctl.log of deploy/destroy/cleanup)
       --log-format string   log output format: text (TTY default) | json (auto-selected when stderr is piped)
       --log-level string    log verbosity (debug, info, warn, error) (default "info")
       --no-color            disable colour and progress output (same as NO_COLOR=1)
