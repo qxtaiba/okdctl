@@ -173,8 +173,9 @@ type StepCompleteMsg struct {
 // StepBackMsg signals that the wizard should step back one position.
 type StepBackMsg struct{}
 
-// ErrorSetMsg signals an error to display in the wizard's footer, emitted
-// when a ConfigApplier returns an error during a step transition.
+// ErrorSetMsg signals an error to display in the wizard's status row, emitted
+// on a failed step-level validation or when a ConfigApplier returns an error
+// during a step transition.
 type ErrorSetMsg struct {
 	Error error
 }

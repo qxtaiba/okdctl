@@ -179,9 +179,11 @@ func TestDataDrivenStep_UpdateEnterValidatesThenCompletes(t *testing.T) {
 
 	enter := tea.KeyPressMsg{Code: tea.KeyEnter}
 
-	// Required "name" is empty: enter must fail validation and not advance.
-	if _, cmd := step.Update(enter); cmd != nil {
-		t.Fatal("Update(enter) with empty required field: want nil cmd, got non-nil")
+	// Required "name" is empty: enter must fail validation and emit an error, not advance.
+	if _, cmd := step.Update(enter); cmd == nil {
+		t.Fatal("Update(enter) with empty required field: want error cmd, got nil")
+	} else if _, ok := cmd().(ErrorSetMsg); !ok {
+		t.Fatalf("Update(enter) with empty required field emitted %T, want ErrorSetMsg", cmd())
 	}
 
 	step.setValue("name", "cluster-a")
@@ -198,10 +200,28 @@ func TestDataDrivenStep_UpdateEnterValidatesThenCompletes(t *testing.T) {
 		t.Errorf("StepCompleteMsg.StepID = %q, want %q", complete.StepID, StepIDBasics)
 	}
 
-	// Definition-level Validate rejects "forbidden": enter must not advance.
+	// Definition-level Validate rejects "forbidden": enter must emit an error, not advance.
 	step.setValue("name", "forbidden")
-	if _, cmd := step.Update(enter); cmd != nil {
-		t.Fatal("Update(enter) with definition-forbidden value: want nil cmd, got non-nil")
+	if _, cmd := step.Update(enter); cmd == nil {
+		t.Fatal("Update(enter) with definition-forbidden value: want error cmd, got nil")
+	} else if _, ok := cmd().(ErrorSetMsg); !ok {
+		t.Fatalf("Update(enter) with definition-forbidden value emitted %T, want ErrorSetMsg", cmd())
+	}
+}
+
+func TestDataDrivenStep_EnterDefinitionErrorEmitsErrorSetMsg(t *testing.T) {
+	def := testStepDefinition()
+	def.Validate = func(map[string]string) error { return errors.New("name is forbidden") }
+	s := NewDataDrivenStep(def)
+	s.SetFocused(true)
+	s.setValue("name", "cluster-a") // required field must pass before definition-level Validate runs
+
+	_, cmd := s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected a cmd")
+	}
+	if msg, ok := cmd().(ErrorSetMsg); !ok || msg.Error.Error() != "name is forbidden" {
+		t.Fatalf("msg = %#v", cmd())
 	}
 }
 

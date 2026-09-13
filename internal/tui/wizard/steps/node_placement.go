@@ -259,7 +259,7 @@ func (s *NodePlacementStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 			return s, cmd
 		}
 		if err := s.inner.Validate(); err != nil {
-			return s, nil
+			return s, func() tea.Msg { return wizard.ErrorSetMsg{Error: err} }
 		}
 		return s, func() tea.Msg {
 			return wizard.StepCompleteMsg{StepID: s.ID()}

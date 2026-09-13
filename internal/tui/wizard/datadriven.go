@@ -517,7 +517,7 @@ func (s *DataDrivenStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 		return s, cmd
 	}
 	if err := s.Validate(); err != nil {
-		return s, nil
+		return s, func() tea.Msg { return ErrorSetMsg{Error: err} }
 	}
 	return s, func() tea.Msg {
 		return StepCompleteMsg{StepID: s.ID()}

@@ -191,6 +191,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyPressMsg:
+		m.err = nil
+
 		if key.Matches(msg, m.keyMap.Quit) {
 			if len(m.steps) > 0 && m.currentStep < len(m.steps) {
 				if g, ok := m.steps[m.currentStep].(QuitGuard); ok && g.InterceptQuit() {
