@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"os"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -12,6 +13,10 @@ import (
 // wizardDemoEnv enables README-demo recording mode: blank fields, no sudo
 // re-exec (see scripts/demo/record.sh).
 const wizardDemoEnv = "OKDCTL_WIZARD_DEMO"
+
+// wizardDemoReleasesEnv set to "fail" forces the demo distribution step's
+// release fetch into its error state, for the error-state screenshot fixture.
+const wizardDemoReleasesEnv = "OKDCTL_DEMO_RELEASES"
 
 func runWizardWithMode(ctx context.Context, cfg *config.Config, configExists bool) (wizard.Result, steps.WelcomeMode, error) {
 	wizardCfg := wizard.DefaultConfig()
@@ -43,6 +48,7 @@ func buildWizardStepsWithState(wizardCfg wizard.Config) wizard.BuiltSteps {
 	built := wizard.BuildSteps(wizardCfg, builder)
 
 	configureWelcomeStep(built, wizardCfg.ConfigExists)
+	configureDemoVersionFetcher(built)
 
 	if wizardCfg.InitialConfig != nil {
 		if os.Getenv(wizardDemoEnv) == "" {
@@ -58,6 +64,28 @@ func configureWelcomeStep(built wizard.BuiltSteps, configExists bool) {
 	for _, step := range built.Steps {
 		if ws, ok := step.(*steps.WelcomeStep); ok {
 			ws.SetConfigExists(configExists)
+			break
+		}
+	}
+}
+
+// configureDemoVersionFetcher injects a deterministic release-catalog
+// fixture under OKDCTL_WIZARD_DEMO, bypassing the network for demo
+// recordings and screenshots; OKDCTL_DEMO_RELEASES=fail additionally forces
+// the distribution step's error state.
+func configureDemoVersionFetcher(built wizard.BuiltSteps) {
+	if os.Getenv(wizardDemoEnv) == "" {
+		return
+	}
+
+	var fetcher steps.VersionFetcher = steps.StaticVersionFetcher{Series: steps.DemoReleaseSeries()}
+	if os.Getenv(wizardDemoReleasesEnv) == "fail" {
+		fetcher = steps.StaticVersionFetcher{Err: errors.New("demo: releases unavailable")}
+	}
+
+	for _, step := range built.Steps {
+		if ds, ok := step.(*steps.DistributionStep); ok {
+			ds.SetVersionFetcher(fetcher)
 			break
 		}
 	}
