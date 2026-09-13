@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -35,6 +36,7 @@ var (
 	logFile    string
 	logQuiet   bool
 	logVerbose bool
+	noColor    bool
 )
 
 // startLogged records that the "okdctl: started" bookend fired, keeping "finished" symmetric.
@@ -176,7 +178,7 @@ func execute() (code int) {
 		return exitCodeFor(err)
 	}
 
-	printUpdateNotice(updateCh)
+	printUpdateNotice(os.Stderr, updateCh)
 	return 0
 }
 
@@ -209,7 +211,9 @@ func signalLoop(sigCh <-chan os.Signal, cancel context.CancelFunc, caughtSig *at
 	exit(130)
 }
 
-func printUpdateNotice(ch <-chan version.CheckResult) {
+// printUpdateNotice writes the update-available banner to w, downsampling
+// every styled line so it stays plain under NO_COLOR/--no-color.
+func printUpdateNotice(w io.Writer, ch <-chan version.CheckResult) {
 	if logQuiet || logFormat == tui.FormatJSON {
 		return
 	}
@@ -224,12 +228,12 @@ func printUpdateNotice(ch <-chan version.CheckResult) {
 	if result.LatestTag == "" {
 		return
 	}
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, tui.WarningStyle.Render("update available:")+" "+
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, tui.Downsample(tui.WarningStyle.Render("update available:")+" "+
 		tui.MutedStyle.Render(version.Version)+" → "+
-		tui.HighlightStyle.Render(result.LatestTag))
-	fmt.Fprintln(os.Stderr, tui.MutedStyle.Render("  to upgrade (sha256 + cosign verified):"))
-	fmt.Fprintln(os.Stderr, tui.MutedStyle.Render("  curl -sSfL https://raw.githubusercontent.com/qxtaiba/okdctl/develop/scripts/install.sh | bash"))
+		tui.HighlightStyle.Render(result.LatestTag)))
+	fmt.Fprintln(w, tui.Downsample(tui.MutedStyle.Render("  to upgrade (sha256 + cosign verified):")))
+	fmt.Fprintln(w, tui.Downsample(tui.MutedStyle.Render("  curl -sSfL https://raw.githubusercontent.com/qxtaiba/okdctl/develop/scripts/install.sh | bash")))
 }
 
 // announceFailure renders the boxed ErrorSummary on a TTY, else logs "command
@@ -379,11 +383,12 @@ func versionText() string {
 	for _, r := range rows {
 		b.WriteString("  " + tui.DottedKeyValueFull(r[0], r[1], keyCol, 0) + "\n")
 	}
-	return b.String()
+	return tui.Downsample(b.String())
 }
 
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, flagConfig, flagConfigShort, "okdctl.yaml", "configuration file")
+	rootCmd.PersistentFlags().BoolVar(&noColor, flagNoColor, false, "disable colour and progress output (same as NO_COLOR=1)")
 	rootCmd.PersistentFlags().StringVar(&logLevel, flagLogLevel, "info", "log verbosity (debug, info, warn, error)")
 	_ = rootCmd.RegisterFlagCompletionFunc(flagLogLevel,
 		cobra.FixedCompletions([]string{"debug", "info", "warn", "error"}, cobra.ShellCompDirectiveNoFileComp))
@@ -413,5 +418,8 @@ func init() {
 	rootCmd.AddCommand(updateIngressCmd)
 	rootCmd.AddCommand(versionCmd)
 
-	rootCmd.SetVersionTemplate(versionText())
+	// versionText is registered as a template func rather than baked in here
+	// so --version renders after flags parse (colour gates included).
+	cobra.AddTemplateFunc("versionText", versionText)
+	rootCmd.SetVersionTemplate("{{versionText}}")
 }

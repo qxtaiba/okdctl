@@ -17,6 +17,8 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/version"
 )
 
 // tripwire: pflag embeds flag values in error text (unscrubbed UsageError.Msg);
@@ -287,5 +289,37 @@ func TestFlagErrorFuncReturnsUsageErrorWithHelpHint(t *testing.T) {
 	}
 	if buf.Len() != 0 {
 		t.Fatalf("FlagErrorFunc must not log directly; buffer = %q", buf.String())
+	}
+}
+
+func TestPrintUpdateNoticeNoANSIUnderNoColor(t *testing.T) {
+	prevQuiet, prevFormat := logQuiet, logFormat
+	logQuiet, logFormat = false, outputText
+	t.Cleanup(func() { logQuiet, logFormat = prevQuiet, prevFormat })
+
+	tui.SetColorProfileFor(&bytes.Buffer{}) // a buffer is never a TTY
+	t.Cleanup(func() { tui.SetColorProfileFor(&bytes.Buffer{}) })
+
+	ch := make(chan version.CheckResult, 1)
+	ch <- version.CheckResult{LatestTag: "v9.9.9"}
+
+	var out bytes.Buffer
+	printUpdateNotice(&out, ch)
+
+	if strings.Contains(out.String(), "\x1b[") {
+		t.Errorf("printUpdateNotice leaked ANSI escapes under a no-color profile:\n%q", out.String())
+	}
+	if !strings.Contains(out.String(), "v9.9.9") {
+		t.Errorf("printUpdateNotice output missing latest tag:\n%s", out.String())
+	}
+}
+
+func TestNoColorFlagIsLongFormOnly(t *testing.T) {
+	f := rootCmd.PersistentFlags().Lookup(flagNoColor)
+	if f == nil {
+		t.Fatal("--no-color flag not registered")
+	}
+	if f.Shorthand != "" {
+		t.Fatalf("--no-color has shorthand %q, want none (shorthand allowlist is closed)", f.Shorthand)
 	}
 }

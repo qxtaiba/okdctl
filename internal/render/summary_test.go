@@ -1,12 +1,14 @@
 package render
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
+	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 func TestValidationSummary(t *testing.T) {
@@ -22,6 +24,19 @@ func TestValidationSummary(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("invalid summary missing %q:\n%s", want, out)
 		}
+	}
+}
+
+func TestValidationSummaryNoANSIUnderNoColor(t *testing.T) {
+	tui.SetColorProfileFor(&bytes.Buffer{}) // a buffer is never a TTY
+	t.Cleanup(func() { tui.SetColorProfileFor(&bytes.Buffer{}) })
+
+	invalid := &config.ValidationResult{}
+	invalid.AddError("cluster.name", "must not be empty")
+	out := ValidationSummary(invalid)
+
+	if strings.Contains(out, "\x1b[") {
+		t.Errorf("ValidationSummary leaked ANSI escapes under a no-color profile:\n%q", out)
 	}
 }
 
