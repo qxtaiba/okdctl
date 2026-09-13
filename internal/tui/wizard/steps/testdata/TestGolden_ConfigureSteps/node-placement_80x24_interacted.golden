@@ -1,10 +1,8 @@
                                                                                 
   ╭──────────────────────────────────────────────────────────────────────────╮  
   │ O K D C T L                                                              │  
-  │ okd over proxmox, the easy way        ●─●─●─●─●─○─○─○─○─○─○ step 5 of 11 │  
+  │ configure proxmox infrastructure     ●─●─●─●─●─○─○─○─○─○─○  step 5 of 11 │  
   │──────────────────────────────────────────────────────────────────────────│  
-  │  configure proxmox infrastructure                                        │  
-  │                                                                          │  
   │    discovered 2 node(s), 3 storage pool(s), 2 bridge(s)                  │  
   │                                                                          │  
   │                                                                          │  
@@ -17,6 +15,8 @@
   │                                                                          │  
   │    additional networks (extra bridges to attach to all vms — leave       │  
   │  empty for none) (j/k navigate, space toggle)                            │  
+  │    > [ ] vmbr0                                                           │  
+  │      [ ] vmbr1                                                           │  
   │                                                                          │  
   │─────────────────────── ↑ ↓  scroll down for more ─── ▸ okd 4.22.0-okd-   │  
   │scos.7                                                                    │  

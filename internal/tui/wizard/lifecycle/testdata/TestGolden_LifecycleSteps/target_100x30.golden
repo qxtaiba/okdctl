@@ -1,10 +1,8 @@
                                                                                                     
   ╭──────────────────────────────────────────────────────────────────────────────────────────────╮  
   │ O K D C T L                                                                                  │  
-  │ okd over proxmox, the easy way                                           ●─●─○─○ step 2 of 4 │  
+  │ which nodes should be resized?                                          ●─●─○─○  step 2 of 4 │  
   │──────────────────────────────────────────────────────────────────────────────────────────────│  
-  │  which nodes should be resized?                                                              │  
-  │                                                                                              │  
   │  ● masters — all 1 control-plane nodes                                                       │  
   │    │ rolled one at a time; etcd-gated before and after every node                            │  
   │    │                                                                                         │  
@@ -15,6 +13,8 @@
   │    │   │                                                                                     │  
   │    │ ○ homelab-worker0        worker   ready                                                 │  
   │    └────────────────────                                                                     │  
+  │                                                                                              │  
+  │                                                                                              │  
   │                                                                                              │  
   │                                                                                              │  
   │                                                                                              │  

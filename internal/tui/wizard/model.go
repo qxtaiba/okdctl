@@ -15,7 +15,7 @@ const (
 	minTerminalWidth  = 60
 	minTerminalHeight = 20
 
-	headerHeight = 3 // logo + tagline + step indicator
+	headerHeight = 3 // brand row + title/trail row + bottom rule
 	statusHeight = 1
 	// footer is 2 rows: the scroll-indicator line (also the top divider) + the help bar.
 	footerHeight         = 2
@@ -42,8 +42,8 @@ type centerable interface {
 	IsCentered() bool
 }
 
-// displayTitler is implemented by steps with prompt text above the content;
-// empty DisplayTitle skips rendering.
+// displayTitler is implemented by steps with a header prompt distinct from
+// their Title(); an empty DisplayTitle falls back to Title() instead.
 type displayTitler interface {
 	DisplayTitle() string
 }

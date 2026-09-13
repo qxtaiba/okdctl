@@ -107,7 +107,8 @@ func NewBaseStep(id StepID, title, description string) BaseStep {
 }
 
 // NewBaseStepWithDisplayTitle returns a BaseStep with a separate
-// displayTitle (above the step body) plus title (in the progress indicator).
+// displayTitle (shown in the header) plus title (the progress-indicator
+// fallback used when displayTitle is empty).
 func NewBaseStepWithDisplayTitle(id StepID, title, displayTitle, description string) BaseStep {
 	return BaseStep{
 		id:           id,
@@ -125,8 +126,8 @@ func (b *BaseStep) ID() StepID { return b.id }
 // Title returns the progress-indicator title.
 func (b *BaseStep) Title() string { return b.title }
 
-// DisplayTitle returns the title shown above the step body; an empty
-// string skips title rendering.
+// DisplayTitle returns the title shown in the header; an empty string
+// falls back to Title().
 func (b *BaseStep) DisplayTitle() string { return b.displayTitle }
 
 // IsFocused reports whether the step currently owns input focus.
