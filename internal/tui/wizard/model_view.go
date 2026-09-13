@@ -42,9 +42,7 @@ func (m *Model) View() tea.View {
 	content.WriteString("\n")
 	content.WriteString(m.viewport.View())
 	content.WriteString("\n")
-	// Status row placeholder: Task 4 renders step-level errors here; until
-	// then a blank line holds the row so fixedLayoutOverhead stays accurate.
-	content.WriteString(strings.Repeat(" ", m.contentWidth()))
+	content.WriteString(m.statusRow())
 	content.WriteString("\n")
 	content.WriteString(m.renderFooter())
 
@@ -65,6 +63,18 @@ func (m *Model) contentWidth() int {
 		width = minTerminalWidth - 6
 	}
 	return width
+}
+
+// statusRow is always exactly one row so the frame never grows; blank when clear.
+func (m *Model) statusRow() string {
+	width := m.contentWidth()
+	if m.err == nil {
+		return ""
+	}
+	// Padding is inert under Inline (lipgloss v2 skips it), so the 2-space
+	// inset — matching the body's viewport inset — is prepended literally.
+	style := lipgloss.NewStyle().Foreground(tui.ColorError).Inline(true).MaxWidth(width - 2)
+	return "  " + style.Render(tui.IconError+" "+m.err.Error())
 }
 
 func (m *Model) contentDimensions() (width, height int) {

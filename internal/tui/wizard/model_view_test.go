@@ -1,9 +1,11 @@
 package wizard
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -44,5 +46,39 @@ func TestModel_ViewportHeightBudget(t *testing.T) {
 		if got := m.viewport.Height(); got != sz[1]-fixedLayoutOverhead {
 			t.Errorf("%v viewport height %d", sz, got)
 		}
+	}
+}
+
+func TestModel_StatusRowIsBudgeted(t *testing.T) {
+	for _, sz := range [][2]int{{80, 24}, {100, 30}, {120, 40}} {
+		m := NewModel([]WizardStep{newNopStep()}, config.DefaultConfig())
+		before := strings.Count(tuitest.RenderAt(t, m, sz[0], sz[1]), "\n")
+		m.Update(ErrorSetMsg{Error: errors.New("boom")})
+		after := strings.Count(m.View().Content, "\n")
+		if before != after {
+			t.Fatalf("%v: rows %d → %d", sz, before, after)
+		}
+		if !strings.Contains(tuitest.StripANSI(m.View().Content), "✗ boom") {
+			t.Fatalf("%v: status row missing", sz)
+		}
+	}
+}
+
+func TestModel_StatusRowClearsOnKeypress(t *testing.T) {
+	m := NewModel([]WizardStep{newNopStep()}, config.DefaultConfig())
+	tuitest.RenderAt(t, m, 100, 30)
+	m.Update(ErrorSetMsg{Error: errors.New("boom")})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	if strings.Contains(tuitest.StripANSI(m.View().Content), "boom") {
+		t.Fatal("status row did not clear")
+	}
+}
+
+func TestModel_StatusRowTruncatesLongError(t *testing.T) {
+	for _, sz := range [][2]int{{80, 24}, {100, 30}, {120, 40}} {
+		m := NewModel([]WizardStep{newNopStep()}, config.DefaultConfig())
+		tuitest.RenderAt(t, m, sz[0], sz[1])
+		m.Update(ErrorSetMsg{Error: errors.New(strings.Repeat("x", 300))})
+		tuitest.AssertFits(t, m.View().Content, sz[0], sz[1])
 	}
 }

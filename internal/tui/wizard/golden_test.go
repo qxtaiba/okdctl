@@ -1,6 +1,7 @@
 package wizard
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
@@ -30,4 +31,15 @@ func TestGolden_ChromeOnly(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("error", func(t *testing.T) {
+		cfg := config.DefaultConfig()
+		cfg.Cluster.Name = "homelab"
+		m := NewFlowModel([]WizardStep{newNopStep()}, cfg, DefaultChrome())
+		tuitest.RenderAt(t, m, 100, 30)
+		m.Update(ErrorSetMsg{Error: errors.New("boom")})
+		frame := m.View().Content
+		tuitest.Golden(t, "chrome_error_100x30", frame)
+		tuitest.AssertFits(t, frame, 100, 30)
+	})
 }
