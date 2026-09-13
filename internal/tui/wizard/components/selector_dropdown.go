@@ -121,8 +121,11 @@ func (s *Selector) getDropdownBounds() (start, end int) {
 	return start, end
 }
 
-func (s *Selector) renderDropdownRegion(start, end int, scrollStyle, borderStyle *lipgloss.Style) []string {
-	var lines []string
+// renderDropdownRegion renders the dropdown's border and visible options,
+// returning the index within lines of the selected option, or -1 when the
+// selection sits outside the visible window.
+func (s *Selector) renderDropdownRegion(start, end int, scrollStyle, borderStyle *lipgloss.Style) (lines []string, selectedRow int) {
+	selectedRow = -1
 
 	visibleStart := start + s.dropdownScrollOffset
 	visibleEnd := min(visibleStart+maxDropdownVisible-1, end)
@@ -143,6 +146,9 @@ func (s *Selector) renderDropdownRegion(start, end int, scrollStyle, borderStyle
 		isSelected := i == s.selected
 		isLast := i == visibleEnd
 		optView := s.renderOptionWithPrefix(opt, isSelected, !isLast, dropdownPrefix)
+		if isSelected {
+			selectedRow = len(lines)
+		}
 		lines = append(lines, optView)
 	}
 
@@ -153,5 +159,5 @@ func (s *Selector) renderDropdownRegion(start, end int, scrollStyle, borderStyle
 	bottomBorder += strings.Repeat("─", dropdownBorderWidth)
 	lines = append(lines, borderStyle.Render(bottomBorder))
 
-	return lines
+	return lines, selectedRow
 }

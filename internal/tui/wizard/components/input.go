@@ -340,16 +340,17 @@ func (g *InputGroup) Update(msg tea.Msg) (*InputGroup, tea.Cmd) {
 	return g, cmd
 }
 
+// FieldViews renders each field in order; View is exactly these joined by a
+// blank row, so callers may index into the group's rendering field by field.
+func (g *InputGroup) FieldViews() []string {
+	views := make([]string, len(g.fields))
+	for i, f := range g.fields {
+		views[i] = f.View()
+	}
+	return views
+}
+
 // View renders the group's fields separated by blank lines.
 func (g *InputGroup) View() string {
-	var lines []string
-
-	for i, f := range g.fields {
-		lines = append(lines, f.View())
-		if i < len(g.fields)-1 {
-			lines = append(lines, "")
-		}
-	}
-
-	return strings.Join(lines, "\n")
+	return strings.Join(g.FieldViews(), "\n\n")
 }

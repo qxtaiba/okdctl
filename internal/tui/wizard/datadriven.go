@@ -103,16 +103,14 @@ type MultiSectionForm struct {
 	sections       []FormSection
 	currentSection int
 
-	// totalFieldsCache caches the field count for emitFocusChanged; -1 means uncomputed.
-	totalFieldsCache int
+	// spans[section][field] is the line range that field occupied in the last
+	// View; empty until the form has rendered once.
+	spans [][]LineSpan
 }
 
 // NewMultiSectionForm wraps sections in a form focused on the first section.
 func NewMultiSectionForm(sections []FormSection) *MultiSectionForm {
-	return &MultiSectionForm{
-		sections:         sections,
-		totalFieldsCache: -1,
-	}
+	return &MultiSectionForm{sections: sections}
 }
 
 // CurrentSection returns the index of the section that currently owns focus.
@@ -191,17 +189,16 @@ func (f *MultiSectionForm) Update(msg tea.Msg) (cmd tea.Cmd, enterPressed bool) 
 				group.Blur()
 				f.currentSection++
 				nextGroup := f.currentGroup()
-				focusCmd := f.emitFocusChanged()
 				if nextGroup == nil {
-					return focusCmd, false
+					return focusChanged, false
 				}
 				nextGroup.SetFocusIndex(0)
-				return tea.Batch(nextGroup.Focus(), focusCmd), false
+				return tea.Batch(nextGroup.Focus(), focusChanged), false
 			}
 
 			var groupCmd tea.Cmd
 			f.sections[f.currentSection].Group, groupCmd = group.Update(msg)
-			return tea.Batch(groupCmd, f.emitFocusChanged()), false
+			return tea.Batch(groupCmd, focusChanged), false
 
 		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("shift+tab", "up"))):
 			isFirstField := group.FocusIndex() == 0
@@ -215,17 +212,16 @@ func (f *MultiSectionForm) Update(msg tea.Msg) (cmd tea.Cmd, enterPressed bool) 
 				group.Blur()
 				f.currentSection--
 				prevGroup := f.currentGroup()
-				focusCmd := f.emitFocusChanged()
 				if prevGroup == nil {
-					return focusCmd, false
+					return focusChanged, false
 				}
 				prevGroup.SetFocusIndex(len(prevGroup.Fields()) - 1)
-				return tea.Batch(prevGroup.Focus(), focusCmd), false
+				return tea.Batch(prevGroup.Focus(), focusChanged), false
 			}
 
 			var groupCmd tea.Cmd
 			f.sections[f.currentSection].Group, groupCmd = group.Update(msg)
-			return tea.Batch(groupCmd, f.emitFocusChanged()), false
+			return tea.Batch(groupCmd, focusChanged), false
 		}
 	}
 
@@ -234,35 +230,22 @@ func (f *MultiSectionForm) Update(msg tea.Msg) (cmd tea.Cmd, enterPressed bool) 
 	return groupCmd, false
 }
 
-func (f *MultiSectionForm) emitFocusChanged() tea.Cmd {
-	globalIndex := 0
-	for i := range f.currentSection {
-		if f.sections[i].Group == nil {
-			continue
-		}
-		globalIndex += len(f.sections[i].Group.Fields())
-	}
-	if current := f.currentGroup(); current != nil {
-		globalIndex += current.FocusIndex()
-	}
+// focusChanged is the tea.Cmd every focus-moving widget returns.
+func focusChanged() tea.Msg { return FocusChangedMsg{} }
 
-	if f.totalFieldsCache < 0 {
-		total := 0
-		for _, section := range f.sections {
-			if section.Group != nil {
-				total += len(section.Group.Fields())
-			}
-		}
-		f.totalFieldsCache = total
+// FocusedSpan returns the line range the focused field occupied in the last
+// View, or false when the form has not rendered or owns no focused field.
+func (f *MultiSectionForm) FocusedSpan() (LineSpan, bool) {
+	group := f.currentGroup()
+	if group == nil || f.currentSection < 0 || f.currentSection >= len(f.spans) {
+		return LineSpan{}, false
 	}
-	totalFields := f.totalFieldsCache
-
-	return func() tea.Msg {
-		return FocusChangedMsg{
-			FieldIndex:  globalIndex,
-			TotalFields: totalFields,
-		}
+	spans := f.spans[f.currentSection]
+	index := group.FocusIndex()
+	if index < 0 || index >= len(spans) {
+		return LineSpan{}, false
 	}
+	return spans[index], true
 }
 
 // Validate returns the first error from any section's group validation, or nil
@@ -279,47 +262,76 @@ func (f *MultiSectionForm) Validate() error {
 	return nil
 }
 
-// View renders each section with its active/completed/pending indicator.
-func (f *MultiSectionForm) View(width int) string {
-	innerWidth := width - 4
-	if innerWidth < 40 {
-		innerWidth = 40
+// innerWidth is the width left to a section's fields inside its horizontal padding.
+func (f *MultiSectionForm) innerWidth(width int) int {
+	return max(width-4, 40)
+}
+
+// sectionHead renders section i's status indicator, title, and optional note.
+func (f *MultiSectionForm) sectionHead(i int) string {
+	section := &f.sections[i]
+
+	var indicator string
+	switch {
+	case i == f.currentSection:
+		indicator = formViewStyles.activeRender
+	case section.isComplete():
+		indicator = formViewStyles.completedRender
+	default:
+		indicator = formViewStyles.pendingRender
 	}
 
-	var content strings.Builder
+	head := indicator + " " + formViewStyles.sectionHeader.Render(strings.ToLower(section.Title))
+	if section.Note != "" {
+		head += "\n" + formViewStyles.note.Render(section.Note)
+	}
+	return head
+}
 
-	for i, section := range f.sections {
-		if section.Group == nil {
+// View renders each section as a head block followed by one block per field,
+// one blank row apart, recording the line span every field occupies so the
+// wizard can scroll the focused one into view.
+func (f *MultiSectionForm) View(width int) string {
+	f.spans = make([][]LineSpan, len(f.sections))
+	innerWidth := f.innerWidth(width)
+
+	var b strings.Builder
+	// The form opens and closes with the blank row the section padding used
+	// to contribute, so the first block starts at line 1.
+	line := 1
+	emit := func(block string) LineSpan {
+		if b.Len() > 0 {
+			b.WriteString("\n\n")
+			line++
+		}
+		block = formViewStyles.section.Render(block)
+		height := lipgloss.Height(block)
+		b.WriteString(block)
+		span := LineSpan{Start: line, End: line + height - 1}
+		line += height
+		return span
+	}
+
+	for i := range f.sections {
+		group := f.sections[i].Group
+		if group == nil {
 			continue
 		}
-		section.Group.SetWidth(innerWidth)
+		group.SetWidth(innerWidth)
 
-		var style lipgloss.Style
-		var indicator string
+		_ = emit(f.sectionHead(i))
 
-		switch {
-		case i == f.currentSection:
-			style = formViewStyles.activeSection
-			indicator = formViewStyles.activeRender
-		case section.isComplete():
-			style = formViewStyles.inactiveSection
-			indicator = formViewStyles.completedRender
-		default:
-			style = formViewStyles.inactiveSection
-			indicator = formViewStyles.pendingRender
+		views := group.FieldViews()
+		f.spans[i] = make([]LineSpan, len(views))
+		for j, view := range views {
+			f.spans[i][j] = emit(view)
 		}
-
-		sectionTitle := indicator + " " + formViewStyles.sectionHeader.Render(strings.ToLower(section.Title))
-		var sectionContent string
-		if section.Note != "" {
-			sectionContent = sectionTitle + "\n" + formViewStyles.note.Render(section.Note) + "\n\n" + section.Group.View()
-		} else {
-			sectionContent = sectionTitle + "\n\n" + section.Group.View()
-		}
-		content.WriteString(style.Render(sectionContent))
 	}
 
-	return content.String()
+	if b.Len() == 0 {
+		return ""
+	}
+	return "\n" + b.String() + "\n"
 }
 
 type fieldLocation struct {
@@ -556,6 +568,12 @@ func (s *DataDrivenStep) Apply(cfg *config.Config) error {
 	return nil
 }
 
+// FocusedSpan reports the line range the focused field occupied in the last
+// View; the form's blocks start at the step's own line 0, so no offset applies.
+func (s *DataDrivenStep) FocusedSpan() (LineSpan, bool) {
+	return s.form.FocusedSpan()
+}
+
 // ShouldShow reports whether this step is visible given the current cfg.
 func (s *DataDrivenStep) ShouldShow(cfg *config.Config) bool {
 	if s.definition.ShouldShow != nil {
@@ -568,8 +586,7 @@ func (s *DataDrivenStep) ShouldShow(cfg *config.Config) bool {
 // tui.Color* values never change after init.
 var formViewStyles = struct {
 	sectionHeader   lipgloss.Style
-	activeSection   lipgloss.Style
-	inactiveSection lipgloss.Style
+	section         lipgloss.Style
 	completedRender string
 	activeRender    string
 	pendingRender   string
@@ -578,10 +595,8 @@ var formViewStyles = struct {
 	sectionHeader: lipgloss.NewStyle().
 		Foreground(tui.ColorCyan500).
 		Bold(true),
-	activeSection: lipgloss.NewStyle().
-		Padding(1, 2),
-	inactiveSection: lipgloss.NewStyle().
-		Padding(1, 2),
+	section: lipgloss.NewStyle().
+		PaddingLeft(2),
 	completedRender: lipgloss.NewStyle().
 		Foreground(tui.ColorSuccess).
 		Bold(true).

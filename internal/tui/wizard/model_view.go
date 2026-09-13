@@ -112,8 +112,6 @@ func (m *Model) syncViewportContent() {
 		innerWidth = 40
 	}
 
-	var content strings.Builder
-
 	stepContent := step.View(innerWidth, 1000)
 
 	if c, ok := step.(centerable); ok && c.IsCentered() {
@@ -136,14 +134,33 @@ func (m *Model) syncViewportContent() {
 			Render(stepContent)
 	}
 
-	content.WriteString(stepContent)
+	padded, rows := padContent(stepContent, contentWidth)
+	m.contentRows = rows
+	m.viewport.SetContent(padded)
+}
 
-	paddingStyle := lipgloss.NewStyle().
+// padContent insets each step line into a width-wide content column and
+// records the viewport row each one starts on: the column width wraps an
+// over-wide line into several rows, which would otherwise desynchronise a
+// step's LineSpan indices from the viewport's. Rendering line by line matches
+// rendering the whole block.
+func padContent(content string, width int) (padded string, rows []int) {
+	style := lipgloss.NewStyle().
 		PaddingLeft(2).
 		PaddingRight(2).
-		Width(contentWidth)
-	paddedContent := paddingStyle.Render(content.String())
-	m.viewport.SetContent(paddedContent)
+		Width(width)
+
+	lines := strings.Split(content, "\n")
+	rows = make([]int, len(lines)+1)
+
+	out := make([]string, 0, len(lines))
+	for i, line := range lines {
+		rows[i] = len(out)
+		out = append(out, strings.Split(style.Render(line), "\n")...)
+	}
+	rows[len(lines)] = len(out)
+
+	return strings.Join(out, "\n"), rows
 }
 
 // renderHeader draws the two-row header: brand (+ tagline on the first

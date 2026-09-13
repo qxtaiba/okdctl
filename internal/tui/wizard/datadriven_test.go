@@ -2,11 +2,14 @@ package wizard
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
 )
 
 const testValYes = "yes"
@@ -280,4 +283,110 @@ func TestSetIntSetBool(t *testing.T) {
 			t.Errorf("SetBool(%q) did not set false", falsy)
 		}
 	}
+}
+
+func newSpanTestForm() *MultiSectionForm {
+	return NewMultiSectionForm([]FormSection{
+		{
+			Title: "section one",
+			Note:  "a note",
+			Group: components.NewInputGroup(
+				components.NewInputField("name", "cluster"),
+				components.NewInputField("domain", "example.com"),
+				components.NewSelectField("approve", []string{"no", testValYes}),
+			),
+		},
+		{
+			Title: "section two",
+			Group: components.NewInputGroup(
+				components.NewInputField("gateway", "10.0.0.1"),
+				components.NewInputField("bastion", "10.0.0.2"),
+				components.NewSelectField("mode", []string{"a", "b"}),
+			),
+		},
+	})
+}
+
+func TestMultiSectionForm_SpansCoverEveryFieldWithoutOverlap(t *testing.T) {
+	f := newSpanTestForm()
+	lines := strings.Split(f.View(80), "\n")
+
+	prev := -1
+	for si := range f.spans {
+		for fi, sp := range f.spans[si] {
+			if sp.Start <= prev {
+				t.Fatalf("span %d/%d starts at %d, not after %d", si, fi, sp.Start, prev)
+			}
+			if fi > 0 && sp.Start-prev != 2 {
+				t.Fatalf("gap before span %d/%d is %d rows, want 1 blank row", si, fi, sp.Start-prev-1)
+			}
+			if got, want := sp.End-sp.Start+1, lipgloss.Height(f.FieldAt(si, fi).View()); got != want {
+				t.Fatalf("span %d/%d is %d rows, want %d", si, fi, got, want)
+			}
+			if strings.TrimSpace(lines[sp.Start]) == "" {
+				t.Fatalf("span %d/%d starts on a blank line", si, fi)
+			}
+			if strings.TrimSpace(lines[sp.End]) == "" {
+				t.Fatalf("span %d/%d ends on a blank line", si, fi)
+			}
+			if strings.TrimSpace(lines[sp.Start-1]) != "" {
+				t.Fatalf("row above span %d/%d is not blank: %q", si, fi, lines[sp.Start-1])
+			}
+			if strings.TrimSpace(lines[sp.End+1]) != "" {
+				t.Fatalf("row below span %d/%d is not blank: %q", si, fi, lines[sp.End+1])
+			}
+			prev = sp.End
+		}
+	}
+}
+
+func TestMultiSectionForm_FocusedSpanFollowsFocus(t *testing.T) {
+	f := newSpanTestForm()
+	_ = f.Focus()
+	_ = f.View(80)
+
+	span, ok := f.FocusedSpan()
+	if !ok || span != f.spans[0][0] {
+		t.Fatalf("FocusedSpan() = %+v, %v; want %+v", span, ok, f.spans[0][0])
+	}
+
+	tab := tea.KeyPressMsg{Code: tea.KeyTab}
+	for range 3 {
+		f.Update(tab)
+	}
+	_ = f.View(80)
+
+	span, ok = f.FocusedSpan()
+	if !ok || span != f.spans[1][0] {
+		t.Fatalf("after 3 tabs FocusedSpan() = %+v, %v; want %+v", span, ok, f.spans[1][0])
+	}
+}
+
+func TestMultiSectionForm_TabEmitsFocusChanged(t *testing.T) {
+	f := newSpanTestForm()
+	_ = f.Focus()
+
+	cmd, _ := f.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if !containsFocusChanged(cmd) {
+		t.Fatal("tab did not emit FocusChangedMsg")
+	}
+}
+
+// containsFocusChanged runs cmd, flattening batches, and reports whether any
+// resulting message is a FocusChangedMsg.
+func containsFocusChanged(cmd tea.Cmd) bool {
+	if cmd == nil {
+		return false
+	}
+	switch msg := cmd().(type) {
+	case FocusChangedMsg:
+		return true
+	case tea.BatchMsg:
+		for _, c := range msg {
+			if containsFocusChanged(c) {
+				return true
+			}
+		}
+	}
+	return false
 }

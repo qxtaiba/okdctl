@@ -182,10 +182,22 @@ type ErrorSetMsg struct {
 }
 
 // FocusChangedMsg signals that focus has moved within the active step; the
-// wizard uses this to auto-scroll the focused field into view.
-type FocusChangedMsg struct {
-	FieldIndex  int
-	TotalFields int
+// wizard resyncs the viewport and scrolls the focused field into view.
+type FocusChangedMsg struct{}
+
+// LineSpan is an inclusive range of 0-based line indices into a step's
+// View() output.
+type LineSpan struct {
+	Start int
+	End   int
+}
+
+// SpanProvider is implemented by steps that can report which lines of their
+// View() the focused field occupies; the wizard scrolls that span into view
+// on FocusChangedMsg. Spans are recorded during View, so a step that has
+// not rendered yet reports false.
+type SpanProvider interface {
+	FocusedSpan() (LineSpan, bool)
 }
 
 // ConfigSyncMsg requests step.Apply(cfg) on the active step without

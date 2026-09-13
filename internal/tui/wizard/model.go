@@ -56,6 +56,11 @@ type Model struct {
 	viewport viewport.Model
 	ready    bool
 
+	// contentRows[i] is the viewport row the active step's View line i starts
+	// on; a step line wider than the content column wraps into several rows,
+	// so the two index spaces differ. Length is line count + 1.
+	contentRows []int
+
 	steps       []WizardStep
 	currentStep int
 
@@ -229,8 +234,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case FocusChangedMsg:
+		// Resync first: the focus move may itself have changed the step's
+		// content (an expanded dropdown, a new validation row), so spans
+		// recorded by the previous render would point at stale lines.
 		if m.ready {
-			m.autoScrollToField(msg.FieldIndex, msg.TotalFields)
+			m.syncViewportContent()
+			m.scrollToFocusedField()
 		}
 		return m, nil
 

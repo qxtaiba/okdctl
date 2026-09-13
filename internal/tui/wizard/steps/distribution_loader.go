@@ -8,7 +8,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/releases"
-	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
 )
 
@@ -80,41 +79,6 @@ func (s *DistributionStep) updateVersionSelector() {
 		s.selectedVersion = ""
 	}
 	s.versionSelector.SetSelectedByID(s.selectedVersion)
-}
-
-func (s *DistributionStep) emitFocusChanged() tea.Cmd {
-	selected := s.versionSelector.Selected()
-
-	if selected.InDropdown {
-		return nil
-	}
-
-	index := s.versionSelector.SelectedIndex()
-	total := s.countVersionOptions()
-
-	if total == 0 {
-		return nil
-	}
-
-	return func() tea.Msg {
-		return wizard.FocusChangedMsg{
-			FieldIndex:  index,
-			TotalFields: total,
-		}
-	}
-}
-
-func (s *DistributionStep) countVersionOptions() int {
-	count := len(s.okdSeries)
-	if s.expandedMinor >= 0 {
-		for _, series := range s.okdSeries {
-			if series.Minor == s.expandedMinor {
-				count += len(series.Versions)
-				break
-			}
-		}
-	}
-	return count
 }
 
 func (s *DistributionStep) getMinorFromOptionID(id string) int {

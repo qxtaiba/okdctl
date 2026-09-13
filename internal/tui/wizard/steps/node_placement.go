@@ -269,6 +269,33 @@ func (s *NodePlacementStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	return s, nil
 }
 
+// discoveryHeader renders the discovery summary (or its failure) shown above
+// the placement form, without the blank row that separates the two.
+func (s *NodePlacementStep) discoveryHeader() string {
+	noteStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500).Italic(true).PaddingLeft(2)
+	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning).PaddingLeft(2)
+
+	switch {
+	case s.discoveryErr != nil:
+		return warnStyle.Render(s.discoveryErr.Error())
+	case s.discovery != nil:
+		return noteStyle.Render(fmt.Sprintf("discovered %d node(s), %d storage pool(s), %d bridge(s)",
+			len(s.discovery.Nodes), len(s.discovery.Storage), len(s.discovery.Bridges)))
+	default:
+		return ""
+	}
+}
+
+// headerOffset is how many lines View prepends before the inner form's own
+// line 0, so the form's spans can be rebased onto the step's View.
+func (s *NodePlacementStep) headerOffset() int {
+	header := s.discoveryHeader()
+	if header == "" {
+		return 0
+	}
+	return lipgloss.Height(header) + 1
+}
+
 // View renders either the loading spinner or the inner placement form.
 func (s *NodePlacementStep) View(width, height int) string {
 	s.SetSize(width, height)
@@ -277,21 +304,29 @@ func (s *NodePlacementStep) View(width, height int) string {
 		return s.loadingSpinner.View() + " discovering proxmox infrastructure..."
 	}
 
-	noteStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500).Italic(true).PaddingLeft(2)
-	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning).PaddingLeft(2)
-
-	var header string
-	if s.discoveryErr != nil {
-		header = warnStyle.Render(s.discoveryErr.Error()) + "\n\n"
-	} else if s.discovery != nil {
-		header = noteStyle.Render(fmt.Sprintf("discovered %d node(s), %d storage pool(s), %d bridge(s)",
-			len(s.discovery.Nodes), len(s.discovery.Storage), len(s.discovery.Bridges))) + "\n\n"
+	header := s.discoveryHeader()
+	if header != "" {
+		header += "\n\n"
 	}
 
 	if s.inner != nil {
 		return header + s.inner.View(width)
 	}
 	return header
+}
+
+// FocusedSpan rebases the inner form's span onto this step's View, which
+// prepends the discovery header.
+func (s *NodePlacementStep) FocusedSpan() (wizard.LineSpan, bool) {
+	if s.inner == nil || s.phase != phasePlacing {
+		return wizard.LineSpan{}, false
+	}
+	span, ok := s.inner.FocusedSpan()
+	if !ok {
+		return wizard.LineSpan{}, false
+	}
+	offset := s.headerOffset()
+	return wizard.LineSpan{Start: span.Start + offset, End: span.End + offset}, true
 }
 
 // Apply writes each retained field's value into cfg; controlPlaneFields[i]/
