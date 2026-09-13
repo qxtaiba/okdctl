@@ -11,25 +11,25 @@ import (
 )
 
 // addonFieldLabels flattens the addons definition into the tab order the
-// wizard walks, rendering each label the way the field itself does: text
-// and password fields show their authored-case label alone, while
-// select/multi-select/key-value fields still fold their help into the
-// label row.
+// wizard walks, rendering each label the way the field itself does: text,
+// password, and select fields show their authored-case label alone, while
+// multi-select/key-value fields still fold their help into the label row.
 func addonFieldLabels() []string {
 	var labels []string
 	for si := range AddonsStepDefinition.Sections {
 		fields := AddonsStepDefinition.Sections[si].Fields
 		for fi := range fields {
 			def := &fields[fi]
-			if def.Type == wizard.FieldTypeText || def.Type == wizard.FieldTypePassword {
+			switch def.Type {
+			case wizard.FieldTypeText, wizard.FieldTypePassword, wizard.FieldTypeSelect:
 				labels = append(labels, def.Label)
-				continue
+			default:
+				label := strings.ToLower(def.Label)
+				if help := strings.ToLower(def.Help); help != "" {
+					label += " (" + help[:min(20, len(help))]
+				}
+				labels = append(labels, label)
 			}
-			label := strings.ToLower(def.Label)
-			if help := strings.ToLower(def.Help); help != "" {
-				label += " (" + help[:min(20, len(help))]
-			}
-			labels = append(labels, label)
 		}
 	}
 	return labels

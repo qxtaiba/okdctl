@@ -445,6 +445,9 @@ func buildFormField(def *FieldDefinition) components.FormField {
 		if def.Default != "" {
 			sf.SetDefault(def.Default)
 		}
+		if def.Width != FieldWidthAuto {
+			sf.SetBoxWidth(def.Width.Cols(fieldWidthSentinel))
+		}
 		return sf
 
 	default:

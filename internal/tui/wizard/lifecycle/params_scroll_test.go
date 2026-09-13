@@ -87,7 +87,7 @@ func TestParamsStep_FocusedFieldStaysOnScreen(t *testing.T) {
 		t.Fatal("setup: the resize params form does not overflow a 90x24 terminal")
 	}
 
-	labels := []string{"vcpus", "os disk (gb)", "drain mode (", "drain timeout"}
+	labels := []string{"vcpus", "os disk (gb)", "drain mode", "drain timeout"}
 	for i, want := range labels {
 		m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 		m.Update(wizard.FocusChangedMsg{})

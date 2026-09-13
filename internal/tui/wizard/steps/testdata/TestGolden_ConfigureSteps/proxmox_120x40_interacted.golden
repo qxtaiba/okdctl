@@ -30,9 +30,9 @@
   │    │ ·                            │                                                                              │  
   │    ╰──────────────────────────────╯                                                                              │  
   │                                                                                                                  │  
-  │    skip tls verify (skip tls certificate verification — set to yes only for self-signed certs)                   │  
-  │    ╭────────────────────────────────────────────────────────────────────────────────────────────────────╮        │  
-  │    │ > no                                                                                               │        │  
+  │    skip tls verify                                                                                               │  
+  │    ╭──────────────╮                                                                                              │  
+  │    │ ● no  ○ yes  │                                                                                              │  
   │                                                                                                                  │  
   │─────────────────────────────── ↑ ↓  scroll down for more ─────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
   │  ↑↓/tab navigate • enter continue • esc back • pgup/pgdn scroll                                                  │  

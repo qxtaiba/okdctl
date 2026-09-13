@@ -13,16 +13,16 @@
   │                                                                                              │  
   │    ● proxmox vm settings                                                                     │  
   │                                                                                              │  
-  │    cpu type (host gives best performance, x86-64-v2 or kvm64 allow live migration)           │  
-  │    ╭────────────────────────────────────────────────────────────────────────────────╮        │  
-  │    │ ◂ host ▸                                                                       │        │  
-  │    ╰────────────────────────────────────────────────────────────────────────────────╯        │  
+  │    cpu type                                                                                  │  
+  │    ╭───────────────╮                                                                         │  
+  │    │ ◂ host ▸      │                                                                         │  
+  │    ╰───────────────╯                                                                         │  
+  │    host gives best performance, x86-64-v2 or kvm64 allow live migration                      │  
   │                                                                                              │  
-  │    enable numa (enable numa topology for vms — improves performance on multi-socket hosts)   │  
-  │    ╭────────────────────────────────────────────────────────────────────────────────╮        │  
-  │    │ > no                                                                           │        │  
-  │    ╰────────────────────────────────────────────────────────────────────────────────╯        │  
-  │                                                                                              │  
+  │    enable numa                                                                               │  
+  │    ╭──────────────╮                                                                          │  
+  │    │ ● no  ○ yes  │                                                                          │  
+  │    ╰──────────────╯                                                                          │  
   │                                                                                              │  
   │───────────────────── ↑ ↓  scroll down for more ───────────────────── ▸ okd 4.22.0-okd-scos.7 │  
   │  ↑↓/tab navigate • enter continue • esc back • pgup/pgdn scroll                              │  

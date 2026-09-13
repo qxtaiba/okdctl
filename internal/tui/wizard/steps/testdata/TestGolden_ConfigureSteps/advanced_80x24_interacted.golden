@@ -13,10 +13,10 @@
   │                                                                          │  
   │    ● proxmox vm settings                                                 │  
   │                                                                          │  
-  │    cpu type (host gives best performance, x86-64-v2 or kvm64 allow live  │  
-  │  migration)                                                              │  
-  │    ╭────────────────────────────────────────────────────────────╮        │  
-  │    │ ◂ host ▸                                                   │        │  
+  │    cpu type                                                              │  
+  │    ╭───────────────╮                                                     │  
+  │    │ ◂ host ▸      │                                                     │  
+  │    ╰───────────────╯                                                     │  
   │                                                                          │  
   │─────────── ↑ ↓  scroll down for more ─────────── ▸ okd 4.22.0-okd-scos.7 │  
   │  ↑↓/tab navigate • enter continue • esc back • pgup/pgdn scroll          │  
