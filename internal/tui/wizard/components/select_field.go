@@ -173,8 +173,12 @@ func (f *SelectField) nominalBoxWidth() int {
 }
 
 // arrowContent renders the current value flanked by cycle arrows, shown
-// even while blurred so a select field always signals it can be cycled.
+// even while blurred; a lone option has nothing to cycle to, so it renders
+// bare rather than implying an interaction that doesn't exist.
 func (f *SelectField) arrowContent() string {
+	if len(f.Options) < 2 {
+		return f.Value()
+	}
 	arrow := lipgloss.NewStyle().Foreground(tui.ColorPrimary)
 	return arrow.Render("◂") + " " + f.Value() + " " + arrow.Render("▸")
 }

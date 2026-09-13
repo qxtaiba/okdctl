@@ -100,6 +100,18 @@ func demoDiscovery() *proxmoxDiscovery {
 	}
 }
 
+// demoDiscoverySingleNode pins the single-Proxmox-host case: storage and
+// bridges stay multi-option (as demoDiscovery), but Nodes has exactly one
+// entry, so every per-node select (bootstrap, control plane, workers)
+// resolves to exactly one option.
+func demoDiscoverySingleNode() *proxmoxDiscovery {
+	disc := demoDiscovery()
+	disc.Nodes = []proxmoxNode{
+		{Name: "pve1", Status: "online", CPUs: 32, MemGB: 128},
+	}
+	return disc
+}
+
 var goldenSizes = []struct {
 	w, h int
 	fits bool
@@ -138,4 +150,26 @@ func TestGolden_ConfigureSteps(t *testing.T) {
 			})
 		}
 	}
+}
+
+// TestGolden_NodePlacementSingleNode pins the single-Proxmox-host case:
+// the bootstrap field's per-node select has exactly one option and must
+// render the bare value with no cycle arrows. Tabs past the infrastructure
+// section's 6 fields (bridge, additional networks, os/data/iso storage,
+// fcos iso) so the bootstrap field is focused and scrolled into view.
+func TestGolden_NodePlacementSingleNode(t *testing.T) {
+	m := newGoldenModel(t)
+	_ = tuitest.RenderAt(t, m, 100, 30)
+	m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDNodePlacement})
+	m.Update(discoveryCompleteMsg{discovery: demoDiscoverySingleNode()})
+
+	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
+	for range 6 {
+		m.Update(tabKey)
+		m.Update(wizard.FocusChangedMsg{})
+	}
+
+	frame := tuitest.RenderAt(t, m, 100, 30)
+	tuitest.Golden(t, "node-placement-single-node_100x30", frame)
+	tuitest.AssertFits(t, frame, 100, 30)
 }
