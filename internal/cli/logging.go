@@ -109,9 +109,10 @@ func configureLogging(cmd *cobra.Command) error {
 
 	stderrIsTTY := term.IsTerminal(int(os.Stderr.Fd()))
 	stdoutIsTTY := term.IsTerminal(int(os.Stdout.Fd()))
-	// NO_COLOR (no-color.org) disables progress bars regardless of TTY;
-	// FORCE_COLOR only affects colorprofile styling, not this gate.
-	noColor := os.Getenv("NO_COLOR") != ""
+	// --no-color or NO_COLOR (no-color.org, any value) disables progress bars
+	// regardless of TTY; FORCE_COLOR only affects colorprofile styling, not
+	// this gate.
+	colorOff := noColor || os.Getenv("NO_COLOR") != ""
 
 	// auto-switch to json when stderr is piped and --log-format wasn't set
 	// explicitly, mirroring the progress-bar TTY gate
@@ -119,11 +120,16 @@ func configureLogging(cmd *cobra.Command) error {
 		logFormat = tui.FormatJSON
 	}
 
-	progressBars := stderrIsTTY && stdoutIsTTY && logFormat != tui.FormatJSON && !noColor
+progressBars := stderrIsTTY && stdoutIsTTY && logFormat != tui.FormatJSON && !colorOff
 
 	// pin the render profile to stdout's real capabilities so a piped/NO_COLOR
-	// run strips box escapes like charm/log strips level badges
-	tui.SetColorProfileFor(os.Stdout)
+	// run strips box escapes like charm/log strips level badges; --no-color
+	// forces it off outright instead of re-detecting from stdout
+	if colorOff {
+		tui.DisableColor()
+	} else {
+		tui.SetColorProfileFor(os.Stdout)
+	}
 
 	if err := tui.ConfigureLoggers(effectiveLevel, logFormat, stderrW, progressBars); err != nil {
 		return err

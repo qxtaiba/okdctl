@@ -130,7 +130,7 @@ func ValidationSummary(result *config.ValidationResult) string {
 		}
 	}
 
-	return sb.String()
+	return tui.Downsample(sb.String())
 }
 
 // PostDeploySummary renders the success summary after a cluster deploy: access

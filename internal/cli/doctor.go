@@ -171,7 +171,7 @@ func printResult(c doctor.Check, r doctor.Result, w io.Writer) {
 	if c.Desc != "" {
 		title += tui.MutedStyle.Render(": " + c.Desc)
 	}
-	fmt.Fprintln(w, "  "+icon+" "+title)
+	fmt.Fprintln(w, tui.Downsample("  "+icon+" "+title))
 
 	if len(r.Items) > 0 {
 		// Labels aligned to the widest possible label ("[fail]"/"[warn]" at 6 chars).
@@ -183,10 +183,10 @@ func printResult(c doctor.Check, r doctor.Result, w io.Writer) {
 			if item.Note != "" {
 				line += tui.MutedStyle.Render(" (" + item.Note + ")")
 			}
-			fmt.Fprintln(w, line)
+			fmt.Fprintln(w, tui.Downsample(line))
 		}
 	} else {
-		fmt.Fprintln(w, "      "+aggregateLabel+" "+r.Detail)
+		fmt.Fprintln(w, tui.Downsample("      "+aggregateLabel+" "+r.Detail))
 	}
 
 	fmt.Fprintln(w)
