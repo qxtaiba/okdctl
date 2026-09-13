@@ -1,24 +1,24 @@
-                                                                                      
-  ╭────────────────────────────────────────────────────────────────────────────────╮  
-  │ O K D C T L                                                                    │  
-  │ okd over proxmox, the easy way                   ●─●─●─●─●─● step 6 of 6       │  
-  │──────────────────────────────────────────────────────────────────────────      │  
-  │  ✓ resize complete                                                             │  
-  │                                                                                │  
-  │  cluster           mycluster                                                   │  
-  │  elapsed           1m30s                                                       │  
-  │                                                                                │  
-  │  nodes                                                                         │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄            │  
-  │  homelab-master0   master  resized (power-cycled to realize the change)        │  
-  │                                                                                │  
-  │  next steps                                                                    │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄            │  
-  │                    each resized node was power-cycled to realize the           │  
-  │  change; verify with                                                           │  
-  │                      'okdctl node list' or 'oc debug node/<name> --            │  
-  │  free -m'                                                                      │  
-  │─────────────────────── ↑ ↓  scroll down for more ─────────── ▸ mycluster       │  
-  │   enter  exit                                                                  │  
-  ╰────────────────────────────────────────────────────────────────────────────────╯  
-                                                                                      
+                                                                                
+  ╭──────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L                                                              │  
+  │ okd over proxmox, the easy way                   ●─●─●─●─●─● step 6 of 6 │  
+  │──────────────────────────────────────────────────────────────────────────│  
+  │  ✓ resize complete                                                       │  
+  │                                                                          │  
+  │  cluster           mycluster                                             │  
+  │  elapsed           1m30s                                                 │  
+  │                                                                          │  
+  │  nodes                                                                   │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
+  │  homelab-master0   master  resized (power-cycled to realize the change)  │  
+  │                                                                          │  
+  │  next steps                                                              │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
+  │                    each resized node was power-cycled to realize the     │  
+  │  change; verify with                                                     │  
+  │                      'okdctl node list' or 'oc debug node/<name> --      │  
+  │                                                                          │  
+  │─────────────────────── ↑ ↓  scroll down for more ─────────── ▸ mycluster │  
+  │   enter  exit                                                            │  
+  ╰──────────────────────────────────────────────────────────────────────────╯  
+                                                                                
