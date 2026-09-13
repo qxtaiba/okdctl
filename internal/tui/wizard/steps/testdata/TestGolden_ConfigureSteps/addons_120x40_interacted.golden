@@ -7,10 +7,10 @@
   │    ● gitops (flux)                                                                                               │  
   │      requires: ssh deploy key at ~/.ssh/flux-deploy-key                                                          │  
   │                                                                                                                  │  
-  │    enabled (enable gitops deployment)                                                                            │  
-  │    ╭────────────────────────────────────────────────────────────────────────────────────────────────────╮        │  
-  │    │ > no                                                                                               │        │  
-  │    ╰────────────────────────────────────────────────────────────────────────────────────────────────────╯        │  
+  │    enabled                                                                                                       │  
+  │    ╭──────────────╮                                                                                              │  
+  │    │ ● no  ○ yes  │                                                                                              │  
+  │    ╰──────────────╯                                                                                              │  
   │                                                                                                                  │  
   │    repository                                                                                                    │  
   │    ╭──────────────────────────────────────────────────────╮                                                      │  
@@ -31,8 +31,8 @@
   │    ✓ secret store (common)                                                                                       │  
   │      supports onepassword, vault, and bitwarden via external-secrets-operator                                    │  
   │                                                                                                                  │  
-  │    enabled (bootstrap eso provider credentials and secretstore crd)                                              │  
-  │    ╭────────────────────────────────────────────────────────────────────────────────────────────────────╮        │  
+  │    enabled                                                                                                       │  
+  │    ╭──────────────╮                                                                                              │  
   │                                                                                                                  │  
   │─────────────────────────────── ↑ ↓  scroll down for more ─────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
   │  ↑↓/tab navigate • enter continue • esc back • pgup/pgdn scroll                                                  │  

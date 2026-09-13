@@ -8,10 +8,10 @@
   │                                                                          │  
   │    ● infrastructure                                                      │  
   │                                                                          │  
-  │    bridge (network bridge for vms)                                       │  
-  │    ╭────────────────────────────────────────────────────────────╮        │  
-  │    │ > vmbr0                                                    │        │  
-  │    ╰────────────────────────────────────────────────────────────╯        │  
+  │    bridge                                                                │  
+  │    ╭───────────╮                                                         │  
+  │    │ ◂ vmbr0 ▸ │                                                         │  
+  │    ╰───────────╯                                                         │  
   │                                                                          │  
   │    additional networks (extra bridges to attach to all vms — leave       │  
   │  empty for none) (j/k navigate, space toggle)                            │  
