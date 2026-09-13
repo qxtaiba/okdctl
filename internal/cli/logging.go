@@ -76,8 +76,6 @@ func openDefaultLogSink() (string, *os.File, error) {
 }
 
 func configureLogging(cmd *cobra.Command) error {
-	stderrW := io.Writer(os.Stderr)
-
 	var sink *os.File
 	var sinkErr error
 	switch {
@@ -92,10 +90,13 @@ func configureLogging(cmd *cobra.Command) error {
 		// --log-file); warning emitted after ConfigureLoggers so it's formatted
 		runLogPath, sink, sinkErr = openDefaultLogSink()
 	}
+	// a nil *os.File assigned into an io.Writer is a non-nil interface, so
+	// this must stay a guarded assignment rather than `io.Writer(sink)`
+	var sinkW io.Writer
 	if sink != nil {
 		logFileCloser = sink
 		runLogSink = sink
-		stderrW = io.MultiWriter(os.Stderr, sink)
+		sinkW = sink
 	}
 
 	// --quiet/--verbose are sugar over --log-level; mutual exclusion is enforced at flag registration.
@@ -117,10 +118,10 @@ func configureLogging(cmd *cobra.Command) error {
 	// auto-switch to json when stderr is piped and --log-format wasn't set
 	// explicitly, mirroring the progress-bar TTY gate
 	if !cmd.Root().PersistentFlags().Changed(flagLogFormat) && !stderrIsTTY {
-		logFormat = tui.FormatJSON
+		logFormat = outputJSON
 	}
 
-progressBars := stderrIsTTY && stdoutIsTTY && logFormat != tui.FormatJSON && !colorOff
+	progressBars := stderrIsTTY && stdoutIsTTY && logFormat != outputJSON && !colorOff
 
 	// pin the render profile to stdout's real capabilities so a piped/NO_COLOR
 	// run strips box escapes like charm/log strips level badges; --no-color
@@ -131,7 +132,13 @@ progressBars := stderrIsTTY && stdoutIsTTY && logFormat != tui.FormatJSON && !co
 		tui.SetColorProfileFor(os.Stdout)
 	}
 
-	if err := tui.ConfigureLoggers(effectiveLevel, logFormat, stderrW, progressBars); err != nil {
+	if err := tui.ConfigureLoggers(tui.LoggerConfig{
+		Level:        effectiveLevel,
+		Format:       logFormat,
+		Stderr:       os.Stderr,
+		Sink:         sinkW,
+		ProgressBars: progressBars,
+	}); err != nil {
 		return err
 	}
 	if sinkErr != nil {
@@ -139,7 +146,7 @@ progressBars := stderrIsTTY && stdoutIsTTY && logFormat != tui.FormatJSON && !co
 	}
 	// suppress Info/Warn under json for clean pipelines, except deploy-family
 	// flows which keep milestones/degraded-notices visible
-	if logFormat == tui.FormatJSON && !logVerbose && !wantsDefaultLogSink(cmd) {
+	if logFormat == outputJSON && !logVerbose && !wantsDefaultLogSink(cmd) {
 		tui.SuppressInfo()
 	}
 	return nil

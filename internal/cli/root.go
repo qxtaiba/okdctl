@@ -42,6 +42,39 @@ var (
 // startLogged records that the "okdctl: started" bookend fired, keeping "finished" symmetric.
 var startLogged bool
 
+// startBookendMutates carries PersistentPreRunE's mutatesState(cmd) decision to
+// execute()'s deferred "finished" bookend so both log at the same level.
+var startBookendMutates bool
+
+// mutatesState reports whether cmd mutates cluster/host state, gating the
+// "okdctl: started"/"finished" bookends between Info (mutating) and Debug
+// (read-only): true for a default-log-sink verb, a command exposing --yes, or
+// one annotated requires-root.
+func mutatesState(cmd *cobra.Command) bool {
+	if wantsDefaultLogSink(cmd) {
+		return true
+	}
+	if cmd.Flags().Lookup("yes") != nil {
+		return true
+	}
+	for c := cmd; c != nil; c = c.Parent() {
+		if c.Annotations[annotationKeyRequiresRoot] == annotationValueTrue {
+			return true
+		}
+	}
+	return false
+}
+
+// logBookend logs msg at Info when mutates else Debug, keeping the
+// "started"/"finished" pair at one shared level per invocation.
+func logBookend(msg string, mutates bool, fields ...logutil.LogField) {
+	if mutates {
+		logutil.Info(msg, fields...)
+		return
+	}
+	logutil.Debug(msg, fields...)
+}
+
 // preflightWarns holds pre-Execute warnings; PersistentPreRunE drains them
 // after configureLogging so they use the final formatter.
 var preflightWarns []func()
@@ -71,7 +104,8 @@ per 24h, cached locally); set OKDCTL_NO_UPDATE_CHECK=1 to disable.`,
 		}
 		// logged here (not execute()) so it honors --quiet/--log-format/the
 		// piped-stderr auto-switch, symmetric with "finished"
-		logutil.Info("okdctl: started", logutil.LF("argv", logutil.RedactableArgv(os.Args[1:])))
+		startBookendMutates = mutatesState(cmd)
+		logBookend("okdctl: started", startBookendMutates, logutil.LF("argv", logutil.RedactableArgv(os.Args[1:])))
 		startLogged = true
 		for _, fn := range preflightWarns {
 			fn()
@@ -124,8 +158,9 @@ func execute() (code int) {
 		if !startLogged {
 			return
 		}
-		logutil.Info(
+		logBookend(
 			"okdctl: finished",
+			startBookendMutates,
 			logutil.LF("duration", time.Since(start).Round(time.Millisecond).String()),
 			logutil.LF("exit_code", code),
 		)
