@@ -104,7 +104,11 @@ var goldenSizes = []struct {
 	w, h int
 	fits bool
 }{
-	{80, 24, false}, // fits=false until Task 3 lands: today's frame draws 86 cols at W=80
+	// fits=false: the frame now draws at exactly 80 cols (Task 3), but several
+	// steps' scroll indicator (badge width) and review/confirm's help bar
+	// still overflow onto a second row — the footer's width budget doesn't
+	// yet clamp/truncate (Task 6 rewrites it).
+	{80, 24, false},
 	{100, 30, true},
 	{120, 40, true},
 }

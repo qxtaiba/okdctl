@@ -13,7 +13,7 @@ func TestGolden_ChromeOnly(t *testing.T) {
 		w, h int
 		fits bool
 	}{
-		{80, 24, false},
+		{80, 24, true},
 		{100, 30, true},
 		{120, 40, true},
 	}

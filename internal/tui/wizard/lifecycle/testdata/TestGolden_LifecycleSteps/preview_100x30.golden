@@ -23,7 +23,7 @@
   │  vm → wait for node ready → etcd health gate (post) → uncordon + ceph health gate            │  
   │  plan gate: ✓ dry-run passed — the safety gate allows exactly the listed changes             │  
   │                                                                                              │  
-  │  ══════════════════════════════════════════════════════════════════════════════════════      │  
+  │                                                                                              │  
   │───────────────────────────────── ↑ ↓  scroll down for more ───────────────────── ▸ mycluster │  
   │   ↑↓  select action    enter  confirm    esc  back    ctrl+c  quit                           │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  

@@ -111,6 +111,9 @@ var lifecycleGoldenSizes = []struct {
 	w, h int
 	fits bool
 }{
+	// fits=false: the frame now draws at exactly 80 cols (Task 3), but
+	// confirm's help bar still overflows onto a second row — the footer's
+	// width budget doesn't yet clamp/truncate (Task 6 rewrites it).
 	{80, 24, false},
 	{100, 30, true},
 	{120, 40, true},

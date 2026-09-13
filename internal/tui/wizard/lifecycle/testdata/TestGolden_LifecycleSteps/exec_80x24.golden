@@ -1,24 +1,24 @@
-                                                                                      
-  ╭────────────────────────────────────────────────────────────────────────────────╮  
-  │ O K D C T L                                                                    │  
-  │ okd over proxmox, the easy way                   ●─●─●─●─●─○ step 5 of 6       │  
-  │──────────────────────────────────────────────────────────────────────────      │  
-  │  resizing nodes — node 1 of 1                                                  │  
-  │                                                                                │  
-  │  ● homelab-master0                                                             │  
-  │      ✓ etcd health gate (pre)                                                  │  
-  │      ✓ cordon + drain                                                          │  
-  │      ⣾ terraform apply (in-place update)                                       │  
-  │      ○ power-cycle vm                                                          │  
-  │      ○ wait for node ready                                                     │  
-  │      ○ etcd health gate (post)                                                 │  
-  │      ○ uncordon + ceph health gate                                             │  
-  │                                                                                │  
-  │  op marker: okd-install/.okdctl-node-op.json — if this run is                  │  
-  │  interrupted,                                                                  │  
-  │  re-running the same operation resumes at the recorded step                    │  
-  │                                                                                │  
-  │───────────────────────────────────────────────────────────── ▸ mycluster       │  
-  │   ctrl+c  request graceful cancel (twice to force-quit)                        │  
-  ╰────────────────────────────────────────────────────────────────────────────────╯  
-                                                                                      
+                                                                                
+  ╭──────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L                                                              │  
+  │ okd over proxmox, the easy way                   ●─●─●─●─●─○ step 5 of 6 │  
+  │──────────────────────────────────────────────────────────────────────────│  
+  │  resizing nodes — node 1 of 1                                            │  
+  │                                                                          │  
+  │  ● homelab-master0                                                       │  
+  │      ✓ etcd health gate (pre)                                            │  
+  │      ✓ cordon + drain                                                    │  
+  │      ⣾ terraform apply (in-place update)                                 │  
+  │      ○ power-cycle vm                                                    │  
+  │      ○ wait for node ready                                               │  
+  │      ○ etcd health gate (post)                                           │  
+  │      ○ uncordon + ceph health gate                                       │  
+  │                                                                          │  
+  │  op marker: okd-install/.okdctl-node-op.json — if this run is            │  
+  │  interrupted,                                                            │  
+  │  re-running the same operation resumes at the recorded step              │  
+  │                                                                          │  
+  │───────────────────────────────────────────────────────────── ▸ mycluster │  
+  │   ctrl+c  request graceful cancel (twice to force-quit)                  │  
+  ╰──────────────────────────────────────────────────────────────────────────╯  
+                                                                                

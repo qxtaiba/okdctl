@@ -1,24 +1,24 @@
-                                                                                      
-  ╭────────────────────────────────────────────────────────────────────────────────╮  
-  │ O K D C T L                                                                    │  
-  │ okd over proxmox, the easy way        ●─●─○─○─○─○─○─○─○─○─○ step 2 of 11       │  
-  │──────────────────────────────────────────────────────────────────────────      │  
-  │  which okd version would you like to deploy?                                   │  
-  │                                                                                │  
-  │  ● okd 4.20 (recommended)                                                      │  
-  │    │ ▶ latest stable (4.20.1) (tab to expand)                                  │  
-  │    │                                                                           │  
-  │  ○ okd 4.19                                                                    │  
-  │    │ ▶ stable (4.19.4) (tab to expand)                                         │  
-  │    │                                                                           │  
-  │  ○ okd 4.18                                                                    │  
-  │    │ ▶ lts candidate (4.18.7) (tab to expand)                                  │  
-  │                                                                                │  
-  │  press tab to expand patch versions                                            │  
-  │                                                                                │  
-  │                                                                                │  
-  │                                                                                │  
-  │───────────────────────────────────────────────── ▸ okd 4.22.0-okd-scos.7       │  
-  │   ↑↓  select    tab  expand/collapse    enter  confirm    esc  back            │  
-  ╰────────────────────────────────────────────────────────────────────────────────╯  
-                                                                                      
+                                                                                
+  ╭──────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L                                                              │  
+  │ okd over proxmox, the easy way        ●─●─○─○─○─○─○─○─○─○─○ step 2 of 11 │  
+  │──────────────────────────────────────────────────────────────────────────│  
+  │  which okd version would you like to deploy?                             │  
+  │                                                                          │  
+  │  ● okd 4.20 (recommended)                                                │  
+  │    │ ▶ latest stable (4.20.1) (tab to expand)                            │  
+  │    │                                                                     │  
+  │  ○ okd 4.19                                                              │  
+  │    │ ▶ stable (4.19.4) (tab to expand)                                   │  
+  │    │                                                                     │  
+  │  ○ okd 4.18                                                              │  
+  │    │ ▶ lts candidate (4.18.7) (tab to expand)                            │  
+  │                                                                          │  
+  │  press tab to expand patch versions                                      │  
+  │                                                                          │  
+  │                                                                          │  
+  │                                                                          │  
+  │───────────────────────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
+  │   ↑↓  select    tab  expand/collapse    enter  confirm    esc  back      │  
+  ╰──────────────────────────────────────────────────────────────────────────╯  
+                                                                                
