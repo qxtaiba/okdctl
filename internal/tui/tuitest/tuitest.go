@@ -15,7 +15,7 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-var ansiRE = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(\x07|\x1b\\)`)
+var ansiRE = regexp.MustCompile(`\x1b\[[0-9;?]*[\x20-\x2f]*[\x40-\x7e]|\x1b\][^\x07\x1b]*(\x07|\x1b\\)`)
 
 // StripANSI removes SGR (color/style) and OSC (e.g. hyperlink) escape
 // sequences from s, leaving the plain visible text.
