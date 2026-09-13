@@ -6,10 +6,11 @@
   │                                                                                                                  │  
   │    ● vm settings                                                                                                 │  
   │                                                                                                                  │  
-  │    vm id base (starting vm id in proxmox (e.g., 6000, 6001, ...))                                                │  
-  │    ╭────────────────────────────────────────────────────────────────────────────────────────────────────╮        │  
-  │    │ > 6000                                                                                             │        │  
-  │    ╰────────────────────────────────────────────────────────────────────────────────────────────────────╯        │  
+  │    vm id base                                                                                                    │  
+  │    ╭──────────╮                                                                                                  │  
+  │    │ 6000     │                                                                                                  │  
+  │    ╰──────────╯                                                                                                  │  
+  │    starting vm id in proxmox (e.g., 6000, 6001, ...)                                                             │  
   │                                                                                                                  │  
   │    ✓ proxmox vm settings                                                                                         │  
   │                                                                                                                  │  
@@ -32,7 +33,6 @@
   │                                                                                                                  │  
   │    ○ clock synchronization                                                                                       │  
   │                                                                                                                  │  
-  │    ntp server (chrony source for master/worker nodes — blank uses the bastion's ignition server ip)              │  
   │                                                                                                                  │  
   │─────────────────────────────── ↑ ↓  scroll down for more ─────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
   │  ↑↓/tab navigate • enter continue • esc back • pgup/pgdn scroll                                                  │  

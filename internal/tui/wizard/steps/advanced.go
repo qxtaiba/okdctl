@@ -25,6 +25,7 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 					Label:     "vm id base",
 					Default:   "6000",
 					Help:      "starting vm id in proxmox (e.g., 6000, 6001, ...)",
+					Width:     wizard.FieldWidthNumber,
 					Required:  true,
 					Validate:  config.ValidateVMID,
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.VMIDBase = v }),
@@ -112,12 +113,14 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 		},
 		{
 			Title: "installation timeouts",
+			//nolint:dupl // two int fields share the FieldDefinition shape with resources.go's data-storage section; data, not logic
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "bootstrap_timeout",
 					Label:     "bootstrap timeout",
 					Default:   "3600",
 					Help:      "seconds to wait for bootstrap (default: 1 hour)",
+					Width:     wizard.FieldWidthNumber,
 					Required:  true,
 					Validate:  config.ValidateTimeout,
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Deployment.BootstrapTimeout = v }),
@@ -128,6 +131,7 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 					Label:     "install timeout",
 					Default:   "7200",
 					Help:      "seconds to wait for install (default: 2 hours)",
+					Width:     wizard.FieldWidthNumber,
 					Required:  true,
 					Validate:  config.ValidateTimeout,
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Deployment.InstallTimeout = v }),
@@ -143,6 +147,7 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 					Label:     "terraform environment",
 					Default:   "",
 					Help:      "selects a directory under infrastructure/terraform/environments/ — leave blank to use the default (production)",
+					Width:     wizard.FieldWidthPath,
 					Validate:  config.ValidateTerraformEnv,
 					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Deployment.TerraformEnv = v }),
 					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Deployment.TerraformEnv }),
@@ -167,6 +172,7 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 					Label:     "bin dir",
 					Default:   "",
 					Help:      "absolute path to install oc, openshift-install and tools; ~/ is expanded. blank = /usr/local/bin",
+					Width:     wizard.FieldWidthPath,
 					Validate:  config.ValidateBinDir,
 					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Deployment.BinDir = v }),
 					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Deployment.BinDir }),
