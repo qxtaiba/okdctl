@@ -10,8 +10,8 @@
   │    ╰──────────────────────────────╯                                                          │  
   │                                                                                              │  
   │    ● secret store (onepassword)                                                              │  
-  │      requires: sops-encrypted 1password-credentials.json and 1password-token.txt + age key   │  
-  │  on bastion                                                                                  │  
+  │      requires: sops-encrypted 1password-credentials.json and 1password-token.txt + age       │  
+  │      key on bastion                                                                          │  
   │                                                                                              │  
   │    connect host                                                                              │  
   │    ╭──────────────────────────────────────────────────────╮                                  │  

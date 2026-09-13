@@ -9,6 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
 )
 
@@ -451,4 +452,80 @@ func containsFocusChanged(cmd tea.Cmd) bool {
 		}
 	}
 	return false
+}
+
+func TestMultiSectionForm_SectionsJoinedByOneBlankRow(t *testing.T) {
+	f := newSpanTestForm()
+	lines := strings.Split(f.View(80), "\n")
+
+	lastFieldEnd := f.spans[0][len(f.spans[0])-1].End
+	if strings.TrimSpace(lines[lastFieldEnd+1]) != "" {
+		t.Fatalf("row after section one's last field is not blank: %q", lines[lastFieldEnd+1])
+	}
+	if strings.TrimSpace(lines[lastFieldEnd+2]) == "" {
+		t.Fatalf("row two after section one's last field is blank, want section two's head")
+	}
+	next := strings.TrimSpace(lines[lastFieldEnd+2])
+	if !strings.Contains(next, "○") {
+		t.Fatalf("row after the blank gap = %q, want the pending indicator ○", next)
+	}
+}
+
+func TestMultiSectionForm_NoteWrapsToWidth(t *testing.T) {
+	f := NewMultiSectionForm([]FormSection{
+		{
+			Title: "section one",
+			Note:  strings.Repeat("a", 150),
+			Group: components.NewInputGroup(components.NewInputField("name", "cluster")),
+		},
+	})
+
+	for _, line := range strings.Split(f.View(50), "\n") {
+		if got := lipgloss.Width(line); got > 50 {
+			t.Fatalf("line %q is %d columns wide, want <= 50", line, got)
+		}
+	}
+}
+
+func TestMultiSectionForm_SectionWarningRendersUnderFields(t *testing.T) {
+	f := NewMultiSectionForm([]FormSection{
+		{
+			Title:   "section one",
+			Group:   components.NewInputGroup(components.NewInputField("name", "cluster")),
+			Warning: func() string { return "something needs attention" },
+		},
+		{
+			Title: "section two",
+			Group: components.NewInputGroup(components.NewInputField("gateway", "10.0.0.1")),
+		},
+	})
+
+	lines := strings.Split(f.View(80), "\n")
+	lastFieldEnd := f.spans[0][len(f.spans[0])-1].End
+
+	if strings.TrimSpace(lines[lastFieldEnd+1]) != "" {
+		t.Fatalf("row after section one's last field is not blank: %q", lines[lastFieldEnd+1])
+	}
+	warningLine := strings.TrimSpace(lines[lastFieldEnd+2])
+	if !strings.Contains(warningLine, tui.IconWarning) || !strings.Contains(warningLine, "something needs attention") {
+		t.Fatalf("row after the blank gap = %q, want the warning block", warningLine)
+	}
+	if strings.TrimSpace(lines[lastFieldEnd+3]) != "" {
+		t.Fatalf("row after the warning is not blank: %q", lines[lastFieldEnd+3])
+	}
+	if !strings.Contains(strings.TrimSpace(lines[lastFieldEnd+4]), "section two") {
+		t.Fatalf("row after the warning's blank gap = %q, want section two's head", lines[lastFieldEnd+4])
+	}
+}
+
+func TestRenderInfoCard_FitsWidth(t *testing.T) {
+	for _, width := range []int{50, 70, 110} {
+		body := lipgloss.Wrap(strings.Repeat("resource totals go here ", 10), width-4, "")
+		card := RenderInfoCard("totals", body, width)
+		for i, line := range strings.Split(card, "\n") {
+			if got := lipgloss.Width(line); got != width {
+				t.Errorf("width %d: row %d = %d columns, want %d", width, i, got, width)
+			}
+		}
+	}
 }

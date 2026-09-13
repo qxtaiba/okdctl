@@ -145,26 +145,24 @@ func NewResourcesStep() (*wizard.DataDrivenStep, *ResourcesStepState) {
 		Step: step,
 	}
 
-	step.WithExtraContentFunc(func(s *wizard.DataDrivenStep, width int) string {
-		return renderResourceSummary(s, state, width)
+	step.WithExtraContentFunc("total resources required", func(s *wizard.DataDrivenStep, _ int) string {
+		return renderResourceSummary(s, state)
 	})
 
 	return step, state
 }
 
 var resourceSummaryStyles = struct {
-	wrapper lipgloss.Style
-	title   lipgloss.Style
-	value   lipgloss.Style
-	sep     string
+	value lipgloss.Style
+	sep   string
 }{
-	wrapper: lipgloss.NewStyle().Padding(1, 2),
-	title:   lipgloss.NewStyle().Foreground(tui.ColorSlate400).Bold(true),
-	value:   lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true),
-	sep:     lipgloss.NewStyle().Foreground(tui.ColorSlate600).Render("  ·  "),
+	value: lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true),
+	sep:   lipgloss.NewStyle().Foreground(tui.ColorSlate600).Render("  ·  "),
 }
 
-func renderResourceSummary(step *wizard.DataDrivenStep, state *ResourcesStepState, width int) string {
+// renderResourceSummary returns the totals line for the resources step's
+// info card; the card itself supplies the title and border.
+func renderResourceSummary(step *wizard.DataDrivenStep, state *ResourcesStepState) string {
 	cpCount := 3
 	workerCount := 3
 	if state.Cfg != nil {
@@ -186,14 +184,6 @@ func renderResourceSummary(step *wizard.DataDrivenStep, state *ResourcesStepStat
 	totalOSDisk := (cpDisk * cpCount) + (workerDisk * workerCount)
 	totalDataDisk := (workerDataDisk * workerCount) + (cpDataDisk * cpCount)
 
-	boxContentWidth := max(width-8, 30)
-
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(tui.ColorSlate600).
-		Padding(0, 1).
-		Width(boxContentWidth)
-
 	sep := resourceSummaryStyles.sep
 
 	var storageStr string
@@ -203,11 +193,8 @@ func renderResourceSummary(step *wizard.DataDrivenStep, state *ResourcesStepStat
 		storageStr = fmt.Sprintf("%d gb storage", totalDataDisk)
 	}
 
-	summary := resourceSummaryStyles.title.Render("total resources required") + "\n\n" +
-		resourceSummaryStyles.value.Render(fmt.Sprintf("%d vcpus", totalCPU)) + sep +
+	return resourceSummaryStyles.value.Render(fmt.Sprintf("%d vcpus", totalCPU)) + sep +
 		resourceSummaryStyles.value.Render(fmt.Sprintf("%d gb ram", totalMem/1024)) + sep +
 		resourceSummaryStyles.value.Render(fmt.Sprintf("%d gb os", totalOSDisk)) + sep +
 		resourceSummaryStyles.value.Render(storageStr)
-
-	return resourceSummaryStyles.wrapper.Render(boxStyle.Render(summary))
 }

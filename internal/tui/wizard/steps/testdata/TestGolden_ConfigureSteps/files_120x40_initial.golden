@@ -24,12 +24,12 @@
   │    ╭──────────────────────────────────────────────────────╮                                                      │  
   │    │ /var/www/html                                        │                                                      │  
   │    ╰──────────────────────────────────────────────────────╯                                                      │  
-  │  pull secret: get from https://cloud.redhat.com/openshift/install/pull-secret                                    │  
-  │  ignition server runs on bastion — ip is derived from networking step.                                           │  
   │                                                                                                                  │  
   │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
+  │  ╭─ notes ────────────────────────────────────────────────────────────────────────────────────────────────────╮  │  
+  │  │pull secret: get from https://cloud.redhat.com/openshift/install/pull-secret                                │  │  
+  │  │ignition server runs on bastion — ip is derived from networking step.                                       │  │  
+  │  ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  │  
   │                                                                                                                  │  
   │                                                                                                                  │  
   │                                                                                                                  │  

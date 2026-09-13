@@ -72,6 +72,7 @@ var FilesStepDefinition = wizard.StepDefinition{
 		cfg.HTTPServer.IgnitionServerIP = cfg.Networking.Bastion.IP
 		return nil
 	},
+	ExtraContentTitle: "notes",
 	ExtraContent: func(_ map[string]string, _ int) string {
 		helpStyle := lipgloss.NewStyle().
 			Foreground(tui.ColorSlate500).

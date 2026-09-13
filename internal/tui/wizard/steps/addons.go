@@ -4,15 +4,11 @@ package steps
 
 import (
 	"os/exec"
-	"strings"
-
-	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/addon/catalog/flux"
 	"github.com/qxtaiba/okdctl/internal/addon/catalog/secretstore"
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/system"
-	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
@@ -74,6 +70,15 @@ var AddonsStepDefinition = wizard.StepDefinition{
 		{
 			Title: "gitops (flux)",
 			Note:  "requires: ssh deploy key at ~/.ssh/flux-deploy-key",
+			Warning: func(values map[string]string) string {
+				if values["flux_enabled"] != valYes {
+					return ""
+				}
+				if system.FileExists(system.ExpandPath("~/.ssh/flux-deploy-key")) {
+					return ""
+				}
+				return "flux requires ssh deploy key at ~/.ssh/flux-deploy-key — create it before deploying"
+			},
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "flux_enabled",
@@ -116,6 +121,15 @@ var AddonsStepDefinition = wizard.StepDefinition{
 		{
 			Title: "secret store (common)",
 			Note:  "supports onepassword, vault, and bitwarden via external-secrets-operator",
+			Warning: func(values map[string]string) string {
+				if values["secretstore_enabled"] != valYes {
+					return ""
+				}
+				if _, err := exec.LookPath("sops"); err == nil {
+					return ""
+				}
+				return "secretstore requires sops — install before deploying"
+			},
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "secretstore_enabled",
@@ -256,32 +270,5 @@ var AddonsStepDefinition = wizard.StepDefinition{
 
 // NewAddonsStep returns the addons wizard step.
 func NewAddonsStep() *wizard.DataDrivenStep {
-	step := wizard.NewDataDrivenStep(&AddonsStepDefinition)
-	step.WithExtraContentFunc(func(s *wizard.DataDrivenStep, _ int) string {
-		return renderAddonWarnings(s)
-	})
-	return step
-}
-
-func renderAddonWarnings(step *wizard.DataDrivenStep) string {
-	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
-	var warnings []string
-
-	if step.Value("flux_enabled") == valYes {
-		keyPath := system.ExpandPath("~/.ssh/flux-deploy-key")
-		if !system.FileExists(keyPath) {
-			warnings = append(warnings, warnStyle.Render("  flux requires ssh deploy key at ~/.ssh/flux-deploy-key — create it before deploying"))
-		}
-	}
-
-	if step.Value("secretstore_enabled") == valYes {
-		if _, err := exec.LookPath("sops"); err != nil {
-			warnings = append(warnings, warnStyle.Render("  secretstore requires sops — install before deploying"))
-		}
-	}
-
-	if len(warnings) == 0 {
-		return ""
-	}
-	return "\n" + strings.Join(warnings, "\n")
+	return wizard.NewDataDrivenStep(&AddonsStepDefinition)
 }
