@@ -225,12 +225,30 @@ func (s *ReviewStep) renderNetworking(st *wizard.SectionStyles) string {
 	})
 }
 
+// computeLabels lists the labels renderCompute will emit, so its caller can
+// fit the section's label column before rendering.
+func (s *ReviewStep) computeLabels() []string {
+	labels := []string{roleLabelControlPlane, "total"}
+	if s.cfg.Topology.Workers.Count > 0 {
+		labels = append(labels, roleLabelWorkers)
+		if s.cfg.Disks.WorkerDataSizeGB > 0 {
+			labels = append(labels, "worker data disk")
+		}
+	}
+	if s.cfg.Disks.ControlPlaneDataSizeGB > 0 {
+		labels = append(labels, "control plane data disk")
+	}
+	return labels
+}
+
 func (s *ReviewStep) renderCompute(st *wizard.SectionStyles) string {
 	var b strings.Builder
 
-	b.WriteString(st.Header.Render(s.sectionTitle("compute", wizard.StepIDResources)))
+	fitted := st.ForLabels(s.computeLabels()...)
+
+	b.WriteString(fitted.Header.Render(s.sectionTitle("compute", wizard.StepIDResources)))
 	b.WriteString("\n")
-	b.WriteString(st.Separator)
+	b.WriteString(fitted.Separator)
 	b.WriteString("\n")
 
 	cpCPU := s.cfg.Topology.ControlPlane.CPU
@@ -239,7 +257,7 @@ func (s *ReviewStep) renderCompute(st *wizard.SectionStyles) string {
 	cpCount := s.cfg.Topology.ControlPlane.Count
 
 	cpSpec := fmt.Sprintf("%d × (%d vcpu, %d GB RAM, %d GB os disk)", cpCount, cpCPU, cpMem, cpDisk)
-	b.WriteString(st.KVPair(roleLabelControlPlane, cpSpec))
+	b.WriteString(fitted.KVPair(roleLabelControlPlane, cpSpec))
 	b.WriteString("\n")
 
 	if s.cfg.Topology.Workers.Count > 0 {
@@ -249,19 +267,19 @@ func (s *ReviewStep) renderCompute(st *wizard.SectionStyles) string {
 		wCount := s.cfg.Topology.Workers.Count
 
 		wSpec := fmt.Sprintf("%d × (%d vcpu, %d GB RAM, %d GB os disk)", wCount, wCPU, wMem, wDisk)
-		b.WriteString(st.KVPair(roleLabelWorkers, wSpec))
+		b.WriteString(fitted.KVPair(roleLabelWorkers, wSpec))
 		b.WriteString("\n")
 
 		if s.cfg.Disks.WorkerDataSizeGB > 0 {
 			cephSpec := fmt.Sprintf("%d gb per worker (%d gb total)", s.cfg.Disks.WorkerDataSizeGB, s.cfg.Disks.WorkerDataSizeGB*wCount)
-			b.WriteString(st.KVPair("worker data disk", cephSpec))
+			b.WriteString(fitted.KVPair("worker data disk", cephSpec))
 			b.WriteString("\n")
 		}
 	}
 
 	if s.cfg.Disks.ControlPlaneDataSizeGB > 0 {
 		cephSpec := fmt.Sprintf("%d gb per control plane node (%d gb total)", s.cfg.Disks.ControlPlaneDataSizeGB, s.cfg.Disks.ControlPlaneDataSizeGB*cpCount)
-		b.WriteString(st.KVPair("control plane data disk", cephSpec))
+		b.WriteString(fitted.KVPair("control plane data disk", cephSpec))
 		b.WriteString("\n")
 	}
 
@@ -285,10 +303,10 @@ func (s *ReviewStep) renderCompute(st *wizard.SectionStyles) string {
 		totalDataDiskGB += s.cfg.Disks.ControlPlaneDataSizeGB * cpCount
 	}
 
-	b.WriteString(st.Separator)
+	b.WriteString(fitted.Separator)
 	b.WriteString("\n")
 	totalSpec := fmt.Sprintf("%d vcpu, %d gb ram, %d gb disk", totalCPU, totalMemGB, totalOSDiskGB+totalDataDiskGB)
-	b.WriteString(st.KVPair("total", totalSpec))
+	b.WriteString(fitted.KVPair("total", totalSpec))
 	b.WriteString("\n")
 
 	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
@@ -311,31 +329,43 @@ func (s *ReviewStep) renderCompute(st *wizard.SectionStyles) string {
 }
 
 func (s *ReviewStep) renderFilesIgnition(st *wizard.SectionStyles) string {
+	var labels []string
+	if s.cfg.Files.PullSecret != "" {
+		labels = append(labels, "pull secret")
+	}
+	if s.cfg.Files.SSHPublicKey != "" {
+		labels = append(labels, "ssh key")
+	}
+	if s.cfg.HTTPServer.IgnitionServerIP != "" {
+		labels = append(labels, "ignition server", "web root")
+	}
+	fitted := st.ForLabels(labels...)
+
 	var b strings.Builder
 
-	b.WriteString(st.Header.Render(s.sectionTitle("files & ignition", wizard.StepIDFiles)))
+	b.WriteString(fitted.Header.Render(s.sectionTitle("files & ignition", wizard.StepIDFiles)))
 	b.WriteString("\n")
-	b.WriteString(st.Separator)
+	b.WriteString(fitted.Separator)
 	b.WriteString("\n")
 
 	if s.cfg.Files.PullSecret != "" {
-		b.WriteString(st.Label.Render("pull secret"))
-		b.WriteString(st.Check.Render(tui.IconSuccess + " "))
-		b.WriteString(st.Value.Render(truncatePath(s.cfg.Files.PullSecret, 40)))
+		b.WriteString(fitted.Label.Render("pull secret"))
+		b.WriteString(fitted.Check.Render(tui.IconSuccess + " "))
+		b.WriteString(fitted.Value.Render(truncatePath(s.cfg.Files.PullSecret, 40)))
 		b.WriteString("\n")
 	}
 	if s.cfg.Files.SSHPublicKey != "" {
-		b.WriteString(st.Label.Render("ssh key"))
-		b.WriteString(st.Check.Render(tui.IconSuccess + " "))
-		b.WriteString(st.Value.Render(truncatePath(s.cfg.Files.SSHPublicKey, 40)))
+		b.WriteString(fitted.Label.Render("ssh key"))
+		b.WriteString(fitted.Check.Render(tui.IconSuccess + " "))
+		b.WriteString(fitted.Value.Render(truncatePath(s.cfg.Files.SSHPublicKey, 40)))
 		b.WriteString("\n")
 	}
 
 	if s.cfg.HTTPServer.IgnitionServerIP != "" {
 		ignitionURL := "https://" + s.cfg.HTTPServer.IgnitionServerIP
-		b.WriteString(st.KVPair("ignition server", ignitionURL))
+		b.WriteString(fitted.KVPair("ignition server", ignitionURL))
 		b.WriteString("\n")
-		b.WriteString(st.KVPair("web root", s.cfg.HTTPServer.Root))
+		b.WriteString(fitted.KVPair("web root", s.cfg.HTTPServer.Root))
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
@@ -359,11 +389,19 @@ func (s *ReviewStep) renderFeatures(st *wizard.SectionStyles) string {
 		return ""
 	}
 
+	labels := make([]string, 0, len(s.cfg.Addons))
+	for name, ac := range s.cfg.Addons {
+		if ac.Enabled {
+			labels = append(labels, name)
+		}
+	}
+	fitted := st.ForLabels(labels...)
+
 	var b strings.Builder
 
-	b.WriteString(st.Header.Render(s.sectionTitle("addons", wizard.StepIDAddons)))
+	b.WriteString(fitted.Header.Render(s.sectionTitle("addons", wizard.StepIDAddons)))
 	b.WriteString("\n")
-	b.WriteString(st.Separator)
+	b.WriteString(fitted.Separator)
 	b.WriteString("\n")
 
 	for name, ac := range s.cfg.Addons {
@@ -376,7 +414,7 @@ func (s *ReviewStep) renderFeatures(st *wizard.SectionStyles) string {
 		} else if repo, ok := ac.Settings[flux.SettingRepository]; ok && repo != "" {
 			label = fmt.Sprintf("%s (%s)", name, repo)
 		}
-		b.WriteString(st.KVPair(name, label))
+		b.WriteString(fitted.KVPair(name, label))
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")

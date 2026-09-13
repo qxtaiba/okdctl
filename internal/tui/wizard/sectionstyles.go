@@ -8,9 +8,13 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
+// minLabelWidth is the narrowest a section's label column ever shrinks to.
+const minLabelWidth = 12
+
 // SectionStyles is the shared style set for review-style summary screens:
-// cyan section headers over dashed separators, fixed-width dim labels, and
-// a thick separator ahead of a screen's action selector.
+// cyan section headers over full-width separators, a label column fitted to
+// its section's content, and a thick separator ahead of a screen's action
+// selector.
 type SectionStyles struct {
 	Header         lipgloss.Style
 	Separator      string
@@ -28,18 +32,42 @@ func NewSectionStyles(width int) SectionStyles {
 			Bold(true),
 		Separator: lipgloss.NewStyle().
 			Foreground(tui.ColorSlate700).
-			Render(strings.Repeat("┄", width-4)),
+			Render(strings.Repeat("┄", width)),
 		ThickSeparator: lipgloss.NewStyle().
 			Foreground(tui.ColorSlate600).
-			Render(strings.Repeat("═", width-4)),
+			Render(strings.Repeat("═", width)),
 		Label: lipgloss.NewStyle().
 			Foreground(tui.ColorSlate400).
-			Width(18),
+			Width(minLabelWidth),
 		Value: lipgloss.NewStyle().
 			Foreground(tui.ColorText),
 		Check: lipgloss.NewStyle().
 			Foreground(tui.ColorSuccess),
 	}
+}
+
+// LabelWidthFor returns the label column width that fits the longest of
+// labels plus two columns of padding, never narrower than minLabelWidth.
+func LabelWidthFor(labels ...string) int {
+	w := minLabelWidth
+	for _, label := range labels {
+		if lw := lipgloss.Width(label) + 2; lw > w {
+			w = lw
+		}
+	}
+	return w
+}
+
+// NewSectionStylesFor builds section styles sized to width with the label
+// column fitted to labels.
+func NewSectionStylesFor(width int, labels ...string) SectionStyles {
+	return NewSectionStyles(width).ForLabels(labels...)
+}
+
+// ForLabels returns a copy of st with the label column fitted to labels.
+func (st SectionStyles) ForLabels(labels ...string) SectionStyles { //nolint:gocritic // hugeParam: value receiver is deliberate, it returns an independent copy so callers never mutate a shared SectionStyles
+	st.Label = st.Label.Width(LabelWidthFor(labels...))
+	return st
 }
 
 // KVPair renders one label/value line using the section label column.
@@ -65,13 +93,19 @@ func RenderSection(st *SectionStyles, title string, entries []KVEntry) string {
 	if len(visible) == 0 {
 		return ""
 	}
+	labels := make([]string, len(visible))
+	for i, e := range visible {
+		labels[i] = e.Label
+	}
+	fitted := st.ForLabels(labels...)
+
 	var b strings.Builder
-	b.WriteString(st.Header.Render(title))
+	b.WriteString(fitted.Header.Render(title))
 	b.WriteString("\n")
-	b.WriteString(st.Separator)
+	b.WriteString(fitted.Separator)
 	b.WriteString("\n")
 	for _, e := range visible {
-		b.WriteString(st.KVPair(e.Label, e.Value))
+		b.WriteString(fitted.KVPair(e.Label, e.Value))
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")

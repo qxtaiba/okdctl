@@ -4,18 +4,18 @@
   │ review your configuration           ●─●─●─●─●─●─●─●─●─●─●  step 11 of 11 │  
   │──────────────────────────────────────────────────────────────────────────│  
   │  [1] cluster identity                                                    │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
-  │  name              mycluster                                             │  
-  │  domain            k8s.local                                             │  
-  │  distribution      OKD 4.22.0-okd-scos.7                                 │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
+  │  name          mycluster                                                 │  
+  │  domain        k8s.local                                                 │  
+  │  distribution  OKD 4.22.0-okd-scos.7                                     │  
   │                                                                          │  
   │  [2] proxmox                                                             │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
-  │  host              192.168.1.100:8006                                    │  
-  │  bootstrap node    pve                                                   │  
-  │  bridge            vmbr0                                                 │  
-  │  storage           local-lvm                                             │  
-  │  iso storage       local                                                 │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
+  │  host            192.168.1.100:8006                                      │  
+  │  bootstrap node  pve                                                     │  
+  │  bridge          vmbr0                                                   │  
+  │  storage         local-lvm                                               │  
+  │  iso storage     local                                                   │  
   │                                                                          │  
   │                                                                          │  
   │─────────── ↑ ↓  scroll down for more ─────────── ▸ okd 4.22.0-okd-scos.7 │  
