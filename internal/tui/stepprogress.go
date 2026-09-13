@@ -71,7 +71,7 @@ func (s *StepProgress) StepStarted(id distribution.StepID) {
 	})
 }
 
-// StepFinished rewrites r's step line with its duration and a ✔/✖/skip
+// StepFinished rewrites r's step line with its duration and a ✓/✗/skip
 // glyph, commits it to scrollback, and mirrors to the log sink; tolerates a
 // missing StepStarted.
 func (s *StepProgress) StepFinished(r *distribution.StepResult) {

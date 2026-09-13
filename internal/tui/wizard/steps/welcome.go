@@ -134,10 +134,10 @@ func (s *WelcomeStep) renderOption(title, description string, selected bool) str
 	var bullet, titleStyled string
 
 	if selected {
-		bullet = lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true).Render("●")
+		bullet = lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true).Render(tui.IconActive)
 		titleStyled = lipgloss.NewStyle().Foreground(tui.ColorText).Bold(true).Render(title)
 	} else {
-		bullet = lipgloss.NewStyle().Foreground(tui.ColorSlate600).Render("○")
+		bullet = lipgloss.NewStyle().Foreground(tui.ColorSlate600).Render(tui.IconPending)
 		titleStyled = lipgloss.NewStyle().Foreground(tui.ColorSlate300).Render(title)
 	}
 

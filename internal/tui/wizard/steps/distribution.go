@@ -1,6 +1,7 @@
 package steps
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -15,6 +16,30 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
 )
+
+// VersionFetcher resolves the OKD release catalog for the distribution step.
+// *releases.OKDVersionFetcher is the production implementation;
+// StaticVersionFetcher is a deterministic fixture for demo mode and tests.
+type VersionFetcher interface {
+	FetchVersions(ctx context.Context) ([]releases.OKDReleaseSeries, error)
+}
+
+// StaticVersionFetcher is a VersionFetcher fixture that returns a fixed
+// release catalog (or a fixed error) without touching the network.
+type StaticVersionFetcher struct {
+	Series []releases.OKDReleaseSeries
+	Err    error
+}
+
+// FetchVersions returns a copy of Series, or Err if it is set.
+func (f StaticVersionFetcher) FetchVersions(_ context.Context) ([]releases.OKDReleaseSeries, error) {
+	if f.Err != nil {
+		return nil, f.Err
+	}
+	series := make([]releases.OKDReleaseSeries, len(f.Series))
+	copy(series, f.Series)
+	return series, nil
+}
 
 type selectionPhase int
 
@@ -31,7 +56,7 @@ type DistributionStep struct {
 	phase           selectionPhase
 	selectedVersion string
 
-	versionFetcher *releases.OKDVersionFetcher
+	versionFetcher VersionFetcher
 	okdSeries      []releases.OKDReleaseSeries
 	expandedMinor  int // -1 = none expanded (show latest per minor)
 	loadingSpinner spinner.Model
@@ -216,7 +241,7 @@ func (s *DistributionStep) viewVersionPhase() string {
 		errMsg := lipgloss.NewStyle().
 			Foreground(tui.ColorError).
 			Bold(true).
-			Render("✗ failed to fetch okd versions: " + s.loadError.Error())
+			Render(tui.IconError + " failed to fetch okd versions: " + s.loadError.Error())
 		content.WriteString(errMsg)
 		content.WriteString("\n\n")
 		content.WriteString(lipgloss.NewStyle().
@@ -301,6 +326,12 @@ func (s *DistributionStep) GetSelectedVersion() string {
 func (s *DistributionStep) SetSelectedVersion(version string) {
 	s.selectedVersion = version
 	s.versionSelector.SetSelectedByID(version)
+}
+
+// SetVersionFetcher swaps the release-catalog fetcher, used by demo mode and
+// tests to bypass the network with a deterministic fixture.
+func (s *DistributionStep) SetVersionFetcher(f VersionFetcher) {
+	s.versionFetcher = f
 }
 
 // DisplayTitle returns the header text for the step, suppressed while the
