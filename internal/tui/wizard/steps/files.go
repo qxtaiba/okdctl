@@ -20,13 +20,13 @@ var FilesStepDefinition = wizard.StepDefinition{
 			Title: "required files",
 			Fields: []wizard.FieldDefinition{
 				{
-					Key:      "pull_secret",
-					Label:    "pull secret",
-					Default:  "~/pull-secret.json",
-					Help:     "path to okd pull-secret.json from red hat",
-					Width:    wizard.FieldWidthPath,
-					Required: true,
-					Validate: ValidateFilePath,
+					Key:         "pull_secret",
+					Label:       "pull secret",
+					Placeholder: "~/pull-secret.json",
+					Help:        "path to okd pull-secret.json from red hat",
+					Width:       wizard.FieldWidthPath,
+					Required:    true,
+					Validate:    ValidateFilePath,
 					ConfigSet: func(cfg *config.Config, value string) error {
 						cfg.Files.PullSecret = system.ExpandPath(value)
 						return nil
@@ -34,13 +34,13 @@ var FilesStepDefinition = wizard.StepDefinition{
 					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Files.PullSecret }),
 				},
 				{
-					Key:      "ssh_public_key",
-					Label:    "ssh public key",
-					Default:  "~/.ssh/id_ed25519.pub",
-					Help:     "path to ssh public key for node access",
-					Width:    wizard.FieldWidthPath,
-					Required: true,
-					Validate: ValidateFilePath,
+					Key:         "ssh_public_key",
+					Label:       "ssh public key",
+					Placeholder: "~/.ssh/id_ed25519.pub",
+					Help:        "path to ssh public key for node access",
+					Width:       wizard.FieldWidthPath,
+					Required:    true,
+					Validate:    ValidateFilePath,
 					ConfigSet: func(cfg *config.Config, value string) error {
 						cfg.Files.SSHPublicKey = system.ExpandPath(value)
 						return nil

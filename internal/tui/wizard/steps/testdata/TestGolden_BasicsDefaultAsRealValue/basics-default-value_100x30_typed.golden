@@ -1,28 +1,28 @@
                                                                                                     
   ╭──────────────────────────────────────────────────────────────────────────────────────────────╮  
   │ O K D C T L                                                                                  │  
-  │ configure proxmox ve connection                          ●─●─●─○─○─○─○─○─○─○─○  step 3 of 11 │  
+  │ configure your cluster basics                            ●─●─●─●─○─○─○─○─○─○─○  step 4 of 11 │  
   │──────────────────────────────────────────────────────────────────────────────────────────────│  
   │                                                                                              │  
-  │    ✓ connection                                                                              │  
+  │    ● cluster identity                                                                        │  
   │                                                                                              │  
-  │    host                                                                                      │  
+  │    cluster name                                                                              │  
   │    ╭──────────────────────────────╮                                                          │  
-  │    │ 192.168.1.100:8006           │                                                          │  
+  │    │ h                            │                                                          │  
+  │    ╰──────────────────────────────╯                                                          │  
+  │    lowercase letters, numbers, and hyphens only                                              │  
+  │                                                                                              │  
+  │    domain                                                                                    │  
+  │    ╭──────────────────────────────╮                                                          │  
+  │    │ k8s.local                    │ default                                                  │  
   │    ╰──────────────────────────────╯                                                          │  
   │                                                                                              │  
-  │    ● credentials                                                                             │  
+  │    ✓ node topology                                                                           │  
   │                                                                                              │  
-  │    username                                                                                  │  
-  │    ╭──────────────────────────────╮                                                          │  
-  │    │ root@pam                     │ default                                                  │  
-  │    ╰──────────────────────────────╯                                                          │  
-  │    proxmox username (user@realm)                                                             │  
-  │                                                                                              │  
-  │    password                                                                                  │  
-  │    ╭──────────────────────────────╮                                                          │  
-  │    │ ·                            │                                                          │  
-  │    ╰──────────────────────────────╯                                                          │  
+  │    control plane                                                                             │  
+  │    ╭──────────╮                                                                              │  
+  │    │ ◂ 3 ▸    │ default                                                                      │  
+  │    ╰──────────╯                                                                              │  
   │                                                                                              │  
   │───────────────────── ↑ ↓  scroll down for more ───────────────────── ▸ okd 4.22.0-okd-scos.7 │  
   │  ↑↓/tab navigate • enter continue • esc back • pgup/pgdn scroll                              │  

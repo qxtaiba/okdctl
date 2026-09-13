@@ -22,7 +22,8 @@ type FormField interface {
 	Focus() tea.Cmd
 	Blur()
 	SetWidth(width int)
-	Validate() error
+	Check() error    // pure: reports validity without recording it for View
+	Validate() error // Check, then records the result for View to render
 	Update(msg tea.Msg) (FormField, tea.Cmd)
 	View() string
 }
@@ -43,6 +44,7 @@ type InputField struct {
 	width     int
 	boxWidth  int
 	isDefault bool
+	touched   bool
 	savedPos  int
 	err       error
 }
@@ -53,7 +55,7 @@ func NewInputField(label, placeholder string) *InputField {
 	ti.Prompt = ""
 	ti.Placeholder = placeholder
 	ti.CharLimit = 256
-	ti.SetStyles(fieldInputStyles())
+	ti.SetStyles(fieldInputStyles(false))
 
 	return &InputField{
 		Label:       label,
@@ -64,15 +66,22 @@ func NewInputField(label, placeholder string) *InputField {
 }
 
 // fieldInputStyles builds the textinput color scheme shared by every
-// InputField: dim placeholder, brand-purple cursor, slate blurred text.
-func fieldInputStyles() textinput.Styles {
+// InputField: brand-purple cursor, dim placeholder, and — while isDefault —
+// Slate500 text so an unmodified default reads as dimmer than a typed value.
+func fieldInputStyles(isDefault bool) textinput.Styles {
+	focusedText := lipgloss.NewStyle().Foreground(tui.ColorText)
+	blurredText := lipgloss.NewStyle().Foreground(tui.ColorSlate300)
+	if isDefault {
+		focusedText = lipgloss.NewStyle().Foreground(tui.ColorSlate500)
+		blurredText = lipgloss.NewStyle().Foreground(tui.ColorSlate500)
+	}
 	return textinput.Styles{
 		Focused: textinput.StyleState{
-			Text:        lipgloss.NewStyle().Foreground(tui.ColorText),
+			Text:        focusedText,
 			Placeholder: lipgloss.NewStyle().Foreground(tui.ColorSlate600),
 		},
 		Blurred: textinput.StyleState{
-			Text:        lipgloss.NewStyle().Foreground(tui.ColorSlate300),
+			Text:        blurredText,
 			Placeholder: lipgloss.NewStyle().Foreground(tui.ColorSlate600),
 		},
 		Cursor: textinput.CursorStyle{
@@ -98,24 +107,44 @@ func (f *InputField) Value() string {
 	return f.input.Value()
 }
 
-// SetValue replaces the field value.
+// SetValue replaces the field value and clears the default tag, since the
+// value is now an explicit one rather than an unmodified default.
 func (f *InputField) SetValue(value string) {
 	f.input.SetValue(value)
+	f.isDefault = false
 }
 
-// Focus gives the field focus, restores the cursor to where Blur last left
-// it, and returns the textinput blink command.
+// SetDefault sets the field's value to v and marks it as an unmodified
+// default, which View renders dim with a "default" tag until the value
+// changes.
+func (f *InputField) SetDefault(v string) {
+	f.input.SetValue(v)
+	f.isDefault = true
+}
+
+// IsDefault reports whether the field's value is still its unmodified default.
+func (f *InputField) IsDefault() bool {
+	return f.isDefault
+}
+
+// Focus gives the field focus, marks it touched so a later Blur will
+// validate it, restores the cursor to where Blur last left it, and returns
+// the textinput blink command.
 func (f *InputField) Focus() tea.Cmd {
 	f.focused = true
+	f.touched = true
 	f.input.SetCursor(f.savedPos)
 	return f.input.Focus()
 }
 
 // Blur removes focus, scrolls a long value back to its head so it reads
-// from the start while unfocused, and runs one validation pass so error
-// state is current when the field is rendered next; the position save is
-// guarded on an actual focus->blur transition so InputGroup.updateFocus's
-// redundant re-blur of an already-blurred field can't collapse it to 0.
+// from the start while unfocused, and — only for a field that has actually
+// held focus (touched), so the wizard never manufactures an error for a
+// field nobody has visited via InputGroup's blur-everyone-else navigation —
+// runs one validation pass so error state is current when the field is
+// rendered next; the position save is guarded on an actual focus->blur
+// transition so InputGroup.updateFocus's redundant re-blur of an
+// already-blurred field can't collapse it to 0.
 func (f *InputField) Blur() {
 	if f.focused {
 		f.savedPos = f.input.Position()
@@ -123,7 +152,9 @@ func (f *InputField) Blur() {
 	f.focused = false
 	f.input.SetCursor(0)
 	f.input.Blur()
-	_ = f.Validate()
+	if f.touched {
+		_ = f.Validate()
+	}
 }
 
 // SetWidth records the width available to the field's label and help/error
@@ -156,44 +187,64 @@ func (f *InputField) applyBox() {
 	f.input.SetCursor(f.input.Position())
 }
 
-// Validate runs the Required check and Validator; for password fields the
-// raw value is scrubbed from error messages so secrets can't leak.
-func (f *InputField) Validate() error {
+// Check runs the Required check and Validator without recording the
+// result, so a caller probing validity (e.g. a section-complete indicator)
+// can't paint error state onto a field the user hasn't touched; for
+// password fields the raw value is scrubbed from error messages so
+// secrets can't leak.
+func (f *InputField) Check() error {
 	if f.Required && strings.TrimSpace(f.input.Value()) == "" {
-		f.err = errRequired
-		return f.err
+		return errRequired
 	}
-	if f.Validator != nil {
-		value := f.input.Value()
-		f.err = f.Validator(value)
-		// Wraps a validator's error for password fields so its message can't
-		// leak the raw value, while preserving Unwrap().
-		if f.Password && f.err != nil && value != "" {
-			var msg string
-			// Short values (e.g. "a") would mangle unrelated chars via
-			// ReplaceAll; fall back to a generic message instead.
-			if len(value) >= 4 {
-				msg = strings.ReplaceAll(f.err.Error(), value, "***")
-			} else {
-				msg = "invalid password"
-			}
-			f.err = &scrubbedError{msg: msg, inner: f.err}
+	if f.Validator == nil {
+		return nil
+	}
+	value := f.input.Value()
+	err := f.Validator(value)
+	// Wraps a validator's error for password fields so its message can't
+	// leak the raw value, while preserving Unwrap().
+	if f.Password && err != nil && value != "" {
+		var msg string
+		// Short values (e.g. "a") would mangle unrelated chars via
+		// ReplaceAll; fall back to a generic message instead.
+		if len(value) >= 4 {
+			msg = strings.ReplaceAll(err.Error(), value, "***")
+		} else {
+			msg = "invalid password"
 		}
-		return f.err
+		err = &scrubbedError{msg: msg, inner: err}
 	}
-	f.err = nil
-	return nil
+	return err
+}
+
+// Validate runs Check, records the result as the field's current error for
+// View to render, and marks the field touched — so InputGroup.TouchAll can
+// force every field to a current, visible validation state through this
+// same interface method.
+func (f *InputField) Validate() error {
+	f.touched = true
+	f.err = f.Check()
+	return f.err
 }
 
 // Update forwards msg to the underlying textinput, clearing any stale
-// validation error on keypress.
+// validation error on keypress, and — while the value is still an
+// unmodified default — clears the default tag and, for an edit rather
+// than mere cursor movement, the text itself, so the first keystroke
+// replaces the default instead of appending to it.
 func (f *InputField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 	if !f.focused {
 		return f, nil
 	}
 
-	if _, ok := msg.(tea.KeyPressMsg); ok {
+	if k, ok := msg.(tea.KeyPressMsg); ok {
 		f.err = nil
+		if f.isDefault {
+			f.isDefault = false
+			if k.Text != "" || k.Code == tea.KeyBackspace || k.Code == tea.KeyDelete {
+				f.input.SetValue("")
+			}
+		}
 	}
 
 	var cmd tea.Cmd
@@ -210,6 +261,7 @@ func (f *InputField) View() string {
 	// EchoMode, and scrub raw value on every text path below.
 	label := labelStyle.Render(f.Label)
 
+	f.input.SetStyles(fieldInputStyles(f.isDefault))
 	content := f.input.View()
 	if f.input.Value() == "" && f.Placeholder == "" {
 		content = tagStyle.Render("·")
@@ -360,6 +412,16 @@ func (g *InputGroup) Validate() []error {
 		}
 	}
 	return errs
+}
+
+// TouchAll runs Validate on every field, marking each one touched and
+// recording its current error, so a forced submission attempt (enter)
+// shows every invalid field's real state at once rather than only the
+// ones the user happened to visit.
+func (g *InputGroup) TouchAll() {
+	for _, f := range g.fields {
+		_ = f.Validate()
+	}
 }
 
 // Update handles group-level navigation keys (tab, shift-tab) and forwards

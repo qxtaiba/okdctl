@@ -262,8 +262,8 @@ func (s *NodePlacementStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		if !enterPressed {
 			return s, cmd
 		}
-		if err := s.inner.Validate(); err != nil {
-			return s, func() tea.Msg { return wizard.ErrorSetMsg{Error: err} }
+		if errs := s.inner.Validate(); len(errs) > 0 {
+			return s, func() tea.Msg { return wizard.ErrorSetMsg{Error: errs[0]} }
 		}
 		return s, func() tea.Msg {
 			return wizard.StepCompleteMsg{StepID: s.ID()}

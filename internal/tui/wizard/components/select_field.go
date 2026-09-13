@@ -97,9 +97,14 @@ func (f *SelectField) SetBoxWidth(outer int) {
 	f.boxWidth = outer
 }
 
+// Check always returns nil because selection is constrained to Options.
+func (f *SelectField) Check() error {
+	return nil
+}
+
 // Validate always returns nil because selection is constrained to Options.
 func (f *SelectField) Validate() error {
-	return nil
+	return f.Check()
 }
 
 // Update handles left/right and h/l key presses to cycle through Options.

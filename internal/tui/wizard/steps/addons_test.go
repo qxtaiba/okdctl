@@ -20,7 +20,7 @@ func TestAddonsStep_WarningAttachesToFluxSection(t *testing.T) {
 	cfg.Addons = map[string]config.AddonConfig{"flux": {Enabled: true}}
 
 	step := NewAddonsStep()
-	step.LoadFromConfig(cfg)
+	step.LoadFromConfig(cfg, false)
 
 	lines := strings.Split(tuitest.StripANSI(step.View(100, 30)), "\n")
 
@@ -60,7 +60,7 @@ func TestAddonsStep_WarningAttachesToSecretStoreSection(t *testing.T) {
 	cfg.Addons = map[string]config.AddonConfig{"secretstore": {Enabled: true}}
 
 	step := NewAddonsStep()
-	step.LoadFromConfig(cfg)
+	step.LoadFromConfig(cfg, false)
 
 	lines := strings.Split(tuitest.StripANSI(step.View(100, 30)), "\n")
 
