@@ -369,8 +369,13 @@ pinning or scripted comparisons (see docs/cli/json-schema.md).`,
 }
 
 // versionText renders build identity with okdctl's dotted-leader convention
-// instead of cobra's stock "Key:" colons.
+// instead of cobra's stock "Key:" colons; it disables color itself for
+// --no-color since the bare "okdctl --version" flag short-circuits inside
+// cobra's execute() before PersistentPreRunE/configureLogging ever runs.
 func versionText() string {
+	if noColor {
+		tui.DisableColor()
+	}
 	const keyCol = 16
 	rows := [][2]string{
 		{"git commit", version.GitCommit},
