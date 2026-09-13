@@ -24,7 +24,7 @@
   │  ══════════════════════════════════════════════════════════════════════════════════════      │  
   │                                                                                              │  
   │                                                                                              │  
-  │───────────────────────────────── ↑ ↓  scroll down for more ───────────────────── ▸ mycluster │  
-  │   ↑↓  select action    enter  confirm    esc  back    ctrl+c  quit                           │  
+  │─────────────────────────── ↑ ↓  scroll down for more ─────────────────────────── ▸ mycluster │  
+  │  ↑↓ select action • enter confirm • esc back • ctrl+c quit • pgup/pgdn scroll                │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                     

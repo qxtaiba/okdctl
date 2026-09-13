@@ -25,6 +25,6 @@
   │                                                                                              │  
   │                                                                                              │  
   │───────────────────────────────────────────────────────────────────────────────── ▸ mycluster │  
-  │   ctrl+c  request graceful cancel (twice to force-quit)                                      │  
+  │  ctrl+c request graceful cancel (twice to force-quit)                                        │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                     

@@ -18,8 +18,7 @@
   │                                                                          │  
   │    os disk (gb) (boot disk for control plane nodes (okd minimum: 50      │  
   │                                                                          │  
-  │─────────────────────── ↑ ↓  scroll down for more ─── ▸ okd 4.22.0-okd-   │  
-  │scos.7                                                                    │  
-  │   ↑↓/tab  navigate    enter  continue    esc  back                       │  
+  │─────────── ↑ ↓  scroll down for more ─────────── ▸ okd 4.22.0-okd-scos.7 │  
+  │  ↑↓/tab navigate • enter continue • esc back • pgup/pgdn scroll          │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

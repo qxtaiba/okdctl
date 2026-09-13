@@ -153,3 +153,90 @@ func TestHeader_TitleTruncatesAt60Cols(t *testing.T) {
 		t.Fatalf("ellipsis must precede the ribbon: %q", row2)
 	}
 }
+
+// tallStep renders far more lines than any test terminal height, forcing
+// the viewport (and its footer scroll indicator) into the scrollable state.
+type tallStep struct{ nopStep }
+
+func (s *tallStep) View(_, _ int) string {
+	return strings.TrimRight(strings.Repeat("row\n", 60), "\n")
+}
+
+func newTallStep() *tallStep {
+	return &tallStep{nopStep: *newNopStep()}
+}
+
+func TestFooterRule_IndicatorCentredWithinAvail(t *testing.T) {
+	cfg := config.DefaultConfig()
+	chrome := FlowChrome{Badge: func(*config.Config) string { return "cluster-badge" }}
+	m := NewFlowModel([]WizardStep{newTallStep()}, cfg, chrome)
+	tuitest.RenderAt(t, m, 100, 30)
+
+	ind, scrollable := m.scrollIndicator()
+	if !scrollable {
+		t.Fatal("expected a scrollable viewport")
+	}
+	indPlain := tuitest.StripANSI(ind)
+
+	rule := tuitest.StripANSI(m.renderFooterRule())
+	idx := strings.Index(rule, indPlain)
+	if idx < 0 {
+		t.Fatalf("indicator %q not found in rule %q", indPlain, rule)
+	}
+
+	left := strings.Count(rule[:idx], "─")
+	right := strings.Count(rule[idx+len(indPlain):], "─")
+	if d := left - right; d < -1 || d > 1 {
+		t.Fatalf("left=%d right=%d not centred: %q", left, right, rule)
+	}
+}
+
+func TestFooter_AdvertisesPageKeysWhenScrollable(t *testing.T) {
+	cfg := config.DefaultConfig()
+
+	tall := NewModel([]WizardStep{newTallStep()}, cfg)
+	tallFrame := tuitest.StripANSI(tuitest.RenderAt(t, tall, 100, 30))
+	if !strings.Contains(tallFrame, "pgup/pgdn") {
+		t.Fatalf("expected pgup/pgdn hint:\n%s", tallFrame)
+	}
+
+	short := NewModel([]WizardStep{newNopStep()}, cfg)
+	shortFrame := tuitest.StripANSI(tuitest.RenderAt(t, short, 100, 30))
+	if strings.Contains(shortFrame, "pgup/pgdn") {
+		t.Fatalf("unexpected pgup/pgdn hint:\n%s", shortFrame)
+	}
+}
+
+const pinnedFooterText = "custom footer text"
+
+type pinnedFooterStep struct{ nopStep }
+
+func (s *pinnedFooterStep) PinnedFooter(_ int) string { return pinnedFooterText }
+
+func newPinnedFooterStep() *pinnedFooterStep {
+	return &pinnedFooterStep{nopStep: *newNopStep()}
+}
+
+func TestFooter_PinnedFooterLeftOfRibbon(t *testing.T) {
+	cfg := config.DefaultConfig()
+	m := NewModel([]WizardStep{newPinnedFooterStep()}, cfg)
+	tuitest.RenderAt(t, m, 100, 30)
+
+	helpRow := tuitest.StripANSI(m.renderHelpRow())
+	if strings.Contains(helpRow, "\n") {
+		t.Fatalf("help row wrapped to a second line: %q", helpRow)
+	}
+
+	leftIdx := strings.Index(helpRow, pinnedFooterText)
+	if leftIdx != 2 {
+		t.Fatalf("pinned footer text at col %d, want 2: %q", leftIdx, helpRow)
+	}
+
+	quitIdx := strings.LastIndex(helpRow, "quit")
+	if quitIdx < leftIdx+len(pinnedFooterText) {
+		t.Fatalf("ribbon not right of pinned text: %q", helpRow)
+	}
+	if trailing := len(helpRow) - (quitIdx + len("quit")); trailing > 2 {
+		t.Fatalf("ribbon not right-aligned, trailing=%d: %q", trailing, helpRow)
+	}
+}
