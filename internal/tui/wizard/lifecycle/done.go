@@ -68,11 +68,12 @@ func (s *DoneStep) successView(width int) string {
 	st := wizard.NewSectionStyles(width)
 	okStyle := lipgloss.NewStyle().Foreground(tui.ColorSuccess).Bold(true)
 	dimStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
+	fitted := st.ForLabels("cluster", "elapsed")
 
 	out := okStyle.Render(tui.IconSuccess+" "+completionHeadline(s.st.Op)) + "\n\n"
-	out += st.KVPair("cluster", s.st.Cfg.Cluster.Name) + "\n"
+	out += fitted.KVPair("cluster", s.st.Cfg.Cluster.Name) + "\n"
 	if s.st.Elapsed > 0 {
-		out += st.KVPair("elapsed", s.st.Elapsed.Truncate(time.Second).String()) + "\n"
+		out += fitted.KVPair("elapsed", s.st.Elapsed.Truncate(time.Second).String()) + "\n"
 	}
 	out += "\n"
 

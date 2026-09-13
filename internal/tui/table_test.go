@@ -45,6 +45,12 @@ func TestTableMiddleTruncatesOverLongCells(t *testing.T) {
 	}
 }
 
+func TestTruncateRuneSafe(t *testing.T) {
+	if got := Truncate("héllo wörld", 6); got != "héllo…" {
+		t.Errorf("Truncate = %q, want %q", got, "héllo…")
+	}
+}
+
 func TestTableRowStylePaintsSelectedRow(t *testing.T) {
 	lines := Table(
 		[]string{"NAME", "READY"},

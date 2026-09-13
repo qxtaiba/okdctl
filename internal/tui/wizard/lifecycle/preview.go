@@ -234,14 +234,20 @@ func (s *PreviewStep) operationEntries() []wizard.KVEntry {
 }
 
 func (s *PreviewStep) renderNodes(st *wizard.SectionStyles, warnStyle *lipgloss.Style) string {
+	names := make([]string, len(s.st.Plan.Nodes))
+	for i := range s.st.Plan.Nodes {
+		names[i] = s.st.Plan.Nodes[i].Name
+	}
+	fitted := st.ForLabels(names...)
+
 	var b strings.Builder
-	b.WriteString(st.Header.Render("[2] nodes — execution order"))
+	b.WriteString(fitted.Header.Render("[2] nodes — execution order"))
 	b.WriteString("\n")
-	b.WriteString(st.Separator)
+	b.WriteString(fitted.Separator)
 	b.WriteString("\n")
 	for i := range s.st.Plan.Nodes {
 		n := &s.st.Plan.Nodes[i]
-		b.WriteString(st.KVPair(n.Name, fmt.Sprintf("%s  %s  [%s]", n.Role, n.TFAddress, n.Action)))
+		b.WriteString(fitted.KVPair(n.Name, fmt.Sprintf("%s  %s  [%s]", n.Role, n.TFAddress, n.Action)))
 		b.WriteString("\n")
 		if len(n.OSDs) > 0 {
 			b.WriteString(warnStyle.Render(fmt.Sprintf("  storage: %d rook-ceph OSD(s) — data disk destroyed", len(n.OSDs))))
