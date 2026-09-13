@@ -1,10 +1,13 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -252,5 +255,37 @@ func TestWrapArgValidators(t *testing.T) {
 	err = handRolled.Args(handRolled, nil)
 	if !errors.As(err, &usageErr) || usageErr.Msg != "expected exactly one name" {
 		t.Fatalf("hand-rolled UsageError must pass through unwrapped, got %v", err)
+	}
+}
+
+func installLogBuffer(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	logutil.InstallHandler(slog.NewTextHandler(&buf, nil))
+	t.Cleanup(func() { logutil.InstallHandler(slog.NewTextHandler(os.Stderr, nil)) })
+	return &buf
+}
+
+func TestFlagErrorFuncReturnsUsageErrorWithHelpHint(t *testing.T) {
+	buf := installLogBuffer(t)
+
+	err := rootCmd.FlagErrorFunc()(nodeResizeCmd, errors.New("unknown flag: --bogus"))
+
+	var usageErr *errtypes.UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("want *errtypes.UsageError, got %T: %v", err, err)
+	}
+	if got := exitCodeFor(err); got != 64 {
+		t.Fatalf("exitCodeFor = %d, want 64", got)
+	}
+	d, ok := errtypes.Describe(err)
+	if !ok {
+		t.Fatalf("errtypes.Describe failed to classify %v", err)
+	}
+	if !strings.Contains(d.Hint, "okdctl node resize --help") {
+		t.Fatalf("hint = %q, want it to contain %q", d.Hint, "okdctl node resize --help")
+	}
+	if buf.Len() != 0 {
+		t.Fatalf("FlagErrorFunc must not log directly; buffer = %q", buf.String())
 	}
 }

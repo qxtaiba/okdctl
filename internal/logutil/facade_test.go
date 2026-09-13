@@ -82,3 +82,16 @@ func TestRunID_RoundTrip(t *testing.T) {
 		t.Fatalf("RunID = %q, want run-42", got)
 	}
 }
+
+func TestProgressBarsEnabled_DefaultsToDisabled(t *testing.T) {
+	prev := ProgressBarsEnabled()
+	t.Cleanup(func() { SetProgressBarsEnabled(prev) })
+
+	if ProgressBarsEnabled() {
+		t.Fatal("progress bars must default to disabled; only configureLogging enables them")
+	}
+	SetProgressBarsEnabled(true)
+	if !ProgressBarsEnabled() {
+		t.Fatal("SetProgressBarsEnabled(true) did not take effect")
+	}
+}
