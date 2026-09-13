@@ -13,10 +13,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-const (
-	defaultContentWidth = tui.DefaultBoxWidth - 2
-	defaultKeyColWidth  = 45
-)
+const defaultKeyColWidth = 45
 
 type stepDisplayStatus string
 
@@ -49,9 +46,15 @@ type Builder struct {
 
 // NewBuilder returns a Builder with the shared summary column widths.
 func NewBuilder() *Builder {
+	return NewBuilderWidth(tui.DefaultBoxWidth)
+}
+
+// NewBuilderWidth returns a Builder whose key and key/value columns fit
+// inside a box of the given width.
+func NewBuilderWidth(width int) *Builder {
 	return &Builder{
-		keyWidth: defaultKeyColWidth,
-		kvWidth:  defaultContentWidth - 2,
+		keyWidth: min(defaultKeyColWidth, width/2),
+		kvWidth:  max(width-4, 0),
 	}
 }
 

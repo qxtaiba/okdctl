@@ -67,6 +67,32 @@ func TestPresentedMarkerRoundTrips(t *testing.T) {
 	}
 }
 
+func TestErrorCardOmitsRunID(t *testing.T) {
+	got := ErrorCard("resize failed", "etcd health gate (post-master0) failed: quorum lost",
+		"re-run the same operation to resume at the recorded step", 70)
+	for _, want := range []string{"resize failed", "quorum lost", "→", "re-run the same operation"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("error card missing %q:\n%s", want, got)
+		}
+	}
+	for _, absent := range []string{"run_id", "exit "} {
+		if strings.Contains(got, absent) {
+			t.Errorf("error card must carry no exit/run_id footer, found %q:\n%s", absent, got)
+		}
+	}
+}
+
+func TestErrorBodyChipHasTwoSpaceGap(t *testing.T) {
+	summary := ErrorSummary(&errtypes.ConfigError{Msg: "boom"}, 1, "R")
+	if !strings.Contains(summary, "✗  config error") {
+		t.Errorf("ErrorSummary chip must render the icon and kind with a two-space gap:\n%s", summary)
+	}
+	card := ErrorCard("resize failed", "boom", "", 70)
+	if !strings.Contains(card, "✗  resize failed") {
+		t.Errorf("ErrorCard chip must render the icon and kind with a two-space gap:\n%s", card)
+	}
+}
+
 func TestWrapTextHardSplitsLongToken(t *testing.T) {
 	long := strings.Repeat("a", 50)
 	lines := wrapText(long, 20)

@@ -61,8 +61,8 @@ func TestReportLifecycleOutcomeExecutedPaths(t *testing.T) {
 	if err := reportLifecycleOutcome(cmd, wizard.Result{Completed: true}, st); err != nil {
 		t.Fatalf("successful run: %v", err)
 	}
-	if !strings.Contains(out.String(), "resize") {
-		t.Error("successful run must print the completion box")
+	if out.Len() != 0 {
+		t.Errorf("success prints nothing; the done screen already showed the box")
 	}
 
 	boom := errors.New("etcd gate failed")

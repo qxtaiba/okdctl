@@ -7,6 +7,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/node"
@@ -41,6 +42,43 @@ func TestDoneStepFailureCarriesError(t *testing.T) {
 	}
 	if !strings.Contains(out, "resume") {
 		t.Errorf("failure view must point at the resume path:\n%s", out)
+	}
+}
+
+func TestDoneStepFitsNarrowWidth(t *testing.T) {
+	st := doneState()
+	st.Elapsed = 90 * time.Second
+	out := NewDoneStep(st).View(70, 24)
+	for _, line := range strings.Split(out, "\n") {
+		if w := lipgloss.Width(line); w > 70 {
+			t.Errorf("done view line %d cols wide, want <= 70: %q", w, line)
+		}
+	}
+}
+
+func TestDoneStepFailureFitsNarrowWidth(t *testing.T) {
+	st := doneState()
+	st.Result = errors.New("etcd health gate (post-master0) failed: quorum lost")
+	out := NewDoneStep(st).View(70, 24)
+	for _, line := range strings.Split(out, "\n") {
+		if w := lipgloss.Width(line); w > 70 {
+			t.Errorf("failure view line %d cols wide, want <= 70: %q", w, line)
+		}
+	}
+}
+
+func TestDoneStepFailureShowsChipAndPointer(t *testing.T) {
+	st := doneState()
+	st.Result = errors.New("etcd health gate (post-master0) failed: quorum lost")
+	out := NewDoneStep(st).View(90, 40)
+	if !strings.Contains(out, "✗  resize failed") {
+		t.Errorf("failure view must show the failed-op chip:\n%s", out)
+	}
+	if !strings.Contains(out, "→") {
+		t.Errorf("failure view must point at the resume hint:\n%s", out)
+	}
+	if strings.Contains(out, "run_id") {
+		t.Errorf("failure view must not carry the exit/run_id footer:\n%s", out)
 	}
 }
 
