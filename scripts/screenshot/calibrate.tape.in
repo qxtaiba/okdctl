@@ -1,0 +1,14 @@
+# Template for scripts/screenshot/run.sh: prints the terminal's actual
+# column/row count at the given pixel size so run.sh can verify a preset
+# maps to its named dimensions before rendering the wizard tape.
+Output out/calib-@NAME@.txt
+Set Shell zsh
+Set FontSize 14
+Set Padding 0
+Set LineHeight 1.0
+Set LetterSpacing 1.0
+Set Width @W@
+Set Height @H@
+Type "printf '%s %s\n' $(tput cols) $(tput lines)"
+Enter
+Sleep 300ms
