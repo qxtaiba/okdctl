@@ -11,10 +11,11 @@ ROOT="$(git rev-parse --show-toplevel)"
 SCREENSHOT_DIR="$ROOT/scripts/screenshot"
 OUT_DIR="$SCREENSHOT_DIR/out"
 WORK="$(mktemp -d -t okdctl-screenshot)"
-# `go run` doesn't forward signals to the compiled child it spawns, so
-# killing $PVE_PID (the go run wrapper) leaves fakepve itself running; kill
-# by port instead. || true keeps the handler's exit clean under errexit.
-trap '(lsof -ti :8006 | xargs kill) 2>/dev/null || true; rm -rf "$WORK"' EXIT
+# Guards the kill: unset PVE_PID must not abort before rm cleans $WORK under
+# errexit; || true keeps the handler's exit clean. Safe to register before
+# the port check below — it no-ops until PVE_PID is actually set, so an
+# early abort (e.g. port already busy) can never kill a foreign process.
+trap '[ -n "${PVE_PID:-}" ] && kill "$PVE_PID" 2>/dev/null || true; rm -rf "$WORK"' EXIT
 
 if lsof -i :8006 >/dev/null 2>&1; then
   echo "port 8006 is already in use — stop whatever's listening and retry" >&2
@@ -35,7 +36,13 @@ export OKDCTL_DEMO_BIN="$WORK/okdctl"
 go build -o "$OKDCTL_DEMO_BIN" "$ROOT/cmd/okdctl"
 
 echo "starting fake proxmox api..."
-go run "$ROOT/scripts/demo/fakepve.go" &
+# Built to a binary (not `go run`) so $! below is the actual server's PID,
+# not a `go run` wrapper's — `go run` doesn't forward signals to the child
+# it spawns, which would otherwise leave fakepve running after the trap's
+# kill "$PVE_PID".
+go build -o "$WORK/fakepve" "$ROOT/scripts/demo/fakepve.go"
+"$WORK/fakepve" &
+PVE_PID=$!
 for _ in $(seq 1 20); do
   curl -sk https://127.0.0.1:8006/api2/json/version >/dev/null 2>&1 && break
   sleep 0.5
