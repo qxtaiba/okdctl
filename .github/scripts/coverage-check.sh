@@ -18,7 +18,7 @@ if [[ ! -f "$FLOORS_FILE" ]]; then
 fi
 
 awk '
-BEGIN { def = 0; total_floor = 0 }
+BEGIN { def = 0; total_floor = 0; stale = 0; stale_slack = 20 }
 
 # First file: floors (pkg=pct, "#" comments, "*" default, "total" aggregate).
 FNR == NR {
@@ -50,10 +50,18 @@ FNR == 1 { next }
   }
 }
 
-function report(pkg, pct, fl) {
+# STALE is advisory, never fatal: a floor this far below actual has stopped
+# being a tripwire, and nothing else reports that it has gone slack.
+function report(pkg, pct, fl,   slack) {
   if (pct < fl) {
     printf "FAIL  %-70s  %5.1f%% (floor %d%%)\n", pkg, pct, fl > "/dev/stderr"
     return 1
+  }
+  slack = pct - fl
+  if (slack > stale_slack) {
+    printf "STALE %-70s  %5.1f%% (floor %d%%, +%.1f) re-baseline\n", pkg, pct, fl, slack
+    stale_names[++stale] = pkg
+    return 0
   }
   printf "ok    %-70s  %5.1f%% (floor %d%%)\n", pkg, pct, fl
   return 0
@@ -75,7 +83,7 @@ END {
 
   for (p in floor)
     if (!(p in stmts)) {
-      printf "FAIL  %-70s  absent from coverage profile (floor %d%%) - were its tests deleted?\n", \
+      printf "FAIL  %-70s  absent from coverage profile (floor %d%%) - package deleted or renamed?\n", \
         p, floor[p] > "/dev/stderr"
       failed = 1
     }
@@ -85,6 +93,18 @@ END {
   } else {
     print "coverage-check: no coverage data in profile" > "/dev/stderr"
     failed = 1
+  }
+
+  if (stale > 0) {
+    names = stale_names[1]
+    for (i = 2; i <= stale; i++) names = names ", " stale_names[i]
+    printf "\ncoverage-check: %d entr%s drifted >%d points above %s floor; run: make coverage-floors.\n", \
+      stale, (stale == 1 ? "y" : "ies"), stale_slack, (stale == 1 ? "its" : "their")
+    # A green CI step has its log collapsed; the annotation is the only
+    # form of this warning a reader actually sees.
+    if (ENVIRON["GITHUB_ACTIONS"] == "true")
+      printf "::warning title=Stale coverage floors::%d entr%s drifted >%d points above %s floor (%s); run: make coverage-floors\n", \
+        stale, (stale == 1 ? "y" : "ies"), stale_slack, (stale == 1 ? "its" : "their"), names
   }
 
   if (failed) {

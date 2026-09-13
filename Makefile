@@ -19,7 +19,7 @@ LDFLAGS := -ldflags "-s -w \
 
 .DEFAULT_GOAL := help
 
-.PHONY: all build build-all clean test test-short test-cover lint fmt vet check deps deps-update run dev install docs docs-check demo help
+.PHONY: all build build-all clean test test-short test-cover coverage-floors lint fmt vet check deps deps-update run dev install docs docs-check demo help
 
 all: deps lint test build ## Run all checks and build
 
@@ -60,6 +60,9 @@ test-cover: test ## Run tests with coverage report
 	@echo "Generating coverage report..."
 	$(GOCMD) tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report: coverage.html"
+
+coverage-floors: ## Rewrite .github/coverage-floors.conf from coverage.out (use a LINUX profile)
+	@.github/scripts/coverage-rebaseline.sh coverage.out
 
 # renovate: datasource=go depName=github.com/golangci/golangci-lint/v2
 GOLANGCI_LINT_VERSION=v2.13.2
