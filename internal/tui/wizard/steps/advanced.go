@@ -180,6 +180,7 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 			},
 		},
 	},
+	ExtraContentTitle: "notes",
 	ExtraContent: func(_ map[string]string, _ int) string {
 		return lipgloss.NewStyle().
 			Foreground(tui.ColorSlate400).

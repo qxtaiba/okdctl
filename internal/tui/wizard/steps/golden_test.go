@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
@@ -198,6 +199,41 @@ func TestGolden_AddonsVaultsEditMode(t *testing.T) {
 
 			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
 			tuitest.Golden(t, fmt.Sprintf("addons-vaults-edit_%dx%d", sz.w, sz.h), frame)
+			if sz.fits {
+				tuitest.AssertFits(t, frame, sz.w, sz.h)
+			}
+		})
+	}
+}
+
+// TestGolden_AddonsFluxWarning pins the flux section's warning block: once
+// flux is enabled with no ssh deploy key present, an amber ⚠ line renders
+// after the flux_path field and before the secret store (common) section
+// head, wrapped to the section's width, with the frame unsliced. Toggles
+// the enabled field to yes, then tabs past flux's remaining 3 fields so
+// the warning and the next section head scroll into view.
+func TestGolden_AddonsFluxWarning(t *testing.T) {
+	if system.FileExists(system.ExpandPath("~/.ssh/flux-deploy-key")) {
+		t.Skip("~/.ssh/flux-deploy-key exists on this machine, so the warning this test checks for would not fire")
+	}
+
+	rightKey := tea.KeyPressMsg{Code: tea.KeyRight}
+	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
+
+	for _, sz := range goldenSizes {
+		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
+			m := newGoldenModel(t)
+			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
+			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDAddons})
+
+			m.Update(rightKey)
+			for range 4 {
+				m.Update(tabKey)
+				m.Update(wizard.FocusChangedMsg{})
+			}
+
+			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
+			tuitest.Golden(t, fmt.Sprintf("addons-flux-warning_%dx%d", sz.w, sz.h), frame)
 			if sz.fits {
 				tuitest.AssertFits(t, frame, sz.w, sz.h)
 			}

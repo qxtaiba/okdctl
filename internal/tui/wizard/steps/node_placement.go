@@ -50,6 +50,10 @@ type NodePlacementStep struct {
 	discovery      *proxmoxDiscovery
 	discoveryErr   error
 
+	// header caches the last View's rendered discoveryHeader, so headerOffset
+	// doesn't need the render width again.
+	header string
+
 	// inner is the post-discovery form; fields below alias into it, nil if
 	// discovery didn't surface that field.
 	inner *wizard.MultiSectionForm
@@ -270,16 +274,17 @@ func (s *NodePlacementStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 }
 
 // discoveryHeader renders the discovery summary (or its failure) shown above
-// the placement form, without the blank row that separates the two.
-func (s *NodePlacementStep) discoveryHeader() string {
+// the placement form, wrapped to width-2 to match the form's section rows,
+// without the blank row that separates the two.
+func (s *NodePlacementStep) discoveryHeader(width int) string {
 	noteStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500).Italic(true).PaddingLeft(2)
 	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning).PaddingLeft(2)
 
 	switch {
 	case s.discoveryErr != nil:
-		return warnStyle.Render(s.discoveryErr.Error())
+		return warnStyle.Width(width - 2).Render(s.discoveryErr.Error())
 	case s.discovery != nil:
-		return noteStyle.Render(fmt.Sprintf("discovered %d node(s), %d storage pool(s), %d bridge(s)",
+		return noteStyle.Width(width - 2).Render(fmt.Sprintf("discovered %d node(s), %d storage pool(s), %d bridge(s)",
 			len(s.discovery.Nodes), len(s.discovery.Storage), len(s.discovery.Bridges)))
 	default:
 		return ""
@@ -289,11 +294,10 @@ func (s *NodePlacementStep) discoveryHeader() string {
 // headerOffset is how many lines View prepends before the inner form's own
 // line 0, so the form's spans can be rebased onto the step's View.
 func (s *NodePlacementStep) headerOffset() int {
-	header := s.discoveryHeader()
-	if header == "" {
+	if s.header == "" {
 		return 0
 	}
-	return lipgloss.Height(header) + 1
+	return lipgloss.Height(s.header) + 1
 }
 
 // View renders either the loading spinner or the inner placement form.
@@ -304,7 +308,8 @@ func (s *NodePlacementStep) View(width, height int) string {
 		return s.loadingSpinner.View() + " discovering proxmox infrastructure..."
 	}
 
-	header := s.discoveryHeader()
+	s.header = s.discoveryHeader(width)
+	header := s.header
 	if header != "" {
 		header += "\n\n"
 	}

@@ -86,9 +86,10 @@ type FieldDefinition struct {
 
 // SectionDefinition groups related fields under a shared title/note.
 type SectionDefinition struct {
-	Title  string
-	Note   string // e.g. prerequisites, shown below the title
-	Fields []FieldDefinition
+	Title   string
+	Note    string // e.g. prerequisites, shown below the title
+	Fields  []FieldDefinition
+	Warning func(values map[string]string) string // non-empty return renders a warning block under the section's fields
 }
 
 // StepDefinition is the declarative description of a data-driven wizard step.
@@ -99,18 +100,27 @@ type StepDefinition struct {
 	Description  string
 	Sections     []SectionDefinition
 
-	Validate     func(values map[string]string) error
-	Apply        func(step *DataDrivenStep, cfg *config.Config) error // runs after auto-binding
-	ShouldShow   func(*config.Config) bool
-	ExtraContent func(values map[string]string, width int) string
+	Validate          func(values map[string]string) error
+	Apply             func(step *DataDrivenStep, cfg *config.Config) error // runs after auto-binding
+	ShouldShow        func(*config.Config) bool
+	ExtraContent      func(values map[string]string, width int) string
+	ExtraContentTitle string // info card title used when ExtraContent renders non-empty content
 }
 
 // FormSection pairs a titled section with its built InputGroup — the
 // runtime counterpart to SectionDefinition that MultiSectionForm navigates across.
 type FormSection struct {
-	Title string
-	Note  string // e.g. prerequisites, shown below the title
-	Group *components.InputGroup
+	Title   string
+	Note    string // e.g. prerequisites, shown below the title
+	Group   *components.InputGroup
+	Warning func() string // non-empty return renders a warning block under the section's fields
+}
+
+func (s *FormSection) warningText() string {
+	if s.Warning == nil {
+		return ""
+	}
+	return s.Warning()
 }
 
 func (s *FormSection) isComplete() bool {
@@ -309,8 +319,9 @@ func (f *MultiSectionForm) innerWidth(width int) int {
 	return max(width-4, 40)
 }
 
-// sectionHead renders section i's status indicator, title, and optional note.
-func (f *MultiSectionForm) sectionHead(i int) string {
+// sectionHead renders section i's status indicator, title, and optional
+// note, wrapping the note to innerWidth.
+func (f *MultiSectionForm) sectionHead(i, innerWidth int) string {
 	section := &f.sections[i]
 
 	var indicator string
@@ -323,9 +334,9 @@ func (f *MultiSectionForm) sectionHead(i int) string {
 		indicator = formViewStyles.pendingRender
 	}
 
-	head := indicator + " " + formViewStyles.sectionHeader.Render(strings.ToLower(section.Title))
+	head := indicator + " " + formViewStyles.sectionHeader.Render(section.Title)
 	if section.Note != "" {
-		head += "\n" + formViewStyles.note.Render(section.Note)
+		head += "\n" + formViewStyles.note.Width(innerWidth).Render(section.Note)
 	}
 	return head
 }
@@ -361,12 +372,16 @@ func (f *MultiSectionForm) View(width int) string {
 		}
 		group.SetWidth(innerWidth)
 
-		_ = emit(f.sectionHead(i))
+		_ = emit(f.sectionHead(i, innerWidth))
 
 		views := group.FieldViews()
 		f.spans[i] = make([]LineSpan, len(views))
 		for j, view := range views {
 			f.spans[i][j] = emit(view)
+		}
+
+		if w := f.sections[i].warningText(); w != "" {
+			_ = emit(formViewStyles.warning.Width(innerWidth).Render(tui.IconWarning + " " + w))
 		}
 	}
 
@@ -391,8 +406,9 @@ type DataDrivenStep struct {
 	form *MultiSectionForm
 
 	// customExtraContent, when non-nil, overrides definition.ExtraContent (set
-	// via WithExtraContentFunc).
-	customExtraContent func(width int) string
+	// via WithExtraContentFunc); customExtraContentTitle is its info card title.
+	customExtraContent      func(width int) string
+	customExtraContentTitle string
 }
 
 // NewDataDrivenStep builds a DataDrivenStep from a StepDefinition.
@@ -417,10 +433,16 @@ func NewDataDrivenStep(def *StepDefinition) *DataDrivenStep {
 			}
 		}
 
+		var warning func() string
+		if sectionDef.Warning != nil {
+			warning = func() string { return sectionDef.Warning(step.values()) }
+		}
+
 		sections = append(sections, FormSection{
-			Title: sectionDef.Title,
-			Note:  sectionDef.Note,
-			Group: components.NewInputGroup(fields...),
+			Title:   sectionDef.Title,
+			Note:    sectionDef.Note,
+			Group:   components.NewInputGroup(fields...),
+			Warning: warning,
 		})
 	}
 
@@ -537,8 +559,10 @@ func (s *DataDrivenStep) LoadFromConfig(cfg *config.Config) {
 	}
 }
 
-// WithExtraContentFunc overrides the definition's ExtraContent with fn.
-func (s *DataDrivenStep) WithExtraContentFunc(fn func(step *DataDrivenStep, width int) string) *DataDrivenStep {
+// WithExtraContentFunc overrides the definition's ExtraContent with fn,
+// rendered under the given info card title.
+func (s *DataDrivenStep) WithExtraContentFunc(title string, fn func(step *DataDrivenStep, width int) string) *DataDrivenStep {
+	s.customExtraContentTitle = title
 	s.customExtraContent = func(width int) string {
 		return fn(s, width)
 	}
@@ -647,6 +671,7 @@ var formViewStyles = struct {
 	activeRender    string
 	pendingRender   string
 	note            lipgloss.Style
+	warning         lipgloss.Style
 }{
 	sectionHeader: lipgloss.NewStyle().
 		Foreground(tui.ColorCyan500).
@@ -668,24 +693,36 @@ var formViewStyles = struct {
 		Foreground(tui.ColorSlate500).
 		Italic(true).
 		PaddingLeft(2),
+	warning: lipgloss.NewStyle().
+		Foreground(tui.ColorWarning),
 }
 
 // View renders the step's sections via the embedded form and appends any
-// configured extra content.
+// configured extra content as an info card.
 func (s *DataDrivenStep) View(width, height int) string {
 	s.SetSize(width, height)
 
 	var content strings.Builder
 	content.WriteString(s.form.View(width))
 
+	var title, body string
 	switch {
 	case s.customExtraContent != nil:
-		content.WriteString(s.customExtraContent(width))
+		title, body = s.customExtraContentTitle, s.customExtraContent(width)
 	case s.definition.ExtraContent != nil:
-		content.WriteString(s.definition.ExtraContent(s.values(), width))
+		title, body = s.definition.ExtraContentTitle, s.definition.ExtraContent(s.values(), width)
+	}
+	if body != "" {
+		content.WriteString("\n\n")
+		content.WriteString(RenderInfoCard(title, body, width))
 	}
 
 	return content.String()
+}
+
+// RenderInfoCard renders body as a bordered card titled title, exactly width columns wide.
+func RenderInfoCard(title, body string, width int) string {
+	return tui.Card(title, lipgloss.Wrap(body, width-4, ""), width, tui.ColorSlate600)
 }
 
 // SetString adapts a plain string setter into a ConfigSetter.
