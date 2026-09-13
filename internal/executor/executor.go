@@ -243,6 +243,11 @@ func (e *Executor) RunWithStdin(ctx context.Context, input, name string, args ..
 	return e.run(ctx, strings.NewReader(input), name, args...)
 }
 
+// WaitDelay bounds how long os/exec waits after ctx cancellation before it
+// SIGKILLs the child and closes its I/O pipes. Callers that reap a
+// StartStreamed channel must allow at least this long.
+const WaitDelay = 30 * time.Second
+
 // newCmd builds the shared exec.Cmd: workDir, filtered env, and soft-cancel
 // via e.cancelSignal before WaitDelay's SIGKILL escalation.
 func (e *Executor) newCmd(ctx context.Context, name string, args ...string) *exec.Cmd {
@@ -252,7 +257,7 @@ func (e *Executor) newCmd(ctx context.Context, name string, args ...string) *exe
 	}
 	cmd.Env = e.buildEnv()
 	cmd.Cancel = func() error { return cmd.Process.Signal(e.cancelSignal) }
-	cmd.WaitDelay = 30 * time.Second
+	cmd.WaitDelay = WaitDelay
 	return cmd
 }
 
@@ -338,7 +343,9 @@ func (e *Executor) RunStreamedChecked(ctx context.Context, name string, args ...
 
 // StartStreamed starts name with args, piping stdout/stderr live, and
 // returns immediately with a channel that receives cmd.Wait's result.
-// Cancelling ctx terminates the process via cmd.Cancel.
+// Cancelling ctx terminates the process via cmd.Cancel, but the caller must
+// drain the returned channel: until it does the child may outlive the parent
+// by up to WaitDelay, and cmd.Wait's goroutine stays parked until it exits.
 func (e *Executor) StartStreamed(ctx context.Context, name string, args ...string) (done <-chan error, err error) {
 	cmd := e.newCmd(ctx, name, args...)
 	cmd.Stdout = e.stdout
