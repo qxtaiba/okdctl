@@ -48,30 +48,45 @@ func (m *Model) handleScrollKey(msg tea.KeyPressMsg) bool {
 	return true
 }
 
-// autoScrollToField scrolls by field-progress percentage to keep the focused field visible.
-func (m *Model) autoScrollToField(fieldIndex, totalFields int) {
-	if totalFields == 0 {
+// scrollToFocusedField scrolls the viewport so the active step's focused
+// field sits entirely on screen; a field taller than the viewport is pinned
+// to its first row.
+func (m *Model) scrollToFocusedField() {
+	if len(m.steps) == 0 || m.currentStep < 0 || m.currentStep >= len(m.steps) {
+		return
+	}
+	provider, ok := m.steps[m.currentStep].(SpanProvider)
+	if !ok {
+		return
+	}
+	span, ok := provider.FocusedSpan()
+	if !ok {
 		return
 	}
 
-	totalContent := m.viewport.TotalLineCount()
-	viewportHeight := m.viewport.Height()
+	start, end := m.viewportSpan(span)
+	top, height := m.viewport.YOffset(), m.viewport.Height()
+	spanHeight := end - start + 1
 
-	if totalContent <= viewportHeight {
-		return
+	switch {
+	case spanHeight > height, start < top:
+		m.viewport.SetYOffset(start)
+	case end >= top+height:
+		m.viewport.SetYOffset(end - height + 1)
 	}
+}
 
-	var progress float64
-	if totalFields <= 1 {
-		progress = 0
-	} else {
-		progress = float64(fieldIndex) / float64(totalFields-1)
+// viewportSpan maps a step-View line span onto the viewport rows it occupies
+// after content padding wrapped any over-wide lines.
+func (m *Model) viewportSpan(span LineSpan) (start, end int) {
+	rows := m.contentRows
+	if len(rows) < 2 {
+		return span.Start, span.End
 	}
-
-	maxOffset := totalContent - viewportHeight
-	targetOffset := min(max(int(progress*float64(maxOffset)), 0), maxOffset)
-
-	m.viewport.SetYOffset(targetOffset)
+	last := len(rows) - 1
+	start = rows[min(max(span.Start, 0), last)]
+	end = rows[min(max(span.End+1, 0), last)] - 1
+	return start, max(end, start)
 }
 
 func (m *Model) goToNextStep() (tea.Model, tea.Cmd) {

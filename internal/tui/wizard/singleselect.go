@@ -11,8 +11,8 @@ import (
 // emits StepCompleteMsg, up/down/j/k delegate to the selector, and OnNav
 // runs after every navigation key.
 type SingleSelect struct {
-	// OnNav, when non-nil, runs after every nav key with the new index and option count.
-	OnNav func(index, total int) tea.Cmd
+	// OnNav, when non-nil, runs after every nav key.
+	OnNav func() tea.Cmd
 
 	selector *components.CompactSelector
 	stepID   StepID
@@ -45,7 +45,7 @@ func (s *SingleSelect) Update(msg tea.Msg) tea.Cmd {
 		var cmd tea.Cmd
 		s.selector, cmd = s.selector.Update(msg)
 		if s.OnNav != nil {
-			return tea.Batch(cmd, s.OnNav(s.selector.SelectedIndex(), s.selector.Len()))
+			return tea.Batch(cmd, s.OnNav())
 		}
 		return cmd
 	}

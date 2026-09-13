@@ -1,6 +1,8 @@
 package wizard
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -35,6 +37,28 @@ func (f *fakeStep) ShouldShow(cfg *config.Config) bool {
 		return true
 	}
 	return f.shouldShow(cfg)
+}
+
+// growingStep is a SpanProvider whose View grows on demand, exercising the
+// resync-then-scroll order on FocusChangedMsg.
+type growingStep struct {
+	BaseStep
+	rows int
+}
+
+func (g *growingStep) Init() tea.Cmd                        { return nil }
+func (g *growingStep) Update(tea.Msg) (WizardStep, tea.Cmd) { return g, nil }
+
+func (g *growingStep) View(int, int) string {
+	lines := make([]string, g.rows)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("row %d", i)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (g *growingStep) FocusedSpan() (LineSpan, bool) {
+	return LineSpan{Start: g.rows - 1, End: g.rows - 1}, true
 }
 
 // fakeReviewStep additionally implements ReviewJumper, standing in for steps.ReviewStep.
@@ -167,5 +191,88 @@ func TestModel_DigitKeyOutsideReviewUnaffected(t *testing.T) {
 	m = update(t, m, tea.KeyPressMsg{Code: '2', Text: "2"})
 	if got := m.CurrentStep().ID(); got != StepIDBasics {
 		t.Fatalf("digit key on non-review step: CurrentStep() = %v, want basics (unaffected)", got)
+	}
+}
+
+// scrollTestDefinition mirrors the addons step's shape: several sections of
+// text and select fields, with help text long enough to wrap at 80 columns.
+func scrollTestDefinition() *StepDefinition {
+	sections := make([]SectionDefinition, 0, 4)
+	for s := range 4 {
+		fields := make([]FieldDefinition, 0, 4)
+		for f := range 4 {
+			def := FieldDefinition{
+				Key:     fmt.Sprintf("s%df%d", s, f),
+				Label:   fmt.Sprintf("section %d field %d", s, f),
+				Default: fmt.Sprintf("value-%d-%d", s, f),
+				Help:    "a deliberately long hint that wraps once the wizard renders it at eighty columns",
+			}
+			if f == 1 {
+				def.Type = FieldTypeSelect
+				def.Options = []string{"no", testValYes}
+			}
+			fields = append(fields, def)
+		}
+		sections = append(sections, SectionDefinition{
+			Title:  fmt.Sprintf("section %d", s),
+			Note:   "a note that is itself long enough to need a second row at eighty columns wide",
+			Fields: fields,
+		})
+	}
+	return &StepDefinition{
+		ID:       StepIDAddons,
+		Title:    "scroll fixture",
+		Sections: sections,
+	}
+}
+
+func TestModel_ScrollKeepsFocusedFieldFullyVisible(t *testing.T) {
+	step := NewDataDrivenStep(scrollTestDefinition())
+	m := NewModel([]WizardStep{step}, config.DefaultConfig())
+	m = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	if m.viewport.TotalLineCount() <= m.viewport.Height() {
+		t.Fatal("setup: fixture step does not overflow the viewport")
+	}
+
+	for i := range 12 {
+		m = update(t, m, tea.KeyPressMsg{Code: tea.KeyTab})
+		m = update(t, m, FocusChangedMsg{})
+
+		provider, ok := m.steps[m.currentStep].(SpanProvider)
+		if !ok {
+			t.Fatal("step does not implement SpanProvider")
+		}
+		span, ok := provider.FocusedSpan()
+		if !ok {
+			t.Fatalf("tab %d: no focused span", i)
+		}
+		start, end := m.viewportSpan(span)
+		top, height := m.viewport.YOffset(), m.viewport.Height()
+		if start < top || end >= top+height {
+			t.Fatalf("tab %d: span %+v maps to rows [%d,%d], outside viewport [%d,%d)", i, span, start, end, top, top+height)
+		}
+
+		label := fmt.Sprintf("section %d field %d", (i+1)/4, (i+1)%4)
+		if !strings.Contains(m.View().Content, label) {
+			t.Fatalf("tab %d: focused field %q is not on screen", i, label)
+		}
+	}
+}
+
+func TestModel_FocusChangedResyncsBeforeScroll(t *testing.T) {
+	step := &growingStep{BaseStep: NewBaseStep(StepIDBasics, "grower", ""), rows: 5}
+	m := NewModel([]WizardStep{step}, config.DefaultConfig())
+	m = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	before := m.viewport.TotalLineCount()
+	step.rows = 120
+	m = update(t, m, FocusChangedMsg{})
+
+	if got := m.viewport.TotalLineCount(); got <= before {
+		t.Fatalf("TotalLineCount() = %d after growth, want more than %d (content not resynced)", got, before)
+	}
+	if m.viewport.YOffset() == 0 {
+		t.Fatal("YOffset() = 0; want the focused last row scrolled into view")
 	}
 }
