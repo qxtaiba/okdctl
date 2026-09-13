@@ -132,6 +132,21 @@ func (f *KeyValueField) Validate() error {
 	return nil
 }
 
+// KeyHints returns the field's footer hints, differing between edit and
+// navigate mode.
+func (f *KeyValueField) KeyHints() []KeyHint {
+	if f.editMode {
+		return []KeyHint{{Key: "ctrl+e", Help: "done"}}
+	}
+	return []KeyHint{
+		{Key: "j/k", Help: "row"},
+		{Key: "h/l", Help: "column"},
+		{Key: "a", Help: "add"},
+		{Key: "d", Help: "delete"},
+		{Key: "ctrl+e", Help: "edit"},
+	}
+}
+
 // Update routes messages: ctrl+e toggles edit mode; navigate mode uses
 // j/k/h/l/a/d; edit mode forwards other keys to the active textinput.
 func (f *KeyValueField) Update(msg tea.Msg) (FormField, tea.Cmd) {
@@ -243,77 +258,73 @@ func (f *KeyValueField) blurAllInputs() {
 	}
 }
 
-// View renders the label, column header, all data rows, and any validation
-// error. The active row shows live textinputs when in edit mode.
+// View renders the field's card — one row per pair plus an add-row
+// trailer — and an error or help row below it.
 func (f *KeyValueField) View() string {
-	labelStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate300)
-	hintStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
-
-	labelLine := labelStyle.Render(strings.ToLower(f.Label))
-	if f.Help != "" {
-		labelLine += " " + hintStyle.Render("("+strings.ToLower(f.Help)+")")
-	}
-	if f.focused && f.editMode {
-		labelLine += " " + hintStyle.Render("(editing — ctrl+e done)")
-	} else if f.focused {
-		labelLine += " " + hintStyle.Render("(j/k rows · h/l col · a add · d del · ctrl+e edit)")
-	}
-
 	colW := f.cellWidth()
-	lines := []string{labelLine, f.viewHeader(colW)}
+
+	rows := make([]string, 0, len(f.rows)+1)
 	for i := range f.rows {
-		lines = append(lines, f.viewRow(i, colW))
+		rows = append(rows, f.viewRow(i, colW))
 	}
-	if f.err != nil {
-		errStyle := lipgloss.NewStyle().Foreground(tui.ColorError)
-		lines = append(lines, errStyle.Render(tui.IconError+" "+strings.ToLower(f.err.Error())))
+	rows = append(rows, f.viewAddRow())
+
+	accent := tui.ColorSlate600
+	switch {
+	case f.err != nil:
+		accent = tui.ColorError
+	case f.focused:
+		accent = tui.ColorPrimary
 	}
-	return strings.Join(lines, "\n")
+
+	out := tui.Card(f.Label, strings.Join(rows, "\n"), f.width, accent)
+	switch {
+	case f.err != nil:
+		out += "\n" + errStyle.Render(tui.IconError+" "+strings.ToLower(f.err.Error()))
+	case f.focused && f.Help != "":
+		out += "\n" + helpStyle.Width(f.width).Render(f.Help)
+	}
+	return out
 }
 
+// cellWidth splits the card's inner width between the key and value
+// columns, reserving 1 column for the cursor prefix and 2 for the gap
+// between them.
 func (f *KeyValueField) cellWidth() int {
-	return max((f.width-8)/2, 10)
+	inner := f.width - 2
+	return max((inner-3)/2, 10)
 }
 
-func (f *KeyValueField) viewHeader(colW int) string {
-	hdrStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
-	return hdrStyle.Render(fmt.Sprintf("  %-*s  %-*s", colW, "key", colW, "value"))
-}
-
+// viewRow renders row i as "key  value", dim unless it holds the cursor; in
+// edit mode the cursor row becomes two joined fieldBox cells instead.
 func (f *KeyValueField) viewRow(i, colW int) string {
 	cursorStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true)
 	activeStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate300)
 	dimStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
-	boxFocus := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).BorderForeground(tui.ColorPrimary).
-		Padding(0, 1).Width(colW)
-	boxIdle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).BorderForeground(tui.ColorSlate600).
-		Padding(0, 1).Width(colW)
 
 	r := &f.rows[i]
 	isCursor := f.focused && i == f.cursor
-	cur := "  "
-	if isCursor {
-		cur = cursorStyle.Render("> ")
-	}
 
 	if f.editMode && isCursor {
-		if f.col == 0 {
-			return cur + boxFocus.Render(r.keyInput.View()) + "  " + boxIdle.Render(r.valInput.View())
-		}
-		return cur + boxIdle.Render(r.keyInput.View()) + "  " + boxFocus.Render(r.valInput.View())
+		focusedKey := f.col == 0
+		keyBox := fieldBox(r.keyInput.View(), colW, focusedKey, false)
+		valBox := fieldBox(r.valInput.View(), colW, !focusedKey, false)
+		// JoinHorizontal zips the boxes' rows together; "+" concatenation
+		// would instead glue keyBox's last row to valBox's first row.
+		return lipgloss.JoinHorizontal(lipgloss.Top, keyBox, "  ", valBox)
 	}
 
-	kVal := fmt.Sprintf("%-*s", colW, r.keyInput.Value())
-	vVal := fmt.Sprintf("%-*s", colW, r.valInput.Value())
-	if isCursor && f.col == 0 {
-		return cur + activeStyle.Render(kVal) + "  " + dimStyle.Render(vVal)
+	prefix, style := " ", dimStyle
+	if isCursor {
+		prefix, style = cursorStyle.Render(">"), activeStyle
 	}
-	if isCursor && f.col == 1 {
-		return cur + dimStyle.Render(kVal) + "  " + activeStyle.Render(vVal)
-	}
-	return cur + dimStyle.Render(kVal) + "  " + dimStyle.Render(vVal)
+	content := fmt.Sprintf("%-*s  %-*s", colW, r.keyInput.Value(), colW, r.valInput.Value())
+	return prefix + style.Render(content)
+}
+
+// viewAddRow renders the trailing "+ add" row that the 'a' key acts on.
+func (f *KeyValueField) viewAddRow() string {
+	return lipgloss.NewStyle().Foreground(tui.ColorSlate500).Render(" + add")
 }
 
 func parseKVString(value string) []kvRow {

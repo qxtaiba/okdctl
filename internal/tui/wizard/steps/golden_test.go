@@ -173,3 +173,34 @@ func TestGolden_NodePlacementSingleNode(t *testing.T) {
 	tuitest.Golden(t, "node-placement-single-node_100x30", frame)
 	tuitest.AssertFits(t, frame, 100, 30)
 }
+
+// TestGolden_AddonsVaultsEditMode pins the vaults key-value field's
+// edit-mode composition: two fieldBox cells joined with
+// lipgloss.JoinHorizontal side by side, rather than the old string-concat
+// that interleaved their rows. Tabs past the 8 fields preceding vaults
+// (flux's 4, secretstore common's 3, connect host) so it's focused and
+// scrolled into view, then ctrl+e enters edit mode.
+func TestGolden_AddonsVaultsEditMode(t *testing.T) {
+	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
+	ctrlE := tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl}
+
+	for _, sz := range goldenSizes {
+		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
+			m := newGoldenModel(t)
+			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
+			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDAddons})
+
+			for range 8 {
+				m.Update(tabKey)
+				m.Update(wizard.FocusChangedMsg{})
+			}
+			m.Update(ctrlE)
+
+			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
+			tuitest.Golden(t, fmt.Sprintf("addons-vaults-edit_%dx%d", sz.w, sz.h), frame)
+			if sz.fits {
+				tuitest.AssertFits(t, frame, sz.w, sz.h)
+			}
+		})
+	}
+}
