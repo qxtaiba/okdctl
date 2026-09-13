@@ -1,0 +1,30 @@
+                                                                                                    
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L                                                                                  │  
+  │ okd over proxmox, the easy way                                           ●─●─●─● step 4 of 4 │  
+  │──────────────────────────────────────────────────────────────────────────────────────────────│  
+  │  review the plan                                                                             │  
+  │                                                                                              │  
+  │  [1] operation                                                                               │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
+  │  cluster           homelab                                                                   │  
+  │  operation         resize masters                                                            │  
+  │  target memory     12288 → 24576 MiB per node                                                │  
+  │  target cpu        unchanged                                                                 │  
+  │  disruption        each node is drained, then power-cycled (stop→start)                      │  
+  │                                                                                              │  
+  │  [2] nodes — execution order                                                                 │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
+  │  homelab-master0   master  m.master[0]  [update]                                             │  
+  │                                                                                              │  
+  │  [3] gates per node                                                                          │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
+  │  etcd health gate (pre) → cordon + drain → terraform apply (in-place update) → power-cycle   │  
+  │  vm → wait for node ready → etcd health gate (post) → uncordon + ceph health gate            │  
+  │  plan gate: ✓ dry-run passed — the safety gate allows exactly the listed changes             │  
+  │                                                                                              │  
+  │  ══════════════════════════════════════════════════════════════════════════════════════      │  
+  │───────────────────────────────── ↑ ↓  scroll down for more ───────────────────── ▸ mycluster │  
+  │   ↑↓  select action    enter  confirm    esc  back    ctrl+c  quit                           │  
+  ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
+                                                                                                    

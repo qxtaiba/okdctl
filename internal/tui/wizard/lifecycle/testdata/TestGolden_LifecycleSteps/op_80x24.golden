@@ -1,0 +1,24 @@
+                                                                                      
+  ╭────────────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L                                                                    │  
+  │ okd over proxmox, the easy way                       ●─○─○─○ step 1 of 4       │  
+  │──────────────────────────────────────────────────────────────────────────      │  
+  │           cluster lifecycle                                                    │  
+  │                                                                                │  
+  │           manage nodes on cluster "mycluster"                                  │  
+  │                                                                                │  
+  │           ● resize nodes                                                       │  
+  │             change per-role cpu/memory, rolled out one node                    │  
+  │             at a time behind etcd/ceph health gates                            │  
+  │                                                                                │  
+  │           ○ add workers                                                        │  
+  │             build + upload a per-node iso, revive the ignition                 │  
+  │             server, join and wait ready                                        │  
+  │                                                                                │  
+  │           ○ remove worker                                                      │  
+  │             cordon, drain, destroy the vm, delete the node                     │  
+  │             (highest-numbered worker only)                                     │  
+  │───────────────────────────────────────────────────────────── ▸ mycluster       │  
+  │   ↑↓  select    enter  confirm    ctrl+c  quit                                 │  
+  ╰────────────────────────────────────────────────────────────────────────────────╯  
+                                                                                      

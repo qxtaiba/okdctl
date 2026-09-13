@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 )
 
 type nopStep struct{ BaseStep }
@@ -19,7 +20,7 @@ func newNopStep() *nopStep { return &nopStep{BaseStep: NewBaseStep("nop", "nop",
 
 func viewContent(t *testing.T, m *Model) string {
 	t.Helper()
-	return update(t, m, tea.WindowSizeMsg{Width: 100, Height: 30}).View().Content
+	return tuitest.RenderAt(t, m, 100, 30)
 }
 
 func TestCustomChromeRendersTaglineAndBadge(t *testing.T) {
