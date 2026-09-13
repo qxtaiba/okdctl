@@ -13,6 +13,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/testutil"
 	"github.com/qxtaiba/okdctl/internal/workspace"
@@ -237,10 +238,47 @@ func TestMonitorInstallation_CtxCancelReapsGracefully(t *testing.T) {
 		synctest.Wait()
 		cancel()
 		synctest.Wait()
+		done <- nil
 
 		err := <-errc
 		if !errors.Is(err, context.Canceled) {
 			t.Errorf("err = %v; want context.Canceled", err)
+		}
+		if len(done) != 0 {
+			t.Error("child exit status left unread: monitor returned without reaping openshift-install")
+		}
+	})
+}
+
+func TestMonitorInstallation_CtxCancelReturnsWhenChildNeverExits(t *testing.T) {
+	if installReapGrace <= executor.WaitDelay {
+		t.Fatalf("installReapGrace = %v; must exceed executor.WaitDelay %v", installReapGrace, executor.WaitDelay)
+	}
+	synctest.Test(t, func(t *testing.T) {
+		p := newPhaseSynctest(t, func(_ context.Context, _ string) (<-chan error, error) {
+			return make(chan error), nil
+		})
+		opts := &Options{
+			InstallTimeout:      5 * time.Minute,
+			CSRApprovalInterval: 1 * time.Minute,
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		errc := make(chan error, 1)
+		go func() {
+			errc <- p.MonitorInstallation(ctx, t.TempDir(), opts, &fakeApprover{})
+		}()
+
+		synctest.Wait()
+		start := time.Now()
+		cancel()
+
+		err := <-errc
+		if waited := time.Since(start); waited != installReapGrace {
+			t.Errorf("reap wait = %v; want exactly %v", waited, installReapGrace)
+		}
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("err = %v; want context.Canceled after the reap grace elapses", err)
 		}
 	})
 }

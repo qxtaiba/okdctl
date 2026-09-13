@@ -9,6 +9,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
@@ -160,15 +161,37 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 			setStatus(operatorStatusDetail(ctx, counter, totalApproved))
 
 		case <-ctx.Done():
+			// Reap so openshift-install can't outlive okdctl or interleave output.
+			stopStatus()
+			p.Log.Info("install: waiting for openshift-install to exit")
+			childErr := reapInstall(installDone)
 			if errors.Is(ctx.Err(), context.Canceled) {
 				// Bare wrap intentional: preserves context.Canceled for
 				// cli/root.go::signalExitCode (SIGINT→130/SIGTERM→143).
 				return fmt.Errorf("installation cancelled: %w", ctx.Err())
+			}
+			if childErr != nil {
+				p.Log.Warn("install: openshift-install exited", "err", childErr)
 			}
 			return &errtypes.ClusterError{
 				Msg: fmt.Sprintf("installation timed out after %v — %s", opts.InstallTimeout, timeoutNextSteps(clusterDir)),
 				Err: ctx.Err(),
 			}
 		}
+	}
+}
+
+// installReapGrace must exceed executor.WaitDelay: only a hung cmd.Wait trips it.
+const installReapGrace = executor.WaitDelay + 5*time.Second
+
+func reapInstall(done <-chan error) error {
+	t := time.NewTimer(installReapGrace)
+	defer t.Stop()
+	select {
+	case err := <-done:
+		return err
+	case <-t.C:
+		// Leak bound: executor's cmd.Wait goroutine stays parked until the child dies.
+		return nil
 	}
 }
