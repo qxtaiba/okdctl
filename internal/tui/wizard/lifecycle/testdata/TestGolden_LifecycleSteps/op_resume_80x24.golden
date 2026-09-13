@@ -1,24 +1,24 @@
                                                                                 
   ╭──────────────────────────────────────────────────────────────────────────╮  
   │ O K D C T L  okd over proxmox, the easy way                              │  
-  │ choose an operation                                 ●─○─○─○  step 1 of 4 │  
+  │ choose an operation                                   ●─○─○  step 1 of 3 │  
   │──────────────────────────────────────────────────────────────────────────│  
-  │           cluster lifecycle                                              │  
+  │          cluster lifecycle                                               │  
   │                                                                          │  
-  │           manage nodes on cluster "mycluster"                            │  
+  │          manage nodes on cluster "homelab"                               │  
   │                                                                          │  
-  │           ● resize nodes                                                 │  
-  │             change per-role cpu/memory, rolled out one node at           │  
-  │             a time behind etcd/ceph health gates                         │  
+  │          ⚠ interrupted resize of homelab-master0 — step: power-          │  
+  │          cycle, recorded 2h ago                                          │  
   │                                                                          │  
-  │           ○ add workers                                                  │  
-  │             build + upload a per-node iso, revive the ignition           │  
-  │             server, join and wait ready                                  │  
+  │          ● resume interrupted resize                                     │  
+  │            re-enters at the recorded step; completed nodes               │  
+  │            are skipped via a read-only plan probe                        │  
   │                                                                          │  
-  │           ○ remove worker                                                │  
-  │             cordon, drain, destroy the vm, delete the node               │  
+  │          ○ resize nodes                                                  │  
+  │            change per-role cpu/memory, rolled out one node at            │  
+  │            a time behind etcd/ceph health gates                          │  
   │                                                                          │  
-  │───────────────── ↑ ↓  scroll down for more ───────────────── ▸ mycluster │  
+  │────────────────── ↑ ↓  scroll down for more ────────────────── ▸ homelab │  
   │  ↑↓ select • enter confirm • ctrl+c quit • pgup/pgdn scroll              │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 
