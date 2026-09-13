@@ -76,7 +76,6 @@ func openDefaultLogSink() (string, *os.File, error) {
 }
 
 func configureLogging(cmd *cobra.Command) error {
-	stdoutW := io.Writer(os.Stdout)
 	stderrW := io.Writer(os.Stderr)
 
 	var sink *os.File
@@ -96,7 +95,6 @@ func configureLogging(cmd *cobra.Command) error {
 	if sink != nil {
 		logFileCloser = sink
 		runLogSink = sink
-		stdoutW = io.MultiWriter(os.Stdout, sink)
 		stderrW = io.MultiWriter(os.Stderr, sink)
 	}
 
@@ -118,16 +116,16 @@ func configureLogging(cmd *cobra.Command) error {
 	// auto-switch to json when stderr is piped and --log-format wasn't set
 	// explicitly, mirroring the progress-bar TTY gate
 	if !cmd.Root().PersistentFlags().Changed(flagLogFormat) && !stderrIsTTY {
-		logFormat = outputJSON
+		logFormat = tui.FormatJSON
 	}
 
-	progressBars := stderrIsTTY && stdoutIsTTY && logFormat != outputJSON && !noColor
+	progressBars := stderrIsTTY && stdoutIsTTY && logFormat != tui.FormatJSON && !noColor
 
 	// pin the render profile to stdout's real capabilities so a piped/NO_COLOR
 	// run strips box escapes like charm/log strips level badges
 	tui.SetColorProfileFor(os.Stdout)
 
-	if err := tui.ConfigureLoggers(effectiveLevel, logFormat, stdoutW, stderrW, progressBars); err != nil {
+	if err := tui.ConfigureLoggers(effectiveLevel, logFormat, stderrW, progressBars); err != nil {
 		return err
 	}
 	if sinkErr != nil {
@@ -135,7 +133,7 @@ func configureLogging(cmd *cobra.Command) error {
 	}
 	// suppress Info/Warn under json for clean pipelines, except deploy-family
 	// flows which keep milestones/degraded-notices visible
-	if logFormat == outputJSON && !logVerbose && !wantsDefaultLogSink(cmd) {
+	if logFormat == tui.FormatJSON && !logVerbose && !wantsDefaultLogSink(cmd) {
 		tui.SuppressInfo()
 	}
 	return nil

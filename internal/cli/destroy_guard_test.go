@@ -326,11 +326,11 @@ func TestRunDestroy_ConfirmGateWiring(t *testing.T) {
 func captureStderrLog(t *testing.T) *bytes.Buffer {
 	t.Helper()
 	var buf bytes.Buffer
-	if err := tui.ConfigureLoggers("info", "text", io.Discard, &buf, false); err != nil {
+	if err := tui.ConfigureLoggers("info", "text", &buf, false); err != nil {
 		t.Fatalf("capture loggers: %v", err)
 	}
 	t.Cleanup(func() {
-		if err := tui.ConfigureLoggers("info", "text", os.Stdout, os.Stderr, false); err != nil {
+		if err := tui.ConfigureLoggers("info", "text", os.Stderr, false); err != nil {
 			t.Errorf("restore loggers: %v", err)
 		}
 	})

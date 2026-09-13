@@ -61,8 +61,9 @@ func resetLoggingState(t *testing.T) {
 		}
 		logFileCloser = nil
 		runLogPath = ""
+		runLogSink = nil
 		logFile, logFormat, logLevel = prevLogFile, prevFormat, prevLevel
-		if err := tui.ConfigureLoggers("info", "text", os.Stdout, os.Stderr, false); err != nil {
+		if err := tui.ConfigureLoggers("info", "text", os.Stderr, false); err != nil {
 			t.Errorf("restore loggers: %v", err)
 		}
 	})

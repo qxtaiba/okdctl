@@ -30,10 +30,6 @@ const PlanFileName = "tfplan"
 // prior run waits then fails cleanly.
 const defaultLockTimeout = "120s"
 
-// ExecError is a true type alias for executor.ExitError, so errors.As works
-// against either name interchangeably.
-type ExecError = executor.ExitError
-
 // Executor wraps terraform subcommand execution for a single working
 // directory. Must be constructed via New; the zero value panics on first use.
 type Executor struct {

@@ -1,6 +1,8 @@
 package cli
 
-import "github.com/spf13/cobra"
+import (
+	"github.com/spf13/cobra"
+)
 
 // Kept as consts: a typo between flag registration and read-back would silently
 // return the zero value.
@@ -21,7 +23,8 @@ const (
 )
 
 // Output-format values for --output/-o; mirrors kubectl/oc convention (see
-// docs/cli/json-schema.md).
+// docs/cli/json-schema.md). Deliberately separate from tui.FormatText/FormatJSON:
+// --output selects a data encoding, --log-format selects a log encoding.
 const (
 	outputText = "text"
 	outputJSON = "json"

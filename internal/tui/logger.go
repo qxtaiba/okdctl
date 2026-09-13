@@ -14,16 +14,9 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
-var (
-	// stdoutLogger is stderrLogger's stdout counterpart; unused today.
-	// Future writers must wrap with logutil.NewRedactHandler — RedactHandler
-	// only wraps the stderr sink.
-	stdoutLogger atomic.Pointer[charmlog.Logger]
-	stderrLogger atomic.Pointer[charmlog.Logger]
-)
+var stderrLogger atomic.Pointer[charmlog.Logger]
 
 func init() {
-	stdoutLogger.Store(buildLogger(os.Stdout))
 	stderrLogger.Store(buildLogger(os.Stderr))
 	logutil.InstallHandler(newStderrHandler())
 }
@@ -71,16 +64,16 @@ func (h *stderrHandler) WithGroup(name string) slog.Handler {
 	return &stderrHandler{h: h.h.WithGroup(name)}
 }
 
-// FormatText and FormatJSON are ConfigureLoggers' two output encodings.
+// FormatText and FormatJSON are the log encodings ConfigureLoggers accepts.
 const (
 	FormatText = "text"
 	FormatJSON = "json"
 )
 
 // ConfigureLoggers applies level, formatter, and writer settings to the
-// package-level loggers. Not safe for concurrent calls — call once in cobra
-// PersistentPreRunE before any subcommand runs.
-func ConfigureLoggers(level, format string, stdoutW, stderrW io.Writer, progressBars bool) error {
+// package-level stderr logger. Not safe for concurrent calls — call once
+// in cobra PersistentPreRunE before any subcommand runs.
+func ConfigureLoggers(level, format string, stderrW io.Writer, progressBars bool) error {
 	lvl, err := charmlog.ParseLevel(level)
 	if err != nil {
 		return fmt.Errorf("unknown log level %q: %w", level, err)
@@ -95,11 +88,6 @@ func ConfigureLoggers(level, format string, stdoutW, stderrW io.Writer, progress
 	default:
 		return fmt.Errorf("unknown log format %q: must be text or json", format)
 	}
-
-	sl := stdoutLogger.Load()
-	sl.SetLevel(lvl)
-	sl.SetFormatter(formatter)
-	sl.SetOutput(stdoutW)
 
 	el := stderrLogger.Load()
 	el.SetLevel(lvl)
@@ -116,13 +104,12 @@ func SuppressInfo() {
 	stderrLogger.Load().SetLevel(charmlog.ErrorLevel)
 }
 
-// SetRunID pins run_id on the package-level loggers so subsequent
+// SetRunID pins run_id on the package-level stderr logger so subsequent
 // logutil.X calls carry it; call once, before any log line, since
 // logutil.SimpleLogger snapshots loggers at creation time. Not safe for
 // concurrent callers.
 func SetRunID(id string) {
 	logutil.SetRunID(id)
-	stdoutLogger.Store(stdoutLogger.Load().With("run_id", id))
 	stderrLogger.Store(stderrLogger.Load().With("run_id", id))
 	// Reinstall so the facade captures the new stderrLogger.
 	logutil.InstallHandler(newStderrHandler())

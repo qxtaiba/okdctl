@@ -175,7 +175,7 @@ func TestMonitorInstallation_CtxCanceled(t *testing.T) {
 	}
 }
 
-func newPhaseSynctest(t *testing.T, start func(context.Context, string) (<-chan error, func(), error)) *Phase {
+func newPhaseSynctest(t *testing.T, start func(context.Context, string) (<-chan error, error)) *Phase {
 	t.Helper()
 	return &Phase{
 		BasePhase:       phase.NewBasePhase(phase.WithLogger(logutil.NopLogger), phase.WithReporter(logutil.NopProgressReporter)),
@@ -186,8 +186,8 @@ func newPhaseSynctest(t *testing.T, start func(context.Context, string) (<-chan 
 func TestMonitorInstallation_TickerApproveCSRs(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		done := make(chan error, 1)
-		p := newPhaseSynctest(t, func(_ context.Context, _ string) (<-chan error, func(), error) {
-			return done, func() {}, nil
+		p := newPhaseSynctest(t, func(_ context.Context, _ string) (<-chan error, error) {
+			return done, nil
 		})
 		approver := &fakeApprover{approveN: 1}
 		opts := &Options{
@@ -219,8 +219,8 @@ func TestMonitorInstallation_TickerApproveCSRs(t *testing.T) {
 func TestMonitorInstallation_CtxCancelReapsGracefully(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		done := make(chan error, 1)
-		p := newPhaseSynctest(t, func(_ context.Context, _ string) (<-chan error, func(), error) {
-			return done, func() {}, nil
+		p := newPhaseSynctest(t, func(_ context.Context, _ string) (<-chan error, error) {
+			return done, nil
 		})
 		approver := &fakeApprover{}
 		opts := &Options{
