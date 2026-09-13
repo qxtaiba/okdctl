@@ -58,7 +58,9 @@ type Model struct {
 
 	// contentRows[i] is the viewport row the active step's View line i starts
 	// on; a step line wider than the content column wraps into several rows,
-	// so the two index spaces differ. Length is line count + 1.
+	// so the two index spaces differ. Length is line count + 1. Valid only
+	// for non-centered steps: a centered step's content is re-rendered with
+	// PaddingTop first, so the rows describe the shifted lines instead.
 	contentRows []int
 
 	steps       []WizardStep

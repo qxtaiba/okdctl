@@ -247,6 +247,15 @@ func (s *ParamsStep) View(width, height int) string {
 	return out
 }
 
+// FocusedSpan reports the focused field's lines; View renders the inner form
+// from its own line 0 and only appends below it, so no offset applies.
+func (s *ParamsStep) FocusedSpan() (wizard.LineSpan, bool) {
+	if s.inner == nil {
+		return wizard.LineSpan{}, false
+	}
+	return s.inner.FocusedSpan()
+}
+
 // Apply writes the collected parameters into the shared state.
 func (s *ParamsStep) Apply(_ *config.Config) error {
 	if err := s.Validate(); err != nil {

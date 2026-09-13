@@ -43,8 +43,11 @@ func (f *fakeStep) ShouldShow(cfg *config.Config) bool {
 // resync-then-scroll order on FocusChangedMsg.
 type growingStep struct {
 	BaseStep
-	rows int
+	rows     int
+	centered bool
 }
+
+func (g *growingStep) IsCentered() bool { return g.centered }
 
 func (g *growingStep) Init() tea.Cmd                        { return nil }
 func (g *growingStep) Update(tea.Msg) (WizardStep, tea.Cmd) { return g, nil }
@@ -257,6 +260,17 @@ func TestModel_ScrollKeepsFocusedFieldFullyVisible(t *testing.T) {
 		if !strings.Contains(m.View().Content, label) {
 			t.Fatalf("tab %d: focused field %q is not on screen", i, label)
 		}
+	}
+}
+
+func TestModel_CenteredStepIsNotSpanScrolled(t *testing.T) {
+	step := &growingStep{BaseStep: NewBaseStep(StepIDWelcome, "grower", ""), rows: 120, centered: true}
+	m := NewModel([]WizardStep{step}, config.DefaultConfig())
+	m = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = update(t, m, FocusChangedMsg{})
+
+	if got := m.viewport.YOffset(); got != 0 {
+		t.Fatalf("YOffset() = %d; a centered step's rows do not map to its View lines, so it must not be span-scrolled", got)
 	}
 }
 
