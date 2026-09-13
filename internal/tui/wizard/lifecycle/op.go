@@ -118,10 +118,10 @@ func (s *OpStep) View(width, height int) string {
 func (s *OpStep) renderOption(o *opChoice, selected bool) string {
 	var bullet, title string
 	if selected {
-		bullet = lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true).Render("●")
+		bullet = lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true).Render(tui.IconActive)
 		title = lipgloss.NewStyle().Foreground(tui.ColorText).Bold(true).Render(o.title)
 	} else {
-		bullet = lipgloss.NewStyle().Foreground(tui.ColorSlate600).Render("○")
+		bullet = lipgloss.NewStyle().Foreground(tui.ColorSlate600).Render(tui.IconPending)
 		title = lipgloss.NewStyle().Foreground(tui.ColorSlate300).Render(o.title)
 	}
 	descStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)

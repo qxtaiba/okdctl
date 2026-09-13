@@ -79,11 +79,11 @@ func RenderStepProgress(current, total int) string {
 	for i := range total {
 		switch {
 		case i < current-1:
-			parts = append(parts, StepDotCompletedStyle.Render("●"))
+			parts = append(parts, StepDotCompletedStyle.Render(tui.IconActive))
 		case i == current-1:
-			parts = append(parts, StepDotCurrentStyle.Render("●"))
+			parts = append(parts, StepDotCurrentStyle.Render(tui.IconActive))
 		default:
-			parts = append(parts, StepDotPendingStyle.Render("○"))
+			parts = append(parts, StepDotPendingStyle.Render(tui.IconPending))
 		}
 	}
 	connector := StepDotPendingStyle.Render("─")

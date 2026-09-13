@@ -1,7 +1,11 @@
 package cli
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
+
+	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 var doctorOutput string
@@ -11,16 +15,16 @@ var doctorOutput string
 var doctorCmd = &cobra.Command{
 	Use:   "doctor",
 	Short: "Check that your environment is ready to deploy a cluster",
-	Long: `Run preflight checks on the local environment before a deploy.
+	Long: fmt.Sprintf(`Run preflight checks on the local environment before a deploy.
 
 Each check prints a title line with a status icon and a result line
 with a bracketed label:
 
-  ✓ [ok]   : the check passed, no action needed
+  %s [ok]   : the check passed, no action needed
   ⚠ [warn] : something is suboptimal or missing but can be handled
              during deploy (e.g., 'oc' will be auto-downloaded into
              /usr/local/bin)
-  ✗ [fail] : this must be fixed before 'okdctl deploy' will
+  %s [fail] : this must be fixed before 'okdctl deploy' will
              succeed
 
 Exit code is 0 when every check passes, 6 when one or more checks warn
@@ -29,7 +33,7 @@ Designed to be rerun until clean.
 
 Pass --output=json for machine-readable output (see docs/cli/json-schema.md).
 
-See docs/doctor-checks.md for per-check fail messages and fix guidance.`,
+See docs/doctor-checks.md for per-check fail messages and fix guidance.`, tui.IconSuccess, tui.IconError),
 	Example: `  okdctl doctor
   okdctl doctor --output json | jq '.failed'`,
 	Args: cobra.NoArgs,

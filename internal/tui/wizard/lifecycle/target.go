@@ -153,7 +153,7 @@ func (s *TargetStep) buildChoices(nodes []cluster.NodeDetail) {
 			after := []string{top.Name}
 			for _, w := range workers[1:] {
 				s.blocked = append(s.blocked,
-					fmt.Sprintf("○ %s      removable only after %s (top-down)", w.Name, strings.Join(after, ", ")))
+					fmt.Sprintf("%s %s      removable only after %s (top-down)", tui.IconPending, w.Name, strings.Join(after, ", ")))
 				after = append(after, w.Name)
 			}
 		}

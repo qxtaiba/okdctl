@@ -69,7 +69,7 @@ func (s *DoneStep) successView(width int) string {
 	okStyle := lipgloss.NewStyle().Foreground(tui.ColorSuccess).Bold(true)
 	dimStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
 
-	out := okStyle.Render("✓ "+completionHeadline(s.st.Op)) + "\n\n"
+	out := okStyle.Render(tui.IconSuccess+" "+completionHeadline(s.st.Op)) + "\n\n"
 	out += st.KVPair("cluster", s.st.Cfg.Cluster.Name) + "\n"
 	if s.st.Elapsed > 0 {
 		out += st.KVPair("elapsed", s.st.Elapsed.Truncate(time.Second).String()) + "\n"
@@ -105,7 +105,7 @@ func (s *DoneStep) failureView() string {
 	textStyle := lipgloss.NewStyle().Foreground(tui.ColorText)
 	dimStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
 
-	return failStyle.Render("✗ "+string(s.st.Op)+" failed") + "\n\n" +
+	return failStyle.Render(tui.IconError+" "+string(s.st.Op)+" failed") + "\n\n" +
 		textStyle.Render(s.st.Result.Error()) + "\n\n" +
 		dimStyle.Render("the op marker was left in place — re-run 'okdctl node manage' or the\nmatching flag verb to resume at the recorded step") + "\n\n" +
 		dimStyle.Render("enter to exit")

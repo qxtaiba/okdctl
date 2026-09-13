@@ -216,7 +216,7 @@ func (s *DistributionStep) viewVersionPhase() string {
 		errMsg := lipgloss.NewStyle().
 			Foreground(tui.ColorError).
 			Bold(true).
-			Render("✗ failed to fetch okd versions: " + s.loadError.Error())
+			Render(tui.IconError + " failed to fetch okd versions: " + s.loadError.Error())
 		content.WriteString(errMsg)
 		content.WriteString("\n\n")
 		content.WriteString(lipgloss.NewStyle().

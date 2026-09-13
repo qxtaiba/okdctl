@@ -265,7 +265,7 @@ func (s *PreviewStep) renderGates(st *wizard.SectionStyles) string {
 	b.WriteString("\n")
 	b.WriteString(strings.Join(GateRows(s.st.Op, s.planRole(), s.st.SkipDrain, diskModeFor(s.st)), " → "))
 	b.WriteString("\n")
-	b.WriteString(okStyle.Render("plan gate: ✓ dry-run passed — the safety gate allows exactly the listed changes"))
+	b.WriteString(okStyle.Render(fmt.Sprintf("plan gate: %s dry-run passed — the safety gate allows exactly the listed changes", tui.IconSuccess)))
 	b.WriteString("\n\n")
 	return b.String()
 }
