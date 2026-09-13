@@ -1,0 +1,263 @@
+# Template for scripts/screenshot/run.sh: renders the full 11-step wizard
+# walkthrough against the fakepve fixture and screenshots the header of
+# every step. @W@/@H@/@NAME@ are substituted per size preset by run.sh.
+# Each "STEP N" block is self-contained: the wait/screenshot pair that opens
+# it, then the keystrokes that complete that step and advance to the next
+# one. Keystroke sequences mirror docs/assets/demo.tape (the human-paced
+# README recording) with sleeps compressed for unattended batch rendering.
+Output out/@NAME@.txt
+Set Shell zsh
+Set FontSize 14
+Set Padding 0
+Set LineHeight 1.0
+Set LetterSpacing 1.0
+Set Width @W@
+Set Height @H@
+
+Hide
+Type `export PATH="$(dirname "$OKDCTL_DEMO_BIN"):$PATH" HOME="$OKDCTL_DEMO_HOME" OKDCTL_WIZARD_DEMO=1; cd "$OKDCTL_DEMO_CWD"; clear`
+Enter
+Show
+
+Type "okdctl deploy"
+Sleep 450ms
+Enter
+
+# ==================== STEP 1: welcome ====================
+Wait+Screen@10s /step 1 of 11/
+Screenshot out/@NAME@-welcome.png
+Enter
+Sleep 450ms
+
+# ==================== STEP 2: okd version (distribution) ====================
+Wait+Screen@10s /step 2 of 11/
+Screenshot out/@NAME@-distribution.png
+Enter
+Sleep 650ms
+Down
+Sleep 450ms
+Down
+Sleep 450ms
+Up
+Sleep 450ms
+Up
+Sleep 650ms
+Enter
+Sleep 450ms
+
+# ==================== STEP 3: proxmox connection ====================
+Wait+Screen@10s /step 3 of 11/
+Screenshot out/@NAME@-proxmox.png
+Type "127.0.0.1:8006"
+Sleep 450ms
+Tab
+Type "root@pam"
+Sleep 450ms
+Tab
+Type "demo-password"
+Sleep 450ms
+Tab
+Sleep 450ms
+Tab
+Sleep 450ms
+Right
+Sleep 650ms
+Enter
+Sleep 450ms
+
+# ==================== STEP 4: basics ====================
+Wait+Screen@10s /step 4 of 11/
+Screenshot out/@NAME@-basics.png
+Type "homelab"
+Sleep 450ms
+Tab
+Type "lab.example.com"
+Sleep 450ms
+Tab
+Type "3"
+Sleep 450ms
+Tab
+Type "3"
+Sleep 650ms
+Enter
+Sleep 450ms
+
+# ==================== STEP 5: node placement ====================
+Wait+Screen@10s /step 5 of 11/
+Sleep 2s
+Screenshot out/@NAME@-node-placement.png
+Tab
+Sleep 450ms
+Tab
+Sleep 450ms
+Tab
+Sleep 450ms
+Tab
+Sleep 450ms
+Tab
+Sleep 450ms
+Tab
+Sleep 450ms
+Tab
+Sleep 450ms
+Right
+Sleep 450ms
+Left
+Sleep 450ms
+Tab
+Sleep 450ms
+Tab
+Sleep 450ms
+Tab
+Sleep 650ms
+Enter
+Sleep 450ms
+
+# ==================== STEP 6: networking ====================
+Wait+Screen@10s /step 6 of 11/
+Screenshot out/@NAME@-networking.png
+Type "192.168.1.0/24"
+Sleep 450ms
+Tab
+Type "192.168.1.1"
+Sleep 450ms
+Tab
+Type "192.168.1.1"
+Sleep 450ms
+Tab
+Type "10.128.0.0/14"
+Sleep 450ms
+Tab
+Type "172.30.0.0/16"
+Sleep 450ms
+Tab
+Sleep 450ms
+Tab
+Type "192.168.1.140"
+Sleep 450ms
+Tab
+Type "ens18"
+Sleep 450ms
+Tab
+Type "192.168.1.20"
+Sleep 450ms
+Tab
+Sleep 650ms
+Enter
+Sleep 450ms
+
+# ==================== STEP 7: resources ====================
+Wait+Screen@10s /step 7 of 11/
+Screenshot out/@NAME@-resources.png
+Type "4"
+Sleep 350ms
+Tab
+Type "12288"
+Sleep 350ms
+Tab
+Type "50"
+Sleep 350ms
+Tab
+Type "8"
+Sleep 350ms
+Tab
+Type "20480"
+Sleep 350ms
+Tab
+Type "50"
+Sleep 350ms
+Tab
+Type "500"
+Sleep 350ms
+Tab
+Type "0"
+Sleep 650ms
+Enter
+Sleep 450ms
+
+# ==================== STEP 8: addons ====================
+Wait+Screen@10s /step 8 of 11/
+Screenshot out/@NAME@-addons.png
+Down
+Sleep 450ms
+Down
+Sleep 450ms
+Up
+Sleep 450ms
+Up
+Sleep 650ms
+Enter
+Sleep 450ms
+
+# ==================== STEP 9: files ====================
+# ValidateFilePath expands a leading "~/" via the real OS user's home
+# (system.InvokingUserHomeDir, not $HOME — see internal/system/elevation.go),
+# so a literal "~/pull-secret.json" validates against the operator's real
+# home, not $OKDCTL_DEMO_HOME. Type the demo home's absolute path instead.
+Wait+Screen@10s /step 9 of 11/
+Screenshot out/@NAME@-files.png
+Type "@HOME@/pull-secret.json"
+Sleep 450ms
+Tab
+Type "@HOME@/.ssh/id_ed25519.pub"
+Sleep 450ms
+Tab
+Type "/var/www/html"
+Sleep 650ms
+Enter
+Sleep 450ms
+
+# ==================== STEP 10: advanced ====================
+Wait+Screen@10s /step 10 of 11/
+Screenshot out/@NAME@-advanced.png
+Type "6000"
+Sleep 450ms
+Tab
+Sleep 450ms
+Tab
+Sleep 450ms
+Tab
+Sleep 450ms
+Tab
+Sleep 450ms
+Tab
+Sleep 450ms
+Type "3600"
+Sleep 450ms
+Tab
+Type "7200"
+Sleep 450ms
+Tab
+Sleep 450ms
+Tab
+Sleep 450ms
+Tab
+Sleep 650ms
+Enter
+Sleep 450ms
+
+# ==================== STEP 11: review ====================
+Wait+Screen@10s /step 11 of 11/
+Screenshot out/@NAME@-review.png
+Down
+Sleep 350ms
+Down
+Sleep 350ms
+Down
+Sleep 350ms
+Down
+Sleep 350ms
+Down
+Sleep 350ms
+Down
+Sleep 350ms
+Down
+Sleep 350ms
+Down
+Sleep 350ms
+Up
+Sleep 350ms
+Up
+Sleep 500ms
+Ctrl+C
+Sleep 500ms

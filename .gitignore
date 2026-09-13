@@ -102,6 +102,9 @@ okdctl.yaml
 test.yaml
 demo.yaml
 
+# Generated wizard screenshots
+scripts/screenshot/out/
+
 # agent-workflow artifacts — local only, never shipped
 .claude/
 docs/superpowers/

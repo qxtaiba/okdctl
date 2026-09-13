@@ -19,7 +19,7 @@ LDFLAGS := -ldflags "-s -w \
 
 .DEFAULT_GOAL := help
 
-.PHONY: all build build-all clean test test-short test-cover coverage-floors lint fmt vet check deps deps-update run dev install docs docs-check demo help
+.PHONY: all build build-all clean test test-short test-cover coverage-floors lint fmt vet check deps deps-update run dev install docs docs-check demo screenshots help
 
 all: deps lint test build ## Run all checks and build
 
@@ -105,6 +105,9 @@ docs: ## Regenerate CLI reference pages under docs/cli/
 
 demo: ## Re-record docs/assets/demo.gif from the committed tape (needs vhs)
 	scripts/demo/record.sh
+
+screenshots: ## Render wizard PNGs at 80x24/100x30/120x40 (needs vhs)
+	scripts/screenshot/run.sh
 
 docs-check: ## Regenerate CLI reference and fail on drift
 	$(GOCMD) run -tags docs ./cmd/okdctl-gen-docs
