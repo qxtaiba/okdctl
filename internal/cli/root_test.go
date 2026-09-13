@@ -323,3 +323,33 @@ func TestNoColorFlagIsLongFormOnly(t *testing.T) {
 		t.Fatalf("--no-color has shorthand %q, want none (shorthand allowlist is closed)", f.Shorthand)
 	}
 }
+
+// Regression guard: the bare "okdctl --version" flag short-circuits inside
+// cobra's execute() before PersistentPreRunE/configureLogging ever runs, so
+// --no-color must be honored by versionText itself.
+func TestVersionFlagRespectsNoColor(t *testing.T) {
+	t.Setenv("CLICOLOR_FORCE", "1") // forces color even for a non-TTY writer
+
+	tui.SetColorProfileFor(&bytes.Buffer{})
+	t.Cleanup(func() { tui.SetColorProfileFor(&bytes.Buffer{}) })
+
+	if got := tui.Downsample(tui.SuccessStyle.Render("x")); !strings.Contains(got, "\x1b[") {
+		t.Fatalf("test setup failed to force a colourful profile: %q", got)
+	}
+
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetArgs([]string{"--no-color", "--version"})
+	t.Cleanup(func() {
+		rootCmd.SetOut(nil)
+		rootCmd.SetArgs(nil)
+		noColor = false
+	})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("rootCmd.Execute(--no-color --version) = %v", err)
+	}
+	if strings.Contains(out.String(), "\x1b[") {
+		t.Errorf("--version leaked ANSI under --no-color: %q", out.String())
+	}
+}
