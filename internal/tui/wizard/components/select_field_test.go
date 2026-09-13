@@ -93,3 +93,16 @@ func TestSelectField_NoteRendersVerbatim(t *testing.T) {
 		t.Fatalf("View() = %q, want to end with note %q", got, f.Note)
 	}
 }
+
+func TestSelectField_SingleOptionHidesArrows(t *testing.T) {
+	f := NewSelectField("proxmox node for bootstrap vm", []string{"pve1"})
+	f.SetWidth(90)
+
+	rows := strings.Split(tuitest.StripANSI(f.View()), "\n")
+	if strings.Contains(rows[2], "◂") || strings.Contains(rows[2], "▸") {
+		t.Fatalf("content row = %q, want no cycle arrows for a single option", rows[2])
+	}
+	if !strings.Contains(rows[2], "pve1") {
+		t.Fatalf("content row = %q, want the bare value %q", rows[2], "pve1")
+	}
+}
