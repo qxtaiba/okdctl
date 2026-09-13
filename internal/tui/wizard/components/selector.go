@@ -272,11 +272,6 @@ func NewCompactSelector(options []string) *CompactSelector {
 	}
 }
 
-// Len returns the number of options currently in the selector.
-func (s *CompactSelector) Len() int {
-	return len(s.options)
-}
-
 // SelectedIndex returns the current selection's index.
 func (s *CompactSelector) SelectedIndex() int {
 	return s.selected

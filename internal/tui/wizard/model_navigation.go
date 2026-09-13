@@ -55,7 +55,14 @@ func (m *Model) scrollToFocusedField() {
 	if len(m.steps) == 0 || m.currentStep < 0 || m.currentStep >= len(m.steps) {
 		return
 	}
-	provider, ok := m.steps[m.currentStep].(SpanProvider)
+	step := m.steps[m.currentStep]
+	// contentRows maps the step's own View lines; a centered step's content is
+	// shifted by PaddingTop before it is measured, so the spans would not line
+	// up. No centered step provides spans today.
+	if c, ok := step.(centerable); ok && c.IsCentered() {
+		return
+	}
+	provider, ok := step.(SpanProvider)
 	if !ok {
 		return
 	}
@@ -81,7 +88,7 @@ func (m *Model) scrollToFocusedField() {
 func (m *Model) viewportSpan(span LineSpan) (start, end int) {
 	rows := m.contentRows
 	if len(rows) < 2 {
-		return span.Start, span.End
+		return 0, 0
 	}
 	last := len(rows) - 1
 	start = rows[min(max(span.Start, 0), last)]
