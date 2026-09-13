@@ -42,6 +42,28 @@ func lifecycleScenarios() []lifecycleScenario {
 			},
 		},
 		{
+			name: "op_resume",
+			id:   StepIDOp,
+			build: func() (*State, Hooks) {
+				cfg := config.DefaultConfig()
+				cfg.Cluster.Name = "homelab"
+				marker := time.Date(2026, 8, 30, 8, 0, 0, 0, time.UTC)
+				return &State{
+					Cfg: cfg,
+					Marker: &node.OpMarker{
+						Op: node.OpResize, Target: "homelab-master0",
+						Step: node.StepPowerCycle, Timestamp: marker,
+					},
+				}, Hooks{}
+			},
+			seed: func(m *wizard.Model, st *State) {
+				marker := st.Marker.Timestamp
+				if op, ok := m.CurrentStep().(*OpStep); ok {
+					op.now = func() time.Time { return marker.Add(2 * time.Hour) }
+				}
+			},
+		},
+		{
 			name: "target",
 			id:   StepIDTarget,
 			build: func() (*State, Hooks) {
