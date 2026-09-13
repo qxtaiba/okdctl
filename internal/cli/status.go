@@ -284,15 +284,11 @@ func runDescribeNode(cmd *cobra.Command, args []string) error {
 		return writeJSON(cmd.OutOrStdout(), payload)
 	}
 
-	lines := []struct{ k, v string }{
+	return printLeaders(cmd.OutOrStdout(), [][2]string{
 		{colName, n.Name},
 		{"role", string(n.Role)},
 		{"ready", yesNo(n.Ready)},
-	}
-	for _, ln := range lines {
-		fmt.Fprintln(cmd.OutOrStdout(), tui.DottedKeyValueFull(ln.k, ln.v, tui.DefaultKeyColWidth, 0))
-	}
-	return nil
+	})
 }
 
 func runDescribeAddon(cmd *cobra.Command, args []string) error {
@@ -352,15 +348,11 @@ func runDescribeAddon(cmd *cobra.Command, args []string) error {
 	if !as.Healthy && as.Error != "" {
 		health += ": " + as.Error
 	}
-	lines := []struct{ k, v string }{
+	return printLeaders(cmd.OutOrStdout(), [][2]string{
 		{colName, info.Name},
 		{"display-name", info.DisplayName},
 		{"description", info.Description},
 		{"category", info.Category},
 		{"health", health},
-	}
-	for _, ln := range lines {
-		fmt.Fprintln(cmd.OutOrStdout(), tui.DottedKeyValueFull(ln.k, ln.v, tui.DefaultKeyColWidth, 0))
-	}
-	return nil
+	})
 }

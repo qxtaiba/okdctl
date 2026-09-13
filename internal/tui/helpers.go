@@ -8,7 +8,7 @@ import (
 
 // DefaultKeyColWidth is the key-column width used when the caller doesn't
 // override it.
-const DefaultKeyColWidth = 28
+const DefaultKeyColWidth = 24
 
 type dottedKVOpts struct {
 	highlight  bool
