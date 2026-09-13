@@ -333,16 +333,3 @@ func (s *DistributionStep) SetSelectedVersion(version string) {
 func (s *DistributionStep) SetVersionFetcher(f VersionFetcher) {
 	s.versionFetcher = f
 }
-
-// DisplayTitle returns the header text for the step, suppressed while the
-// release list is loading.
-func (s *DistributionStep) DisplayTitle() string {
-	switch s.phase {
-	case phaseVersionLoading:
-		return ""
-	case phaseVersionSelect:
-		return "which okd version would you like to deploy?"
-	default:
-		return s.BaseStep.DisplayTitle()
-	}
-}

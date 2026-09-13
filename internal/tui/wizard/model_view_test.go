@@ -82,3 +82,74 @@ func TestModel_StatusRowTruncatesLongError(t *testing.T) {
 		tuitest.AssertFits(t, m.View().Content, sz[0], sz[1])
 	}
 }
+
+type titledStep struct {
+	nopStep
+	title string
+}
+
+func (s *titledStep) DisplayTitle() string { return s.title }
+
+func TestHeader_TitleRowContainsDisplayTitleAndStepCount(t *testing.T) {
+	s := &titledStep{nopStep: *newNopStep(), title: "configure your cluster basics"}
+	m := NewModel([]WizardStep{newNopStep(), newNopStep(), s}, config.DefaultConfig())
+	tuitest.RenderAt(t, m, 100, 30)
+	m.Update(JumpToStepMsg{StepID: s.ID()})
+	frame := tuitest.StripANSI(m.View().Content)
+	rows := strings.Split(frame, "\n")
+	if !strings.Contains(rows[3], "configure your cluster basics") || !strings.Contains(rows[3], "step 3 of 3") {
+		t.Fatalf("row 3 = %q", rows[3])
+	}
+	if strings.Contains(strings.Join(rows[5:], "\n"), "configure your cluster basics") {
+		t.Fatal("title still in body")
+	}
+}
+
+func TestHeader_TaglineOnlyOnFirstStep(t *testing.T) {
+	second := newNopStep()
+	chrome := FlowChrome{Tagline: "okd over proxmox, the easy way"}
+	m := NewFlowModel([]WizardStep{newNopStep(), second}, config.DefaultConfig(), chrome)
+	frame := tuitest.StripANSI(tuitest.RenderAt(t, m, 100, 30))
+	if !strings.Contains(frame, chrome.Tagline) {
+		t.Fatalf("tagline missing on step 1:\n%s", frame)
+	}
+
+	m.Update(JumpToStepMsg{StepID: second.ID()})
+	frame = tuitest.StripANSI(m.View().Content)
+	if strings.Contains(frame, chrome.Tagline) {
+		t.Fatalf("tagline present on step 2:\n%s", frame)
+	}
+}
+
+func TestHeader_TrailHookReplacesDots(t *testing.T) {
+	chrome := FlowChrome{Trail: func(_ ProgressInfo) string { return "op › target" }}
+	m := NewFlowModel([]WizardStep{newNopStep()}, config.DefaultConfig(), chrome)
+	frame := tuitest.StripANSI(tuitest.RenderAt(t, m, 100, 30))
+	if !strings.Contains(frame, "op › target") || strings.Contains(frame, "step 1 of 1") {
+		t.Fatal(frame)
+	}
+}
+
+func TestHeader_TitleTruncatesAt60Cols(t *testing.T) {
+	long := strings.Repeat("configure your cluster basics ", 4)
+	s := &titledStep{nopStep: *newNopStep(), title: long}
+	m := NewModel([]WizardStep{s}, config.DefaultConfig())
+	tuitest.RenderAt(t, m, 60, 20)
+
+	row2 := tuitest.StripANSI(strings.Split(m.renderHeader(), "\n")[1])
+	if w := lipgloss.Width(row2); w > 54 {
+		t.Fatalf("header row 2 width %d > 54: %q", w, row2)
+	}
+	if strings.Contains(row2, long) {
+		t.Fatalf("row 2 shows the untruncated title: %q", row2)
+	}
+
+	ellipsis := strings.Index(row2, "…")
+	ribbon := strings.Index(row2, "step ")
+	if ellipsis < 0 {
+		t.Fatalf("row 2 missing ellipsis: %q", row2)
+	}
+	if ribbon < 0 || ellipsis >= ribbon {
+		t.Fatalf("ellipsis must precede the ribbon: %q", row2)
+	}
+}

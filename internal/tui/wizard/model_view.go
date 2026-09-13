@@ -2,6 +2,7 @@ package wizard
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -113,13 +114,6 @@ func (m *Model) syncViewportContent() {
 
 	var content strings.Builder
 
-	if d, ok := step.(displayTitler); ok {
-		if displayTitle := d.DisplayTitle(); displayTitle != "" {
-			content.WriteString(m.renderStepTitle(displayTitle))
-			content.WriteString("\n\n")
-		}
-	}
-
 	stepContent := step.View(innerWidth, 1000)
 
 	if c, ok := step.(centerable); ok && c.IsCentered() {
@@ -152,30 +146,97 @@ func (m *Model) syncViewportContent() {
 	m.viewport.SetContent(paddedContent)
 }
 
+// renderHeader draws the two-row header: brand (+ tagline on the first
+// visible step) on row one, the step's display title and the progress
+// trail on row two.
 func (m *Model) renderHeader() string {
 	width := m.contentWidth()
 
 	brand := LogoStyle.Render("O K D C T L")
-	tagline := TaglineStyle.Render(m.chrome.Tagline)
-
-	visibleSteps := m.countVisibleSteps()
-	currentVisible := m.currentVisibleStepIndex() + 1
-	progressDots := RenderStepProgress(currentVisible, visibleSteps)
-	stepIndicator := progressDots + " " +
-		StepIndicatorStyle.Render("step ") +
-		StepIndicatorCurrentStyle.Render(fmt.Sprintf("%d", currentVisible)) +
-		StepIndicatorStyle.Render(fmt.Sprintf(" of %d", visibleSteps))
-
-	taglineWidth := lipgloss.Width(tagline)
-	indicatorWidth := lipgloss.Width(stepIndicator)
-	spacing := width - taglineWidth - indicatorWidth - 2
-	if spacing < 1 {
-		spacing = 1
+	if m.currentVisibleStepIndex() == 0 && m.chrome.Tagline != "" {
+		brand += "  " + TaglineStyle.Render(m.chrome.Tagline)
 	}
 
-	header := brand + "\n" + tagline + strings.Repeat(" ", spacing) + stepIndicator
+	right := m.renderTrail()
+	rightW := lipgloss.Width(right)
 
-	return HeaderStyle.Render(header)
+	titleWidth := max(width-2-rightW-2, 8)
+	title := lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText).Inline(true).
+		Render(truncateTitle(m.headerTitle(), titleWidth))
+
+	gap := max(width-2-lipgloss.Width(title)-rightW, 1)
+	row2 := title + strings.Repeat(" ", gap) + right
+
+	return HeaderStyle.Width(width).Render(brand + "\n" + row2)
+}
+
+// renderTrail renders the header's right-hand progress indicator: the
+// chrome's Trail hook if set, otherwise the default dot ribbon.
+func (m *Model) renderTrail() string {
+	p := m.progressInfo()
+	if m.chrome.Trail != nil {
+		return m.chrome.Trail(p)
+	}
+	return RenderStepProgress(p.Current, p.Total) + "  " +
+		StepIndicatorStyle.Render("step ") +
+		StepIndicatorCurrentStyle.Render(strconv.Itoa(p.Current)) +
+		StepIndicatorStyle.Render(" of "+strconv.Itoa(p.Total))
+}
+
+// headerTitle returns the current step's DisplayTitle(), falling back to
+// its Title() when DisplayTitle is unimplemented or empty.
+func (m *Model) headerTitle() string {
+	if len(m.steps) == 0 || m.currentStep < 0 || m.currentStep >= len(m.steps) {
+		return ""
+	}
+	step := m.steps[m.currentStep]
+	if d, ok := step.(displayTitler); ok {
+		if t := d.DisplayTitle(); t != "" {
+			return t
+		}
+	}
+	return step.Title()
+}
+
+// progressInfo reports the current step's position among visible steps for
+// FlowChrome.Trail hooks.
+func (m *Model) progressInfo() ProgressInfo {
+	titles := make([]string, 0, len(m.steps))
+	var currentID StepID
+	for i, step := range m.steps {
+		if !stepShouldShow(step, m.config) {
+			continue
+		}
+		titles = append(titles, step.Title())
+		if i == m.currentStep {
+			currentID = step.ID()
+		}
+	}
+	return ProgressInfo{
+		Current:   m.currentVisibleStepIndex() + 1,
+		Total:     m.countVisibleSteps(),
+		CurrentID: currentID,
+		Titles:    titles,
+	}
+}
+
+// truncateTitle rune-safely clips s to fit within maxWidth visible columns,
+// appending "…" when it clips — lipgloss's own MaxWidth truncates silently.
+func truncateTitle(s string, maxWidth int) string {
+	if maxWidth <= 0 {
+		return ""
+	}
+	if lipgloss.Width(s) <= maxWidth {
+		return s
+	}
+	runes := []rune(s)
+	for i := len(runes) - 1; i > 0; i-- {
+		candidate := string(runes[:i]) + "…"
+		if lipgloss.Width(candidate) <= maxWidth {
+			return candidate
+		}
+	}
+	return "…"
 }
 
 func (m *Model) renderFooter() string {
@@ -201,13 +262,6 @@ func defaultKeyBindings() []KeyBinding {
 		{Key: HelpEsc, Help: HelpBack},
 		{Key: HelpCtrlC, Help: HelpQuit},
 	}
-}
-
-func (m *Model) renderStepTitle(title string) string {
-	titleStyle := lipgloss.NewStyle().
-		Foreground(tui.ColorText).
-		Bold(true)
-	return titleStyle.Render(title)
 }
 
 func (m *Model) renderScrollIndicator() string {
