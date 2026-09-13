@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
@@ -235,8 +236,8 @@ func printUpdateNotice(ch <-chan version.CheckResult) {
 // failed" structured so RedactHandler can scrub credentials (stringifying err
 // first would bypass it).
 func announceFailure(err error) {
-	if logutil.ProgressBarsEnabled() && !render.IsPresented(err) {
-		fmt.Fprint(os.Stderr, render.ErrorSummary(err, exitCodeFor(err), logutil.RunID()))
+	if logutil.ProgressBarsEnabled() && term.IsTerminal(int(os.Stderr.Fd())) && !render.IsPresented(err) {
+		fmt.Fprintln(os.Stderr, render.ErrorSummary(err, exitCodeFor(err), logutil.RunID()))
 		return
 	}
 	logutil.Error("command failed", logutil.LF("err", err))
@@ -399,9 +400,9 @@ func init() {
 	rootCmd.MarkFlagsMutuallyExclusive(flagQuiet, flagVerbose)
 
 	// returns UsageError instead of os.Exit so Execute's deferred logFileCloser.Close() still runs
-	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
-		logutil.Error("flag error", logutil.LF("err", err))
-		return &errtypes.UsageError{Msg: err.Error(), Err: err}
+	rootCmd.SetFlagErrorFunc(func(c *cobra.Command, err error) error {
+		usageErr := &errtypes.UsageError{Msg: err.Error(), Err: err}
+		return usageErr.WithHint(fmt.Sprintf("see '%s --help'", c.CommandPath()))
 	})
 
 	versionCmd.Flags().StringVarP(&versionOutputFlag, flagOutput, flagOutputShort, outputText, "output format: text|json")

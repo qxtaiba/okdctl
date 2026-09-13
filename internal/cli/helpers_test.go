@@ -1,9 +1,13 @@
 package cli
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
 func seedMarkerFile(t *testing.T, dir, relPath, content string) {
@@ -42,4 +46,41 @@ func TestHasProjectMarker(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestLoadConfigMissingCarriesHint(t *testing.T) {
+	t.Run("default path", func(t *testing.T) {
+		t.Chdir(t.TempDir())
+
+		_, err := loadConfig("okdctl.yaml")
+		if !errors.Is(err, errtypes.ErrConfigMissing) {
+			t.Fatalf("want ErrConfigMissing, got %v", err)
+		}
+		if got := exitCodeFor(err); got != 66 {
+			t.Fatalf("exitCodeFor = %d, want 66", got)
+		}
+		d, ok := errtypes.Describe(err)
+		if !ok {
+			t.Fatalf("errtypes.Describe failed to classify %v", err)
+		}
+		if !strings.Contains(d.Hint, "okdctl deploy") {
+			t.Fatalf("hint = %q, want it to contain %q", d.Hint, "okdctl deploy")
+		}
+	})
+
+	t.Run("custom path", func(t *testing.T) {
+		configFile := filepath.Join(t.TempDir(), "custom.yaml")
+
+		_, err := loadConfig(configFile)
+		if !errors.Is(err, errtypes.ErrConfigMissing) {
+			t.Fatalf("want ErrConfigMissing, got %v", err)
+		}
+		d, ok := errtypes.Describe(err)
+		if !ok {
+			t.Fatalf("errtypes.Describe failed to classify %v", err)
+		}
+		if !strings.Contains(d.Hint, "--output-file") {
+			t.Fatalf("hint = %q, want it to contain %q", d.Hint, "--output-file")
+		}
+	})
 }
