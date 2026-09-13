@@ -116,6 +116,26 @@ func TestInputField_IsDefaultRendersTag(t *testing.T) {
 	}
 }
 
+func TestInputField_SavedPositionSurvivesRedundantBlur(t *testing.T) {
+	a := NewInputField("a", "")
+	b := NewInputField("b", "")
+	c := NewInputField("c", "")
+	g := NewInputGroup(a, b, c)
+	g.SetWidth(60)
+
+	_ = g.Focus()
+	a.SetValue("abcdefghij")
+	a.input.SetCursor(5)
+
+	g.Next() // a -> b: a's real blur saves position 5
+	g.Next() // b -> c: a's redundant re-blur must not collapse it to 0
+	g.Next() // c -> a (wraps): a's Focus restores the saved position
+
+	if got := a.input.Position(); got != 5 {
+		t.Fatalf("Position() after refocus = %d, want 5 (saved position lost to a redundant Blur)", got)
+	}
+}
+
 // ansiPrefix renders "x" in fg and returns the ANSI escape sequence that
 // precedes it, so a test can assert a rendered row was styled with fg.
 func ansiPrefix(t *testing.T, fg color.Color) string {
