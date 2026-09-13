@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -30,16 +29,10 @@ func (f *fakeOwner) clearLine() {
 
 func configureBuf(t *testing.T, buf *bytes.Buffer) {
 	t.Helper()
-	if err := ConfigureLoggers("debug", "text", buf, false); err != nil {
+	if err := ConfigureLoggers(LoggerConfig{Level: "debug", Format: "text", Stderr: buf}); err != nil {
 		t.Fatal(err)
 	}
 	logutil.InstallHandler(newStderrHandler())
-	t.Cleanup(func() {
-		if err := ConfigureLoggers("info", "text", os.Stderr, false); err != nil {
-			t.Errorf("restore loggers: %v", err)
-		}
-		logutil.InstallHandler(newStderrHandler())
-	})
 }
 
 func TestHandler_ClearsOwnerLineOncePerRecord(t *testing.T) {

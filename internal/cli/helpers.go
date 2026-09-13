@@ -63,10 +63,10 @@ func handleCredentials(cfg *config.Config) (*credentials.ProxmoxCredentials, err
 func reportCredentialProvenance(creds *credentials.ProxmoxCredentials) {
 	logutil.Info("using credentials", logutil.LF("source", creds.Source))
 	if creds.ConfigCredentialsOverridden {
-		logutil.Warn("environment credentials override proxmox credentials in config file")
+		logutil.Info("environment credentials override proxmox credentials in config file")
 	}
 	if creds.EndpointFromConfig {
-		logutil.Warn("PROXMOX_VE_ENDPOINT not set; endpoint falling back to config file (mixed source)")
+		logutil.Debug("PROXMOX_VE_ENDPOINT not set; endpoint falling back to config file (mixed source)")
 	}
 	if creds.Insecure {
 		logutil.Warn("proxmox: TLS verification disabled (insecure=true in config)")

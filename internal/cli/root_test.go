@@ -328,10 +328,14 @@ func TestNoColorFlagIsLongFormOnly(t *testing.T) {
 // cobra's execute() before PersistentPreRunE/configureLogging ever runs, so
 // --no-color must be honored by versionText itself.
 func TestVersionFlagRespectsNoColor(t *testing.T) {
+	// registered before t.Setenv so LIFO cleanup restores CLICOLOR_FORCE
+	// first and only then re-detects the profile with a clean environment;
+	// the reverse order left the package profile forced-colourful for later
+	// tests
+	t.Cleanup(func() { tui.SetColorProfileFor(&bytes.Buffer{}) })
 	t.Setenv("CLICOLOR_FORCE", "1") // forces color even for a non-TTY writer
 
 	tui.SetColorProfileFor(&bytes.Buffer{})
-	t.Cleanup(func() { tui.SetColorProfileFor(&bytes.Buffer{}) })
 
 	if got := tui.Downsample(tui.SuccessStyle.Render("x")); !strings.Contains(got, "\x1b[") {
 		t.Fatalf("test setup failed to force a colourful profile: %q", got)
@@ -351,5 +355,36 @@ func TestVersionFlagRespectsNoColor(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "\x1b[") {
 		t.Errorf("--version leaked ANSI under --no-color: %q", out.String())
+	}
+}
+
+func TestMutatesStateClassification(t *testing.T) {
+	cases := []struct {
+		cmd  *cobra.Command
+		want bool
+	}{
+		{deployCmd, true},
+		{destroyCmd, true},
+		{cleanupCmd, true},
+		{updateIngressCmd, true},
+		{nodeAddCmd, true},
+		{nodeRemoveCmd, true},
+		{nodeResizeCmd, true},
+		{clusterStopCmd, true},
+		{addonUninstallCmd, true},
+		{versionCmd, false},
+		{statusCmd, false},
+		{nodeListCmd, false},
+		{describeNodeCmd, false},
+		{releasesListCmd, false},
+		{addonListCmd, false},
+		{addonVerifyCmd, false},
+		{doctorCmd, false},
+		{planCmd, false},
+	}
+	for _, tc := range cases {
+		if got := mutatesState(tc.cmd); got != tc.want {
+			t.Errorf("mutatesState(%s) = %v, want %v", tc.cmd.CommandPath(), got, tc.want)
+		}
 	}
 }

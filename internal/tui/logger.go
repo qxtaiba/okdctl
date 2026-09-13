@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"image/color"
 	"io"
 	"log/slog"
 	"os"
@@ -10,91 +11,185 @@ import (
 
 	"charm.land/lipgloss/v2"
 	charmlog "charm.land/log/v2"
+	"github.com/charmbracelet/colorprofile"
 
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
-var stderrLogger atomic.Pointer[charmlog.Logger]
+var (
+	stderrLogger atomic.Pointer[charmlog.Logger]
+	// sinkLogger is the persistent-run-log logger; nil when no sink is
+	// configured.
+	sinkLogger atomic.Pointer[charmlog.Logger]
+	// stderrIsJSON gates whether SetRunID attaches run_id to stderr;
+	// ConfigureLoggers sets it from LoggerConfig.Format.
+	stderrIsJSON atomic.Bool
+)
 
 func init() {
 	stderrLogger.Store(buildLogger(os.Stderr))
 	logutil.InstallHandler(newStderrHandler())
 }
 
-// newStderrHandler wraps stderrLogger for logutil, which adds the
-// RedactHandler layer on install.
+// newStderrHandler wraps stderrLogger (and sinkLogger, when configured) for
+// logutil, which adds the RedactHandler layer on install.
 func newStderrHandler() slog.Handler {
-	return &stderrHandler{h: stderrLogger.Load()}
+	h := &stderrHandler{stderr: stderrLogger.Load()}
+	if sl := sinkLogger.Load(); sl != nil {
+		h.sink = sl
+	}
+	return h
+}
+
+// badgeWidth pads every level badge to the same column so log messages
+// share a starting column regardless of level.
+const badgeWidth = 7
+
+func levelBadge(c color.Color, text string, bold bool) lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(c).Bold(bold).Width(badgeWidth).SetString(text)
+}
+
+func buildStyles() *charmlog.Styles {
+	styles := charmlog.DefaultStyles()
+	styles.Levels[charmlog.DebugLevel] = levelBadge(ColorSlate500, "[DEBUG]", false)
+	styles.Levels[charmlog.InfoLevel] = levelBadge(ColorInfo, "[INFO]", true)
+	styles.Levels[charmlog.WarnLevel] = levelBadge(ColorWarning, "[WARN]", true)
+	styles.Levels[charmlog.ErrorLevel] = levelBadge(ColorError, "[ERROR]", true)
+	return styles
 }
 
 func buildLogger(w io.Writer) *charmlog.Logger {
 	l := charmlog.New(w)
 	l.SetReportTimestamp(false)
 	l.SetLevel(charmlog.InfoLevel)
-	styles := charmlog.DefaultStyles()
-	styles.Levels[charmlog.DebugLevel] = lipgloss.NewStyle().Foreground(ColorSlate500).SetString("[DEBUG]")
-	styles.Levels[charmlog.InfoLevel] = lipgloss.NewStyle().Foreground(ColorInfo).Bold(true).SetString("[INFO]")
-	styles.Levels[charmlog.WarnLevel] = lipgloss.NewStyle().Foreground(ColorWarning).Bold(true).SetString("[WARN]")
-	styles.Levels[charmlog.ErrorLevel] = lipgloss.NewStyle().Foreground(ColorError).Bold(true).SetString("[ERROR]")
-	l.SetStyles(styles)
+	l.SetStyles(buildStyles())
 	return l
 }
 
-// stderrHandler writes every record to stderr, clearing any active
-// spinner/progress line via lineReg first.
+// buildSinkLogger builds the persistent run-log logger: always text with
+// timestamps on and a colour-stripped profile, independent of the stderr
+// logger's format and colour settings.
+func buildSinkLogger(w io.Writer) *charmlog.Logger {
+	l := charmlog.New(w)
+	l.SetReportTimestamp(true)
+	l.SetFormatter(charmlog.TextFormatter)
+	l.SetColorProfile(colorprofile.NoTTY)
+	l.SetStyles(buildStyles())
+	return l
+}
+
+// stderrHandler fans each record to stderr and, when configured, the
+// persistent-log sink, clearing any active spinner/progress line via lineReg
+// first so both writes land on a clean line.
 type stderrHandler struct {
-	h slog.Handler
+	stderr slog.Handler
+	sink   slog.Handler // nil when no persistent-log sink is active
 }
 
 func (h *stderrHandler) Enabled(ctx context.Context, lvl slog.Level) bool {
-	return h.h.Enabled(ctx, lvl)
+	return h.stderr.Enabled(ctx, lvl)
 }
 
 func (h *stderrHandler) Handle(ctx context.Context, r slog.Record) error { //nolint:gocritic // hugeParam: slog.Handler interface requires value receiver
 	var err error
-	lineReg.withLine(func() { err = h.h.Handle(ctx, r) })
+	lineReg.withLine(func() {
+		err = h.stderr.Handle(ctx, r)
+		if h.sink == nil {
+			return
+		}
+		if sinkErr := h.sink.Handle(ctx, r); err == nil {
+			err = sinkErr
+		}
+	})
 	return err
 }
 
 func (h *stderrHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return &stderrHandler{h: h.h.WithAttrs(attrs)}
+	nh := &stderrHandler{stderr: h.stderr.WithAttrs(attrs)}
+	if h.sink != nil {
+		nh.sink = h.sink.WithAttrs(attrs)
+	}
+	return nh
 }
 
 func (h *stderrHandler) WithGroup(name string) slog.Handler {
-	return &stderrHandler{h: h.h.WithGroup(name)}
+	nh := &stderrHandler{stderr: h.stderr.WithGroup(name)}
+	if h.sink != nil {
+		nh.sink = h.sink.WithGroup(name)
+	}
+	return nh
 }
 
-// FormatText and FormatJSON are the log encodings ConfigureLoggers accepts.
+// FormatText and FormatJSON are ConfigureLoggers' two output encodings.
 const (
 	FormatText = "text"
 	FormatJSON = "json"
 )
 
+// LoggerConfig configures the package-level stderr and sink loggers.
+type LoggerConfig struct {
+	Level  string
+	Format string
+	Stderr io.Writer
+	// Sink is the persistent run log: always text with timestamps on and a
+	// colour-stripped profile, and always carries run_id; nil disables it.
+	Sink         io.Writer
+	ProgressBars bool
+}
+
 // ConfigureLoggers applies level, formatter, and writer settings to the
-// package-level stderr logger. Not safe for concurrent calls — call once
-// in cobra PersistentPreRunE before any subcommand runs.
-func ConfigureLoggers(level, format string, stderrW io.Writer, progressBars bool) error {
-	lvl, err := charmlog.ParseLevel(level)
+// package-level loggers. Not safe for concurrent calls — call once in cobra
+// PersistentPreRunE before any subcommand runs.
+func ConfigureLoggers(cfg LoggerConfig) error {
+	lvl, err := charmlog.ParseLevel(cfg.Level)
 	if err != nil {
-		return fmt.Errorf("unknown log level %q: %w", level, err)
+		return fmt.Errorf("unknown log level %q: %w", cfg.Level, err)
 	}
 
 	var formatter charmlog.Formatter
-	switch format {
+	switch cfg.Format {
 	case FormatText:
 		formatter = charmlog.TextFormatter
 	case FormatJSON:
 		formatter = charmlog.JSONFormatter
 	default:
-		return fmt.Errorf("unknown log format %q: must be text or json", format)
+		return fmt.Errorf("unknown log format %q: must be text or json", cfg.Format)
 	}
 
 	el := stderrLogger.Load()
 	el.SetLevel(lvl)
 	el.SetFormatter(formatter)
-	el.SetOutput(stderrW)
+	el.SetOutput(cfg.Stderr)
+	if !colorEnabled() {
+		// NoTTY, not Ascii: colorprofile.Writer only downsamples color SGR
+		// params at Ascii, leaving bold/reset codes in place (see detect's
+		// doc in colorprofile.go); NoTTY takes the full ansi.Strip path so
+		// --no-color/NO_COLOR text output carries zero escape bytes.
+		el.SetColorProfile(colorprofile.NoTTY)
+	}
+	stderrIsJSON.Store(cfg.Format == FormatJSON)
+	// SetRunID may already have fired (execute() pins run_id before
+	// PersistentPreRunE parses --log-format); attach it here too so a json
+	// run configured after SetRunID still carries it.
+	if cfg.Format == FormatJSON {
+		if id := logutil.RunID(); id != "" {
+			stderrLogger.Store(el.With("run_id", id))
+		}
+	}
 
-	logutil.SetProgressBarsEnabled(progressBars)
+	if cfg.Sink != nil {
+		sl := buildSinkLogger(cfg.Sink)
+		sl.SetLevel(lvl)
+		if id := logutil.RunID(); id != "" {
+			sl = sl.With("run_id", id)
+		}
+		sinkLogger.Store(sl)
+	} else {
+		sinkLogger.Store(nil)
+	}
+
+	logutil.SetProgressBarsEnabled(cfg.ProgressBars)
+	logutil.InstallHandler(newStderrHandler())
 	return nil
 }
 
@@ -104,14 +199,20 @@ func SuppressInfo() {
 	stderrLogger.Load().SetLevel(charmlog.ErrorLevel)
 }
 
-// SetRunID pins run_id on the package-level stderr logger so subsequent
+// SetRunID pins run_id on the package-level loggers so subsequent
 // logutil.X calls carry it; call once, before any log line, since
-// logutil.SimpleLogger snapshots loggers at creation time. Not safe for
-// concurrent callers.
+// logutil.SimpleLogger snapshots loggers at creation time. run_id always
+// attaches to the sink and attaches to stderr only under json format. Not
+// safe for concurrent callers.
 func SetRunID(id string) {
 	logutil.SetRunID(id)
-	stderrLogger.Store(stderrLogger.Load().With("run_id", id))
-	// Reinstall so the facade captures the new stderrLogger.
+	if sl := sinkLogger.Load(); sl != nil {
+		sinkLogger.Store(sl.With("run_id", id))
+	}
+	if stderrIsJSON.Load() {
+		stderrLogger.Store(stderrLogger.Load().With("run_id", id))
+	}
+	// Reinstall so the facade captures the rebound loggers.
 	logutil.InstallHandler(newStderrHandler())
 	// Rebind slog.SetDefault so libs/goroutines that captured slog.Default()
 	// earlier also see run_id.
