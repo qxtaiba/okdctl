@@ -13,9 +13,11 @@
   │    │ ◂ vmbr0 ▸ │                                                                                                 │  
   │    ╰───────────╯                                                                                                 │  
   │                                                                                                                  │  
-  │    additional networks (extra bridges to attach to all vms — leave empty for none) (j/k navigate, space toggle)  │  
-  │    > [ ] vmbr0                                                                                                   │  
-  │      [ ] vmbr1                                                                                                   │  
+  │    additional networks                                                                                           │  
+  │    ╭────────────────────────────────────────────────────────────────────────────────────────────────────────╮    │  
+  │    │ > [ ] vmbr0    [ ] vmbr1                                                                               │    │  
+  │    ╰────────────────────────────────────────────────────────────────────────────────────────────────────────╯    │  
+  │    extra bridges to attach to all vms — leave empty for none                                                     │  
   │                                                                                                                  │  
   │    os storage                                                                                                    │  
   │    ╭───────────────╮                                                                                             │  
@@ -32,9 +34,7 @@
   │    │ local     │                                                                                                 │  
   │    ╰───────────╯                                                                                                 │  
   │                                                                                                                  │  
-  │    fcos iso                                                                                                      │  
-  │                                                                                                                  │  
   │─────────────────────────────── ↑ ↓  scroll down for more ─────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
-  │  ↑↓ navigate • ← → change value • enter confirm • esc back • pgup/pgdn scroll                                    │  
+  │  ↑↓ navigate • ← → change value • enter confirm • esc back • space toggle • ←/→ move • pgup/pgdn scroll          │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                                         

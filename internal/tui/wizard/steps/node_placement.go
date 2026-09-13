@@ -390,17 +390,27 @@ func (s *NodePlacementStep) SetFocused(focused bool) {
 	s.inner.Blur()
 }
 
-// ShortHelp returns the step's help bar or nil while discovering.
+// ShortHelp returns the step's help bar (nil while discovering), plus any
+// key hints the focused field contributes.
 func (s *NodePlacementStep) ShortHelp() []wizard.KeyBinding {
 	if s.phase == phaseDiscovering {
 		return nil
 	}
-	return []wizard.KeyBinding{
+	help := []wizard.KeyBinding{
 		{Key: "↑↓", Help: wizard.HelpNavigate},
 		{Key: "← →", Help: "change value"},
 		{Key: wizard.HelpEnter, Help: wizard.HelpConfirm},
 		{Key: wizard.HelpEsc, Help: wizard.HelpBack},
 	}
+	if s.inner == nil {
+		return help
+	}
+	if h, ok := s.inner.FocusedField().(components.KeyHinter); ok {
+		for _, hint := range h.KeyHints() {
+			help = append(help, wizard.KeyBinding{Key: hint.Key, Help: hint.Help})
+		}
+	}
+	return help
 }
 
 func bridgeNames(bridges []proxmoxBridge) []string {

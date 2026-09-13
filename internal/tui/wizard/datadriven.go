@@ -169,6 +169,16 @@ func (f *MultiSectionForm) currentGroup() *components.InputGroup {
 	return f.sections[f.currentSection].Group
 }
 
+// FocusedField returns the field owning focus in the current section, or nil
+// when the form has no sections or the current section has no group.
+func (f *MultiSectionForm) FocusedField() components.FormField {
+	group := f.currentGroup()
+	if group == nil {
+		return nil
+	}
+	return group.Field(group.FocusIndex())
+}
+
 // Init focuses the first input group so the user can type immediately.
 func (f *MultiSectionForm) Init() tea.Cmd {
 	if len(f.sections) > 0 && f.sections[0].Group != nil {
@@ -551,13 +561,20 @@ func (s *DataDrivenStep) SetFocused(focused bool) {
 	s.form.Blur()
 }
 
-// ShortHelp returns the key bindings shown in the step's help footer.
+// ShortHelp returns the key bindings shown in the step's help footer, plus
+// any key hints the focused field contributes.
 func (s *DataDrivenStep) ShortHelp() []KeyBinding {
-	return []KeyBinding{
+	bindings := []KeyBinding{
 		{Key: "↑↓/tab", Help: HelpNavigate},
 		{Key: HelpEnter, Help: HelpContinue},
 		{Key: HelpEsc, Help: HelpBack},
 	}
+	if h, ok := s.form.FocusedField().(components.KeyHinter); ok {
+		for _, hint := range h.KeyHints() {
+			bindings = append(bindings, KeyBinding{Key: hint.Key, Help: hint.Help})
+		}
+	}
+	return bindings
 }
 
 // Update forwards input to the embedded form and, on enter, runs
