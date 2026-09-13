@@ -1,14 +1,11 @@
 package lifecycle
 
 import (
-	"time"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
-	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
@@ -55,87 +52,19 @@ func (s *DoneStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	return s, nil
 }
 
-// View renders the success or failure summary.
+// View renders the CLI completion box for a success, or the CLI error box
+// for a failure, sized to fit the wizard frame's inner width.
 func (s *DoneStep) View(width, height int) string {
 	s.SetSize(width, height)
+	w := min(width-2, tui.DefaultBoxWidth)
 	if s.st.Result != nil {
-		return s.failureView()
+		return strings.Trim(render.ErrorCard(string(s.st.Op)+" failed", s.st.Result.Error(),
+			"re-run the same operation to resume at the recorded step", w), "\n")
 	}
-	return s.successView(width)
-}
-
-func (s *DoneStep) successView(width int) string {
-	st := wizard.NewSectionStyles(width)
-	okStyle := lipgloss.NewStyle().Foreground(tui.ColorSuccess).Bold(true)
-	dimStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
-	fitted := st.ForLabels("cluster", "elapsed")
-
-	out := okStyle.Render(tui.IconSuccess+" "+completionHeadline(s.st.Op)) + "\n\n"
-	out += fitted.KVPair("cluster", s.st.Cfg.Cluster.Name) + "\n"
-	if s.st.Elapsed > 0 {
-		out += fitted.KVPair("elapsed", s.st.Elapsed.Truncate(time.Second).String()) + "\n"
+	if s.st.Plan == nil {
+		return tui.CompletionSuccess("operation complete")
 	}
-	out += "\n"
-
-	if s.st.Plan != nil {
-		entries := make([]wizard.KVEntry, 0, len(s.st.Plan.Nodes))
-		for i := range s.st.Plan.Nodes {
-			n := &s.st.Plan.Nodes[i]
-			entries = append(entries, wizard.KVEntry{
-				Label: n.Name,
-				Value: string(n.Role) + "  " + completionVerb(n.Action),
-			})
-		}
-		out += wizard.RenderSection(&st, "nodes", entries)
-
-		if steps := render.NodeOpNextSteps(s.st.Plan); len(steps) > 0 {
-			nextEntries := make([]wizard.KVEntry, 0, len(steps))
-			for _, line := range steps {
-				nextEntries = append(nextEntries, wizard.KVEntry{Label: "", Value: line})
-			}
-			out += wizard.RenderSection(&st, "next steps", nextEntries)
-		}
-	}
-
-	out += dimStyle.Render("enter to exit")
-	return out
-}
-
-func (s *DoneStep) failureView() string {
-	failStyle := lipgloss.NewStyle().Foreground(tui.ColorError).Bold(true)
-	textStyle := lipgloss.NewStyle().Foreground(tui.ColorText)
-	dimStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
-
-	return failStyle.Render(tui.IconError+" "+string(s.st.Op)+" failed") + "\n\n" +
-		textStyle.Render(s.st.Result.Error()) + "\n\n" +
-		dimStyle.Render("the op marker was left in place — re-run 'okdctl node manage' or the\nmatching flag verb to resume at the recorded step") + "\n\n" +
-		dimStyle.Render("enter to exit")
-}
-
-func completionHeadline(op node.Op) string {
-	switch op {
-	case node.OpAdd:
-		return "worker(s) added"
-	case node.OpRemove:
-		return "worker removed"
-	case node.OpResize:
-		return "resize complete"
-	default:
-		return "operation complete"
-	}
-}
-
-func completionVerb(a terraform.PlanAction) string {
-	switch a {
-	case terraform.PlanActionCreate:
-		return "added"
-	case terraform.PlanActionDelete:
-		return "removed"
-	case terraform.PlanActionUpdate:
-		return "resized (power-cycled to realize the change)"
-	default:
-		return string(a)
-	}
+	return strings.Trim(render.NodeOpCompleteWidth(s.st.Plan, s.st.Elapsed, w), "\n")
 }
 
 // ShortHelp returns the completion help bar.

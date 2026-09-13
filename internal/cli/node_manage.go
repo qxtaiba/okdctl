@@ -18,7 +18,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/node"
-	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/lifecycle"
 	"github.com/qxtaiba/okdctl/internal/workspace"
@@ -122,14 +121,13 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 // reportLifecycleOutcome maps wizard terminal state to a truthful exit; an
 // interrupted mid-execution run exits non-zero instead of claiming a clean
 // state.
-func reportLifecycleOutcome(cmd *cobra.Command, result wizard.Result, st *lifecycle.State) error {
+func reportLifecycleOutcome(_ *cobra.Command, result wizard.Result, st *lifecycle.State) error {
 	switch {
 	case st.Started && !st.Executed:
 		return &errtypes.ClusterError{Msg: lifecycleInterruptedMsg}
 	case st.Executed && st.Result != nil:
 		return st.Result
 	case st.Executed:
-		fmt.Fprint(cmd.OutOrStdout(), render.NodeOpComplete(st.Plan, st.Elapsed))
 		return nil
 	case result.Cancelled || !st.Proceed:
 		logutil.Info("no changes made")

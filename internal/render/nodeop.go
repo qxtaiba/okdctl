@@ -9,6 +9,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
+// IrreversibleWarning is the amber wording shared by the CLI and wizard for
+// a destructive node op that also destroys a data disk.
+const IrreversibleWarning = "destroys the listed VM(s) and their data disk; removed data cannot be recovered"
+
 // NodeOpConfirm renders the preview before a destructive node op; it prints even under --yes.
 func NodeOpConfirm(plan *node.OpPlan) string {
 	sb := NewBuilder()
@@ -19,8 +23,7 @@ func NodeOpConfirm(plan *node.OpPlan) string {
 	nodeOpDetails(sb, plan)
 
 	if plan.DestroysData() {
-		sb.WriteString("  " + tui.WarningStyle.Render(
-			"irreversible: destroys the listed VM(s) and their data disk; removed data cannot be recovered") + "\n")
+		sb.WriteString("  " + tui.WarningStyle.Render("irreversible: "+IrreversibleWarning) + "\n")
 		sb.Newline()
 	}
 
@@ -46,7 +49,13 @@ func NodeOpDryRun(plan *node.OpPlan) string {
 // NodeOpComplete renders the completion box after a node op succeeds, listing
 // the affected nodes, elapsed time, and any operator-owned follow-up.
 func NodeOpComplete(plan *node.OpPlan, elapsed time.Duration) string {
-	sb := NewBuilder()
+	return NodeOpCompleteWidth(plan, elapsed, tui.DefaultBoxWidth)
+}
+
+// NodeOpCompleteWidth renders NodeOpComplete sized to fit inside a box of
+// the given width, for callers that must fit a narrower viewport.
+func NodeOpCompleteWidth(plan *node.OpPlan, elapsed time.Duration, width int) string {
+	sb := NewBuilderWidth(width)
 	sb.WriteString("\n")
 	sb.WriteString("  " + tui.CompletionSuccess(opComplete(plan.Op)) + "\n")
 	sb.Newline()
@@ -67,13 +76,14 @@ func NodeOpComplete(plan *node.OpPlan, elapsed time.Duration) string {
 
 	if steps := NodeOpNextSteps(plan); len(steps) > 0 {
 		sb.Section("next steps")
+		avail := width - 8
 		for _, s := range steps {
-			sb.WriteString("    " + s + "\n")
+			sb.WriteString("    " + tui.Truncate(s, avail) + "\n")
 		}
 		sb.Newline()
 	}
 
-	return "\n" + tui.BoxedSectionCompact(sb.String(), opTitle(plan.Op), tui.DefaultBoxWidth) + "\n"
+	return "\n" + tui.BoxedSectionCompact(sb.String(), opTitle(plan.Op), width) + "\n"
 }
 
 // nodeOpDetails writes the shared header + per-node section for the confirm and dry-run boxes.
