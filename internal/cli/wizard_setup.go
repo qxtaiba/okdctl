@@ -39,17 +39,7 @@ func runWizardWithMode(ctx context.Context, cfg *config.Config, configExists boo
 
 func buildWizardStepsWithState(wizardCfg wizard.Config) wizard.BuiltSteps {
 	builder := wizard.NewStepBuilder()
-	builder.Register(wizard.StepTypeWelcome, func() (wizard.WizardStep, wizard.StepState) { return steps.NewWelcomeStep(), nil })
-	builder.Register(wizard.StepTypeDistribution, func() (wizard.WizardStep, wizard.StepState) { return steps.NewDistributionStep(), nil })
-	builder.Register(wizard.StepTypeBasics, func() (wizard.WizardStep, wizard.StepState) { return steps.NewBasicsStep(), nil })
-	builder.Register(wizard.StepTypeProxmox, func() (wizard.WizardStep, wizard.StepState) { return steps.NewProxmoxStep(), nil })
-	builder.Register(wizard.StepTypeNodePlacement, func() (wizard.WizardStep, wizard.StepState) { return steps.NewNodePlacementStep(), nil })
-	builder.Register(wizard.StepTypeNetworking, func() (wizard.WizardStep, wizard.StepState) { return steps.NewNetworkingStep(), nil })
-	builder.Register(wizard.StepTypeResources, func() (wizard.WizardStep, wizard.StepState) { return steps.NewResourcesStep() })
-	builder.Register(wizard.StepTypeAddons, func() (wizard.WizardStep, wizard.StepState) { return steps.NewAddonsStep(), nil })
-	builder.Register(wizard.StepTypeFiles, func() (wizard.WizardStep, wizard.StepState) { return steps.NewFilesStep(), nil })
-	builder.Register(wizard.StepTypeAdvanced, func() (wizard.WizardStep, wizard.StepState) { return steps.NewAdvancedStep(), nil })
-	builder.Register(wizard.StepTypeReview, func() (wizard.WizardStep, wizard.StepState) { return steps.NewReviewStep(), nil })
+	steps.RegisterAll(builder)
 	built := wizard.BuildSteps(wizardCfg, builder)
 
 	configureWelcomeStep(built, wizardCfg.ConfigExists)
