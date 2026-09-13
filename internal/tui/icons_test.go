@@ -1,8 +1,10 @@
 package tui
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -15,20 +17,29 @@ func TestIconsAreCheckAndCross(t *testing.T) {
 }
 
 func TestNoLiteralStatusGlyphsOutsideIcons(t *testing.T) {
-	bad := []string{`"✓`, `✓ "`, `"✗`, `"●`, `"○`, `"✔`, `"✖`}
+	bad := []rune{'✓', '✗', '✔', '✖', '●', '○'}
+	fset := token.NewFileSet()
 	err := filepath.WalkDir("..", func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") || filepath.Base(path) == "icons.go" {
 			return err
 		}
-		src, err := os.ReadFile(path)
+		f, err := parser.ParseFile(fset, path, nil, 0)
 		if err != nil {
 			return err
 		}
-		for _, b := range bad {
-			if strings.Contains(string(src), b) {
-				t.Errorf("%s spells a status glyph literally (%s); use tui.Icon*", path, b)
+		ast.Inspect(f, func(n ast.Node) bool {
+			lit, ok := n.(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
+				return true
 			}
-		}
+			for _, r := range bad {
+				if strings.ContainsRune(lit.Value, r) {
+					t.Errorf("%s:%d spells a status glyph literally (%q); use tui.Icon*",
+						path, fset.Position(lit.Pos()).Line, r)
+				}
+			}
+			return true
+		})
 		return nil
 	})
 	if err != nil {
