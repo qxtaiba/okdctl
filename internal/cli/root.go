@@ -411,19 +411,15 @@ func versionText() string {
 	if noColor {
 		tui.DisableColor()
 	}
-	const keyCol = 16
-	rows := [][2]string{
+	var b strings.Builder
+	fmt.Fprintf(&b, "okdctl %s\n", version.Version)
+	_ = printLeaders(&b, [][2]string{
 		{"git commit", version.GitCommit},
 		{"build date", version.BuildDate},
 		{"go version", version.GoVersion},
 		{"platform", version.Platform},
-	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "okdctl %s\n", version.Version)
-	for _, r := range rows {
-		b.WriteString("  " + tui.DottedKeyValueFull(r[0], r[1], keyCol, 0) + "\n")
-	}
-	return tui.Downsample(b.String())
+	})
+	return b.String()
 }
 
 func init() {

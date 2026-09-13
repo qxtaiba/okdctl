@@ -13,7 +13,6 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/releases"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 const (
@@ -199,7 +198,7 @@ func printVersionList(w io.Writer, versions []releases.OKDVersion) error {
 }
 
 func printVersionDetail(w io.Writer, v releases.OKDVersion) error {
-	lines := []struct{ k, val string }{
+	return printLeaders(w, [][2]string{
 		{"version", v.Version},
 		{"tag", v.Tag},
 		{"series", v.ShortVersion()},
@@ -207,11 +206,7 @@ func printVersionDetail(w io.Writer, v releases.OKDVersion) error {
 		{"stable", yesNo(v.Stable)},
 		{"latest-in-series", yesNo(v.Latest)},
 		{"release-type", v.Type.String()},
-	}
-	for _, ln := range lines {
-		fmt.Fprintln(w, tui.DottedKeyValueFull(ln.k, ln.val, tui.DefaultKeyColWidth, 0))
-	}
-	return nil
+	})
 }
 
 func yesNo(b bool) string {
