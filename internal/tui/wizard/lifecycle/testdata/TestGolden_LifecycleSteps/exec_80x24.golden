@@ -19,6 +19,6 @@
   │  re-running the same operation resumes at the recorded step              │  
   │                                                                          │  
   │───────────────────────────────────────────────────────────── ▸ mycluster │  
-  │   ctrl+c  request graceful cancel (twice to force-quit)                  │  
+  │  ctrl+c request graceful cancel (twice to force-quit)                    │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

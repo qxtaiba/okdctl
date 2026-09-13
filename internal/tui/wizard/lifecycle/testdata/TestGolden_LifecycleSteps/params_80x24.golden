@@ -18,7 +18,7 @@
   │                                                                          │  
   │    os disk (gb) (per-node os disk — current: 50, grow-only, 0 keeps      │  
   │                                                                          │  
-  │─────────────────────── ↑ ↓  scroll down for more ─────────── ▸ mycluster │  
-  │   ↑↓/tab  navigate    ← →  change value    enter  continue    esc  back  │  
+  │───────────────── ↑ ↓  scroll down for more ───────────────── ▸ mycluster │  
+  │  ↑↓/tab navigate • ← → change value • enter continue • esc back …        │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

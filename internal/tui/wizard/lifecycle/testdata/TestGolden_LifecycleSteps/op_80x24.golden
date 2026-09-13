@@ -18,7 +18,7 @@
   │           ○ remove worker                                                │  
   │             cordon, drain, destroy the vm, delete the node               │  
   │                                                                          │  
-  │─────────────────────── ↑ ↓  scroll down for more ─────────── ▸ mycluster │  
-  │   ↑↓  select    enter  confirm    ctrl+c  quit                           │  
+  │───────────────── ↑ ↓  scroll down for more ───────────────── ▸ mycluster │  
+  │  ↑↓ select • enter confirm • ctrl+c quit • pgup/pgdn scroll              │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

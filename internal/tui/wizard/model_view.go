@@ -239,20 +239,10 @@ func truncateTitle(s string, maxWidth int) string {
 	return "…"
 }
 
+// renderFooter draws the two-row footer: the scroll-indicator rule on top,
+// the help ribbon (or a step's PinnedFooter row) beneath it.
 func (m *Model) renderFooter() string {
-	width := m.contentWidth()
-
-	bindings := defaultKeyBindings()
-	if len(m.steps) > 0 && m.currentStep >= 0 && m.currentStep < len(m.steps) {
-		if h, ok := m.steps[m.currentStep].(HelpProvider); ok {
-			bindings = h.ShortHelp()
-		}
-	}
-
-	helpBar := RenderHelpBar(bindings)
-	helpBarRendered := FooterStyle.Width(width).Render(helpBar)
-
-	return m.renderScrollIndicator() + "\n" + helpBarRendered
+	return m.renderFooterRule() + "\n" + m.renderHelpRow()
 }
 
 func defaultKeyBindings() []KeyBinding {
@@ -264,7 +254,52 @@ func defaultKeyBindings() []KeyBinding {
 	}
 }
 
-func (m *Model) renderScrollIndicator() string {
+// footerBindings returns the current step's ShortHelp() bindings (falling
+// back to defaultKeyBindings when the step has none), plus a pgup/pgdn hint
+// whenever the viewport content overflows its height.
+func (m *Model) footerBindings() []KeyBinding {
+	bindings := defaultKeyBindings()
+	if len(m.steps) > 0 && m.currentStep >= 0 && m.currentStep < len(m.steps) {
+		if h, ok := m.steps[m.currentStep].(HelpProvider); ok {
+			bindings = h.ShortHelp()
+		}
+	}
+	if m.viewport.TotalLineCount() > m.viewport.Height() {
+		bindings = append(bindings, KeyBinding{Key: "pgup/pgdn", Help: "scroll"})
+	}
+	return bindings
+}
+
+// renderHelpRow draws the footer's help row: a step's PinnedFooter text at
+// the left (when implemented) with the key-binding ribbon right-aligned in
+// the remaining width, or just the ribbon on its own otherwise.
+func (m *Model) renderHelpRow() string {
+	width := m.contentWidth()
+	innerWidth := width - 4 // FooterStyle Padding(0, 2) on both sides
+	bindings := m.footerBindings()
+
+	var left string
+	if len(m.steps) > 0 && m.currentStep >= 0 && m.currentStep < len(m.steps) {
+		if pf, ok := m.steps[m.currentStep].(PinnedFooter); ok {
+			left = pf.PinnedFooter(innerWidth)
+		}
+	}
+
+	if left == "" {
+		return FooterStyle.Width(width).Render(RenderHelpRibbon(bindings, innerWidth))
+	}
+
+	leftWidth := lipgloss.Width(left)
+	ribbonWidth := max(innerWidth-leftWidth-2, 0)
+	ribbon := RenderHelpRibbon(bindings, ribbonWidth)
+	row := left + lipgloss.PlaceHorizontal(innerWidth-leftWidth, lipgloss.Right, ribbon)
+	return FooterStyle.Width(width).Render(row)
+}
+
+// renderFooterRule draws the footer's top row: a "─" rule with the scroll
+// indicator centred in it when the viewport overflows, plus the context
+// badge pinned to the right.
+func (m *Model) renderFooterRule() string {
 	width := m.contentWidth()
 	lineStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate700)
 
@@ -279,12 +314,41 @@ func (m *Model) renderScrollIndicator() string {
 		badgeWidth = lipgloss.Width(badgeStyled)
 	}
 
-	if m.viewport.TotalLineCount() <= m.viewport.Height() {
-		lineWidth := width - badgeWidth
-		if lineWidth < 10 {
-			lineWidth = 10
-		}
+	avail := width - badgeWidth
+
+	ind, scrollable := m.scrollIndicator()
+	if !scrollable {
+		lineWidth := max(avail, 10)
 		return lineStyle.Render(strings.Repeat("─", lineWidth)) + badgeStyled
+	}
+
+	return m.centreInRule(ind, avail) + badgeStyled
+}
+
+// centreInRule centres ind within avail columns of "─" rule, keeping the
+// two sides within one column of each other.
+func (m *Model) centreInRule(ind string, avail int) string {
+	lineStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate700)
+	indWidth := lipgloss.Width(ind)
+
+	left := (avail - indWidth - 2) / 2
+	right := avail - left - indWidth - 2
+	if left < 3 {
+		left = 3
+	}
+	if right < 3 {
+		right = 3
+	}
+
+	return lineStyle.Render(strings.Repeat("─", left)) + " " + ind + " " + lineStyle.Render(strings.Repeat("─", right))
+}
+
+// scrollIndicator returns the footer's arrows-and-message scroll-state text
+// and whether the viewport currently overflows its height; it returns
+// ("", false) when the content fits without scrolling.
+func (m *Model) scrollIndicator() (string, bool) {
+	if m.viewport.TotalLineCount() <= m.viewport.Height() {
+		return "", false
 	}
 
 	scrollPercent := m.viewport.ScrollPercent()
@@ -315,22 +379,7 @@ func (m *Model) renderScrollIndicator() string {
 		message = fmt.Sprintf("%.0f%% • scroll for more", scrollPercent*100)
 	}
 
-	indicator := arrows + "  " + textStyle.Render(message)
-	indicatorWidth := lipgloss.Width(indicator)
-
-	leftWidth := (width-indicatorWidth)/2 - 1                         // -1 for space before indicator
-	rightWidth := width - leftWidth - indicatorWidth - badgeWidth - 2 // -2 for spaces around indicator
-	if leftWidth < 3 {
-		leftWidth = 3
-	}
-	if rightWidth < 3 {
-		rightWidth = 3
-	}
-
-	leftLine := lineStyle.Render(strings.Repeat("─", leftWidth))
-	rightLine := lineStyle.Render(strings.Repeat("─", rightWidth))
-
-	return leftLine + " " + indicator + " " + rightLine + badgeStyled
+	return arrows + "  " + textStyle.Render(message), true
 }
 
 func (m *Model) renderContextBadge() string {
