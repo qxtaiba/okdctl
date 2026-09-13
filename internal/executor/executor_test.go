@@ -626,11 +626,10 @@ func TestStartStreamed(t *testing.T) {
 		var out strings.Builder
 		e := New(WithInheritedEnv(), WithStdout(&out), WithStderr(&strings.Builder{}))
 
-		done, kill, err := e.StartStreamed(context.Background(), "sh", "-c", "printf 'hello\n'")
+		done, err := e.StartStreamed(context.Background(), "sh", "-c", "printf 'hello\n'")
 		if err != nil {
 			t.Fatalf("StartStreamed: %v", err)
 		}
-		defer kill()
 
 		if waitErr := <-done; waitErr != nil {
 			t.Fatalf("done channel error: %v", waitErr)
@@ -643,7 +642,7 @@ func TestStartStreamed(t *testing.T) {
 	t.Run("start failure returns error and nil done channel", func(t *testing.T) {
 		t.Parallel()
 		e := New(WithInheritedEnv())
-		done, _, err := e.StartStreamed(context.Background(), "okdctl-definitely-not-a-real-binary")
+		done, err := e.StartStreamed(context.Background(), "okdctl-definitely-not-a-real-binary")
 		if err == nil {
 			t.Fatal("expected error for missing binary")
 		}

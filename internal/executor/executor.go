@@ -337,17 +337,16 @@ func (e *Executor) RunStreamedChecked(ctx context.Context, name string, args ...
 }
 
 // StartStreamed starts name with args, piping stdout/stderr live, and
-// returns immediately with a channel that receives cmd.Wait's result. kill
-// is a deliberate no-op — cmd.Cancel already handles ctx cancellation; it
-// exists only for API symmetry with callers expecting an explicit kill func.
-func (e *Executor) StartStreamed(ctx context.Context, name string, args ...string) (done <-chan error, kill func(), err error) {
+// returns immediately with a channel that receives cmd.Wait's result.
+// Cancelling ctx terminates the process via cmd.Cancel.
+func (e *Executor) StartStreamed(ctx context.Context, name string, args ...string) (done <-chan error, err error) {
 	cmd := e.newCmd(ctx, name, args...)
 	cmd.Stdout = e.stdout
 	cmd.Stderr = e.stderr
 
 	e.logger.Debug("exec: started", "cmd", name, "argc", len(args))
 	if startErr := cmd.Start(); startErr != nil {
-		return nil, func() {}, startErr
+		return nil, startErr
 	}
 
 	doneCh := make(chan error, 1)
@@ -355,7 +354,7 @@ func (e *Executor) StartStreamed(ctx context.Context, name string, args ...strin
 		defer close(doneCh)
 		doneCh <- cmd.Wait()
 	}()
-	return doneCh, func() {}, nil
+	return doneCh, nil
 }
 
 // RunInteractive executes a command wired to the current process's stdin and

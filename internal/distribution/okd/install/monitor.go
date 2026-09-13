@@ -14,7 +14,7 @@ import (
 )
 
 // defaultStartMonitorCmd starts wait-for install-complete; --verbose tees output to the terminal.
-func (p *Phase) defaultStartMonitorCmd(ctx context.Context, clusterDir string) (done <-chan error, kill func(), err error) {
+func (p *Phase) defaultStartMonitorCmd(ctx context.Context, clusterDir string) (<-chan error, error) {
 	return p.Exec.StartStreamed(ctx, "openshift-install", "wait-for", "install-complete", "--dir", clusterDir, "--log-level=debug")
 }
 
@@ -102,7 +102,7 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 	setStatus, stopStatus := p.StatusLine("waiting for cluster operators")
 	defer stopStatus()
 
-	installDone, _, err := startCmd(ctx, clusterDir)
+	installDone, err := startCmd(ctx, clusterDir)
 	if err != nil {
 		return &errtypes.ClusterError{Msg: "start installation monitor", Err: err}
 	}

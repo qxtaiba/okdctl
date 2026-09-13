@@ -89,10 +89,10 @@ func TestInstallExecute_FullRunWithFakeBinaries(t *testing.T) {
 		phase.WithLogger(logutil.NopLogger),
 		phase.WithReporter(logutil.NopProgressReporter),
 	)
-	p.startMonitorCmd = func(_ context.Context, _ string) (<-chan error, func(), error) {
+	p.startMonitorCmd = func(_ context.Context, _ string) (<-chan error, error) {
 		done := make(chan error, 1)
 		done <- nil
-		return done, func() {}, nil
+		return done, nil
 	}
 
 	opts := &Options{

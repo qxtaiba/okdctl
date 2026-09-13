@@ -61,7 +61,7 @@ type Phase struct {
 	phase.BasePhase
 	// startMonitorCmd, when non-nil, replaces the default subprocess
 	// start-and-wait; tests inject a pure-Go stub.
-	startMonitorCmd func(ctx context.Context, clusterDir string) (<-chan error, func(), error)
+	startMonitorCmd func(ctx context.Context, clusterDir string) (<-chan error, error)
 }
 
 // New constructs an install Phase with the given options.

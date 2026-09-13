@@ -209,7 +209,7 @@ func signalLoop(sigCh <-chan os.Signal, cancel context.CancelFunc, caughtSig *at
 }
 
 func printUpdateNotice(ch <-chan version.CheckResult) {
-	if logQuiet || logFormat == outputJSON {
+	if logQuiet || logFormat == tui.FormatJSON {
 		return
 	}
 	var result version.CheckResult
@@ -386,9 +386,9 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&logLevel, flagLogLevel, "info", "log verbosity (debug, info, warn, error)")
 	_ = rootCmd.RegisterFlagCompletionFunc(flagLogLevel,
 		cobra.FixedCompletions([]string{"debug", "info", "warn", "error"}, cobra.ShellCompDirectiveNoFileComp))
-	rootCmd.PersistentFlags().StringVar(&logFormat, flagLogFormat, "text", "log output format: text (TTY default) | json (auto-selected when stderr is piped)")
+	rootCmd.PersistentFlags().StringVar(&logFormat, flagLogFormat, tui.FormatText, "log output format: text (TTY default) | json (auto-selected when stderr is piped)")
 	_ = rootCmd.RegisterFlagCompletionFunc(flagLogFormat,
-		cobra.FixedCompletions([]string{outputText, outputJSON}, cobra.ShellCompDirectiveNoFileComp))
+		cobra.FixedCompletions([]string{tui.FormatText, tui.FormatJSON}, cobra.ShellCompDirectiveNoFileComp))
 	// DefValue is blanked so --help doesn't print '(default "text")',
 	// contradicting the auto-switch prose; keep in sync with the flag's Usage
 	// string
