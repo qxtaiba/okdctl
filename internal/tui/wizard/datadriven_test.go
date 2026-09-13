@@ -228,6 +228,49 @@ func TestDataDrivenStep_EnterDefinitionErrorEmitsErrorSetMsg(t *testing.T) {
 	}
 }
 
+func TestDataDrivenStep_ShortHelpIncludesFieldHints(t *testing.T) {
+	step := NewDataDrivenStep(testStepDefinition())
+	step.SetFocused(true)
+
+	base := step.ShortHelp()
+	for _, kb := range base {
+		if kb.Key == "space" || kb.Key == "←/→" {
+			t.Fatalf("ShortHelp() with a text field focused = %+v, want no multi-select hints", base)
+		}
+	}
+
+	def := &StepDefinition{
+		ID:    StepIDBasics,
+		Title: "test step",
+		Sections: []SectionDefinition{
+			{
+				Title: "section one",
+				Fields: []FieldDefinition{
+					{Key: "networks", Label: "additional networks", Type: FieldTypeMultiSelect, Options: []string{"vmbr0", "vmbr1"}},
+				},
+			},
+		},
+	}
+	multiStep := NewDataDrivenStep(def)
+	multiStep.SetFocused(true)
+
+	help := multiStep.ShortHelp()
+	want := map[string]bool{"space": false, "←/→": false}
+	for _, kb := range help {
+		if _, ok := want[kb.Key]; ok {
+			want[kb.Key] = true
+		}
+	}
+	for k, found := range want {
+		if !found {
+			t.Errorf("ShortHelp() = %+v, want a hint for key %q", help, k)
+		}
+	}
+	if len(help) != len(base)+2 {
+		t.Errorf("ShortHelp() len = %d, want base %d + 2 field hints", len(help), len(base))
+	}
+}
+
 func TestDataDrivenStep_ShouldShow(t *testing.T) {
 	step := NewDataDrivenStep(testStepDefinition())
 	cfg := &config.Config{}
