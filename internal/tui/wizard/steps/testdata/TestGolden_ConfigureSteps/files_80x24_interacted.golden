@@ -16,7 +16,7 @@
   │    ╭──────────────────────────────────────────────────────╮              │  
   │    │ ~/.ssh/id_ed25519.pub                                │              │  
   │    ╰──────────────────────────────────────────────────────╯              │  
-  │    ✗ this field is required                                              │  
+  │    path to ssh public key for node access                                │  
   │                                                                          │  
   │─────────── ↑ ↓  scroll down for more ─────────── ▸ okd 4.22.0-okd-scos.7 │  
   │  ↑↓/tab navigate • enter continue • esc back • pgup/pgdn scroll          │  

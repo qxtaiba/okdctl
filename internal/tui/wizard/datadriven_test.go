@@ -10,6 +10,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
 )
 
@@ -114,7 +115,7 @@ func TestDataDrivenStep_LoadFromConfig(t *testing.T) {
 	cfg.Topology.ControlPlane.Count = 5
 	cfg.Deployment.AutoApprove = true
 
-	step.LoadFromConfig(cfg)
+	step.LoadFromConfig(cfg, true)
 
 	if got := step.Value("name"); got != "loaded-cluster" {
 		t.Errorf("Value(name) = %q, want loaded-cluster", got)
@@ -124,6 +125,67 @@ func TestDataDrivenStep_LoadFromConfig(t *testing.T) {
 	}
 	if got := step.Value("approve"); got != testValYes {
 		t.Errorf("Value(approve) = %q, want yes", got)
+	}
+}
+
+// blankableDefaultStepDefinition returns a single non-required text field
+// with a Default, mirroring secretstore_op_connect_host's shape: a value
+// the wizard offers as a starting point but that a real config may
+// legitimately have cleared.
+func blankableDefaultStepDefinition() *StepDefinition {
+	return &StepDefinition{
+		ID: StepIDBasics,
+		Sections: []SectionDefinition{
+			{
+				Fields: []FieldDefinition{
+					{
+						Key:       "host",
+						Label:     "connect host",
+						Default:   "http://onepassword-connect:8080",
+						ConfigSet: SetString(func(c *config.Config, v string) { c.Cluster.Domain = v }),
+						ConfigGet: GetString(func(c *config.Config) string { return c.Cluster.Domain }),
+					},
+				},
+			},
+		},
+	}
+}
+
+func TestDataDrivenStep_LoadFromConfig_RealConfigBlankSurvivesRoundTrip(t *testing.T) {
+	step := NewDataDrivenStep(blankableDefaultStepDefinition())
+	cfg := &config.Config{} // Cluster.Domain == "": a real, saved config the user intentionally blanked
+
+	step.LoadFromConfig(cfg, true)
+
+	if got := step.Value("host"); got != "" {
+		t.Fatalf("Value(host) after loading a real config with a blanked field = %q, want empty", got)
+	}
+	field, ok := step.getField("host").(*components.InputField)
+	if !ok || field.IsDefault() {
+		t.Fatal("IsDefault() after loading a real, intentionally-blanked config = true, want false")
+	}
+
+	out := &config.Config{}
+	if err := step.Apply(out); err != nil {
+		t.Fatalf("Apply(): %v", err)
+	}
+	if out.Cluster.Domain != "" {
+		t.Fatalf("Apply() wrote %q, want the blank preserved", out.Cluster.Domain)
+	}
+}
+
+func TestDataDrivenStep_LoadFromConfig_FreshSeedKeepsDefault(t *testing.T) {
+	step := NewDataDrivenStep(blankableDefaultStepDefinition())
+	cfg := &config.Config{} // a synthetic seed (e.g. config.DefaultConfig gap), not a real saved file
+
+	step.LoadFromConfig(cfg, false)
+
+	if got := step.Value("host"); got != "http://onepassword-connect:8080" {
+		t.Fatalf("Value(host) after a fresh seed = %q, want the constructed default", got)
+	}
+	field, ok := step.getField("host").(*components.InputField)
+	if !ok || !field.IsDefault() {
+		t.Fatal("IsDefault() after a fresh seed = false, want true (default survives)")
 	}
 }
 
@@ -186,8 +248,8 @@ func TestDataDrivenStep_UpdateEnterValidatesThenCompletes(t *testing.T) {
 	// Required "name" is empty: enter must fail validation and emit an error, not advance.
 	if _, cmd := step.Update(enter); cmd == nil {
 		t.Fatal("Update(enter) with empty required field: want error cmd, got nil")
-	} else if _, ok := cmd().(ErrorSetMsg); !ok {
-		t.Fatalf("Update(enter) with empty required field emitted %T, want ErrorSetMsg", cmd())
+	} else if _, ok := firstErrorSetMsg(cmd); !ok {
+		t.Fatal("Update(enter) with empty required field: want an ErrorSetMsg, got none")
 	}
 
 	step.setValue("name", "cluster-a")
@@ -206,10 +268,121 @@ func TestDataDrivenStep_UpdateEnterValidatesThenCompletes(t *testing.T) {
 
 	// Definition-level Validate rejects "forbidden": enter must emit an error, not advance.
 	step.setValue("name", "forbidden")
-	if _, cmd := step.Update(enter); cmd == nil {
+	_, cmd = step.Update(enter)
+	if cmd == nil {
 		t.Fatal("Update(enter) with definition-forbidden value: want error cmd, got nil")
-	} else if _, ok := cmd().(ErrorSetMsg); !ok {
-		t.Fatalf("Update(enter) with definition-forbidden value emitted %T, want ErrorSetMsg", cmd())
+	}
+	if errMsg, ok := firstErrorSetMsg(cmd); !ok || errMsg.Error.Error() != "name is forbidden" {
+		t.Fatalf("Update(enter) with definition-forbidden value = %#v, want ErrorSetMsg(name is forbidden)", cmd())
+	}
+}
+
+// firstErrorSetMsg runs cmd, flattening batches, and returns the first
+// ErrorSetMsg produced along with whether one was found.
+func firstErrorSetMsg(cmd tea.Cmd) (ErrorSetMsg, bool) {
+	if cmd == nil {
+		return ErrorSetMsg{}, false
+	}
+	switch msg := cmd().(type) {
+	case ErrorSetMsg:
+		return msg, true
+	case tea.BatchMsg:
+		for _, c := range msg {
+			if m, ok := firstErrorSetMsg(c); ok {
+				return m, true
+			}
+		}
+	}
+	return ErrorSetMsg{}, false
+}
+
+func TestDataDrivenStep_EnterMarksAllTouchedAndFocusesFirstInvalid(t *testing.T) {
+	step := NewDataDrivenStep(testStepDefinition())
+	step.SetFocused(true)
+
+	_, cmd := step.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Update(enter) with an empty required field: want a cmd, got nil")
+	}
+	if !containsFocusChanged(cmd) {
+		t.Fatal("Update(enter) with invalid fields did not emit FocusChangedMsg")
+	}
+	if errMsg, ok := firstErrorSetMsg(cmd); !ok || !errors.Is(errMsg.Error, errFixHighlighted) {
+		t.Fatalf("Update(enter) with invalid fields = %#v, want ErrorSetMsg(errFixHighlighted)", cmd())
+	}
+
+	if got := step.form.FocusedField(); got != step.getField("name") {
+		t.Fatalf("FocusedField() after enter = %v, want the first invalid field (name)", got)
+	}
+
+	view := tuitest.StripANSI(step.View(80, 24))
+	if !strings.Contains(view, "this field is required") {
+		t.Fatalf("View() after enter = %q, want the required-field error visible", view)
+	}
+}
+
+func TestBuildFormField_DefaultIsRealValue(t *testing.T) {
+	def := &FieldDefinition{Key: "name", Label: "name", Default: "mycluster"}
+
+	field := buildFormField(def)
+
+	if got := field.Value(); got != "mycluster" {
+		t.Fatalf("Value() before any input = %q, want the default %q", got, "mycluster")
+	}
+	inputField, ok := field.(*components.InputField)
+	if !ok || !inputField.IsDefault() {
+		t.Fatal("buildFormField with a Default did not mark the field IsDefault")
+	}
+}
+
+func TestDataDrivenStep_ApplyWithDefaultsSucceeds(t *testing.T) {
+	def := &StepDefinition{
+		ID:    StepIDBasics,
+		Title: "defaults step",
+		Sections: []SectionDefinition{
+			{
+				Title: "section",
+				Fields: []FieldDefinition{
+					{
+						Key:       "name",
+						Label:     "name",
+						Default:   "mycluster",
+						Required:  true,
+						ConfigSet: SetString(func(c *config.Config, v string) { c.Cluster.Name = v }),
+					},
+				},
+			},
+		},
+	}
+	step := NewDataDrivenStep(def)
+
+	if err := step.Validate(); err != nil {
+		t.Fatalf("Validate() with an untouched default value: %v", err)
+	}
+
+	cfg := &config.Config{}
+	if err := step.Apply(cfg); err != nil {
+		t.Fatalf("Apply() with an untouched default value: %v", err)
+	}
+	if cfg.Cluster.Name != "mycluster" {
+		t.Fatalf("cfg.Cluster.Name = %q, want the default mycluster", cfg.Cluster.Name)
+	}
+}
+
+func TestFormSection_IsCompleteHasNoSideEffects(t *testing.T) {
+	field := components.NewInputField("name", "")
+	field.Required = true
+	section := FormSection{Group: components.NewInputGroup(field)}
+	section.Group.SetWidth(60)
+
+	if section.isComplete() {
+		t.Fatal("isComplete() with an empty required field = true, want false")
+	}
+
+	errColor := lipgloss.NewStyle().Foreground(tui.ColorError).Render("x")
+	prefix := errColor[:strings.IndexByte(errColor, 'x')]
+	if strings.Contains(field.View(), prefix) {
+		t.Fatal("View() after isComplete() carries ColorError styling, want no side effect")
 	}
 }
 

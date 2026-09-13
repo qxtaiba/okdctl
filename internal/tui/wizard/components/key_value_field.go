@@ -114,22 +114,25 @@ func (f *KeyValueField) SetWidth(width int) {
 	}
 }
 
-// Validate rejects rows with a non-empty value but empty key, then runs the
+// Check rejects rows with a non-empty value but empty key, then runs the
 // field Validator against the serialized Value if one is set.
-func (f *KeyValueField) Validate() error {
+func (f *KeyValueField) Check() error {
 	for i := range f.rows {
 		r := &f.rows[i]
 		if strings.TrimSpace(r.keyInput.Value()) == "" && r.valInput.Value() != "" {
-			f.err = errKVEmptyKey
-			return f.err
+			return errKVEmptyKey
 		}
 	}
 	if f.Validator != nil {
-		f.err = f.Validator(f.Value())
-		return f.err
+		return f.Validator(f.Value())
 	}
-	f.err = nil
 	return nil
+}
+
+// Validate runs Check and records the result as the field's current error for View to render.
+func (f *KeyValueField) Validate() error {
+	f.err = f.Check()
+	return f.err
 }
 
 // KeyHints returns the field's footer hints, differing between edit and

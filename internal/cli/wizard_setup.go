@@ -52,7 +52,7 @@ func buildWizardStepsWithState(wizardCfg wizard.Config) wizard.BuiltSteps {
 
 	if wizardCfg.InitialConfig != nil {
 		if os.Getenv(wizardDemoEnv) == "" {
-			initializeStepsFromConfig(built, wizardCfg.InitialConfig)
+			initializeStepsFromConfig(built, wizardCfg.InitialConfig, wizardCfg.ConfigExists)
 		}
 		configureReviewStep(built, wizardCfg.InitialConfig)
 	}
@@ -100,7 +100,12 @@ func configureReviewStep(built wizard.BuiltSteps, cfg *config.Config) {
 	}
 }
 
-func initializeStepsFromConfig(built wizard.BuiltSteps, cfg *config.Config) {
+// initializeStepsFromConfig seeds every data-driven step's fields from cfg;
+// configExists distinguishes a real saved file (an empty field value is an
+// intentional blank) from a synthetic defaults-only seed like
+// config.DefaultConfig() (an empty value is just a gap, so the step's own
+// constructed default survives) — see DataDrivenStep.LoadFromConfig.
+func initializeStepsFromConfig(built wizard.BuiltSteps, cfg *config.Config, configExists bool) {
 	if cfg.Distribution.Version != "" {
 		for _, step := range built.Steps {
 			if ds, ok := step.(*steps.DistributionStep); ok {
@@ -112,7 +117,7 @@ func initializeStepsFromConfig(built wizard.BuiltSteps, cfg *config.Config) {
 
 	for _, step := range built.Steps {
 		if ds, ok := step.(*wizard.DataDrivenStep); ok {
-			ds.LoadFromConfig(cfg)
+			ds.LoadFromConfig(cfg, configExists)
 		}
 	}
 

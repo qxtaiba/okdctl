@@ -76,7 +76,7 @@ func newGoldenModel(t *testing.T) *wizard.Model {
 	cfg := config.DefaultConfig()
 	for _, step := range built.Steps {
 		if ds, ok := step.(*wizard.DataDrivenStep); ok {
-			ds.LoadFromConfig(cfg)
+			ds.LoadFromConfig(cfg, false)
 		}
 	}
 	return wizard.NewModel(built.Steps, cfg)
@@ -239,4 +239,84 @@ func TestGolden_AddonsFluxWarning(t *testing.T) {
 			}
 		})
 	}
+}
+
+// newGoldenModelFreshDefaults mirrors newGoldenModel but skips
+// LoadFromConfig (matching OKDCTL_WIZARD_DEMO=1's real code path in
+// internal/cli/wizard_setup.go), so fields still carry their raw
+// FieldDefinition defaults instead of config.DefaultConfig's — needed to
+// pin the still-a-default rendering (dim text plus the "default" tag).
+func newGoldenModelFreshDefaults(t *testing.T) *wizard.Model {
+	t.Helper()
+	builder := wizard.NewStepBuilder()
+	RegisterAll(builder)
+	built := wizard.BuildSteps(wizard.DefaultConfig(), builder)
+	return wizard.NewModel(built.Steps, config.DefaultConfig())
+}
+
+// pumpCmd recursively runs cmd, flattening tea.BatchMsg, and delivers every
+// resulting message to m.Update, so a headless test observes the state a
+// running tea.Program would reach once its returned commands complete.
+func pumpCmd(m *wizard.Model, cmd tea.Cmd) {
+	if cmd == nil {
+		return
+	}
+	if batch, ok := cmd().(tea.BatchMsg); ok {
+		for _, c := range batch {
+			pumpCmd(m, c)
+		}
+		return
+	}
+	m.Update(cmd())
+}
+
+// TestGolden_BasicsDefaultAsRealValue pins the cluster-name field's default
+// rendering: "mycluster" shows dim with a "default" tag beside the box
+// before any input, and typing the first character replaces it outright
+// rather than appending to it.
+func TestGolden_BasicsDefaultAsRealValue(t *testing.T) {
+	m := newGoldenModelFreshDefaults(t)
+	_ = tuitest.RenderAt(t, m, 100, 30)
+	m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDBasics})
+
+	frame := tuitest.RenderAt(t, m, 100, 30)
+	tuitest.Golden(t, "basics-default-value_100x30_initial", frame)
+	tuitest.AssertFits(t, frame, 100, 30)
+
+	m.Update(tea.KeyPressMsg{Code: 'h', Text: "h"})
+
+	frame = tuitest.RenderAt(t, m, 100, 30)
+	tuitest.Golden(t, "basics-default-value_100x30_typed", frame)
+	tuitest.AssertFits(t, frame, 100, 30)
+}
+
+// TestGolden_ProxmoxEnterHighlightsInvalidFields pins the honest-validation
+// story end to end: tabbing onto the empty, required password field paints
+// no error (it hasn't been left yet), but pressing enter forces the whole
+// form's validation, paints a red box plus field error on password, shows
+// the generic status-row message, and scrolls/focuses the first invalid
+// field.
+func TestGolden_ProxmoxEnterHighlightsInvalidFields(t *testing.T) {
+	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
+	enterKey := tea.KeyPressMsg{Code: tea.KeyEnter}
+
+	m := newGoldenModel(t)
+	_ = tuitest.RenderAt(t, m, 100, 30)
+	m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDProxmox})
+
+	for range 2 {
+		m.Update(tabKey)
+		m.Update(wizard.FocusChangedMsg{})
+	}
+
+	frame := tuitest.RenderAt(t, m, 100, 30)
+	tuitest.Golden(t, "proxmox-enter-invalid_100x30_before", frame)
+	tuitest.AssertFits(t, frame, 100, 30)
+
+	_, cmd := m.Update(enterKey)
+	pumpCmd(m, cmd)
+
+	frame = tuitest.RenderAt(t, m, 100, 30)
+	tuitest.Golden(t, "proxmox-enter-invalid_100x30_after", frame)
+	tuitest.AssertFits(t, frame, 100, 30)
 }

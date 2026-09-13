@@ -89,9 +89,14 @@ func (f *MultiSelectField) SetWidth(width int) {
 	f.width = width
 }
 
+// Check always returns nil — any non-empty selection is valid.
+func (f *MultiSelectField) Check() error {
+	return nil
+}
+
 // Validate always returns nil — any non-empty selection is valid.
 func (f *MultiSelectField) Validate() error {
-	return nil
+	return f.Check()
 }
 
 // KeyHints returns the field's footer hints, shown while it holds focus.

@@ -5,6 +5,7 @@
 package wizard
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -17,6 +18,11 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
 )
+
+// errFixHighlighted is the status-row message shown when enter is pressed
+// with invalid fields; FocusFirstInvalid has already moved focus and
+// scrolled to the first one.
+var errFixHighlighted = errors.New("fix the highlighted fields to continue")
 
 // FieldType classifies how a FieldDefinition is rendered and validated.
 type FieldType int
@@ -123,6 +129,10 @@ func (s *FormSection) warningText() string {
 	return s.Warning()
 }
 
+// isComplete reports whether every field in the section is non-empty and
+// passes Check, using the pure check rather than Validate so computing a
+// section-complete indicator on every render never paints error state onto
+// a field the user hasn't touched.
 func (s *FormSection) isComplete() bool {
 	if s.Group == nil {
 		return false
@@ -131,7 +141,7 @@ func (s *FormSection) isComplete() bool {
 		if field.Value() == "" {
 			return false
 		}
-		if err := field.Validate(); err != nil {
+		if err := field.Check(); err != nil {
 			return false
 		}
 	}
@@ -300,18 +310,56 @@ func (f *MultiSectionForm) FocusedSpan() (LineSpan, bool) {
 	return spans[index], true
 }
 
-// Validate returns the first error from any section's group validation, or nil
-// when every field is valid.
-func (f *MultiSectionForm) Validate() error {
+// Validate returns every error from every section's group, running Check
+// (via each field's Validate) across the whole form rather than stopping at
+// the first invalid section, so every invalid field's error is current for
+// View after a submission attempt.
+func (f *MultiSectionForm) Validate() []error {
+	var errs []error
 	for _, section := range f.sections {
 		if section.Group == nil {
 			continue
 		}
-		if errs := section.Group.Validate(); len(errs) > 0 {
-			return errs[0]
+		errs = append(errs, section.Group.Validate()...)
+	}
+	return errs
+}
+
+// touchAll marks every field in every section touched and records its
+// current error, ahead of Validate, so enter's forced submission attempt
+// paints every field's real state rather than only the ones the user has
+// visited.
+func (f *MultiSectionForm) touchAll() {
+	for _, section := range f.sections {
+		if section.Group != nil {
+			section.Group.TouchAll()
 		}
 	}
-	return nil
+}
+
+// FocusFirstInvalid moves focus to the first field (scanning sections in
+// order) that fails Check, and returns a command that runs any focus side
+// effect followed by FocusChangedMsg so the wizard re-syncs its viewport
+// and scrolls the field into view.
+func (f *MultiSectionForm) FocusFirstInvalid() tea.Cmd {
+	for si := range f.sections {
+		group := f.sections[si].Group
+		if group == nil {
+			continue
+		}
+		for fi, field := range group.Fields() {
+			if field.Check() == nil {
+				continue
+			}
+			if cur := f.currentGroup(); cur != nil {
+				cur.Blur()
+			}
+			f.currentSection = si
+			group.SetFocusIndex(fi)
+			return tea.Batch(group.Focus(), focusChanged)
+		}
+	}
+	return focusChanged
 }
 
 // innerWidth is the width left to a section's fields inside its horizontal padding.
@@ -485,12 +533,13 @@ func buildFormField(def *FieldDefinition) components.FormField {
 	default:
 		var field *components.InputField
 		if def.Type == FieldTypePassword {
-			field = components.NewPasswordField(def.Label, def.Default)
+			field = components.NewPasswordField(def.Label, "")
 		} else {
-			field = components.NewInputField(def.Label, def.Default)
+			field = components.NewInputField(def.Label, "")
 		}
-		if def.Placeholder != "" {
-			field.SetPlaceholder(def.Placeholder)
+		field.SetPlaceholder(def.Placeholder)
+		if def.Default != "" {
+			field.SetDefault(def.Default)
 		}
 		field.Required = def.Required
 		field.Help = def.Help
@@ -547,14 +596,24 @@ func (s *DataDrivenStep) values() map[string]string {
 	return out
 }
 
-// LoadFromConfig seeds field values from cfg using each field's ConfigGet.
-func (s *DataDrivenStep) LoadFromConfig(cfg *config.Config) {
+// LoadFromConfig seeds field values from cfg using each field's ConfigGet;
+// when configExists is false, cfg is a synthetic defaults-only seed (e.g.
+// config.DefaultConfig(), not a real saved file), so a zero-value read
+// leaves a field's own constructed default in place instead of wiping it
+// (a gap in DefaultConfig isn't an intentional blank), while configExists
+// true trusts cfg as authoritative and clears a field on a real blank.
+func (s *DataDrivenStep) LoadFromConfig(cfg *config.Config, configExists bool) {
 	for sIdx := range s.definition.Sections {
 		for fIdx := range s.definition.Sections[sIdx].Fields {
 			fieldDef := &s.definition.Sections[sIdx].Fields[fIdx]
-			if fieldDef.ConfigGet != nil {
-				s.setValue(fieldDef.Key, fieldDef.ConfigGet(cfg))
+			if fieldDef.ConfigGet == nil {
+				continue
 			}
+			value := fieldDef.ConfigGet(cfg)
+			if value == "" && !configExists {
+				continue
+			}
+			s.setValue(fieldDef.Key, value)
 		}
 	}
 }
@@ -601,15 +660,24 @@ func (s *DataDrivenStep) ShortHelp() []KeyBinding {
 	return bindings
 }
 
-// Update forwards input to the embedded form and, on enter, runs
-// definition-aware validation before emitting StepCompleteMsg.
+// Update forwards input to the embedded form and, on enter, touches and
+// validates every field (scrolling to and reporting the first invalid one
+// on failure) before running definition-aware validation and emitting
+// StepCompleteMsg.
 func (s *DataDrivenStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 	cmd, enterPressed := s.form.Update(msg)
 	if !enterPressed {
 		return s, cmd
 	}
-	if err := s.Validate(); err != nil {
-		return s, func() tea.Msg { return ErrorSetMsg{Error: err} }
+
+	s.form.touchAll()
+	if errs := s.form.Validate(); len(errs) > 0 {
+		return s, tea.Batch(s.form.FocusFirstInvalid(), func() tea.Msg { return ErrorSetMsg{Error: errFixHighlighted} })
+	}
+	if s.definition.Validate != nil {
+		if err := s.definition.Validate(s.values()); err != nil {
+			return s, func() tea.Msg { return ErrorSetMsg{Error: err} }
+		}
 	}
 	return s, func() tea.Msg {
 		return StepCompleteMsg{StepID: s.ID()}
@@ -619,8 +687,8 @@ func (s *DataDrivenStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 // Validate runs the form's field validation, then the step-level Validate
 // function if the definition provides one.
 func (s *DataDrivenStep) Validate() error {
-	if err := s.form.Validate(); err != nil {
-		return err
+	if errs := s.form.Validate(); len(errs) > 0 {
+		return errs[0]
 	}
 	if s.definition.Validate != nil {
 		return s.definition.Validate(s.values())

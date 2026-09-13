@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/tui"
@@ -133,6 +134,70 @@ func TestInputField_SavedPositionSurvivesRedundantBlur(t *testing.T) {
 
 	if got := a.input.Position(); got != 5 {
 		t.Fatalf("Position() after refocus = %d, want 5 (saved position lost to a redundant Blur)", got)
+	}
+}
+
+func TestInputField_BlurUntouchedDoesNotValidate(t *testing.T) {
+	f := NewInputField("name", "")
+	f.Required = true
+
+	f.Blur()
+
+	if f.err != nil {
+		t.Fatalf("Blur() on a never-focused field set err = %v, want nil", f.err)
+	}
+}
+
+func TestInputField_BlurTouchedValidates(t *testing.T) {
+	f := NewInputField("name", "")
+	f.Required = true
+	_ = f.Focus()
+
+	f.Blur()
+
+	if f.err == nil {
+		t.Fatal("Blur() on a focused-then-blurred field did not validate")
+	}
+}
+
+func TestInputField_DefaultTypeToReplace(t *testing.T) {
+	f := NewInputField("cluster name", "")
+	f.SetDefault("mycluster")
+	_ = f.Focus()
+
+	f.Update(tea.KeyPressMsg{Code: 'h', Text: "h"})
+
+	if got := f.Value(); got != "h" {
+		t.Fatalf("Value() after typing over a default = %q, want %q", got, "h")
+	}
+	if f.IsDefault() {
+		t.Fatal("IsDefault() after typing = true, want false")
+	}
+}
+
+func TestInputField_DefaultArrowKeepsText(t *testing.T) {
+	f := NewInputField("cluster name", "")
+	f.SetDefault("mycluster")
+	_ = f.Focus()
+
+	f.Update(tea.KeyPressMsg{Code: tea.KeyRight})
+
+	if got := f.Value(); got != "mycluster" {
+		t.Fatalf("Value() after an arrow key = %q, want the default text preserved", got)
+	}
+}
+
+func TestInputField_SetValueClearsDefaultTag(t *testing.T) {
+	f := NewInputField("cluster name", "")
+	f.SetDefault("mycluster")
+
+	f.SetValue("homelab")
+
+	if f.IsDefault() {
+		t.Fatal("IsDefault() after SetValue = true, want false")
+	}
+	if got := f.Value(); got != "homelab" {
+		t.Fatalf("Value() after SetValue = %q, want homelab", got)
 	}
 }
 

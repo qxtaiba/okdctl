@@ -104,17 +104,36 @@ answer is usually "your step is too complex — split it" rather than
 
 ## Validation lifecycle
 
-1. **Per-field validation** runs on every keystroke (live feedback) and
-   blocks advancing if any required field is empty or any validator
-   returns an error
-2. **Per-step validation** (`StepDefinition.Validate`) runs when the
-   user presses enter to advance; it gets all the step's field values
-   and can enforce cross-field invariants
-3. **Apply** runs only after validation passes; it writes the values
-   into `*config.Config`
-4. **Whole-config validation** (`config.Config.Validate`) runs at the
-   end of the wizard, before `deploy` actually starts; it's the same
-   validator run by `loadConfig` in `internal/cli/helpers.go`
+The wizard runs validation in layers, so a mistake surfaces only once the
+user has actually had a chance to see it:
+
+- The first layer is per-field: typing clears that field's error
+  immediately, and leaving a field (tab/shift-tab) runs `FormField.Check`
+  and records the result — but only for a field the user has actually
+  focused. That keeps navigation honest, since tabbing past a field the
+  user never visited can't manufacture an error for it.
+- The second layer fires when the user presses enter: `touchAll` marks
+  every field in the step touched, `Validate` records every field's
+  current error across the whole form, and `FocusFirstInvalid` moves
+  focus and the viewport to the first invalid one. The status row shows a
+  generic "fix the highlighted fields to continue" message, while each
+  field's own error row carries the specifics.
+- The third layer is `StepDefinition.Validate`, which runs only once
+  every field passes, enforcing cross-field invariants a single field's
+  `Check` can't see on its own.
+
+This is followed by two steps that run regardless of which layer above
+caught something: `Apply` writes the step's values into `*config.Config`
+once validation passes, and `config.Config.Validate` runs once more at
+the end of the wizard, before `deploy` actually starts — the same
+validator `loadConfig` runs in `internal/cli/helpers.go`.
+
+That layering is also why a `Default` on a `FieldDefinition` counts as a
+real starting value rather than a placeholder: it satisfies a `Required`
+field immediately, so the wizard never manufactures an error for a field
+the user hasn't touched. The `Placeholder` field, by contrast, is only a
+dim hint shown while the field is empty, and never becomes part of the
+field's actual value.
 
 If the user hits escape, the state is not discarded. It stays in the
 step's field values so they can come back and tweak.
@@ -139,6 +158,15 @@ flowchart TD
     advanced --> review
     review --> E([complete])
 ```
+
+## HA anti-affinity requirements
+
+The advanced step's "enable ha anti-affinity" field spreads control-plane
+VMs across Proxmox nodes via ha-manager anti-affinity. That feature
+requires Proxmox VE 9 or later plus a multi-node cluster, since a single
+host cannot satisfy the anti-affinity rule. In particular, once enabled,
+ha-manager supersedes the per-VM `startup{}` ordering on any HA-triggered
+relocation.
 
 ## Why not huh, survey, or promptui
 
