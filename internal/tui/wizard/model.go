@@ -15,7 +15,7 @@ const (
 	minTerminalWidth  = 60
 	minTerminalHeight = 20
 
-	headerHeight = 3 // logo + tagline + step indicator
+	headerHeight = 3 // brand row + title/trail row + bottom rule
 	statusHeight = 1
 	// footer is 2 rows: the scroll-indicator line (also the top divider) + the help bar.
 	footerHeight         = 2
@@ -42,8 +42,8 @@ type centerable interface {
 	IsCentered() bool
 }
 
-// displayTitler is implemented by steps with prompt text above the content;
-// empty DisplayTitle skips rendering.
+// displayTitler is implemented by steps with a header prompt distinct from
+// their Title(); an empty DisplayTitle falls back to Title() instead.
 type displayTitler interface {
 	DisplayTitle() string
 }
@@ -55,6 +55,13 @@ type Model struct {
 
 	viewport viewport.Model
 	ready    bool
+
+	// contentRows[i] is the viewport row the active step's View line i starts
+	// on; a step line wider than the content column wraps into several rows,
+	// so the two index spaces differ. Length is line count + 1. Valid only
+	// for non-centered steps: a centered step's content is re-rendered with
+	// PaddingTop first, so the rows describe the shifted lines instead.
+	contentRows []int
 
 	steps       []WizardStep
 	currentStep int
@@ -229,8 +236,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case FocusChangedMsg:
+		// Resync first: the focus move may itself have changed the step's
+		// content (an expanded dropdown, a new validation row), so spans
+		// recorded by the previous render would point at stale lines.
 		if m.ready {
-			m.autoScrollToField(msg.FieldIndex, msg.TotalFields)
+			m.syncViewportContent()
+			m.scrollToFocusedField()
 		}
 		return m, nil
 

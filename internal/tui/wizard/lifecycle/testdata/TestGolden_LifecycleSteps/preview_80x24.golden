@@ -1,10 +1,8 @@
                                                                                 
   ╭──────────────────────────────────────────────────────────────────────────╮  
   │ O K D C T L                                                              │  
-  │ okd over proxmox, the easy way                       ●─●─●─● step 4 of 4 │  
+  │ review the plan                                     ●─●─●─●  step 4 of 4 │  
   │──────────────────────────────────────────────────────────────────────────│  
-  │  review the plan                                                         │  
-  │                                                                          │  
   │  [1] operation                                                           │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
   │  cluster           homelab                                               │  
@@ -17,8 +15,10 @@
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
   │  homelab-master0   master  m.master[0]  [update]                         │  
   │                                                                          │  
+  │  [3] gates per node                                                      │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
   │                                                                          │  
-  │─────────────────────── ↑ ↓  scroll down for more ─────────── ▸ mycluster │  
-  │   ↑↓  select action    enter  confirm    esc  back    ctrl+c  quit       │  
+  │───────────────── ↑ ↓  scroll down for more ───────────────── ▸ mycluster │  
+  │  ↑↓ select action • enter confirm • esc back • ctrl+c quit …             │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

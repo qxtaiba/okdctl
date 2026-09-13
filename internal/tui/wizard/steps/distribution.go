@@ -178,7 +178,7 @@ func (s *DistributionStep) handleTabKey() (wizard.WizardStep, tea.Cmd) {
 
 	s.updateVersionSelector()
 	s.versionSelector.SetSelectedByID(restoreID)
-	return s, nil
+	return s, func() tea.Msg { return wizard.FocusChangedMsg{} }
 }
 
 func (s *DistributionStep) handleNavigationKey(msg tea.KeyPressMsg) (wizard.WizardStep, tea.Cmd) {
@@ -187,11 +187,25 @@ func (s *DistributionStep) handleNavigationKey(msg tea.KeyPressMsg) (wizard.Wiza
 	selected := s.versionSelector.Selected()
 	s.syncSelectedVersion(&selected)
 
-	cmds := []tea.Cmd{cmd, func() tea.Msg { return wizard.ConfigSyncMsg{StepID: s.ID()} }}
-	if !selected.InDropdown {
-		cmds = append(cmds, s.emitFocusChanged())
+	return s, tea.Batch(
+		cmd,
+		func() tea.Msg { return wizard.ConfigSyncMsg{StepID: s.ID()} },
+		func() tea.Msg { return wizard.FocusChangedMsg{} },
+	)
+}
+
+// FocusedSpan reports the lines the highlighted version occupies, patch rows
+// inside the expanded dropdown included; the selector starts at line 0 of
+// View unless the release fetch failed.
+func (s *DistributionStep) FocusedSpan() (wizard.LineSpan, bool) {
+	if s.phase != phaseVersionSelect || s.loadError != nil {
+		return wizard.LineSpan{}, false
 	}
-	return s, tea.Batch(cmds...)
+	start, end, ok := s.versionSelector.SelectedSpan()
+	if !ok {
+		return wizard.LineSpan{}, false
+	}
+	return wizard.LineSpan{Start: start, End: end}, true
 }
 
 // syncSelectedVersion mirrors SelectField.Value(): latest patch for an
@@ -332,17 +346,4 @@ func (s *DistributionStep) SetSelectedVersion(version string) {
 // tests to bypass the network with a deterministic fixture.
 func (s *DistributionStep) SetVersionFetcher(f VersionFetcher) {
 	s.versionFetcher = f
-}
-
-// DisplayTitle returns the header text for the step, suppressed while the
-// release list is loading.
-func (s *DistributionStep) DisplayTitle() string {
-	switch s.phase {
-	case phaseVersionLoading:
-		return ""
-	case phaseVersionSelect:
-		return "which okd version would you like to deploy?"
-	default:
-		return s.BaseStep.DisplayTitle()
-	}
 }

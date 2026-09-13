@@ -37,6 +37,11 @@ type ReviewStep struct {
 	cfg         *config.Config
 	action      *wizard.SingleSelect
 	jumpTargets []wizard.JumpTarget
+
+	// actionSpan is where the action selector landed in the last View;
+	// spanKnown is false until the step has rendered a config.
+	actionSpan wizard.LineSpan
+	spanKnown  bool
 }
 
 // NewReviewStep constructs the review wizard step.
@@ -47,10 +52,8 @@ func NewReviewStep() *ReviewStep {
 	}
 
 	action := wizard.NewSingleSelect(wizard.StepIDReview, components.NewCompactSelector(actions), "enter")
-	action.OnNav = func(index, total int) tea.Cmd {
-		return func() tea.Msg {
-			return wizard.FocusChangedMsg{FieldIndex: index, TotalFields: total}
-		}
+	action.OnNav = func() tea.Cmd {
+		return func() tea.Msg { return wizard.FocusChangedMsg{} }
 	}
 
 	return &ReviewStep{
@@ -114,6 +117,7 @@ func (s *ReviewStep) View(width, height int) string {
 	s.SetSize(width, height)
 
 	if s.cfg == nil {
+		s.spanKnown = false
 		return "no configuration to review"
 	}
 
@@ -131,9 +135,21 @@ func (s *ReviewStep) View(width, height int) string {
 
 	content.WriteString(st.ThickSeparator)
 	content.WriteString("\n\n")
-	content.WriteString(s.action.View())
+
+	action := s.action.View()
+	// A line's 0-based index equals the number of newlines written before it.
+	start := strings.Count(content.String(), "\n")
+	s.actionSpan = wizard.LineSpan{Start: start, End: start + lipgloss.Height(action) - 1}
+	s.spanKnown = true
+	content.WriteString(action)
 
 	return content.String()
+}
+
+// FocusedSpan reports the action selector's lines; the review body above it
+// is a summary the user reads rather than navigates.
+func (s *ReviewStep) FocusedSpan() (wizard.LineSpan, bool) {
+	return s.actionSpan, s.spanKnown
 }
 
 func (s *ReviewStep) renderClusterIdentity(st *wizard.SectionStyles) string {

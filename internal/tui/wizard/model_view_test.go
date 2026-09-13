@@ -82,3 +82,161 @@ func TestModel_StatusRowTruncatesLongError(t *testing.T) {
 		tuitest.AssertFits(t, m.View().Content, sz[0], sz[1])
 	}
 }
+
+type titledStep struct {
+	nopStep
+	title string
+}
+
+func (s *titledStep) DisplayTitle() string { return s.title }
+
+func TestHeader_TitleRowContainsDisplayTitleAndStepCount(t *testing.T) {
+	s := &titledStep{nopStep: *newNopStep(), title: "configure your cluster basics"}
+	m := NewModel([]WizardStep{newNopStep(), newNopStep(), s}, config.DefaultConfig())
+	tuitest.RenderAt(t, m, 100, 30)
+	m.Update(JumpToStepMsg{StepID: s.ID()})
+	frame := tuitest.StripANSI(m.View().Content)
+	rows := strings.Split(frame, "\n")
+	if !strings.Contains(rows[3], "configure your cluster basics") || !strings.Contains(rows[3], "step 3 of 3") {
+		t.Fatalf("row 3 = %q", rows[3])
+	}
+	if strings.Contains(strings.Join(rows[5:], "\n"), "configure your cluster basics") {
+		t.Fatal("title still in body")
+	}
+}
+
+func TestHeader_TaglineOnlyOnFirstStep(t *testing.T) {
+	second := newNopStep()
+	chrome := FlowChrome{Tagline: "okd over proxmox, the easy way"}
+	m := NewFlowModel([]WizardStep{newNopStep(), second}, config.DefaultConfig(), chrome)
+	frame := tuitest.StripANSI(tuitest.RenderAt(t, m, 100, 30))
+	if !strings.Contains(frame, chrome.Tagline) {
+		t.Fatalf("tagline missing on step 1:\n%s", frame)
+	}
+
+	m.Update(JumpToStepMsg{StepID: second.ID()})
+	frame = tuitest.StripANSI(m.View().Content)
+	if strings.Contains(frame, chrome.Tagline) {
+		t.Fatalf("tagline present on step 2:\n%s", frame)
+	}
+}
+
+func TestHeader_TrailHookReplacesDots(t *testing.T) {
+	chrome := FlowChrome{Trail: func(_ ProgressInfo) string { return "op › target" }}
+	m := NewFlowModel([]WizardStep{newNopStep()}, config.DefaultConfig(), chrome)
+	frame := tuitest.StripANSI(tuitest.RenderAt(t, m, 100, 30))
+	if !strings.Contains(frame, "op › target") || strings.Contains(frame, "step 1 of 1") {
+		t.Fatal(frame)
+	}
+}
+
+func TestHeader_TitleTruncatesAt60Cols(t *testing.T) {
+	long := strings.Repeat("configure your cluster basics ", 4)
+	s := &titledStep{nopStep: *newNopStep(), title: long}
+	m := NewModel([]WizardStep{s}, config.DefaultConfig())
+	tuitest.RenderAt(t, m, 60, 20)
+
+	row2 := tuitest.StripANSI(strings.Split(m.renderHeader(), "\n")[1])
+	if w := lipgloss.Width(row2); w > 54 {
+		t.Fatalf("header row 2 width %d > 54: %q", w, row2)
+	}
+	if strings.Contains(row2, long) {
+		t.Fatalf("row 2 shows the untruncated title: %q", row2)
+	}
+
+	ellipsis := strings.Index(row2, "…")
+	ribbon := strings.Index(row2, "step ")
+	if ellipsis < 0 {
+		t.Fatalf("row 2 missing ellipsis: %q", row2)
+	}
+	if ribbon < 0 || ellipsis >= ribbon {
+		t.Fatalf("ellipsis must precede the ribbon: %q", row2)
+	}
+}
+
+// tallStep renders far more lines than any test terminal height, forcing
+// the viewport (and its footer scroll indicator) into the scrollable state.
+type tallStep struct{ nopStep }
+
+func (s *tallStep) View(_, _ int) string {
+	return strings.TrimRight(strings.Repeat("row\n", 60), "\n")
+}
+
+func newTallStep() *tallStep {
+	return &tallStep{nopStep: *newNopStep()}
+}
+
+func TestFooterRule_IndicatorCentredWithinAvail(t *testing.T) {
+	cfg := config.DefaultConfig()
+	chrome := FlowChrome{Badge: func(*config.Config) string { return "cluster-badge" }}
+	m := NewFlowModel([]WizardStep{newTallStep()}, cfg, chrome)
+	tuitest.RenderAt(t, m, 100, 30)
+
+	ind, scrollable := m.scrollIndicator()
+	if !scrollable {
+		t.Fatal("expected a scrollable viewport")
+	}
+	indPlain := tuitest.StripANSI(ind)
+
+	rule := tuitest.StripANSI(m.renderFooterRule())
+	idx := strings.Index(rule, indPlain)
+	if idx < 0 {
+		t.Fatalf("indicator %q not found in rule %q", indPlain, rule)
+	}
+
+	left := strings.Count(rule[:idx], "─")
+	right := strings.Count(rule[idx+len(indPlain):], "─")
+	if d := left - right; d < -1 || d > 1 {
+		t.Fatalf("left=%d right=%d not centred: %q", left, right, rule)
+	}
+}
+
+func TestFooter_AdvertisesPageKeysWhenScrollable(t *testing.T) {
+	cfg := config.DefaultConfig()
+
+	tall := NewModel([]WizardStep{newTallStep()}, cfg)
+	tallFrame := tuitest.StripANSI(tuitest.RenderAt(t, tall, 100, 30))
+	if !strings.Contains(tallFrame, "pgup/pgdn") {
+		t.Fatalf("expected pgup/pgdn hint:\n%s", tallFrame)
+	}
+
+	short := NewModel([]WizardStep{newNopStep()}, cfg)
+	shortFrame := tuitest.StripANSI(tuitest.RenderAt(t, short, 100, 30))
+	if strings.Contains(shortFrame, "pgup/pgdn") {
+		t.Fatalf("unexpected pgup/pgdn hint:\n%s", shortFrame)
+	}
+}
+
+const pinnedFooterText = "custom footer text"
+
+type pinnedFooterStep struct{ nopStep }
+
+func (s *pinnedFooterStep) PinnedFooter(_ int) string { return pinnedFooterText }
+
+func newPinnedFooterStep() *pinnedFooterStep {
+	return &pinnedFooterStep{nopStep: *newNopStep()}
+}
+
+func TestFooter_PinnedFooterLeftOfRibbon(t *testing.T) {
+	cfg := config.DefaultConfig()
+	m := NewModel([]WizardStep{newPinnedFooterStep()}, cfg)
+	tuitest.RenderAt(t, m, 100, 30)
+
+	helpRow := tuitest.StripANSI(m.renderHelpRow())
+	if strings.Contains(helpRow, "\n") {
+		t.Fatalf("help row wrapped to a second line: %q", helpRow)
+	}
+
+	leftIdx := strings.Index(helpRow, pinnedFooterText)
+	if leftIdx != 2 {
+		t.Fatalf("pinned footer text at col %d, want 2: %q", leftIdx, helpRow)
+	}
+
+	quitIdx := strings.LastIndex(helpRow, "quit")
+	if quitIdx < leftIdx+len(pinnedFooterText) {
+		t.Fatalf("ribbon not right of pinned text: %q", helpRow)
+	}
+	if trailing := len(helpRow) - (quitIdx + len("quit")); trailing > 2 {
+		t.Fatalf("ribbon not right-aligned, trailing=%d: %q", trailing, helpRow)
+	}
+}

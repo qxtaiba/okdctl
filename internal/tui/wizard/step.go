@@ -107,7 +107,8 @@ func NewBaseStep(id StepID, title, description string) BaseStep {
 }
 
 // NewBaseStepWithDisplayTitle returns a BaseStep with a separate
-// displayTitle (above the step body) plus title (in the progress indicator).
+// displayTitle (shown in the header) plus title (the progress-indicator
+// fallback used when displayTitle is empty).
 func NewBaseStepWithDisplayTitle(id StepID, title, displayTitle, description string) BaseStep {
 	return BaseStep{
 		id:           id,
@@ -125,8 +126,8 @@ func (b *BaseStep) ID() StepID { return b.id }
 // Title returns the progress-indicator title.
 func (b *BaseStep) Title() string { return b.title }
 
-// DisplayTitle returns the title shown above the step body; an empty
-// string skips title rendering.
+// DisplayTitle returns the title shown in the header; an empty string
+// falls back to Title().
 func (b *BaseStep) DisplayTitle() string { return b.displayTitle }
 
 // IsFocused reports whether the step currently owns input focus.
@@ -181,10 +182,22 @@ type ErrorSetMsg struct {
 }
 
 // FocusChangedMsg signals that focus has moved within the active step; the
-// wizard uses this to auto-scroll the focused field into view.
-type FocusChangedMsg struct {
-	FieldIndex  int
-	TotalFields int
+// wizard resyncs the viewport and scrolls the focused field into view.
+type FocusChangedMsg struct{}
+
+// LineSpan is an inclusive range of 0-based line indices into a step's
+// View() output.
+type LineSpan struct {
+	Start int
+	End   int
+}
+
+// SpanProvider is implemented by steps that can report which lines of their
+// View() the focused field occupies; the wizard scrolls that span into view
+// on FocusChangedMsg. Spans are recorded during View, so a step that has
+// not rendered yet reports false.
+type SpanProvider interface {
+	FocusedSpan() (LineSpan, bool)
 }
 
 // ConfigSyncMsg requests step.Apply(cfg) on the active step without

@@ -1,10 +1,8 @@
                                                                                                     
   ╭──────────────────────────────────────────────────────────────────────────────────────────────╮  
   │ O K D C T L                                                                                  │  
-  │ okd over proxmox, the easy way                            ●─●─○─○─○─○─○─○─○─○─○ step 2 of 11 │  
+  │ which okd version would you like to deploy?              ●─●─○─○─○─○─○─○─○─○─○  step 2 of 11 │  
   │──────────────────────────────────────────────────────────────────────────────────────────────│  
-  │  which okd version would you like to deploy?                                                 │  
-  │                                                                                              │  
   │  ● okd 4.20 (recommended)                                                                    │  
   │    │ ▼ 2 patch versions available                                                            │  
   │    ┌────────────────────                                                                     │  
@@ -24,7 +22,9 @@
   │  press tab to collapse                                                                       │  
   │                                                                                              │  
   │                                                                                              │  
+  │                                                                                              │  
+  │                                                                                              │  
   │───────────────────────────────────────────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
-  │   ↑↓  select    tab  expand/collapse    enter  confirm    esc  back                          │  
+  │  ↑↓ select • tab expand/collapse • enter confirm • esc back                                  │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                     

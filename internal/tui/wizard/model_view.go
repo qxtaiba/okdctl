@@ -2,6 +2,7 @@ package wizard
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -111,15 +112,6 @@ func (m *Model) syncViewportContent() {
 		innerWidth = 40
 	}
 
-	var content strings.Builder
-
-	if d, ok := step.(displayTitler); ok {
-		if displayTitle := d.DisplayTitle(); displayTitle != "" {
-			content.WriteString(m.renderStepTitle(displayTitle))
-			content.WriteString("\n\n")
-		}
-	}
-
 	stepContent := step.View(innerWidth, 1000)
 
 	if c, ok := step.(centerable); ok && c.IsCentered() {
@@ -142,56 +134,132 @@ func (m *Model) syncViewportContent() {
 			Render(stepContent)
 	}
 
-	content.WriteString(stepContent)
-
-	paddingStyle := lipgloss.NewStyle().
-		PaddingLeft(2).
-		PaddingRight(2).
-		Width(contentWidth)
-	paddedContent := paddingStyle.Render(content.String())
-	m.viewport.SetContent(paddedContent)
+	padded, rows := padContent(stepContent, contentWidth)
+	m.contentRows = rows
+	m.viewport.SetContent(padded)
 }
 
+// padContent insets each step line into a width-wide content column and
+// records the viewport row each one starts on: the column width wraps an
+// over-wide line into several rows, which would otherwise desynchronise a
+// step's LineSpan indices from the viewport's. Rendering line by line matches
+// rendering the whole block.
+func padContent(content string, width int) (padded string, rows []int) {
+	style := lipgloss.NewStyle().
+		PaddingLeft(2).
+		PaddingRight(2).
+		Width(width)
+
+	lines := strings.Split(content, "\n")
+	rows = make([]int, len(lines)+1)
+
+	out := make([]string, 0, len(lines))
+	for i, line := range lines {
+		rows[i] = len(out)
+		out = append(out, strings.Split(style.Render(line), "\n")...)
+	}
+	rows[len(lines)] = len(out)
+
+	return strings.Join(out, "\n"), rows
+}
+
+// renderHeader draws the two-row header: brand (+ tagline on the first
+// visible step) on row one, the step's display title and the progress
+// trail on row two.
 func (m *Model) renderHeader() string {
 	width := m.contentWidth()
 
 	brand := LogoStyle.Render("O K D C T L")
-	tagline := TaglineStyle.Render(m.chrome.Tagline)
-
-	visibleSteps := m.countVisibleSteps()
-	currentVisible := m.currentVisibleStepIndex() + 1
-	progressDots := RenderStepProgress(currentVisible, visibleSteps)
-	stepIndicator := progressDots + " " +
-		StepIndicatorStyle.Render("step ") +
-		StepIndicatorCurrentStyle.Render(fmt.Sprintf("%d", currentVisible)) +
-		StepIndicatorStyle.Render(fmt.Sprintf(" of %d", visibleSteps))
-
-	taglineWidth := lipgloss.Width(tagline)
-	indicatorWidth := lipgloss.Width(stepIndicator)
-	spacing := width - taglineWidth - indicatorWidth - 2
-	if spacing < 1 {
-		spacing = 1
+	if m.currentVisibleStepIndex() == 0 && m.chrome.Tagline != "" {
+		brand += "  " + TaglineStyle.Render(m.chrome.Tagline)
 	}
 
-	header := brand + "\n" + tagline + strings.Repeat(" ", spacing) + stepIndicator
+	right := m.renderTrail()
+	rightW := lipgloss.Width(right)
 
-	return HeaderStyle.Render(header)
+	titleWidth := max(width-2-rightW-2, 8)
+	title := lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText).Inline(true).
+		Render(truncateTitle(m.headerTitle(), titleWidth))
+
+	gap := max(width-2-lipgloss.Width(title)-rightW, 1)
+	row2 := title + strings.Repeat(" ", gap) + right
+
+	return HeaderStyle.Width(width).Render(brand + "\n" + row2)
 }
 
-func (m *Model) renderFooter() string {
-	width := m.contentWidth()
+// renderTrail renders the header's right-hand progress indicator: the
+// chrome's Trail hook if set, otherwise the default dot ribbon.
+func (m *Model) renderTrail() string {
+	p := m.progressInfo()
+	if m.chrome.Trail != nil {
+		return m.chrome.Trail(p)
+	}
+	return RenderStepProgress(p.Current, p.Total) + "  " +
+		StepIndicatorStyle.Render("step ") +
+		StepIndicatorCurrentStyle.Render(strconv.Itoa(p.Current)) +
+		StepIndicatorStyle.Render(" of "+strconv.Itoa(p.Total))
+}
 
-	bindings := defaultKeyBindings()
-	if len(m.steps) > 0 && m.currentStep >= 0 && m.currentStep < len(m.steps) {
-		if h, ok := m.steps[m.currentStep].(HelpProvider); ok {
-			bindings = h.ShortHelp()
+// headerTitle returns the current step's DisplayTitle(), falling back to
+// its Title() when DisplayTitle is unimplemented or empty.
+func (m *Model) headerTitle() string {
+	if len(m.steps) == 0 || m.currentStep < 0 || m.currentStep >= len(m.steps) {
+		return ""
+	}
+	step := m.steps[m.currentStep]
+	if d, ok := step.(displayTitler); ok {
+		if t := d.DisplayTitle(); t != "" {
+			return t
 		}
 	}
+	return step.Title()
+}
 
-	helpBar := RenderHelpBar(bindings)
-	helpBarRendered := FooterStyle.Width(width).Render(helpBar)
+// progressInfo reports the current step's position among visible steps for
+// FlowChrome.Trail hooks.
+func (m *Model) progressInfo() ProgressInfo {
+	titles := make([]string, 0, len(m.steps))
+	var currentID StepID
+	for i, step := range m.steps {
+		if !stepShouldShow(step, m.config) {
+			continue
+		}
+		titles = append(titles, step.Title())
+		if i == m.currentStep {
+			currentID = step.ID()
+		}
+	}
+	return ProgressInfo{
+		Current:   m.currentVisibleStepIndex() + 1,
+		Total:     m.countVisibleSteps(),
+		CurrentID: currentID,
+		Titles:    titles,
+	}
+}
 
-	return m.renderScrollIndicator() + "\n" + helpBarRendered
+// truncateTitle rune-safely clips s to fit within maxWidth visible columns,
+// appending "…" when it clips — lipgloss's own MaxWidth truncates silently.
+func truncateTitle(s string, maxWidth int) string {
+	if maxWidth <= 0 {
+		return ""
+	}
+	if lipgloss.Width(s) <= maxWidth {
+		return s
+	}
+	runes := []rune(s)
+	for i := len(runes) - 1; i > 0; i-- {
+		candidate := string(runes[:i]) + "…"
+		if lipgloss.Width(candidate) <= maxWidth {
+			return candidate
+		}
+	}
+	return "…"
+}
+
+// renderFooter draws the two-row footer: the scroll-indicator rule on top,
+// the help ribbon (or a step's PinnedFooter row) beneath it.
+func (m *Model) renderFooter() string {
+	return m.renderFooterRule() + "\n" + m.renderHelpRow()
 }
 
 func defaultKeyBindings() []KeyBinding {
@@ -203,14 +271,52 @@ func defaultKeyBindings() []KeyBinding {
 	}
 }
 
-func (m *Model) renderStepTitle(title string) string {
-	titleStyle := lipgloss.NewStyle().
-		Foreground(tui.ColorText).
-		Bold(true)
-	return titleStyle.Render(title)
+// footerBindings returns the current step's ShortHelp() bindings (falling
+// back to defaultKeyBindings when the step has none), plus a pgup/pgdn hint
+// whenever the viewport content overflows its height.
+func (m *Model) footerBindings() []KeyBinding {
+	bindings := defaultKeyBindings()
+	if len(m.steps) > 0 && m.currentStep >= 0 && m.currentStep < len(m.steps) {
+		if h, ok := m.steps[m.currentStep].(HelpProvider); ok {
+			bindings = h.ShortHelp()
+		}
+	}
+	if m.viewport.TotalLineCount() > m.viewport.Height() {
+		bindings = append(bindings, KeyBinding{Key: "pgup/pgdn", Help: "scroll"})
+	}
+	return bindings
 }
 
-func (m *Model) renderScrollIndicator() string {
+// renderHelpRow draws the footer's help row: a step's PinnedFooter text at
+// the left (when implemented) with the key-binding ribbon right-aligned in
+// the remaining width, or just the ribbon on its own otherwise.
+func (m *Model) renderHelpRow() string {
+	width := m.contentWidth()
+	innerWidth := width - 4 // FooterStyle Padding(0, 2) on both sides
+	bindings := m.footerBindings()
+
+	var left string
+	if len(m.steps) > 0 && m.currentStep >= 0 && m.currentStep < len(m.steps) {
+		if pf, ok := m.steps[m.currentStep].(PinnedFooter); ok {
+			left = pf.PinnedFooter(innerWidth)
+		}
+	}
+
+	if left == "" {
+		return FooterStyle.Width(width).Render(RenderHelpRibbon(bindings, innerWidth))
+	}
+
+	leftWidth := lipgloss.Width(left)
+	ribbonWidth := max(innerWidth-leftWidth-2, 0)
+	ribbon := RenderHelpRibbon(bindings, ribbonWidth)
+	row := left + lipgloss.PlaceHorizontal(innerWidth-leftWidth, lipgloss.Right, ribbon)
+	return FooterStyle.Width(width).Render(row)
+}
+
+// renderFooterRule draws the footer's top row: a "─" rule with the scroll
+// indicator centred in it when the viewport overflows, plus the context
+// badge pinned to the right.
+func (m *Model) renderFooterRule() string {
 	width := m.contentWidth()
 	lineStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate700)
 
@@ -225,12 +331,41 @@ func (m *Model) renderScrollIndicator() string {
 		badgeWidth = lipgloss.Width(badgeStyled)
 	}
 
-	if m.viewport.TotalLineCount() <= m.viewport.Height() {
-		lineWidth := width - badgeWidth
-		if lineWidth < 10 {
-			lineWidth = 10
-		}
+	avail := width - badgeWidth
+
+	ind, scrollable := m.scrollIndicator()
+	if !scrollable {
+		lineWidth := max(avail, 10)
 		return lineStyle.Render(strings.Repeat("─", lineWidth)) + badgeStyled
+	}
+
+	return m.centreInRule(ind, avail) + badgeStyled
+}
+
+// centreInRule centres ind within avail columns of "─" rule, keeping the
+// two sides within one column of each other.
+func (m *Model) centreInRule(ind string, avail int) string {
+	lineStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate700)
+	indWidth := lipgloss.Width(ind)
+
+	left := (avail - indWidth - 2) / 2
+	right := avail - left - indWidth - 2
+	if left < 3 {
+		left = 3
+	}
+	if right < 3 {
+		right = 3
+	}
+
+	return lineStyle.Render(strings.Repeat("─", left)) + " " + ind + " " + lineStyle.Render(strings.Repeat("─", right))
+}
+
+// scrollIndicator returns the footer's arrows-and-message scroll-state text
+// and whether the viewport currently overflows its height; it returns
+// ("", false) when the content fits without scrolling.
+func (m *Model) scrollIndicator() (string, bool) {
+	if m.viewport.TotalLineCount() <= m.viewport.Height() {
+		return "", false
 	}
 
 	scrollPercent := m.viewport.ScrollPercent()
@@ -261,22 +396,7 @@ func (m *Model) renderScrollIndicator() string {
 		message = fmt.Sprintf("%.0f%% • scroll for more", scrollPercent*100)
 	}
 
-	indicator := arrows + "  " + textStyle.Render(message)
-	indicatorWidth := lipgloss.Width(indicator)
-
-	leftWidth := (width-indicatorWidth)/2 - 1                         // -1 for space before indicator
-	rightWidth := width - leftWidth - indicatorWidth - badgeWidth - 2 // -2 for spaces around indicator
-	if leftWidth < 3 {
-		leftWidth = 3
-	}
-	if rightWidth < 3 {
-		rightWidth = 3
-	}
-
-	leftLine := lineStyle.Render(strings.Repeat("─", leftWidth))
-	rightLine := lineStyle.Render(strings.Repeat("─", rightWidth))
-
-	return leftLine + " " + indicator + " " + rightLine + badgeStyled
+	return arrows + "  " + textStyle.Render(message), true
 }
 
 func (m *Model) renderContextBadge() string {

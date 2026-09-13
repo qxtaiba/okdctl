@@ -1,7 +1,7 @@
                                                                                 
   ╭──────────────────────────────────────────────────────────────────────────╮  
-  │ O K D C T L                                                              │  
-  │ okd over proxmox, the easy way                       ●─○─○─○ step 1 of 4 │  
+  │ O K D C T L  okd over proxmox, the easy way                              │  
+  │ operation                                           ●─○─○─○  step 1 of 4 │  
   │──────────────────────────────────────────────────────────────────────────│  
   │           cluster lifecycle                                              │  
   │                                                                          │  
@@ -18,7 +18,7 @@
   │           ○ remove worker                                                │  
   │             cordon, drain, destroy the vm, delete the node               │  
   │                                                                          │  
-  │─────────────────────── ↑ ↓  scroll down for more ─────────── ▸ mycluster │  
-  │   ↑↓  select    enter  confirm    ctrl+c  quit                           │  
+  │───────────────── ↑ ↓  scroll down for more ───────────────── ▸ mycluster │  
+  │  ↑↓ select • enter confirm • ctrl+c quit • pgup/pgdn scroll              │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

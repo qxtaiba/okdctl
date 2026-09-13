@@ -1,10 +1,8 @@
                                                                                                                         
   ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
   │ O K D C T L                                                                                                      │  
-  │ okd over proxmox, the easy way                                                ●─●─●─●─●─●─●─●─○─○─○ step 8 of 11 │  
+  │ configure cluster addons                                                     ●─●─●─●─●─●─●─●─○─○─○  step 8 of 11 │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
-  │  configure cluster addons                                                                                        │  
-  │                                                                                                                  │  
   │                                                                                                                  │  
   │    ● gitops (flux)                                                                                               │  
   │      requires: ssh deploy key at ~/.ssh/flux-deploy-key                                                          │  
@@ -33,8 +31,10 @@
   │      supports onepassword, vault, and bitwarden via external-secrets-operator                                    │  
   │                                                                                                                  │  
   │    enabled (bootstrap eso provider credentials and secretstore crd)                                              │  
+  │    ╭────────────────────────────────────────────────────────────────────────────────────────────────────╮        │  
+  │    │ > no                                                                                               │        │  
   │                                                                                                                  │  
-  │─────────────────────────────────────────── ↑ ↓  scroll down for more ─────────────────── ▸ okd 4.22.0-okd-scos.7 │  
-  │   ↑↓/tab  navigate    enter  continue    esc  back                                                               │  
+  │─────────────────────────────── ↑ ↓  scroll down for more ─────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
+  │  ↑↓/tab navigate • enter continue • esc back • pgup/pgdn scroll                                                  │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                                         

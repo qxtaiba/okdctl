@@ -46,12 +46,10 @@ var (
 					Bold(true)
 )
 
-// Help-bar styles for footer key/text/separator rendering.
+// Help-ribbon styles for footer key/text/separator rendering.
 var (
 	HelpKeyStyle = lipgloss.NewStyle().
-			Foreground(tui.ColorSlate900).
-			Background(tui.ColorSlate300).
-			Padding(0, 1).
+			Foreground(tui.ColorSlate300).
 			Bold(true)
 
 	HelpTextStyle = lipgloss.NewStyle().
@@ -90,19 +88,34 @@ func RenderStepProgress(current, total int) string {
 	return strings.Join(parts, connector)
 }
 
-// RenderHelpItem renders a single key/description pair for the help bar.
-func RenderHelpItem(key, description string) string {
-	return HelpKeyStyle.Render(key) + " " + HelpTextStyle.Render(description)
-}
+// RenderHelpRibbon joins items as "key desc • key desc" within width,
+// dropping whole items and appending "…" once the remainder no longer fits;
+// the result never wraps.
+func RenderHelpRibbon(items []KeyBinding, width int) string {
+	sep := HelpSeparatorStyle.Render(" • ")
+	more := HelpSeparatorStyle.Render(" …")
 
-// RenderHelpBar joins multiple RenderHelpItem outputs with separators.
-func RenderHelpBar(items []KeyBinding) string {
-	var parts []string
-	separator := HelpSeparatorStyle.Render("   ")
-
-	for _, item := range items {
-		parts = append(parts, RenderHelpItem(item.Key, item.Help))
+	var b strings.Builder
+	used := 0
+	for i, it := range items {
+		piece := HelpKeyStyle.Render(it.Key) + " " + HelpTextStyle.Render(it.Help)
+		need := lipgloss.Width(piece)
+		if i > 0 {
+			need += lipgloss.Width(sep)
+		}
+		reserve := 0
+		if i < len(items)-1 {
+			reserve = lipgloss.Width(more)
+		}
+		if used+need+reserve > width {
+			b.WriteString(more)
+			break
+		}
+		if i > 0 {
+			b.WriteString(sep)
+		}
+		b.WriteString(piece)
+		used += need
 	}
-
-	return strings.Join(parts, separator)
+	return lipgloss.NewStyle().MaxWidth(width).Inline(true).Render(b.String())
 }

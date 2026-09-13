@@ -42,6 +42,11 @@ type Selector struct {
 	focused              bool
 	dropdownScrollOffset int
 
+	// selectedSpan is the line range the selection occupied in the last View;
+	// spanKnown is false until the selector has rendered at least once.
+	selectedSpan struct{ start, end int }
+	spanKnown    bool
+
 	// cachedStyles caches option render styles; safe since tui.Color* only
 	// changes during package init.
 	cachedStyles *optionStyles
@@ -154,6 +159,16 @@ func (s *Selector) getTitleStyle(style OptionStyle) lipgloss.Style {
 	}
 }
 
+// SelectedSpan returns the inclusive line range the selected option occupied
+// in the last View, dropdown entries included, or ok=false when the selector
+// has not rendered or has no options.
+func (s *Selector) SelectedSpan() (start, end int, ok bool) {
+	if !s.spanKnown {
+		return 0, 0, false
+	}
+	return s.selectedSpan.start, s.selectedSpan.end, true
+}
+
 // View renders the selector as a vertical list with top-of-list options
 // above the scrollable dropdown region.
 func (s *Selector) View() string {
@@ -164,6 +179,14 @@ func (s *Selector) View() string {
 	scrollIndicatorStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
 	dropdownBorderStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate700)
 
+	s.spanKnown = false
+	line := 0
+	record := func(block string) {
+		s.selectedSpan.start = line
+		s.selectedSpan.end = line + lipgloss.Height(block) - 1
+		s.spanKnown = true
+	}
+
 	i := 0
 	for i < len(s.options) {
 		opt := &s.options[i]
@@ -173,10 +196,20 @@ func (s *Selector) View() string {
 			isLast := i == len(s.options)-1
 			showConnector := !isLast && !s.options[i+1].InDropdown
 			optView := s.renderOptionWithPrefix(opt, isSelected, showConnector, "")
+			if isSelected {
+				record(optView)
+			}
 			lines = append(lines, optView)
+			line += lipgloss.Height(optView)
 			i++
 		} else {
-			dropdownLines := s.renderDropdownRegion(dropdownStart, dropdownEnd, &scrollIndicatorStyle, &dropdownBorderStyle)
+			dropdownLines, selectedRow := s.renderDropdownRegion(dropdownStart, dropdownEnd, &scrollIndicatorStyle, &dropdownBorderStyle)
+			for j, block := range dropdownLines {
+				if j == selectedRow {
+					record(block)
+				}
+				line += lipgloss.Height(block)
+			}
 			lines = append(lines, dropdownLines...)
 
 			i = dropdownEnd + 1
@@ -237,11 +270,6 @@ func NewCompactSelector(options []string) *CompactSelector {
 		selected: 0,
 		focused:  true,
 	}
-}
-
-// Len returns the number of options currently in the selector.
-func (s *CompactSelector) Len() int {
-	return len(s.options)
 }
 
 // SelectedIndex returns the current selection's index.

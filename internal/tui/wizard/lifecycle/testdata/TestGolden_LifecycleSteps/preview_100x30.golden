@@ -1,10 +1,8 @@
                                                                                                     
   ╭──────────────────────────────────────────────────────────────────────────────────────────────╮  
   │ O K D C T L                                                                                  │  
-  │ okd over proxmox, the easy way                                           ●─●─●─● step 4 of 4 │  
+  │ review the plan                                                         ●─●─●─●  step 4 of 4 │  
   │──────────────────────────────────────────────────────────────────────────────────────────────│  
-  │  review the plan                                                                             │  
-  │                                                                                              │  
   │  [1] operation                                                                               │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
   │  cluster           homelab                                                                   │  
@@ -23,8 +21,10 @@
   │  vm → wait for node ready → etcd health gate (post) → uncordon + ceph health gate            │  
   │  plan gate: ✓ dry-run passed — the safety gate allows exactly the listed changes             │  
   │                                                                                              │  
+  │  ══════════════════════════════════════════════════════════════════════════════════════      │  
   │                                                                                              │  
-  │───────────────────────────────── ↑ ↓  scroll down for more ───────────────────── ▸ mycluster │  
-  │   ↑↓  select action    enter  confirm    esc  back    ctrl+c  quit                           │  
+  │                                                                                              │  
+  │─────────────────────────── ↑ ↓  scroll down for more ─────────────────────────── ▸ mycluster │  
+  │  ↑↓ select action • enter confirm • esc back • ctrl+c quit • pgup/pgdn scroll                │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                     
