@@ -36,17 +36,49 @@ type ConfigSetter func(cfg *config.Config, value string) error
 // ConfigGetter reads a field's value from a Config.
 type ConfigGetter func(cfg *config.Config) string
 
+// FieldWidth classifies how wide a field's input box renders, in columns,
+// independent of the section's full available width.
+type FieldWidth int
+
+// Field width classes for data-driven step definitions.
+const (
+	FieldWidthAuto   FieldWidth = 0 // zero value — 32 columns
+	FieldWidthNumber FieldWidth = 12
+	FieldWidthPath   FieldWidth = 56
+	FieldWidthFull   FieldWidth = -1 // the whole inner width
+)
+
+// Cols resolves w to a concrete box width in columns, clamped to avail;
+// FieldWidthFull always returns avail itself.
+func (w FieldWidth) Cols(avail int) int {
+	if w == FieldWidthFull {
+		return avail
+	}
+	if w == FieldWidthAuto {
+		return min(32, avail)
+	}
+	return min(int(w), avail)
+}
+
+// fieldWidthSentinel stands in for "no limit" when buildFormField resolves
+// a field's nominal box width at construction time, before the real
+// available width is known; InputField's own min(boxWidth, width) clamp at
+// render time still bounds it correctly on every resize.
+const fieldWidthSentinel = 1 << 20
+
 // FieldDefinition declares a single wizard form field and how it binds to
 // the Config struct.
 type FieldDefinition struct {
-	Key      string
-	Label    string
-	Default  string
-	Help     string
-	Type     FieldType
-	Options  []string // used by FieldTypeSelect and FieldTypeMultiSelect
-	Required bool
-	Validate func(string) error
+	Key         string
+	Label       string
+	Default     string
+	Placeholder string
+	Width       FieldWidth
+	Help        string
+	Type        FieldType
+	Options     []string // used by FieldTypeSelect and FieldTypeMultiSelect
+	Required    bool
+	Validate    func(string) error
 
 	ConfigSet ConfigSetter
 	ConfigGet ConfigGetter
@@ -422,9 +454,13 @@ func buildFormField(def *FieldDefinition) components.FormField {
 		} else {
 			field = components.NewInputField(def.Label, def.Default)
 		}
+		if def.Placeholder != "" {
+			field.SetPlaceholder(def.Placeholder)
+		}
 		field.Required = def.Required
 		field.Help = def.Help
 		field.Validator = def.Validate
+		field.SetBoxWidth(def.Width.Cols(fieldWidthSentinel))
 		return field
 	}
 }

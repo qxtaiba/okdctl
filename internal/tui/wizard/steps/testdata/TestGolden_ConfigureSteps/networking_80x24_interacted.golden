@@ -6,17 +6,17 @@
   │                                                                          │  
   │    ● infrastructure network                                              │  
   │                                                                          │  
-  │    machine cidr (network where vms will be deployed)                     │  
-  │    ╭────────────────────────────────────────────────────────────╮        │  
-  │    │ > 192.168.1.0/24                                           │        │  
-  │    ╰────────────────────────────────────────────────────────────╯        │  
+  │    machine cidr                                                          │  
+  │    ╭──────────────────────────────╮                                      │  
+  │    │ 192.168.1.0/24               │                                      │  
+  │    ╰──────────────────────────────╯                                      │  
   │                                                                          │  
-  │    gateway (network gateway ip address)                                  │  
-  │    ╭────────────────────────────────────────────────────────────╮        │  
-  │    │ > 192.168.1.1                                              │        │  
-  │    ╰────────────────────────────────────────────────────────────╯        │  
+  │    gateway                                                               │  
+  │    ╭──────────────────────────────╮                                      │  
+  │    │ 192.168.1.1                  │                                      │  
+  │    ╰──────────────────────────────╯                                      │  
+  │    network gateway ip address                                            │  
   │                                                                          │  
-  │    upstream dns (upstream dns for dnsmasq on bastion — vms resolve       │  
   │                                                                          │  
   │─────────── ↑ ↓  scroll down for more ─────────── ▸ okd 4.22.0-okd-scos.7 │  
   │  ↑↓/tab navigate • enter continue • esc back • pgup/pgdn scroll          │  

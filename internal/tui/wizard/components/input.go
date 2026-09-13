@@ -33,27 +33,53 @@ type InputField struct {
 	Label       string
 	Placeholder string
 	Help        string
+	Note        string
 	Required    bool
 	Password    bool
 	Validator   func(string) error
 
-	input   textinput.Model
-	focused bool
-	width   int
-	err     error
+	input     textinput.Model
+	focused   bool
+	width     int
+	boxWidth  int
+	isDefault bool
+	savedPos  int
+	err       error
 }
 
 // NewInputField builds a plain-text InputField from label and placeholder.
 func NewInputField(label, placeholder string) *InputField {
 	ti := textinput.New()
+	ti.Prompt = ""
 	ti.Placeholder = placeholder
 	ti.CharLimit = 256
-	ti.SetWidth(40)
+	ti.SetStyles(fieldInputStyles())
 
 	return &InputField{
 		Label:       label,
 		Placeholder: placeholder,
 		input:       ti,
+		boxWidth:    32,
+	}
+}
+
+// fieldInputStyles builds the textinput color scheme shared by every
+// InputField: dim placeholder, brand-purple cursor, slate blurred text.
+func fieldInputStyles() textinput.Styles {
+	return textinput.Styles{
+		Focused: textinput.StyleState{
+			Text:        lipgloss.NewStyle().Foreground(tui.ColorText),
+			Placeholder: lipgloss.NewStyle().Foreground(tui.ColorSlate600),
+		},
+		Blurred: textinput.StyleState{
+			Text:        lipgloss.NewStyle().Foreground(tui.ColorSlate300),
+			Placeholder: lipgloss.NewStyle().Foreground(tui.ColorSlate600),
+		},
+		Cursor: textinput.CursorStyle{
+			Color: tui.ColorPrimary,
+			Shape: tea.CursorBlock,
+			Blink: true,
+		},
 	}
 }
 
@@ -77,25 +103,53 @@ func (f *InputField) SetValue(value string) {
 	f.input.SetValue(value)
 }
 
-// Focus gives the field focus and returns the textinput blink command.
+// Focus gives the field focus, restores the cursor to where Blur last left
+// it, and returns the textinput blink command.
 func (f *InputField) Focus() tea.Cmd {
 	f.focused = true
+	f.input.SetCursor(f.savedPos)
 	return f.input.Focus()
 }
 
-// Blur removes focus and runs one validation pass so error state is current
-// when the field is rendered next.
+// Blur removes focus, scrolls a long value back to its head so it reads
+// from the start while unfocused, and runs one validation pass so error
+// state is current when the field is rendered next.
 func (f *InputField) Blur() {
 	f.focused = false
+	f.savedPos = f.input.Position()
+	f.input.SetCursor(0)
 	f.input.Blur()
 	_ = f.Validate()
 }
 
-// SetWidth resizes the input field, reserving border and padding space.
+// SetWidth records the width available to the field's label and help/error
+// rows, then reapplies the box so the textinput's scroll window matches.
 func (f *InputField) SetWidth(width int) {
 	f.width = width
-	inputWidth := max(width-4, 20) // border (2) + padding (2)
-	f.input.SetWidth(inputWidth)
+	f.applyBox()
+}
+
+// SetBoxWidth sets the field's nominal box width; the box actually renders
+// at min(outer, the width from SetWidth), so a narrow terminal still clamps
+// it.
+func (f *InputField) SetBoxWidth(outer int) {
+	f.boxWidth = outer
+	f.applyBox()
+}
+
+// SetPlaceholder replaces the dim hint text shown inside an empty box.
+func (f *InputField) SetPlaceholder(p string) {
+	f.Placeholder = p
+	f.input.Placeholder = p
+}
+
+// applyBox resizes the textinput to the current box's inner width (border 2
+// + padding 2 + cursor cell 1) and recomputes its scroll window — bubbles'
+// SetWidth alone leaves a stale window after a resize.
+func (f *InputField) applyBox() {
+	w := min(f.boxWidth, f.width)
+	f.input.SetWidth(w - 5)
+	f.input.SetCursor(f.input.Position())
 }
 
 // Validate runs the Required check and Validator; for password fields the
@@ -144,59 +198,46 @@ func (f *InputField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 	return f, cmd
 }
 
-// View renders the field: label, input box, and any validation error.
-// Password fields mask the value and scrub it from error text.
+// View renders the label, the boxed input (masked and error-scrubbed for
+// password fields), and — depending on state — an error row, a help row
+// (focused only), and a Note row.
 func (f *InputField) View() string {
 	// Never render f.input.Value() directly when Password is true; rely on
 	// EchoMode, and scrub raw value on every text path below.
-	labelStyle := lipgloss.NewStyle().
-		Foreground(tui.ColorSlate300)
+	label := labelStyle.Render(f.Label)
 
-	hintStyle := lipgloss.NewStyle().
-		Foreground(tui.ColorSlate500)
-
-	labelText := strings.ToLower(f.Label)
-	labelLine := labelStyle.Render(labelText)
-	if f.Help != "" {
-		labelLine += " " + hintStyle.Render("("+strings.ToLower(f.Help)+")")
+	content := f.input.View()
+	if f.input.Value() == "" && f.Placeholder == "" {
+		content = tagStyle.Render("·")
 	}
 
-	contentWidth := f.input.Width()
-	if contentWidth < 20 {
-		contentWidth = 40
+	box := fieldBox(content, min(f.boxWidth, f.width), f.focused, f.err != nil)
+	if f.isDefault {
+		box = lipgloss.JoinHorizontal(lipgloss.Center, box, " "+tagStyle.Render("default"))
 	}
 
-	borderColor := tui.ColorSlate600
+	out := label + "\n" + box
 	switch {
-	case f.focused:
-		borderColor = tui.ColorPrimary
 	case f.err != nil:
-		borderColor = tui.ColorError
+		out += "\n" + errStyle.Width(f.width).Render(tui.IconError+" "+f.scrubbed(f.err.Error()))
+	case f.focused && f.Help != "":
+		out += "\n" + helpStyle.Width(f.width).Render(f.Help)
 	}
-	inputStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(borderColor).
-		Padding(0, 1).
-		Width(contentWidth)
+	if f.Note != "" {
+		out += "\n" + f.Note
+	}
+	return out
+}
 
-	input := inputStyle.Render(f.input.View())
-
-	result := labelLine + "\n" + input
-
-	if f.err != nil {
-		errStyle := lipgloss.NewStyle().Foreground(tui.ColorError)
-		errText := strings.ToLower(f.err.Error())
-		// Scrub the raw value from password-field error messages so an
-		// interpolating validator can't leak it.
-		if f.Password {
-			if v := f.input.Value(); v != "" {
-				errText = strings.ReplaceAll(errText, strings.ToLower(v), "<redacted>")
-			}
+// scrubbed redacts the raw value out of msg for password fields so an
+// interpolating validator error can't leak it.
+func (f *InputField) scrubbed(msg string) string {
+	if f.Password {
+		if v := f.input.Value(); v != "" {
+			msg = strings.ReplaceAll(msg, v, "<redacted>")
 		}
-		result += "\n" + errStyle.Render(tui.IconError+" "+errText)
 	}
-
-	return result
+	return msg
 }
 
 var errRequired = errors.New("this field is required")

@@ -24,6 +24,7 @@ var FilesStepDefinition = wizard.StepDefinition{
 					Label:    "pull secret",
 					Default:  "~/pull-secret.json",
 					Help:     "path to okd pull-secret.json from red hat",
+					Width:    wizard.FieldWidthPath,
 					Required: true,
 					Validate: ValidateFilePath,
 					ConfigSet: func(cfg *config.Config, value string) error {
@@ -37,6 +38,7 @@ var FilesStepDefinition = wizard.StepDefinition{
 					Label:    "ssh public key",
 					Default:  "~/.ssh/id_ed25519.pub",
 					Help:     "path to ssh public key for node access",
+					Width:    wizard.FieldWidthPath,
 					Required: true,
 					Validate: ValidateFilePath,
 					ConfigSet: func(cfg *config.Config, value string) error {
@@ -55,6 +57,7 @@ var FilesStepDefinition = wizard.StepDefinition{
 					Label:     "web root",
 					Default:   "/var/www/html",
 					Help:      "directory to serve ignition files from",
+					Width:     wizard.FieldWidthPath,
 					Required:  true,
 					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.HTTPServer.Root = v }),
 					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.HTTPServer.Root }),

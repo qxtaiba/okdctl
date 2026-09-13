@@ -285,6 +285,25 @@ func TestSetIntSetBool(t *testing.T) {
 	}
 }
 
+func TestFieldWidth_Cols(t *testing.T) {
+	cases := []struct {
+		w     FieldWidth
+		avail int
+		want  int
+	}{
+		{FieldWidthAuto, 90, 32},
+		{FieldWidthNumber, 90, 12},
+		{FieldWidthPath, 90, 56},
+		{FieldWidthFull, 90, 90},
+		{FieldWidthPath, 50, 50},
+	}
+	for _, c := range cases {
+		if got := c.w.Cols(c.avail); got != c.want {
+			t.Errorf("FieldWidth(%d).Cols(%d) = %d, want %d", c.w, c.avail, got, c.want)
+		}
+	}
+}
+
 func newSpanTestForm() *MultiSectionForm {
 	return NewMultiSectionForm([]FormSection{
 		{
