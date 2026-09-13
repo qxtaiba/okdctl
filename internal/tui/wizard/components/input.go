@@ -113,10 +113,14 @@ func (f *InputField) Focus() tea.Cmd {
 
 // Blur removes focus, scrolls a long value back to its head so it reads
 // from the start while unfocused, and runs one validation pass so error
-// state is current when the field is rendered next.
+// state is current when the field is rendered next; the position save is
+// guarded on an actual focus->blur transition so InputGroup.updateFocus's
+// redundant re-blur of an already-blurred field can't collapse it to 0.
 func (f *InputField) Blur() {
+	if f.focused {
+		f.savedPos = f.input.Position()
+	}
 	f.focused = false
-	f.savedPos = f.input.Position()
 	f.input.SetCursor(0)
 	f.input.Blur()
 	_ = f.Validate()
