@@ -17,6 +17,10 @@ const (
 	ThemeHighContrast
 )
 
+// colorSlate500Hex is ColorSlate500's literal value, named so
+// SetDarkBackground can reuse it instead of re-spelling the hex.
+const colorSlate500Hex = "#64748B"
+
 // Palette — literal hex values kept stable across themes; setTheme
 // swaps the semantic aliases below.
 var (
@@ -45,7 +49,7 @@ var (
 	ColorSlate100 = lipgloss.Color("#F1F5F9")
 	ColorSlate300 = lipgloss.Color("#CBD5E1")
 	ColorSlate400 = lipgloss.Color("#94A3B8")
-	ColorSlate500 = lipgloss.Color("#64748B")
+	ColorSlate500 = lipgloss.Color(colorSlate500Hex)
 	ColorSlate600 = lipgloss.Color("#475569")
 	ColorSlate700 = lipgloss.Color("#334155")
 	ColorSlate900 = lipgloss.Color("#0F172A")
@@ -103,8 +107,31 @@ func highContrastRequested() bool {
 	return v == "1" || v == "true"
 }
 
+var darkBackground = true
+
+// IsDarkBackground reports whether the terminal is currently treated as dark-background.
+func IsDarkBackground() bool {
+	return darkBackground
+}
+
+// SetDarkBackground rebinds the muted colour tiers for a light- or dark-background terminal and rebuilds the base styles — not safe for concurrent use, so call it once, before rendering starts.
+func SetDarkBackground(dark bool) {
+	darkBackground = dark
+	if dark {
+		ColorTextDim = ColorSlate400
+		ColorSlate500 = lipgloss.Color(colorSlate500Hex)
+		ColorSlate700 = lipgloss.Color("#334155")
+	} else {
+		ColorTextDim = ColorSlate600
+		ColorSlate500 = lipgloss.Color(colorSlate500Hex)
+		ColorSlate700 = ColorSlate300
+	}
+	rebuildStyles()
+}
+
 func init() {
 	if highContrastRequested() {
 		setTheme(ThemeHighContrast)
 	}
+	rebuildStyles()
 }

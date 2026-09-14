@@ -62,7 +62,7 @@ func dottedKV(key, value string, keyColWidth int, opts dottedKVOpts) string {
 	keyStyle := lipgloss.NewStyle().Foreground(keyColor)
 	dotStyle := lipgloss.NewStyle().Foreground(ColorSlate700)
 
-	valueStyle := lipgloss.NewStyle().Foreground(ColorText)
+	valueStyle := lipgloss.NewStyle()
 	if opts.highlight {
 		valueStyle = lipgloss.NewStyle().Foreground(ColorAmber500).Bold(true)
 	}
@@ -98,7 +98,7 @@ func DottedKeyValueSubFull(key, value string, keyColWidth, totalWidth int) strin
 // KeyValueNote renders "key    text" — key padded to keyColWidth with no dot leaders, wrapping text under the value column across several lines when it doesn't fit.
 func KeyValueNote(key, text string, keyColWidth, totalWidth int) string {
 	keyStyle := lipgloss.NewStyle().Foreground(ColorSlate400)
-	valueStyle := lipgloss.NewStyle().Foreground(ColorText)
+	valueStyle := lipgloss.NewStyle()
 
 	if keyColWidth <= 0 {
 		keyColWidth = DefaultKeyColWidth
