@@ -1,0 +1,73 @@
+# Template for scripts/screenshot/run.sh: renders the Cluster Lifecycle
+# wizard ("okdctl node manage") against lifecycle.DemoHooks' static six-node
+# fixture and screenshots every screen. @W@/@H@/@NAME@ are substituted per
+# size preset by run.sh. The flow picks "remove worker" — the only operation
+# that reaches all seven screens, since the confirm screen only shows for a
+# plan that destroys a VM. Each "SCREEN" block is self-contained: the
+# wait/screenshot pair that opens it, then the keystrokes that complete it
+# and advance to the next one.
+Output out/@NAME@-lifecycle.txt
+Set Shell zsh
+Set FontSize 14
+Set Padding 0
+Set LineHeight 1.0
+Set LetterSpacing 1.0
+Set Width @W@
+Set Height @H@
+
+Hide
+Type `export PATH="$(dirname "$OKDCTL_DEMO_BIN"):$PATH" HOME="$OKDCTL_DEMO_HOME" OKDCTL_WIZARD_DEMO=1; cd "$OKDCTL_DEMO_CWD"; clear`
+Enter
+Show
+
+Type "okdctl node manage"
+Sleep 450ms
+Enter
+
+# ==================== SCREEN 1: op ====================
+Wait+Screen@10s /choose an operation/
+Screenshot out/@NAME@-lifecycle-op.png
+Down
+Sleep 350ms
+Down
+Sleep 350ms
+Enter
+Sleep 450ms
+
+# ==================== SCREEN 2: target ====================
+Wait+Screen@10s /worker to remove/
+Screenshot out/@NAME@-lifecycle-target.png
+Enter
+Sleep 450ms
+
+# ==================== SCREEN 3: params ====================
+Wait+Screen@10s /operation parameters/
+Screenshot out/@NAME@-lifecycle-params.png
+Enter
+Sleep 450ms
+
+# ==================== SCREEN 4: preview ====================
+Wait+Screen@10s /review the plan/
+Screenshot out/@NAME@-lifecycle-preview.png
+Enter
+Sleep 450ms
+
+# ==================== SCREEN 5: confirm ====================
+Wait+Screen@10s /confirm irreversible removal/
+Screenshot out/@NAME@-lifecycle-confirm.png
+Type "homelab"
+Sleep 350ms
+Enter
+
+# ==================== SCREEN 6: exec ====================
+# demoExecStepDelay paces the scripted event feed, so a short sleep after
+# landing catches the checklist mid-progress instead of already finished.
+Wait+Screen@10s /removing worker/
+Sleep 1200ms
+Screenshot out/@NAME@-lifecycle-exec.png
+
+# ==================== SCREEN 7: done ====================
+Wait+Screen@10s /worker removed/
+Screenshot out/@NAME@-lifecycle-done.png
+Enter
+Sleep 450ms
