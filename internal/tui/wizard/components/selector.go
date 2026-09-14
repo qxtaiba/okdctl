@@ -338,3 +338,31 @@ func (s *CompactSelector) View() string {
 
 	return strings.Join(lines, "\n")
 }
+
+// ViewInline renders the options as a single horizontal row of bulleted radios.
+func (s *CompactSelector) ViewInline() string {
+	selectedStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true)
+	unselectedStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate400)
+
+	parts := make([]string, len(s.options))
+	for i, opt := range s.options {
+		if i == s.selected {
+			parts[i] = selectedStyle.Render(tui.IconActive + " " + opt)
+		} else {
+			parts[i] = unselectedStyle.Render(tui.IconPending + " " + opt)
+		}
+	}
+
+	return strings.Join(parts, "   ")
+}
+
+// ArrowsAsVertical remaps a left/right key press to its up/down equivalent so a component built for vertical navigation can drive a horizontally-rendered selector.
+func ArrowsAsVertical(msg tea.KeyPressMsg) tea.KeyPressMsg {
+	switch msg.Code {
+	case tea.KeyLeft:
+		msg.Code = tea.KeyUp
+	case tea.KeyRight:
+		msg.Code = tea.KeyDown
+	}
+	return msg
+}

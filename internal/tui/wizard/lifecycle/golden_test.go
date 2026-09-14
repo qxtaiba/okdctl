@@ -1,6 +1,7 @@
 package lifecycle
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -120,6 +121,44 @@ func lifecycleScenarios() []lifecycleScenario {
 			seed: func(m *wizard.Model, st *State) {
 				st.Scope = node.ResizeScope{Role: nodetypes.RoleMaster}
 				m.Update(dryRunDoneMsg{plan: masterResizePlan()})
+			},
+		},
+		{
+			name: "preview_loading",
+			id:   StepIDPreview,
+			build: func() (*State, Hooks) {
+				return resizePreviewState(), Hooks{}
+			},
+		},
+		{
+			name: "preview_error",
+			id:   StepIDPreview,
+			build: func() (*State, Hooks) {
+				return resizePreviewState(), Hooks{}
+			},
+			seed: func(m *wizard.Model, _ *State) {
+				m.Update(dryRunDoneMsg{err: errors.New("plan safety gate refused the change")})
+			},
+		},
+		{
+			name: "preview_blockers",
+			id:   StepIDPreview,
+			build: func() (*State, Hooks) {
+				return &State{
+					Cfg: config.DefaultConfig(), Op: node.OpRemove,
+					Target: "homelab-worker2",
+				}, Hooks{}
+			},
+			seed: func(m *wizard.Model, st *State) {
+				// The jump through StepIDOp applies its default selection
+				// (resize) first; restore remove before the dry-run seeds.
+				st.Op = node.OpRemove
+				st.Target = "homelab-worker2"
+				m.Update(dryRunDoneMsg{plan: removeWorkerPlan()})
+				// Scroll past the node table so the narrow (80-col) golden
+				// shows the gate grid and the irreversible bar, not just
+				// the section the "preview" scenario already covers.
+				m.Update(tea.KeyPressMsg{Code: tea.KeyPgDown})
 			},
 		},
 		{

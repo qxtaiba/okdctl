@@ -11,6 +11,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
+	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
@@ -152,5 +153,111 @@ func TestPreviewBlocksEscWhileDryRunInFlight(t *testing.T) {
 	updated, _ := s.Update(dryRunDoneMsg{plan: masterResizePlan()})
 	if updated.(*PreviewStep).InterceptBack() {
 		t.Error("esc must work again once the dry-run finished")
+	}
+}
+
+func removePreviewPlan() *node.OpPlan {
+	return &node.OpPlan{
+		Op: node.OpRemove, Cluster: "homelab",
+		Nodes: []node.PlanNode{{
+			Name: "homelab-worker2", Role: nodetypes.RoleWorker,
+			TFAddress: "m.worker[2]", Action: terraform.PlanActionDelete,
+		}},
+	}
+}
+
+func TestPreviewPinnedFooterFollowsSelection(t *testing.T) {
+	st := &State{Cfg: config.DefaultConfig(), Op: node.OpRemove, Target: "homelab-worker2"}
+	s := previewWith(t, st, removePreviewPlan(), nil)
+
+	footer := s.PinnedFooter(100)
+	executeAt := strings.Index(footer, tui.IconActive+" execute removal")
+	backAt := strings.Index(footer, tui.IconPending+" back to parameters")
+	if executeAt < 0 || backAt < 0 || executeAt > backAt {
+		t.Errorf("pinned footer must lead with the selected action, got %q", footer)
+	}
+
+	pressActionDown(s)
+	footer = s.PinnedFooter(100)
+	if !strings.Contains(footer, tui.IconActive+" back to parameters") {
+		t.Errorf("pinned footer must track the selection after moving down, got %q", footer)
+	}
+
+	running := NewPreviewStep(&State{Cfg: config.DefaultConfig(), Op: node.OpResize}, Hooks{})
+	_ = running.Init()
+	if got := running.PinnedFooter(100); got != "" {
+		t.Errorf("pinned footer must be empty while the dry-run runs, got %q", got)
+	}
+}
+
+func TestPreviewBodyHasNoActionRadio(t *testing.T) {
+	s := previewWith(t, resizePreviewState(), masterResizePlan(), nil)
+	out := s.View(90, 60)
+	for _, unwanted := range []string{"execute resize", "back to parameters", "exit without changes"} {
+		if strings.Contains(out, unwanted) {
+			t.Errorf("preview body must not render the action radio, found %q in:\n%s", unwanted, out)
+		}
+	}
+}
+
+func TestPreviewGateGridColumns(t *testing.T) {
+	gates := GateRows(node.OpResize, nodetypes.RoleMaster, false, DiskNone)
+	if len(gates) != 7 {
+		t.Fatalf("expected 7 master resize gates, got %d: %v", len(gates), gates)
+	}
+
+	wide := renderGateGrid(gates, 100)
+	if len(wide) != 3 {
+		t.Fatalf("expected 3 rows at width 100, got %d:\n%s", len(wide), strings.Join(wide, "\n"))
+	}
+	if !strings.Contains(wide[0], "1 etcd health gate (pre)") || !strings.Contains(wide[0], "4 power-cycle vm") {
+		t.Errorf("row 1 at width 100 must carry columns 1 and 4, got %q", wide[0])
+	}
+
+	narrow := renderGateGrid(gates, 80)
+	if len(narrow) != 4 {
+		t.Fatalf("expected 4 rows at width 80, got %d:\n%s", len(narrow), strings.Join(narrow, "\n"))
+	}
+}
+
+func TestPreviewShortHelpNeverNil(t *testing.T) {
+	running := NewPreviewStep(&State{Cfg: config.DefaultConfig(), Op: node.OpResize}, Hooks{})
+	_ = running.Init()
+	help := running.ShortHelp()
+	if len(help) != 1 || help[0].Key != wizard.HelpCtrlC || help[0].Help != wizard.HelpQuit {
+		t.Errorf("running ShortHelp must be ctrl+c quit only, got %+v", help)
+	}
+
+	done := previewWith(t, resizePreviewState(), masterResizePlan(), nil)
+	help = done.ShortHelp()
+	want := []wizard.KeyBinding{
+		{Key: wizard.HelpLeftRight, Help: wizard.HelpChoose},
+		{Key: wizard.HelpEnter, Help: wizard.HelpConfirm},
+		{Key: wizard.HelpEsc, Help: wizard.HelpBack},
+		{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
+	}
+	if len(help) != len(want) {
+		t.Fatalf("done ShortHelp has %d bindings, want %d: %+v", len(help), len(want), help)
+	}
+	for i := range want {
+		if help[i] != want[i] {
+			t.Errorf("done ShortHelp[%d] = %+v, want %+v", i, help[i], want[i])
+		}
+	}
+}
+
+func TestPreviewIrreversibleBlockTwoLines(t *testing.T) {
+	s := previewWith(t, &State{Cfg: config.DefaultConfig(), Op: node.OpRemove, Target: "homelab-worker2"},
+		removePreviewPlan(), nil)
+	out := s.View(90, 60)
+
+	var barLines int
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, tui.IconBar) {
+			barLines++
+		}
+	}
+	if barLines != 2 {
+		t.Errorf("irreversible block must render as exactly two bar-prefixed lines, got %d in:\n%s", barLines, out)
 	}
 }

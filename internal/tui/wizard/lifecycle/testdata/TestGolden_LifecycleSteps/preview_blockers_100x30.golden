@@ -5,26 +5,26 @@
   │──────────────────────────────────────────────────────────────────────────────────────────────│  
   │  operation                                                                                   │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
-  │  cluster        homelab                                                                      │  
-  │  operation      resize masters                                                               │  
-  │  target memory  12288 → 24576 MiB per node                                                   │  
-  │  target cpu     unchanged                                                                    │  
-  │  disruption     each node is drained, then power-cycled (stop→start)                         │  
+  │  cluster     homelab                                                                         │  
+  │  operation   remove homelab-worker2                                                          │  
   │                                                                                              │  
   │  nodes — execution order                                                                     │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
   │  NODE             ROLE    ADDRESS      ACTION                                                │  
-  │  homelab-master0  master  m.master[0]  update                                                │  
+  │  homelab-worker2  worker  m.worker[2]  delete                                                │  
+  │    storage: 1 rook-ceph OSD(s) — data disk destroyed                                         │  
+  │    ingress: 1 router pod(s) here                                                             │  
   │                                                                                              │  
   │  gates per node                                                                              │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
-  │  1 etcd health gate (pre)    4 power-cycle vm            7 uncordon + ceph health ga…        │  
-  │  2 cordon + drain            5 wait for node ready                                           │  
-  │  3 terraform apply (in-place…6 etcd health gate (post)                                       │  
+  │  1 cordon + drain            3 delete kubernetes node                                        │  
+  │  2 terraform apply (destroy) 4 ceph health gate                                              │  
   │  ✓ plan gate passed — the safety gate allows exactly the listed changes                      │  
   │                                                                                              │  
+  │  ┃ irreversible                                                                              │  
+  │  ┃ destroys the listed VM(s) and their data disk; removed data cannot be recovered           │  
   │                                                                                              │  
   │───────────────────────────────────────────────────────────────────────────────── ▸ mycluster │  
-  │  ● execute resize   ○ back to parameters   ○ exit without changes              ←/→ choose …  │  
+  │  ● execute removal   ○ back to parameters   ○ exit without changes             ←/→ choose …  │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                     

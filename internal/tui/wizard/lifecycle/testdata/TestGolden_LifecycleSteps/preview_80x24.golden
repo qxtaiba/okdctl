@@ -3,7 +3,7 @@
   │ O K D C T L                                                              │  
   │ review the plan                 op · target · params · plan · run · done │  
   │──────────────────────────────────────────────────────────────────────────│  
-  │  [1] operation                                                           │  
+  │  operation                                                               │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
   │  cluster        homelab                                                  │  
   │  operation      resize masters                                           │  
@@ -11,14 +11,14 @@
   │  target cpu     unchanged                                                │  
   │  disruption     each node is drained, then power-cycled (stop→start)     │  
   │                                                                          │  
-  │  [2] nodes — execution order                                             │  
+  │  nodes — execution order                                                 │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
-  │  homelab-master0  master  m.master[0]  [update]                          │  
+  │  NODE             ROLE    ADDRESS      ACTION                            │  
+  │  homelab-master0  master  m.master[0]  update                            │  
   │                                                                          │  
-  │  [3] gates per node                                                      │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
+  │  gates per node                                                          │  
   │                                                                          │  
   │───────────────── ↑ ↓  scroll down for more ───────────────── ▸ mycluster │  
-  │  ↑↓ select action • enter confirm • esc back • ctrl+c quit …             │  
+  │  ● execute resize   ○ back to parameters   ○ exit without changes     …  │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

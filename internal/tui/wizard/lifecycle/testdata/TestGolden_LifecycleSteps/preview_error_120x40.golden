@@ -3,25 +3,25 @@
   │ O K D C T L                                                                                                      │  
   │ review the plan                                                         op · target · params · plan · run · done │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
-  │  operation                                                                                                       │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
-  │  cluster        homelab                                                                                          │  
-  │  operation      resize masters                                                                                   │  
-  │  target memory  12288 → 24576 MiB per node                                                                       │  
-  │  target cpu     unchanged                                                                                        │  
-  │  disruption     each node is drained, then power-cycled (stop→start)                                             │  
+  │  dry-run failed                                                                                                  │  
   │                                                                                                                  │  
-  │  nodes — execution order                                                                                         │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
-  │  NODE             ROLE    ADDRESS      ACTION                                                                    │  
-  │  homelab-master0  master  m.master[0]  update                                                                    │  
+  │  plan safety gate refused the change                                                                             │  
   │                                                                                                                  │  
-  │  gates per node                                                                                                  │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
-  │  1 etcd health gate (pre)    4 power-cycle vm            7 uncordon + ceph health ga…                            │  
-  │  2 cordon + drain            5 wait for node ready                                                               │  
-  │  3 terraform apply (in-place…6 etcd health gate (post)                                                           │  
-  │  ✓ plan gate passed — the safety gate allows exactly the listed changes                                          │  
+  │  esc to go back and adjust                                                                                       │  
+  │                                                                                                                  │  
+  │                                                                                                                  │  
+  │                                                                                                                  │  
+  │                                                                                                                  │  
+  │                                                                                                                  │  
+  │                                                                                                                  │  
+  │                                                                                                                  │  
+  │                                                                                                                  │  
+  │                                                                                                                  │  
+  │                                                                                                                  │  
+  │                                                                                                                  │  
+  │                                                                                                                  │  
+  │                                                                                                                  │  
+  │                                                                                                                  │  
   │                                                                                                                  │  
   │                                                                                                                  │  
   │                                                                                                                  │  
@@ -35,6 +35,6 @@
   │                                                                                                                  │  
   │                                                                                                                  │  
   │───────────────────────────────────────────────────────────────────────────────────────────────────── ▸ mycluster │  
-  │  ● execute resize   ○ back to parameters   ○ exit without changes       ←/→ choose • enter confirm • esc back …  │  
+  │  ←/→ choose • enter confirm • esc back • ctrl+c quit                                                             │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                                         
