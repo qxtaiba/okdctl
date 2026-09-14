@@ -46,6 +46,7 @@ func configureScenarios() []configureScenario {
 	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
 	downKey := tea.KeyPressMsg{Code: 'j', Text: "j"}
 	enterKey := tea.KeyPressMsg{Code: tea.KeyEnter}
+	endKey := tea.KeyPressMsg{Code: tea.KeyEnd}
 
 	return []configureScenario{
 		{name: "welcome_fresh", id: wizard.StepIDWelcome},
@@ -90,6 +91,37 @@ func configureScenarios() []configureScenario {
 				m.CurrentStep().(*ReviewStep).SetConfig(m.Config())
 			},
 			interact: downKey,
+		},
+		{
+			// Populates node placement and enables an addon on top of the
+			// default config so every reviewJumpOrder section renders,
+			// pinning the full 1-8 contiguous jump legend.
+			name: "review-with-8-targets",
+			id:   wizard.StepIDReview,
+			seed: func(m *wizard.Model) {
+				cfg := m.Config()
+				cfg.Provider.Proxmox.ControlPlaneNodes = []string{"pve1", "pve2", "pve3"}
+				cfg.Provider.Proxmox.WorkerNodes = []string{"pve1", "pve2", "pve3"}
+				flux := cfg.Addons["flux"]
+				flux.Enabled = true
+				cfg.Addons["flux"] = flux
+				m.CurrentStep().(*ReviewStep).SetConfig(cfg)
+			},
+			interact: endKey,
+		},
+		{
+			// Same as review-with-8-targets but leaves every addon disabled
+			// (the default), pinning that the addons-hidden gap renumbers
+			// advanced to [7] rather than leaving [8] behind it.
+			name: "review-with-addons-hidden",
+			id:   wizard.StepIDReview,
+			seed: func(m *wizard.Model) {
+				cfg := m.Config()
+				cfg.Provider.Proxmox.ControlPlaneNodes = []string{"pve1", "pve2", "pve3"}
+				cfg.Provider.Proxmox.WorkerNodes = []string{"pve1", "pve2", "pve3"}
+				m.CurrentStep().(*ReviewStep).SetConfig(cfg)
+			},
+			interact: endKey,
 		},
 	}
 }
