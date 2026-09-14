@@ -13,6 +13,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
+	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
@@ -110,6 +111,36 @@ func lifecycleScenarios() []lifecycleScenario {
 			id:   StepIDParams,
 			build: func() (*State, Hooks) {
 				return &State{Cfg: config.DefaultConfig(), Op: node.OpResize}, Hooks{}
+			},
+		},
+		{
+			// The skip-drain selection and its amber warning note, which
+			// only render once the drain-mode field carries drainModeSkip.
+			name: "params_drain_skip",
+			id:   StepIDParams,
+			build: func() (*State, Hooks) {
+				cfg := config.DefaultConfig()
+				cfg.Cluster.Name = "homelab"
+				return &State{Cfg: cfg, Op: node.OpRemove, Target: "homelab-worker2"}, Hooks{}
+			},
+			seed: func(m *wizard.Model, st *State) {
+				// The jump through StepIDOp applies its default selection
+				// (resize) first; restore remove, then rebuild the form
+				// for it (ParamsStep.Init lazily rebuilds and re-focuses
+				// whenever the op changed). Remove's disruption section —
+				// drain mode, timeout, force storage — has no sizing
+				// section ahead of it, so drain mode is already focused.
+				st.Op = node.OpRemove
+				p, ok := m.CurrentStep().(*ParamsStep)
+				if !ok {
+					return
+				}
+				p.Init()
+				m.Update(tea.KeyPressMsg{Code: tea.KeyRight})
+				// Scroll to the bottom so the narrow (80-col) golden shows
+				// the amber warning View appends below the form, not just
+				// the drain-mode selection.
+				m.Update(tea.KeyPressMsg{Code: tea.KeyEnd})
 			},
 		},
 		{
@@ -294,6 +325,18 @@ func lifecycleScenarios() []lifecycleScenario {
 				return st, Hooks{}
 			},
 		},
+		{
+			// The failure frame: render.ErrorCard inside the wizard chrome,
+			// shown once st.Result carries the backend error.
+			name: "done_failure",
+			id:   StepIDDone,
+			build: func() (*State, Hooks) {
+				st := doneState()
+				st.Elapsed = 90 * time.Second
+				st.Result = errors.New("etcd health gate (post-master0) failed: quorum lost")
+				return st, Hooks{}
+			},
+		},
 	}
 }
 
@@ -310,6 +353,12 @@ func TestGolden_LifecycleSteps(t *testing.T) {
 	for _, sz := range lifecycleGoldenSizes {
 		for _, sc := range lifecycleScenarios() {
 			t.Run(fmt.Sprintf("%s_%dx%d", sc.name, sz.w, sz.h), func(t *testing.T) {
+				// NewFlowModel seeds its initial size from the process's
+				// real terminal (pipes under go test, or CI) rather than
+				// sz; pin it so the golden is independent of that.
+				tui.SetTerminalWidth(sz.w)
+				t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
 				st, hooks := sc.build()
 				m := wizard.NewFlowModel(NewSteps(st, hooks), st.Cfg, Chrome())
 

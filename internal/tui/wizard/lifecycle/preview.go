@@ -422,14 +422,18 @@ func (s *PreviewStep) PinnedFooter(width int) string {
 	return lipgloss.NewStyle().MaxWidth(width).Render(s.actions.ViewInline())
 }
 
-// ShortHelp returns the preview help bar: ctrl+c quit only while the dry-run
-// runs (esc is intercepted, so advertising it would lie), or the full
-// action/navigation bar once the plan is ready.
+// ShortHelp returns the preview help bar: with no action selector built
+// (still running, or the dry-run failed) it advertises only the keys
+// Update actually handles there — esc-back once InterceptBack releases it,
+// ctrl+c quit always — never the choose/confirm keys the selector alone
+// drives; with a selector, the full action/navigation bar.
 func (s *PreviewStep) ShortHelp() []wizard.KeyBinding {
-	if s.phase == previewRunning {
-		return []wizard.KeyBinding{
-			{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
+	if s.actions == nil {
+		help := []wizard.KeyBinding{}
+		if s.phase != previewRunning {
+			help = append(help, wizard.KeyBinding{Key: wizard.HelpEsc, Help: wizard.HelpBack})
 		}
+		return append(help, wizard.KeyBinding{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit})
 	}
 	return []wizard.KeyBinding{
 		{Key: wizard.HelpLeftRight, Help: wizard.HelpChoose},

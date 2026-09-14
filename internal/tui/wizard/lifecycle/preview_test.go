@@ -246,6 +246,23 @@ func TestPreviewShortHelpNeverNil(t *testing.T) {
 	}
 }
 
+func TestPreviewShortHelpOnDryRunErrorOmitsSelectorKeys(t *testing.T) {
+	failed := previewWith(t, resizePreviewState(), nil, errors.New("plan safety gate refused the change"))
+	help := failed.ShortHelp()
+	want := []wizard.KeyBinding{
+		{Key: wizard.HelpEsc, Help: wizard.HelpBack},
+		{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
+	}
+	if len(help) != len(want) {
+		t.Fatalf("error ShortHelp has %d bindings, want %d: %+v", len(help), len(want), help)
+	}
+	for i := range want {
+		if help[i] != want[i] {
+			t.Errorf("error ShortHelp[%d] = %+v, want %+v", i, help[i], want[i])
+		}
+	}
+}
+
 func TestPreviewIrreversibleBlockTwoLines(t *testing.T) {
 	s := previewWith(t, &State{Cfg: config.DefaultConfig(), Op: node.OpRemove, Target: "homelab-worker2"},
 		removePreviewPlan(), nil)
