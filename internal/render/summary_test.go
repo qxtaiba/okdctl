@@ -87,6 +87,21 @@ func TestFailureSummary(t *testing.T) {
 	}
 }
 
+func TestBuilderNoteAndBulletFit(t *testing.T) {
+	tui.SetTerminalWidth(60)
+	t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+	sb := NewBuilder()
+	sb.Section("details")
+	sb.Note("about", strings.Repeat("word ", 40))
+	sb.Bullet(strings.Repeat("bullet-item ", 30))
+	sb.Para(strings.Repeat("paragraph-text ", 30))
+	sb.Newline()
+
+	out := "\n" + tui.BoxedSectionCompact(sb.String(), "note and bullet", tui.DefaultBoxWidth) + "\n"
+	tuitest.AssertFits(t, out, 60, 0)
+}
+
 func TestPostDeploySummaryGoldenAtWidths(t *testing.T) {
 	cfg := config.DefaultConfig()
 	result := &postinstall.Result{KubeVipIP: "192.168.1.50", BootstrapCleaned: true, DNSDeployed: true}
