@@ -177,7 +177,7 @@ func getTerminalSize() (width, height int) {
 	if err != nil {
 		h = 24
 	}
-	return tui.TerminalWidth(80), h
+	return tui.TerminalWidth(), h
 }
 
 // Init implements tea.Model; it fires the first step's Init command.
