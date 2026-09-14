@@ -5,6 +5,7 @@
 package wizard
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -17,6 +18,11 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
 )
+
+// ErrFixHighlighted is the status-row message shown when enter is pressed
+// with invalid fields; FocusFirstInvalid has already moved focus and
+// scrolled to the first one.
+var ErrFixHighlighted = errors.New("fix the highlighted fields to continue")
 
 // FieldType classifies how a FieldDefinition is rendered and validated.
 type FieldType int
@@ -36,17 +42,49 @@ type ConfigSetter func(cfg *config.Config, value string) error
 // ConfigGetter reads a field's value from a Config.
 type ConfigGetter func(cfg *config.Config) string
 
+// FieldWidth classifies how wide a field's input box renders, in columns,
+// independent of the section's full available width.
+type FieldWidth int
+
+// Field width classes for data-driven step definitions.
+const (
+	FieldWidthAuto   FieldWidth = 0 // zero value — 32 columns
+	FieldWidthNumber FieldWidth = 12
+	FieldWidthPath   FieldWidth = 56
+	FieldWidthFull   FieldWidth = -1 // the whole inner width
+)
+
+// Cols resolves w to a concrete box width in columns, clamped to avail;
+// FieldWidthFull always returns avail itself.
+func (w FieldWidth) Cols(avail int) int {
+	if w == FieldWidthFull {
+		return avail
+	}
+	if w == FieldWidthAuto {
+		return min(32, avail)
+	}
+	return min(int(w), avail)
+}
+
+// fieldWidthSentinel stands in for "no limit" when buildFormField resolves
+// a field's nominal box width at construction time, before the real
+// available width is known; InputField's own min(boxWidth, width) clamp at
+// render time still bounds it correctly on every resize.
+const fieldWidthSentinel = 1 << 20
+
 // FieldDefinition declares a single wizard form field and how it binds to
 // the Config struct.
 type FieldDefinition struct {
-	Key      string
-	Label    string
-	Default  string
-	Help     string
-	Type     FieldType
-	Options  []string // used by FieldTypeSelect and FieldTypeMultiSelect
-	Required bool
-	Validate func(string) error
+	Key         string
+	Label       string
+	Default     string
+	Placeholder string
+	Width       FieldWidth
+	Help        string
+	Type        FieldType
+	Options     []string // used by FieldTypeSelect and FieldTypeMultiSelect
+	Required    bool
+	Validate    func(string) error
 
 	ConfigSet ConfigSetter
 	ConfigGet ConfigGetter
@@ -54,9 +92,10 @@ type FieldDefinition struct {
 
 // SectionDefinition groups related fields under a shared title/note.
 type SectionDefinition struct {
-	Title  string
-	Note   string // e.g. prerequisites, shown below the title
-	Fields []FieldDefinition
+	Title   string
+	Note    string // e.g. prerequisites, shown below the title
+	Fields  []FieldDefinition
+	Warning func(values map[string]string) string // non-empty return renders a warning block under the section's fields
 }
 
 // StepDefinition is the declarative description of a data-driven wizard step.
@@ -67,20 +106,33 @@ type StepDefinition struct {
 	Description  string
 	Sections     []SectionDefinition
 
-	Validate     func(values map[string]string) error
-	Apply        func(step *DataDrivenStep, cfg *config.Config) error // runs after auto-binding
-	ShouldShow   func(*config.Config) bool
-	ExtraContent func(values map[string]string, width int) string
+	Validate          func(values map[string]string) error
+	Apply             func(step *DataDrivenStep, cfg *config.Config) error // runs after auto-binding
+	ShouldShow        func(*config.Config) bool
+	ExtraContent      func(values map[string]string, width int) string
+	ExtraContentTitle string // info card title used when ExtraContent renders non-empty content
 }
 
 // FormSection pairs a titled section with its built InputGroup — the
 // runtime counterpart to SectionDefinition that MultiSectionForm navigates across.
 type FormSection struct {
-	Title string
-	Note  string // e.g. prerequisites, shown below the title
-	Group *components.InputGroup
+	Title   string
+	Note    string // e.g. prerequisites, shown below the title
+	Group   *components.InputGroup
+	Warning func() string // non-empty return renders a warning block under the section's fields
 }
 
+func (s *FormSection) warningText() string {
+	if s.Warning == nil {
+		return ""
+	}
+	return s.Warning()
+}
+
+// isComplete reports whether every field in the section is non-empty and
+// passes Check, using the pure check rather than Validate so computing a
+// section-complete indicator on every render never paints error state onto
+// a field the user hasn't touched.
 func (s *FormSection) isComplete() bool {
 	if s.Group == nil {
 		return false
@@ -89,7 +141,7 @@ func (s *FormSection) isComplete() bool {
 		if field.Value() == "" {
 			return false
 		}
-		if err := field.Validate(); err != nil {
+		if err := field.Check(); err != nil {
 			return false
 		}
 	}
@@ -135,6 +187,16 @@ func (f *MultiSectionForm) currentGroup() *components.InputGroup {
 		return nil
 	}
 	return f.sections[f.currentSection].Group
+}
+
+// FocusedField returns the field owning focus in the current section, or nil
+// when the form has no sections or the current section has no group.
+func (f *MultiSectionForm) FocusedField() components.FormField {
+	group := f.currentGroup()
+	if group == nil {
+		return nil
+	}
+	return group.Field(group.FocusIndex())
 }
 
 // Init focuses the first input group so the user can type immediately.
@@ -248,18 +310,56 @@ func (f *MultiSectionForm) FocusedSpan() (LineSpan, bool) {
 	return spans[index], true
 }
 
-// Validate returns the first error from any section's group validation, or nil
-// when every field is valid.
-func (f *MultiSectionForm) Validate() error {
+// Validate returns every error from every section's group, running Check
+// (via each field's Validate) across the whole form rather than stopping at
+// the first invalid section, so every invalid field's error is current for
+// View after a submission attempt.
+func (f *MultiSectionForm) Validate() []error {
+	var errs []error
 	for _, section := range f.sections {
 		if section.Group == nil {
 			continue
 		}
-		if errs := section.Group.Validate(); len(errs) > 0 {
-			return errs[0]
+		errs = append(errs, section.Group.Validate()...)
+	}
+	return errs
+}
+
+// TouchAll marks every field in every section touched and records its
+// current error, ahead of Validate, so enter's forced submission attempt
+// paints every field's real state rather than only the ones the user has
+// visited.
+func (f *MultiSectionForm) TouchAll() {
+	for _, section := range f.sections {
+		if section.Group != nil {
+			section.Group.TouchAll()
 		}
 	}
-	return nil
+}
+
+// FocusFirstInvalid moves focus to the first field (scanning sections in
+// order) that fails Check, and returns a command that runs any focus side
+// effect followed by FocusChangedMsg so the wizard re-syncs its viewport
+// and scrolls the field into view.
+func (f *MultiSectionForm) FocusFirstInvalid() tea.Cmd {
+	for si := range f.sections {
+		group := f.sections[si].Group
+		if group == nil {
+			continue
+		}
+		for fi, field := range group.Fields() {
+			if field.Check() == nil {
+				continue
+			}
+			if cur := f.currentGroup(); cur != nil {
+				cur.Blur()
+			}
+			f.currentSection = si
+			group.SetFocusIndex(fi)
+			return tea.Batch(group.Focus(), focusChanged)
+		}
+	}
+	return focusChanged
 }
 
 // innerWidth is the width left to a section's fields inside its horizontal padding.
@@ -267,8 +367,9 @@ func (f *MultiSectionForm) innerWidth(width int) int {
 	return max(width-4, 40)
 }
 
-// sectionHead renders section i's status indicator, title, and optional note.
-func (f *MultiSectionForm) sectionHead(i int) string {
+// sectionHead renders section i's status indicator, title, and optional
+// note, wrapping the note to innerWidth.
+func (f *MultiSectionForm) sectionHead(i, innerWidth int) string {
 	section := &f.sections[i]
 
 	var indicator string
@@ -281,9 +382,9 @@ func (f *MultiSectionForm) sectionHead(i int) string {
 		indicator = formViewStyles.pendingRender
 	}
 
-	head := indicator + " " + formViewStyles.sectionHeader.Render(strings.ToLower(section.Title))
+	head := indicator + " " + formViewStyles.sectionHeader.Render(section.Title)
 	if section.Note != "" {
-		head += "\n" + formViewStyles.note.Render(section.Note)
+		head += "\n" + formViewStyles.note.Width(innerWidth).Render(section.Note)
 	}
 	return head
 }
@@ -319,12 +420,16 @@ func (f *MultiSectionForm) View(width int) string {
 		}
 		group.SetWidth(innerWidth)
 
-		_ = emit(f.sectionHead(i))
+		_ = emit(f.sectionHead(i, innerWidth))
 
 		views := group.FieldViews()
 		f.spans[i] = make([]LineSpan, len(views))
 		for j, view := range views {
 			f.spans[i][j] = emit(view)
+		}
+
+		if w := f.sections[i].warningText(); w != "" {
+			_ = emit(formViewStyles.warning.Width(innerWidth).Render(tui.IconWarning + " " + w))
 		}
 	}
 
@@ -349,8 +454,9 @@ type DataDrivenStep struct {
 	form *MultiSectionForm
 
 	// customExtraContent, when non-nil, overrides definition.ExtraContent (set
-	// via WithExtraContentFunc).
-	customExtraContent func(width int) string
+	// via WithExtraContentFunc); customExtraContentTitle is its info card title.
+	customExtraContent      func(width int) string
+	customExtraContentTitle string
 }
 
 // NewDataDrivenStep builds a DataDrivenStep from a StepDefinition.
@@ -375,10 +481,16 @@ func NewDataDrivenStep(def *StepDefinition) *DataDrivenStep {
 			}
 		}
 
+		var warning func() string
+		if sectionDef.Warning != nil {
+			warning = func() string { return sectionDef.Warning(step.values()) }
+		}
+
 		sections = append(sections, FormSection{
-			Title: sectionDef.Title,
-			Note:  sectionDef.Note,
-			Group: components.NewInputGroup(fields...),
+			Title:   sectionDef.Title,
+			Note:    sectionDef.Note,
+			Group:   components.NewInputGroup(fields...),
+			Warning: warning,
 		})
 	}
 
@@ -413,18 +525,26 @@ func buildFormField(def *FieldDefinition) components.FormField {
 		if def.Default != "" {
 			sf.SetDefault(def.Default)
 		}
+		if def.Width != FieldWidthAuto {
+			sf.SetBoxWidth(def.Width.Cols(fieldWidthSentinel))
+		}
 		return sf
 
 	default:
 		var field *components.InputField
 		if def.Type == FieldTypePassword {
-			field = components.NewPasswordField(def.Label, def.Default)
+			field = components.NewPasswordField(def.Label, "")
 		} else {
-			field = components.NewInputField(def.Label, def.Default)
+			field = components.NewInputField(def.Label, "")
+		}
+		field.SetPlaceholder(def.Placeholder)
+		if def.Default != "" {
+			field.SetDefault(def.Default)
 		}
 		field.Required = def.Required
 		field.Help = def.Help
 		field.Validator = def.Validate
+		field.SetBoxWidth(def.Width.Cols(fieldWidthSentinel))
 		return field
 	}
 }
@@ -476,20 +596,32 @@ func (s *DataDrivenStep) values() map[string]string {
 	return out
 }
 
-// LoadFromConfig seeds field values from cfg using each field's ConfigGet.
-func (s *DataDrivenStep) LoadFromConfig(cfg *config.Config) {
+// LoadFromConfig seeds field values from cfg using each field's ConfigGet;
+// when configExists is false, cfg is a synthetic defaults-only seed (e.g.
+// config.DefaultConfig(), not a real saved file), so a zero-value read
+// leaves a field's own constructed default in place instead of wiping it
+// (a gap in DefaultConfig isn't an intentional blank), while configExists
+// true trusts cfg as authoritative and clears a field on a real blank.
+func (s *DataDrivenStep) LoadFromConfig(cfg *config.Config, configExists bool) {
 	for sIdx := range s.definition.Sections {
 		for fIdx := range s.definition.Sections[sIdx].Fields {
 			fieldDef := &s.definition.Sections[sIdx].Fields[fIdx]
-			if fieldDef.ConfigGet != nil {
-				s.setValue(fieldDef.Key, fieldDef.ConfigGet(cfg))
+			if fieldDef.ConfigGet == nil {
+				continue
 			}
+			value := fieldDef.ConfigGet(cfg)
+			if value == "" && !configExists {
+				continue
+			}
+			s.setValue(fieldDef.Key, value)
 		}
 	}
 }
 
-// WithExtraContentFunc overrides the definition's ExtraContent with fn.
-func (s *DataDrivenStep) WithExtraContentFunc(fn func(step *DataDrivenStep, width int) string) *DataDrivenStep {
+// WithExtraContentFunc overrides the definition's ExtraContent with fn,
+// rendered under the given info card title.
+func (s *DataDrivenStep) WithExtraContentFunc(title string, fn func(step *DataDrivenStep, width int) string) *DataDrivenStep {
+	s.customExtraContentTitle = title
 	s.customExtraContent = func(width int) string {
 		return fn(s, width)
 	}
@@ -512,24 +644,40 @@ func (s *DataDrivenStep) SetFocused(focused bool) {
 	s.form.Blur()
 }
 
-// ShortHelp returns the key bindings shown in the step's help footer.
+// ShortHelp returns the key bindings shown in the step's help footer, plus
+// any key hints the focused field contributes.
 func (s *DataDrivenStep) ShortHelp() []KeyBinding {
-	return []KeyBinding{
+	bindings := []KeyBinding{
 		{Key: "↑↓/tab", Help: HelpNavigate},
 		{Key: HelpEnter, Help: HelpContinue},
 		{Key: HelpEsc, Help: HelpBack},
 	}
+	if h, ok := s.form.FocusedField().(components.KeyHinter); ok {
+		for _, hint := range h.KeyHints() {
+			bindings = append(bindings, KeyBinding{Key: hint.Key, Help: hint.Help})
+		}
+	}
+	return bindings
 }
 
-// Update forwards input to the embedded form and, on enter, runs
-// definition-aware validation before emitting StepCompleteMsg.
+// Update forwards input to the embedded form and, on enter, touches and
+// validates every field (scrolling to and reporting the first invalid one
+// on failure) before running definition-aware validation and emitting
+// StepCompleteMsg.
 func (s *DataDrivenStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 	cmd, enterPressed := s.form.Update(msg)
 	if !enterPressed {
 		return s, cmd
 	}
-	if err := s.Validate(); err != nil {
-		return s, func() tea.Msg { return ErrorSetMsg{Error: err} }
+
+	s.form.TouchAll()
+	if errs := s.form.Validate(); len(errs) > 0 {
+		return s, tea.Batch(s.form.FocusFirstInvalid(), func() tea.Msg { return ErrorSetMsg{Error: ErrFixHighlighted} })
+	}
+	if s.definition.Validate != nil {
+		if err := s.definition.Validate(s.values()); err != nil {
+			return s, func() tea.Msg { return ErrorSetMsg{Error: err} }
+		}
 	}
 	return s, func() tea.Msg {
 		return StepCompleteMsg{StepID: s.ID()}
@@ -539,8 +687,8 @@ func (s *DataDrivenStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 // Validate runs the form's field validation, then the step-level Validate
 // function if the definition provides one.
 func (s *DataDrivenStep) Validate() error {
-	if err := s.form.Validate(); err != nil {
-		return err
+	if errs := s.form.Validate(); len(errs) > 0 {
+		return errs[0]
 	}
 	if s.definition.Validate != nil {
 		return s.definition.Validate(s.values())
@@ -591,6 +739,7 @@ var formViewStyles = struct {
 	activeRender    string
 	pendingRender   string
 	note            lipgloss.Style
+	warning         lipgloss.Style
 }{
 	sectionHeader: lipgloss.NewStyle().
 		Foreground(tui.ColorCyan500).
@@ -612,24 +761,36 @@ var formViewStyles = struct {
 		Foreground(tui.ColorSlate500).
 		Italic(true).
 		PaddingLeft(2),
+	warning: lipgloss.NewStyle().
+		Foreground(tui.ColorWarning),
 }
 
 // View renders the step's sections via the embedded form and appends any
-// configured extra content.
+// configured extra content as an info card.
 func (s *DataDrivenStep) View(width, height int) string {
 	s.SetSize(width, height)
 
 	var content strings.Builder
 	content.WriteString(s.form.View(width))
 
+	var title, body string
 	switch {
 	case s.customExtraContent != nil:
-		content.WriteString(s.customExtraContent(width))
+		title, body = s.customExtraContentTitle, s.customExtraContent(width)
 	case s.definition.ExtraContent != nil:
-		content.WriteString(s.definition.ExtraContent(s.values(), width))
+		title, body = s.definition.ExtraContentTitle, s.definition.ExtraContent(s.values(), width)
+	}
+	if body != "" {
+		content.WriteString("\n\n")
+		content.WriteString(RenderInfoCard(title, body, width))
 	}
 
 	return content.String()
+}
+
+// RenderInfoCard renders body as a bordered card titled title, exactly width columns wide.
+func RenderInfoCard(title, body string, width int) string {
+	return tui.Card(title, lipgloss.Wrap(body, width-4, ""), width, tui.ColorSlate600)
 }
 
 // SetString adapts a plain string setter into a ConfigSetter.

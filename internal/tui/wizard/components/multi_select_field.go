@@ -10,9 +10,23 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-// MultiSelectField renders a checklist; Value/SetValue use a comma-separated
-// format. Space toggles, j/k moves — up/down are reserved by DataDrivenStep
-// for navigation, same constraint as SelectField's left/right.
+// KeyHint is a single key/help pair a field contributes to the step's footer
+// while it holds focus.
+type KeyHint struct {
+	Key  string
+	Help string
+}
+
+// KeyHinter is implemented by fields whose interaction keys are shown in the
+// step's footer ribbon rather than inline in the field's own label.
+type KeyHinter interface {
+	KeyHints() []KeyHint
+}
+
+// MultiSelectField renders a checklist of chips in the shared field box;
+// Value/SetValue use a comma-separated format. Space toggles the current
+// chip; left/right/h/l/j/k move the cursor — up/down are reserved by
+// DataDrivenStep for navigation, same constraint as SelectField's left/right.
 type MultiSelectField struct {
 	Label   string
 	Help    string
@@ -21,6 +35,7 @@ type MultiSelectField struct {
 	selected []bool
 	cursor   int
 	focused  bool
+	width    int
 }
 
 // NewMultiSelectField returns a multi-select field with options unchecked.
@@ -69,15 +84,31 @@ func (f *MultiSelectField) Blur() {
 	f.focused = false
 }
 
-// SetWidth is a no-op: the field width is governed by option labels.
-func (f *MultiSelectField) SetWidth(_ int) {}
+// SetWidth records the width available to the field's box and help row.
+func (f *MultiSelectField) SetWidth(width int) {
+	f.width = width
+}
 
-// Validate always returns nil — any non-empty selection is valid.
-func (f *MultiSelectField) Validate() error {
+// Check always returns nil — any non-empty selection is valid.
+func (f *MultiSelectField) Check() error {
 	return nil
 }
 
-// Update handles j/k cursor movement and space to toggle selection.
+// Validate always returns nil — any non-empty selection is valid.
+func (f *MultiSelectField) Validate() error {
+	return f.Check()
+}
+
+// KeyHints returns the field's footer hints, shown while it holds focus.
+func (f *MultiSelectField) KeyHints() []KeyHint {
+	return []KeyHint{
+		{Key: "space", Help: "toggle"},
+		{Key: "←/→", Help: "move"},
+	}
+}
+
+// Update handles left/right/h/l/j/k cursor movement and space to toggle the
+// chip under the cursor.
 func (f *MultiSelectField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 	if !f.focused || len(f.Options) == 0 {
 		return f, nil
@@ -85,12 +116,12 @@ func (f *MultiSelectField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 
 	if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
 		switch {
-		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("k"))):
+		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("left", "h", "k"))):
 			f.cursor--
 			if f.cursor < 0 {
 				f.cursor = len(f.Options) - 1
 			}
-		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("j"))):
+		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("right", "l", "j"))):
 			f.cursor++
 			if f.cursor >= len(f.Options) {
 				f.cursor = 0
@@ -105,41 +136,91 @@ func (f *MultiSelectField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 	return f, nil
 }
 
-// View renders the label and checkbox list with the cursor highlighted.
+// View renders the label and a bordered box of chips, wrapped to the box's
+// inner width, with the cursor preceding the current chip.
 func (f *MultiSelectField) View() string {
-	labelStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate300)
-	hintStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
-	cursorStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true)
+	label := labelStyle.Render(f.Label)
+
+	outer := f.width
+	content := f.chipsContent(max(outer-4, 1))
+	box := fieldBox(content, outer, f.focused, false)
+
+	out := label + "\n" + box
+	if f.focused && f.Help != "" {
+		out += "\n" + helpStyle.Width(f.width).Render(f.Help)
+	}
+	return out
+}
+
+// chipCoreWidth is the width of every chip's cursor ("> " or "  ") plus
+// checkbox ("[✓]" or "[ ]") plus the space before the option name.
+const chipCoreWidth = 2 + 3 + 1
+
+// chipsContent renders every option as a cursor+checkbox+name chip, wrapping
+// at chip boundaries to a new row whenever the next chip would push the row
+// past innerWidth; a chip that alone would exceed innerWidth has its name
+// ellipsized to fit one row, since fieldBox's own lipgloss Width() re-wraps
+// (mid-word) any content line it receives that is still too wide.
+func (f *MultiSelectField) chipsContent(innerWidth int) string {
 	checkedStyle := lipgloss.NewStyle().Foreground(tui.ColorSuccess)
 	uncheckedStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
+	cursorStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true)
 
-	labelText := strings.ToLower(f.Label)
-	labelLine := labelStyle.Render(labelText)
-	if f.Help != "" {
-		labelLine += " " + hintStyle.Render("("+strings.ToLower(f.Help)+")")
-	}
-	if f.focused {
-		labelLine += " " + hintStyle.Render("(j/k navigate, space toggle)")
-	}
-
-	var lines []string
-	lines = append(lines, labelLine)
+	var rows []string
+	var row strings.Builder
+	rowWidth := 0
 
 	for i, opt := range f.Options {
-		var checkbox string
-		if i < len(f.selected) && f.selected[i] {
-			checkbox = checkedStyle.Render("[x]")
-		} else {
-			checkbox = uncheckedStyle.Render("[ ]")
-		}
-		var cursor string
+		cursor := "  "
 		if f.focused && i == f.cursor {
 			cursor = cursorStyle.Render("> ")
-		} else {
-			cursor = "  "
 		}
-		lines = append(lines, cursor+checkbox+" "+opt)
-	}
 
-	return strings.Join(lines, "\n")
+		checkbox := uncheckedStyle.Render("[ ]")
+		if i < len(f.selected) && f.selected[i] {
+			checkbox = checkedStyle.Render("[" + tui.IconSuccess + "]")
+		}
+
+		name := opt
+		if nameBudget := innerWidth - chipCoreWidth; lipgloss.Width(name) > nameBudget {
+			name = ellipsize(name, nameBudget)
+		}
+		chip := cursor + checkbox + " " + name
+		chipWidth := lipgloss.Width(chip)
+
+		if row.Len() > 0 && rowWidth+2+chipWidth > innerWidth {
+			rows = append(rows, row.String())
+			row.Reset()
+			rowWidth = 0
+		}
+		if row.Len() > 0 {
+			row.WriteString("  ")
+			rowWidth += 2
+		}
+		row.WriteString(chip)
+		rowWidth += chipWidth
+	}
+	if row.Len() > 0 {
+		rows = append(rows, row.String())
+	}
+	return strings.Join(rows, "\n")
+}
+
+// ellipsize rune-safely clips s to fit within maxWidth visible columns,
+// appending "…" when it clips.
+func ellipsize(s string, maxWidth int) string {
+	if maxWidth <= 0 {
+		return ""
+	}
+	if lipgloss.Width(s) <= maxWidth {
+		return s
+	}
+	runes := []rune(s)
+	for i := len(runes) - 1; i > 0; i-- {
+		candidate := string(runes[:i]) + "…"
+		if lipgloss.Width(candidate) <= maxWidth {
+			return candidate
+		}
+	}
+	return "…"
 }

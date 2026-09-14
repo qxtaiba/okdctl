@@ -59,3 +59,25 @@ func TestSelector_SelectedSpanEmptyOptions(t *testing.T) {
 		t.Fatal("SelectedSpan() reported a span for an empty selector")
 	}
 }
+
+func TestSelector_UpFromFirstDropdownItemReturnsToParent(t *testing.T) {
+	s := newSpanSelector()
+	s.SetSelectedByID("4.20.1")
+
+	s.moveUp()
+
+	if got := s.Selected().ID; got != "minor:4.20" {
+		t.Fatalf("Selected().ID after moveUp() from the first dropdown item = %q, want minor:4.20 (the parent)", got)
+	}
+}
+
+func TestSelector_DownFromLastDropdownItemContinues(t *testing.T) {
+	s := newSpanSelector()
+	s.SetSelectedByID("4.20.0")
+
+	s.moveDown()
+
+	if got := s.Selected().ID; got != "minor:4.19" {
+		t.Fatalf("Selected().ID after moveDown() from the last dropdown item = %q, want minor:4.19 (the next parent)", got)
+	}
+}

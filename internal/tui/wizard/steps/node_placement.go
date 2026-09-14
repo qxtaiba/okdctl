@@ -50,6 +50,10 @@ type NodePlacementStep struct {
 	discovery      *proxmoxDiscovery
 	discoveryErr   error
 
+	// header caches the last View's rendered discoveryHeader, so headerOffset
+	// doesn't need the render width again.
+	header string
+
 	// inner is the post-discovery form; fields below alias into it, nil if
 	// discovery didn't surface that field.
 	inner *wizard.MultiSectionForm
@@ -258,8 +262,10 @@ func (s *NodePlacementStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		if !enterPressed {
 			return s, cmd
 		}
-		if err := s.inner.Validate(); err != nil {
-			return s, func() tea.Msg { return wizard.ErrorSetMsg{Error: err} }
+
+		s.inner.TouchAll()
+		if errs := s.inner.Validate(); len(errs) > 0 {
+			return s, tea.Batch(s.inner.FocusFirstInvalid(), func() tea.Msg { return wizard.ErrorSetMsg{Error: wizard.ErrFixHighlighted} })
 		}
 		return s, func() tea.Msg {
 			return wizard.StepCompleteMsg{StepID: s.ID()}
@@ -270,16 +276,17 @@ func (s *NodePlacementStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 }
 
 // discoveryHeader renders the discovery summary (or its failure) shown above
-// the placement form, without the blank row that separates the two.
-func (s *NodePlacementStep) discoveryHeader() string {
+// the placement form, wrapped to width-2 to match the form's section rows,
+// without the blank row that separates the two.
+func (s *NodePlacementStep) discoveryHeader(width int) string {
 	noteStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500).Italic(true).PaddingLeft(2)
 	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning).PaddingLeft(2)
 
 	switch {
 	case s.discoveryErr != nil:
-		return warnStyle.Render(s.discoveryErr.Error())
+		return warnStyle.Width(width - 2).Render(s.discoveryErr.Error())
 	case s.discovery != nil:
-		return noteStyle.Render(fmt.Sprintf("discovered %d node(s), %d storage pool(s), %d bridge(s)",
+		return noteStyle.Width(width - 2).Render(fmt.Sprintf("discovered %d node(s), %d storage pool(s), %d bridge(s)",
 			len(s.discovery.Nodes), len(s.discovery.Storage), len(s.discovery.Bridges)))
 	default:
 		return ""
@@ -289,11 +296,10 @@ func (s *NodePlacementStep) discoveryHeader() string {
 // headerOffset is how many lines View prepends before the inner form's own
 // line 0, so the form's spans can be rebased onto the step's View.
 func (s *NodePlacementStep) headerOffset() int {
-	header := s.discoveryHeader()
-	if header == "" {
+	if s.header == "" {
 		return 0
 	}
-	return lipgloss.Height(header) + 1
+	return lipgloss.Height(s.header) + 1
 }
 
 // View renders either the loading spinner or the inner placement form.
@@ -304,7 +310,8 @@ func (s *NodePlacementStep) View(width, height int) string {
 		return s.loadingSpinner.View() + " discovering proxmox infrastructure..."
 	}
 
-	header := s.discoveryHeader()
+	s.header = s.discoveryHeader(width)
+	header := s.header
 	if header != "" {
 		header += "\n\n"
 	}
@@ -390,17 +397,31 @@ func (s *NodePlacementStep) SetFocused(focused bool) {
 	s.inner.Blur()
 }
 
-// ShortHelp returns the step's help bar or nil while discovering.
+// ShortHelp returns the step's help bar — {esc back, ctrl+c quit} while
+// discovering, else the placement form's bindings plus any key hints the
+// focused field contributes.
 func (s *NodePlacementStep) ShortHelp() []wizard.KeyBinding {
 	if s.phase == phaseDiscovering {
-		return nil
+		return []wizard.KeyBinding{
+			{Key: wizard.HelpEsc, Help: wizard.HelpBack},
+			{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
+		}
 	}
-	return []wizard.KeyBinding{
+	help := []wizard.KeyBinding{
 		{Key: "↑↓", Help: wizard.HelpNavigate},
 		{Key: "← →", Help: "change value"},
 		{Key: wizard.HelpEnter, Help: wizard.HelpConfirm},
 		{Key: wizard.HelpEsc, Help: wizard.HelpBack},
 	}
+	if s.inner == nil {
+		return help
+	}
+	if h, ok := s.inner.FocusedField().(components.KeyHinter); ok {
+		for _, hint := range h.KeyHints() {
+			help = append(help, wizard.KeyBinding{Key: hint.Key, Help: hint.Help})
+		}
+	}
+	return help
 }
 
 func bridgeNames(bridges []proxmoxBridge) []string {

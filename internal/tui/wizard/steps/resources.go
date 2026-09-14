@@ -35,6 +35,7 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					Label:     "vcpus",
 					Default:   "4",
 					Help:      "okd minimum: 4 vcpus",
+					Width:     wizard.FieldWidthNumber,
 					Required:  true,
 					Validate:  config.ValidateCPU,
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.ControlPlane.CPU = v }),
@@ -45,6 +46,7 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					Label:     "memory (mb)",
 					Default:   "12288",
 					Help:      "okd minimum: 8192 mb (8 gb)",
+					Width:     wizard.FieldWidthNumber,
 					Required:  true,
 					Validate:  config.ValidateMemory,
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.ControlPlane.MemoryMB = v }),
@@ -55,6 +57,7 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					Label:    "os disk (gb)",
 					Default:  "50",
 					Help:     "boot disk for control plane nodes (okd minimum: 50 gb)",
+					Width:    wizard.FieldWidthNumber,
 					Required: true,
 					Validate: config.ValidateOSDisk,
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) {
@@ -73,6 +76,7 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					Label:     "vcpus",
 					Default:   "8",
 					Help:      "recommended: 4-16 vcpus",
+					Width:     wizard.FieldWidthNumber,
 					Required:  true,
 					Validate:  config.ValidateCPU,
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.Workers.CPU = v }),
@@ -83,6 +87,7 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					Label:     "memory (mb)",
 					Default:   "20480",
 					Help:      "recommended: 8192-65536 mb",
+					Width:     wizard.FieldWidthNumber,
 					Required:  true,
 					Validate:  config.ValidateMemory,
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.Workers.MemoryMB = v }),
@@ -93,6 +98,7 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					Label:     "os disk (gb)",
 					Default:   "50",
 					Help:      "boot disk for worker nodes (okd minimum: 50 gb)",
+					Width:     wizard.FieldWidthNumber,
 					Required:  true,
 					Validate:  config.ValidateOSDisk,
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.Workers.DiskGB = v }),
@@ -102,12 +108,14 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 		},
 		{
 			Title: fieldDataStorage,
+			//nolint:dupl // two int fields share the FieldDefinition shape with advanced.go's timeouts section; data, not logic
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "worker_data_disk",
 					Label:     "worker data disk (gb)",
 					Default:   "500",
 					Help:      "data disk per worker for ceph/storage — set to 0 to disable",
+					Width:     wizard.FieldWidthNumber,
 					Required:  true,
 					Validate:  config.ValidateDataDisk,
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Disks.WorkerDataSizeGB = v }),
@@ -118,6 +126,7 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					Label:     "control plane data disk (gb)",
 					Default:   "0",
 					Help:      "data disk per control plane node for ceph/storage — set to 0 to disable",
+					Width:     wizard.FieldWidthNumber,
 					Required:  true,
 					Validate:  config.ValidateDataDisk,
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Disks.ControlPlaneDataSizeGB = v }),
@@ -136,26 +145,24 @@ func NewResourcesStep() (*wizard.DataDrivenStep, *ResourcesStepState) {
 		Step: step,
 	}
 
-	step.WithExtraContentFunc(func(s *wizard.DataDrivenStep, width int) string {
-		return renderResourceSummary(s, state, width)
+	step.WithExtraContentFunc("total resources required", func(s *wizard.DataDrivenStep, _ int) string {
+		return renderResourceSummary(s, state)
 	})
 
 	return step, state
 }
 
 var resourceSummaryStyles = struct {
-	wrapper lipgloss.Style
-	title   lipgloss.Style
-	value   lipgloss.Style
-	sep     string
+	value lipgloss.Style
+	sep   string
 }{
-	wrapper: lipgloss.NewStyle().Padding(1, 2),
-	title:   lipgloss.NewStyle().Foreground(tui.ColorSlate400).Bold(true),
-	value:   lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true),
-	sep:     lipgloss.NewStyle().Foreground(tui.ColorSlate600).Render("  ·  "),
+	value: lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true),
+	sep:   lipgloss.NewStyle().Foreground(tui.ColorSlate600).Render("  ·  "),
 }
 
-func renderResourceSummary(step *wizard.DataDrivenStep, state *ResourcesStepState, width int) string {
+// renderResourceSummary returns the totals line for the resources step's
+// info card; the card itself supplies the title and border.
+func renderResourceSummary(step *wizard.DataDrivenStep, state *ResourcesStepState) string {
 	cpCount := 3
 	workerCount := 3
 	if state.Cfg != nil {
@@ -177,14 +184,6 @@ func renderResourceSummary(step *wizard.DataDrivenStep, state *ResourcesStepStat
 	totalOSDisk := (cpDisk * cpCount) + (workerDisk * workerCount)
 	totalDataDisk := (workerDataDisk * workerCount) + (cpDataDisk * cpCount)
 
-	boxContentWidth := max(width-8, 30)
-
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(tui.ColorSlate600).
-		Padding(0, 1).
-		Width(boxContentWidth)
-
 	sep := resourceSummaryStyles.sep
 
 	var storageStr string
@@ -194,11 +193,8 @@ func renderResourceSummary(step *wizard.DataDrivenStep, state *ResourcesStepStat
 		storageStr = fmt.Sprintf("%d gb storage", totalDataDisk)
 	}
 
-	summary := resourceSummaryStyles.title.Render("total resources required") + "\n\n" +
-		resourceSummaryStyles.value.Render(fmt.Sprintf("%d vcpus", totalCPU)) + sep +
+	return resourceSummaryStyles.value.Render(fmt.Sprintf("%d vcpus", totalCPU)) + sep +
 		resourceSummaryStyles.value.Render(fmt.Sprintf("%d gb ram", totalMem/1024)) + sep +
 		resourceSummaryStyles.value.Render(fmt.Sprintf("%d gb os", totalOSDisk)) + sep +
 		resourceSummaryStyles.value.Render(storageStr)
-
-	return resourceSummaryStyles.wrapper.Render(boxStyle.Render(summary))
 }

@@ -1,12 +1,14 @@
 package steps
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
@@ -75,7 +77,7 @@ func newGoldenModel(t *testing.T) *wizard.Model {
 	cfg := config.DefaultConfig()
 	for _, step := range built.Steps {
 		if ds, ok := step.(*wizard.DataDrivenStep); ok {
-			ds.LoadFromConfig(cfg)
+			ds.LoadFromConfig(cfg, false)
 		}
 	}
 	return wizard.NewModel(built.Steps, cfg)
@@ -98,6 +100,18 @@ func demoDiscovery() *proxmoxDiscovery {
 		},
 		ISOs: []string{"local:iso/fedora-coreos-live.x86_64.iso"},
 	}
+}
+
+// demoDiscoverySingleNode pins the single-Proxmox-host case: storage and
+// bridges stay multi-option (as demoDiscovery), but Nodes has exactly one
+// entry, so every per-node select (bootstrap, control plane, workers)
+// resolves to exactly one option.
+func demoDiscoverySingleNode() *proxmoxDiscovery {
+	disc := demoDiscovery()
+	disc.Nodes = []proxmoxNode{
+		{Name: "pve1", Status: "online", CPUs: 32, MemGB: 128},
+	}
+	return disc
 }
 
 var goldenSizes = []struct {
@@ -138,4 +152,212 @@ func TestGolden_ConfigureSteps(t *testing.T) {
 			})
 		}
 	}
+}
+
+// TestGolden_NodePlacementSingleNode pins the single-Proxmox-host case:
+// the bootstrap field's per-node select has exactly one option and must
+// render the bare value with no cycle arrows. Tabs past the infrastructure
+// section's 6 fields (bridge, additional networks, os/data/iso storage,
+// fcos iso) so the bootstrap field is focused and scrolled into view.
+func TestGolden_NodePlacementSingleNode(t *testing.T) {
+	m := newGoldenModel(t)
+	_ = tuitest.RenderAt(t, m, 100, 30)
+	m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDNodePlacement})
+	m.Update(discoveryCompleteMsg{discovery: demoDiscoverySingleNode()})
+
+	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
+	for range 6 {
+		m.Update(tabKey)
+		m.Update(wizard.FocusChangedMsg{})
+	}
+
+	frame := tuitest.RenderAt(t, m, 100, 30)
+	tuitest.Golden(t, "node-placement-single-node_100x30", frame)
+	tuitest.AssertFits(t, frame, 100, 30)
+}
+
+// TestGolden_DistributionLoadingState pins the distribution step's loading
+// phase (before versionsLoadedMsg arrives): the spinner, "fetching okd
+// releases", and the dim "this can take a few seconds" hint.
+func TestGolden_DistributionLoadingState(t *testing.T) {
+	for _, sz := range goldenSizes {
+		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
+			m := newGoldenModel(t)
+			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
+			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDDistribution})
+
+			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
+			tuitest.Golden(t, fmt.Sprintf("distribution-loading_%dx%d", sz.w, sz.h), frame)
+			if sz.fits {
+				tuitest.AssertFits(t, frame, sz.w, sz.h)
+			}
+		})
+	}
+}
+
+// TestGolden_DistributionErrorState pins the distribution step's error
+// phase: a failed release fetch renders tui.EmptyState's "no releases
+// loaded — check your connection" line plus the "r retry · esc back"
+// ribbon and the wrapped error detail, never the raw ✗ failure banner.
+func TestGolden_DistributionErrorState(t *testing.T) {
+	for _, sz := range goldenSizes {
+		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
+			m := newGoldenModel(t)
+			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
+			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDDistribution})
+			m.Update(versionsLoadedMsg{err: errors.New("dial tcp: connection refused")})
+
+			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
+			tuitest.Golden(t, fmt.Sprintf("distribution-error_%dx%d", sz.w, sz.h), frame)
+			if sz.fits {
+				tuitest.AssertFits(t, frame, sz.w, sz.h)
+			}
+		})
+	}
+}
+
+// TestGolden_AddonsVaultsEditMode pins the vaults key-value field's
+// edit-mode composition: two fieldBox cells joined with
+// lipgloss.JoinHorizontal side by side, rather than the old string-concat
+// that interleaved their rows. Tabs past the 8 fields preceding vaults
+// (flux's 4, secretstore common's 3, connect host) so it's focused and
+// scrolled into view, then ctrl+e enters edit mode.
+func TestGolden_AddonsVaultsEditMode(t *testing.T) {
+	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
+	ctrlE := tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl}
+
+	for _, sz := range goldenSizes {
+		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
+			m := newGoldenModel(t)
+			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
+			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDAddons})
+
+			for range 8 {
+				m.Update(tabKey)
+				m.Update(wizard.FocusChangedMsg{})
+			}
+			m.Update(ctrlE)
+
+			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
+			tuitest.Golden(t, fmt.Sprintf("addons-vaults-edit_%dx%d", sz.w, sz.h), frame)
+			if sz.fits {
+				tuitest.AssertFits(t, frame, sz.w, sz.h)
+			}
+		})
+	}
+}
+
+// TestGolden_AddonsFluxWarning pins the flux section's warning block: once
+// flux is enabled with no ssh deploy key present, an amber ⚠ line renders
+// after the flux_path field and before the secret store (common) section
+// head, wrapped to the section's width, with the frame unsliced. Toggles
+// the enabled field to yes, then tabs past flux's remaining 3 fields so
+// the warning and the next section head scroll into view.
+func TestGolden_AddonsFluxWarning(t *testing.T) {
+	if system.FileExists(system.ExpandPath("~/.ssh/flux-deploy-key")) {
+		t.Skip("~/.ssh/flux-deploy-key exists on this machine, so the warning this test checks for would not fire")
+	}
+
+	rightKey := tea.KeyPressMsg{Code: tea.KeyRight}
+	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
+
+	for _, sz := range goldenSizes {
+		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
+			m := newGoldenModel(t)
+			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
+			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDAddons})
+
+			m.Update(rightKey)
+			for range 4 {
+				m.Update(tabKey)
+				m.Update(wizard.FocusChangedMsg{})
+			}
+
+			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
+			tuitest.Golden(t, fmt.Sprintf("addons-flux-warning_%dx%d", sz.w, sz.h), frame)
+			if sz.fits {
+				tuitest.AssertFits(t, frame, sz.w, sz.h)
+			}
+		})
+	}
+}
+
+// newGoldenModelFreshDefaults mirrors newGoldenModel but skips
+// LoadFromConfig (matching OKDCTL_WIZARD_DEMO=1's real code path in
+// internal/cli/wizard_setup.go), so fields still carry their raw
+// FieldDefinition defaults instead of config.DefaultConfig's — needed to
+// pin the still-a-default rendering (dim text plus the "default" tag).
+func newGoldenModelFreshDefaults(t *testing.T) *wizard.Model {
+	t.Helper()
+	builder := wizard.NewStepBuilder()
+	RegisterAll(builder)
+	built := wizard.BuildSteps(wizard.DefaultConfig(), builder)
+	return wizard.NewModel(built.Steps, config.DefaultConfig())
+}
+
+// pumpCmd recursively runs cmd, flattening tea.BatchMsg, and delivers every
+// resulting message to m.Update, so a headless test observes the state a
+// running tea.Program would reach once its returned commands complete.
+func pumpCmd(m *wizard.Model, cmd tea.Cmd) {
+	if cmd == nil {
+		return
+	}
+	if batch, ok := cmd().(tea.BatchMsg); ok {
+		for _, c := range batch {
+			pumpCmd(m, c)
+		}
+		return
+	}
+	m.Update(cmd())
+}
+
+// TestGolden_BasicsDefaultAsRealValue pins the cluster-name field's default
+// rendering: "mycluster" shows dim with a "default" tag beside the box
+// before any input, and typing the first character replaces it outright
+// rather than appending to it.
+func TestGolden_BasicsDefaultAsRealValue(t *testing.T) {
+	m := newGoldenModelFreshDefaults(t)
+	_ = tuitest.RenderAt(t, m, 100, 30)
+	m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDBasics})
+
+	frame := tuitest.RenderAt(t, m, 100, 30)
+	tuitest.Golden(t, "basics-default-value_100x30_initial", frame)
+	tuitest.AssertFits(t, frame, 100, 30)
+
+	m.Update(tea.KeyPressMsg{Code: 'h', Text: "h"})
+
+	frame = tuitest.RenderAt(t, m, 100, 30)
+	tuitest.Golden(t, "basics-default-value_100x30_typed", frame)
+	tuitest.AssertFits(t, frame, 100, 30)
+}
+
+// TestGolden_ProxmoxEnterHighlightsInvalidFields pins the honest-validation
+// story end to end: tabbing onto the empty, required password field paints
+// no error (it hasn't been left yet), but pressing enter forces the whole
+// form's validation, paints a red box plus field error on password, shows
+// the generic status-row message, and scrolls/focuses the first invalid
+// field.
+func TestGolden_ProxmoxEnterHighlightsInvalidFields(t *testing.T) {
+	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
+	enterKey := tea.KeyPressMsg{Code: tea.KeyEnter}
+
+	m := newGoldenModel(t)
+	_ = tuitest.RenderAt(t, m, 100, 30)
+	m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDProxmox})
+
+	for range 2 {
+		m.Update(tabKey)
+		m.Update(wizard.FocusChangedMsg{})
+	}
+
+	frame := tuitest.RenderAt(t, m, 100, 30)
+	tuitest.Golden(t, "proxmox-enter-invalid_100x30_before", frame)
+	tuitest.AssertFits(t, frame, 100, 30)
+
+	_, cmd := m.Update(enterKey)
+	pumpCmd(m, cmd)
+
+	frame = tuitest.RenderAt(t, m, 100, 30)
+	tuitest.Golden(t, "proxmox-enter-invalid_100x30_after", frame)
+	tuitest.AssertFits(t, frame, 100, 30)
 }

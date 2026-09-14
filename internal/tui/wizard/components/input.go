@@ -22,7 +22,8 @@ type FormField interface {
 	Focus() tea.Cmd
 	Blur()
 	SetWidth(width int)
-	Validate() error
+	Check() error    // pure: reports validity without recording it for View
+	Validate() error // Check, then records the result for View to render
 	Update(msg tea.Msg) (FormField, tea.Cmd)
 	View() string
 }
@@ -33,27 +34,61 @@ type InputField struct {
 	Label       string
 	Placeholder string
 	Help        string
+	Note        string
 	Required    bool
 	Password    bool
 	Validator   func(string) error
 
-	input   textinput.Model
-	focused bool
-	width   int
-	err     error
+	input     textinput.Model
+	focused   bool
+	width     int
+	boxWidth  int
+	isDefault bool
+	touched   bool
+	savedPos  int
+	err       error
 }
 
 // NewInputField builds a plain-text InputField from label and placeholder.
 func NewInputField(label, placeholder string) *InputField {
 	ti := textinput.New()
+	ti.Prompt = ""
 	ti.Placeholder = placeholder
 	ti.CharLimit = 256
-	ti.SetWidth(40)
+	ti.SetStyles(fieldInputStyles(false))
 
 	return &InputField{
 		Label:       label,
 		Placeholder: placeholder,
 		input:       ti,
+		boxWidth:    32,
+	}
+}
+
+// fieldInputStyles builds the textinput color scheme shared by every
+// InputField: brand-purple cursor, dim placeholder, and — while isDefault —
+// Slate500 text so an unmodified default reads as dimmer than a typed value.
+func fieldInputStyles(isDefault bool) textinput.Styles {
+	focusedText := lipgloss.NewStyle().Foreground(tui.ColorText)
+	blurredText := lipgloss.NewStyle().Foreground(tui.ColorSlate300)
+	if isDefault {
+		focusedText = lipgloss.NewStyle().Foreground(tui.ColorSlate500)
+		blurredText = lipgloss.NewStyle().Foreground(tui.ColorSlate500)
+	}
+	return textinput.Styles{
+		Focused: textinput.StyleState{
+			Text:        focusedText,
+			Placeholder: lipgloss.NewStyle().Foreground(tui.ColorSlate600),
+		},
+		Blurred: textinput.StyleState{
+			Text:        blurredText,
+			Placeholder: lipgloss.NewStyle().Foreground(tui.ColorSlate600),
+		},
+		Cursor: textinput.CursorStyle{
+			Color: tui.ColorPrimary,
+			Shape: tea.CursorBlock,
+			Blink: true,
+		},
 	}
 }
 
@@ -72,70 +107,144 @@ func (f *InputField) Value() string {
 	return f.input.Value()
 }
 
-// SetValue replaces the field value.
+// SetValue replaces the field value and clears the default tag, since the
+// value is now an explicit one rather than an unmodified default.
 func (f *InputField) SetValue(value string) {
 	f.input.SetValue(value)
+	f.isDefault = false
 }
 
-// Focus gives the field focus and returns the textinput blink command.
+// SetDefault sets the field's value to v and marks it as an unmodified
+// default, which View renders dim with a "default" tag until the value
+// changes.
+func (f *InputField) SetDefault(v string) {
+	f.input.SetValue(v)
+	f.isDefault = true
+}
+
+// IsDefault reports whether the field's value is still its unmodified default.
+func (f *InputField) IsDefault() bool {
+	return f.isDefault
+}
+
+// Focus gives the field focus, marks it touched so a later Blur will
+// validate it, restores the cursor to where Blur last left it, and returns
+// the textinput blink command.
 func (f *InputField) Focus() tea.Cmd {
 	f.focused = true
+	f.touched = true
+	f.input.SetCursor(f.savedPos)
 	return f.input.Focus()
 }
 
-// Blur removes focus and runs one validation pass so error state is current
-// when the field is rendered next.
+// Blur removes focus, scrolls a long value back to its head so it reads
+// from the start while unfocused, and — only for a field that has actually
+// held focus (touched), so the wizard never manufactures an error for a
+// field nobody has visited via InputGroup's blur-everyone-else navigation —
+// runs one validation pass so error state is current when the field is
+// rendered next; the position save is guarded on an actual focus->blur
+// transition so InputGroup.updateFocus's redundant re-blur of an
+// already-blurred field can't collapse it to 0.
 func (f *InputField) Blur() {
+	if f.focused {
+		f.savedPos = f.input.Position()
+	}
 	f.focused = false
+	f.input.SetCursor(0)
 	f.input.Blur()
-	_ = f.Validate()
+	if f.touched {
+		_ = f.Validate()
+	}
 }
 
-// SetWidth resizes the input field, reserving border and padding space.
+// SetWidth records the width available to the field's label and help/error
+// rows, then reapplies the box so the textinput's scroll window matches.
 func (f *InputField) SetWidth(width int) {
 	f.width = width
-	inputWidth := max(width-4, 20) // border (2) + padding (2)
-	f.input.SetWidth(inputWidth)
+	f.applyBox()
 }
 
-// Validate runs the Required check and Validator; for password fields the
-// raw value is scrubbed from error messages so secrets can't leak.
-func (f *InputField) Validate() error {
+// SetBoxWidth sets the field's nominal box width; the box actually renders
+// at min(outer, the width from SetWidth), so a narrow terminal still clamps
+// it.
+func (f *InputField) SetBoxWidth(outer int) {
+	f.boxWidth = outer
+	f.applyBox()
+}
+
+// SetPlaceholder replaces the dim hint text shown inside an empty box.
+func (f *InputField) SetPlaceholder(p string) {
+	f.Placeholder = p
+	f.input.Placeholder = p
+}
+
+// applyBox resizes the textinput to the current box's inner width (border 2
+// + padding 2 + cursor cell 1) and recomputes its scroll window — bubbles'
+// SetWidth alone leaves a stale window after a resize.
+func (f *InputField) applyBox() {
+	w := min(f.boxWidth, f.width)
+	f.input.SetWidth(w - 5)
+	f.input.SetCursor(f.input.Position())
+}
+
+// Check runs the Required check and Validator without recording the
+// result, so a caller probing validity (e.g. a section-complete indicator)
+// can't paint error state onto a field the user hasn't touched; for
+// password fields the raw value is scrubbed from error messages so
+// secrets can't leak.
+func (f *InputField) Check() error {
 	if f.Required && strings.TrimSpace(f.input.Value()) == "" {
-		f.err = errRequired
-		return f.err
+		return errRequired
 	}
-	if f.Validator != nil {
-		value := f.input.Value()
-		f.err = f.Validator(value)
-		// Wraps a validator's error for password fields so its message can't
-		// leak the raw value, while preserving Unwrap().
-		if f.Password && f.err != nil && value != "" {
-			var msg string
-			// Short values (e.g. "a") would mangle unrelated chars via
-			// ReplaceAll; fall back to a generic message instead.
-			if len(value) >= 4 {
-				msg = strings.ReplaceAll(f.err.Error(), value, "***")
-			} else {
-				msg = "invalid password"
-			}
-			f.err = &scrubbedError{msg: msg, inner: f.err}
+	if f.Validator == nil {
+		return nil
+	}
+	value := f.input.Value()
+	err := f.Validator(value)
+	// Wraps a validator's error for password fields so its message can't
+	// leak the raw value, while preserving Unwrap().
+	if f.Password && err != nil && value != "" {
+		var msg string
+		// Short values (e.g. "a") would mangle unrelated chars via
+		// ReplaceAll; fall back to a generic message instead.
+		if len(value) >= 4 {
+			msg = strings.ReplaceAll(err.Error(), value, "***")
+		} else {
+			msg = "invalid password"
 		}
-		return f.err
+		err = &scrubbedError{msg: msg, inner: err}
 	}
-	f.err = nil
-	return nil
+	return err
+}
+
+// Validate runs Check, records the result as the field's current error for
+// View to render, and marks the field touched — so InputGroup.TouchAll can
+// force every field to a current, visible validation state through this
+// same interface method.
+func (f *InputField) Validate() error {
+	f.touched = true
+	f.err = f.Check()
+	return f.err
 }
 
 // Update forwards msg to the underlying textinput, clearing any stale
-// validation error on keypress.
+// validation error on keypress, and — while the value is still an
+// unmodified default — clears the default tag and, for an edit rather
+// than mere cursor movement, the text itself, so the first keystroke
+// replaces the default instead of appending to it.
 func (f *InputField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 	if !f.focused {
 		return f, nil
 	}
 
-	if _, ok := msg.(tea.KeyPressMsg); ok {
+	if k, ok := msg.(tea.KeyPressMsg); ok {
 		f.err = nil
+		if f.isDefault {
+			f.isDefault = false
+			if k.Text != "" || k.Code == tea.KeyBackspace || k.Code == tea.KeyDelete {
+				f.input.SetValue("")
+			}
+		}
 	}
 
 	var cmd tea.Cmd
@@ -144,59 +253,47 @@ func (f *InputField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 	return f, cmd
 }
 
-// View renders the field: label, input box, and any validation error.
-// Password fields mask the value and scrub it from error text.
+// View renders the label, the boxed input (masked and error-scrubbed for
+// password fields), and — depending on state — an error row, a help row
+// (focused only), and a Note row.
 func (f *InputField) View() string {
 	// Never render f.input.Value() directly when Password is true; rely on
 	// EchoMode, and scrub raw value on every text path below.
-	labelStyle := lipgloss.NewStyle().
-		Foreground(tui.ColorSlate300)
+	label := labelStyle.Render(f.Label)
 
-	hintStyle := lipgloss.NewStyle().
-		Foreground(tui.ColorSlate500)
-
-	labelText := strings.ToLower(f.Label)
-	labelLine := labelStyle.Render(labelText)
-	if f.Help != "" {
-		labelLine += " " + hintStyle.Render("("+strings.ToLower(f.Help)+")")
+	f.input.SetStyles(fieldInputStyles(f.isDefault))
+	content := f.input.View()
+	if f.input.Value() == "" && f.Placeholder == "" {
+		content = tagStyle.Render("·")
 	}
 
-	contentWidth := f.input.Width()
-	if contentWidth < 20 {
-		contentWidth = 40
+	box := fieldBox(content, min(f.boxWidth, f.width), f.focused, f.err != nil)
+	if f.isDefault {
+		box = lipgloss.JoinHorizontal(lipgloss.Center, box, " "+tagStyle.Render("default"))
 	}
 
-	borderColor := tui.ColorSlate600
+	out := label + "\n" + box
 	switch {
-	case f.focused:
-		borderColor = tui.ColorPrimary
 	case f.err != nil:
-		borderColor = tui.ColorError
+		out += "\n" + errStyle.Width(f.width).Render(tui.IconError+" "+f.scrubbed(f.err.Error()))
+	case f.focused && f.Help != "":
+		out += "\n" + helpStyle.Width(f.width).Render(f.Help)
 	}
-	inputStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(borderColor).
-		Padding(0, 1).
-		Width(contentWidth)
+	if f.Note != "" {
+		out += "\n" + f.Note
+	}
+	return out
+}
 
-	input := inputStyle.Render(f.input.View())
-
-	result := labelLine + "\n" + input
-
-	if f.err != nil {
-		errStyle := lipgloss.NewStyle().Foreground(tui.ColorError)
-		errText := strings.ToLower(f.err.Error())
-		// Scrub the raw value from password-field error messages so an
-		// interpolating validator can't leak it.
-		if f.Password {
-			if v := f.input.Value(); v != "" {
-				errText = strings.ReplaceAll(errText, strings.ToLower(v), "<redacted>")
-			}
+// scrubbed redacts the raw value out of msg for password fields so an
+// interpolating validator error can't leak it.
+func (f *InputField) scrubbed(msg string) string {
+	if f.Password {
+		if v := f.input.Value(); v != "" {
+			msg = strings.ReplaceAll(msg, v, "<redacted>")
 		}
-		result += "\n" + errStyle.Render(tui.IconError+" "+errText)
 	}
-
-	return result
+	return msg
 }
 
 var errRequired = errors.New("this field is required")
@@ -315,6 +412,16 @@ func (g *InputGroup) Validate() []error {
 		}
 	}
 	return errs
+}
+
+// TouchAll runs Validate on every field, marking each one touched and
+// recording its current error, so a forced submission attempt (enter)
+// shows every invalid field's real state at once rather than only the
+// ones the user happened to visit.
+func (g *InputGroup) TouchAll() {
+	for _, f := range g.fields {
+		_ = f.Validate()
+	}
 }
 
 // Update handles group-level navigation keys (tab, shift-tab) and forwards

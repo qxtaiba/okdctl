@@ -6,33 +6,33 @@
   │                                                                                                                  │  
   │    ✓ vm settings                                                                                                 │  
   │                                                                                                                  │  
-  │    vm id base (starting vm id in proxmox (e.g., 6000, 6001, ...))                                                │  
-  │    ╭────────────────────────────────────────────────────────────────────────────────────────────────────╮        │  
-  │    │ > 6000                                                                                             │        │  
-  │    ╰────────────────────────────────────────────────────────────────────────────────────────────────────╯        │  
+  │    vm id base                                                                                                    │  
+  │    ╭──────────╮                                                                                                  │  
+  │    │ 6000     │                                                                                                  │  
+  │    ╰──────────╯                                                                                                  │  
   │                                                                                                                  │  
   │    ● proxmox vm settings                                                                                         │  
   │                                                                                                                  │  
-  │    cpu type (host gives best performance, x86-64-v2 or kvm64 allow live migration)                               │  
-  │    ╭────────────────────────────────────────────────────────────────────────────────────────────────────╮        │  
-  │    │ ◂ host ▸                                                                                           │        │  
-  │    ╰────────────────────────────────────────────────────────────────────────────────────────────────────╯        │  
+  │    cpu type                                                                                                      │  
+  │    ╭───────────────╮                                                                                             │  
+  │    │ ◂ host ▸      │                                                                                             │  
+  │    ╰───────────────╯                                                                                             │  
+  │    host gives best performance, x86-64-v2 or kvm64 allow live migration                                          │  
   │                                                                                                                  │  
-  │    enable numa (enable numa topology for vms — improves performance on multi-socket hosts)                       │  
-  │    ╭────────────────────────────────────────────────────────────────────────────────────────────────────╮        │  
-  │    │ > no                                                                                               │        │  
-  │    ╰────────────────────────────────────────────────────────────────────────────────────────────────────╯        │  
+  │    enable numa                                                                                                   │  
+  │    ╭──────────────╮                                                                                              │  
+  │    │ ● no  ○ yes  │                                                                                              │  
+  │    ╰──────────────╯                                                                                              │  
   │                                                                                                                  │  
-  │    enable ha anti-affinity (spread master vms across proxmox nodes via ha-manager anti-affinity — requires pve   │  
-  │  9+ and a multi-node pve cluster (a single host cannot satisfy the anti-affinity rule); once enabled, ha         │  
-  │  supersedes the per-vm startup{} ordering on any ha-triggered relocation)                                        │  
-  │    ╭────────────────────────────────────────────────────────────────────────────────────────────────────╮        │  
-  │    │ > no                                                                                               │        │  
-  │    ╰────────────────────────────────────────────────────────────────────────────────────────────────────╯        │  
+  │    enable ha anti-affinity                                                                                       │  
+  │    ╭──────────────╮                                                                                              │  
+  │    │ ● no  ○ yes  │                                                                                              │  
+  │    ╰──────────────╯                                                                                              │  
   │                                                                                                                  │  
   │    ○ clock synchronization                                                                                       │  
   │                                                                                                                  │  
-  │    ntp server (chrony source for master/worker nodes — blank uses the bastion's ignition server ip)              │  
+  │    ntp server                                                                                                    │  
+  │    ╭──────────────────────────────╮                                                                              │  
   │                                                                                                                  │  
   │─────────────────────────────── ↑ ↓  scroll down for more ─────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
   │  ↑↓/tab navigate • enter continue • esc back • pgup/pgdn scroll                                                  │  

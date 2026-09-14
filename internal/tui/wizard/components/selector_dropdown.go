@@ -12,7 +12,9 @@ const (
 	maxDropdownVisible  = 5
 )
 
-// moveUp moves selection up, trapped within dropdown boundaries (no wrap-around).
+// moveUp moves selection up by one option, wrapping to the last option from
+// the first; a dropdown's first patch flows straight into the parent minor
+// above it rather than trapping the cursor inside the dropdown.
 func (s *Selector) moveUp() {
 	if len(s.options) == 0 {
 		return
@@ -20,21 +22,7 @@ func (s *Selector) moveUp() {
 
 	wasInDropdown := s.options[s.selected].InDropdown
 
-	if wasInDropdown {
-		dropdownStart, _ := s.getDropdownBounds()
-
-		if s.selected == dropdownStart {
-			return
-		}
-
-		nextIndex := s.selected - 1
-		if nextIndex < 0 || !s.options[nextIndex].InDropdown {
-			return
-		}
-	}
-
 	s.selected--
-
 	if s.selected < 0 {
 		s.selected = len(s.options) - 1
 	}
@@ -46,6 +34,9 @@ func (s *Selector) moveUp() {
 	}
 }
 
+// moveDown moves selection down by one option, wrapping to the first option
+// from the last; a dropdown's last patch flows straight into the next
+// parent below it rather than trapping the cursor inside the dropdown.
 func (s *Selector) moveDown() {
 	if len(s.options) == 0 {
 		return
@@ -53,21 +44,7 @@ func (s *Selector) moveDown() {
 
 	wasInDropdown := s.options[s.selected].InDropdown
 
-	if wasInDropdown {
-		_, dropdownEnd := s.getDropdownBounds()
-
-		if s.selected == dropdownEnd {
-			return
-		}
-
-		nextIndex := s.selected + 1
-		if nextIndex >= len(s.options) || !s.options[nextIndex].InDropdown {
-			return
-		}
-	}
-
 	s.selected++
-
 	if s.selected >= len(s.options) {
 		s.selected = 0
 	}

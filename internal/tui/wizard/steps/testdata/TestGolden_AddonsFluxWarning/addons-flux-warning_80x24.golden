@@ -1,0 +1,24 @@
+                                                                                
+  ╭──────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L                                                              │  
+  │ configure cluster addons             ●─●─●─●─●─●─●─●─○─○─○  step 8 of 11 │  
+  │──────────────────────────────────────────────────────────────────────────│  
+  │    ╰──────────────────────────────────────────────────────╯              │  
+  │                                                                          │  
+  │    ⚠ flux requires ssh deploy key at ~/.ssh/flux-deploy-key — create     │  
+  │    it before deploying                                                   │  
+  │                                                                          │  
+  │    ● secret store (common)                                               │  
+  │      supports onepassword, vault, and bitwarden via external-secrets-    │  
+  │      operator                                                            │  
+  │                                                                          │  
+  │    enabled                                                               │  
+  │    ╭──────────────╮                                                      │  
+  │    │ ● no  ○ yes  │                                                      │  
+  │    ╰──────────────╯                                                      │  
+  │    bootstrap ESO provider credentials and SecretStore CRD                │  
+  │                                                                          │  
+  │────────── ↑ ↓  23% • scroll for more ─────────── ▸ okd 4.22.0-okd-scos.7 │  
+  │  ↑↓/tab navigate • enter continue • esc back • pgup/pgdn scroll          │  
+  ╰──────────────────────────────────────────────────────────────────────────╯  
+                                                                                
