@@ -78,7 +78,7 @@ func paramsBodyRows(t *testing.T, frame string) []string {
 
 func TestParamsStep_FocusedFieldStaysOnScreen(t *testing.T) {
 	st := &State{Cfg: config.DefaultConfig(), Op: node.OpResize, Scope: node.ResizeScope{Role: nodetypes.RoleMaster}}
-	m := wizard.NewFlowModel(NewSteps(st, Hooks{}), st.Cfg, lifecycleChrome())
+	m := wizard.NewFlowModel(NewSteps(st, Hooks{}), st.Cfg, Chrome())
 
 	_ = tuitest.RenderAt(t, m, 90, 24)
 	m.Update(wizard.JumpToStepMsg{StepID: StepIDParams})

@@ -30,11 +30,7 @@ func demoConfig() *config.Config {
 func runNodeManageDemo(cmd *cobra.Command) error {
 	cfg := demoConfig()
 	st := &lifecycle.State{Cfg: cfg}
-	chrome := wizard.FlowChrome{
-		Tagline: "okd over proxmox, the easy way",
-		Badge:   func(c *config.Config) string { return c.Cluster.Name },
-	}
-	result, err := wizard.RunFlow(cmd.Context(), lifecycle.NewSteps(st, lifecycle.DemoHooks(demoExecStepDelay)), cfg, chrome)
+	result, err := wizard.RunFlow(cmd.Context(), lifecycle.NewSteps(st, lifecycle.DemoHooks(demoExecStepDelay)), cfg, lifecycle.Chrome())
 	if err != nil {
 		return &errtypes.ConfigError{Msg: "lifecycle wizard", Err: err}
 	}

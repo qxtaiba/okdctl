@@ -77,6 +77,11 @@ func NewExecStep(st *State, hooks Hooks) *ExecStep {
 	}
 }
 
+// DisplayTitle names the header for the operation in progress.
+func (s *ExecStep) DisplayTitle() string {
+	return opProgressLabel(s.st.Op)
+}
+
 // ShouldShow gates the step to consented plans.
 func (s *ExecStep) ShouldShow(_ *config.Config) bool {
 	return s.st.Proceed

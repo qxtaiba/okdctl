@@ -72,13 +72,14 @@ func NewTargetStep(st *State, hooks Hooks) *TargetStep {
 	}
 }
 
-// DisplayTitle names the screen for the chosen op; computed at render
-// time because the step is constructed before the op screen runs.
+// DisplayTitle names the screen for the chosen op; computed at render time
+// because the step is constructed before the op screen runs — kept short so
+// it still fits beside the six-stage trail at 80 columns.
 func (s *TargetStep) DisplayTitle() string {
 	if s.st.Op == node.OpRemove {
-		return "choose the target — worker to remove"
+		return "worker to remove"
 	}
-	return "choose the target — nodes to resize"
+	return "nodes to resize"
 }
 
 // ShouldShow hides the step for add (workers only) and on resume.

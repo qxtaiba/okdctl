@@ -103,13 +103,7 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 		},
 	}
 
-	// Swaps the context badge to the cluster name — the lifecycle flow operates
-	// an existing cluster, not a distribution choice.
-	chrome := wizard.FlowChrome{
-		Tagline: "okd over proxmox, the easy way",
-		Badge:   func(c *config.Config) string { return c.Cluster.Name },
-	}
-	result, err := wizard.RunFlow(ctx, lifecycle.NewSteps(st, hooks), cfg, chrome)
+	result, err := wizard.RunFlow(ctx, lifecycle.NewSteps(st, hooks), cfg, lifecycle.Chrome())
 	if err != nil {
 		// A tea failure mid-execution must still surface the resume marker, not
 		// read as a configuration problem.

@@ -26,7 +26,7 @@ type ConfirmStep struct {
 func NewConfirmStep(st *State) *ConfirmStep {
 	input := components.NewInputField("", "")
 	return &ConfirmStep{
-		BaseStep: wizard.NewBaseStep(StepIDConfirm, "confirm", ""),
+		BaseStep: wizard.NewBaseStepWithDisplayTitle(StepIDConfirm, "confirm", "confirm removal", ""),
 		st:       st,
 		input:    input,
 	}
