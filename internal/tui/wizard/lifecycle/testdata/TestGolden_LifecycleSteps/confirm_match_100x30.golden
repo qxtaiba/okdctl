@@ -7,24 +7,24 @@
   │                                                                                              │  
   │                                                                                              │  
   │                                                                                              │  
-  │                                                                                              │  
   │                  confirm irreversible removal                                                │  
   │                                                                                              │  
   │                  irreversible: destroys homelab-worker2 and its data disk;                   │  
   │                  removed data cannot be recovered                                            │  
   │                                                                                              │  
-  │                  type the cluster name "mycluster" to confirm                                │  
+  │                  type the cluster name "homelab" to confirm                                  │  
   │                  cluster name                                                                │  
   │                  ╭──────────────────────────────╮                                            │  
-  │                  │ ·                            │                                            │  
+  │                  │ homelab                      │                                            │  
   │                  ╰──────────────────────────────╯                                            │  
+  │                  ✓ matches — press enter                                                     │  
   │                                                                                              │  
   │                                                                                              │  
   │                                                                                              │  
   │                                                                                              │  
   │                                                                                              │  
   │                                                                                              │  
-  │───────────────────────────────────────────────────────────────────────────────── ▸ mycluster │  
+  │─────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
   │  enter confirm • esc back • ctrl+c quit                                                      │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                     
