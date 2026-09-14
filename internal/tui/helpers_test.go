@@ -1,10 +1,12 @@
 package tui
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
 
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 )
@@ -81,6 +83,30 @@ func TestDottedKVNoWrapWhenUnbounded(t *testing.T) {
 	}
 	if !strings.Contains(plain, value) {
 		t.Fatalf("expected the value to render intact, got %q", plain)
+	}
+}
+
+// Node-op tables' sub-rows (Builder.SubKV) depend on DottedKeyValueSubFull
+// muting its key, which was otherwise unverified.
+func TestDottedKeyValueSubFullKeyIsMuted(t *testing.T) {
+	forced := colorprofile.TrueColor
+	outputProfile.Store(&forced)
+	t.Cleanup(func() { SetColorProfileFor(&bytes.Buffer{}) })
+
+	full := DottedKeyValueFull("key", "value", DefaultKeyColWidth, 0)
+	sub := DottedKeyValueSubFull("key", "value", DefaultKeyColWidth, 0)
+
+	mutedKey := lipgloss.NewStyle().Foreground(ColorSlate500).Render("key")
+	plainKey := lipgloss.NewStyle().Foreground(ColorSlate400).Render("key")
+
+	if !strings.Contains(sub, mutedKey) {
+		t.Errorf("SubFull's key must render with the muted ColorSlate500 foreground:\n%q", sub)
+	}
+	if !strings.Contains(full, plainKey) {
+		t.Errorf("Full's key must render with the normal ColorSlate400 foreground:\n%q", full)
+	}
+	if strings.Contains(sub, plainKey) {
+		t.Errorf("SubFull's key must not reuse Full's ColorSlate400 styling:\n%q", sub)
 	}
 }
 

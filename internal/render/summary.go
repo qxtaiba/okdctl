@@ -7,11 +7,16 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/lipgloss/v2"
+
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/postinstall"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
+
+// tableIndent is the left margin Builder.Table writes before every tui.Table line.
+const tableIndent = 4
 
 const defaultKeyColWidth = 45
 
@@ -162,11 +167,68 @@ func (s *Builder) Bullet(text string) {
 	s.writeWrapped("    "+tui.IconBullet+" ", 6, 4, text)
 }
 
-// Table writes tui.Table's rendered lines indented four spaces.
+// Table writes tui.Table's rendered lines indented four spaces, tightening
+// opts.MaxColWidth (deriving a cap from the Builder's content width) when
+// the caller's requested width would otherwise overflow the box.
 func (s *Builder) Table(headers []string, rows [][]string, opts tui.TableOptions) {
-	for _, line := range tui.Table(headers, rows, opts) {
-		s.b.WriteString("    " + tui.Downsample(line) + "\n")
+	if colCap := s.fitTableCap(headers, rows, opts); colCap > 0 {
+		opts.MaxColWidth = colCap
 	}
+	for _, line := range tui.Table(headers, rows, opts) {
+		s.b.WriteString(strings.Repeat(" ", tableIndent) + tui.Downsample(line) + "\n")
+	}
+}
+
+// fitTableCap returns the largest column-width cap, no wider than the
+// caller's requested opts.MaxColWidth (0 meaning uncapped), that keeps the
+// table's total rendered width within the Builder's content width; it
+// returns 0 when the caller's request (or the table's natural, untruncated
+// width) already fits, leaving opts untouched.
+func (s *Builder) fitTableCap(headers []string, rows [][]string, opts tui.TableOptions) int {
+	gap := opts.Gap
+	if gap <= 0 {
+		gap = 2
+	}
+	avail := s.kvWidth - tableIndent
+
+	natural := make([]int, len(headers))
+	for c, h := range headers {
+		natural[c] = lipgloss.Width(h)
+	}
+	for _, row := range rows {
+		for c := 0; c < len(headers) && c < len(row); c++ {
+			natural[c] = max(natural[c], lipgloss.Width(row[c]))
+		}
+	}
+
+	widthAt := func(capW int) int {
+		total := gap * (len(headers) - 1)
+		for _, w := range natural {
+			if capW > 0 && w > capW {
+				w = capW
+			}
+			total += w
+		}
+		return total
+	}
+
+	if widthAt(opts.MaxColWidth) <= avail {
+		return 0
+	}
+
+	hi := 0
+	for _, w := range natural {
+		hi = max(hi, w)
+	}
+	if opts.MaxColWidth > 0 && opts.MaxColWidth < hi {
+		hi = opts.MaxColWidth
+	}
+	for capW := hi; capW > 1; capW-- {
+		if widthAt(capW) <= avail {
+			return capW
+		}
+	}
+	return 1
 }
 
 // Newline writes a blank spacer line between sections.
