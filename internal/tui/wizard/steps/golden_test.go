@@ -189,6 +189,13 @@ func TestGolden_ConfigureSteps(t *testing.T) {
 				}
 				base := fmt.Sprintf("%s_%dx%d", sc.name, sz.w, sz.h)
 
+				// newGoldenModel builds via wizard.NewModel, which seeds
+				// its initial size from the process's real terminal
+				// rather than sz; pin it so the golden is independent of
+				// that.
+				tui.SetTerminalWidth(sz.w)
+				t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
 				m := newGoldenModel(t)
 				_ = tuitest.RenderAt(t, m, sz.w, sz.h)
 				m.Update(wizard.JumpToStepMsg{StepID: sc.id})
@@ -223,6 +230,9 @@ func TestGolden_ConfigureSteps(t *testing.T) {
 // section's 6 fields (bridge, additional networks, os/data/iso storage,
 // fcos iso) so the bootstrap field is focused and scrolled into view.
 func TestGolden_NodePlacementSingleNode(t *testing.T) {
+	tui.SetTerminalWidth(100)
+	t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
 	m := newGoldenModel(t)
 	_ = tuitest.RenderAt(t, m, 100, 30)
 	m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDNodePlacement})
@@ -245,6 +255,9 @@ func TestGolden_NodePlacementSingleNode(t *testing.T) {
 func TestGolden_DistributionLoadingState(t *testing.T) {
 	for _, sz := range goldenSizes {
 		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
+			tui.SetTerminalWidth(sz.w)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
 			m := newGoldenModel(t)
 			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
 			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDDistribution})
@@ -265,6 +278,9 @@ func TestGolden_DistributionLoadingState(t *testing.T) {
 func TestGolden_DistributionErrorState(t *testing.T) {
 	for _, sz := range goldenSizes {
 		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
+			tui.SetTerminalWidth(sz.w)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
 			m := newGoldenModel(t)
 			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
 			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDDistribution})
@@ -291,6 +307,9 @@ func TestGolden_AddonsVaultsEditMode(t *testing.T) {
 
 	for _, sz := range goldenSizes {
 		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
+			tui.SetTerminalWidth(sz.w)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
 			m := newGoldenModel(t)
 			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
 			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDAddons})
@@ -326,6 +345,9 @@ func TestGolden_AddonsFluxWarning(t *testing.T) {
 
 	for _, sz := range goldenSizes {
 		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
+			tui.SetTerminalWidth(sz.w)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
 			m := newGoldenModel(t)
 			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
 			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDAddons})
@@ -379,6 +401,9 @@ func pumpCmd(m *wizard.Model, cmd tea.Cmd) {
 // before any input, and typing the first character replaces it outright
 // rather than appending to it.
 func TestGolden_BasicsDefaultAsRealValue(t *testing.T) {
+	tui.SetTerminalWidth(100)
+	t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
 	m := newGoldenModelFreshDefaults(t)
 	_ = tuitest.RenderAt(t, m, 100, 30)
 	m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDBasics})
@@ -403,6 +428,9 @@ func TestGolden_BasicsDefaultAsRealValue(t *testing.T) {
 func TestGolden_ProxmoxEnterHighlightsInvalidFields(t *testing.T) {
 	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
 	enterKey := tea.KeyPressMsg{Code: tea.KeyEnter}
+
+	tui.SetTerminalWidth(100)
+	t.Cleanup(func() { tui.SetTerminalWidth(0) })
 
 	m := newGoldenModel(t)
 	_ = tuitest.RenderAt(t, m, 100, 30)
