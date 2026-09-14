@@ -21,7 +21,7 @@ func removePlan() node.OpPlan {
 		Nodes: []node.PlanNode{{
 			Name:      "worker2",
 			Role:      nodetypes.RoleWorker,
-			TFAddress: "module.okd_cluster.proxmox_virtual_environment_vm.worker[2]",
+			TFAddress: "module.vm.worker[2]",
 			Action:    terraform.PlanActionDelete,
 			OSDs:      []string{"rook-ceph/osd-3"},
 		}},
@@ -35,7 +35,7 @@ func resizePlan() node.OpPlan {
 		Nodes: []node.PlanNode{{
 			Name:      "master0",
 			Role:      nodetypes.RoleMaster,
-			TFAddress: "module.okd_cluster.proxmox_virtual_environment_vm.master[0]",
+			TFAddress: "module.vm.master[0]",
 			Action:    terraform.PlanActionUpdate,
 		}},
 		MemoryMB: 24576,
@@ -49,7 +49,7 @@ func addPlan() node.OpPlan {
 		Nodes: []node.PlanNode{{
 			Name:      "grappleberry-worker2",
 			Role:      nodetypes.RoleWorker,
-			TFAddress: "module.okd_cluster.proxmox_virtual_environment_vm.worker[2]",
+			TFAddress: "module.vm.worker[2]",
 			Action:    terraform.PlanActionCreate,
 		}},
 	}

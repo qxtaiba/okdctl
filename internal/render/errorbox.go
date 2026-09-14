@@ -55,9 +55,8 @@ func ErrorCard(kind, message, hint string, width int) string {
 // errorBody writes the kind chip, wrapped message, and pointer-led hint
 // shared by ErrorSummary and ErrorCard, sized to fit inside width.
 func errorBody(kind, message, hint string, width int) *Builder {
-	contentWidth := width - 4
-
 	sb := NewBuilderWidth(width)
+	contentWidth := sb.ContentWidth()
 	sb.Newline()
 	sb.WriteString("  " + tui.ErrorStyle.Render(tui.IconError+"  "+kind) + "\n")
 	sb.Newline()

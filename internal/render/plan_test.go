@@ -9,8 +9,8 @@ import (
 
 func TestPlanPreview(t *testing.T) {
 	drift := []terraform.ResourceChange{
-		{Address: "module.okd_cluster.proxmox_virtual_environment_vm.worker[2]", Action: terraform.PlanActionUpdate},
-		{Address: "module.okd_cluster.proxmox_virtual_environment_vm.worker[3]", Action: terraform.PlanActionDelete},
+		{Address: "module.vm.worker[2]", Action: terraform.PlanActionUpdate},
+		{Address: "module.vm.worker[3]", Action: terraform.PlanActionDelete},
 	}
 	cases := []struct {
 		name    string

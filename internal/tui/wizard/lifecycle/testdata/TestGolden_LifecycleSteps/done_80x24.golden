@@ -7,14 +7,14 @@
   │  │                                                                    │  │  
   │  │  ✓ resize complete                                                 │  │  
   │  │                                                                    │  │  
-  │  │    cluster ....................... homelab                         │  │  
-  │  │    elapsed ....................... 1m30s                           │  │  
+  │  │    cluster ............................... homelab                 │  │  
+  │  │    elapsed ............................... 1m30s                   │  │  
   │  │                                                                    │  │  
   │  │  nodes                                                             │  │  
-  │  │    homelab-master0 ............... master  resized                 │  │  
+  │  │    homelab-master0 ....................... master  resized         │  │  
   │  │                                                                    │  │  
   │  │  next steps                                                        │  │  
-  │  │    each resized node was power-cycled to realize the change; v…    │  │  
+  │  │    each resized node was power-cycled to realize the change; ver…  │  │  
   │  │      'okdctl node list' or 'oc debug node/<name> -- free -m'       │  │  
   │  │                                                                    │  │  
   │                                                                          │  

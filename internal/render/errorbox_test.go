@@ -2,12 +2,14 @@ package render
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
 	"charm.land/lipgloss/v2"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 )
 
 func TestErrorSummaryKindHeadlineAndHint(t *testing.T) {
@@ -92,6 +94,22 @@ func TestErrorBodyChipHasTwoSpaceGap(t *testing.T) {
 	card := ErrorCard("resize failed", "boom", "", 70)
 	if !strings.Contains(card, "✗  resize failed") {
 		t.Errorf("ErrorCard chip must render the icon and kind with a two-space gap:\n%s", card)
+	}
+}
+
+func TestErrorSummaryGoldenAtWidths(t *testing.T) {
+	err := (&errtypes.ConfigError{Msg: "ignition tls cert not found at /path/server.crt"}).
+		WithHint("re-run setup to regenerate it")
+
+	for _, w := range []int{60, 120} {
+		t.Run(fmt.Sprintf("w%d", w), func(t *testing.T) {
+			tui.SetTerminalWidth(w)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+			out := ErrorSummary(err, 2, "RUN123")
+			tuitest.AssertFits(t, out, w, 0)
+			tuitest.Golden(t, fmt.Sprintf("error_summary_%d", w), out)
+		})
 	}
 }
 
