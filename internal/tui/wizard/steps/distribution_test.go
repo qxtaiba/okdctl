@@ -122,3 +122,97 @@ func containsFocusChanged(cmd tea.Cmd) bool {
 	}
 	return false
 }
+
+// firstErrorSetMsg runs cmd, flattening batches, and returns the first
+// resulting wizard.ErrorSetMsg it finds.
+func firstErrorSetMsg(cmd tea.Cmd) (wizard.ErrorSetMsg, bool) {
+	if cmd == nil {
+		return wizard.ErrorSetMsg{}, false
+	}
+	switch msg := cmd().(type) {
+	case wizard.ErrorSetMsg:
+		return msg, true
+	case tea.BatchMsg:
+		for _, c := range msg {
+			if errMsg, ok := firstErrorSetMsg(c); ok {
+				return errMsg, true
+			}
+		}
+	}
+	return wizard.ErrorSetMsg{}, false
+}
+
+func TestDistributionStep_ErrorStateRendersEmptyState(t *testing.T) {
+	s := NewDistributionStep()
+	s.SetVersionFetcher(StaticVersionFetcher{Err: errors.New("dial tcp: connection refused")})
+	step, _ := s.Update(s.fetchVersions())
+	s = step.(*DistributionStep)
+
+	view := s.View(80, 24)
+	if !strings.Contains(view, "no releases loaded") {
+		t.Fatalf("View() = %q, want to contain %q", view, "no releases loaded")
+	}
+	if strings.Contains(view, "✗") {
+		t.Fatalf("View() = %q, want no literal ✗ (use tui.EmptyState's pending glyph)", view)
+	}
+}
+
+func TestDistributionStep_RetryRefetches(t *testing.T) {
+	s := NewDistributionStep()
+	s.SetVersionFetcher(StaticVersionFetcher{Err: errors.New("dial tcp: connection refused")})
+	step, _ := s.Update(s.fetchVersions())
+	s = step.(*DistributionStep)
+
+	step, cmd := s.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
+	s = step.(*DistributionStep)
+
+	if s.phase != phaseVersionLoading {
+		t.Fatalf("phase after 'r' = %v, want phaseVersionLoading", s.phase)
+	}
+	if cmd == nil {
+		t.Fatal("Update('r') on the error phase returned a nil cmd, want the refetch command")
+	}
+}
+
+func TestDistributionStep_ShortHelpNeverEmpty(t *testing.T) {
+	s := NewDistributionStep()
+	if len(s.ShortHelp()) == 0 {
+		t.Error("ShortHelp() while loading is empty")
+	}
+
+	s.SetVersionFetcher(StaticVersionFetcher{Err: errors.New("boom")})
+	step, _ := s.Update(s.fetchVersions())
+	s = step.(*DistributionStep)
+	if len(s.ShortHelp()) == 0 {
+		t.Error("ShortHelp() in the error phase is empty")
+	}
+
+	step, _ = s.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
+	s = step.(*DistributionStep)
+	if len(s.ShortHelp()) == 0 {
+		t.Error("ShortHelp() after retry (back to loading) is empty")
+	}
+
+	s.SetVersionFetcher(StaticVersionFetcher{Series: DemoReleaseSeries()})
+	step, _ = s.Update(s.fetchVersions())
+	s = step.(*DistributionStep)
+	if len(s.ShortHelp()) == 0 {
+		t.Error("ShortHelp() in the select phase is empty")
+	}
+}
+
+func TestDistributionStep_EnterOnEmptyListReportsError(t *testing.T) {
+	s := NewDistributionStep()
+	s.SetVersionFetcher(StaticVersionFetcher{Series: nil})
+	step, _ := s.Update(s.fetchVersions())
+	s = step.(*DistributionStep)
+
+	_, cmd := s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	errMsg, ok := firstErrorSetMsg(cmd)
+	if !ok {
+		t.Fatal("Update(enter) on an empty release list did not report an ErrorSetMsg")
+	}
+	if errMsg.Error == nil || errMsg.Error.Error() != "pick a release first" {
+		t.Fatalf("ErrorSetMsg.Error = %v, want %q", errMsg.Error, "pick a release first")
+	}
+}

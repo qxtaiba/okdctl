@@ -121,10 +121,38 @@ render_wizard() {
   return 1
 }
 
+# render_distribution_fail renders just the distribution step under
+# OKDCTL_DEMO_RELEASES=fail, pinning the error-state fixture (empty state +
+# retry ribbon) independently of the full 11-step walkthrough above.
+render_distribution_fail() {
+  local name="$1" w="$2" h="$3"
+  local attempt
+  for attempt in 1 2 3; do
+    local cwd="$WORK/cwd-fail-$name-$attempt"
+    mkdir -p "$cwd"
+    local tape="$WORK/distribution-fail-$name.tape"
+    render_tape "$SCREENSHOT_DIR/distribution-fail.tape.in" "$name" "$w" "$h" "$tape"
+
+    echo "rendering $name distribution-fail (attempt $attempt)..."
+    (cd "$SCREENSHOT_DIR" && OKDCTL_DEMO_CWD="$cwd" vhs "$tape" >/dev/null 2>&1) || true
+
+    local png="$OUT_DIR/$name-distribution-fail.png"
+    if [ -s "$png" ]; then
+      echo "rendered $name: distribution-fail screenshot"
+      return 0
+    fi
+    echo "  missing after attempt $attempt: distribution-fail"
+  done
+
+  echo "failed to render the distribution-fail screenshot for $name after 3 attempts" >&2
+  return 1
+}
+
 for preset in "${PRESETS[@]}"; do
   IFS=':' read -r name cols rows w h <<< "$preset"
   calibrate "$name" "$cols" "$rows" "$w" "$h"
   render_wizard "$name" "$w" "$h"
+  render_distribution_fail "$name" "$w" "$h"
 done
 
 echo "done: $OUT_DIR ($(find "$OUT_DIR" -name '*.png' | wc -l | tr -d ' ') PNGs)"

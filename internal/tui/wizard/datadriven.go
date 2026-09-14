@@ -19,10 +19,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
 )
 
-// errFixHighlighted is the status-row message shown when enter is pressed
+// ErrFixHighlighted is the status-row message shown when enter is pressed
 // with invalid fields; FocusFirstInvalid has already moved focus and
 // scrolled to the first one.
-var errFixHighlighted = errors.New("fix the highlighted fields to continue")
+var ErrFixHighlighted = errors.New("fix the highlighted fields to continue")
 
 // FieldType classifies how a FieldDefinition is rendered and validated.
 type FieldType int
@@ -325,11 +325,11 @@ func (f *MultiSectionForm) Validate() []error {
 	return errs
 }
 
-// touchAll marks every field in every section touched and records its
+// TouchAll marks every field in every section touched and records its
 // current error, ahead of Validate, so enter's forced submission attempt
 // paints every field's real state rather than only the ones the user has
 // visited.
-func (f *MultiSectionForm) touchAll() {
+func (f *MultiSectionForm) TouchAll() {
 	for _, section := range f.sections {
 		if section.Group != nil {
 			section.Group.TouchAll()
@@ -670,9 +670,9 @@ func (s *DataDrivenStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 		return s, cmd
 	}
 
-	s.form.touchAll()
+	s.form.TouchAll()
 	if errs := s.form.Validate(); len(errs) > 0 {
-		return s, tea.Batch(s.form.FocusFirstInvalid(), func() tea.Msg { return ErrorSetMsg{Error: errFixHighlighted} })
+		return s, tea.Batch(s.form.FocusFirstInvalid(), func() tea.Msg { return ErrorSetMsg{Error: ErrFixHighlighted} })
 	}
 	if s.definition.Validate != nil {
 		if err := s.definition.Validate(s.values()); err != nil {

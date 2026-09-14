@@ -1,0 +1,32 @@
+# Template for scripts/screenshot/run.sh: renders the distribution step's
+# error state under OKDCTL_DEMO_RELEASES=fail. StaticVersionFetcher.Err
+# resolves without network latency, so the error state is already showing
+# by the time step 2 appears — no interaction beyond opening the step is
+# needed to capture the empty state + retry ribbon.
+Output out/@NAME@-distribution-fail.txt
+Set Shell zsh
+Set FontSize 14
+Set Padding 0
+Set LineHeight 1.0
+Set LetterSpacing 1.0
+Set Width @W@
+Set Height @H@
+
+Hide
+Type `export PATH="$(dirname "$OKDCTL_DEMO_BIN"):$PATH" HOME="$OKDCTL_DEMO_HOME" OKDCTL_WIZARD_DEMO=1 OKDCTL_DEMO_RELEASES=fail; cd "$OKDCTL_DEMO_CWD"; clear`
+Enter
+Show
+
+Type "okdctl deploy"
+Sleep 450ms
+Enter
+
+Wait+Screen@10s /step 1 of 11/
+Enter
+Sleep 450ms
+
+Wait+Screen@10s /step 2 of 11/
+Sleep 450ms
+Screenshot out/@NAME@-distribution-fail.png
+Ctrl+C
+Sleep 500ms

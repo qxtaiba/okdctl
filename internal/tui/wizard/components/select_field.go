@@ -177,15 +177,20 @@ func (f *SelectField) nominalBoxWidth() int {
 	return max(widest+8, 12)
 }
 
-// arrowContent renders the current value flanked by cycle arrows, shown
-// even while blurred; a lone option has nothing to cycle to, so it renders
-// bare rather than implying an interaction that doesn't exist.
+// arrowContent renders the current value (a dim "none" when it's blank, so
+// the field never shows an empty gap between the arrows) flanked by cycle
+// arrows, shown even while blurred; a lone option has nothing to cycle to,
+// so it renders bare rather than implying an interaction that doesn't exist.
 func (f *SelectField) arrowContent() string {
 	if len(f.Options) < 2 {
 		return f.Value()
 	}
 	arrow := lipgloss.NewStyle().Foreground(tui.ColorPrimary)
-	return arrow.Render("◂") + " " + f.Value() + " " + arrow.Render("▸")
+	value := f.Value()
+	if value == "" {
+		value = tagStyle.Render("none")
+	}
+	return arrow.Render("◂") + " " + value + " " + arrow.Render("▸")
 }
 
 // booleanContent renders both options as a radio pair, lighting the
