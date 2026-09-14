@@ -5,8 +5,8 @@ import (
 	"io"
 	"path/filepath"
 	"strings"
-	"text/tabwriter"
 
+	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/addon"
@@ -16,6 +16,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/runlock"
+	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
@@ -260,28 +261,46 @@ func runAddonVerify(cmd *cobra.Command, _ []string) error {
 		return vErr
 	}
 
-	if len(results) == 0 {
-		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "no addons enabled")
-		return vErr
+	failed, err := printAddonVerify(cmd.OutOrStdout(), results)
+	if err != nil {
+		return err
 	}
-
-	tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(tw, "NAME\tSTATUS")
-	failed := 0
-	for _, r := range results {
-		status := "OK"
-		if r.Err != nil {
-			status = "FAIL: " + r.Err.Error()
-			failed++
-		}
-		_, _ = fmt.Fprintf(tw, "%s\t%s\n", r.Name, status)
-	}
-	_ = tw.Flush()
-
 	if failed > 0 {
 		return &errtypes.ClusterError{Msg: fmt.Sprintf("%d addon(s) failed verification", failed)}
 	}
 	return vErr
+}
+
+// printAddonVerify renders results as a NAME/STATUS table — a check-mark cell
+// for a healthy addon, a cross-mark cell with the error for a failing one,
+// its row styled ErrorStyle — returning the count of failed probes.
+func printAddonVerify(w io.Writer, results []addon.VerifyResult) (int, error) {
+	if len(results) == 0 {
+		_, err := fmt.Fprintln(w, tui.EmptyState("no addons enabled", "enable addons in okdctl.yaml, then 'okdctl addon install --all'"))
+		return 0, err
+	}
+
+	rows := make([][]string, 0, len(results))
+	failed := 0
+	for _, r := range results {
+		status := tui.IconSuccess + " ok"
+		if r.Err != nil {
+			status = tui.IconError + " " + r.Err.Error()
+			failed++
+		}
+		rows = append(rows, []string{r.Name, status})
+	}
+
+	err := printTable(w, []string{headerName, "STATUS"}, rows, tui.TableOptions{
+		MaxColWidth: 60,
+		RowStyle: func(i int) (lipgloss.Style, bool) {
+			if results[i].Err != nil {
+				return tui.ErrorStyle, true
+			}
+			return lipgloss.Style{}, false
+		},
+	})
+	return failed, err
 }
 
 func newAddonManager(cfg *config.Config, projectRoot string) *addon.Manager {
@@ -302,11 +321,10 @@ func newAddonManager(cfg *config.Config, projectRoot string) *addon.Manager {
 func printAddonList(w io.Writer, cfg *config.Config) error {
 	all := addon.All()
 	if len(all) == 0 {
-		_, err := fmt.Fprintln(w, "no addons registered")
+		_, err := fmt.Fprintln(w, tui.EmptyState("no addons registered", ""))
 		return err
 	}
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(tw, "NAME\tDISPLAY-NAME\tDEPS\tIN-CONFIG")
+	rows := make([][]string, 0, len(all))
 	for _, a := range all {
 		info := a.Info()
 		deps := "-"
@@ -314,11 +332,11 @@ func printAddonList(w io.Writer, cfg *config.Config) error {
 			deps = strings.Join(info.Dependencies, ",")
 		}
 		ac := cfg.Addons[info.Name]
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", info.Name, info.DisplayName, deps, yesNo(ac.Enabled))
+		rows = append(rows, []string{info.Name, info.DisplayName, deps, yesNo(ac.Enabled)})
 	}
-	if err := tw.Flush(); err != nil {
+	if err := printTable(w, []string{headerName, "DISPLAY-NAME", "DEPS", "IN-CONFIG"}, rows, tui.TableOptions{}); err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintln(w, "\nIN-CONFIG reflects the configuration file only. Run 'addon verify' for live cluster state.")
-	return nil
+	_, err := fmt.Fprintln(w, "\n"+tui.Footnote("IN-CONFIG reflects the configuration file only. Run 'addon verify' for live cluster state."))
+	return err
 }
