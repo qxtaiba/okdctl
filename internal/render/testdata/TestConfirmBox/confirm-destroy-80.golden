@@ -1,0 +1,15 @@
+
+╭────────────────────────────────── DESTROY ───────────────────────────────────╮
+│                                                                              │
+│  ⚠ confirm destroy                                                           │
+│                                                                              │
+│    cluster .................................. grappleberry                   │
+│    domain ................................... grappleberry.example.com       │
+│    scope .................................... full cluster (all VMs)         │
+│    also removes ............................. fcos iso, host files, firewall │
+│                                               rules                          │
+│                                                                              │
+│  irreversible — destroys the listed VM(s) and their data disk; removed data  │
+│  cannot be recovered                                                         │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯

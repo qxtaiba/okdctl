@@ -400,12 +400,12 @@ func nodeConfirmHook(rc *nodeRunnerCtx, consent nodeConsent, clusterName string,
 func runNodeGate(ctx context.Context, twoStage bool, clusterName string) (bool, error) {
 	if twoStage {
 		nameOK, err := promptForClusterNameConfirmation(ctx, clusterName,
-			fmt.Sprintf("type cluster name %q to confirm: ", clusterName))
+			tui.PromptLine(fmt.Sprintf("type cluster name %q to confirm", clusterName)))
 		if err != nil || !nameOK {
 			return false, err
 		}
 	}
-	return promptForConfirmation(ctx, "proceed? [y/N]: ")
+	return promptForConfirmation(ctx, tui.PromptLine("proceed? [y/N]"))
 }
 
 // runHostBudgetProbe reads host memory and os-datastore headroom for the

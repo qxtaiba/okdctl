@@ -15,6 +15,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 var (
@@ -91,13 +92,27 @@ func buildConvertConfirm(ctx context.Context, yes bool) func([]string) bool {
 			return true
 		}
 
-		prompt := fmt.Sprintf("convert %d HostNetwork controller(s) to LoadBalancerService? [y/N]: ", len(hostNetworkICs))
+		prompt := tui.PromptLine(fmt.Sprintf("convert %d HostNetwork controller(s) to LoadBalancerService? [y/N]", len(hostNetworkICs)))
 		confirmed, err := promptForConfirmation(ctx, prompt)
 		if err != nil {
 			logutil.Warn("skipping HostNetwork conversion", logutil.LF("err", err))
 			return false
 		}
 		return confirmed
+	}
+}
+
+// updateIngressConfirmFacts builds the ConfirmBox facts for cfg's cluster
+// and whether haproxy will be stopped after the DNS cutover.
+func updateIngressConfirmFacts(cfg *config.Config) []render.Fact {
+	haproxy := "stopped and disabled after cutover"
+	if updateIngressKeepHAProxy {
+		haproxy = "kept running (--keep-haproxy)"
+	}
+	return []render.Fact{
+		{Key: factKeyCluster, Value: cfg.Cluster.Name},
+		{Key: "domain", Value: cfg.Cluster.Domain},
+		{Key: "haproxy", Value: haproxy},
 	}
 }
 
@@ -113,18 +128,14 @@ func runUpdateIngress(cmd *cobra.Command, _ []string) error {
 		return runUpdateIngressDryRun(ctx, cfg)
 	}
 
+	fmt.Fprintln(cmd.ErrOrStderr(), render.ConfirmBox("ingress update", updateIngressConfirmFacts(cfg), ""))
+
 	if err := confirmClusterMatches(updateIngressYes, updateIngressConfirmCluster, cfg.Cluster.Name, "update-ingress"); err != nil {
 		return err
 	}
 
-	logutil.Warn("this will update dns to use loadbalancer ips",
-		logutil.LF("cluster", cfg.Cluster.Name), logutil.LF("domain", cfg.Cluster.Domain))
-	if !updateIngressKeepHAProxy {
-		logutil.Warn("haproxy will be stopped and disabled on the bastion (pass --keep-haproxy to skip)")
-	}
-
 	if !updateIngressYes {
-		confirmed, err := promptForConfirmation(ctx, "proceed with ingress update? [y/N]: ")
+		confirmed, err := promptForConfirmation(ctx, tui.PromptLine("proceed with ingress update? [y/N]"))
 		if err != nil {
 			return err
 		}

@@ -56,6 +56,16 @@ func TestTruncateMiddleIsRuneSafe(t *testing.T) {
 	})
 }
 
+func TestPromptLine(t *testing.T) {
+	got := PromptLine("proceed with destroy? [y/N]")
+	if !strings.Contains(got, IconPointer) {
+		t.Errorf("PromptLine must carry the pointer glyph: %q", got)
+	}
+	if !strings.HasSuffix(got, "proceed with destroy? [y/N]: ") {
+		t.Errorf("PromptLine must append a trailing colon and space to the text: %q", got)
+	}
+}
+
 func TestWrapLinesHardSplitsLongToken(t *testing.T) {
 	long := strings.Repeat("中", 30)
 

@@ -16,6 +16,9 @@ import (
 // testStdinReader replaces os.Stdin for tests and bypasses the TTY guard; nil in production.
 var testStdinReader io.Reader
 
+// factKeyCluster is the shared render.Fact.Key every ConfirmBox uses for the cluster name row.
+const factKeyCluster = "cluster"
+
 // promptForLine reads a line from stdin with context awareness. Go can't
 // cancel an in-flight read, so on ctx cancel the reader goroutine leaks
 // bounded by the parent process's lifetime.

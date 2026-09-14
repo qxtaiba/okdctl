@@ -64,6 +64,12 @@ func TestBoxFramingContract(t *testing.T) {
 		{"UpdateIngressSummary", func() string {
 			return UpdateIngressSummary(&postinstall.UpdateIngressResult{})
 		}},
+		{"ConfirmBox irreversible", func() string {
+			return ConfirmBox("destroy", []Fact{{Key: "cluster", Value: "grappleberry"}}, IrreversibleWarning)
+		}},
+		{"ConfirmBox reversible", func() string {
+			return ConfirmBox("ingress update", []Fact{{Key: "cluster", Value: "grappleberry"}}, "")
+		}},
 	}
 
 	for _, tc := range cases {
