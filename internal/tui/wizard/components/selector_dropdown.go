@@ -118,6 +118,10 @@ func (s *Selector) renderDropdownRegion(start, end int, scrollStyle, borderStyle
 	lines = append(lines, borderStyle.Render(topBorder))
 
 	dropdownPrefix := borderStyle.Render("  │ ")
+	if s.DropdownHeader != "" {
+		lines = append(lines, dropdownPrefix+"  "+s.DropdownHeader)
+	}
+
 	for i := visibleStart; i <= visibleEnd; i++ {
 		opt := &s.options[i]
 		isSelected := i == s.selected

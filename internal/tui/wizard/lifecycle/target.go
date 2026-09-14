@@ -3,7 +3,6 @@ package lifecycle
 import (
 	"fmt"
 	"sort"
-	"strings"
 
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
@@ -51,6 +50,9 @@ type TargetStep struct {
 
 	selector *components.Selector
 	choices  []targetChoice
+	// header: the node table's header row, shown above the selector for remove
+	// (resize carries its own copy via selector.DropdownHeader instead).
+	header string
 	// blocked: remove-ineligible workers, rendered dimmed to teach the top-down constraint.
 	blocked []string
 }
@@ -74,9 +76,9 @@ func NewTargetStep(st *State, hooks Hooks) *TargetStep {
 // time because the step is constructed before the op screen runs.
 func (s *TargetStep) DisplayTitle() string {
 	if s.st.Op == node.OpRemove {
-		return "which worker should be removed?"
+		return "choose the target — worker to remove"
 	}
-	return "which nodes should be resized?"
+	return "choose the target — nodes to resize"
 }
 
 // ShouldShow hides the step for add (workers only) and on resume.
@@ -139,22 +141,28 @@ func (s *TargetStep) buildChoices(nodes []cluster.NodeDetail) {
 	sortByIndex(workers, s.st.Op == node.OpRemove)
 
 	s.choices = nil
+	s.header = ""
 	s.blocked = nil
 	var opts []components.Option
+	var dropdownHeader string
 
 	if s.st.Op == node.OpRemove {
 		if len(workers) > 0 {
 			top := workers[0]
+			blockedAfter := make(map[string]string, len(workers)-1)
+			for _, w := range workers[1:] {
+				blockedAfter[w.Name] = top.Name
+			}
+			header, rows := nodeTable(workers, blockedAfter)
+			s.header = header
+
 			s.choices = append(s.choices, targetChoice{node: top.Name})
 			opts = append(opts, components.Option{
 				ID:    top.Name,
-				Title: nodeLine(top),
+				Title: rows[0],
 			})
-			after := []string{top.Name}
-			for _, w := range workers[1:] {
-				s.blocked = append(s.blocked,
-					fmt.Sprintf("%s %s      removable only after %s (top-down)", tui.IconPending, w.Name, strings.Join(after, ", ")))
-				after = append(after, w.Name)
+			for i := range workers[1:] {
+				s.blocked = append(s.blocked, tui.IconSkip+" "+rows[i+1])
 			}
 		}
 	} else {
@@ -174,25 +182,48 @@ func (s *TargetStep) buildChoices(nodes []cluster.NodeDetail) {
 				Description: "rolled one at a time; no etcd gate",
 			})
 		}
-		for _, n := range append(masters, workers...) {
+		allNodes := make([]cluster.NodeDetail, 0, len(masters)+len(workers))
+		allNodes = append(allNodes, masters...)
+		allNodes = append(allNodes, workers...)
+		header, rows := nodeTable(allNodes, nil)
+		dropdownHeader = header
+		for i, n := range allNodes {
 			s.choices = append(s.choices, targetChoice{node: n.Name})
 			opts = append(opts, components.Option{
 				ID:         n.Name,
-				Title:      nodeLine(n),
+				Title:      rows[i],
 				InDropdown: true,
 			})
 		}
 	}
 
 	s.selector = components.NewSelector(opts)
+	s.selector.DropdownHeader = dropdownHeader
 }
 
-func nodeLine(n cluster.NodeDetail) string {
-	ready := "ready"
-	if !n.Ready {
-		ready = "notready"
+// nodeTable renders nodes as an aligned NODE/ROLE/READY table, pre-styling
+// each READY cell as ready, notready, or blocked-after via blockedAfter.
+func nodeTable(nodes []cluster.NodeDetail, blockedAfter map[string]string) (header string, rows []string) {
+	readyStyle := lipgloss.NewStyle().Foreground(tui.ColorSuccess)
+	notReadyStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
+	blockedStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate600)
+
+	data := make([][]string, len(nodes))
+	for i, n := range nodes {
+		var ready string
+		switch {
+		case blockedAfter[n.Name] != "":
+			ready = blockedStyle.Render(fmt.Sprintf("blocked until %s is removed", blockedAfter[n.Name]))
+		case n.Ready:
+			ready = readyStyle.Render(tui.IconSuccess + " ready")
+		default:
+			ready = notReadyStyle.Render("notready")
+		}
+		data[i] = []string{n.Name, string(n.Role), ready}
 	}
-	return fmt.Sprintf("%-22s %-8s %s", n.Name, n.Role, ready)
+
+	lines := tui.Table([]string{"NODE", "ROLE", "READY"}, data, tui.TableOptions{})
+	return lines[0], lines[1:]
 }
 
 func filterRole(nodes []cluster.NodeDetail, role nodetypes.NodeRole) []cluster.NodeDetail {
@@ -240,6 +271,9 @@ func (s *TargetStep) View(width, height int) string {
 	}
 
 	out := s.selector.View()
+	if s.header != "" {
+		out = "  " + s.header + "\n" + out
+	}
 	if len(s.blocked) > 0 {
 		dim := lipgloss.NewStyle().Foreground(tui.ColorSlate600)
 		for _, line := range s.blocked {
@@ -276,10 +310,13 @@ func (s *TargetStep) SetFocused(focused bool) {
 	}
 }
 
-// ShortHelp returns the step's help bar, or nil while loading.
+// ShortHelp returns the step's help bar, back/quit only while loading.
 func (s *TargetStep) ShortHelp() []wizard.KeyBinding {
 	if s.phase == targetLoading {
-		return nil
+		return []wizard.KeyBinding{
+			{Key: wizard.HelpEsc, Help: wizard.HelpBack},
+			{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
+		}
 	}
 	return []wizard.KeyBinding{
 		{Key: "↑↓", Help: "select"},
