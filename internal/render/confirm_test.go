@@ -57,3 +57,39 @@ func TestConfirmBoxReversibleHasNoRedLine(t *testing.T) {
 		t.Errorf("reversible confirm box must carry no irreversible line:\n%s", got)
 	}
 }
+
+func TestDryRunActions(t *testing.T) {
+	facts := []Fact{
+		{Key: "cluster", Value: "grappleberry"},
+		{Key: "domain", Value: "grappleberry.example.com"},
+	}
+	would := []string{
+		"remove work directory (/srv/okdctl/okd-install)",
+		"remove the FCOS ISO from the Proxmox host",
+	}
+	got := DryRunActions("destroy", facts, would)
+
+	for _, want := range []string{
+		"dry-run — no changes made", "would",
+		"remove work directory (/srv/okdctl/okd-install)",
+		"remove the FCOS ISO from the Proxmox host",
+		"--dry-run",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("dry-run actions box missing %q:\n%s", want, got)
+		}
+	}
+
+	for _, w := range []int{80, 120} {
+		t.Run(fmt.Sprintf("w%d", w), func(t *testing.T) {
+			tui.SetTerminalWidth(w)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+			out := DryRunActions("destroy", facts, would)
+			tuitest.AssertFits(t, out, w, 0)
+			if w == 80 {
+				tuitest.Golden(t, "dryrun-destroy-80", out)
+			}
+		})
+	}
+}

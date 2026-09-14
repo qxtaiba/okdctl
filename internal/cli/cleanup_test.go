@@ -107,11 +107,21 @@ func TestRunCleanup_Wiring(t *testing.T) {
 		sentinel := seedCleanupWorkspace(t)
 		cleanupDryRun = true
 		cleanupCmd.SetContext(context.Background())
+		var stdout bytes.Buffer
+		cleanupCmd.SetOut(&stdout)
+		t.Cleanup(func() { cleanupCmd.SetOut(nil) })
 
 		if err := runCleanup(cleanupCmd, nil); err != nil {
 			t.Fatalf("runCleanup --dry-run: %v", err)
 		}
 		mustSurviveCleanup(t, sentinel)
+
+		out := stdout.String()
+		for _, want := range []string{"would", "work directory"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("dry-run preview missing %q:\n%s", want, out)
+			}
+		}
 	})
 
 	t.Run("invalid --kind is a UsageError", func(t *testing.T) {
