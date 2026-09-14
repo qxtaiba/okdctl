@@ -6,19 +6,19 @@
   │                                                                                              │  
   │                                                                                              │  
   │                                                                                              │  
+  │                       ██████  ██   ██ ██████   ██████ ████████ ██                            │  
+  │                      ██    ██ ██  ██  ██   ██ ██         ██    ██                            │  
+  │                      ██    ██ █████   ██   ██ ██         ██    ██                            │  
+  │                      ██    ██ ██  ██  ██   ██ ██         ██    ██                            │  
+  │                       ██████  ██   ██ ██████   ██████    ██    ███████                       │  
+  │                              answer a few questions, then deploy                             │  
+  │                        you'll need              it takes                                     │  
+  │                        ✓ a proxmox host         ≈ 10 min to configure                        │  
+  │                        ✓ proxmox credentials    ≈ 45 min to deploy                           │  
+  │                        ✓ an okd pull secret                                                  │  
   │                                                                                              │  
-  │                                                                                              │  
-  │                                                                                              │  
-  │                                                                                              │  
-  │                              okdctl setup                                                    │  
-  │                                                                                              │  
-  │                              configure your kubernetes cluster                               │  
-  │                                                                                              │  
-  │                              ● get started                                                   │  
+  │                                         ● get started                                        │  
   │                                create your first configuration                               │  
-  │                                                                                              │  
-  │                                                                                              │  
-  │                                                                                              │  
   │                                                                                              │  
   │                                                                                              │  
   │                                                                                              │  

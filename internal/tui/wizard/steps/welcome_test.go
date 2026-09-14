@@ -76,3 +76,36 @@ func TestWelcomeStep_DefaultModeIsFresh(t *testing.T) {
 		t.Errorf("GetMode() on fresh install = %v, want WelcomeModeFresh", s.GetMode())
 	}
 }
+
+func TestWelcomeLeftRightMoveSelection(t *testing.T) {
+	s := NewWelcomeStep()
+	s.SetConfigExists(true)
+
+	s.Update(tea.KeyPressMsg{Code: tea.KeyRight})
+	if got := s.GetMode(); got != WelcomeModeEdit {
+		t.Fatalf("GetMode() after right = %v, want WelcomeModeEdit", got)
+	}
+
+	s.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+	if got := s.GetMode(); got != WelcomeModeDeploy {
+		t.Fatalf("GetMode() after left = %v, want WelcomeModeDeploy", got)
+	}
+}
+
+func TestWelcomeFoundLineFromConfig(t *testing.T) {
+	s := NewWelcomeStep()
+	cfg := &config.Config{}
+	cfg.Cluster.Name = "prod-cluster"
+	cfg.Topology.ControlPlane.Count = 3
+	cfg.Topology.Workers.Count = 5
+
+	s.SetExistingConfig(cfg)
+
+	if !s.configExists {
+		t.Fatal("SetExistingConfig did not mark configExists")
+	}
+	want := "found okdctl.yaml · cluster prod-cluster · 3 + 5 nodes"
+	if s.foundLine != want {
+		t.Errorf("foundLine = %q, want %q", s.foundLine, want)
+	}
+}

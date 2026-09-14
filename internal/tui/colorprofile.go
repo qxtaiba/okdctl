@@ -37,6 +37,11 @@ func colorEnabled() bool {
 	return colorProfile() > colorprofile.Ascii
 }
 
+// ColorEnabled reports whether the active color profile emits any color.
+func ColorEnabled() bool {
+	return colorEnabled()
+}
+
 // Downsample rewrites s so ANSI escapes match the active profile —
 // unchanged under TrueColor, downgraded for ANSI/ANSI256, stripped
 // otherwise. Boxed* helpers apply it internally; callers printing styled

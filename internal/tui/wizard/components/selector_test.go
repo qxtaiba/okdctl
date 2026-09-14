@@ -3,6 +3,10 @@ package components
 import (
 	"strings"
 	"testing"
+
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 )
 
 func newSpanSelector() *Selector {
@@ -79,5 +83,34 @@ func TestSelector_DownFromLastDropdownItemContinues(t *testing.T) {
 
 	if got := s.Selected().ID; got != "minor:4.19" {
 		t.Fatalf("Selected().ID after moveDown() from the last dropdown item = %q, want minor:4.19 (the next parent)", got)
+	}
+}
+
+func TestCompactSelector_ViewInlineRendersRowWithSelection(t *testing.T) {
+	s := NewCompactSelector([]string{"a", "b", "c"})
+
+	if got := tuitest.StripANSI(s.ViewInline()); got != "● a   ○ b   ○ c" {
+		t.Fatalf("ViewInline() = %q, want %q", got, "● a   ○ b   ○ c")
+	}
+
+	s.selected = 1
+
+	if got := tuitest.StripANSI(s.ViewInline()); got != "○ a   ● b   ○ c" {
+		t.Fatalf("ViewInline() after selecting index 1 = %q, want %q", got, "○ a   ● b   ○ c")
+	}
+}
+
+func TestArrowsAsVertical_MapsLeftRightToUpDown(t *testing.T) {
+	if got := ArrowsAsVertical(tea.KeyPressMsg{Code: tea.KeyLeft}); got.Code != tea.KeyUp {
+		t.Errorf("ArrowsAsVertical(left).Code = %v, want KeyUp", got.Code)
+	}
+	if got := ArrowsAsVertical(tea.KeyPressMsg{Code: tea.KeyRight}); got.Code != tea.KeyDown {
+		t.Errorf("ArrowsAsVertical(right).Code = %v, want KeyDown", got.Code)
+	}
+	if got := ArrowsAsVertical(tea.KeyPressMsg{Code: tea.KeyEnter}); got.Code != tea.KeyEnter {
+		t.Errorf("ArrowsAsVertical(enter).Code = %v, want unchanged KeyEnter", got.Code)
+	}
+	if got := ArrowsAsVertical(tea.KeyPressMsg{Code: 'j', Text: "j"}); got.Code != 'j' || got.Text != "j" {
+		t.Errorf("ArrowsAsVertical('j') = %+v, want unchanged", got)
 	}
 }

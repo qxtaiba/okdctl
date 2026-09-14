@@ -47,7 +47,7 @@ func buildWizardStepsWithState(wizardCfg wizard.Config) wizard.BuiltSteps {
 	steps.RegisterAll(builder)
 	built := wizard.BuildSteps(wizardCfg, builder)
 
-	configureWelcomeStep(built, wizardCfg.ConfigExists)
+	configureWelcomeStep(built, wizardCfg)
 	configureDemoVersionFetcher(built)
 
 	if wizardCfg.InitialConfig != nil {
@@ -60,10 +60,16 @@ func buildWizardStepsWithState(wizardCfg wizard.Config) wizard.BuiltSteps {
 	return built
 }
 
-func configureWelcomeStep(built wizard.BuiltSteps, configExists bool) {
+// configureWelcomeStep marks the welcome step's config state, passing the
+// loaded config through for its found line when one exists.
+func configureWelcomeStep(built wizard.BuiltSteps, wizardCfg wizard.Config) {
 	for _, step := range built.Steps {
 		if ws, ok := step.(*steps.WelcomeStep); ok {
-			ws.SetConfigExists(configExists)
+			if wizardCfg.ConfigExists && wizardCfg.InitialConfig != nil {
+				ws.SetExistingConfig(wizardCfg.InitialConfig)
+			} else {
+				ws.SetConfigExists(wizardCfg.ConfigExists)
+			}
 			break
 		}
 	}
