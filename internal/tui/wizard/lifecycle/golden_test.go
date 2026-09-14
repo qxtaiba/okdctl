@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
@@ -64,7 +66,7 @@ func lifecycleScenarios() []lifecycleScenario {
 			},
 		},
 		{
-			name: "target",
+			name: "target_resize",
 			id:   StepIDTarget,
 			build: func() (*State, Hooks) {
 				cfg := config.DefaultConfig()
@@ -74,6 +76,30 @@ func lifecycleScenarios() []lifecycleScenario {
 			seed: func(m *wizard.Model, _ *State) {
 				m.Update(nodesLoadedMsg{nodes: []cluster.NodeDetail{
 					{Name: "homelab-worker0", Role: nodetypes.RoleWorker, Ready: true},
+					{Name: "homelab-master0", Role: nodetypes.RoleMaster, Ready: true},
+				}})
+				// Move selection into the dropdown so its header and a
+				// highlighted node row render together.
+				m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+				m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+			},
+		},
+		{
+			name: "target_remove",
+			id:   StepIDTarget,
+			build: func() (*State, Hooks) {
+				cfg := config.DefaultConfig()
+				cfg.Cluster.Name = "homelab"
+				return &State{Cfg: cfg, Op: node.OpRemove}, Hooks{}
+			},
+			seed: func(m *wizard.Model, st *State) {
+				// The jump through StepIDOp applies its default selection
+				// (resize) first; restore remove before nodes load.
+				st.Op = node.OpRemove
+				m.Update(nodesLoadedMsg{nodes: []cluster.NodeDetail{
+					{Name: "homelab-worker0", Role: nodetypes.RoleWorker, Ready: true},
+					{Name: "homelab-worker2", Role: nodetypes.RoleWorker, Ready: true},
+					{Name: "homelab-worker1", Role: nodetypes.RoleWorker, Ready: false},
 					{Name: "homelab-master0", Role: nodetypes.RoleMaster, Ready: true},
 				}})
 			},

@@ -50,6 +50,10 @@ type Selector struct {
 	// cachedStyles caches option render styles; safe since tui.Color* only
 	// changes during package init.
 	cachedStyles *optionStyles
+
+	// DropdownHeader is a dim, non-selectable line shown above the dropdown's
+	// option rows, or nothing when empty.
+	DropdownHeader string
 }
 
 // NewSelector builds a Selector starting focused on the first option.

@@ -6,11 +6,14 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
+	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
@@ -64,8 +67,73 @@ func TestTargetStepRemoveOnlyTopWorkerSelectable(t *testing.T) {
 	if st.Target != "homelab-worker2" {
 		t.Fatalf("Target = %q, want homelab-worker2", st.Target)
 	}
-	if !strings.Contains(s.View(80, 40), "removable only after") {
+	if !strings.Contains(s.View(80, 40), "blocked until homelab-worker2 is removed") {
 		t.Error("lower workers must render with the top-down explanation")
+	}
+}
+
+func TestTargetRemoveHeaderAndBlockedRowsShareColumns(t *testing.T) {
+	// Node names avoid the substring "worker" so it unambiguously locates
+	// the ROLE cell rather than a node name or the blocked-row message.
+	st := &State{Cfg: config.DefaultConfig(), Op: node.OpRemove}
+	nodes := []cluster.NodeDetail{
+		{Name: "homelab-node1", Role: nodetypes.RoleWorker, Ready: true},
+		{Name: "homelab-node0", Role: nodetypes.RoleWorker, Ready: true},
+	}
+	s := loadedTarget(t, st, nodes)
+
+	var headerLine, blockedLine string
+	for _, line := range strings.Split(tuitest.StripANSI(s.View(80, 40)), "\n") {
+		switch {
+		case strings.Contains(line, "ROLE"):
+			headerLine = line
+		case strings.Contains(line, tui.IconSkip):
+			blockedLine = line
+		}
+	}
+	if headerLine == "" || blockedLine == "" {
+		t.Fatalf("expected a header row and a blocked row, got header=%q blocked=%q", headerLine, blockedLine)
+	}
+
+	roleIdx := strings.Index(headerLine, "ROLE")
+	workerIdx := strings.Index(blockedLine, "worker")
+	if roleIdx < 0 || workerIdx < 0 {
+		t.Fatalf("expected ROLE in header and worker in blocked row, got header=%q blocked=%q", headerLine, blockedLine)
+	}
+
+	roleCol := lipgloss.Width(headerLine[:roleIdx])
+	workerCol := lipgloss.Width(blockedLine[:workerIdx])
+	if roleCol != workerCol {
+		t.Errorf("ROLE column at %d, blocked row's role cell at %d, want equal", roleCol, workerCol)
+	}
+}
+
+func TestTargetShortHelpNeverNil(t *testing.T) {
+	st := &State{Cfg: config.DefaultConfig(), Op: node.OpResize}
+	s := NewTargetStep(st, Hooks{})
+	if s.ShortHelp() == nil {
+		t.Error("ShortHelp must not be nil while loading")
+	}
+	loaded := loadedTarget(t, st, []cluster.NodeDetail{
+		{Name: "homelab-master0", Role: nodetypes.RoleMaster, Ready: true},
+	})
+	if loaded.ShortHelp() == nil {
+		t.Error("ShortHelp must not be nil once picking")
+	}
+}
+
+func TestTargetResizeDropdownHasHeader(t *testing.T) {
+	st := &State{Cfg: config.DefaultConfig(), Op: node.OpResize}
+	nodes := []cluster.NodeDetail{
+		{Name: "homelab-worker0", Role: nodetypes.RoleWorker, Ready: true},
+		{Name: "homelab-master0", Role: nodetypes.RoleMaster, Ready: true},
+	}
+	s := loadedTarget(t, st, nodes)
+	if s.selector.DropdownHeader == "" {
+		t.Fatal("resize dropdown must carry a header")
+	}
+	if !strings.Contains(tuitest.StripANSI(s.selector.DropdownHeader), "ROLE") {
+		t.Errorf("dropdown header = %q, want the table header", s.selector.DropdownHeader)
 	}
 }
 

@@ -1,0 +1,24 @@
+                                                                                
+  ╭──────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L                                                              │  
+  │ choose the target — worker to remove                ●─●─○─○  step 2 of 4 │  
+  │──────────────────────────────────────────────────────────────────────────│  
+  │    NODE             ROLE    READY                                        │  
+  │  ● homelab-worker2  worker  ✓ ready                                      │  
+  │  ↷ homelab-worker1  worker  blocked until homelab-worker2 is removed     │  
+  │  ↷ homelab-worker0  worker  blocked until homelab-worker2 is removed     │  
+  │                                                                          │  
+  │                                                                          │  
+  │                                                                          │  
+  │                                                                          │  
+  │                                                                          │  
+  │                                                                          │  
+  │                                                                          │  
+  │                                                                          │  
+  │                                                                          │  
+  │                                                                          │  
+  │                                                                          │  
+  │─────────────────────────────────────────────────────────────── ▸ homelab │  
+  │  ↑↓ select • enter confirm • esc back • ctrl+c quit                      │  
+  ╰──────────────────────────────────────────────────────────────────────────╯  
+                                                                                
