@@ -1,0 +1,24 @@
+                                                                                
+  ╭──────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L                                                              │  
+  │ review the plan                 op · target · params · plan · run · done │  
+  │──────────────────────────────────────────────────────────────────────────│  
+  │  NODE             ROLE    ADDRESS      ACTION                            │  
+  │  homelab-worker2  worker  m.worker[2]  delete                            │  
+  │    storage: 1 rook-ceph OSD(s) — data disk destroyed                     │  
+  │    ingress: 1 router pod(s) here                                         │  
+  │                                                                          │  
+  │  gates per node                                                          │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
+  │  1 cordon + drain            3 delete kubernetes node                    │  
+  │  2 terraform apply (destroy) 4 ceph health gate                          │  
+  │  ✓ plan gate passed — the safety gate allows exactly the listed changes  │  
+  │                                                                          │  
+  │  ┃ irreversible                                                          │  
+  │  ┃ destroys the listed VM(s) and their data disk; removed data cannot    │  
+  │  ┃ be recovered                                                          │  
+  │                                                                          │  
+  │────────────────── ↑ ↓  scroll up for more ────────────────── ▸ mycluster │  
+  │  ● execute removal   ○ back to parameters   ○ exit without changes    …  │  
+  ╰──────────────────────────────────────────────────────────────────────────╯  
+                                                                                

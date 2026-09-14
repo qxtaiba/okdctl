@@ -10,6 +10,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
+	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
@@ -34,12 +35,13 @@ const (
 	previewActionExit
 )
 
-// irreversibleWarning is the amber wording shared with render.NodeOpConfirm.
-const irreversibleWarning = "irreversible: destroys the listed VM(s) and their data disk; removed data cannot be recovered"
+// gateGridCellWidth is the fixed column width for one renderGateGrid cell.
+const gateGridCellWidth = 28
 
 // PreviewStep runs the real dry-run pass (guards + plan safety gate) and
 // renders the informed plan — nodes, terraform actions, health-gate plan,
-// and destructive warnings — with the execute/back/exit action selector.
+// and destructive warnings — with the execute/back/exit action selector
+// pinned to the help row.
 type PreviewStep struct {
 	wizard.BaseStep
 	st    *State
@@ -126,7 +128,7 @@ func (s *PreviewStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 			}
 		}
 		var cmd tea.Cmd
-		s.actions, cmd = s.actions.Update(msg)
+		s.actions, cmd = s.actions.Update(components.ArrowsAsVertical(msg))
 		return s, cmd
 	}
 	return s, nil
@@ -169,22 +171,17 @@ func (s *PreviewStep) View(width, height int) string {
 	}
 
 	st := wizard.NewSectionStyles(width)
-	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
 	var b strings.Builder
 
-	b.WriteString(wizard.RenderSection(&st, "[1] operation", s.operationEntries()))
-	b.WriteString(s.renderNodes(&st, &warnStyle))
-	b.WriteString(s.renderGates(&st))
+	b.WriteString(wizard.RenderSection(&st, "operation", s.operationEntries()))
+	b.WriteString(s.renderNodes(&st, width))
+	b.WriteString(s.renderGates(&st, width))
 
 	if s.st.Plan.DestroysData() {
-		b.WriteString(warnStyle.Render(irreversibleWarning))
-		b.WriteString("\n\n")
+		b.WriteString(s.renderIrreversibleBlock(width))
 	}
 
-	b.WriteString(st.ThickSeparator)
-	b.WriteString("\n\n")
-	b.WriteString(s.actions.View())
-	return b.String()
+	return strings.TrimRight(b.String(), "\n")
 }
 
 func (s *PreviewStep) operationEntries() []wizard.KVEntry {
@@ -233,46 +230,118 @@ func (s *PreviewStep) operationEntries() []wizard.KVEntry {
 	return entries
 }
 
-func (s *PreviewStep) renderNodes(st *wizard.SectionStyles, warnStyle *lipgloss.Style) string {
-	names := make([]string, len(s.st.Plan.Nodes))
-	for i := range s.st.Plan.Nodes {
-		names[i] = s.st.Plan.Nodes[i].Name
-	}
-	fitted := st.ForLabels(names...)
-
+// renderNodes renders the "nodes — execution order" section as an aligned
+// table, one line per node plus any OSD/ingress warning lines beneath it.
+func (s *PreviewStep) renderNodes(st *wizard.SectionStyles, width int) string {
 	var b strings.Builder
-	b.WriteString(fitted.Header.Render("[2] nodes — execution order"))
+	b.WriteString(st.Header.Render("nodes — execution order"))
 	b.WriteString("\n")
-	b.WriteString(fitted.Separator)
+	b.WriteString(st.Separator)
 	b.WriteString("\n")
-	for i := range s.st.Plan.Nodes {
-		n := &s.st.Plan.Nodes[i]
-		b.WriteString(fitted.KVPair(n.Name, fmt.Sprintf("%s  %s  [%s]", n.Role, n.TFAddress, n.Action)))
+	for _, line := range s.renderNodeTable(width) {
+		b.WriteString(line)
 		b.WriteString("\n")
-		if len(n.OSDs) > 0 {
-			b.WriteString(warnStyle.Render(fmt.Sprintf("  storage: %d rook-ceph OSD(s) — data disk destroyed", len(n.OSDs))))
-			b.WriteString("\n")
-		}
-		if len(n.Ingress) > 0 {
-			b.WriteString(warnStyle.Render(fmt.Sprintf("  ingress: %d router pod(s) here", len(n.Ingress))))
-			b.WriteString("\n")
-		}
 	}
 	b.WriteString("\n")
 	return b.String()
 }
 
-func (s *PreviewStep) renderGates(st *wizard.SectionStyles) string {
+// renderNodeTable renders the plan's nodes as a NODE/ROLE/ADDRESS/ACTION
+// table, with each node's OSD/ingress destructive-storage warnings (if any)
+// inserted as plain lines directly beneath its row.
+func (s *PreviewStep) renderNodeTable(width int) []string {
+	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
+	nodes := s.st.Plan.Nodes
+
+	data := make([][]string, len(nodes))
+	for i := range nodes {
+		n := &nodes[i]
+		data[i] = []string{n.Name, string(n.Role), n.TFAddress, string(n.Action)}
+	}
+
+	colWidth := max(16, width/3)
+	lines := tui.Table([]string{"NODE", "ROLE", "ADDRESS", "ACTION"}, data, tui.TableOptions{MaxColWidth: colWidth})
+
+	out := make([]string, 0, len(lines)+len(nodes))
+	out = append(out, lines[0])
+	for i := range nodes {
+		n := &nodes[i]
+		out = append(out, lines[i+1])
+		if len(n.OSDs) > 0 {
+			out = append(out, warnStyle.Render(fmt.Sprintf("  storage: %d rook-ceph OSD(s) — data disk destroyed", len(n.OSDs))))
+		}
+		if len(n.Ingress) > 0 {
+			out = append(out, warnStyle.Render(fmt.Sprintf("  ingress: %d router pod(s) here", len(n.Ingress))))
+		}
+	}
+	return out
+}
+
+// renderGates renders the "gates per node" section as a numbered gate grid
+// followed by the plan-safety-gate confirmation line.
+func (s *PreviewStep) renderGates(st *wizard.SectionStyles, width int) string {
 	okStyle := lipgloss.NewStyle().Foreground(tui.ColorSuccess)
 	var b strings.Builder
-	b.WriteString(st.Header.Render("[3] gates per node"))
+	b.WriteString(st.Header.Render("gates per node"))
 	b.WriteString("\n")
 	b.WriteString(st.Separator)
 	b.WriteString("\n")
-	b.WriteString(strings.Join(GateRows(s.st.Op, s.planRole(), s.st.SkipDrain, diskModeFor(s.st)), " → "))
-	b.WriteString("\n")
-	b.WriteString(okStyle.Render(fmt.Sprintf("plan gate: %s dry-run passed — the safety gate allows exactly the listed changes", tui.IconSuccess)))
+	gates := GateRows(s.st.Op, s.planRole(), s.st.SkipDrain, diskModeFor(s.st))
+	for _, line := range renderGateGrid(gates, width) {
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+	b.WriteString(okStyle.Render(tui.IconSuccess + " plan gate passed — the safety gate allows exactly the listed changes"))
 	b.WriteString("\n\n")
+	return b.String()
+}
+
+// renderGateGrid lays out gates as a column-major numbered grid of fixed
+// gateGridCellWidth cells: three columns when width is at least 90, else two.
+func renderGateGrid(gates []string, width int) []string {
+	if len(gates) == 0 {
+		return nil
+	}
+	cols := 2
+	if width >= 90 {
+		cols = 3
+	}
+	rowsPerCol := (len(gates) + cols - 1) / cols
+	cell := lipgloss.NewStyle().Width(gateGridCellWidth)
+
+	lines := make([]string, rowsPerCol)
+	for r := range lines {
+		var row strings.Builder
+		for c := 0; c < cols; c++ {
+			idx := c*rowsPerCol + r
+			if idx >= len(gates) {
+				continue
+			}
+			text := tui.Truncate(fmt.Sprintf("%d %s", idx+1, gates[idx]), gateGridCellWidth)
+			row.WriteString(cell.Render(text))
+		}
+		lines[r] = row.String()
+	}
+	return lines
+}
+
+// renderIrreversibleBlock renders the two-line red-bar warning for a plan
+// that destroys a data disk: a bold "irreversible" label line followed by
+// the shared render.IrreversibleWarning wrapped to width−2.
+func (s *PreviewStep) renderIrreversibleBlock(width int) string {
+	barStyle := lipgloss.NewStyle().Foreground(tui.ColorError)
+	labelStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning).Bold(true)
+	textStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
+	bar := barStyle.Render(tui.IconBar)
+
+	var b strings.Builder
+	b.WriteString(bar + " " + labelStyle.Render("irreversible"))
+	b.WriteString("\n")
+	wrapped := lipgloss.Wrap(render.IrreversibleWarning, width-2, "")
+	for _, line := range strings.Split(wrapped, "\n") {
+		b.WriteString(bar + " " + textStyle.Render(line))
+		b.WriteString("\n")
+	}
 	return b.String()
 }
 
@@ -342,13 +411,28 @@ func (s *PreviewStep) SetFocused(focused bool) {
 	}
 }
 
-// ShortHelp returns the preview help bar, or nil while the dry-run runs.
+// PinnedFooter renders the action selector inline on the help row, empty
+// while the dry-run is running or after it fails (no selector to drive).
+func (s *PreviewStep) PinnedFooter(width int) string {
+	if s.actions == nil {
+		return ""
+	}
+	// MaxWidth (not tui.Truncate) because ViewInline is already ANSI-styled;
+	// lipgloss truncates styled text ANSI-safely, a rune slice would not.
+	return lipgloss.NewStyle().MaxWidth(width).Render(s.actions.ViewInline())
+}
+
+// ShortHelp returns the preview help bar: ctrl+c quit only while the dry-run
+// runs (esc is intercepted, so advertising it would lie), or the full
+// action/navigation bar once the plan is ready.
 func (s *PreviewStep) ShortHelp() []wizard.KeyBinding {
 	if s.phase == previewRunning {
-		return nil
+		return []wizard.KeyBinding{
+			{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
+		}
 	}
 	return []wizard.KeyBinding{
-		{Key: "↑↓", Help: "select action"},
+		{Key: wizard.HelpLeftRight, Help: wizard.HelpChoose},
 		{Key: wizard.HelpEnter, Help: wizard.HelpConfirm},
 		{Key: wizard.HelpEsc, Help: wizard.HelpBack},
 		{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
