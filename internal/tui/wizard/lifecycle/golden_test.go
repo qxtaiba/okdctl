@@ -164,19 +164,12 @@ var lifecycleGoldenSizes = []struct {
 	{120, 40, true},
 }
 
-func lifecycleChrome() wizard.FlowChrome {
-	return wizard.FlowChrome{
-		Tagline: "okd over proxmox, the easy way",
-		Badge:   func(c *config.Config) string { return c.Cluster.Name },
-	}
-}
-
 func TestGolden_LifecycleSteps(t *testing.T) {
 	for _, sz := range lifecycleGoldenSizes {
 		for _, sc := range lifecycleScenarios() {
 			t.Run(fmt.Sprintf("%s_%dx%d", sc.name, sz.w, sz.h), func(t *testing.T) {
 				st, hooks := sc.build()
-				m := wizard.NewFlowModel(NewSteps(st, hooks), st.Cfg, lifecycleChrome())
+				m := wizard.NewFlowModel(NewSteps(st, hooks), st.Cfg, Chrome())
 
 				_ = tuitest.RenderAt(t, m, sz.w, sz.h)
 				m.Update(wizard.JumpToStepMsg{StepID: sc.id})

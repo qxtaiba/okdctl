@@ -1,7 +1,7 @@
                                                                                 
   ╭──────────────────────────────────────────────────────────────────────────╮  
   │ O K D C T L                                                              │  
-  │ choose the target — nodes to resize                 ●─●─○─○  step 2 of 4 │  
+  │ nodes to resize                 op · target · params · plan · run · done │  
   │──────────────────────────────────────────────────────────────────────────│  
   │  ○ masters — all 1 control-plane nodes                                   │  
   │    │ rolled one at a time; etcd-gated before and after every node        │  

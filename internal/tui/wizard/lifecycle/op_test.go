@@ -108,7 +108,7 @@ func TestOpStepResumeBannerUsesInjectedClock(t *testing.T) {
 
 func TestOpStepEntryScreenStaysCenteredAtWidth(t *testing.T) {
 	st := &State{Cfg: config.DefaultConfig()}
-	m := wizard.NewFlowModel(NewSteps(st, Hooks{}), st.Cfg, lifecycleChrome())
+	m := wizard.NewFlowModel(NewSteps(st, Hooks{}), st.Cfg, Chrome())
 	frame := tuitest.StripANSI(tuitest.RenderAt(t, m, 100, 30))
 
 	var titleLine string
