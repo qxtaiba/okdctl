@@ -34,3 +34,26 @@ func ConfirmBox(title string, facts []Fact, irreversible string) string {
 
 	return "\n" + tui.BoxedSectionAccent(sb.String(), title, tui.DefaultBoxWidth, accent) + "\n"
 }
+
+// DryRunActions renders the boxed dry-run preview shared by cleanup, destroy, and update-ingress: facts, the would-run actions, and a re-run hint.
+func DryRunActions(title string, facts []Fact, would []string) string {
+	sb := NewBuilder()
+	sb.WriteString("\n")
+	sb.WriteString("  " + tui.WarningStyle.Render("dry-run — no changes made") + "\n")
+	sb.Newline()
+
+	for _, f := range facts {
+		sb.KV(f.Key, f.Value)
+	}
+	sb.Newline()
+
+	sb.Section("would")
+	for _, w := range would {
+		sb.Bullet(w)
+	}
+	sb.Newline()
+
+	sb.WriteString("  " + tui.HighlightStyle.Render(tui.IconPointer+" re-run without --dry-run to execute") + "\n")
+
+	return "\n" + tui.BoxedSectionAccent(sb.String(), title, tui.DefaultBoxWidth, tui.ColorWarning) + "\n"
+}

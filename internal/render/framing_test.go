@@ -70,6 +70,12 @@ func TestBoxFramingContract(t *testing.T) {
 		{"ConfirmBox reversible", func() string {
 			return ConfirmBox("ingress update", []Fact{{Key: "cluster", Value: "grappleberry"}}, "")
 		}},
+		{"DryRunActions with would items", func() string {
+			return DryRunActions("destroy", []Fact{{Key: "cluster", Value: "grappleberry"}}, []string{"remove the FCOS ISO from the Proxmox host"})
+		}},
+		{"DryRunActions no would items", func() string {
+			return DryRunActions("update-ingress", []Fact{{Key: "cluster", Value: "grappleberry"}}, nil)
+		}},
 	}
 
 	for _, tc := range cases {

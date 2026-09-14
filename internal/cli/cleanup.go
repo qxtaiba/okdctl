@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strings"
 	"time"
@@ -65,39 +66,32 @@ func init() {
 	rootCmd.AddCommand(cleanupCmd)
 }
 
-type cleanupDryRunTarget struct {
-	msg    string
-	fields []logutil.LogField
-}
-
 // runCleanupDryRun mirrors cleanup.cleanupSteps' switch so the preview cannot drift from execution.
-func runCleanupDryRun(cfg *config.Config, projectRoot string, kind cleanup.Kind) {
-	workDir := cleanupDryRunTarget{"dry-run: would remove work directory", []logutil.LogField{logutil.LF("path", workspace.WorkDir(projectRoot))}}
-	webServer := cleanupDryRunTarget{"dry-run: would remove ignition files from web server", []logutil.LogField{logutil.LF("dir", cfg.HTTPServer.Root)}}
-	haproxy := cleanupDryRunTarget{"dry-run: would stop haproxy and remove its config block", []logutil.LogField{logutil.LF("path", phase.DefaultHAProxyConfigPath)}}
-	apache := cleanupDryRunTarget{msg: "dry-run: would stop apache httpd service"}
-	dnsmasq := cleanupDryRunTarget{"dry-run: would stop dnsmasq and remove its drop-in", []logutil.LogField{logutil.LF("dir", phase.DefaultDNSMasqConfigDir)}}
-	terraform := cleanupDryRunTarget{"dry-run: would remove generated terraform artifacts and the post-destroy tfstate", []logutil.LogField{logutil.LF("env", cfg.TerraformEnvName())}}
-	packages := cleanupDryRunTarget{"dry-run: would remove packages and tool binaries", []logutil.LogField{logutil.LF("packages", cleanup.InstalledPackages()), logutil.LF("binaries", cleanup.InstalledBinaries())}}
-	ignitionCerts := cleanupDryRunTarget{"dry-run: would remove generated ignition TLS certs", []logutil.LogField{logutil.LF("path", filepath.Join(projectRoot, "certs", "ignition"))}}
+func runCleanupDryRun(w io.Writer, cfg *config.Config, projectRoot string, kind cleanup.Kind) {
+	workDir := "remove work directory (" + workspace.WorkDir(projectRoot) + ")"
+	webServer := "remove ignition files from web server (" + cfg.HTTPServer.Root + ")"
+	haproxy := "stop haproxy and remove its config block (" + phase.DefaultHAProxyConfigPath + ")"
+	apache := "stop apache httpd service"
+	dnsmasq := "stop dnsmasq and remove its drop-in (" + phase.DefaultDNSMasqConfigDir + ")"
+	terraformArtifacts := "remove generated terraform artifacts and the post-destroy tfstate (env=" + cfg.TerraformEnvName() + ")"
+	packages := "remove packages (" + strings.Join(cleanup.InstalledPackages(), ", ") + ") and tool binaries (" + strings.Join(cleanup.InstalledBinaries(), ", ") + ")"
+	ignitionCerts := "remove generated ignition TLS certs (" + filepath.Join(projectRoot, "certs", "ignition") + ")"
 
-	var targets []cleanupDryRunTarget
+	var would []string
 	switch kind {
 	case cleanup.Full:
-		targets = []cleanupDryRunTarget{workDir, webServer, haproxy, apache, dnsmasq, terraform, packages, ignitionCerts}
+		would = []string{workDir, webServer, haproxy, apache, dnsmasq, terraformArtifacts, packages, ignitionCerts}
 	case cleanup.WorkOnly:
-		targets = []cleanupDryRunTarget{workDir}
+		would = []string{workDir}
 	case cleanup.WebOnly:
-		targets = []cleanupDryRunTarget{webServer}
+		would = []string{webServer}
 	case cleanup.HAProxyOnly:
-		targets = []cleanupDryRunTarget{haproxy}
+		would = []string{haproxy}
 	case cleanup.TerraformOnly:
-		targets = []cleanupDryRunTarget{terraform}
+		would = []string{terraformArtifacts}
 	}
-	for _, t := range targets {
-		logutil.Info(t.msg, t.fields...)
-	}
-	logutil.Info("dry-run: re-run without --dry-run to execute cleanup")
+
+	fmt.Fprintln(w, render.DryRunActions("cleanup", cleanupConfirmFacts(cfg, projectRoot, kind), would))
 }
 
 // cleanupKindRemovesCredentials reports whether kind wipes kubeconfig/kubeadmin-password.
@@ -149,7 +143,7 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 	}
 
 	if cleanupDryRun {
-		runCleanupDryRun(cfg, projectRoot, kind)
+		runCleanupDryRun(cmd.OutOrStdout(), cfg, projectRoot, kind)
 		return nil
 	}
 

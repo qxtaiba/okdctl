@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -54,32 +55,34 @@ func init() {
 		"required with --yes; must equal the config cluster name")
 }
 
-// runUpdateIngressDryRun previews update-ingress mutations, probing
+// runUpdateIngressDryRun previews update-ingress mutations to w, probing
 // dnsmasq/haproxy state to label steps that are already no-ops.
-func runUpdateIngressDryRun(ctx context.Context, cfg *config.Config) error {
-	logutil.Info("dry-run: update-ingress for cluster",
-		logutil.LF("cluster", cfg.Cluster.Name), logutil.LF("domain", cfg.Cluster.Domain))
-	logutil.Info("would: query IngressControllers (oc get ingresscontroller -n openshift-ingress-operator)")
-	logutil.Info("would: wait for LoadBalancer IPs on router-* services in openshift-ingress")
-
+func runUpdateIngressDryRun(ctx context.Context, w io.Writer, cfg *config.Config) error {
 	isBootstrap, err := dns.IsBootstrapDNS(cfg)
 	if err != nil {
 		return fmt.Errorf("dry-run: probe dnsmasq state: %w", err)
 	}
-	if isBootstrap {
-		logutil.Info("would: deploy production dnsmasq config pointing *.apps at LoadBalancer IPs")
-	} else {
-		logutil.Info("would: deploy production dnsmasq config pointing *.apps at LoadBalancer IPs (no-op: dns already cut over)")
+
+	dnsAction := "deploy production dnsmasq config pointing *.apps at LoadBalancer IPs"
+	if !isBootstrap {
+		dnsAction += " (no-op: dns already cut over)"
+	}
+
+	would := []string{
+		"query IngressControllers (oc get ingresscontroller -n openshift-ingress-operator)",
+		"wait for LoadBalancer IPs on router-* services in openshift-ingress",
+		dnsAction,
 	}
 
 	if !updateIngressKeepHAProxy {
-		if system.IsServiceActive(ctx, "haproxy") {
-			logutil.Info("would: stop and disable haproxy on the bastion (if all controllers are LB-type)")
-		} else {
-			logutil.Info("would: stop and disable haproxy on the bastion (no-op: haproxy already stopped)")
+		haproxyAction := "stop and disable haproxy on the bastion (if all controllers are LB-type)"
+		if !system.IsServiceActive(ctx, "haproxy") {
+			haproxyAction = "stop and disable haproxy on the bastion (no-op: haproxy already stopped)"
 		}
+		would = append(would, haproxyAction)
 	}
-	logutil.Info("dry-run: re-run without --dry-run to execute update-ingress")
+
+	fmt.Fprintln(w, render.DryRunActions("ingress update", updateIngressConfirmFacts(cfg), would))
 	return nil
 }
 
@@ -125,7 +128,7 @@ func runUpdateIngress(cmd *cobra.Command, _ []string) error {
 	}
 
 	if updateIngressDryRun {
-		return runUpdateIngressDryRun(ctx, cfg)
+		return runUpdateIngressDryRun(ctx, cmd.OutOrStdout(), cfg)
 	}
 
 	fmt.Fprintln(cmd.ErrOrStderr(), render.ConfirmBox("ingress update", updateIngressConfirmFacts(cfg), ""))

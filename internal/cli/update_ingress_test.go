@@ -85,3 +85,26 @@ func TestRunUpdateIngress_ConfirmBoxPrintsEvenOnYesGateRefusal(t *testing.T) {
 		t.Errorf("confirm box must print even on a --yes run refused at the cluster-match gate:\n%s", out)
 	}
 }
+
+// TestRunUpdateIngress_DryRunPreviewsWithoutConfirmation pins that --dry-run
+// prints the boxed preview to stdout and returns before any confirmation gate.
+func TestRunUpdateIngress_DryRunPreviewsWithoutConfirmation(t *testing.T) {
+	resetUpdateIngressFlags(t)
+	seedUpdateIngressWorkspace(t)
+	updateIngressDryRun = true
+	updateIngressCmd.SetContext(context.Background())
+	var stdout bytes.Buffer
+	updateIngressCmd.SetOut(&stdout)
+	t.Cleanup(func() { updateIngressCmd.SetOut(nil) })
+
+	if err := runUpdateIngress(updateIngressCmd, nil); err != nil {
+		t.Fatalf("update-ingress --dry-run: %v", err)
+	}
+
+	out := stdout.String()
+	for _, want := range []string{"would", "IngressControllers", "--dry-run"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("dry-run preview missing %q:\n%s", want, out)
+		}
+	}
+}
