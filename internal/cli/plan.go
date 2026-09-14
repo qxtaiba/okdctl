@@ -100,7 +100,7 @@ func runPlan(cmd *cobra.Command, _ []string) error {
 			return err
 		}
 	} else {
-		fmt.Fprint(cmd.OutOrStdout(), render.PlanPreview(changes))
+		fmt.Fprintln(cmd.OutOrStdout(), render.PlanPreview(changes))
 	}
 
 	if len(changes) > 0 {

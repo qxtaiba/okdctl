@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -15,6 +16,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/postinstall"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
+	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 // Bogus-type case: validateProvider no-ops on a non-proxmox type, so the gate
@@ -87,6 +90,26 @@ func TestDeployDryRunSteps_DerivedFromLivePhaseSteps(t *testing.T) {
 	}
 	if !sawInstallPhase {
 		t.Error("install phase steps missing from dry-run listing")
+	}
+}
+
+func TestPrintDeployDryRunBoxesHasOneBlankLineBetweenBoxes(t *testing.T) {
+	tui.SetColorProfileFor(&bytes.Buffer{})
+	t.Cleanup(func() { tui.SetColorProfileFor(&bytes.Buffer{}) })
+
+	cfg := config.DefaultConfig()
+	root := t.TempDir()
+	changes := []terraform.ResourceChange{{Address: "module.vm.worker[2]", Action: terraform.PlanActionUpdate}}
+
+	var buf bytes.Buffer
+	printDeployDryRunBoxes(&buf, changes, cfg, root)
+	out := buf.String()
+
+	if !strings.Contains(out, "╯\n\n╭") {
+		t.Errorf("plan-preview and step-listing boxes must be separated by exactly one blank line:\n%q", out)
+	}
+	if strings.Contains(out, "╯\n\n\n") {
+		t.Errorf("plan-preview and step-listing boxes must not carry a double blank line:\n%q", out)
 	}
 }
 
