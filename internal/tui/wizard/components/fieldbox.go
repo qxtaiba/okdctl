@@ -27,7 +27,30 @@ func fieldBox(content string, outer int, focused, hasErr bool) string {
 
 var (
 	labelStyle = lipgloss.NewStyle().Foreground(tui.ColorSlate300)
-	helpStyle  = lipgloss.NewStyle().Foreground(tui.ColorSlate500)
 	errStyle   = lipgloss.NewStyle().Foreground(tui.ColorError)
-	tagStyle   = lipgloss.NewStyle().Foreground(tui.ColorSlate500)
+
+	// helpStyle and tagStyle are assigned by RebuildStyles since they
+	// capture ColorSlate500, a tier SetDarkBackground rebinds.
+	helpStyle lipgloss.Style
+	tagStyle  lipgloss.Style
 )
+
+// stylesGeneration counts RebuildStyles calls; a per-instance style cache
+// elsewhere in the package (e.g. Selector.cachedStyles) records the
+// generation it was built at and rebuilds once this counter moves past it,
+// instead of assuming tui.Color* never changes after init.
+var stylesGeneration int
+
+// RebuildStyles assigns helpStyle and tagStyle from the current
+// tui.ColorSlate500 value and advances stylesGeneration so per-instance
+// caches elsewhere in the package invalidate; call at init and whenever
+// tui.SetDarkBackground rebinds a tier.
+func RebuildStyles() {
+	helpStyle = lipgloss.NewStyle().Foreground(tui.ColorSlate500)
+	tagStyle = lipgloss.NewStyle().Foreground(tui.ColorSlate500)
+	stylesGeneration++
+}
+
+func init() {
+	RebuildStyles()
+}

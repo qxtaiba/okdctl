@@ -51,6 +51,12 @@ func levelBadge(c color.Color, text string, bold bool) lipgloss.Style {
 
 func buildStyles() *charmlog.Styles {
 	styles := charmlog.DefaultStyles()
+	// The DEBUG badge captures ColorSlate500 here, at logger-configuration
+	// time — before the wizard's BackgroundColorMsg can call
+	// SetDarkBackground — but that's never visibly stale: SetDarkBackground
+	// assigns ColorSlate500 the same hex on both the dark and light branch
+	// (colors.go), so a badge built pre-wizard is byte-identical to one
+	// rebuilt post-wizard. No rebuild hook needed.
 	styles.Levels[charmlog.DebugLevel] = levelBadge(ColorSlate500, "[DEBUG]", false)
 	styles.Levels[charmlog.InfoLevel] = levelBadge(ColorInfo, "[INFO]", true)
 	styles.Levels[charmlog.WarnLevel] = levelBadge(ColorWarning, "[WARN]", true)

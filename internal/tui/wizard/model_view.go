@@ -22,6 +22,7 @@ func (m *Model) tooSmall() bool {
 // footer into a bordered box drawn at exactly the terminal width.
 func (m *Model) View() tea.View {
 	v := tea.View{AltScreen: true}
+	v.WindowTitle = "okdctl · " + m.headerTitle()
 
 	if m.quitting {
 		return v

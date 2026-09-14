@@ -17,15 +17,10 @@ var (
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(tui.ColorSlate600)
 
-	HeaderStyle = lipgloss.NewStyle().
-			Padding(0, 1).
-			BorderBottom(true).
-			BorderStyle(lipgloss.NormalBorder()).
-			BorderForeground(tui.ColorSlate700)
-
-	FooterStyle = lipgloss.NewStyle().
-			Padding(0, 2).
-			Foreground(tui.ColorSlate500)
+	// HeaderStyle and FooterStyle are assigned by rebuildWizardStyles since
+	// they capture ColorSlate700/ColorSlate500, tiers SetDarkBackground rebinds.
+	HeaderStyle lipgloss.Style
+	FooterStyle lipgloss.Style
 )
 
 // Header element styles (logo, tagline, step indicator).
@@ -38,8 +33,8 @@ var (
 			Foreground(tui.ColorSlate400).
 			Italic(true)
 
-	StepIndicatorStyle = lipgloss.NewStyle().
-				Foreground(tui.ColorSlate500)
+	// StepIndicatorStyle is assigned by rebuildWizardStyles (ColorSlate500).
+	StepIndicatorStyle lipgloss.Style
 
 	StepIndicatorCurrentStyle = lipgloss.NewStyle().
 					Foreground(tui.ColorPrimary).
@@ -52,11 +47,10 @@ var (
 			Foreground(tui.ColorSlate300).
 			Bold(true)
 
-	HelpTextStyle = lipgloss.NewStyle().
-			Foreground(tui.ColorSlate500)
-
-	HelpSeparatorStyle = lipgloss.NewStyle().
-				Foreground(tui.ColorSlate700)
+	// HelpTextStyle and HelpSeparatorStyle are assigned by rebuildWizardStyles
+	// (ColorSlate500, ColorSlate700).
+	HelpTextStyle      lipgloss.Style
+	HelpSeparatorStyle lipgloss.Style
 )
 
 // Step progress-dot styles (completed / current / pending).
@@ -70,6 +64,34 @@ var (
 	StepDotPendingStyle = lipgloss.NewStyle().
 				Foreground(tui.ColorSlate600)
 )
+
+// rebuildWizardStyles assigns HeaderStyle, FooterStyle, StepIndicatorStyle,
+// HelpTextStyle, and HelpSeparatorStyle from the current tui.ColorSlate500/700
+// values; call at init and whenever tui.SetDarkBackground rebinds those tiers.
+func rebuildWizardStyles() {
+	HeaderStyle = lipgloss.NewStyle().
+		Padding(0, 1).
+		BorderBottom(true).
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(tui.ColorSlate700)
+
+	FooterStyle = lipgloss.NewStyle().
+		Padding(0, 2).
+		Foreground(tui.ColorSlate500)
+
+	StepIndicatorStyle = lipgloss.NewStyle().
+		Foreground(tui.ColorSlate500)
+
+	HelpTextStyle = lipgloss.NewStyle().
+		Foreground(tui.ColorSlate500)
+
+	HelpSeparatorStyle = lipgloss.NewStyle().
+		Foreground(tui.ColorSlate700)
+}
+
+func init() {
+	rebuildWizardStyles()
+}
 
 // RenderStepProgress renders the step dots: 1..current-1 completed, current active, rest pending.
 func RenderStepProgress(current, total int) string {

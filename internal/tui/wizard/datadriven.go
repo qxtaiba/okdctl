@@ -730,8 +730,12 @@ func (s *DataDrivenStep) ShouldShow(cfg *config.Config) bool {
 	return true
 }
 
-// formViewStyles caches DataDrivenStep.View's lipgloss styles; safe since
-// tui.Color* values never change after init.
+// formViewStyles caches DataDrivenStep.View's lipgloss styles, built once at
+// init and never rebuilt: tui.Color* tiers do rebind on background
+// detection (SetDarkBackground), but the one tier this struct captures
+// (note's ColorSlate500) resolves to the same hex on both branches, so the
+// cache never actually goes stale in value — unlike Selector.cachedStyles,
+// which captures ColorSlate700 and does need a generation check.
 var formViewStyles = struct {
 	sectionHeader   lipgloss.Style
 	section         lipgloss.Style

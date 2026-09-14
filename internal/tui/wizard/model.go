@@ -10,6 +10,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
 )
 
 const (
@@ -180,12 +181,14 @@ func getTerminalSize() (width, height int) {
 	return tui.TerminalWidth(), h
 }
 
-// Init implements tea.Model; it fires the first step's Init command.
+// Init implements tea.Model; it fires the first step's Init command
+// alongside a terminal background-color request.
 func (m *Model) Init() tea.Cmd {
+	var stepCmd tea.Cmd
 	if len(m.steps) > 0 {
-		return m.steps[m.currentStep].Init()
+		stepCmd = m.steps[m.currentStep].Init()
 	}
-	return nil
+	return tea.Batch(tea.RequestBackgroundColor, stepCmd)
 }
 
 // Update processes wizard-level messages (navigation, resize, quit) and
@@ -196,6 +199,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.handleResize(msg)
+		return m, nil
+
+	case tea.BackgroundColorMsg:
+		// SetDarkBackground must be called exactly once, not concurrently
+		// with itself: Init fires RequestBackgroundColor alongside the first
+		// step's Init, and this case is the wizard's only call site, so the
+		// terminal's one reply lands here as the sole caller, early — before
+		// the user has had any chance to act on the rendered wizard.
+		tui.SetDarkBackground(msg.IsDark())
+		rebuildWizardStyles()
+		components.RebuildStyles()
 		return m, nil
 
 	case tea.KeyPressMsg:

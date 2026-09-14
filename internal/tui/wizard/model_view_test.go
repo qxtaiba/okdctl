@@ -2,6 +2,7 @@ package wizard
 
 import (
 	"errors"
+	"image/color"
 	"strings"
 	"testing"
 
@@ -9,7 +10,9 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
+	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
 )
 
 func TestModel_FrameWidthIsTerminalMinusFour(t *testing.T) {
@@ -89,6 +92,96 @@ type titledStep struct {
 }
 
 func (s *titledStep) DisplayTitle() string { return s.title }
+
+func TestModel_WindowTitleFollowsStep(t *testing.T) {
+	first := &titledStep{nopStep: *newNopStep(), title: "welcome"}
+	second := &titledStep{nopStep: *newNopStep(), title: "basics"}
+	m := NewModel([]WizardStep{first, second}, config.DefaultConfig())
+
+	if got, want := m.View().WindowTitle, "okdctl · welcome"; got != want {
+		t.Errorf("WindowTitle = %q, want %q", got, want)
+	}
+
+	m.Update(JumpToStepMsg{StepID: second.ID()})
+	if got, want := m.View().WindowTitle, "okdctl · basics"; got != want {
+		t.Errorf("WindowTitle = %q, want %q", got, want)
+	}
+}
+
+// lightSlate700ANSI and darkSlate700ANSI are the truecolor SGR sequences for
+// ColorSlate700's light (#CBD5E1) and dark (#334155) tier values.
+const (
+	lightSlate700ANSI = "38;2;203;213;225"
+	darkSlate700ANSI  = "38;2;51;65;85"
+)
+
+// resetPackageColorState restores the dark-tier default and rebuilds every
+// package-level style cache that tracks it, mirroring the full call chain
+// wizard.Model's BackgroundColorMsg case runs in production — SetDarkBackground
+// alone leaves rebuildWizardStyles/components.RebuildStyles's own package
+// vars on the light tier, leaking into whichever test runs next.
+func resetPackageColorState() {
+	tui.SetDarkBackground(true)
+	rebuildWizardStyles()
+	components.RebuildStyles()
+}
+
+func TestModel_BackgroundColorMsgRebuildsStyles(t *testing.T) {
+	t.Cleanup(resetPackageColorState)
+
+	m := NewModel([]WizardStep{newNopStep()}, config.DefaultConfig())
+	tuitest.RenderAt(t, m, 100, 30)
+
+	m.Update(tea.BackgroundColorMsg{Color: color.White})
+
+	frame := m.View().Content
+	if !strings.Contains(frame, lightSlate700ANSI) {
+		t.Errorf("light-tier ColorSlate700 (%s) not found in rendered frame:\n%s", lightSlate700ANSI, frame)
+	}
+	if strings.Contains(frame, darkSlate700ANSI) {
+		t.Errorf("stale dark-tier ColorSlate700 (%s) still rendered:\n%s", darkSlate700ANSI, frame)
+	}
+}
+
+// selectorStep is a WizardStep wrapping a components.Selector directly, so
+// its View exercises Selector.getOptionStyles's cache without any of the
+// other step machinery.
+type selectorStep struct {
+	nopStep
+	sel *components.Selector
+}
+
+func newSelectorStep() *selectorStep {
+	sel := components.NewSelector([]components.Option{
+		{ID: "a", Title: "first"},
+		{ID: "b", Title: "second"},
+	})
+	return &selectorStep{nopStep: *newNopStep(), sel: sel}
+}
+
+func (s *selectorStep) View(_, _ int) string { return s.sel.View() }
+
+func TestModel_BackgroundColorMsgInvalidatesSelectorCache(t *testing.T) {
+	t.Cleanup(resetPackageColorState)
+
+	step := newSelectorStep()
+	m := NewModel([]WizardStep{step}, config.DefaultConfig())
+
+	before := step.View(0, 0)
+	if !strings.Contains(before, darkSlate700ANSI) {
+		t.Fatalf("setup: expected dark-tier ColorSlate700 (%s) in the selector's first render:\n%q", darkSlate700ANSI, before)
+	}
+
+	m.Update(tea.BackgroundColorMsg{Color: color.White})
+
+	after := step.View(0, 0)
+	if !strings.Contains(after, lightSlate700ANSI) {
+		t.Errorf("light-tier ColorSlate700 (%s) not found after BackgroundColorMsg — Selector's cache was not invalidated:\n%q", lightSlate700ANSI, after)
+	}
+	if strings.Contains(after, darkSlate700ANSI) {
+		t.Errorf("stale dark-tier ColorSlate700 (%s) still rendered — Selector's cache was not invalidated:\n%q", darkSlate700ANSI, after)
+	}
+}
 
 func TestHeader_TitleRowContainsDisplayTitleAndStepCount(t *testing.T) {
 	s := &titledStep{nopStep: *newNopStep(), title: "configure your cluster basics"}
