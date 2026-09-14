@@ -18,10 +18,18 @@ var spinnerFrames = []string{"⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "�
 // clears the line and blocks until the goroutine exits — call it before
 // printing output that must appear below the spinner.
 func StartSpinner(ctx context.Context, desc string) func() {
+	return StartSpinnerWithPrefix(ctx, "", desc)
+}
+
+// StartSpinnerWithPrefix is StartSpinner with prefix kept dim and visible
+// ahead of the frame (the deploy checklist's "[N/T] name · phase" counter
+// while its step is mid-execution); an empty prefix paints exactly as
+// StartSpinner does.
+func StartSpinnerWithPrefix(ctx context.Context, prefix, desc string) func() {
 	if !logutil.ProgressBarsEnabled() {
 		return func() {}
 	}
-	return startSpinner(ctx, desc, os.Stderr)
+	return startSpinnerWithPrefix(ctx, prefix, desc, os.Stderr)
 }
 
 // StartStatusLine renders a spinner whose description can be replaced while
@@ -29,19 +37,34 @@ func StartSpinner(ctx context.Context, desc string) func() {
 // StartSpinner's teardown semantics, both no-op when ProgressBarsEnabled is
 // false.
 func StartStatusLine(ctx context.Context, desc string) (set func(string), stop func()) {
+	return StartStatusLineWithPrefix(ctx, "", desc)
+}
+
+// StartStatusLineWithPrefix is StartStatusLine with prefix kept dim and
+// visible ahead of the frame, sharing StartSpinnerWithPrefix's prefix
+// semantics; both funcs are no-op when ProgressBarsEnabled is false.
+func StartStatusLineWithPrefix(ctx context.Context, prefix, desc string) (set func(string), stop func()) {
 	if !logutil.ProgressBarsEnabled() {
 		return func(string) {}, func() {}
 	}
-	return startStatusLine(ctx, desc, os.Stderr)
+	return startStatusLineWithPrefix(ctx, prefix, desc, os.Stderr)
 }
 
 func startStatusLine(ctx context.Context, desc string, w io.Writer) (set func(string), stop func()) {
-	sp := &spinner{w: w, desc: desc, start: time.Now()}
+	return startStatusLineWithPrefix(ctx, "", desc, w)
+}
+
+func startStatusLineWithPrefix(ctx context.Context, prefix, desc string, w io.Writer) (set func(string), stop func()) {
+	sp := &spinner{w: w, prefix: prefix, desc: desc, start: time.Now()}
 	return sp.setDesc, runSpinner(ctx, sp)
 }
 
 func startSpinner(ctx context.Context, desc string, w io.Writer) func() {
-	sp := &spinner{w: w, desc: desc, start: time.Now()}
+	return startSpinnerWithPrefix(ctx, "", desc, w)
+}
+
+func startSpinnerWithPrefix(ctx context.Context, prefix, desc string, w io.Writer) func() {
+	sp := &spinner{w: w, prefix: prefix, desc: desc, start: time.Now()}
 	return runSpinner(ctx, sp)
 }
 
@@ -78,10 +101,11 @@ func runSpinner(ctx context.Context, sp *spinner) func() {
 }
 
 type spinner struct {
-	w     io.Writer
-	desc  string
-	start time.Time
-	frame int
+	w      io.Writer
+	prefix string
+	desc   string
+	start  time.Time
+	frame  int
 }
 
 // clearLine implements lineOwner; the caller holds the line lock.
@@ -97,9 +121,14 @@ func (s *spinner) setDesc(d string) {
 
 func (s *spinner) paint() {
 	lineReg.paint(s, func() {
-		elapsed := time.Since(s.start).Round(time.Second)
+		elapsed := formatElapsed(time.Since(s.start))
 		frame := SpinnerStyle.Render(spinnerFrames[s.frame%len(spinnerFrames)])
-		_, _ = fmt.Fprintf(s.w, "\r\x1b[2K%s %s (%s)", frame, s.desc, elapsed)
+		if s.prefix == "" {
+			_, _ = fmt.Fprintf(s.w, "\r\x1b[2K%s %s (%s)", frame, s.desc, elapsed)
+		} else {
+			line := MutedStyle.Render(s.prefix) + "  " + frame + " " + fmt.Sprintf("%*s", durationCol, elapsed) + "  " + s.desc
+			_, _ = fmt.Fprint(s.w, "\r\x1b[2K"+line)
+		}
 		s.frame++
 	})
 }
