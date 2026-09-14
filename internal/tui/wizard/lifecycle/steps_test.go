@@ -5,6 +5,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/node"
+	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
@@ -43,7 +44,7 @@ func TestEveryLifecycleStepHasDisplayTitle(t *testing.T) {
 		StepIDParams:  "operation parameters",
 		StepIDPreview: "review the plan",
 		StepIDConfirm: "confirm removal",
-		StepIDExec:    opProgressLabel(node.OpRemove),
+		StepIDExec:    opProgressLabel(node.OpRemove, nodetypes.RoleWorker),
 		StepIDDone:    "done",
 	}
 

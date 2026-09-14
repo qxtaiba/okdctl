@@ -209,13 +209,80 @@ func lifecycleScenarios() []lifecycleScenario {
 			},
 		},
 		{
+			// Mid-run: m0 collapsed with its total, m1 expanded with a
+			// spinner row and right-aligned durations, m2 still pending.
 			name: "exec",
 			id:   StepIDExec,
 			build: func() (*State, Hooks) {
-				return execState(), Hooks{}
+				return threeMasterState(), Hooks{}
 			},
 			seed: func(m *wizard.Model, _ *State) {
-				m.Update(execEventMsg{ev: ExecEvent{Node: "homelab-master0", Step: node.StepTFApply}})
+				s, ok := m.CurrentStep().(*ExecStep)
+				if !ok {
+					return
+				}
+				base := time.Date(2026, 8, 30, 9, 0, 0, 0, time.UTC)
+				cur := base
+				s.now = func() time.Time { return cur }
+				s.started = base
+				s.buildRows()
+
+				s.applyEvent(&ExecEvent{Node: "homelab-master0", Step: node.StepTFApply})
+				cur = base.Add(60 * time.Second)
+				s.applyEvent(&ExecEvent{Node: "homelab-master1", Step: node.StepTFApply})
+				cur = base.Add(75 * time.Second)
+			},
+		},
+		{
+			// The graceful-cancel amber line, shown under the headline
+			// while the current gate finishes.
+			name: "exec_cancel",
+			id:   StepIDExec,
+			build: func() (*State, Hooks) {
+				return threeMasterState(), Hooks{}
+			},
+			seed: func(m *wizard.Model, _ *State) {
+				s, ok := m.CurrentStep().(*ExecStep)
+				if !ok {
+					return
+				}
+				base := time.Date(2026, 8, 30, 9, 0, 0, 0, time.UTC)
+				cur := base
+				s.now = func() time.Time { return cur }
+				s.started = base
+				s.buildRows()
+
+				s.applyEvent(&ExecEvent{Node: "homelab-master0", Step: node.StepTFApply})
+				cur = base.Add(30 * time.Second)
+				s.InterceptQuit()
+			},
+		},
+		{
+			// The finished state: every node has collapsed to a single
+			// line with its own total duration.
+			name: "exec_finished",
+			id:   StepIDExec,
+			build: func() (*State, Hooks) {
+				return threeMasterState(), Hooks{}
+			},
+			seed: func(m *wizard.Model, _ *State) {
+				s, ok := m.CurrentStep().(*ExecStep)
+				if !ok {
+					return
+				}
+				base := time.Date(2026, 8, 30, 9, 0, 0, 0, time.UTC)
+				cur := base
+				s.now = func() time.Time { return cur }
+				s.started = base
+				s.buildRows()
+
+				s.applyEvent(&ExecEvent{Node: "homelab-master0", Step: node.StepTFApply})
+				cur = base.Add(60 * time.Second)
+				s.applyEvent(&ExecEvent{Node: "homelab-master1", Step: node.StepTFApply})
+				cur = base.Add(140 * time.Second)
+				s.applyEvent(&ExecEvent{Node: "homelab-master2", Step: node.StepTFApply})
+				cur = base.Add(200 * time.Second)
+				_, _ = s.Update(execEventMsg{ev: ExecEvent{Final: true}})
 			},
 		},
 		{
