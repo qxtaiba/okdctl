@@ -27,11 +27,11 @@ Show
 Type "okdctl deploy"
 Sleep 600ms
 Enter
-Sleep 4.5s
+Wait+Screen@10s /step 1 of 11/
 
 # step 1/11 welcome
 Enter
-Sleep 8s
+Wait+Screen@10s /step 2 of 11/
 
 # step 2/11 okd version — expand recommended group, browse, confirm
 Enter
@@ -45,7 +45,7 @@ Sleep 1.4s
 Up
 Sleep 2s
 Enter
-Sleep 4.5s
+Wait+Screen@10s /step 3 of 11/
 
 # step 3/11 proxmox connection — type every box
 Type "127.0.0.1:8006"
@@ -63,7 +63,7 @@ Sleep 1.2s
 Right
 Sleep 2s
 Enter
-Sleep 4.5s
+Wait+Screen@10s /step 4 of 11/
 
 # step 4/11 basics — name, domain, 3 control-plane / 3 workers
 Type "homelab"
@@ -78,7 +78,7 @@ Tab
 Type "3"
 Sleep 2s
 Enter
-Sleep 4.5s
+Wait+Screen@10s /step 5 of 11/
 
 # step 5/11 node placement — live discovery, walk every assignment
 Sleep 4.5s
@@ -107,7 +107,7 @@ Sleep 1.2s
 Tab
 Sleep 2s
 Enter
-Sleep 4.5s
+Wait+Screen@10s /step 6 of 11/
 
 # step 6/11 networking — type every box; api vip stays blank (auto-derived)
 Sleep 2s
@@ -139,7 +139,7 @@ Sleep 1.2s
 Tab
 Sleep 1.5s
 Enter
-Sleep 4.5s
+Wait+Screen@10s /step 7 of 11/
 
 # step 7/11 resources — type control plane and worker sizing
 Sleep 2s
@@ -167,7 +167,7 @@ Tab
 Type "0"
 Sleep 2s
 Enter
-Sleep 4.5s
+Wait+Screen@10s /step 8 of 11/
 
 # step 8/11 addons — browse the catalog
 Sleep 2.5s
@@ -180,7 +180,7 @@ Sleep 1.3s
 Up
 Sleep 2s
 Enter
-Sleep 4.5s
+Wait+Screen@10s /step 9 of 11/
 
 # step 9/11 files — type pull secret, ssh key, web root
 Sleep 1.5s
@@ -193,7 +193,7 @@ Tab
 Type "/var/www/html"
 Sleep 2s
 Enter
-Sleep 4.5s
+Wait+Screen@10s /step 10 of 11/
 
 # step 10/11 advanced — type vm ids and timeouts
 Sleep 2s
@@ -221,7 +221,7 @@ Sleep 1.2s
 Tab
 Sleep 2s
 Enter
-Sleep 4.5s
+Wait+Screen@10s /step 11 of 11/
 
 # step 11/11 review — scroll the whole summary
 Sleep 5s
