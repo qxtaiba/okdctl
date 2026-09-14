@@ -5,7 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/lipgloss/v2"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 func TestErrorSummaryKindHeadlineAndHint(t *testing.T) {
@@ -95,13 +97,13 @@ func TestErrorBodyChipHasTwoSpaceGap(t *testing.T) {
 
 func TestWrapTextHardSplitsLongToken(t *testing.T) {
 	long := strings.Repeat("a", 50)
-	lines := wrapText(long, 20)
+	lines := tui.WrapLines(long, 20)
 	for _, l := range lines {
-		if len(l) > 20 {
-			t.Fatalf("wrapText produced a %d-col line over the 20 budget: %q", len(l), l)
+		if w := lipgloss.Width(l); w > 20 {
+			t.Fatalf("WrapLines produced a %d-col line over the 20 budget: %q", w, l)
 		}
 	}
 	if joined := strings.Join(lines, ""); joined != long {
-		t.Fatalf("wrapText lost characters: %q", joined)
+		t.Fatalf("WrapLines lost characters: %q", joined)
 	}
 }
