@@ -14,6 +14,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/deploy"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/runlock"
@@ -62,7 +63,7 @@ without deploying.`,
 }
 
 func init() {
-	deployCmd.Flags().StringVar(&deployOutputFile, flagOutputFile, "okdctl.yaml", "config file to write wizard output to; reuses and reads back an existing file at this path, otherwise creates one; overrides --config when both are set")
+	deployCmd.Flags().StringVar(&deployOutputFile, flagOutputFile, "okdctl.yaml", "config file to write wizard output to (reused if present; overrides --config)")
 	deployCmd.Flags().BoolVar(&deployMinimal, "minimal", false, "use minimal defaults (single-node cluster)")
 	deployCmd.Flags().BoolVarP(&deployYes, "yes", "y", false, "skip the wizard and deploy from the existing configuration file (requires --confirm-cluster)")
 	deployCmd.Flags().StringVar(&deployConfirmCluster, "confirm-cluster", "",
@@ -71,7 +72,7 @@ func init() {
 	deployCmd.MarkFlagsMutuallyExclusive("yes", "write-config")
 	deployCmd.Flags().BoolVar(&deployDryRun, flagDryRun, false, "preview terraform plan and step listing without deploying")
 	deployCmd.Flags().BoolVar(&deployFresh, "fresh", false, "wipe the work directory even when live cluster state is detected (credentials will be lost)")
-	deployCmd.Flags().BoolVar(&deployKeepRedHatCatalogs, "keep-redhat-catalogs", false, "keep the redhat-operators, certified-operators, and redhat-marketplace OperatorHub catalogsources and the InsightsDisabled alert enabled (both require a Red Hat subscription OKD clusters don't have)")
+	deployCmd.Flags().BoolVar(&deployKeepRedHatCatalogs, "keep-redhat-catalogs", false, "keep the Red Hat OperatorHub catalogsources and the InsightsDisabled alert")
 	deployCmd.Flags().BoolVar(&deployAcknowledgeInterrupted, "acknowledge-interrupted-op", false, "deploy despite an in-flight node op marker (deploy would otherwise refuse: reconciling mid-op destroys the in-flight node)")
 }
 
@@ -215,10 +216,18 @@ func runDeployDryRun(ctx context.Context, cfg *config.Config, w io.Writer) error
 		return &errtypes.ConfigError{Msg: "dry-run: plan preview failed", Err: err}
 	}
 
-	fmt.Fprint(w, render.PlanPreview(changes))
-	fmt.Fprintln(w, render.DryRunSummary("deploy step listing", deployDryRunSteps(cfg, projectRoot)))
+	printDeployDryRunBoxes(w, changes, cfg, projectRoot)
 	logutil.Info("dry-run: re-run without --dry-run to execute deploy")
 	return nil
+}
+
+// printDeployDryRunBoxes prints the plan-preview box immediately followed by
+// the step-listing box: PlanPreview uses Fprint, not Fprintln, because the
+// step-listing box's own leading newline already supplies the single blank
+// line the two adjacent boxes need between them.
+func printDeployDryRunBoxes(w io.Writer, changes []terraform.ResourceChange, cfg *config.Config, projectRoot string) {
+	fmt.Fprint(w, render.PlanPreview(changes))
+	fmt.Fprintln(w, render.DryRunSummary("deploy step listing", deployDryRunSteps(cfg, projectRoot)))
 }
 
 // deployDryRunSteps derives the step listing from live phase StepDefs so it

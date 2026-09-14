@@ -95,19 +95,3 @@ func Truncate(s string, maxW int) string {
 	}
 	return "…"
 }
-
-// truncateMiddle shortens s to maxW columns by replacing the middle with an
-// ellipsis, preserving the distinguishing head and tail; maxW <= 0 returns s
-// unchanged.
-func truncateMiddle(s string, maxW int) string {
-	if maxW <= 0 || lipgloss.Width(s) <= maxW {
-		return s
-	}
-	if maxW <= 1 {
-		return "…"
-	}
-	keep := maxW - 1
-	head := keep / 2
-	tail := keep - head
-	return s[:head] + "…" + s[len(s)-tail:]
-}

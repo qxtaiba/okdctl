@@ -7,13 +7,22 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/lipgloss/v2"
+
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/postinstall"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
+// tableIndent is the left margin Builder.Table writes before every tui.Table line.
+const tableIndent = 4
+
 const defaultKeyColWidth = 45
+
+// minWrapWidth floors the wrap width for Para and Bullet so a narrow box
+// never collapses prose to an unreadable sliver.
+const minWrapWidth = 12
 
 type stepDisplayStatus string
 
@@ -52,10 +61,16 @@ func NewBuilder() *Builder {
 // NewBuilderWidth returns a Builder whose key and key/value columns fit
 // inside a box of the given width.
 func NewBuilderWidth(width int) *Builder {
+	content := tui.BoxInnerWidth(width) - 2
 	return &Builder{
-		keyWidth: min(defaultKeyColWidth, width/2),
-		kvWidth:  max(width-4, 0),
+		keyWidth: min(defaultKeyColWidth, content-24),
+		kvWidth:  content,
 	}
+}
+
+// ContentWidth reports the content width available for raw lines inside this Builder's box.
+func (s *Builder) ContentWidth() int {
+	return s.kvWidth
 }
 
 // Section writes a subsection label line.
@@ -63,14 +78,157 @@ func (s *Builder) Section(title string) {
 	s.b.WriteString("  " + tui.SubsectionLabel(title) + "\n")
 }
 
+// kvOpts configures the private kv core shared by every KV* row.
+type kvOpts struct {
+	keyColWidth int // 0 = use the Builder's default keyWidth
+	highlight   bool
+	sub         bool
+}
+
+// kv renders key/value through the tui dotted-line variant opts selects and
+// writes the result, indenting every line (including any wrapped
+// continuation) by the Builder's two-space margin.
+func (s *Builder) kv(key, value string, opts kvOpts) {
+	keyColWidth := opts.keyColWidth
+	if keyColWidth <= 0 {
+		keyColWidth = s.keyWidth
+	}
+
+	var rendered string
+	switch {
+	case opts.sub:
+		rendered = tui.DottedKeyValueSubFull("  "+key, value, keyColWidth, s.kvWidth)
+	case opts.highlight:
+		rendered = tui.DottedKeyValueHighlightFull("  "+key, value, keyColWidth, s.kvWidth)
+	default:
+		rendered = tui.DottedKeyValueFull("  "+key, value, keyColWidth, s.kvWidth)
+	}
+	s.writeIndented(rendered)
+}
+
+// writeIndented writes rendered — one or more newline-joined lines — each
+// prefixed by the Builder's two-space margin.
+func (s *Builder) writeIndented(rendered string) {
+	for i, line := range strings.Split(rendered, "\n") {
+		if i > 0 {
+			s.b.WriteString("\n")
+		}
+		s.b.WriteString("  " + line)
+	}
+	s.b.WriteString("\n")
+}
+
+// writeWrapped writes text word-wrapped to fit the box, led by prefix on the
+// first line and by indent spaces on every continuation; extra is how many
+// columns prefix costs beyond the Builder's baseline two-space margin.
+func (s *Builder) writeWrapped(prefix string, indent, extra int, text string) {
+	width := max(s.kvWidth-extra, minWrapWidth)
+	for i, line := range tui.WrapLines(text, width) {
+		if i == 0 {
+			s.b.WriteString(prefix + line + "\n")
+		} else {
+			s.b.WriteString(strings.Repeat(" ", indent) + line + "\n")
+		}
+	}
+}
+
 // KV writes a dotted key/value line.
 func (s *Builder) KV(key, value string) {
-	s.b.WriteString("  " + tui.DottedKeyValueFull("  "+key, value, s.keyWidth, s.kvWidth) + "\n")
+	s.kv(key, value, kvOpts{})
 }
 
 // KVHighlight writes a dotted key/value line with a highlighted value.
 func (s *Builder) KVHighlight(key, value string) {
-	s.b.WriteString("  " + tui.DottedKeyValueHighlightFull("  "+key, value, s.keyWidth, s.kvWidth) + "\n")
+	s.kv(key, value, kvOpts{highlight: true})
+}
+
+// KVWide writes a dotted key/value line with a 24-column key, leaving long command or URL values more room before they wrap.
+func (s *Builder) KVWide(key, value string) {
+	s.kv(key, value, kvOpts{keyColWidth: tui.DefaultKeyColWidth})
+}
+
+// SubKV writes a nested dotted key/value line with a muted key and a key column narrowed by two.
+func (s *Builder) SubKV(key, value string) {
+	s.kv(key, value, kvOpts{keyColWidth: s.keyWidth - 2, sub: true})
+}
+
+// Note writes a labeled prose line with no dot leaders, wrapping the text under the value column.
+func (s *Builder) Note(label, text string) {
+	s.writeIndented(tui.KeyValueNote("  "+label, text, s.keyWidth, s.kvWidth))
+}
+
+// Para writes a word-wrapped paragraph indented two spaces.
+func (s *Builder) Para(text string) {
+	s.writeWrapped("  ", 2, 0, text)
+}
+
+// Bullet writes a bullet-prefixed, word-wrapped line with continuations aligned under the text.
+func (s *Builder) Bullet(text string) {
+	s.writeWrapped("    "+tui.IconBullet+" ", 6, 4, text)
+}
+
+// Table writes tui.Table's rendered lines indented four spaces, tightening
+// opts.MaxColWidth (deriving a cap from the Builder's content width) when
+// the caller's requested width would otherwise overflow the box.
+func (s *Builder) Table(headers []string, rows [][]string, opts tui.TableOptions) {
+	if colCap := s.fitTableCap(headers, rows, opts); colCap > 0 {
+		opts.MaxColWidth = colCap
+	}
+	for _, line := range tui.Table(headers, rows, opts) {
+		s.b.WriteString(strings.Repeat(" ", tableIndent) + tui.Downsample(line) + "\n")
+	}
+}
+
+// fitTableCap returns the largest column-width cap, no wider than the
+// caller's requested opts.MaxColWidth (0 meaning uncapped), that keeps the
+// table's total rendered width within the Builder's content width; it
+// returns 0 when the caller's request (or the table's natural, untruncated
+// width) already fits, leaving opts untouched.
+func (s *Builder) fitTableCap(headers []string, rows [][]string, opts tui.TableOptions) int {
+	gap := opts.Gap
+	if gap <= 0 {
+		gap = 2
+	}
+	avail := s.kvWidth - tableIndent
+
+	natural := make([]int, len(headers))
+	for c, h := range headers {
+		natural[c] = lipgloss.Width(h)
+	}
+	for _, row := range rows {
+		for c := 0; c < len(headers) && c < len(row); c++ {
+			natural[c] = max(natural[c], lipgloss.Width(row[c]))
+		}
+	}
+
+	widthAt := func(capW int) int {
+		total := gap * (len(headers) - 1)
+		for _, w := range natural {
+			if capW > 0 && w > capW {
+				w = capW
+			}
+			total += w
+		}
+		return total
+	}
+
+	if widthAt(opts.MaxColWidth) <= avail {
+		return 0
+	}
+
+	hi := 0
+	for _, w := range natural {
+		hi = max(hi, w)
+	}
+	if opts.MaxColWidth > 0 && opts.MaxColWidth < hi {
+		hi = opts.MaxColWidth
+	}
+	for capW := hi; capW > 1; capW-- {
+		if widthAt(capW) <= avail {
+			return capW
+		}
+	}
+	return 1
 }
 
 // Newline writes a blank spacer line between sections.
@@ -130,7 +288,7 @@ func ValidationSummary(result *config.ValidationResult) string {
 		}
 	}
 
-	return sb.String()
+	return tui.Downsample(sb.String())
 }
 
 // PostDeploySummary renders the success summary after a cluster deploy: access
@@ -149,8 +307,8 @@ func PostDeploySummary(cfg *config.Config, result *postinstall.Result, steps []d
 
 	sb.Section("access")
 	sb.KV("cluster", clusterFQDN)
-	sb.KV("console", consoleURL)
-	sb.KV("api", apiURL)
+	sb.KVWide("console", consoleURL)
+	sb.KVWide("api", apiURL)
 	sb.Newline()
 
 	sb.Section("dns records")
@@ -198,7 +356,7 @@ func PostDeploySummary(cfg *config.Config, result *postinstall.Result, steps []d
 
 	sb.Section("credentials")
 	sb.KVHighlight("username", "kubeadmin")
-	sb.KV("password", "cat okd-install/cluster-config/auth/kubeadmin-password")
+	sb.KVWide("password", "cat okd-install/cluster-config/auth/kubeadmin-password")
 	sb.Newline()
 
 	sb.Section("quick start")
@@ -207,10 +365,10 @@ func PostDeploySummary(cfg *config.Config, result *postinstall.Result, steps []d
 	sb.Newline()
 
 	sb.Section("next steps")
-	sb.WriteString("    cluster deployed with haproxy handling ingress on the bastion.\n")
-	sb.WriteString("    if you deploy a loadbalancer provider (e.g., metallb), run:\n")
+	sb.Para("cluster deployed with haproxy handling ingress on the bastion.")
+	sb.Para("if you deploy a loadbalancer provider (e.g., metallb), run:")
 	sb.WriteString("      " + tui.CodeInlineStyle.Render("okdctl update-ingress") + "\n")
-	sb.WriteString("    to auto-detect loadbalancer ips and switch dns over.\n")
+	sb.Para("to auto-detect loadbalancer ips and switch dns over.")
 	sb.Newline()
 
 	return "\n" + tui.BoxedSectionCompact(sb.String(), "deployment complete", tui.DefaultBoxWidth) + "\n"
@@ -278,9 +436,9 @@ func FailureSummary(f *FailureInfo) string {
 	}
 
 	sb.Section("next steps")
-	sb.WriteString("    re-run " + tui.CodeInlineStyle.Render("okdctl deploy") + " to resume from " + f.Phase + "\n")
-	sb.WriteString("    or " + tui.CodeInlineStyle.Render("okdctl deploy --fresh") + " to restart from scratch (wipes cluster credentials)\n")
-	sb.WriteString("    or " + tui.CodeInlineStyle.Render(f.TeardownCmd) + " to " + f.TeardownNote + "\n")
+	sb.Bullet("re-run " + tui.CodeInlineStyle.Render("okdctl deploy") + " to resume from " + f.Phase)
+	sb.Bullet("or " + tui.CodeInlineStyle.Render("okdctl deploy --fresh") + " to restart from scratch (wipes cluster credentials)")
+	sb.Bullet("or " + tui.CodeInlineStyle.Render(f.TeardownCmd) + " to " + f.TeardownNote)
 	sb.Newline()
 
 	return "\n" + tui.BoxedSectionCompact(sb.String(), "deploy failed", tui.DefaultBoxWidth) + "\n"

@@ -243,6 +243,9 @@ func TestRunDestroy_DryRunPreviewsWithoutConfirmation(t *testing.T) {
 		"#!/bin/sh\n[ -n \"$TF_ARGV_LOG\" ] && echo \"$@\" >> \"$TF_ARGV_LOG\"\nexit 0\n")
 	destroyDryRun = true
 	destroyCmd.SetContext(context.Background())
+	var stdout bytes.Buffer
+	destroyCmd.SetOut(&stdout)
+	t.Cleanup(func() { destroyCmd.SetOut(nil) })
 
 	if err := runDestroy(destroyCmd, nil); err != nil {
 		t.Fatalf("destroy --dry-run: %v", err)
@@ -256,6 +259,9 @@ func TestRunDestroy_DryRunPreviewsWithoutConfirmation(t *testing.T) {
 	}
 	if !strings.Contains(string(argv), "-destroy") {
 		t.Errorf("dry-run must run a -destroy plan, got argv:\n%s", argv)
+	}
+	if !strings.Contains(stdout.String(), "FCOS ISO") {
+		t.Errorf("dry-run preview must name the FCOS ISO removal:\n%s", stdout.String())
 	}
 }
 
@@ -326,11 +332,11 @@ func TestRunDestroy_ConfirmGateWiring(t *testing.T) {
 func captureStderrLog(t *testing.T) *bytes.Buffer {
 	t.Helper()
 	var buf bytes.Buffer
-	if err := tui.ConfigureLoggers("info", "text", &buf, false); err != nil {
+	if err := tui.ConfigureLoggers(tui.LoggerConfig{Level: "info", Format: "text", Stderr: &buf}); err != nil {
 		t.Fatalf("capture loggers: %v", err)
 	}
 	t.Cleanup(func() {
-		if err := tui.ConfigureLoggers("info", "text", os.Stderr, false); err != nil {
+		if err := tui.ConfigureLoggers(tui.LoggerConfig{Level: "info", Format: "text", Stderr: os.Stderr}); err != nil {
 			t.Errorf("restore loggers: %v", err)
 		}
 	})

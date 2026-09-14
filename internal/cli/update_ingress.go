@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -15,6 +16,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 var (
@@ -53,32 +55,34 @@ func init() {
 		"required with --yes; must equal the config cluster name")
 }
 
-// runUpdateIngressDryRun previews update-ingress mutations, probing
+// runUpdateIngressDryRun previews update-ingress mutations to w, probing
 // dnsmasq/haproxy state to label steps that are already no-ops.
-func runUpdateIngressDryRun(ctx context.Context, cfg *config.Config) error {
-	logutil.Info("dry-run: update-ingress for cluster",
-		logutil.LF("cluster", cfg.Cluster.Name), logutil.LF("domain", cfg.Cluster.Domain))
-	logutil.Info("would: query IngressControllers (oc get ingresscontroller -n openshift-ingress-operator)")
-	logutil.Info("would: wait for LoadBalancer IPs on router-* services in openshift-ingress")
-
+func runUpdateIngressDryRun(ctx context.Context, w io.Writer, cfg *config.Config) error {
 	isBootstrap, err := dns.IsBootstrapDNS(cfg)
 	if err != nil {
 		return fmt.Errorf("dry-run: probe dnsmasq state: %w", err)
 	}
-	if isBootstrap {
-		logutil.Info("would: deploy production dnsmasq config pointing *.apps at LoadBalancer IPs")
-	} else {
-		logutil.Info("would: deploy production dnsmasq config pointing *.apps at LoadBalancer IPs (no-op: dns already cut over)")
+
+	dnsAction := "deploy production dnsmasq config pointing *.apps at LoadBalancer IPs"
+	if !isBootstrap {
+		dnsAction += " (no-op: dns already cut over)"
+	}
+
+	would := []string{
+		"query IngressControllers (oc get ingresscontroller -n openshift-ingress-operator)",
+		"wait for LoadBalancer IPs on router-* services in openshift-ingress",
+		dnsAction,
 	}
 
 	if !updateIngressKeepHAProxy {
-		if system.IsServiceActive(ctx, "haproxy") {
-			logutil.Info("would: stop and disable haproxy on the bastion (if all controllers are LB-type)")
-		} else {
-			logutil.Info("would: stop and disable haproxy on the bastion (no-op: haproxy already stopped)")
+		haproxyAction := "stop and disable haproxy on the bastion (if all controllers are LB-type)"
+		if !system.IsServiceActive(ctx, "haproxy") {
+			haproxyAction = "stop and disable haproxy on the bastion (no-op: haproxy already stopped)"
 		}
+		would = append(would, haproxyAction)
 	}
-	logutil.Info("dry-run: re-run without --dry-run to execute update-ingress")
+
+	fmt.Fprintln(w, render.DryRunActions("ingress update", updateIngressConfirmFacts(cfg), would))
 	return nil
 }
 
@@ -91,13 +95,27 @@ func buildConvertConfirm(ctx context.Context, yes bool) func([]string) bool {
 			return true
 		}
 
-		prompt := fmt.Sprintf("convert %d HostNetwork controller(s) to LoadBalancerService? [y/N]: ", len(hostNetworkICs))
+		prompt := tui.PromptLine(fmt.Sprintf("convert %d HostNetwork controller(s) to LoadBalancerService? [y/N]", len(hostNetworkICs)))
 		confirmed, err := promptForConfirmation(ctx, prompt)
 		if err != nil {
 			logutil.Warn("skipping HostNetwork conversion", logutil.LF("err", err))
 			return false
 		}
 		return confirmed
+	}
+}
+
+// updateIngressConfirmFacts builds the ConfirmBox facts for cfg's cluster
+// and whether haproxy will be stopped after the DNS cutover.
+func updateIngressConfirmFacts(cfg *config.Config) []render.Fact {
+	haproxy := "stopped and disabled after cutover"
+	if updateIngressKeepHAProxy {
+		haproxy = "kept running (--keep-haproxy)"
+	}
+	return []render.Fact{
+		{Key: factKeyCluster, Value: cfg.Cluster.Name},
+		{Key: "domain", Value: cfg.Cluster.Domain},
+		{Key: "haproxy", Value: haproxy},
 	}
 }
 
@@ -110,21 +128,17 @@ func runUpdateIngress(cmd *cobra.Command, _ []string) error {
 	}
 
 	if updateIngressDryRun {
-		return runUpdateIngressDryRun(ctx, cfg)
+		return runUpdateIngressDryRun(ctx, cmd.OutOrStdout(), cfg)
 	}
+
+	fmt.Fprintln(cmd.ErrOrStderr(), render.ConfirmBox("ingress update", updateIngressConfirmFacts(cfg), ""))
 
 	if err := confirmClusterMatches(updateIngressYes, updateIngressConfirmCluster, cfg.Cluster.Name, "update-ingress"); err != nil {
 		return err
 	}
 
-	logutil.Warn("this will update dns to use loadbalancer ips",
-		logutil.LF("cluster", cfg.Cluster.Name), logutil.LF("domain", cfg.Cluster.Domain))
-	if !updateIngressKeepHAProxy {
-		logutil.Warn("haproxy will be stopped and disabled on the bastion (pass --keep-haproxy to skip)")
-	}
-
 	if !updateIngressYes {
-		confirmed, err := promptForConfirmation(ctx, "proceed with ingress update? [y/N]: ")
+		confirmed, err := promptForConfirmation(ctx, tui.PromptLine("proceed with ingress update? [y/N]"))
 		if err != nil {
 			return err
 		}

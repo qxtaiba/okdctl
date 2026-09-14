@@ -13,6 +13,7 @@ const (
 	flagLogFile     = "log-file"
 	flagLogFormat   = "log-format"
 	flagLogLevel    = "log-level"
+	flagNoColor     = "no-color"
 	flagOnly        = "only"
 	flagOutput      = "output"
 	flagOutputFile  = "output-file"

@@ -79,7 +79,7 @@ or node instead of refusing.`,
 
 var nodeResizeCmd = &cobra.Command{
 	Use:   "resize (masters|workers|<name>)",
-	Short: "Resize node CPU/memory/OS-disk per role, rolled out one node at a time",
+	Short: "Resize node CPU/memory/disk per role, one node at a time",
 	Long: `Change per-role node resources and roll the change out one node at a
 time. Masters are etcd-health-gated before and after every node and applied
 with an in-place-update plan gate (a VM replace is refused). Workers roll
@@ -106,19 +106,21 @@ above.
 
 --skip-drain power-cycles the node without cordoning/draining it. The resize is
 realized by a hypervisor stop→start that kills the node's pods regardless;
-skipping the drain lets them restart in place on the now-roomier node instead of
-evicting them cluster-wide. Prefer it when the cluster is memory-saturated, where
-a drain's evicted pods cannot reschedule and the drain times out. The etcd and
-Ceph health gates around the power-cycle still run. --skip-drain has no effect
-on a disk-only resize, which never power-cycles.
+skipping the drain lets them restart in place on the now-roomier node instead
+of evicting them cluster-wide. Prefer it when the cluster is memory-saturated,
+where a drain's evicted pods cannot reschedule and the drain times out. The
+etcd and Ceph health gates around the power-cycle still run. --skip-drain has
+no effect on a disk-only resize, which never power-cycles.
 
 An interrupted role roll records an op marker and resumes automatically on the
 next 'okdctl node resize' of the same role or node, skipping already-completed
 nodes and steps. --acknowledge-interrupted-op overrides a marker left by a
 different op or node instead of refusing.`,
-	Example: `  okdctl node resize masters --memory-mb 24576 --yes --confirm-cluster grappleberry
+	Example: `  okdctl node resize masters --memory-mb 24576 \
+    --yes --confirm-cluster grappleberry
   okdctl node resize workers --memory-mb 16384 --dry-run
-  okdctl node resize grappleberry-master0 --memory-mb 30720 --skip-drain --yes --confirm-cluster grappleberry
+  okdctl node resize grappleberry-master0 --memory-mb 30720 --skip-drain \
+    --yes --confirm-cluster grappleberry
   okdctl node resize masters --os-disk-gb 100`,
 	Args: cobra.ExactArgs(1),
 	RunE: runNodeResize,
@@ -166,7 +168,7 @@ func init() {
 	nodeResizeCmd.Flags().IntVar(&nodeResizeMemoryMB, "memory-mb", 0, "new per-node memory in MiB (0 keeps current)")
 	nodeResizeCmd.Flags().IntVar(&nodeResizeCPU, "cpu", 0, "new per-node cpu cores (0 keeps current)")
 	nodeResizeCmd.Flags().IntVar(&nodeResizeOSDiskGB, "os-disk-gb", 0, "grow the role's OS disk to this size in GiB (grow-only, role-scoped only — 'masters'/'workers', not a single node; disk-only resizes are live, no power-cycle)")
-	nodeResizeCmd.Flags().BoolVar(&nodeSkipDrain, "skip-drain", false, "power-cycle without cordon/drain so pods restart in place (use when a drain can't reschedule under memory pressure); etcd/Ceph gates still run")
+	nodeResizeCmd.Flags().BoolVar(&nodeSkipDrain, "skip-drain", false, "power-cycle without cordon/drain so pods restart in place")
 	nodeResizeCmd.Flags().BoolVar(&nodeAcknowledgeInterrupted, "acknowledge-interrupted-op", false, "override a stranded marker left by a different op or node and proceed fresh")
 
 	nodeAddCmd.Flags().BoolVarP(&nodeYes, "yes", "y", false, "skip confirmation prompt")
@@ -220,7 +222,7 @@ func (n *nodeRunnerCtx) complete(w io.Writer, elapsed time.Duration) {
 	if n.dryRun || n.captured == nil {
 		return
 	}
-	fmt.Fprint(w, render.NodeOpComplete(n.captured, elapsed))
+	fmt.Fprintln(w, render.NodeOpComplete(n.captured, elapsed))
 }
 
 // nodeOpsEnv is the pre-TUI environment for node ops; it owns credentials
@@ -371,7 +373,7 @@ func (e *nodeOpsEnv) newRunner(cmd *cobra.Command, cfg *config.Config, verb stri
 		out := cmd.OutOrStdout()
 		runner.Preview = func(plan *node.OpPlan) {
 			rc.captured = plan
-			fmt.Fprint(out, render.NodeOpDryRun(plan))
+			fmt.Fprintln(out, render.NodeOpDryRun(plan))
 		}
 	} else {
 		runner.Confirm = nodeConfirmHook(rc, consent, cfg.Cluster.Name, cmd.ErrOrStderr())
@@ -385,7 +387,7 @@ func (e *nodeOpsEnv) newRunner(cmd *cobra.Command, cfg *config.Config, verb stri
 func nodeConfirmHook(rc *nodeRunnerCtx, consent nodeConsent, clusterName string, errW io.Writer) node.ConfirmFunc {
 	return func(ctx context.Context, plan *node.OpPlan) (bool, error) {
 		rc.captured = plan
-		fmt.Fprint(errW, render.NodeOpConfirm(plan))
+		fmt.Fprintln(errW, render.NodeOpConfirm(plan))
 		if consent.yes {
 			return true, nil
 		}
@@ -398,12 +400,12 @@ func nodeConfirmHook(rc *nodeRunnerCtx, consent nodeConsent, clusterName string,
 func runNodeGate(ctx context.Context, twoStage bool, clusterName string) (bool, error) {
 	if twoStage {
 		nameOK, err := promptForClusterNameConfirmation(ctx, clusterName,
-			fmt.Sprintf("type cluster name %q to confirm: ", clusterName))
+			tui.PromptLine(fmt.Sprintf("type cluster name %q to confirm", clusterName)))
 		if err != nil || !nameOK {
 			return false, err
 		}
 	}
-	return promptForConfirmation(ctx, "proceed? [y/N]: ")
+	return promptForConfirmation(ctx, tui.PromptLine("proceed? [y/N]"))
 }
 
 // runHostBudgetProbe reads host memory and os-datastore headroom for the

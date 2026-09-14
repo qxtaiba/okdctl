@@ -18,9 +18,10 @@ Proxmox VMs (via Terraform), Terraform state, and the Kubernetes lifecycle
 
 ```
   -c, --config string       configuration file (default "okdctl.yaml")
-      --log-file string     write log output to this file in addition to stderr (replaces the default okdctl.log sink of deploy/destroy/cleanup)
+      --log-file string     also write logs to this file (replaces the default okdctl.log of deploy/destroy/cleanup)
       --log-format string   log output format: text (TTY default) | json (auto-selected when stderr is piped)
       --log-level string    log verbosity (debug, info, warn, error) (default "info")
+      --no-color            disable colour and progress output (same as NO_COLOR=1)
   -q, --quiet               suppress info/warn logs (alias for --log-level=error)
   -v, --verbose             enable debug logging (alias for --log-level=debug)
 ```
@@ -32,6 +33,6 @@ Proxmox VMs (via Terraform), Terraform state, and the Kubernetes lifecycle
 * [okdctl node list](okdctl_node_list.md)	 - List cluster nodes with role, readiness, and sizing drift
 * [okdctl node manage](okdctl_node_manage.md)	 - Interactively manage node lifecycle (resize / add / remove)
 * [okdctl node remove](okdctl_node_remove.md)	 - Remove a worker node from the cluster
-* [okdctl node resize](okdctl_node_resize.md)	 - Resize node CPU/memory/OS-disk per role, rolled out one node at a time
+* [okdctl node resize](okdctl_node_resize.md)	 - Resize node CPU/memory/disk per role, one node at a time
 * [okdctl node snapshot](okdctl_node_snapshot.md)	 - Manual, single-node Proxmox VM snapshots
 

@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
@@ -34,10 +36,44 @@ var (
 	logFile    string
 	logQuiet   bool
 	logVerbose bool
+	noColor    bool
 )
 
 // startLogged records that the "okdctl: started" bookend fired, keeping "finished" symmetric.
 var startLogged bool
+
+// startBookendMutates carries PersistentPreRunE's mutatesState(cmd) decision to
+// execute()'s deferred "finished" bookend so both log at the same level.
+var startBookendMutates bool
+
+// mutatesState reports whether cmd mutates cluster/host state, gating the
+// "okdctl: started"/"finished" bookends between Info (mutating) and Debug
+// (read-only): true for a default-log-sink verb, a command exposing --yes, or
+// one annotated requires-root.
+func mutatesState(cmd *cobra.Command) bool {
+	if wantsDefaultLogSink(cmd) {
+		return true
+	}
+	if cmd.Flags().Lookup("yes") != nil {
+		return true
+	}
+	for c := cmd; c != nil; c = c.Parent() {
+		if c.Annotations[annotationKeyRequiresRoot] == annotationValueTrue {
+			return true
+		}
+	}
+	return false
+}
+
+// logBookend logs msg at Info when mutates else Debug, keeping the
+// "started"/"finished" pair at one shared level per invocation.
+func logBookend(msg string, mutates bool, fields ...logutil.LogField) {
+	if mutates {
+		logutil.Info(msg, fields...)
+		return
+	}
+	logutil.Debug(msg, fields...)
+}
 
 // preflightWarns holds pre-Execute warnings; PersistentPreRunE drains them
 // after configureLogging so they use the final formatter.
@@ -68,7 +104,8 @@ per 24h, cached locally); set OKDCTL_NO_UPDATE_CHECK=1 to disable.`,
 		}
 		// logged here (not execute()) so it honors --quiet/--log-format/the
 		// piped-stderr auto-switch, symmetric with "finished"
-		logutil.Info("okdctl: started", logutil.LF("argv", logutil.RedactableArgv(os.Args[1:])))
+		startBookendMutates = mutatesState(cmd)
+		logBookend("okdctl: started", startBookendMutates, logutil.LF("argv", logutil.RedactableArgv(os.Args[1:])))
 		startLogged = true
 		for _, fn := range preflightWarns {
 			fn()
@@ -121,8 +158,9 @@ func execute() (code int) {
 		if !startLogged {
 			return
 		}
-		logutil.Info(
+		logBookend(
 			"okdctl: finished",
+			startBookendMutates,
 			logutil.LF("duration", time.Since(start).Round(time.Millisecond).String()),
 			logutil.LF("exit_code", code),
 		)
@@ -175,7 +213,7 @@ func execute() (code int) {
 		return exitCodeFor(err)
 	}
 
-	printUpdateNotice(updateCh)
+	printUpdateNotice(os.Stderr, updateCh)
 	return 0
 }
 
@@ -208,7 +246,9 @@ func signalLoop(sigCh <-chan os.Signal, cancel context.CancelFunc, caughtSig *at
 	exit(130)
 }
 
-func printUpdateNotice(ch <-chan version.CheckResult) {
+// printUpdateNotice writes the update-available banner to w, downsampling
+// every styled line so it stays plain under NO_COLOR/--no-color.
+func printUpdateNotice(w io.Writer, ch <-chan version.CheckResult) {
 	if logQuiet || logFormat == tui.FormatJSON {
 		return
 	}
@@ -223,20 +263,20 @@ func printUpdateNotice(ch <-chan version.CheckResult) {
 	if result.LatestTag == "" {
 		return
 	}
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, tui.WarningStyle.Render("update available:")+" "+
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, tui.Downsample(tui.WarningStyle.Render("update available:")+" "+
 		tui.MutedStyle.Render(version.Version)+" → "+
-		tui.HighlightStyle.Render(result.LatestTag))
-	fmt.Fprintln(os.Stderr, tui.MutedStyle.Render("  to upgrade (sha256 + cosign verified):"))
-	fmt.Fprintln(os.Stderr, tui.MutedStyle.Render("  curl -sSfL https://raw.githubusercontent.com/qxtaiba/okdctl/develop/scripts/install.sh | bash"))
+		tui.HighlightStyle.Render(result.LatestTag)))
+	fmt.Fprintln(w, tui.Downsample(tui.MutedStyle.Render("  to upgrade (sha256 + cosign verified):")))
+	fmt.Fprintln(w, tui.Downsample(tui.MutedStyle.Render("  curl -sSfL https://raw.githubusercontent.com/qxtaiba/okdctl/develop/scripts/install.sh | bash")))
 }
 
 // announceFailure renders the boxed ErrorSummary on a TTY, else logs "command
 // failed" structured so RedactHandler can scrub credentials (stringifying err
 // first would bypass it).
 func announceFailure(err error) {
-	if logutil.ProgressBarsEnabled() && !render.IsPresented(err) {
-		fmt.Fprint(os.Stderr, render.ErrorSummary(err, exitCodeFor(err), logutil.RunID()))
+	if logutil.ProgressBarsEnabled() && term.IsTerminal(int(os.Stderr.Fd())) && !render.IsPresented(err) {
+		fmt.Fprintln(os.Stderr, render.ErrorSummary(err, exitCodeFor(err), logutil.RunID()))
 		return
 	}
 	logutil.Error("command failed", logutil.LF("err", err))
@@ -364,25 +404,27 @@ pinning or scripted comparisons (see docs/cli/json-schema.md).`,
 }
 
 // versionText renders build identity with okdctl's dotted-leader convention
-// instead of cobra's stock "Key:" colons.
+// instead of cobra's stock "Key:" colons; it disables color itself for
+// --no-color since the bare "okdctl --version" flag short-circuits inside
+// cobra's execute() before PersistentPreRunE/configureLogging ever runs.
 func versionText() string {
-	const keyCol = 16
-	rows := [][2]string{
+	if noColor {
+		tui.DisableColor()
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "okdctl %s\n", version.Version)
+	_ = printLeaders(&b, [][2]string{
 		{"git commit", version.GitCommit},
 		{"build date", version.BuildDate},
 		{"go version", version.GoVersion},
 		{"platform", version.Platform},
-	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "okdctl %s\n", version.Version)
-	for _, r := range rows {
-		b.WriteString("  " + tui.DottedKeyValueFull(r[0], r[1], keyCol, 0) + "\n")
-	}
+	})
 	return b.String()
 }
 
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, flagConfig, flagConfigShort, "okdctl.yaml", "configuration file")
+	rootCmd.PersistentFlags().BoolVar(&noColor, flagNoColor, false, "disable colour and progress output (same as NO_COLOR=1)")
 	rootCmd.PersistentFlags().StringVar(&logLevel, flagLogLevel, "info", "log verbosity (debug, info, warn, error)")
 	_ = rootCmd.RegisterFlagCompletionFunc(flagLogLevel,
 		cobra.FixedCompletions([]string{"debug", "info", "warn", "error"}, cobra.ShellCompDirectiveNoFileComp))
@@ -393,15 +435,15 @@ func init() {
 	// contradicting the auto-switch prose; keep in sync with the flag's Usage
 	// string
 	rootCmd.PersistentFlags().Lookup(flagLogFormat).DefValue = ""
-	rootCmd.PersistentFlags().StringVar(&logFile, flagLogFile, "", "write log output to this file in addition to stderr (replaces the default okdctl.log sink of deploy/destroy/cleanup)")
+	rootCmd.PersistentFlags().StringVar(&logFile, flagLogFile, "", "also write logs to this file (replaces the default okdctl.log of deploy/destroy/cleanup)")
 	rootCmd.PersistentFlags().BoolVarP(&logQuiet, flagQuiet, "q", false, "suppress info/warn logs (alias for --log-level=error)")
 	rootCmd.PersistentFlags().BoolVarP(&logVerbose, flagVerbose, "v", false, "enable debug logging (alias for --log-level=debug)")
 	rootCmd.MarkFlagsMutuallyExclusive(flagQuiet, flagVerbose)
 
 	// returns UsageError instead of os.Exit so Execute's deferred logFileCloser.Close() still runs
-	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
-		logutil.Error("flag error", logutil.LF("err", err))
-		return &errtypes.UsageError{Msg: err.Error(), Err: err}
+	rootCmd.SetFlagErrorFunc(func(c *cobra.Command, err error) error {
+		usageErr := &errtypes.UsageError{Msg: err.Error(), Err: err}
+		return usageErr.WithHint(fmt.Sprintf("see '%s --help'", c.CommandPath()))
 	})
 
 	versionCmd.Flags().StringVarP(&versionOutputFlag, flagOutput, flagOutputShort, outputText, "output format: text|json")
@@ -412,5 +454,5 @@ func init() {
 	rootCmd.AddCommand(updateIngressCmd)
 	rootCmd.AddCommand(versionCmd)
 
-	rootCmd.SetVersionTemplate(versionText())
+	installHelp(rootCmd)
 }

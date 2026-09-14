@@ -55,19 +55,18 @@ func ErrorCard(kind, message, hint string, width int) string {
 // errorBody writes the kind chip, wrapped message, and pointer-led hint
 // shared by ErrorSummary and ErrorCard, sized to fit inside width.
 func errorBody(kind, message, hint string, width int) *Builder {
-	contentWidth := width - 4
-
 	sb := NewBuilderWidth(width)
+	contentWidth := sb.ContentWidth()
 	sb.Newline()
 	sb.WriteString("  " + tui.ErrorStyle.Render(tui.IconError+"  "+kind) + "\n")
 	sb.Newline()
-	for _, line := range wrapText(message, contentWidth) {
+	for _, line := range tui.WrapLines(message, contentWidth) {
 		sb.WriteString("  " + line + "\n")
 	}
 	if hint != "" {
 		sb.Newline()
 		pointer := tui.HighlightStyle.Render(tui.IconPointer)
-		wrapped := wrapText(hint, contentWidth-2)
+		wrapped := tui.WrapLines(hint, contentWidth-2)
 		for i, line := range wrapped {
 			if i == 0 {
 				sb.WriteString("  " + pointer + " " + line + "\n")
@@ -86,37 +85,4 @@ func describeError(err error) (kind, headline, hint string) {
 		return d.Kind.Label(), strings.TrimSpace(d.Message), strings.TrimSpace(d.Hint)
 	}
 	return "error", strings.TrimSpace(err.Error()), ""
-}
-
-// wrapText greedy-wraps s to width columns, hard-splitting tokens that exceed
-// it; returns at least one line.
-func wrapText(s string, width int) []string {
-	width = max(width, 1)
-	var lines []string
-	var cur strings.Builder
-	for _, word := range strings.Fields(s) {
-		for len(word) > width {
-			if cur.Len() > 0 {
-				lines = append(lines, cur.String())
-				cur.Reset()
-			}
-			lines = append(lines, word[:width])
-			word = word[width:]
-		}
-		switch {
-		case cur.Len() == 0:
-			cur.WriteString(word)
-		case cur.Len()+1+len(word) <= width:
-			cur.WriteByte(' ')
-			cur.WriteString(word)
-		default:
-			lines = append(lines, cur.String())
-			cur.Reset()
-			cur.WriteString(word)
-		}
-	}
-	if cur.Len() > 0 || len(lines) == 0 {
-		lines = append(lines, cur.String())
-	}
-	return lines
 }

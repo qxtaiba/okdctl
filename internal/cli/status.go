@@ -198,6 +198,7 @@ func printClusterStatus(cmd *cobra.Command, st *okd.ClusterStatus) error {
 	sb.Section("nodes")
 	if len(st.Nodes) == 0 {
 		sb.WriteString("    " + tui.EmptyState("no nodes reported", "deploy a cluster with 'okdctl deploy'") + "\n")
+		sb.Newline()
 	} else {
 		for _, line := range nodeStatusTableLines(st.Nodes) {
 			sb.WriteString("    " + line + "\n")
@@ -225,7 +226,7 @@ func printClusterStatus(cmd *cobra.Command, st *okd.ClusterStatus) error {
 		sb.Newline()
 	}
 
-	_, err := fmt.Fprint(cmd.OutOrStdout(),
+	_, err := fmt.Fprintln(cmd.OutOrStdout(),
 		"\n"+tui.BoxedSectionCompact(sb.String(), "cluster status", tui.DefaultBoxWidth)+"\n")
 	return err
 }
@@ -237,7 +238,7 @@ func nodeStatusTableLines(nodes []okd.NodeStatus) []string {
 	for _, n := range nodes {
 		rows = append(rows, []string{n.Name, string(n.Role), yesNo(n.Ready)})
 	}
-	return tui.Table([]string{"NAME", "ROLE", "READY"}, rows, tui.TableOptions{
+	return tui.Table([]string{headerName, "ROLE", "READY"}, rows, tui.TableOptions{
 		RowStyle: func(i int) (lipgloss.Style, bool) {
 			if !nodes[i].Ready {
 				return tui.ErrorStyle, true
@@ -284,15 +285,11 @@ func runDescribeNode(cmd *cobra.Command, args []string) error {
 		return writeJSON(cmd.OutOrStdout(), payload)
 	}
 
-	lines := []struct{ k, v string }{
+	return printLeaders(cmd.OutOrStdout(), [][2]string{
 		{colName, n.Name},
 		{"role", string(n.Role)},
 		{"ready", yesNo(n.Ready)},
-	}
-	for _, ln := range lines {
-		fmt.Fprintln(cmd.OutOrStdout(), tui.DottedKeyValueFull(ln.k, ln.v, tui.DefaultKeyColWidth, 0))
-	}
-	return nil
+	})
 }
 
 func runDescribeAddon(cmd *cobra.Command, args []string) error {
@@ -352,15 +349,11 @@ func runDescribeAddon(cmd *cobra.Command, args []string) error {
 	if !as.Healthy && as.Error != "" {
 		health += ": " + as.Error
 	}
-	lines := []struct{ k, v string }{
+	return printLeaders(cmd.OutOrStdout(), [][2]string{
 		{colName, info.Name},
 		{"display-name", info.DisplayName},
 		{"description", info.Description},
 		{"category", info.Category},
 		{"health", health},
-	}
-	for _, ln := range lines {
-		fmt.Fprintln(cmd.OutOrStdout(), tui.DottedKeyValueFull(ln.k, ln.v, tui.DefaultKeyColWidth, 0))
-	}
-	return nil
+	})
 }

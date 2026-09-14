@@ -228,12 +228,19 @@ func TestPrintNodeListAlignsColumnsWithLongNames(t *testing.T) {
 }
 
 func TestPrintNodeListEmpty(t *testing.T) {
+	tui.SetColorProfileFor(&bytes.Buffer{})
+	t.Cleanup(func() { tui.SetColorProfileFor(&bytes.Buffer{}) })
+
 	var buf bytes.Buffer
 	if err := printNodeList(&buf, nil, ""); err != nil {
 		t.Fatalf("printNodeList: %v", err)
 	}
-	if got := buf.String(); got != "no nodes found\n" {
-		t.Errorf("printNodeList(nil, \"\") = %q, want %q", got, "no nodes found\n")
+	got := buf.String()
+	if !strings.Contains(got, "no nodes found") {
+		t.Errorf("printNodeList(nil, \"\") = %q, want to contain %q", got, "no nodes found")
+	}
+	if strings.Contains(got, "\x1b[") {
+		t.Errorf("printNodeList(nil, \"\") must carry no ANSI under a no-color profile: %q", got)
 	}
 }
 

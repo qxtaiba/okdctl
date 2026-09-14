@@ -1,0 +1,15 @@
+
+╭────────────────────────────────── DESTROY ───────────────────────────────────╮
+│                                                                              │
+│  dry-run — no changes made                                                   │
+│                                                                              │
+│    cluster .................................. grappleberry                   │
+│    domain ................................... grappleberry.example.com       │
+│                                                                              │
+│  would                                                                       │
+│    • remove work directory (/srv/okdctl/okd-install)                         │
+│    • remove the FCOS ISO from the Proxmox host                               │
+│                                                                              │
+│  → re-run without --dry-run to execute                                       │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯

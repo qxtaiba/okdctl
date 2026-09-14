@@ -76,8 +76,6 @@ func openDefaultLogSink() (string, *os.File, error) {
 }
 
 func configureLogging(cmd *cobra.Command) error {
-	stderrW := io.Writer(os.Stderr)
-
 	var sink *os.File
 	var sinkErr error
 	switch {
@@ -92,10 +90,13 @@ func configureLogging(cmd *cobra.Command) error {
 		// --log-file); warning emitted after ConfigureLoggers so it's formatted
 		runLogPath, sink, sinkErr = openDefaultLogSink()
 	}
+	// a nil *os.File assigned into an io.Writer is a non-nil interface, so
+	// this must stay a guarded assignment rather than `io.Writer(sink)`
+	var sinkW io.Writer
 	if sink != nil {
 		logFileCloser = sink
 		runLogSink = sink
-		stderrW = io.MultiWriter(os.Stderr, sink)
+		sinkW = sink
 	}
 
 	// --quiet/--verbose are sugar over --log-level; mutual exclusion is enforced at flag registration.
@@ -109,23 +110,35 @@ func configureLogging(cmd *cobra.Command) error {
 
 	stderrIsTTY := term.IsTerminal(int(os.Stderr.Fd()))
 	stdoutIsTTY := term.IsTerminal(int(os.Stdout.Fd()))
-	// NO_COLOR (no-color.org) disables progress bars regardless of TTY;
-	// FORCE_COLOR only affects colorprofile styling, not this gate.
-	noColor := os.Getenv("NO_COLOR") != ""
+	// --no-color or NO_COLOR (no-color.org, any value) disables progress bars
+	// regardless of TTY; FORCE_COLOR only affects colorprofile styling, not
+	// this gate.
+	colorOff := noColor || os.Getenv("NO_COLOR") != ""
 
 	// auto-switch to json when stderr is piped and --log-format wasn't set
 	// explicitly, mirroring the progress-bar TTY gate
 	if !cmd.Root().PersistentFlags().Changed(flagLogFormat) && !stderrIsTTY {
-		logFormat = tui.FormatJSON
+		logFormat = outputJSON
 	}
 
-	progressBars := stderrIsTTY && stdoutIsTTY && logFormat != tui.FormatJSON && !noColor
+	progressBars := stderrIsTTY && stdoutIsTTY && logFormat != outputJSON && !colorOff
 
 	// pin the render profile to stdout's real capabilities so a piped/NO_COLOR
-	// run strips box escapes like charm/log strips level badges
-	tui.SetColorProfileFor(os.Stdout)
+	// run strips box escapes like charm/log strips level badges; --no-color
+	// forces it off outright instead of re-detecting from stdout
+	if colorOff {
+		tui.DisableColor()
+	} else {
+		tui.SetColorProfileFor(os.Stdout)
+	}
 
-	if err := tui.ConfigureLoggers(effectiveLevel, logFormat, stderrW, progressBars); err != nil {
+	if err := tui.ConfigureLoggers(tui.LoggerConfig{
+		Level:        effectiveLevel,
+		Format:       logFormat,
+		Stderr:       os.Stderr,
+		Sink:         sinkW,
+		ProgressBars: progressBars,
+	}); err != nil {
 		return err
 	}
 	if sinkErr != nil {
@@ -133,7 +146,7 @@ func configureLogging(cmd *cobra.Command) error {
 	}
 	// suppress Info/Warn under json for clean pipelines, except deploy-family
 	// flows which keep milestones/degraded-notices visible
-	if logFormat == tui.FormatJSON && !logVerbose && !wantsDefaultLogSink(cmd) {
+	if logFormat == outputJSON && !logVerbose && !wantsDefaultLogSink(cmd) {
 		tui.SuppressInfo()
 	}
 	return nil

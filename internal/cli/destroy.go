@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -22,6 +23,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
@@ -144,11 +146,11 @@ dry-run previews the terraform-destroy plan; the --skip-* flags resume a
 partial terraform-destroy — the two address different failure points and
 cannot be combined (see the --dry-run incompatibility check).
 
-A scoped destroy (--target or --only) only tears down the named Terraform
-resources; host cleanup (haproxy/dnsmasq config, kubeconfig, terraform state
-files), firewall rules, and Proxmox ISO removal are skipped automatically for
-a scoped run — that bastion-wide teardown runs only on an unscoped destroy,
-so it never touches a still-running control plane.
+A scoped destroy (--target or --only, which are mutually exclusive) only tears
+down the named Terraform resources; host cleanup (haproxy/dnsmasq config,
+kubeconfig, terraform state files), firewall rules, and Proxmox ISO removal are
+skipped automatically for a scoped run — that bastion-wide teardown runs only on
+an unscoped destroy, so it never touches a still-running control plane.
 
 Master nodes ship with prevent_destroy = true in the Terraform module to
 guard against accidental etcd-quorum loss. A fully-confirmed destroy
@@ -181,7 +183,7 @@ func init() {
 	destroyCmd.Flags().StringArrayVar(&destroyTargets, flagTarget, nil,
 		"limit terraform destroy to this resource address (repeatable); must match the okd_cluster VM allowlist; scopes cleanup/firewall/iso removal off automatically")
 	destroyCmd.Flags().StringVar(&destroyOnly, flagOnly, "",
-		"scope destroy to a node group: "+strings.Join(validDestroyScopes(), ", ")+" (expands into --target; mutually exclusive with --target; scopes cleanup/firewall/iso removal off automatically)")
+		"scope destroy to a node group: "+strings.Join(validDestroyScopes(), ", ")+" (expands into --target)")
 	destroyCmd.MarkFlagsMutuallyExclusive(flagOnly, flagTarget)
 	_ = destroyCmd.RegisterFlagCompletionFunc(flagOnly, func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		return validDestroyScopes(), cobra.ShellCompDirectiveNoFileComp
@@ -233,25 +235,79 @@ func validateDestroyFlagCombos(cfg *config.Config) error {
 // (unscoped runs only) then y/N.
 func confirmDestroyInteractive(ctx context.Context, cfg *config.Config) (bool, error) {
 	if len(destroyTargets) == 0 {
-		nameConfirmed, err := promptForClusterNameConfirmation(ctx, cfg.Cluster.Name, "type cluster name to confirm destroy: ")
+		nameConfirmed, err := promptForClusterNameConfirmation(ctx, cfg.Cluster.Name, tui.PromptLine("type cluster name to confirm destroy"))
 		if err != nil || !nameConfirmed {
 			return false, err
 		}
 	}
-	return promptForConfirmation(ctx, "proceed with destroy? [y/N]: ")
+	return promptForConfirmation(ctx, tui.PromptLine("proceed with destroy? [y/N]"))
+}
+
+// destroyScopeFact reports the ConfirmBox "scope" value: the full cluster
+// for an unscoped destroy, or the --only group (or a raw --target count)
+// for a scoped one.
+func destroyScopeFact() string {
+	if len(destroyTargets) == 0 {
+		return "full cluster (all VMs)"
+	}
+	if destroyOnly != "" {
+		return fmt.Sprintf("%s (%d resource(s))", destroyOnly, len(destroyTargets))
+	}
+	return fmt.Sprintf("%d targeted resource(s)", len(destroyTargets))
+}
+
+// destroyAlsoRemovesFact reports the ConfirmBox "also removes" value: the
+// non-terraform side effects this run will perform, given the current
+// scope and skip-* flags.
+func destroyAlsoRemovesFact() string {
+	if len(destroyTargets) > 0 {
+		return "nothing else (scoped destroy skips host cleanup, firewall rules, and iso removal)"
+	}
+	var removes []string
+	if !destroyKeepISOs {
+		removes = append(removes, "fcos iso")
+	}
+	if !destroySkipCleanup {
+		removes = append(removes, "host files (work dir, haproxy/dnsmasq config, terraform state)")
+	}
+	if !destroySkipFirewall {
+		removes = append(removes, "firewall rules")
+	}
+	if len(removes) == 0 {
+		return "nothing (all skipped via flags)"
+	}
+	return strings.Join(removes, ", ")
+}
+
+// destroyConfirmFacts builds the ConfirmBox facts for cfg's cluster under
+// the current scope and skip-* flags.
+func destroyConfirmFacts(cfg *config.Config) []render.Fact {
+	return []render.Fact{
+		{Key: factKeyCluster, Value: cfg.Cluster.Name},
+		{Key: "domain", Value: cfg.Cluster.Domain},
+		{Key: "scope", Value: destroyScopeFact()},
+		{Key: "also removes", Value: destroyAlsoRemovesFact()},
+	}
+}
+
+// destroyEffectiveFlags resolves the operator-facing skip/keep flags against
+// the current --target/--only scope: a scoped run forces cleanup, firewall,
+// and iso removal off so bastion-wide teardown never hits a still-running
+// control plane. buildDestroyOptions and destroyNonTerraformActions both
+// call this, so the dry-run preview cannot drift from what destroy executes.
+func destroyEffectiveFlags() (skipCleanup, skipFirewall, keepISOs bool) {
+	if len(destroyTargets) > 0 {
+		return true, true, true
+	}
+	return destroySkipCleanup, destroySkipFirewall, destroyKeepISOs
 }
 
 // buildDestroyOptions forces cleanup/firewall/iso off for a scoped
 // (--target/--only) run so bastion-wide teardown never hits a still-running
 // control plane.
 func buildDestroyOptions(cfg *config.Config, projectRoot string) destroy.Options {
-	skipCleanup := destroySkipCleanup
-	skipFirewall := destroySkipFirewall
-	keepISOs := destroyKeepISOs
+	skipCleanup, skipFirewall, keepISOs := destroyEffectiveFlags()
 	if len(destroyTargets) > 0 {
-		skipCleanup = true
-		skipFirewall = true
-		keepISOs = true
 		logutil.Info("scoped destroy: skipping host cleanup, firewall rules, and iso removal — full bastion teardown is exclusive to an unscoped destroy")
 	}
 
@@ -264,6 +320,30 @@ func buildDestroyOptions(cfg *config.Config, projectRoot string) destroy.Options
 	opts.SkipFirewall = skipFirewall
 	opts.TerraformTargets = destroyTargets
 	return opts
+}
+
+// destroyNonTerraformActions lists the non-terraform side effects a destroy
+// run performs, using destroyEffectiveFlags — the same flags buildDestroyOptions
+// resolves for the real destroy path — so the dry-run preview cannot drift.
+func destroyNonTerraformActions() []string {
+	if len(destroyTargets) > 0 {
+		return []string{"scoped destroy skips iso removal, host cleanup, and firewall rules (unscoped destroy only)"}
+	}
+	skipCleanup, skipFirewall, keepISOs := destroyEffectiveFlags()
+	var actions []string
+	if !keepISOs {
+		actions = append(actions, "remove the FCOS ISO from the Proxmox host")
+	}
+	if !skipCleanup {
+		actions = append(actions, "run host cleanup (kind=full: work directory incl. kubeconfig and kubeadmin-password, haproxy/dnsmasq config, terraform state files, packages)")
+	}
+	if !skipFirewall {
+		actions = append(actions, "remove firewall rules")
+	}
+	if len(actions) == 0 {
+		actions = append(actions, "nothing else (all skipped via flags)")
+	}
+	return actions
 }
 
 func runDestroy(cmd *cobra.Command, _ []string) error {
@@ -291,10 +371,8 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	}
 
 	if destroyDryRun {
-		return runDestroyDryRun(ctx, cfg)
+		return runDestroyDryRun(ctx, cmd.OutOrStdout(), cfg)
 	}
-
-	logutil.Warn("this will destroy cluster and all associated resources", logutil.LF("cluster", cfg.Cluster.Name))
 
 	// Resolved ahead of the confirmation gates so an in-flight node-op marker
 	// is surfaced before the operator confirms.
@@ -303,6 +381,8 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	announceInFlightNodeOp(projectRoot, cfg)
+
+	fmt.Fprintln(cmd.ErrOrStderr(), render.ConfirmBox("destroy", destroyConfirmFacts(cfg), render.IrreversibleWarning))
 
 	if err := confirmClusterMatches(destroyYes, destroyConfirmCluster, cfg.Cluster.Name, "destroy"); err != nil {
 		return err
@@ -365,9 +445,10 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-// runDestroyDryRun runs terraform plan -destroy to preview removal; a plan
-// failure returns *errtypes.ConfigError (exit 2).
-func runDestroyDryRun(ctx context.Context, cfg *config.Config) error {
+// runDestroyDryRun runs terraform plan -destroy to preview removal, then
+// prints the boxed non-terraform preview to w; a plan failure returns
+// *errtypes.ConfigError (exit 2).
+func runDestroyDryRun(ctx context.Context, w io.Writer, cfg *config.Config) error {
 	creds, err := handleCredentials(cfg)
 	if err != nil {
 		return err
@@ -395,8 +476,6 @@ func runDestroyDryRun(ctx context.Context, cfg *config.Config) error {
 	tf := terraform.New(terraformDir, tfOpts...)
 	defer tf.ZeroizeEnv()
 
-	logutil.Info("dry-run: terraform destroy plan", logutil.LF("cluster", cfg.Cluster.Name))
-
 	if err := tf.Init(ctx); err != nil {
 		return tf.WithLockHint(&errtypes.ConfigError{Msg: "terraform init failed in dry-run", Err: err})
 	}
@@ -405,20 +484,6 @@ func runDestroyDryRun(ctx context.Context, cfg *config.Config) error {
 		return tf.WithLockHint(&errtypes.ConfigError{Msg: "terraform destroy plan failed", Err: err})
 	}
 
-	announceDestroyNonTerraformActions()
-
-	logutil.Info("dry-run: re-run without --dry-run to execute destroy")
+	fmt.Fprintln(w, render.DryRunActions("destroy", destroyConfirmFacts(cfg), destroyNonTerraformActions()))
 	return nil
-}
-
-// announceDestroyNonTerraformActions lists the irreversible non-terraform
-// actions an unscoped destroy also performs; a scoped run lists nothing.
-func announceDestroyNonTerraformActions() {
-	if len(destroyTargets) > 0 {
-		logutil.Info("dry-run: scoped destroy skips iso removal, host cleanup, and firewall rules (unscoped destroy only)")
-		return
-	}
-	logutil.Info("dry-run: unscoped destroy would also remove the FCOS ISO from the Proxmox host")
-	logutil.Info("dry-run: unscoped destroy would also run host cleanup (kind=full: work directory incl. kubeconfig and kubeadmin-password, haproxy/dnsmasq config, terraform state files, packages)")
-	logutil.Info("dry-run: unscoped destroy would also remove firewall rules")
 }

@@ -173,8 +173,10 @@ type Options struct {
 
 // checklistRecorder builds a TTY step-checklist seeded only with steps this
 // resumed run executes (so N/total matches), or nil when progress rendering
-// is off; logSink still gets the per-step trail the checklist replaces on the TTY.
-func checklistRecorder(cfg *config.Config, projectRoot string, resumeFrom deployPhase, logSink io.Writer) distribution.MetricsRecorder {
+// is off; logSink still gets the per-step trail the checklist replaces on
+// the TTY. The return type is the concrete *tui.StepProgress, not the
+// distribution.MetricsRecorder interface, so the call site can read Prefix() directly.
+func checklistRecorder(cfg *config.Config, projectRoot string, resumeFrom deployPhase, logSink io.Writer) *tui.StepProgress {
 	if !logutil.ProgressBarsEnabled() {
 		return nil
 	}
@@ -190,6 +192,15 @@ func checklistRecorder(cfg *config.Config, projectRoot string, resumeFrom deploy
 		return nil
 	}
 	return tui.NewStepProgress(plan, logSink)
+}
+
+// checklistPrefix returns rec's current-step prefix, or "" when rec is nil
+// (progress rendering off or nothing to show between steps).
+func checklistPrefix(rec *tui.StepProgress) string {
+	if rec == nil {
+		return ""
+	}
+	return rec.Prefix()
 }
 
 // phaseRuns reports whether stepPhase executes given resumeFrom: a resume
@@ -293,11 +304,16 @@ func Execute(ctx context.Context, cfg *config.Config, opts Options, w io.Writer)
 	markerPath := filepath.Join(workDir, StateFileName)
 	resumeFrom, marker := resolveResumePhase(markerPath, cfg.Cluster.Name, opts.FreshDeploy)
 
+	rec := checklistRecorder(cfg, projectRoot, resumeFrom, opts.LogSink)
 	provOpts := []okd.ProvisionerOption{
-		okd.WithProgressReporter(func(desc string) func() { return tui.StartSpinner(ctx, desc) }),
-		okd.WithStatusLineReporter(func(desc string) (func(string), func()) { return tui.StartStatusLine(ctx, desc) }),
+		okd.WithProgressReporter(func(desc string) func() {
+			return tui.StartSpinnerWithPrefix(ctx, checklistPrefix(rec), desc)
+		}),
+		okd.WithStatusLineReporter(func(desc string) (func(string), func()) {
+			return tui.StartStatusLineWithPrefix(ctx, checklistPrefix(rec), desc)
+		}),
 	}
-	if rec := checklistRecorder(cfg, projectRoot, resumeFrom, opts.LogSink); rec != nil {
+	if rec != nil {
 		provOpts = append(provOpts, okd.WithMetricsRecorder(rec))
 	}
 	if so, se := streamWriters(opts.LogSink, opts.Verbose); so != nil {

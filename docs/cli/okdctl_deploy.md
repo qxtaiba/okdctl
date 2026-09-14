@@ -37,9 +37,9 @@ okdctl deploy [flags]
       --dry-run                      preview terraform plan and step listing without deploying
       --fresh                        wipe the work directory even when live cluster state is detected (credentials will be lost)
   -h, --help                         help for deploy
-      --keep-redhat-catalogs         keep the redhat-operators, certified-operators, and redhat-marketplace OperatorHub catalogsources and the InsightsDisabled alert enabled (both require a Red Hat subscription OKD clusters don't have)
+      --keep-redhat-catalogs         keep the Red Hat OperatorHub catalogsources and the InsightsDisabled alert
       --minimal                      use minimal defaults (single-node cluster)
-      --output-file string           config file to write wizard output to; reuses and reads back an existing file at this path, otherwise creates one; overrides --config when both are set (default "okdctl.yaml")
+      --output-file string           config file to write wizard output to (reused if present; overrides --config) (default "okdctl.yaml")
       --write-config                 write configuration non-interactively; does not deploy
   -y, --yes                          skip the wizard and deploy from the existing configuration file (requires --confirm-cluster)
 ```
@@ -48,9 +48,10 @@ okdctl deploy [flags]
 
 ```
   -c, --config string       configuration file (default "okdctl.yaml")
-      --log-file string     write log output to this file in addition to stderr (replaces the default okdctl.log sink of deploy/destroy/cleanup)
+      --log-file string     also write logs to this file (replaces the default okdctl.log of deploy/destroy/cleanup)
       --log-format string   log output format: text (TTY default) | json (auto-selected when stderr is piped)
       --log-level string    log verbosity (debug, info, warn, error) (default "info")
+      --no-color            disable colour and progress output (same as NO_COLOR=1)
   -q, --quiet               suppress info/warn logs (alias for --log-level=error)
   -v, --verbose             enable debug logging (alias for --log-level=debug)
 ```

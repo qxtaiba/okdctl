@@ -1,10 +1,13 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -14,6 +17,8 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/version"
 )
 
 // tripwire: pflag embeds flag values in error text (unscrubbed UsageError.Msg);
@@ -252,5 +257,134 @@ func TestWrapArgValidators(t *testing.T) {
 	err = handRolled.Args(handRolled, nil)
 	if !errors.As(err, &usageErr) || usageErr.Msg != "expected exactly one name" {
 		t.Fatalf("hand-rolled UsageError must pass through unwrapped, got %v", err)
+	}
+}
+
+func installLogBuffer(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	logutil.InstallHandler(slog.NewTextHandler(&buf, nil))
+	t.Cleanup(func() { logutil.InstallHandler(slog.NewTextHandler(os.Stderr, nil)) })
+	return &buf
+}
+
+func TestFlagErrorFuncReturnsUsageErrorWithHelpHint(t *testing.T) {
+	buf := installLogBuffer(t)
+
+	err := rootCmd.FlagErrorFunc()(nodeResizeCmd, errors.New("unknown flag: --bogus"))
+
+	var usageErr *errtypes.UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("want *errtypes.UsageError, got %T: %v", err, err)
+	}
+	if got := exitCodeFor(err); got != 64 {
+		t.Fatalf("exitCodeFor = %d, want 64", got)
+	}
+	d, ok := errtypes.Describe(err)
+	if !ok {
+		t.Fatalf("errtypes.Describe failed to classify %v", err)
+	}
+	if !strings.Contains(d.Hint, "okdctl node resize --help") {
+		t.Fatalf("hint = %q, want it to contain %q", d.Hint, "okdctl node resize --help")
+	}
+	if buf.Len() != 0 {
+		t.Fatalf("FlagErrorFunc must not log directly; buffer = %q", buf.String())
+	}
+}
+
+func TestPrintUpdateNoticeNoANSIUnderNoColor(t *testing.T) {
+	prevQuiet, prevFormat := logQuiet, logFormat
+	logQuiet, logFormat = false, outputText
+	t.Cleanup(func() { logQuiet, logFormat = prevQuiet, prevFormat })
+
+	tui.SetColorProfileFor(&bytes.Buffer{}) // a buffer is never a TTY
+	t.Cleanup(func() { tui.SetColorProfileFor(&bytes.Buffer{}) })
+
+	ch := make(chan version.CheckResult, 1)
+	ch <- version.CheckResult{LatestTag: "v9.9.9"}
+
+	var out bytes.Buffer
+	printUpdateNotice(&out, ch)
+
+	if strings.Contains(out.String(), "\x1b[") {
+		t.Errorf("printUpdateNotice leaked ANSI escapes under a no-color profile:\n%q", out.String())
+	}
+	if !strings.Contains(out.String(), "v9.9.9") {
+		t.Errorf("printUpdateNotice output missing latest tag:\n%s", out.String())
+	}
+}
+
+func TestNoColorFlagIsLongFormOnly(t *testing.T) {
+	f := rootCmd.PersistentFlags().Lookup(flagNoColor)
+	if f == nil {
+		t.Fatal("--no-color flag not registered")
+	}
+	if f.Shorthand != "" {
+		t.Fatalf("--no-color has shorthand %q, want none (shorthand allowlist is closed)", f.Shorthand)
+	}
+}
+
+// Regression guard: the bare "okdctl --version" flag short-circuits inside
+// cobra's execute() before PersistentPreRunE/configureLogging ever runs, so
+// --no-color must be honored by versionText itself.
+func TestVersionFlagRespectsNoColor(t *testing.T) {
+	// registered before t.Setenv so LIFO cleanup restores CLICOLOR_FORCE
+	// first and only then re-detects the profile with a clean environment;
+	// the reverse order left the package profile forced-colourful for later
+	// tests
+	t.Cleanup(func() { tui.SetColorProfileFor(&bytes.Buffer{}) })
+	t.Setenv("CLICOLOR_FORCE", "1") // forces color even for a non-TTY writer
+
+	tui.SetColorProfileFor(&bytes.Buffer{})
+
+	if got := tui.Downsample(tui.SuccessStyle.Render("x")); !strings.Contains(got, "\x1b[") {
+		t.Fatalf("test setup failed to force a colourful profile: %q", got)
+	}
+
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetArgs([]string{"--no-color", "--version"})
+	t.Cleanup(func() {
+		rootCmd.SetOut(nil)
+		rootCmd.SetArgs(nil)
+		noColor = false
+	})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("rootCmd.Execute(--no-color --version) = %v", err)
+	}
+	if strings.Contains(out.String(), "\x1b[") {
+		t.Errorf("--version leaked ANSI under --no-color: %q", out.String())
+	}
+}
+
+func TestMutatesStateClassification(t *testing.T) {
+	cases := []struct {
+		cmd  *cobra.Command
+		want bool
+	}{
+		{deployCmd, true},
+		{destroyCmd, true},
+		{cleanupCmd, true},
+		{updateIngressCmd, true},
+		{nodeAddCmd, true},
+		{nodeRemoveCmd, true},
+		{nodeResizeCmd, true},
+		{clusterStopCmd, true},
+		{addonUninstallCmd, true},
+		{versionCmd, false},
+		{statusCmd, false},
+		{nodeListCmd, false},
+		{describeNodeCmd, false},
+		{releasesListCmd, false},
+		{addonListCmd, false},
+		{addonVerifyCmd, false},
+		{doctorCmd, false},
+		{planCmd, false},
+	}
+	for _, tc := range cases {
+		if got := mutatesState(tc.cmd); got != tc.want {
+			t.Errorf("mutatesState(%s) = %v, want %v", tc.cmd.CommandPath(), got, tc.want)
+		}
 	}
 }

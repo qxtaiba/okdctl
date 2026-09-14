@@ -7,7 +7,6 @@ import (
 	"io"
 	"slices"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 
@@ -182,24 +181,23 @@ func validateFormat(format string) error {
 
 func printVersionList(w io.Writer, versions []releases.OKDVersion) error {
 	if len(versions) == 0 {
-		_, err := fmt.Fprintln(w, "no versions found")
+		_, err := fmt.Fprintln(w, tui.EmptyState("no releases", "try --channel all"))
 		return err
 	}
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "VERSION\tRELEASED\tSTABLE\tTYPE")
+	rows := make([][]string, 0, len(versions))
 	for _, v := range versions {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n",
+		rows = append(rows, []string{
 			v.Version,
 			v.ReleaseDate.Format("2006-01-02"),
 			yesNo(v.Stable),
 			v.Type.String(),
-		)
+		})
 	}
-	return tw.Flush()
+	return printTable(w, []string{"VERSION", "RELEASED", "STABLE", "TYPE"}, rows, tui.TableOptions{})
 }
 
 func printVersionDetail(w io.Writer, v releases.OKDVersion) error {
-	lines := []struct{ k, val string }{
+	return printLeaders(w, [][2]string{
 		{"version", v.Version},
 		{"tag", v.Tag},
 		{"series", v.ShortVersion()},
@@ -207,11 +205,7 @@ func printVersionDetail(w io.Writer, v releases.OKDVersion) error {
 		{"stable", yesNo(v.Stable)},
 		{"latest-in-series", yesNo(v.Latest)},
 		{"release-type", v.Type.String()},
-	}
-	for _, ln := range lines {
-		fmt.Fprintln(w, tui.DottedKeyValueFull(ln.k, ln.val, tui.DefaultKeyColWidth, 0))
-	}
-	return nil
+	})
 }
 
 func yesNo(b bool) string {

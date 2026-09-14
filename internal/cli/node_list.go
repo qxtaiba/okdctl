@@ -175,11 +175,11 @@ func roleSizingDrift(cfg *config.Config, role nodetypes.NodeRole, sizing provisi
 	return driftPending, fmt.Sprintf("config %dMiB/%dcpu/%dGiB vs tfvars %dMiB/%dcpu/%dGiB", cfgMem, cfgCPU, cfgDisk, tfMem, tfCPU, tfDisk)
 }
 
-// printNodeList renders the table via tui.Table; each line goes through
-// tui.Downsample (no surrounding box) to honor pipes and NO_COLOR.
+// printNodeList renders the node table via printTable, an empty-state line
+// when there are no entries, and a drift footnote and unattached-op note.
 func printNodeList(w io.Writer, entries []nodeListEntry, unattachedOp string) error {
 	if len(entries) == 0 {
-		if _, err := fmt.Fprintln(w, "no nodes found"); err != nil {
+		if _, err := fmt.Fprintln(w, tui.EmptyState("no nodes found", "deploy a cluster with 'okdctl deploy'")); err != nil {
 			return err
 		}
 	} else {
@@ -195,20 +195,17 @@ func printNodeList(w io.Writer, entries []nodeListEntry, unattachedOp string) er
 			}
 			rows = append(rows, []string{e.Name, e.Role.String(), yesNo(e.Ready), idx, e.Drift, op})
 		}
-		lines := tui.Table([]string{"NAME", "ROLE", "READY", "TF-INDEX", "DRIFT", "OP"}, rows, tui.TableOptions{
+		if err := printTable(w, []string{headerName, "ROLE", "READY", "TF-INDEX", "DRIFT", "OP"}, rows, tui.TableOptions{
 			RowStyle: func(i int) (lipgloss.Style, bool) {
 				if !entries[i].Ready {
 					return tui.ErrorStyle, true
 				}
 				return lipgloss.Style{}, false
 			},
-		})
-		for _, line := range lines {
-			if _, err := fmt.Fprintln(w, tui.Downsample(line)); err != nil {
-				return err
-			}
+		}); err != nil {
+			return err
 		}
-		if _, err := fmt.Fprintln(w, "\nDRIFT compares config sizing to terraform.tfvars on disk, not live VM state."); err != nil {
+		if _, err := fmt.Fprintln(w, "\n"+tui.Footnote("DRIFT compares config sizing to terraform.tfvars on disk, not live VM state.")); err != nil {
 			return err
 		}
 	}

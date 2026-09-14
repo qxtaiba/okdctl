@@ -3,22 +3,22 @@
   │ O K D C T L                                                                                                      │  
   │ done                                                                    op · target · params · plan · run · done │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
-  │  ╭────────────────────────────────────── NODE RESIZE ───────────────────────────────────────╮                    │  
-  │  │                                                                                          │                    │  
-  │  │  ✓ resize complete                                                                       │                    │  
-  │  │                                                                                          │                    │  
-  │  │    cluster .................................. homelab                                    │                    │  
-  │  │    elapsed .................................. 1m30s                                      │                    │  
-  │  │                                                                                          │                    │  
-  │  │  nodes                                                                                   │                    │  
-  │  │    homelab-master0 .......................... master  resized                            │                    │  
-  │  │                                                                                          │                    │  
-  │  │  next steps                                                                              │                    │  
-  │  │    each resized node was power-cycled to realize the change; verify with                 │                    │  
-  │  │      'okdctl node list' or 'oc debug node/<name> -- free -m'                             │                    │  
-  │  │                                                                                          │                    │  
-  │  ╰──────────────────────────────────────────────────────────────────────────────────────────╯                    │  
-  │                                                                                                                  │  
+  │  ╭───────────────────────────────────── NODE RESIZE ──────────────────────────────────────╮                      │  
+  │  │                                                                                        │                      │  
+  │  │  ✓ resize complete                                                                     │                      │  
+  │  │                                                                                        │                      │  
+  │  │    cluster .................................. homelab                                  │                      │  
+  │  │    elapsed .................................. 1m30s                                    │                      │  
+  │  │                                                                                        │                      │  
+  │  │  nodes                                                                                 │                      │  
+  │  │    NODE             ROLE    STATE                                                      │                      │  
+  │  │    homelab-master0  master  resized                                                    │                      │  
+  │  │                                                                                        │                      │  
+  │  │  next steps                                                                            │                      │  
+  │  │    each resized node was power-cycled to realize the change; verify with               │                      │  
+  │  │      'okdctl node list' or 'oc debug node/<name> -- free -m'                           │                      │  
+  │  │                                                                                        │                      │  
+  │  ╰────────────────────────────────────────────────────────────────────────────────────────╯                      │  
   │                                                                                                                  │  
   │                                                                                                                  │  
   │                                                                                                                  │  

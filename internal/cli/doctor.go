@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/clusterstatus"
@@ -117,8 +118,9 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 	fmt.Fprintln(w, tui.SubsectionLabel(fmt.Sprintf("doctor: running %d environment checks", len(checks))))
 	fmt.Fprintln(w)
 
+	labelWidth := severityLabelWidth()
 	for _, cr := range results {
-		printResult(cr.c, cr.r, w)
+		printResult(cr.c, cr.r, labelWidth, w)
 	}
 
 	switch {
@@ -164,29 +166,43 @@ func severityMarkers(sev doctor.Severity) (icon, label, rawLabel string) {
 	return
 }
 
-func printResult(c doctor.Check, r doctor.Result, w io.Writer) {
-	icon, aggregateLabel, _ := severityMarkers(r.Sev)
+// severityLabelWidth returns the render width of the widest severity badge
+// ("[ok]"/"[warn]"/"[fail]") so aggregate and item rows share one label column.
+func severityLabelWidth() int {
+	width := 0
+	for _, sev := range []doctor.Severity{doctor.Pass, doctor.Warn, doctor.Fail} {
+		width = max(width, lipgloss.Width("["+sev.String()+"]"))
+	}
+	return width
+}
+
+// padSeverityLabel right-pads a rendered severity label to width using raw's
+// unstyled length, so text after the label lands on the same column
+// regardless of which severity rendered it.
+func padSeverityLabel(label, raw string, width int) string {
+	return label + strings.Repeat(" ", width-lipgloss.Width(raw)+2)
+}
+
+func printResult(c doctor.Check, r doctor.Result, labelWidth int, w io.Writer) {
+	icon, aggregateLabel, aggregateRawLabel := severityMarkers(r.Sev)
 
 	title := c.Name
 	if c.Desc != "" {
 		title += tui.MutedStyle.Render(": " + c.Desc)
 	}
-	fmt.Fprintln(w, "  "+icon+" "+title)
+	fmt.Fprintln(w, tui.Downsample("  "+icon+" "+title))
 
 	if len(r.Items) > 0 {
-		// Labels aligned to the widest possible label ("[fail]"/"[warn]" at 6 chars).
-		const maxLabelWidth = 6
 		for _, item := range r.Items {
 			_, itemLabel, itemRawLabel := severityMarkers(item.Sev)
-			padding := strings.Repeat(" ", maxLabelWidth-len(itemRawLabel)+2)
-			line := "      " + itemLabel + padding + item.Name
+			line := "      " + padSeverityLabel(itemLabel, itemRawLabel, labelWidth) + item.Name
 			if item.Note != "" {
 				line += tui.MutedStyle.Render(" (" + item.Note + ")")
 			}
-			fmt.Fprintln(w, line)
+			fmt.Fprintln(w, tui.Downsample(line))
 		}
 	} else {
-		fmt.Fprintln(w, "      "+aggregateLabel+" "+r.Detail)
+		fmt.Fprintln(w, tui.Downsample("      "+padSeverityLabel(aggregateLabel, aggregateRawLabel, labelWidth)+r.Detail))
 	}
 
 	fmt.Fprintln(w)

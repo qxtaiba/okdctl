@@ -25,7 +25,6 @@ var (
 )
 
 func init() {
-	progressBarsActive.Store(true)
 	InstallHandler(slog.NewTextHandler(os.Stderr, nil))
 }
 

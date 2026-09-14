@@ -2,10 +2,14 @@ package render
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
+	"charm.land/lipgloss/v2"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 )
 
 func TestErrorSummaryKindHeadlineAndHint(t *testing.T) {
@@ -93,15 +97,31 @@ func TestErrorBodyChipHasTwoSpaceGap(t *testing.T) {
 	}
 }
 
+func TestErrorSummaryGoldenAtWidths(t *testing.T) {
+	err := (&errtypes.ConfigError{Msg: "ignition tls cert not found at /path/server.crt"}).
+		WithHint("re-run setup to regenerate it")
+
+	for _, w := range []int{60, 120} {
+		t.Run(fmt.Sprintf("w%d", w), func(t *testing.T) {
+			tui.SetTerminalWidth(w)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+			out := ErrorSummary(err, 2, "RUN123")
+			tuitest.AssertFits(t, out, w, 0)
+			tuitest.Golden(t, fmt.Sprintf("error_summary_%d", w), out)
+		})
+	}
+}
+
 func TestWrapTextHardSplitsLongToken(t *testing.T) {
 	long := strings.Repeat("a", 50)
-	lines := wrapText(long, 20)
+	lines := tui.WrapLines(long, 20)
 	for _, l := range lines {
-		if len(l) > 20 {
-			t.Fatalf("wrapText produced a %d-col line over the 20 budget: %q", len(l), l)
+		if w := lipgloss.Width(l); w > 20 {
+			t.Fatalf("WrapLines produced a %d-col line over the 20 budget: %q", w, l)
 		}
 	}
 	if joined := strings.Join(lines, ""); joined != long {
-		t.Fatalf("wrapText lost characters: %q", joined)
+		t.Fatalf("WrapLines lost characters: %q", joined)
 	}
 }

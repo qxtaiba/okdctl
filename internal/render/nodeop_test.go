@@ -2,6 +2,7 @@ package render
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +12,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
+	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 )
 
 func removePlan() node.OpPlan {
@@ -21,7 +24,7 @@ func removePlan() node.OpPlan {
 		Nodes: []node.PlanNode{{
 			Name:      "worker2",
 			Role:      nodetypes.RoleWorker,
-			TFAddress: "module.okd_cluster.proxmox_virtual_environment_vm.worker[2]",
+			TFAddress: "module.vm.worker[2]",
 			Action:    terraform.PlanActionDelete,
 			OSDs:      []string{"rook-ceph/osd-3"},
 		}},
@@ -35,7 +38,7 @@ func resizePlan() node.OpPlan {
 		Nodes: []node.PlanNode{{
 			Name:      "master0",
 			Role:      nodetypes.RoleMaster,
-			TFAddress: "module.okd_cluster.proxmox_virtual_environment_vm.master[0]",
+			TFAddress: "module.vm.master[0]",
 			Action:    terraform.PlanActionUpdate,
 		}},
 		MemoryMB: 24576,
@@ -49,7 +52,7 @@ func addPlan() node.OpPlan {
 		Nodes: []node.PlanNode{{
 			Name:      "grappleberry-worker2",
 			Role:      nodetypes.RoleWorker,
-			TFAddress: "module.okd_cluster.proxmox_virtual_environment_vm.worker[2]",
+			TFAddress: "module.vm.worker[2]",
 			Action:    terraform.PlanActionCreate,
 		}},
 	}
@@ -152,6 +155,103 @@ func TestNodeOpBoxes(t *testing.T) {
 				if strings.Contains(got, absent) {
 					t.Errorf("box must not contain %q:\n%s", absent, got)
 				}
+			}
+		})
+	}
+}
+
+func TestNodeOpConfirmTableHeadersAndFit(t *testing.T) {
+	for _, w := range []int{80, 120} {
+		t.Run(fmt.Sprintf("w%d", w), func(t *testing.T) {
+			tui.SetTerminalWidth(w)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+			p := removePlan()
+			out := NodeOpConfirm(&p)
+
+			for _, header := range []string{"NODE", "ROLE", "ADDRESS", "ACTION"} {
+				if !strings.Contains(out, header) {
+					t.Errorf("confirm box missing table header %q:\n%s", header, out)
+				}
+			}
+			tuitest.AssertFits(t, out, w, 0)
+			if w == 80 {
+				tuitest.Golden(t, "nodeop-confirm-remove-80", out)
+			}
+		})
+	}
+}
+
+// Regression guard for the box-growth-era truncation bug: a real-length
+// terraform address must keep its trailing [N] index once the ADDRESS
+// column middle-truncates it, instead of losing it to a trailing ellipsis.
+func TestNodeOpConfirmTableAddressTruncationKeepsIndexTail(t *testing.T) {
+	const realAddress = "module.okd_cluster.proxmox_virtual_environment_vm.worker[3]"
+	p := node.OpPlan{
+		Op:      node.OpRemove,
+		Cluster: "grappleberry",
+		Nodes: []node.PlanNode{{
+			Name:      "worker3",
+			Role:      nodetypes.RoleWorker,
+			TFAddress: realAddress,
+			Action:    terraform.PlanActionDelete,
+		}},
+	}
+	out := NodeOpConfirm(&p)
+
+	if !strings.Contains(out, "worker[3]") {
+		t.Errorf("ADDRESS column must middle-truncate a long address and keep the [N] index tail:\n%s", out)
+	}
+	if strings.Contains(out, realAddress) {
+		t.Errorf("a %d-char address should have been truncated in the ADDRESS column, not rendered whole:\n%s", len(realAddress), out)
+	}
+	tuitest.AssertFits(t, out, tui.DefaultBoxWidth, 0)
+}
+
+// Regression guard: a "dry-run — no changes made" box is a self-contradiction
+// if its table claims a node was already "removed" — the pre-execution
+// table speaks the raw plan action, not the completion verb.
+func TestNodeOpDryRunTableSpeaksPlanVoiceNotCompletionVoice(t *testing.T) {
+	p := removePlan()
+	out := NodeOpDryRun(&p)
+
+	if !strings.Contains(out, "delete") {
+		t.Errorf("dry-run table must show the raw plan action %q:\n%s", "delete", out)
+	}
+	if strings.Contains(out, "removed") {
+		t.Errorf("dry-run box must not speak completion voice (%q); nothing has changed yet:\n%s", "removed", out)
+	}
+}
+
+// Regression guard: the completion box speaks the past-tense completion
+// verb, not the raw plan action the table showed before the op ran.
+func TestNodeOpCompleteTableSpeaksCompletionVoiceNotPlanVoice(t *testing.T) {
+	p := removePlan()
+	out := NodeOpComplete(&p, 90*time.Second)
+
+	if !strings.Contains(out, "removed") {
+		t.Errorf("completion box must show the completion verb %q:\n%s", "removed", out)
+	}
+	if strings.Contains(out, "delete") {
+		t.Errorf("completion box must not show the raw plan action %q:\n%s", "delete", out)
+	}
+}
+
+func TestShortHost(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"dotted FQDN keeps the first label", "worker2.cluster.local", "worker2"},
+		{"no dot returns the name unchanged", "worker2", "worker2"},
+		{"IPv4 address returns unchanged", "192.168.1.24", "192.168.1.24"},
+		{"IPv6 address returns unchanged", "fe80::1", "fe80::1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := shortHost(tc.in); got != tc.want {
+				t.Errorf("shortHost(%q) = %q, want %q", tc.in, got, tc.want)
 			}
 		})
 	}

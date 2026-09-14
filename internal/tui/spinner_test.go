@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -30,16 +29,10 @@ func (f *fakeOwner) clearLine() {
 
 func configureBuf(t *testing.T, buf *bytes.Buffer) {
 	t.Helper()
-	if err := ConfigureLoggers("debug", "text", buf, false); err != nil {
+	if err := ConfigureLoggers(LoggerConfig{Level: "debug", Format: "text", Stderr: buf}); err != nil {
 		t.Fatal(err)
 	}
 	logutil.InstallHandler(newStderrHandler())
-	t.Cleanup(func() {
-		if err := ConfigureLoggers("info", "text", os.Stderr, false); err != nil {
-			t.Errorf("restore loggers: %v", err)
-		}
-		logutil.InstallHandler(newStderrHandler())
-	})
 }
 
 func TestHandler_ClearsOwnerLineOncePerRecord(t *testing.T) {
@@ -247,6 +240,79 @@ func TestSpinner_PaintErasesToEndOfLine(t *testing.T) {
 	sp.paint()
 	if !strings.HasPrefix(buf.String(), clearSeq) {
 		t.Fatalf("shorter repaint did not erase the longer prior line; got %q", buf.String())
+	}
+}
+
+// A non-empty prefix replaces the parenthesized "(elapsed)" no-prefix
+// format with the checklist's counter kept ahead of the frame.
+func TestSpinner_PrefixKeepsCounter(t *testing.T) {
+	var buf bytes.Buffer
+	sp := &spinner{w: &buf, prefix: "[2/3] create vms · install", desc: "applying terraform", start: time.Now()}
+	lineReg.register(sp)
+	t.Cleanup(func() { lineReg.release(sp) })
+
+	sp.paint()
+
+	out := buf.String()
+	if !strings.Contains(out, "[2/3] create vms · install") {
+		t.Fatalf("painted line missing prefix:\n%q", out)
+	}
+	if !strings.Contains(out, "applying terraform") {
+		t.Fatalf("painted line missing desc:\n%q", out)
+	}
+	if strings.Contains(out, "(") {
+		t.Fatalf("prefixed paint kept the no-prefix parenthesized elapsed format:\n%q", out)
+	}
+	if !strings.HasPrefix(out, clearSeq) {
+		t.Fatalf("prefixed paint did not erase to end of line; got %q", out)
+	}
+}
+
+// FOLDED-IN (logging task review): every other race test here configures
+// Stderr only, so stderrHandler's sink write inside withLine is never raced
+// against a spinner clearing its line. This drives both writers
+// concurrently under a live spinner so -race covers that dual-writer path.
+func TestSpinner_SinkAndStderrRaceFree(t *testing.T) {
+	var stderrBuf, sinkBuf bytes.Buffer
+	if err := ConfigureLoggers(LoggerConfig{Level: "debug", Format: "text", Stderr: &stderrBuf, Sink: &sinkBuf}); err != nil {
+		t.Fatal(err)
+	}
+	logutil.InstallHandler(newStderrHandler())
+
+	stop := startSpinner(context.Background(), "converging", &stderrBuf)
+
+	const goroutines, perG = 16, 40
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for g := range goroutines {
+		go func(id int) {
+			defer wg.Done()
+			for range perG {
+				logutil.Info("worker log", logutil.LF("g", id))
+			}
+		}(g)
+	}
+
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("timeout: concurrent logging deadlocked with spinner")
+	}
+	stop()
+
+	if got := strings.Count(stderrBuf.String(), "worker log"); got != goroutines*perG {
+		t.Fatalf("stderr record count = %d, want %d", got, goroutines*perG)
+	}
+	sinkOut := sinkBuf.String()
+	if got := strings.Count(sinkOut, "worker log"); got != goroutines*perG {
+		t.Fatalf("sink record count = %d, want %d", got, goroutines*perG)
+	}
+	for _, line := range strings.Split(strings.TrimRight(sinkOut, "\n"), "\n") {
+		if !strings.Contains(line, "worker log") {
+			t.Fatalf("sink line corrupted by concurrent write: %q", line)
+		}
 	}
 }
 

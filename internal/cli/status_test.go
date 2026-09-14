@@ -79,3 +79,23 @@ func TestPrintClusterStatusNoNodesReported(t *testing.T) {
 		t.Errorf("status output missing empty-nodes message:\n%s", buf.String())
 	}
 }
+
+func TestPrintClusterStatusEndsWithOneBlankLine(t *testing.T) {
+	st := &okd.ClusterStatus{Phase: okd.PhaseUnknown}
+
+	var buf bytes.Buffer
+	cmd := &cobra.Command{}
+	cmd.SetOut(&buf)
+
+	if err := printClusterStatus(cmd, st); err != nil {
+		t.Fatalf("printClusterStatus: %v", err)
+	}
+	out := buf.String()
+
+	if !strings.HasSuffix(out, "╯\n\n") {
+		t.Errorf("status box must end with exactly one blank line after it:\n%q", out)
+	}
+	if strings.HasSuffix(out, "╯\n\n\n") {
+		t.Errorf("status box must not print more than one blank line after it:\n%q", out)
+	}
+}

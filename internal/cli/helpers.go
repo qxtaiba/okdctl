@@ -26,12 +26,12 @@ func loadConfig(configFile string) (*config.Config, error) {
 	cfg, err := loader.LoadFile(configFile)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			if configFile == "okdctl.yaml" {
-				logutil.Info("run 'okdctl deploy' to create a configuration file")
-			} else {
-				logutil.Info("run 'okdctl deploy --output-file <file>' to create it", logutil.LF("file", configFile))
+			hint := "run 'okdctl deploy' to create it"
+			if configFile != "okdctl.yaml" {
+				hint = fmt.Sprintf("run 'okdctl deploy --output-file %s' to create it", configFile)
 			}
-			return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("configuration file not found: %s", configFile), Err: errtypes.ErrConfigMissing}
+			configErr := &errtypes.ConfigError{Msg: "configuration file not found: " + configFile, Err: errtypes.ErrConfigMissing}
+			return nil, configErr.WithHint(hint)
 		}
 		return nil, &errtypes.ConfigError{Msg: "load configuration", Err: err}
 	}
@@ -63,10 +63,10 @@ func handleCredentials(cfg *config.Config) (*credentials.ProxmoxCredentials, err
 func reportCredentialProvenance(creds *credentials.ProxmoxCredentials) {
 	logutil.Info("using credentials", logutil.LF("source", creds.Source))
 	if creds.ConfigCredentialsOverridden {
-		logutil.Warn("environment credentials override proxmox credentials in config file")
+		logutil.Info("environment credentials override proxmox credentials in config file")
 	}
 	if creds.EndpointFromConfig {
-		logutil.Warn("PROXMOX_VE_ENDPOINT not set; endpoint falling back to config file (mixed source)")
+		logutil.Debug("PROXMOX_VE_ENDPOINT not set; endpoint falling back to config file (mixed source)")
 	}
 	if creds.Insecure {
 		logutil.Warn("proxmox: TLS verification disabled (insecure=true in config)")

@@ -1,6 +1,6 @@
 ## okdctl node resize
 
-Resize node CPU/memory/OS-disk per role, rolled out one node at a time
+Resize node CPU/memory/disk per role, one node at a time
 
 ### Synopsis
 
@@ -30,11 +30,11 @@ above.
 
 --skip-drain power-cycles the node without cordoning/draining it. The resize is
 realized by a hypervisor stop→start that kills the node's pods regardless;
-skipping the drain lets them restart in place on the now-roomier node instead of
-evicting them cluster-wide. Prefer it when the cluster is memory-saturated, where
-a drain's evicted pods cannot reschedule and the drain times out. The etcd and
-Ceph health gates around the power-cycle still run. --skip-drain has no effect
-on a disk-only resize, which never power-cycles.
+skipping the drain lets them restart in place on the now-roomier node instead
+of evicting them cluster-wide. Prefer it when the cluster is memory-saturated,
+where a drain's evicted pods cannot reschedule and the drain times out. The
+etcd and Ceph health gates around the power-cycle still run. --skip-drain has
+no effect on a disk-only resize, which never power-cycles.
 
 An interrupted role roll records an op marker and resumes automatically on the
 next 'okdctl node resize' of the same role or node, skipping already-completed
@@ -48,9 +48,11 @@ okdctl node resize (masters|workers|<name>) [flags]
 ### Examples
 
 ```
-  okdctl node resize masters --memory-mb 24576 --yes --confirm-cluster grappleberry
+  okdctl node resize masters --memory-mb 24576 \
+    --yes --confirm-cluster grappleberry
   okdctl node resize workers --memory-mb 16384 --dry-run
-  okdctl node resize grappleberry-master0 --memory-mb 30720 --skip-drain --yes --confirm-cluster grappleberry
+  okdctl node resize grappleberry-master0 --memory-mb 30720 --skip-drain \
+    --yes --confirm-cluster grappleberry
   okdctl node resize masters --os-disk-gb 100
 ```
 
@@ -64,7 +66,7 @@ okdctl node resize (masters|workers|<name>) [flags]
   -h, --help                         help for resize
       --memory-mb int                new per-node memory in MiB (0 keeps current)
       --os-disk-gb int               grow the role's OS disk to this size in GiB (grow-only, role-scoped only — 'masters'/'workers', not a single node; disk-only resizes are live, no power-cycle)
-      --skip-drain                   power-cycle without cordon/drain so pods restart in place (use when a drain can't reschedule under memory pressure); etcd/Ceph gates still run
+      --skip-drain                   power-cycle without cordon/drain so pods restart in place
   -y, --yes                          skip confirmation prompt
 ```
 
@@ -72,9 +74,10 @@ okdctl node resize (masters|workers|<name>) [flags]
 
 ```
   -c, --config string       configuration file (default "okdctl.yaml")
-      --log-file string     write log output to this file in addition to stderr (replaces the default okdctl.log sink of deploy/destroy/cleanup)
+      --log-file string     also write logs to this file (replaces the default okdctl.log of deploy/destroy/cleanup)
       --log-format string   log output format: text (TTY default) | json (auto-selected when stderr is piped)
       --log-level string    log verbosity (debug, info, warn, error) (default "info")
+      --no-color            disable colour and progress output (same as NO_COLOR=1)
   -q, --quiet               suppress info/warn logs (alias for --log-level=error)
   -v, --verbose             enable debug logging (alias for --log-level=debug)
 ```
