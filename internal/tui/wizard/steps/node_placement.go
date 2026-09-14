@@ -262,8 +262,10 @@ func (s *NodePlacementStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		if !enterPressed {
 			return s, cmd
 		}
+
+		s.inner.TouchAll()
 		if errs := s.inner.Validate(); len(errs) > 0 {
-			return s, func() tea.Msg { return wizard.ErrorSetMsg{Error: errs[0]} }
+			return s, tea.Batch(s.inner.FocusFirstInvalid(), func() tea.Msg { return wizard.ErrorSetMsg{Error: wizard.ErrFixHighlighted} })
 		}
 		return s, func() tea.Msg {
 			return wizard.StepCompleteMsg{StepID: s.ID()}
@@ -395,11 +397,15 @@ func (s *NodePlacementStep) SetFocused(focused bool) {
 	s.inner.Blur()
 }
 
-// ShortHelp returns the step's help bar (nil while discovering), plus any
-// key hints the focused field contributes.
+// ShortHelp returns the step's help bar — {esc back, ctrl+c quit} while
+// discovering, else the placement form's bindings plus any key hints the
+// focused field contributes.
 func (s *NodePlacementStep) ShortHelp() []wizard.KeyBinding {
 	if s.phase == phaseDiscovering {
-		return nil
+		return []wizard.KeyBinding{
+			{Key: wizard.HelpEsc, Help: wizard.HelpBack},
+			{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
+		}
 	}
 	help := []wizard.KeyBinding{
 		{Key: "↑↓", Help: wizard.HelpNavigate},

@@ -2,6 +2,7 @@ package steps
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -45,6 +46,7 @@ type selectionPhase int
 
 const (
 	phaseVersionLoading selectionPhase = iota
+	phaseVersionError
 	phaseVersionSelect
 )
 
@@ -100,6 +102,10 @@ func (s *DistributionStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	case versionsLoadedMsg:
 		s.okdSeries = msg.series
 		s.loadError = msg.err
+		if msg.err != nil {
+			s.phase = phaseVersionError
+			return s, nil
+		}
 		s.phase = phaseVersionSelect
 		s.updateVersionSelector()
 		s.versionSelector.SetFocused(true)
@@ -113,10 +119,13 @@ func (s *DistributionStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		}
 
 	case tea.KeyPressMsg:
-		if s.phase != phaseVersionSelect {
-			return s, nil
+		switch s.phase {
+		case phaseVersionSelect:
+			return s.handleKeyMsg(msg)
+		case phaseVersionError:
+			return s.handleErrorKeyMsg(msg)
 		}
-		return s.handleKeyMsg(msg)
+		return s, nil
 	}
 	return s, nil
 }
@@ -133,8 +142,28 @@ func (s *DistributionStep) handleKeyMsg(msg tea.KeyPressMsg) (wizard.WizardStep,
 	return s, nil
 }
 
+// handleErrorKeyMsg handles the error phase's only key: 'r' re-issues the
+// release fetch.
+func (s *DistributionStep) handleErrorKeyMsg(msg tea.KeyPressMsg) (wizard.WizardStep, tea.Cmd) {
+	if key.Matches(msg, key.NewBinding(key.WithKeys("r"))) {
+		return s.retry()
+	}
+	return s, nil
+}
+
+// retry resets the step to the loading phase and re-issues the release fetch.
+func (s *DistributionStep) retry() (wizard.WizardStep, tea.Cmd) {
+	s.phase = phaseVersionLoading
+	s.loadError = nil
+	return s, tea.Batch(s.loadingSpinner.Tick, s.fetchVersions)
+}
+
 func (s *DistributionStep) handleEnterKey() (wizard.WizardStep, tea.Cmd) {
 	selected := s.versionSelector.Selected()
+
+	if selected.ID == "" {
+		return s, func() tea.Msg { return wizard.ErrorSetMsg{Error: errors.New("pick a release first")} }
+	}
 
 	if strings.HasPrefix(selected.ID, "minor:") {
 		minor := s.getMinorFromOptionID(selected.ID)
@@ -196,9 +225,9 @@ func (s *DistributionStep) handleNavigationKey(msg tea.KeyPressMsg) (wizard.Wiza
 
 // FocusedSpan reports the lines the highlighted version occupies, patch rows
 // inside the expanded dropdown included; the selector starts at line 0 of
-// View unless the release fetch failed.
+// View, and there is nothing to focus outside the select phase.
 func (s *DistributionStep) FocusedSpan() (wizard.LineSpan, bool) {
-	if s.phase != phaseVersionSelect || s.loadError != nil {
+	if s.phase != phaseVersionSelect {
 		return wizard.LineSpan{}, false
 	}
 	start, end, ok := s.versionSelector.SelectedSpan()
@@ -227,13 +256,16 @@ func (s *DistributionStep) syncSelectedVersion(selected *components.Option) {
 	s.selectedVersion = selected.ID
 }
 
-// View renders either the loading indicator or the version selector.
+// View renders the loading indicator, the error state, or the version
+// selector, depending on phase.
 func (s *DistributionStep) View(width, height int) string {
 	s.SetSize(width, height)
 
 	switch s.phase {
 	case phaseVersionLoading:
 		return s.viewLoadingPhase()
+	case phaseVersionError:
+		return s.viewErrorPhase(width)
 	case phaseVersionSelect:
 		return s.viewVersionPhase()
 	}
@@ -241,30 +273,38 @@ func (s *DistributionStep) View(width, height int) string {
 	return ""
 }
 
+// viewLoadingPhase renders the fetch-in-progress spinner and its dim
+// this-can-take-a-few-seconds hint.
 func (s *DistributionStep) viewLoadingPhase() string {
-	loading := s.loadingSpinner.View() + " fetching available okd versions..."
-	return lipgloss.NewStyle().
+	var content strings.Builder
+	content.WriteString(lipgloss.NewStyle().
 		Foreground(tui.ColorSlate400).
-		Render(loading)
+		Render(s.loadingSpinner.View() + " fetching okd releases"))
+	content.WriteString("\n")
+	content.WriteString(lipgloss.NewStyle().
+		Foreground(tui.ColorSlate500).
+		Italic(true).
+		Render("this can take a few seconds"))
+	return content.String()
+}
+
+// viewErrorPhase renders the empty state and retry ribbon shown when the
+// release fetch failed, followed by the wrapped error detail.
+func (s *DistributionStep) viewErrorPhase(width int) string {
+	var content strings.Builder
+	content.WriteString(tui.EmptyState("no releases loaded — check your connection", "r retry · esc back"))
+	if s.loadError != nil {
+		content.WriteString("\n\n")
+		content.WriteString(lipgloss.NewStyle().
+			Foreground(tui.ColorSlate500).
+			Width(width - 2).
+			Render(s.loadError.Error()))
+	}
+	return content.String()
 }
 
 func (s *DistributionStep) viewVersionPhase() string {
 	var content strings.Builder
-
-	if s.loadError != nil {
-		errMsg := lipgloss.NewStyle().
-			Foreground(tui.ColorError).
-			Bold(true).
-			Render(tui.IconError + " failed to fetch okd versions: " + s.loadError.Error())
-		content.WriteString(errMsg)
-		content.WriteString("\n\n")
-		content.WriteString(lipgloss.NewStyle().
-			Foreground(tui.ColorSlate500).
-			Italic(true).
-			Render("please check your network connection and try again."))
-		content.WriteString("\n\n")
-		return content.String()
-	}
 
 	content.WriteString(s.versionSelector.View())
 	content.WriteString("\n\n")
@@ -304,7 +344,9 @@ func (s *DistributionStep) Apply(cfg *config.Config) error {
 	return nil
 }
 
-// ShortHelp returns the step's help bar, which differs by phase.
+// ShortHelp returns the step's help bar, which differs by phase: the select
+// phase's own bindings, or loading's {esc back, ctrl+c quit} with the error
+// phase adding {r retry}.
 func (s *DistributionStep) ShortHelp() []wizard.KeyBinding {
 	if s.phase == phaseVersionSelect {
 		return []wizard.KeyBinding{
@@ -314,10 +356,15 @@ func (s *DistributionStep) ShortHelp() []wizard.KeyBinding {
 			{Key: wizard.HelpEsc, Help: wizard.HelpBack},
 		}
 	}
-	return []wizard.KeyBinding{
+
+	help := []wizard.KeyBinding{
 		{Key: wizard.HelpEsc, Help: wizard.HelpBack},
 		{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
 	}
+	if s.phase == phaseVersionError {
+		help = append(help, wizard.KeyBinding{Key: "r", Help: "retry"})
+	}
+	return help
 }
 
 // SetFocused toggles focus; the version selector is only focused once the

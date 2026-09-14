@@ -42,6 +42,9 @@ Up
 Sleep 450ms
 Up
 Sleep 650ms
+# Cursor freedom: up from the first patch (4.20.1) flows past the dropdown
+# boundary back onto the parent minor row (4.20) instead of trapping there.
+Screenshot out/@NAME@-distribution-expanded.png
 Enter
 Sleep 450ms
 

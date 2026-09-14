@@ -307,8 +307,8 @@ func TestDataDrivenStep_EnterMarksAllTouchedAndFocusesFirstInvalid(t *testing.T)
 	if !containsFocusChanged(cmd) {
 		t.Fatal("Update(enter) with invalid fields did not emit FocusChangedMsg")
 	}
-	if errMsg, ok := firstErrorSetMsg(cmd); !ok || !errors.Is(errMsg.Error, errFixHighlighted) {
-		t.Fatalf("Update(enter) with invalid fields = %#v, want ErrorSetMsg(errFixHighlighted)", cmd())
+	if errMsg, ok := firstErrorSetMsg(cmd); !ok || !errors.Is(errMsg.Error, ErrFixHighlighted) {
+		t.Fatalf("Update(enter) with invalid fields = %#v, want ErrorSetMsg(ErrFixHighlighted)", cmd())
 	}
 
 	if got := step.form.FocusedField(); got != step.getField("name") {

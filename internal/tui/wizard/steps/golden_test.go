@@ -1,6 +1,7 @@
 package steps
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
@@ -173,6 +174,46 @@ func TestGolden_NodePlacementSingleNode(t *testing.T) {
 	frame := tuitest.RenderAt(t, m, 100, 30)
 	tuitest.Golden(t, "node-placement-single-node_100x30", frame)
 	tuitest.AssertFits(t, frame, 100, 30)
+}
+
+// TestGolden_DistributionLoadingState pins the distribution step's loading
+// phase (before versionsLoadedMsg arrives): the spinner, "fetching okd
+// releases", and the dim "this can take a few seconds" hint.
+func TestGolden_DistributionLoadingState(t *testing.T) {
+	for _, sz := range goldenSizes {
+		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
+			m := newGoldenModel(t)
+			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
+			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDDistribution})
+
+			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
+			tuitest.Golden(t, fmt.Sprintf("distribution-loading_%dx%d", sz.w, sz.h), frame)
+			if sz.fits {
+				tuitest.AssertFits(t, frame, sz.w, sz.h)
+			}
+		})
+	}
+}
+
+// TestGolden_DistributionErrorState pins the distribution step's error
+// phase: a failed release fetch renders tui.EmptyState's "no releases
+// loaded — check your connection" line plus the "r retry · esc back"
+// ribbon and the wrapped error detail, never the raw ✗ failure banner.
+func TestGolden_DistributionErrorState(t *testing.T) {
+	for _, sz := range goldenSizes {
+		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
+			m := newGoldenModel(t)
+			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
+			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDDistribution})
+			m.Update(versionsLoadedMsg{err: errors.New("dial tcp: connection refused")})
+
+			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
+			tuitest.Golden(t, fmt.Sprintf("distribution-error_%dx%d", sz.w, sz.h), frame)
+			if sz.fits {
+				tuitest.AssertFits(t, frame, sz.w, sz.h)
+			}
+		})
+	}
 }
 
 // TestGolden_AddonsVaultsEditMode pins the vaults key-value field's

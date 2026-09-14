@@ -106,3 +106,17 @@ func TestSelectField_SingleOptionHidesArrows(t *testing.T) {
 		t.Fatalf("content row = %q, want the bare value %q", rows[2], "pve1")
 	}
 }
+
+// TestSelectField_BlankOptionRendersHonestLabel pins the fcos-iso field's
+// shape (a leading blank option meaning "let okdctl download it"): the
+// blank value must render as a dim "none" between the cycle arrows rather
+// than a bare double space that reads as a rendering glitch.
+func TestSelectField_BlankOptionRendersHonestLabel(t *testing.T) {
+	f := NewSelectField("fcos iso", []string{"", "local:iso/fedora-coreos.iso"})
+	f.SetWidth(90)
+
+	rows := strings.Split(tuitest.StripANSI(f.View()), "\n")
+	if !strings.Contains(rows[2], "◂ none ▸") {
+		t.Fatalf("content row = %q, want the blank option labeled %q", rows[2], "◂ none ▸")
+	}
+}

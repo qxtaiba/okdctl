@@ -1,12 +1,15 @@
 package steps
 
 import (
+	"errors"
 	"slices"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/tui/wizard"
+	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
 )
 
 func newProxmoxTestConfig() *config.Config {
@@ -127,6 +130,42 @@ func TestNodePlacementStep_TabAdvancesAcrossSections(t *testing.T) {
 	_, _ = s.Update(tab)
 	if got := s.inner.CurrentSection(); got != 2 {
 		t.Fatalf("CurrentSection() at final boundary = %d, want 2 (unchanged)", got)
+	}
+}
+
+func TestNodePlacementStep_ShortHelpWhileDiscovering(t *testing.T) {
+	s := NewNodePlacementStep()
+	if s.phase != phaseDiscovering {
+		t.Fatalf("initial phase = %v, want phaseDiscovering", s.phase)
+	}
+	if got := s.ShortHelp(); len(got) == 0 {
+		t.Fatal("ShortHelp() while discovering is nil, want {esc back, ctrl+c quit}")
+	}
+}
+
+func TestNodePlacementStep_EnterWithInvalidFieldFocusesAndReportsErrFixHighlighted(t *testing.T) {
+	s := NewNodePlacementStep()
+	s.cfg = newProxmoxTestConfig()
+	s.phase = phasePlacing
+
+	required := components.NewInputField("test required", "")
+	required.Required = true
+	s.inner = wizard.NewMultiSectionForm([]wizard.FormSection{
+		{Title: "test", Group: components.NewInputGroup(required)},
+	})
+	s.SetFocused(true)
+
+	_, cmd := s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Update(enter) with an invalid field: want a cmd, got nil")
+	}
+
+	errMsg, ok := firstErrorSetMsg(cmd)
+	if !ok || !errors.Is(errMsg.Error, wizard.ErrFixHighlighted) {
+		t.Fatalf("Update(enter) with an invalid field = %#v, want ErrorSetMsg(ErrFixHighlighted)", cmd())
+	}
+	if got := s.inner.FocusedField(); got != required {
+		t.Fatalf("FocusedField() after enter = %v, want the invalid field focused", got)
 	}
 }
 
