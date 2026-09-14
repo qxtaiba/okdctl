@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Renders the 11-step configure wizard against the fakepve fixture at three
-# terminal sizes (80x24, 100x30, 120x40), screenshotting the header of every
-# step. Requires vhs (github.com/charmbracelet/vhs) + go; nothing touches a
-# real hypervisor or deploys.
+# Renders the 11-step configure wizard against the fakepve fixture, plus the
+# Cluster Lifecycle wizard against lifecycle.DemoHooks' static fixture, at
+# three terminal sizes (80x24, 100x30, 120x40), screenshotting every step.
+# Requires vhs (github.com/charmbracelet/vhs) + go; nothing touches a real
+# hypervisor or deploys.
 set -euo pipefail
 
 command -v vhs >/dev/null || { echo "vhs not found — brew install vhs" >&2; exit 1; }
@@ -65,6 +66,10 @@ PRESETS=(
 # filenames baked into wizard.tape.in.
 STEP_NAMES=(welcome distribution proxmox basics node-placement networking resources addons files advanced review)
 
+# Screens in lifecycle.NewSteps order; must match the Screenshot filenames
+# baked into lifecycle.tape.in.
+LIFECYCLE_STEP_NAMES=(op target params preview confirm exec "done")
+
 render_tape() {
   local template="$1" name="$2" w="$3" h="$4" dest="$5"
   # @HOME@ uses a `|` delimiter since $OKDCTL_DEMO_HOME itself contains `/`.
@@ -121,6 +126,39 @@ render_wizard() {
   return 1
 }
 
+# render_lifecycle renders the Cluster Lifecycle wizard ("okdctl node
+# manage") against lifecycle.DemoHooks' static fixture, independently of the
+# configure-wizard walkthrough above; same retry shape as render_wizard.
+render_lifecycle() {
+  local name="$1" w="$2" h="$3"
+  local attempt
+  for attempt in 1 2 3; do
+    local cwd="$WORK/cwd-lifecycle-$name-$attempt"
+    mkdir -p "$cwd"
+    local tape="$WORK/lifecycle-$name.tape"
+    render_tape "$SCREENSHOT_DIR/lifecycle.tape.in" "$name" "$w" "$h" "$tape"
+
+    echo "rendering $name lifecycle (attempt $attempt)..."
+    (cd "$SCREENSHOT_DIR" && OKDCTL_DEMO_CWD="$cwd" vhs "$tape" >/dev/null 2>&1) || true
+
+    local missing=()
+    local step
+    for step in "${LIFECYCLE_STEP_NAMES[@]}"; do
+      local png="$OUT_DIR/$name-lifecycle-$step.png"
+      [ -s "$png" ] || missing+=("$step")
+    done
+
+    if [ "${#missing[@]}" -eq 0 ]; then
+      echo "rendered $name: lifecycle ${#LIFECYCLE_STEP_NAMES[@]}/${#LIFECYCLE_STEP_NAMES[@]} screenshots"
+      return 0
+    fi
+    echo "  missing after attempt $attempt: ${missing[*]}"
+  done
+
+  echo "failed to render all lifecycle screenshots for $name after 3 attempts; missing: ${missing[*]}" >&2
+  return 1
+}
+
 # render_distribution_fail renders just the distribution step under
 # OKDCTL_DEMO_RELEASES=fail, pinning the error-state fixture (empty state +
 # retry ribbon) independently of the full 11-step walkthrough above.
@@ -153,6 +191,7 @@ for preset in "${PRESETS[@]}"; do
   calibrate "$name" "$cols" "$rows" "$w" "$h"
   render_wizard "$name" "$w" "$h"
   render_distribution_fail "$name" "$w" "$h"
+  render_lifecycle "$name" "$w" "$h"
 done
 
 echo "done: $OUT_DIR ($(find "$OUT_DIR" -name '*.png' | wc -l | tr -d ' ') PNGs)"

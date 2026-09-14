@@ -47,6 +47,9 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 	if !term.IsTerminal(int(os.Stdout.Fd())) || !term.IsTerminal(int(os.Stdin.Fd())) {
 		return &errtypes.UsageError{Msg: "node manage needs a terminal; use 'okdctl node resize/add/remove' for automation"}
 	}
+	if os.Getenv(wizardDemoEnv) != "" {
+		return runNodeManageDemo(cmd)
+	}
 
 	cfg, err := loadConfig(cfgFile)
 	if err != nil {
