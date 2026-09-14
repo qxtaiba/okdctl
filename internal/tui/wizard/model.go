@@ -9,6 +9,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 const (
@@ -172,11 +173,11 @@ func NewFlowModel(steps []WizardStep, cfg *config.Config, chrome FlowChrome) *Mo
 }
 
 func getTerminalSize() (width, height int) {
-	w, h, err := term.GetSize(int(os.Stdout.Fd()))
+	_, h, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil {
-		return 80, 24
+		h = 24
 	}
-	return w, h
+	return tui.TerminalWidth(80), h
 }
 
 // Init implements tea.Model; it fires the first step's Init command.

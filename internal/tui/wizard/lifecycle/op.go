@@ -2,7 +2,6 @@ package lifecycle
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -22,6 +21,12 @@ type opChoice struct {
 	desc   string
 }
 
+// opCardWidth caps the wrap budget for the entry screen's description and
+// banner text: without a cap the text would grow with the frame, widening
+// the step's measured content until the wizard's IsCentered math had no
+// gutter left to center against.
+const opCardWidth = 58
+
 // OpStep is the lifecycle flow's entry screen: pick resize/add/remove, or
 // resume an interrupted op when a marker exists.
 type OpStep struct {
@@ -29,6 +34,7 @@ type OpStep struct {
 	st  *State
 	nav *wizard.SingleSelect
 	ops []opChoice
+	now func() time.Time // overridden in tests for a deterministic marker age
 }
 
 // NewOpStep constructs the operation-select step, pinning a resume option
@@ -40,21 +46,21 @@ func NewOpStep(st *State) *OpStep {
 			op:     st.Marker.Op,
 			resume: true,
 			title:  fmt.Sprintf("resume interrupted %s", st.Marker.Op),
-			desc:   "re-enters at the recorded step; completed nodes\nare skipped via a read-only plan probe",
+			desc:   "re-enters at the recorded step; completed nodes are skipped via a read-only plan probe",
 		})
 	}
 	ops = append(ops,
 		opChoice{
 			op: node.OpResize, title: "resize nodes",
-			desc: "change per-role cpu/memory, rolled out one node\nat a time behind etcd/ceph health gates",
+			desc: "change per-role cpu/memory, rolled out one node at a time behind etcd/ceph health gates",
 		},
 		opChoice{
 			op: node.OpAdd, title: "add workers",
-			desc: "build + upload a per-node iso, revive the ignition\nserver, join and wait ready",
+			desc: "build + upload a per-node iso, revive the ignition server, join and wait ready",
 		},
 		opChoice{
 			op: node.OpRemove, title: "remove worker",
-			desc: "cordon, drain, destroy the vm, delete the node\n(highest-numbered worker only)",
+			desc: "cordon, drain, destroy the vm, delete the node (highest-numbered worker only)",
 		},
 	)
 
@@ -66,10 +72,11 @@ func NewOpStep(st *State) *OpStep {
 	selector.SetWrap(false)
 
 	return &OpStep{
-		BaseStep: wizard.NewBaseStep(StepIDOp, "operation", ""),
+		BaseStep: wizard.NewBaseStepWithDisplayTitle(StepIDOp, "operation", "choose an operation", ""),
 		st:       st,
 		nav:      wizard.NewSingleSelect(StepIDOp, selector, "enter"),
 		ops:      ops,
+		now:      time.Now,
 	}
 }
 
@@ -101,13 +108,14 @@ func (s *OpStep) View(width, height int) string {
 
 	if s.st.Marker != nil {
 		warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
-		content += warnStyle.Render(fmt.Sprintf("⚠ interrupted %s of %s — step: %s, recorded %s ago",
-			s.st.Marker.Op, s.st.Marker.Target, s.st.Marker.Step,
-			humanAge(time.Since(s.st.Marker.Timestamp)))) + "\n\n"
+		banner := fmt.Sprintf("%s interrupted %s of %s — step: %s, recorded %s ago",
+			tui.IconWarning, s.st.Marker.Op, s.st.Marker.Target, s.st.Marker.Step,
+			humanAge(s.now().Sub(s.st.Marker.Timestamp)))
+		content += warnStyle.Render(lipgloss.Wrap(banner, min(width, opCardWidth)-4, "")) + "\n\n"
 	}
 
 	for i, o := range s.ops {
-		content += s.renderOption(&o, i == s.nav.SelectedIndex())
+		content += s.renderOption(&o, i == s.nav.SelectedIndex(), width)
 		if i < len(s.ops)-1 {
 			content += "\n\n"
 		}
@@ -115,7 +123,7 @@ func (s *OpStep) View(width, height int) string {
 	return content
 }
 
-func (s *OpStep) renderOption(o *opChoice, selected bool) string {
+func (s *OpStep) renderOption(o *opChoice, selected bool, width int) string {
 	var bullet, title string
 	if selected {
 		bullet = lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true).Render(tui.IconActive)
@@ -124,12 +132,9 @@ func (s *OpStep) renderOption(o *opChoice, selected bool) string {
 		bullet = lipgloss.NewStyle().Foreground(tui.ColorSlate600).Render(tui.IconPending)
 		title = lipgloss.NewStyle().Foreground(tui.ColorSlate300).Render(o.title)
 	}
-	descStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
-	out := bullet + " " + title
-	for line := range strings.SplitSeq(o.desc, "\n") {
-		out += "\n  " + descStyle.Render(line)
-	}
-	return out
+	desc := lipgloss.Wrap(o.desc, min(width, opCardWidth)-8, "")
+	descStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500).PaddingLeft(2)
+	return bullet + " " + title + "\n" + descStyle.Render(desc)
 }
 
 // Apply records the chosen operation. Choosing a non-resume op over an

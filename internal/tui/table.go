@@ -77,6 +77,25 @@ func padRightCells(s string, w int) string {
 	return s
 }
 
+// Truncate rune-safely clips s to fit within maxW visible columns, appending
+// "…" when it clips.
+func Truncate(s string, maxW int) string {
+	if maxW <= 0 {
+		return ""
+	}
+	if lipgloss.Width(s) <= maxW {
+		return s
+	}
+	runes := []rune(s)
+	for i := len(runes) - 1; i > 0; i-- {
+		candidate := string(runes[:i]) + "…"
+		if lipgloss.Width(candidate) <= maxW {
+			return candidate
+		}
+	}
+	return "…"
+}
+
 // truncateMiddle shortens s to maxW columns by replacing the middle with an
 // ellipsis, preserving the distinguishing head and tail; maxW <= 0 returns s
 // unchanged.

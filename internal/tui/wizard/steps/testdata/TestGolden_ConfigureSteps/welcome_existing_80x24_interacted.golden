@@ -3,22 +3,22 @@
   │ O K D C T L  okd over proxmox, the easy way                              │  
   │ welcome                              ●─○─○─○─○─○─○─○─○─○─○  step 1 of 11 │  
   │──────────────────────────────────────────────────────────────────────────│  
+  │             ██████  ██   ██ ██████   ██████ ████████ ██                  │  
+  │            ██    ██ ██  ██  ██   ██ ██         ██    ██                  │  
+  │            ██    ██ █████   ██   ██ ██         ██    ██                  │  
+  │            ██    ██ ██  ██  ██   ██ ██         ██    ██                  │  
+  │             ██████  ██   ██ ██████   ██████    ██    ███████             │  
+  │                    answer a few questions, then deploy                   │  
+  │              you'll need              it takes                           │  
+  │              ✓ a proxmox host         ≈ 10 min to configure              │  
+  │              ✓ proxmox credentials    ≈ 45 min to deploy                 │  
+  │              ✓ an okd pull secret                                        │  
   │                                                                          │  
-  │                    okdctl setup                                          │  
-  │                                                                          │  
-  │                    existing configuration detected                       │  
-  │                                                                          │  
-  │                    ○ deploy now                                          │  
-  │                      deploy using current okdctl.yaml                    │  
-  │                                                                          │  
-  │                    ● edit existing                                       │  
-  │                      modify your current settings                        │  
-  │                                                                          │  
-  │                    ○ start fresh                                         │  
-  │                      create a new configuration                          │  
-  │                                                                          │  
+  │          found okdctl.yaml · cluster prod-cluster · 3 + 3 nodes          │  
+  │              ○ deploy now   ● edit existing   ○ start fresh              │  
+  │                       modify your current settings                       │  
   │                                                                          │  
   │───────────────────────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
-  │  ↑↓ select • enter confirm • ctrl+c quit                                 │  
+  │  ←/→ choose • enter start • ctrl+c quit                                  │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

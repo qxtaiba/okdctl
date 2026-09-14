@@ -1,17 +1,39 @@
 package steps
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
+
+// assertNoScrollIndicator fails t if frame's footer shows the viewport
+// scroll hint, i.e. the step's content overflowed its height.
+func assertNoScrollIndicator(t *testing.T, frame string) {
+	t.Helper()
+	if strings.Contains(tuitest.StripANSI(frame), "scroll") {
+		t.Errorf("frame shows a scroll indicator, want the welcome body to fit without scrolling:\n%s", frame)
+	}
+}
+
+// forceHeroColor forces tui.ColorEnabled() true for the duration of t, so
+// the welcome step's block-letter hero renders instead of its no-color
+// fallback, restoring the prior color profile on cleanup.
+func forceHeroColor(t *testing.T) {
+	t.Helper()
+	t.Cleanup(func() { tui.SetColorProfileFor(&bytes.Buffer{}) })
+	t.Setenv("CLICOLOR_FORCE", "1")
+	tui.SetColorProfileFor(&bytes.Buffer{})
+}
 
 type configureScenario struct {
 	name     string
@@ -24,6 +46,7 @@ func configureScenarios() []configureScenario {
 	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
 	downKey := tea.KeyPressMsg{Code: 'j', Text: "j"}
 	enterKey := tea.KeyPressMsg{Code: tea.KeyEnter}
+	endKey := tea.KeyPressMsg{Code: tea.KeyEnd}
 
 	return []configureScenario{
 		{name: "welcome_fresh", id: wizard.StepIDWelcome},
@@ -31,7 +54,10 @@ func configureScenarios() []configureScenario {
 			name: "welcome_existing",
 			id:   wizard.StepIDWelcome,
 			seed: func(m *wizard.Model) {
-				m.CurrentStep().(*WelcomeStep).SetConfigExists(true)
+				cfg := config.DefaultConfig()
+				cfg.Cluster.Name = "prod-cluster"
+				cfg.Topology.Workers.Count = 3
+				m.CurrentStep().(*WelcomeStep).SetExistingConfig(cfg)
 			},
 			interact: downKey,
 		},
@@ -65,6 +91,37 @@ func configureScenarios() []configureScenario {
 				m.CurrentStep().(*ReviewStep).SetConfig(m.Config())
 			},
 			interact: downKey,
+		},
+		{
+			// Populates node placement and enables an addon on top of the
+			// default config so every reviewJumpOrder section renders,
+			// pinning the full 1-8 contiguous jump legend.
+			name: "review-with-8-targets",
+			id:   wizard.StepIDReview,
+			seed: func(m *wizard.Model) {
+				cfg := m.Config()
+				cfg.Provider.Proxmox.ControlPlaneNodes = []string{"pve1", "pve2", "pve3"}
+				cfg.Provider.Proxmox.WorkerNodes = []string{"pve1", "pve2", "pve3"}
+				flux := cfg.Addons["flux"]
+				flux.Enabled = true
+				cfg.Addons["flux"] = flux
+				m.CurrentStep().(*ReviewStep).SetConfig(cfg)
+			},
+			interact: endKey,
+		},
+		{
+			// Same as review-with-8-targets but leaves every addon disabled
+			// (the default), pinning that the addons-hidden gap renumbers
+			// advanced to [7] rather than leaving [8] behind it.
+			name: "review-with-addons-hidden",
+			id:   wizard.StepIDReview,
+			seed: func(m *wizard.Model) {
+				cfg := m.Config()
+				cfg.Provider.Proxmox.ControlPlaneNodes = []string{"pve1", "pve2", "pve3"}
+				cfg.Provider.Proxmox.WorkerNodes = []string{"pve1", "pve2", "pve3"}
+				m.CurrentStep().(*ReviewStep).SetConfig(cfg)
+			},
+			interact: endKey,
 		},
 	}
 }
@@ -127,7 +184,17 @@ func TestGolden_ConfigureSteps(t *testing.T) {
 	for _, sz := range goldenSizes {
 		for _, sc := range configureScenarios() {
 			t.Run(fmt.Sprintf("%s_%dx%d", sc.name, sz.w, sz.h), func(t *testing.T) {
+				if strings.HasPrefix(sc.name, "welcome") {
+					forceHeroColor(t)
+				}
 				base := fmt.Sprintf("%s_%dx%d", sc.name, sz.w, sz.h)
+
+				// newGoldenModel builds via wizard.NewModel, which seeds
+				// its initial size from the process's real terminal
+				// rather than sz; pin it so the golden is independent of
+				// that.
+				tui.SetTerminalWidth(sz.w)
+				t.Cleanup(func() { tui.SetTerminalWidth(0) })
 
 				m := newGoldenModel(t)
 				_ = tuitest.RenderAt(t, m, sz.w, sz.h)
@@ -139,6 +206,9 @@ func TestGolden_ConfigureSteps(t *testing.T) {
 				tuitest.Golden(t, base+"_initial", frame)
 				if sz.fits {
 					tuitest.AssertFits(t, frame, sz.w, sz.h)
+				}
+				if strings.HasPrefix(sc.name, "welcome") && sz.w == 80 && sz.h == 24 {
+					assertNoScrollIndicator(t, frame)
 				}
 
 				if sc.interact != nil {
@@ -160,6 +230,9 @@ func TestGolden_ConfigureSteps(t *testing.T) {
 // section's 6 fields (bridge, additional networks, os/data/iso storage,
 // fcos iso) so the bootstrap field is focused and scrolled into view.
 func TestGolden_NodePlacementSingleNode(t *testing.T) {
+	tui.SetTerminalWidth(100)
+	t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
 	m := newGoldenModel(t)
 	_ = tuitest.RenderAt(t, m, 100, 30)
 	m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDNodePlacement})
@@ -182,6 +255,9 @@ func TestGolden_NodePlacementSingleNode(t *testing.T) {
 func TestGolden_DistributionLoadingState(t *testing.T) {
 	for _, sz := range goldenSizes {
 		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
+			tui.SetTerminalWidth(sz.w)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
 			m := newGoldenModel(t)
 			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
 			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDDistribution})
@@ -202,6 +278,9 @@ func TestGolden_DistributionLoadingState(t *testing.T) {
 func TestGolden_DistributionErrorState(t *testing.T) {
 	for _, sz := range goldenSizes {
 		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
+			tui.SetTerminalWidth(sz.w)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
 			m := newGoldenModel(t)
 			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
 			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDDistribution})
@@ -228,6 +307,9 @@ func TestGolden_AddonsVaultsEditMode(t *testing.T) {
 
 	for _, sz := range goldenSizes {
 		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
+			tui.SetTerminalWidth(sz.w)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
 			m := newGoldenModel(t)
 			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
 			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDAddons})
@@ -263,6 +345,9 @@ func TestGolden_AddonsFluxWarning(t *testing.T) {
 
 	for _, sz := range goldenSizes {
 		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
+			tui.SetTerminalWidth(sz.w)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
 			m := newGoldenModel(t)
 			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
 			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDAddons})
@@ -316,6 +401,9 @@ func pumpCmd(m *wizard.Model, cmd tea.Cmd) {
 // before any input, and typing the first character replaces it outright
 // rather than appending to it.
 func TestGolden_BasicsDefaultAsRealValue(t *testing.T) {
+	tui.SetTerminalWidth(100)
+	t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
 	m := newGoldenModelFreshDefaults(t)
 	_ = tuitest.RenderAt(t, m, 100, 30)
 	m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDBasics})
@@ -340,6 +428,9 @@ func TestGolden_BasicsDefaultAsRealValue(t *testing.T) {
 func TestGolden_ProxmoxEnterHighlightsInvalidFields(t *testing.T) {
 	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
 	enterKey := tea.KeyPressMsg{Code: tea.KeyEnter}
+
+	tui.SetTerminalWidth(100)
+	t.Cleanup(func() { tui.SetTerminalWidth(0) })
 
 	m := newGoldenModel(t)
 	_ = tuitest.RenderAt(t, m, 100, 30)

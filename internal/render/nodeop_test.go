@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"charm.land/lipgloss/v2"
+
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
@@ -152,5 +154,16 @@ func TestNodeOpBoxes(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestNodeOpCompleteWidthShrinksBox(t *testing.T) {
+	p := resizePlan()
+	const viewport = 70
+	got := NodeOpCompleteWidth(&p, 90*time.Second, viewport-2)
+	for _, line := range strings.Split(got, "\n") {
+		if w := lipgloss.Width(line); w > viewport {
+			t.Errorf("box line %d cols wide, want <= %d: %q", w, viewport, line)
+		}
 	}
 }

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"image/color"
 	"os"
 
 	"charm.land/lipgloss/v2"
@@ -52,6 +53,17 @@ var (
 	ColorText    = ColorSlate100
 	ColorTextDim = ColorSlate400
 )
+
+// LogoGradient is the six-color gradient painted left to right across the
+// welcome hero's OKDCTL block letters.
+var LogoGradient = [6]color.Color{
+	lipgloss.Color("#C084FC"),
+	lipgloss.Color("#A78BFA"),
+	lipgloss.Color("#8B8CF6"),
+	lipgloss.Color("#67A6F0"),
+	lipgloss.Color("#4CC0E8"),
+	lipgloss.Color("#22D3EE"),
+}
 
 var (
 	hcColorPrimary = lipgloss.Color("#FF00FF")

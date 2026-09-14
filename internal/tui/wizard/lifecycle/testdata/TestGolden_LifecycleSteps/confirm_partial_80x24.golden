@@ -1,0 +1,24 @@
+                                                                                
+  ╭──────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L                                                              │  
+  │ confirm removal                 op · target · params · plan · run · done │  
+  │──────────────────────────────────────────────────────────────────────────│  
+  │                                                                          │  
+  │        confirm irreversible removal                                      │  
+  │                                                                          │  
+  │        irreversible: destroys homelab-worker2 and its data disk;         │  
+  │        removed data cannot be recovered                                  │  
+  │                                                                          │  
+  │        type the cluster name "homelab" to confirm                        │  
+  │        cluster name                                                      │  
+  │        ╭──────────────────────────────╮                                  │  
+  │        │ homela                       │                                  │  
+  │        ╰──────────────────────────────╯                                  │  
+  │        ✗ must match "homelab"                                            │  
+  │                                                                          │  
+  │                                                                          │  
+  │                                                                          │  
+  │─────────────────────────────────────────────────────────────── ▸ homelab │  
+  │  enter confirm • esc back • ctrl+c quit                                  │  
+  ╰──────────────────────────────────────────────────────────────────────────╯  
+                                                                                

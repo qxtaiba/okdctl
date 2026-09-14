@@ -1,31 +1,31 @@
                                                                                                                         
   ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
   │ O K D C T L                                                                                                      │  
-  │ which nodes should be resized?                                                              ●─●─○─○  step 2 of 4 │  
+  │ operation parameters                                                    op · target · params · plan · run · done │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
-  │  ● masters — all 1 control-plane nodes                                                                           │  
-  │    │ rolled one at a time; etcd-gated before and after every node                                                │  
-  │    │                                                                                                             │  
-  │  ○ workers — all 1 worker nodes                                                                                  │  
-  │    │ rolled one at a time; no etcd gate                                                                          │  
-  │    ┌────────────────────                                                                                         │  
-  │    │ ○ homelab-master0        master   ready                                                                     │  
-  │    │   │                                                                                                         │  
-  │    │ ○ homelab-worker0        worker   ready                                                                     │  
-  │    └────────────────────                                                                                         │  
   │                                                                                                                  │  
+  │    ● disruption                                                                                                  │  
   │                                                                                                                  │  
+  │    drain mode                                                                                                    │  
+  │    ╭────────────────────────────────────────╮                                                                    │  
+  │    │ ◂ skip drain — restart pods in place ▸ │                                                                    │  
+  │    ╰────────────────────────────────────────╯                                                                    │  
+  │    how pods leave the node                                                                                       │  
   │                                                                                                                  │  
+  │    drain timeout                                                                                                 │  
+  │    ╭──────────────────────────────╮                                                                              │  
+  │    │ 10m                          │                                                                              │  
+  │    ╰──────────────────────────────╯                                                                              │  
   │                                                                                                                  │  
+  │    force storage                                                                                                 │  
+  │    ╭──────────────╮                                                                                              │  
+  │    │ ● no  ○ yes  │ default                                                                                      │  
+  │    ╰──────────────╯                                                                                              │  
   │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
+  │    ⚠ skip-drain: the node is power-cycled without evacuating pods —                                              │  
+  │      they die with the vm and restart in place on the resized node.                                              │  
+  │      use when a memory-saturated cluster cannot reschedule evictions.                                            │  
+  │      the etcd and ceph health gates still run.                                                                   │  
   │                                                                                                                  │  
   │                                                                                                                  │  
   │                                                                                                                  │  
@@ -35,6 +35,6 @@
   │                                                                                                                  │  
   │                                                                                                                  │  
   │─────────────────────────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
-  │  ↑↓ select • enter confirm • esc back • ctrl+c quit                                                              │  
+  │  ↑↓/tab navigate • ← → change value • enter continue • esc back                                                  │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                                         

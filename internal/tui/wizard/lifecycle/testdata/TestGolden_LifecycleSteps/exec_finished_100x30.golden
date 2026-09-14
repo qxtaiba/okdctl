@@ -1,0 +1,30 @@
+                                                                                                    
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L                                                                                  │  
+  │ resizing masters                                    op · target · params · plan · run · done │  
+  │──────────────────────────────────────────────────────────────────────────────────────────────│  
+  │  resizing masters  3 / 3                                                  elapsed 3m20s      │  
+  │  ✓ homelab-master0                                                                 1m0s      │  
+  │  ✓ homelab-master1                                                                1m20s      │  
+  │  ✓ homelab-master2                                                                 1m0s      │  
+  │                                                                                              │  
+  │  marker okd-install/.okdctl-node-op.json · ctrl+c cancels after the current gate             │  
+  │                                                                                              │  
+  │                                                                                              │  
+  │                                                                                              │  
+  │                                                                                              │  
+  │                                                                                              │  
+  │                                                                                              │  
+  │                                                                                              │  
+  │                                                                                              │  
+  │                                                                                              │  
+  │                                                                                              │  
+  │                                                                                              │  
+  │                                                                                              │  
+  │                                                                                              │  
+  │                                                                                              │  
+  │                                                                                              │  
+  │───────────────────────────────────────────────────────────────────────────────── ▸ mycluster │  
+  │  ctrl+c request graceful cancel (twice to force-quit)                                        │  
+  ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
+                                                                                                    

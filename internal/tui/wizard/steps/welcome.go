@@ -1,6 +1,9 @@
 package steps
 
 import (
+	"fmt"
+	"strings"
+
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -29,12 +32,31 @@ var welcomeOptions = []struct {
 	{"start fresh", "create a new configuration"},
 }
 
+// welcomeNeedItems lists the "you'll need" checklist rendered beside the hero.
+var welcomeNeedItems = []string{
+	"a proxmox host",
+	"proxmox credentials",
+	"an okd pull secret",
+}
+
+// welcomeTakesItems lists the "it takes" timing estimates rendered beside the hero.
+var welcomeTakesItems = []string{
+	"≈ 10 min to configure",
+	"≈ 45 min to deploy",
+}
+
+var (
+	welcomeTaglineStyle     = lipgloss.NewStyle().Foreground(tui.ColorSlate400).Italic(true)
+	welcomeColumnTitleStyle = tui.TextStyle.Bold(true)
+)
+
 // WelcomeStep is the wizard's entry screen, offering deploy/edit/fresh options
 // when a config already exists.
 type WelcomeStep struct {
 	wizard.BaseStep
 	configExists bool
-	nav          *wizard.SingleSelect
+	foundLine    string
+	nav          *components.CompactSelector
 }
 
 // NewWelcomeStep constructs the welcome wizard step.
@@ -50,9 +72,8 @@ func NewWelcomeStep() *WelcomeStep {
 }
 
 // newWelcomeSelect builds a clamped (non-wrapping) selector over
-// deploy/edit/fresh, or a single "get started" entry; space confirms alongside
-// enter.
-func newWelcomeSelect(configExists bool) *wizard.SingleSelect {
+// deploy/edit/fresh, or a single "get started" entry.
+func newWelcomeSelect(configExists bool) *components.CompactSelector {
 	options := []string{"get started"}
 	if configExists {
 		options = make([]string, len(welcomeOptions))
@@ -62,7 +83,7 @@ func newWelcomeSelect(configExists bool) *wizard.SingleSelect {
 	}
 	selector := components.NewCompactSelector(options)
 	selector.SetWrap(false)
-	return wizard.NewSingleSelect(wizard.StepIDWelcome, selector, "enter", " ")
+	return selector
 }
 
 // SetConfigExists tells the step whether okdctl.yaml exists, switching between
@@ -72,6 +93,17 @@ func (s *WelcomeStep) SetConfigExists(exists bool) {
 	if exists {
 		s.nav = newWelcomeSelect(true)
 	}
+}
+
+// SetExistingConfig marks an existing okdctl.yaml as present and derives the
+// found line's cluster name and node counts from cfg.
+func (s *WelcomeStep) SetExistingConfig(cfg *config.Config) {
+	s.SetConfigExists(true)
+	if cfg == nil {
+		return
+	}
+	s.foundLine = fmt.Sprintf("found okdctl.yaml · cluster %s · %d + %d nodes",
+		cfg.Cluster.Name, cfg.Topology.ControlPlane.Count, cfg.Topology.Workers.Count)
 }
 
 // GetMode returns the currently-selected welcome mode.
@@ -87,9 +119,18 @@ func (s *WelcomeStep) Init() tea.Cmd {
 	return nil
 }
 
-// Update handles up/down navigation and enter to advance.
+// Update handles left/right/up/down navigation (arrows remapped onto the
+// selector's vertical bindings) and enter/space to advance.
 func (s *WelcomeStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
-	return s, s.nav.Update(msg)
+	keyMsg, ok := msg.(tea.KeyPressMsg)
+	if !ok {
+		return s, nil
+	}
+	if keyMsg.Code == tea.KeyEnter || keyMsg.Code == tea.KeySpace {
+		return s, func() tea.Msg { return wizard.StepCompleteMsg{StepID: wizard.StepIDWelcome} }
+	}
+	s.nav, _ = s.nav.Update(components.ArrowsAsVertical(keyMsg))
+	return s, nil
 }
 
 // IsCentered returns true so the welcome screen is rendered centered.
@@ -97,53 +138,50 @@ func (s *WelcomeStep) IsCentered() bool {
 	return true
 }
 
-// View renders the welcome screen with the appropriate option set.
+// View renders the block-letter hero, the you'll-need/it-takes checklist
+// columns, an optional found-config line, and the horizontal mode radio.
 func (s *WelcomeStep) View(width, height int) string {
 	s.SetSize(width, height)
 
-	titleStyle := lipgloss.NewStyle().
-		Foreground(tui.ColorPrimary).
-		Bold(true)
+	hero := renderHero(width, tui.ColorEnabled())
+	tagline := welcomeTaglineStyle.Render("answer a few questions, then deploy")
+	columns := lipgloss.JoinHorizontal(lipgloss.Top, s.renderNeedList(), "    ", s.renderTakesList())
 
-	subtitleStyle := lipgloss.NewStyle().
-		Foreground(tui.ColorSlate400).
-		Italic(true)
-
-	var content string
-
-	if s.configExists {
-		content = titleStyle.Render("okdctl setup") + "\n\n"
-		content += subtitleStyle.Render("existing configuration detected") + "\n\n"
-
-		for i, opt := range welcomeOptions {
-			content += s.renderOption(opt.title, opt.desc, i == s.nav.SelectedIndex())
-			if i < len(welcomeOptions)-1 {
-				content += "\n\n"
-			}
-		}
-	} else {
-		content = titleStyle.Render("okdctl setup") + "\n\n"
-		content += subtitleStyle.Render("configure your kubernetes cluster") + "\n\n"
-		content += s.renderOption("get started", "create your first configuration", true)
+	parts := []string{hero, tagline, columns, ""}
+	if s.foundLine != "" {
+		parts = append(parts, tui.MutedStyle.Render(s.foundLine))
 	}
+	parts = append(parts, s.nav.ViewInline(), tui.MutedStyle.Render(s.selectedDesc()))
 
-	return content
+	return lipgloss.JoinVertical(lipgloss.Center, parts...)
 }
 
-func (s *WelcomeStep) renderOption(title, description string, selected bool) string {
-	var bullet, titleStyled string
-
-	if selected {
-		bullet = lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true).Render(tui.IconActive)
-		titleStyled = lipgloss.NewStyle().Foreground(tui.ColorText).Bold(true).Render(title)
-	} else {
-		bullet = lipgloss.NewStyle().Foreground(tui.ColorSlate600).Render(tui.IconPending)
-		titleStyled = lipgloss.NewStyle().Foreground(tui.ColorSlate300).Render(title)
+// renderNeedList renders the "you'll need" checklist column.
+func (s *WelcomeStep) renderNeedList() string {
+	lines := make([]string, 0, len(welcomeNeedItems)+1)
+	lines = append(lines, welcomeColumnTitleStyle.Render("you'll need"))
+	for _, item := range welcomeNeedItems {
+		lines = append(lines, tui.SuccessStyle.Render(tui.IconSuccess)+" "+tui.TextStyle.Render(item))
 	}
+	return strings.Join(lines, "\n")
+}
 
-	descStyled := lipgloss.NewStyle().Foreground(tui.ColorSlate500).Render(description)
+// renderTakesList renders the "it takes" timing-estimate column.
+func (s *WelcomeStep) renderTakesList() string {
+	lines := make([]string, 0, len(welcomeTakesItems)+1)
+	lines = append(lines, welcomeColumnTitleStyle.Render("it takes"))
+	for _, item := range welcomeTakesItems {
+		lines = append(lines, tui.TextStyle.Render(item))
+	}
+	return strings.Join(lines, "\n")
+}
 
-	return bullet + " " + titleStyled + "\n  " + descStyled
+// selectedDesc returns the description shown dim beneath the radio for the currently-selected option.
+func (s *WelcomeStep) selectedDesc() string {
+	if !s.configExists {
+		return "create your first configuration"
+	}
+	return welcomeOptions[s.nav.SelectedIndex()].desc
 }
 
 // Validate always returns nil; the welcome step has no inputs to validate.
@@ -163,17 +201,15 @@ func (s *WelcomeStep) Apply(cfg *config.Config) error {
 
 // ShortHelp returns the help bar shown on the welcome screen.
 func (s *WelcomeStep) ShortHelp() []wizard.KeyBinding {
+	var bindings []wizard.KeyBinding
 	if s.configExists {
-		return []wizard.KeyBinding{
-			{Key: "↑↓", Help: "select"},
-			{Key: wizard.HelpEnter, Help: wizard.HelpConfirm},
-			{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
-		}
+		bindings = append(bindings, wizard.KeyBinding{Key: "←/→", Help: "choose"})
 	}
-	return []wizard.KeyBinding{
-		{Key: wizard.HelpEnter, Help: "start"},
-		{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
-	}
+	bindings = append(bindings,
+		wizard.KeyBinding{Key: wizard.HelpEnter, Help: "start"},
+		wizard.KeyBinding{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
+	)
+	return bindings
 }
 
 // GetSelectedAction maps the chosen welcome mode to a wizard.Action.

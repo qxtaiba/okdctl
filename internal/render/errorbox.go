@@ -32,17 +32,36 @@ func IsPresented(err error) bool {
 }
 
 // ErrorSummary renders err in the deploy-summary boxed chrome, using
-// errtypes.Describe (never re-parsed Error() text) for the kind and hint.
+// errtypes.Describe (never re-parsed Error() text) for the kind and hint,
+// plus an exit-code/run-id footer.
 func ErrorSummary(err error, exitCode int, runID string) string {
 	kind, headline, hint := describeError(err)
 
-	contentWidth := tui.DefaultBoxWidth - 4
+	sb := errorBody(kind, headline, hint, tui.DefaultBoxWidth)
+	sb.Newline()
+	footer := fmt.Sprintf("exit %d · run_id %s", exitCode, runID)
+	sb.WriteString("  " + tui.MutedStyle.Render(footer) + "\n")
 
-	sb := NewBuilder()
+	return "\n" + tui.BoxedSectionAccent(sb.String(), "error", tui.DefaultBoxWidth, tui.ColorError) + "\n"
+}
+
+// ErrorCard renders the red error box body — kind chip, wrapped message, and
+// pointer-led hint — without the exit-code/run-id footer ErrorSummary adds.
+func ErrorCard(kind, message, hint string, width int) string {
+	sb := errorBody(kind, message, hint, width)
+	return "\n" + tui.BoxedSectionAccent(sb.String(), "error", width, tui.ColorError) + "\n"
+}
+
+// errorBody writes the kind chip, wrapped message, and pointer-led hint
+// shared by ErrorSummary and ErrorCard, sized to fit inside width.
+func errorBody(kind, message, hint string, width int) *Builder {
+	contentWidth := width - 4
+
+	sb := NewBuilderWidth(width)
 	sb.Newline()
 	sb.WriteString("  " + tui.ErrorStyle.Render(tui.IconError+"  "+kind) + "\n")
 	sb.Newline()
-	for _, line := range wrapText(headline, contentWidth) {
+	for _, line := range wrapText(message, contentWidth) {
 		sb.WriteString("  " + line + "\n")
 	}
 	if hint != "" {
@@ -57,11 +76,7 @@ func ErrorSummary(err error, exitCode int, runID string) string {
 			}
 		}
 	}
-	sb.Newline()
-	footer := fmt.Sprintf("exit %d · run_id %s", exitCode, runID)
-	sb.WriteString("  " + tui.MutedStyle.Render(footer) + "\n")
-
-	return "\n" + tui.BoxedSectionAccent(sb.String(), "error", tui.DefaultBoxWidth, tui.ColorError) + "\n"
+	return sb
 }
 
 // describeError decomposes err via errtypes.Describe, falling back to a plain

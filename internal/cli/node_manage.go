@@ -18,7 +18,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/node"
-	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/lifecycle"
 	"github.com/qxtaiba/okdctl/internal/workspace"
@@ -47,6 +46,9 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 	if !term.IsTerminal(int(os.Stdout.Fd())) || !term.IsTerminal(int(os.Stdin.Fd())) {
 		return &errtypes.UsageError{Msg: "node manage needs a terminal; use 'okdctl node resize/add/remove' for automation"}
+	}
+	if os.Getenv(wizardDemoEnv) != "" {
+		return runNodeManageDemo(cmd)
 	}
 
 	cfg, err := loadConfig(cfgFile)
@@ -101,13 +103,7 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 		},
 	}
 
-	// Swaps the context badge to the cluster name — the lifecycle flow operates
-	// an existing cluster, not a distribution choice.
-	chrome := wizard.FlowChrome{
-		Tagline: "okd over proxmox, the easy way",
-		Badge:   func(c *config.Config) string { return c.Cluster.Name },
-	}
-	result, err := wizard.RunFlow(ctx, lifecycle.NewSteps(st, hooks), cfg, chrome)
+	result, err := wizard.RunFlow(ctx, lifecycle.NewSteps(st, hooks), cfg, lifecycle.Chrome())
 	if err != nil {
 		// A tea failure mid-execution must still surface the resume marker, not
 		// read as a configuration problem.
@@ -122,14 +118,13 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 // reportLifecycleOutcome maps wizard terminal state to a truthful exit; an
 // interrupted mid-execution run exits non-zero instead of claiming a clean
 // state.
-func reportLifecycleOutcome(cmd *cobra.Command, result wizard.Result, st *lifecycle.State) error {
+func reportLifecycleOutcome(_ *cobra.Command, result wizard.Result, st *lifecycle.State) error {
 	switch {
 	case st.Started && !st.Executed:
 		return &errtypes.ClusterError{Msg: lifecycleInterruptedMsg}
 	case st.Executed && st.Result != nil:
 		return st.Result
 	case st.Executed:
-		fmt.Fprint(cmd.OutOrStdout(), render.NodeOpComplete(st.Plan, st.Elapsed))
 		return nil
 	case result.Cancelled || !st.Proceed:
 		logutil.Info("no changes made")

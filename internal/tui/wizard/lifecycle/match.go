@@ -9,6 +9,14 @@ import (
 // rowCordonDrain: cordon and drain render as a single combined row.
 const rowCordonDrain = "cordon + drain"
 
+// rowBuildISO and rowUploadISO name node add's iso-lifecycle gate rows;
+// shared with gates.go and the demo event script so the literal isn't
+// re-typed at each site.
+const (
+	rowBuildISO  = "build iso"
+	rowUploadISO = "upload iso"
+)
+
 var stepRowHints = map[node.Step]string{
 	node.StepCordon:     rowCordonDrain,
 	node.StepDrain:      rowCordonDrain,
@@ -17,8 +25,8 @@ var stepRowHints = map[node.Step]string{
 	node.StepDiskGrow:   "grow os disk",
 	node.StepUncordon:   "uncordon",
 	node.StepDeleteK8s:  "delete kubernetes node",
-	node.StepBuildISO:   "build iso",
-	node.StepUploadISO:  "upload iso",
+	node.StepBuildISO:   rowBuildISO,
+	node.StepUploadISO:  rowUploadISO,
 	node.StepWaitJoin:   "wait for join",
 }
 

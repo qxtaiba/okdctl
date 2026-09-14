@@ -35,27 +35,12 @@ var reviewJumpOrder = []wizard.StepID{
 type ReviewStep struct {
 	wizard.BaseStep
 	cfg         *config.Config
-	action      *wizard.SingleSelect
+	actions     *components.CompactSelector
 	jumpTargets []wizard.JumpTarget
-
-	// actionSpan is where the action selector landed in the last View;
-	// spanKnown is false until the step has rendered a config.
-	actionSpan wizard.LineSpan
-	spanKnown  bool
 }
 
 // NewReviewStep constructs the review wizard step.
 func NewReviewStep() *ReviewStep {
-	actions := []string{
-		"deploy now",
-		"save and exit",
-	}
-
-	action := wizard.NewSingleSelect(wizard.StepIDReview, components.NewCompactSelector(actions), "enter")
-	action.OnNav = func() tea.Cmd {
-		return func() tea.Msg { return wizard.FocusChangedMsg{} }
-	}
-
 	return &ReviewStep{
 		BaseStep: wizard.NewBaseStepWithDisplayTitle(
 			wizard.StepIDReview,
@@ -63,7 +48,10 @@ func NewReviewStep() *ReviewStep {
 			"review your configuration",
 			"review configuration and choose action",
 		),
-		action: action,
+		actions: components.NewCompactSelector([]string{
+			"deploy now",
+			"save and exit",
+		}),
 	}
 }
 
@@ -79,15 +67,25 @@ func (s *ReviewStep) SetConfig(cfg *config.Config) {
 
 // Update handles digit-jump keys, action-selector navigation, and enter to confirm.
 func (s *ReviewStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
-	if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
-		for _, t := range s.jumpTargets {
-			if key.Matches(keyMsg, key.NewBinding(key.WithKeys(strconv.Itoa(t.Digit)))) {
-				id := t.StepID
-				return s, func() tea.Msg { return wizard.JumpToStepMsg{StepID: id} }
-			}
+	keyMsg, ok := msg.(tea.KeyPressMsg)
+	if !ok {
+		return s, nil
+	}
+
+	for _, t := range s.visibleTargets() {
+		if key.Matches(keyMsg, key.NewBinding(key.WithKeys(strconv.Itoa(t.Digit)))) {
+			id := t.StepID
+			return s, func() tea.Msg { return wizard.JumpToStepMsg{StepID: id} }
 		}
 	}
-	return s, s.action.Update(msg)
+
+	if keyMsg.Code == tea.KeyEnter {
+		return s, func() tea.Msg { return wizard.StepCompleteMsg{StepID: wizard.StepIDReview} }
+	}
+
+	var cmd tea.Cmd
+	s.actions, cmd = s.actions.Update(components.ArrowsAsVertical(keyMsg))
+	return s, cmd
 }
 
 // JumpOrder returns the steps a digit keypress may route to; see reviewJumpOrder.
@@ -101,10 +99,10 @@ func (s *ReviewStep) SetJumpTargets(targets []wizard.JumpTarget) {
 	s.jumpTargets = targets
 }
 
-// sectionTitle prefixes title with "[N] " when stepID has a jump digit,
-// doubling headers as the jump legend.
+// sectionTitle prefixes title with "[N] " when stepID has a visible jump
+// digit, doubling headers as the jump legend.
 func (s *ReviewStep) sectionTitle(title string, stepID wizard.StepID) string {
-	for _, t := range s.jumpTargets {
+	for _, t := range s.visibleTargets() {
 		if t.StepID == stepID {
 			return fmt.Sprintf("[%d] %s", t.Digit, title)
 		}
@@ -112,12 +110,63 @@ func (s *ReviewStep) sectionTitle(title string, stepID wizard.StepID) string {
 	return title
 }
 
-// View renders the full configuration summary and deploy-or-save selector.
+// visibleTargets filters jumpTargets down to sections that will actually
+// render and renumbers the survivors 1..N in on-screen order, so a section
+// hidden by its own content (no addons enabled, no node placement chosen)
+// never leaves a gap in the on-screen digit legend. It falls back to the raw
+// jumpTargets when no config is set, since visibility can't be evaluated.
+func (s *ReviewStep) visibleTargets() []wizard.JumpTarget {
+	if s.cfg == nil {
+		return s.jumpTargets
+	}
+	visible := make([]wizard.JumpTarget, 0, len(s.jumpTargets))
+	for _, t := range s.jumpTargets {
+		if !s.sectionVisible(t.StepID) {
+			continue
+		}
+		visible = append(visible, wizard.JumpTarget{StepID: t.StepID, Digit: len(visible) + 1})
+	}
+	return visible
+}
+
+// sectionVisible reports whether stepID's review section renders non-empty
+// content for the current config, mirroring each renderX method's own
+// emptiness rule.
+func (s *ReviewStep) sectionVisible(stepID wizard.StepID) bool {
+	switch stepID {
+	case wizard.StepIDProxmox:
+		return s.cfg.Provider.Proxmox != nil
+	case wizard.StepIDNodePlacement:
+		p := s.cfg.Provider.Proxmox
+		return p != nil && (len(p.ControlPlaneNodes) > 0 || len(p.WorkerNodes) > 0)
+	case wizard.StepIDAddons:
+		return s.anyAddonEnabled()
+	case wizard.StepIDAdvanced:
+		dep := s.cfg.Deployment
+		return s.cfg.Topology.VMIDBase > 0 || dep.BootstrapTimeout > 0 || dep.TerraformEnv != "" || dep.AutoApprove
+	default:
+		// cluster identity, networking, compute, and files & ignition
+		// always emit at least one always-shown KVEntry.
+		return true
+	}
+}
+
+// anyAddonEnabled reports whether any configured addon is enabled.
+func (s *ReviewStep) anyAddonEnabled() bool {
+	for _, ac := range s.cfg.Addons {
+		if ac.Enabled {
+			return true
+		}
+	}
+	return false
+}
+
+// View renders the full configuration summary; the deploy-or-save action
+// selector renders separately, pinned to the footer via PinnedFooter.
 func (s *ReviewStep) View(width, height int) string {
 	s.SetSize(width, height)
 
 	if s.cfg == nil {
-		s.spanKnown = false
 		return "no configuration to review"
 	}
 
@@ -128,28 +177,23 @@ func (s *ReviewStep) View(width, height int) string {
 	content.WriteString(s.renderProxmox(&st))
 	content.WriteString(s.renderNodePlacement(&st))
 	content.WriteString(s.renderNetworking(&st))
-	content.WriteString(s.renderCompute(&st))
+	content.WriteString(s.renderCompute(&st, width))
 	content.WriteString(s.renderFilesIgnition(&st))
 	content.WriteString(s.renderFeatures(&st))
 	content.WriteString(s.renderAdvanced(&st))
 
-	content.WriteString(st.ThickSeparator)
-	content.WriteString("\n\n")
-
-	action := s.action.View()
-	// A line's 0-based index equals the number of newlines written before it.
-	start := strings.Count(content.String(), "\n")
-	s.actionSpan = wizard.LineSpan{Start: start, End: start + lipgloss.Height(action) - 1}
-	s.spanKnown = true
-	content.WriteString(action)
-
-	return content.String()
+	return strings.TrimRight(content.String(), "\n")
 }
 
-// FocusedSpan reports the action selector's lines; the review body above it
-// is a summary the user reads rather than navigates.
-func (s *ReviewStep) FocusedSpan() (wizard.LineSpan, bool) {
-	return s.actionSpan, s.spanKnown
+// PinnedFooter renders the deploy/save action selector inline on the help
+// row, empty while there is no configuration loaded to act on.
+func (s *ReviewStep) PinnedFooter(width int) string {
+	if s.cfg == nil {
+		return ""
+	}
+	// MaxWidth (not tui.Truncate) because ViewInline is already ANSI-styled;
+	// lipgloss truncates styled text ANSI-safely, a rune slice would not.
+	return lipgloss.NewStyle().MaxWidth(width).Render(s.actions.ViewInline())
 }
 
 func (s *ReviewStep) renderClusterIdentity(st *wizard.SectionStyles) string {
@@ -225,7 +269,48 @@ func (s *ReviewStep) renderNetworking(st *wizard.SectionStyles) string {
 	})
 }
 
-func (s *ReviewStep) renderCompute(st *wizard.SectionStyles) string {
+// computeLabels lists the labels renderCompute will emit, so its caller can
+// fit the section's label column before rendering.
+func (s *ReviewStep) computeLabels() []string {
+	labels := []string{roleLabelControlPlane, "total"}
+	if s.cfg.Topology.Workers.Count > 0 {
+		labels = append(labels, roleLabelWorkers)
+		if s.cfg.Disks.WorkerDataSizeGB > 0 {
+			labels = append(labels, "worker data disk")
+		}
+	}
+	if s.cfg.Disks.ControlPlaneDataSizeGB > 0 {
+		labels = append(labels, "control plane data disk")
+	}
+	return labels
+}
+
+// renderCompute renders the compute section: the fitted specs table, the
+// total row beneath its own separator, and any over-capacity warnings.
+func (s *ReviewStep) renderCompute(st *wizard.SectionStyles, width int) string {
+	fitted := st.ForLabels(s.computeLabels()...)
+
+	var b strings.Builder
+	b.WriteString(s.renderComputeSpecs(&fitted))
+
+	totalCPU, totalMemGB, totalOSDiskGB, totalDataDiskGB := s.computeTotals()
+
+	b.WriteString(fitted.Separator)
+	b.WriteString("\n")
+	totalSpec := fmt.Sprintf("%d vcpu, %d gb ram, %d gb disk", totalCPU, totalMemGB, totalOSDiskGB+totalDataDiskGB)
+	b.WriteString(fitted.KVPair("total", totalSpec))
+	b.WriteString("\n")
+
+	b.WriteString(s.renderComputeWarnings(totalCPU, totalMemGB, width))
+	b.WriteString("\n")
+
+	return b.String()
+}
+
+// renderComputeSpecs renders the compute section's header and its
+// control-plane/workers/data-disk spec rows, using the label column st was
+// already fitted to.
+func (s *ReviewStep) renderComputeSpecs(st *wizard.SectionStyles) string {
 	var b strings.Builder
 
 	b.WriteString(st.Header.Render(s.sectionTitle("compute", wizard.StepIDResources)))
@@ -265,10 +350,19 @@ func (s *ReviewStep) renderCompute(st *wizard.SectionStyles) string {
 		b.WriteString("\n")
 	}
 
-	totalCPU := cpCPU*cpCount + 4                                              // +4 for bootstrap
-	totalMemGB := (s.cfg.Topology.ControlPlane.MemoryMB*cpCount + 8192) / 1024 // +8192 for bootstrap
-	totalOSDiskGB := cpDisk*cpCount + 50                                       // +50 for bootstrap
-	totalDataDiskGB := 0
+	return b.String()
+}
+
+// computeTotals sums control-plane, worker, and bootstrap allocations into
+// the review's total vcpu, ram, os-disk, and data-disk figures.
+func (s *ReviewStep) computeTotals() (totalCPU, totalMemGB, totalOSDiskGB, totalDataDiskGB int) {
+	cpCPU := s.cfg.Topology.ControlPlane.CPU
+	cpDisk := s.cfg.Topology.ControlPlane.DiskGB
+	cpCount := s.cfg.Topology.ControlPlane.Count
+
+	totalCPU = cpCPU*cpCount + 4                                              // +4 for bootstrap
+	totalMemGB = (s.cfg.Topology.ControlPlane.MemoryMB*cpCount + 8192) / 1024 // +8192 for bootstrap
+	totalOSDiskGB = cpDisk*cpCount + 50                                       // +50 for bootstrap
 
 	wCount := 0
 	if s.cfg.Topology.Workers.Count > 0 {
@@ -285,57 +379,72 @@ func (s *ReviewStep) renderCompute(st *wizard.SectionStyles) string {
 		totalDataDiskGB += s.cfg.Disks.ControlPlaneDataSizeGB * cpCount
 	}
 
-	b.WriteString(st.Separator)
-	b.WriteString("\n")
-	totalSpec := fmt.Sprintf("%d vcpu, %d gb ram, %d gb disk", totalCPU, totalMemGB, totalOSDiskGB+totalDataDiskGB)
-	b.WriteString(st.KVPair("total", totalSpec))
-	b.WriteString("\n")
+	return totalCPU, totalMemGB, totalOSDiskGB, totalDataDiskGB
+}
 
+// renderComputeWarnings renders the wrapped, amber ⚠ lines flagging totals
+// that exceed the review's ram/vcpu thresholds, or "" when neither trips.
+func (s *ReviewStep) renderComputeWarnings(totalCPU, totalMemGB, width int) string {
 	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
 	nodeCount := countUniqueNodes(s.cfg)
 	perHost := ""
 	if nodeCount > 1 {
 		perHost = fmt.Sprintf(" across %d nodes", nodeCount)
 	}
+
+	var b strings.Builder
 	if totalMemGB > 64 {
-		b.WriteString(warnStyle.Render(fmt.Sprintf("  total ram exceeds 64 gb%s — verify your proxmox host(s) have sufficient memory", perHost)))
+		text := fmt.Sprintf("%s total ram exceeds 64 gb%s — verify your proxmox host(s) have sufficient memory", tui.IconWarning, perHost)
+		b.WriteString(warnStyle.Render(lipgloss.Wrap(text, width, "")))
 		b.WriteString("\n")
 	}
 	if totalCPU > 32 {
-		b.WriteString(warnStyle.Render(fmt.Sprintf("  total vcpu exceeds 32%s — verify your proxmox host(s) have sufficient cores", perHost)))
+		text := fmt.Sprintf("%s total vcpu exceeds 32%s — verify your proxmox host(s) have sufficient cores", tui.IconWarning, perHost)
+		b.WriteString(warnStyle.Render(lipgloss.Wrap(text, width, "")))
 		b.WriteString("\n")
 	}
-	b.WriteString("\n")
 
 	return b.String()
 }
 
 func (s *ReviewStep) renderFilesIgnition(st *wizard.SectionStyles) string {
+	var labels []string
+	if s.cfg.Files.PullSecret != "" {
+		labels = append(labels, "pull secret")
+	}
+	if s.cfg.Files.SSHPublicKey != "" {
+		labels = append(labels, "ssh key")
+	}
+	if s.cfg.HTTPServer.IgnitionServerIP != "" {
+		labels = append(labels, "ignition server", "web root")
+	}
+	fitted := st.ForLabels(labels...)
+
 	var b strings.Builder
 
-	b.WriteString(st.Header.Render(s.sectionTitle("files & ignition", wizard.StepIDFiles)))
+	b.WriteString(fitted.Header.Render(s.sectionTitle("files & ignition", wizard.StepIDFiles)))
 	b.WriteString("\n")
-	b.WriteString(st.Separator)
+	b.WriteString(fitted.Separator)
 	b.WriteString("\n")
 
 	if s.cfg.Files.PullSecret != "" {
-		b.WriteString(st.Label.Render("pull secret"))
-		b.WriteString(st.Check.Render(tui.IconSuccess + " "))
-		b.WriteString(st.Value.Render(truncatePath(s.cfg.Files.PullSecret, 40)))
+		b.WriteString(fitted.Label.Render("pull secret"))
+		b.WriteString(fitted.Check.Render(tui.IconSuccess + " "))
+		b.WriteString(fitted.Value.Render(truncatePath(s.cfg.Files.PullSecret, 40)))
 		b.WriteString("\n")
 	}
 	if s.cfg.Files.SSHPublicKey != "" {
-		b.WriteString(st.Label.Render("ssh key"))
-		b.WriteString(st.Check.Render(tui.IconSuccess + " "))
-		b.WriteString(st.Value.Render(truncatePath(s.cfg.Files.SSHPublicKey, 40)))
+		b.WriteString(fitted.Label.Render("ssh key"))
+		b.WriteString(fitted.Check.Render(tui.IconSuccess + " "))
+		b.WriteString(fitted.Value.Render(truncatePath(s.cfg.Files.SSHPublicKey, 40)))
 		b.WriteString("\n")
 	}
 
 	if s.cfg.HTTPServer.IgnitionServerIP != "" {
 		ignitionURL := "https://" + s.cfg.HTTPServer.IgnitionServerIP
-		b.WriteString(st.KVPair("ignition server", ignitionURL))
+		b.WriteString(fitted.KVPair("ignition server", ignitionURL))
 		b.WriteString("\n")
-		b.WriteString(st.KVPair("web root", s.cfg.HTTPServer.Root))
+		b.WriteString(fitted.KVPair("web root", s.cfg.HTTPServer.Root))
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
@@ -344,26 +453,23 @@ func (s *ReviewStep) renderFilesIgnition(st *wizard.SectionStyles) string {
 }
 
 func (s *ReviewStep) renderFeatures(st *wizard.SectionStyles) string {
-	if s.cfg.Addons == nil {
+	if !s.anyAddonEnabled() {
 		return ""
 	}
 
-	anyEnabled := false
-	for _, ac := range s.cfg.Addons {
+	labels := make([]string, 0, len(s.cfg.Addons))
+	for name, ac := range s.cfg.Addons {
 		if ac.Enabled {
-			anyEnabled = true
-			break
+			labels = append(labels, name)
 		}
 	}
-	if !anyEnabled {
-		return ""
-	}
+	fitted := st.ForLabels(labels...)
 
 	var b strings.Builder
 
-	b.WriteString(st.Header.Render(s.sectionTitle("addons", wizard.StepIDAddons)))
+	b.WriteString(fitted.Header.Render(s.sectionTitle("addons", wizard.StepIDAddons)))
 	b.WriteString("\n")
-	b.WriteString(st.Separator)
+	b.WriteString(fitted.Separator)
 	b.WriteString("\n")
 
 	for name, ac := range s.cfg.Addons {
@@ -376,7 +482,7 @@ func (s *ReviewStep) renderFeatures(st *wizard.SectionStyles) string {
 		} else if repo, ok := ac.Settings[flux.SettingRepository]; ok && repo != "" {
 			label = fmt.Sprintf("%s (%s)", name, repo)
 		}
-		b.WriteString(st.KVPair(name, label))
+		b.WriteString(fitted.KVPair(name, label))
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
@@ -451,26 +557,25 @@ func (s *ReviewStep) Apply(_ *config.Config) error {
 // ShortHelp returns the review step's help bar.
 func (s *ReviewStep) ShortHelp() []wizard.KeyBinding {
 	bindings := []wizard.KeyBinding{
-		{Key: "↑↓", Help: "select action"},
+		{Key: wizard.HelpLeftRight, Help: wizard.HelpChoose},
 		{Key: wizard.HelpEnter, Help: wizard.HelpConfirm},
 		{Key: wizard.HelpEsc, Help: wizard.HelpBack},
-		{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
 	}
-	if len(s.jumpTargets) > 0 {
+	if len(s.visibleTargets()) > 0 {
 		bindings = append(bindings, wizard.KeyBinding{Key: "1-9", Help: wizard.HelpJump})
 	}
-	return bindings
+	return append(bindings, wizard.KeyBinding{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit})
 }
 
 // SetFocused propagates focus to the action selector.
 func (s *ReviewStep) SetFocused(focused bool) {
 	s.BaseStep.SetFocused(focused)
-	s.action.SetFocused(focused)
+	s.actions.SetFocused(focused)
 }
 
 // GetSelectedAction returns the action the user chose on the review screen.
 func (s *ReviewStep) GetSelectedAction() wizard.Action {
-	switch s.action.SelectedIndex() {
+	switch s.actions.SelectedIndex() {
 	case 0:
 		return wizard.ActionDeploy
 	default:

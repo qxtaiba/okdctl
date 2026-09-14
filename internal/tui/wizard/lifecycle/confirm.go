@@ -26,7 +26,7 @@ type ConfirmStep struct {
 func NewConfirmStep(st *State) *ConfirmStep {
 	input := components.NewInputField("", "")
 	return &ConfirmStep{
-		BaseStep: wizard.NewBaseStep(StepIDConfirm, "confirm", ""),
+		BaseStep: wizard.NewBaseStepWithDisplayTitle(StepIDConfirm, "confirm", "confirm removal", ""),
 		st:       st,
 		input:    input,
 	}
@@ -37,8 +37,17 @@ func (s *ConfirmStep) ShouldShow(_ *config.Config) bool {
 	return s.st.Proceed && s.st.Plan != nil && s.st.Plan.DestroysData()
 }
 
-// Init clears any previously typed name so re-entry always re-confirms.
+// Init wires the exact-match validator, clears any previously typed name so
+// re-entry always re-confirms, and focuses the input.
 func (s *ConfirmStep) Init() tea.Cmd {
+	name := s.st.Cfg.Cluster.Name
+	s.input.Label = "cluster name"
+	s.input.Validator = func(v string) error {
+		if strings.TrimSpace(v) != name {
+			return fmt.Errorf("must match %q", name)
+		}
+		return nil
+	}
 	s.input.SetValue("")
 	return s.input.Focus()
 }
@@ -48,11 +57,17 @@ func (s *ConfirmStep) IsCentered() bool {
 	return true
 }
 
-// Update forwards typing to the input; enter completes only on an exact
-// cluster-name match.
+// matches reports whether the typed value exactly equals the cluster name.
+func (s *ConfirmStep) matches() bool {
+	return strings.TrimSpace(s.input.Value()) == s.st.Cfg.Cluster.Name
+}
+
+// Update forwards typing to the input, revalidating on every keypress so the
+// box paints red until the typed value matches; enter completes only on an
+// exact cluster-name match.
 func (s *ConfirmStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	if keyMsg, ok := msg.(tea.KeyPressMsg); ok && keyMsg.Code == tea.KeyEnter {
-		if strings.TrimSpace(s.input.Value()) == s.st.Cfg.Cluster.Name {
+		if s.matches() {
 			return s, func() tea.Msg { return wizard.StepCompleteMsg{StepID: StepIDConfirm} }
 		}
 		return s, nil
@@ -62,6 +77,9 @@ func (s *ConfirmStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	field, cmd = s.input.Update(msg)
 	if in, ok := field.(*components.InputField); ok {
 		s.input = in
+	}
+	if _, ok := msg.(tea.KeyPressMsg); ok {
+		_ = s.input.Validate()
 	}
 	return s, cmd
 }
@@ -73,25 +91,45 @@ func (s *ConfirmStep) View(width, height int) string {
 	titleStyle := lipgloss.NewStyle().Foreground(tui.ColorError).Bold(true)
 	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
 	promptStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate300)
-
-	names := make([]string, 0, len(s.st.Plan.Nodes))
-	for i := range s.st.Plan.Nodes {
-		names = append(names, s.st.Plan.Nodes[i].Name)
-	}
+	okStyle := lipgloss.NewStyle().Foreground(tui.ColorSuccess)
 
 	s.input.SetWidth(min(width-8, 52))
 
+	wrapWidth := min(width-4, 60)
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("confirm irreversible removal"))
 	b.WriteString("\n\n")
-	b.WriteString(warnStyle.Render(fmt.Sprintf("irreversible: destroys %s and its data disk;", strings.Join(names, ", "))))
+	b.WriteString(warnStyle.Render(lipgloss.Wrap(s.destroySummary(), wrapWidth, "")))
 	b.WriteString("\n")
-	b.WriteString(warnStyle.Render("removed data cannot be recovered"))
+	b.WriteString(warnStyle.Render(lipgloss.Wrap("removed data cannot be recovered", wrapWidth, "")))
 	b.WriteString("\n\n")
 	b.WriteString(promptStyle.Render(fmt.Sprintf("type the cluster name %q to confirm", s.st.Cfg.Cluster.Name)))
 	b.WriteString("\n")
 	b.WriteString(s.input.View())
+	if s.matches() {
+		b.WriteString("\n")
+		b.WriteString(okStyle.Render(tui.IconSuccess + " matches — press enter"))
+	}
 	return b.String()
+}
+
+// destroySummary names the destroyed nodes and their data disks, pluralising
+// "its data disk" to "their data disks" when the plan removes more than one
+// and comma-listing three or more names with a final "and".
+func (s *ConfirmStep) destroySummary() string {
+	names := make([]string, 0, len(s.st.Plan.Nodes))
+	for i := range s.st.Plan.Nodes {
+		names = append(names, s.st.Plan.Nodes[i].Name)
+	}
+	switch len(names) {
+	case 1:
+		return fmt.Sprintf("irreversible: destroys %s and its data disk;", names[0])
+	case 2:
+		return fmt.Sprintf("irreversible: destroys %s and their data disks;", strings.Join(names, " and "))
+	default:
+		list := strings.Join(names[:len(names)-1], ", ") + ", and " + names[len(names)-1]
+		return fmt.Sprintf("irreversible: destroys %s and their data disks;", list)
+	}
 }
 
 // SetFocused propagates focus to the input.
@@ -107,7 +145,7 @@ func (s *ConfirmStep) SetFocused(focused bool) {
 // ShortHelp returns the confirmation help bar.
 func (s *ConfirmStep) ShortHelp() []wizard.KeyBinding {
 	return []wizard.KeyBinding{
-		{Key: wizard.HelpEnter, Help: "confirm (disabled until name matches)"},
+		{Key: wizard.HelpEnter, Help: wizard.HelpConfirm},
 		{Key: wizard.HelpEsc, Help: wizard.HelpBack},
 		{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
 	}

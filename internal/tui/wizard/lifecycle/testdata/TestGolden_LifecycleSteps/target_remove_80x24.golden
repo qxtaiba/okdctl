@@ -1,0 +1,24 @@
+                                                                                
+  ╭──────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L                                                              │  
+  │ worker to remove                op · target · params · plan · run · done │  
+  │──────────────────────────────────────────────────────────────────────────│  
+  │    NODE             ROLE    READY                                        │  
+  │  ● homelab-worker2  worker  ✓ ready                                      │  
+  │  ↷ homelab-worker1  worker  blocked until homelab-worker2 is removed     │  
+  │  ↷ homelab-worker0  worker  blocked until homelab-worker2 is removed     │  
+  │                                                                          │  
+  │                                                                          │  
+  │                                                                          │  
+  │                                                                          │  
+  │                                                                          │  
+  │                                                                          │  
+  │                                                                          │  
+  │                                                                          │  
+  │                                                                          │  
+  │                                                                          │  
+  │                                                                          │  
+  │─────────────────────────────────────────────────────────────── ▸ homelab │  
+  │  ↑↓ select • enter confirm • esc back • ctrl+c quit                      │  
+  ╰──────────────────────────────────────────────────────────────────────────╯  
+                                                                                
