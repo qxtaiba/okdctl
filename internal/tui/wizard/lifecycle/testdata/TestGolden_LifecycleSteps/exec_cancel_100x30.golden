@@ -3,20 +3,20 @@
   │ O K D C T L                                                                                  │  
   │ resizing masters                                    op · target · params · plan · run · done │  
   │──────────────────────────────────────────────────────────────────────────────────────────────│  
-  │  resizing masters  2 / 3                                                  elapsed 1m15s      │  
-  │  ✓ homelab-master0                                                                 1m0s      │  
-  │  ● homelab-master1                                                                           │  
+  │  resizing masters  1 / 3                                                    elapsed 30s      │  
+  │  cancel requested — finishing the current terraform/oc call safely…                          │  
+  │  ● homelab-master0                                                                           │  
   │      ✓ etcd health gate (pre)                                                        0s      │  
   │      ✓ cordon + drain                                                                0s      │  
-  │      ⣾ terraform apply (in-place update)                                            15s      │  
+  │      ⣾ terraform apply (in-place update)                                            30s      │  
   │      ○ power-cycle vm                                                                        │  
   │      ○ wait for node ready                                                                   │  
   │      ○ etcd health gate (post)                                                               │  
   │      ○ uncordon + ceph health gate                                                           │  
+  │  ○ homelab-master1                                                                           │  
   │  ○ homelab-master2                                                                           │  
   │                                                                                              │  
   │  marker okd-install/.okdctl-node-op.json · ctrl+c cancels after the current gate             │  
-  │                                                                                              │  
   │                                                                                              │  
   │                                                                                              │  
   │                                                                                              │  
