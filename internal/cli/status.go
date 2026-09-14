@@ -198,6 +198,7 @@ func printClusterStatus(cmd *cobra.Command, st *okd.ClusterStatus) error {
 	sb.Section("nodes")
 	if len(st.Nodes) == 0 {
 		sb.WriteString("    " + tui.EmptyState("no nodes reported", "deploy a cluster with 'okdctl deploy'") + "\n")
+		sb.Newline()
 	} else {
 		for _, line := range nodeStatusTableLines(st.Nodes) {
 			sb.WriteString("    " + line + "\n")
@@ -237,7 +238,7 @@ func nodeStatusTableLines(nodes []okd.NodeStatus) []string {
 	for _, n := range nodes {
 		rows = append(rows, []string{n.Name, string(n.Role), yesNo(n.Ready)})
 	}
-	return tui.Table([]string{"NAME", "ROLE", "READY"}, rows, tui.TableOptions{
+	return tui.Table([]string{headerName, "ROLE", "READY"}, rows, tui.TableOptions{
 		RowStyle: func(i int) (lipgloss.Style, bool) {
 			if !nodes[i].Ready {
 				return tui.ErrorStyle, true
