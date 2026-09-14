@@ -222,7 +222,7 @@ func (n *nodeRunnerCtx) complete(w io.Writer, elapsed time.Duration) {
 	if n.dryRun || n.captured == nil {
 		return
 	}
-	fmt.Fprint(w, render.NodeOpComplete(n.captured, elapsed))
+	fmt.Fprintln(w, render.NodeOpComplete(n.captured, elapsed))
 }
 
 // nodeOpsEnv is the pre-TUI environment for node ops; it owns credentials
@@ -373,7 +373,7 @@ func (e *nodeOpsEnv) newRunner(cmd *cobra.Command, cfg *config.Config, verb stri
 		out := cmd.OutOrStdout()
 		runner.Preview = func(plan *node.OpPlan) {
 			rc.captured = plan
-			fmt.Fprint(out, render.NodeOpDryRun(plan))
+			fmt.Fprintln(out, render.NodeOpDryRun(plan))
 		}
 	} else {
 		runner.Confirm = nodeConfirmHook(rc, consent, cfg.Cluster.Name, cmd.ErrOrStderr())
@@ -387,7 +387,7 @@ func (e *nodeOpsEnv) newRunner(cmd *cobra.Command, cfg *config.Config, verb stri
 func nodeConfirmHook(rc *nodeRunnerCtx, consent nodeConsent, clusterName string, errW io.Writer) node.ConfirmFunc {
 	return func(ctx context.Context, plan *node.OpPlan) (bool, error) {
 		rc.captured = plan
-		fmt.Fprint(errW, render.NodeOpConfirm(plan))
+		fmt.Fprintln(errW, render.NodeOpConfirm(plan))
 		if consent.yes {
 			return true, nil
 		}

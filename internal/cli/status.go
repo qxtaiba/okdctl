@@ -225,7 +225,7 @@ func printClusterStatus(cmd *cobra.Command, st *okd.ClusterStatus) error {
 		sb.Newline()
 	}
 
-	_, err := fmt.Fprint(cmd.OutOrStdout(),
+	_, err := fmt.Fprintln(cmd.OutOrStdout(),
 		"\n"+tui.BoxedSectionCompact(sb.String(), "cluster status", tui.DefaultBoxWidth)+"\n")
 	return err
 }
