@@ -14,6 +14,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/install"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/postinstall"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
 type fakeProvisioner struct {
@@ -183,5 +184,24 @@ func TestRunDeployPhases_ResumeRouting(t *testing.T) {
 				t.Errorf("resume-postinstall calls = %d; want %d", f.resumePostCalls, tc.wantResumePost)
 			}
 		})
+	}
+}
+
+// checklistRecorder must stay a true nil (not a wrapped concrete pointer)
+// when progress rendering is off, and checklistPrefix must not dereference it.
+func TestChecklistRecorder_NilWhenProgressOff(t *testing.T) {
+	prev := logutil.ProgressBarsEnabled()
+	logutil.SetProgressBarsEnabled(false)
+	t.Cleanup(func() { logutil.SetProgressBarsEnabled(prev) })
+
+	cfg := config.DefaultConfig()
+	cfg.Cluster.Name = "prod"
+
+	rec := checklistRecorder(cfg, t.TempDir(), phaseSetup, nil)
+	if rec != nil {
+		t.Fatalf("checklistRecorder = %v, want nil when progress bars are off", rec)
+	}
+	if got := checklistPrefix(rec); got != "" {
+		t.Errorf("checklistPrefix(nil) = %q, want empty", got)
 	}
 }
