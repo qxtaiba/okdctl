@@ -11,12 +11,12 @@
   │  │    elapsed ............................... 1m30s                   │  │  
   │  │                                                                    │  │  
   │  │  nodes                                                             │  │  
-  │  │    homelab-master0 ....................... master  resized         │  │  
+  │  │    NODE             ROLE    STATE                                  │  │  
+  │  │    homelab-master0  master  resized                                │  │  
   │  │                                                                    │  │  
   │  │  next steps                                                        │  │  
   │  │    each resized node was power-cycled to realize the change; ver…  │  │  
   │  │      'okdctl node list' or 'oc debug node/<name> -- free -m'       │  │  
-  │  │                                                                    │  │  
   │                                                                          │  
   │───────────────── ↑ ↓  scroll down for more ───────────────── ▸ mycluster │  
   │  enter exit • pgup/pgdn scroll                                           │  

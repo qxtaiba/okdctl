@@ -2,6 +2,8 @@ package render
 
 import (
 	"fmt"
+	"net"
+	"strings"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
@@ -12,6 +14,14 @@ import (
 // IrreversibleWarning is the amber wording shared by the CLI and wizard for
 // a destructive node op that also destroys a data disk.
 const IrreversibleWarning = "destroys the listed VM(s) and their data disk; removed data cannot be recovered"
+
+// nodeRoleStateHeaders labels the per-node table for stop/start plans and
+// for the completion box, none of which carry a terraform address.
+var nodeRoleStateHeaders = []string{"NODE", "ROLE", "STATE"}
+
+// nodeRoleAddressActionHeaders labels the per-node table for every other op,
+// where the terraform address and its queued action are worth showing.
+var nodeRoleAddressActionHeaders = []string{"NODE", "ROLE", "ADDRESS", "ACTION"}
 
 // NodeOpConfirm renders the preview before a destructive node op; it prints even under --yes.
 func NodeOpConfirm(plan *node.OpPlan) string {
@@ -64,14 +74,16 @@ func NodeOpCompleteWidth(plan *node.OpPlan, elapsed time.Duration, width int) st
 	sb.Newline()
 
 	sb.Section("nodes")
+	rows := make([][]string, len(plan.Nodes))
 	for i := range plan.Nodes {
 		n := &plan.Nodes[i]
 		verb := nodeActionVerb(n.Action)
 		if plan.Op == node.OpStop || plan.Op == node.OpStart {
 			verb = nodePowerCompleteVerb(plan.Op)
 		}
-		sb.KV(n.Name, fmt.Sprintf("%s  %s", n.Role, verb))
+		rows[i] = []string{shortHost(n.Name), string(n.Role), verb}
 	}
+	sb.Table(nodeRoleStateHeaders, rows, tui.TableOptions{})
 	sb.Newline()
 
 	if steps := NodeOpNextSteps(plan); len(steps) > 0 {
@@ -100,7 +112,7 @@ func nodeOpDetails(sb *Builder, plan *node.OpPlan) {
 		if plan.CPU > 0 {
 			sb.KV("target cpu", fmt.Sprintf("%d vCPU", plan.CPU))
 		}
-		sb.KV("disruption", "each node is drained, then hard power-cycled (stop→start) to realize the change")
+		sb.Note("disruption", "each node is drained, then hard power-cycled (stop→start) to realize the change")
 	}
 	if plan.GrowMasterMemoryMB > 0 {
 		sb.KV("grow masters to", fmt.Sprintf("%d MiB", plan.GrowMasterMemoryMB))
@@ -111,24 +123,45 @@ func nodeOpDetails(sb *Builder, plan *node.OpPlan) {
 	sb.Newline()
 
 	sb.Section("nodes")
+	if plan.Op == node.OpStop || plan.Op == node.OpStart {
+		rows := make([][]string, len(plan.Nodes))
+		for i := range plan.Nodes {
+			n := &plan.Nodes[i]
+			rows[i] = []string{shortHost(n.Name), string(n.Role), nodePowerPlanVerb(plan.Op)}
+		}
+		sb.Table(nodeRoleStateHeaders, rows, tui.TableOptions{})
+	} else {
+		rows := make([][]string, len(plan.Nodes))
+		for i := range plan.Nodes {
+			n := &plan.Nodes[i]
+			rows[i] = []string{shortHost(n.Name), string(n.Role), n.TFAddress, string(n.Action)}
+		}
+		sb.Table(nodeRoleAddressActionHeaders, rows, tui.TableOptions{MaxColWidth: 40})
+	}
 	for i := range plan.Nodes {
 		n := &plan.Nodes[i]
-		if plan.Op == node.OpStop || plan.Op == node.OpStart {
-			sb.KV(n.Name, fmt.Sprintf("%s  %s", n.Role, nodePowerPlanVerb(plan.Op)))
-		} else {
-			sb.KV(n.Name, fmt.Sprintf("%s  %s  [%s]", n.Role, n.TFAddress, n.Action))
-		}
 		if len(n.OSDs) > 0 {
-			sb.KV("  storage", fmt.Sprintf("%d rook-ceph OSD(s) — data disk destroyed", len(n.OSDs)))
+			sb.SubKV(shortHost(n.Name)+" storage", fmt.Sprintf("%d rook-ceph OSD(s) — data disk destroyed", len(n.OSDs)))
 		}
 		if len(n.Ingress) > 0 {
-			sb.KV("  ingress", fmt.Sprintf("%d router pod(s) here", len(n.Ingress)))
+			sb.SubKV(shortHost(n.Name)+" ingress", fmt.Sprintf("%d router pod(s) here", len(n.Ingress)))
 		}
 		if n.Blocked != nil {
-			sb.KV("  blocked", n.Blocked.Error())
+			sb.SubKV(shortHost(n.Name)+" blocked", n.Blocked.Error())
 		}
 	}
 	sb.Newline()
+}
+
+// shortHost returns name's first DNS label, or name unchanged when it's an IP address or carries no dot.
+func shortHost(name string) string {
+	if net.ParseIP(name) != nil {
+		return name
+	}
+	if i := strings.IndexByte(name, '.'); i >= 0 {
+		return name[:i]
+	}
+	return name
 }
 
 // NodeOpNextSteps returns the operator follow-ups for a completed op; shared by

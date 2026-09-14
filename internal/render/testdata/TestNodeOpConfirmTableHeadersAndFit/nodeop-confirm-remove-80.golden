@@ -1,0 +1,18 @@
+
+╭──────────────────────────────── NODE REMOVE ─────────────────────────────────╮
+│                                                                              │
+│  confirm worker removal                                                      │
+│                                                                              │
+│    cluster .................................. grappleberry                   │
+│    operation ................................ remove                         │
+│    drain timeout ............................ 10m                            │
+│                                                                              │
+│  nodes                                                                       │
+│    NODE     ROLE    ADDRESS              ACTION                              │
+│    worker2  worker  module.vm.worker[2]  delete                              │
+│    worker2 storage ........................ 1 rook-ceph OSD(s) — data disk   │
+│                                             destroyed                        │
+│                                                                              │
+│  irreversible: destroys the listed VM(s) and their data disk; removed data c…│
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
