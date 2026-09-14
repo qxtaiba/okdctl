@@ -1,17 +1,39 @@
 package steps
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
+
+// assertNoScrollIndicator fails t if frame's footer shows the viewport
+// scroll hint, i.e. the step's content overflowed its height.
+func assertNoScrollIndicator(t *testing.T, frame string) {
+	t.Helper()
+	if strings.Contains(tuitest.StripANSI(frame), "scroll") {
+		t.Errorf("frame shows a scroll indicator, want the welcome body to fit without scrolling:\n%s", frame)
+	}
+}
+
+// forceHeroColor forces tui.ColorEnabled() true for the duration of t, so
+// the welcome step's block-letter hero renders instead of its no-color
+// fallback, restoring the prior color profile on cleanup.
+func forceHeroColor(t *testing.T) {
+	t.Helper()
+	t.Cleanup(func() { tui.SetColorProfileFor(&bytes.Buffer{}) })
+	t.Setenv("CLICOLOR_FORCE", "1")
+	tui.SetColorProfileFor(&bytes.Buffer{})
+}
 
 type configureScenario struct {
 	name     string
@@ -31,7 +53,10 @@ func configureScenarios() []configureScenario {
 			name: "welcome_existing",
 			id:   wizard.StepIDWelcome,
 			seed: func(m *wizard.Model) {
-				m.CurrentStep().(*WelcomeStep).SetConfigExists(true)
+				cfg := config.DefaultConfig()
+				cfg.Cluster.Name = "prod-cluster"
+				cfg.Topology.Workers.Count = 3
+				m.CurrentStep().(*WelcomeStep).SetExistingConfig(cfg)
 			},
 			interact: downKey,
 		},
@@ -127,6 +152,9 @@ func TestGolden_ConfigureSteps(t *testing.T) {
 	for _, sz := range goldenSizes {
 		for _, sc := range configureScenarios() {
 			t.Run(fmt.Sprintf("%s_%dx%d", sc.name, sz.w, sz.h), func(t *testing.T) {
+				if strings.HasPrefix(sc.name, "welcome") {
+					forceHeroColor(t)
+				}
 				base := fmt.Sprintf("%s_%dx%d", sc.name, sz.w, sz.h)
 
 				m := newGoldenModel(t)
@@ -139,6 +167,9 @@ func TestGolden_ConfigureSteps(t *testing.T) {
 				tuitest.Golden(t, base+"_initial", frame)
 				if sz.fits {
 					tuitest.AssertFits(t, frame, sz.w, sz.h)
+				}
+				if strings.HasPrefix(sc.name, "welcome") && sz.w == 80 && sz.h == 24 {
+					assertNoScrollIndicator(t, frame)
 				}
 
 				if sc.interact != nil {
