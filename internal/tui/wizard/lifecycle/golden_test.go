@@ -173,6 +173,42 @@ func lifecycleScenarios() []lifecycleScenario {
 			},
 		},
 		{
+			name: "confirm_partial",
+			id:   StepIDConfirm,
+			build: func() (*State, Hooks) {
+				cfg := config.DefaultConfig()
+				cfg.Cluster.Name = "homelab"
+				return &State{
+					Cfg: cfg, Op: node.OpRemove,
+					Target: "homelab-worker2", Proceed: true,
+					Plan: removeWorkerPlan(),
+				}, Hooks{}
+			},
+			seed: func(m *wizard.Model, _ *State) {
+				for _, r := range "homela" {
+					m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+				}
+			},
+		},
+		{
+			name: "confirm_match",
+			id:   StepIDConfirm,
+			build: func() (*State, Hooks) {
+				cfg := config.DefaultConfig()
+				cfg.Cluster.Name = "homelab"
+				return &State{
+					Cfg: cfg, Op: node.OpRemove,
+					Target: "homelab-worker2", Proceed: true,
+					Plan: removeWorkerPlan(),
+				}, Hooks{}
+			},
+			seed: func(m *wizard.Model, _ *State) {
+				for _, r := range "homelab" {
+					m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+				}
+			},
+		},
+		{
 			name: "exec",
 			id:   StepIDExec,
 			build: func() (*State, Hooks) {
