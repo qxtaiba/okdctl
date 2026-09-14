@@ -10,4 +10,5 @@ const (
 	IconActive  = "●"
 	IconPointer = "→"
 	IconBar     = "┃"
+	IconBullet  = "•"
 )

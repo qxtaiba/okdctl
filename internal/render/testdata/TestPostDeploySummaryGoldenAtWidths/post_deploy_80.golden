@@ -7,8 +7,9 @@
 │                                                                              │
 │  access                                                                      │
 │    cluster .................................. mycluster.k8s.local            │
-│    console .................................. https://console-openshift-cons…│
-│    api ...................................... https://api.mycluster.k8s.loca…│
+│    console ............. https://console-openshift-                          │
+│                          console.apps.mycluster.k8s.local                    │
+│    api ................. https://api.mycluster.k8s.local:6443                │
 │                                                                              │
 │  dns records                                                                 │
 │    api.mycluster.k8s.local .................. 192.168.1.50 (kube-vip)        │
@@ -26,16 +27,17 @@
 │                                                                              │
 │  credentials                                                                 │
 │    username ................................. kubeadmin                      │
-│    password ................................. cat okd-install/cluster-config…│
+│    password ............ cat okd-install/cluster-config/auth/kubeadmin-      │
+│                          password                                            │
 │                                                                              │
 │  quick start                                                                 │
 │    export KUBECONFIG=~/.kube/config                                          │
 │    oc get nodes                                                              │
 │                                                                              │
 │  next steps                                                                  │
-│    cluster deployed with haproxy handling ingress on the bastion.            │
-│    if you deploy a loadbalancer provider (e.g., metallb), run:               │
+│  cluster deployed with haproxy handling ingress on the bastion.              │
+│  if you deploy a loadbalancer provider (e.g., metallb), run:                 │
 │      okdctl update-ingress                                                   │
-│    to auto-detect loadbalancer ips and switch dns over.                      │
+│  to auto-detect loadbalancer ips and switch dns over.                        │
 │                                                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
