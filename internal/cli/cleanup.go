@@ -15,10 +15,16 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
+
+// cleanupIrreversibleWarning is the ConfirmBox irreversible text for a
+// cleanup kind that wipes admin credentials (kubeconfig, kubeadmin-password).
+const cleanupIrreversibleWarning = "wipes cluster credentials (kubeconfig, kubeadmin-password); they cannot be recovered without a fresh deploy"
 
 var (
 	cleanupYes            bool
@@ -103,12 +109,22 @@ func cleanupKindRemovesCredentials(kind cleanup.Kind) bool {
 // credential-removing kinds; scoped kinds keep a single y/N.
 func confirmCleanupInteractive(ctx context.Context, cfg *config.Config, kind cleanup.Kind) (bool, error) {
 	if cleanupKindRemovesCredentials(kind) {
-		nameConfirmed, err := promptForClusterNameConfirmation(ctx, cfg.Cluster.Name, "type cluster name to confirm cleanup: ")
+		nameConfirmed, err := promptForClusterNameConfirmation(ctx, cfg.Cluster.Name, tui.PromptLine("type cluster name to confirm cleanup"))
 		if err != nil || !nameConfirmed {
 			return false, err
 		}
 	}
-	return promptForConfirmation(ctx, "proceed with cleanup? [y/N]: ")
+	return promptForConfirmation(ctx, tui.PromptLine("proceed with cleanup? [y/N]"))
+}
+
+// cleanupConfirmFacts builds the ConfirmBox facts for cfg's cluster, kind,
+// and the resolved work directory.
+func cleanupConfirmFacts(cfg *config.Config, projectRoot string, kind cleanup.Kind) []render.Fact {
+	return []render.Fact{
+		{Key: factKeyCluster, Value: cfg.Cluster.Name},
+		{Key: "kind", Value: string(kind)},
+		{Key: "work dir", Value: workspace.WorkDir(projectRoot)},
+	}
 }
 
 func runCleanup(cmd *cobra.Command, _ []string) error {
@@ -127,19 +143,21 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
+	projectRoot, err := resolveProjectRootOrDie()
+	if err != nil {
+		return err
+	}
+
 	if cleanupDryRun {
-		projectRoot, err := resolveProjectRootOrDie()
-		if err != nil {
-			return err
-		}
 		runCleanupDryRun(cfg, projectRoot, kind)
 		return nil
 	}
 
-	logutil.Warn("this will remove all local artifacts for cluster", logutil.LF("cluster", cfg.Cluster.Name))
+	irreversible := ""
 	if cleanupKindRemovesCredentials(kind) {
-		logutil.Warn("once the infrastructure is destroyed this includes the admin credentials (kubeconfig, kubeadmin-password)")
+		irreversible = cleanupIrreversibleWarning
 	}
+	fmt.Fprintln(cmd.ErrOrStderr(), render.ConfirmBox("cleanup", cleanupConfirmFacts(cfg, projectRoot, kind), irreversible))
 
 	if err := confirmClusterMatches(cleanupYes, cleanupConfirmCluster, cfg.Cluster.Name, "cleanup"); err != nil {
 		return err
@@ -154,11 +172,6 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 			logutil.Info("cancelled")
 			return nil
 		}
-	}
-
-	projectRoot, err := resolveProjectRootOrDie()
-	if err != nil {
-		return err
 	}
 
 	lock, err := runlock.Acquire(projectRoot, "cleanup")

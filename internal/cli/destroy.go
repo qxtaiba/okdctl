@@ -22,6 +22,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
@@ -233,12 +234,59 @@ func validateDestroyFlagCombos(cfg *config.Config) error {
 // (unscoped runs only) then y/N.
 func confirmDestroyInteractive(ctx context.Context, cfg *config.Config) (bool, error) {
 	if len(destroyTargets) == 0 {
-		nameConfirmed, err := promptForClusterNameConfirmation(ctx, cfg.Cluster.Name, "type cluster name to confirm destroy: ")
+		nameConfirmed, err := promptForClusterNameConfirmation(ctx, cfg.Cluster.Name, tui.PromptLine("type cluster name to confirm destroy"))
 		if err != nil || !nameConfirmed {
 			return false, err
 		}
 	}
-	return promptForConfirmation(ctx, "proceed with destroy? [y/N]: ")
+	return promptForConfirmation(ctx, tui.PromptLine("proceed with destroy? [y/N]"))
+}
+
+// destroyScopeFact reports the ConfirmBox "scope" value: the full cluster
+// for an unscoped destroy, or the --only group (or a raw --target count)
+// for a scoped one.
+func destroyScopeFact() string {
+	if len(destroyTargets) == 0 {
+		return "full cluster (all VMs)"
+	}
+	if destroyOnly != "" {
+		return fmt.Sprintf("%s (%d resource(s))", destroyOnly, len(destroyTargets))
+	}
+	return fmt.Sprintf("%d targeted resource(s)", len(destroyTargets))
+}
+
+// destroyAlsoRemovesFact reports the ConfirmBox "also removes" value: the
+// non-terraform side effects this run will perform, given the current
+// scope and skip-* flags.
+func destroyAlsoRemovesFact() string {
+	if len(destroyTargets) > 0 {
+		return "nothing else (scoped destroy skips host cleanup, firewall rules, and iso removal)"
+	}
+	var removes []string
+	if !destroyKeepISOs {
+		removes = append(removes, "fcos iso")
+	}
+	if !destroySkipCleanup {
+		removes = append(removes, "host files (work dir, haproxy/dnsmasq config, terraform state)")
+	}
+	if !destroySkipFirewall {
+		removes = append(removes, "firewall rules")
+	}
+	if len(removes) == 0 {
+		return "nothing (all skipped via flags)"
+	}
+	return strings.Join(removes, ", ")
+}
+
+// destroyConfirmFacts builds the ConfirmBox facts for cfg's cluster under
+// the current scope and skip-* flags.
+func destroyConfirmFacts(cfg *config.Config) []render.Fact {
+	return []render.Fact{
+		{Key: factKeyCluster, Value: cfg.Cluster.Name},
+		{Key: "domain", Value: cfg.Cluster.Domain},
+		{Key: "scope", Value: destroyScopeFact()},
+		{Key: "also removes", Value: destroyAlsoRemovesFact()},
+	}
 }
 
 // buildDestroyOptions forces cleanup/firewall/iso off for a scoped
@@ -294,8 +342,6 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 		return runDestroyDryRun(ctx, cfg)
 	}
 
-	logutil.Warn("this will destroy cluster and all associated resources", logutil.LF("cluster", cfg.Cluster.Name))
-
 	// Resolved ahead of the confirmation gates so an in-flight node-op marker
 	// is surfaced before the operator confirms.
 	projectRoot, err := resolveProjectRootOrDie()
@@ -303,6 +349,8 @@ func runDestroy(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	announceInFlightNodeOp(projectRoot, cfg)
+
+	fmt.Fprintln(cmd.ErrOrStderr(), render.ConfirmBox("destroy", destroyConfirmFacts(cfg), render.IrreversibleWarning))
 
 	if err := confirmClusterMatches(destroyYes, destroyConfirmCluster, cfg.Cluster.Name, "destroy"); err != nil {
 		return err
