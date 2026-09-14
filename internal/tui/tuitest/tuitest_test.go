@@ -22,6 +22,8 @@ func TestAssertFits_Table(t *testing.T) {
 		{"ab\ncd", 2, 2, true},
 		{"abc\ncd", 2, 2, false},
 		{"ab\ncd\nef", 2, 2, false},
+		{"ab\ncd\nef", 2, 0, true},
+		{"abc\ncd\nef", 2, 0, false},
 	}
 	for _, c := range cases {
 		if got := fits(c.frame, c.w, c.h) == nil; got != c.ok {

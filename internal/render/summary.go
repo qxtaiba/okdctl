@@ -52,10 +52,16 @@ func NewBuilder() *Builder {
 // NewBuilderWidth returns a Builder whose key and key/value columns fit
 // inside a box of the given width.
 func NewBuilderWidth(width int) *Builder {
+	content := tui.BoxInnerWidth(width) - 2
 	return &Builder{
-		keyWidth: min(defaultKeyColWidth, width/2),
-		kvWidth:  max(width-4, 0),
+		keyWidth: min(defaultKeyColWidth, content-24),
+		kvWidth:  content,
 	}
+}
+
+// ContentWidth reports the content width available for raw lines inside this Builder's box.
+func (s *Builder) ContentWidth() int {
+	return s.kvWidth
 }
 
 // Section writes a subsection label line.

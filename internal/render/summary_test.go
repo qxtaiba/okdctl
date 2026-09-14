@@ -2,13 +2,16 @@ package render
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/postinstall"
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 )
 
 func TestValidationSummary(t *testing.T) {
@@ -81,5 +84,25 @@ func TestFailureSummary(t *testing.T) {
 	destroy := strings.Index(out, "okdctl destroy")
 	if resume < 0 || fresh < 0 || destroy < 0 || resume > fresh || fresh > destroy {
 		t.Errorf("next steps not ordered resume, --fresh, destroy (%d, %d, %d):\n%s", resume, fresh, destroy, out)
+	}
+}
+
+func TestPostDeploySummaryGoldenAtWidths(t *testing.T) {
+	cfg := config.DefaultConfig()
+	result := &postinstall.Result{KubeVipIP: "192.168.1.50", BootstrapCleaned: true, DNSDeployed: true}
+	steps := []distribution.StepResult{
+		{StepID: "download-tools", Success: true, Duration: 3 * time.Second},
+		{StepID: "deploy-infrastructure", Success: true, Duration: 90 * time.Second},
+	}
+
+	for _, w := range []int{60, 80, 100, 120} {
+		t.Run(fmt.Sprintf("w%d", w), func(t *testing.T) {
+			tui.SetTerminalWidth(w)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+			out := PostDeploySummary(cfg, result, steps, "run-42")
+			tuitest.AssertFits(t, out, w, 0)
+			tuitest.Golden(t, fmt.Sprintf("post_deploy_%d", w), out)
+		})
 	}
 }

@@ -54,7 +54,7 @@ func Golden(t *testing.T, name, got string) {
 
 func fits(frame string, w, h int) error {
 	lines := strings.Split(strings.TrimRight(frame, "\n"), "\n")
-	if len(lines) > h {
+	if h > 0 && len(lines) > h {
 		return fmt.Errorf("frame is %d rows, want <= %d", len(lines), h)
 	}
 	for i, l := range lines {
@@ -66,7 +66,8 @@ func fits(frame string, w, h int) error {
 }
 
 // AssertFits fails the test if frame has more than h rows or any row wider
-// than w columns (after ANSI stripping).
+// than w columns (after ANSI stripping); h <= 0 skips the row-count check,
+// for CLI output with no fixed viewport height.
 func AssertFits(t *testing.T, frame string, w, h int) {
 	t.Helper()
 	if err := fits(frame, w, h); err != nil {

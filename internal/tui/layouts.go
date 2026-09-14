@@ -7,8 +7,9 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// Layout constants for BoxedSection rendering; DefaultBoxWidth (90) leaves
-// room for the 1-col border and 2-col ContentPadding in a 94-col terminal.
+// Layout constants for BoxedSection rendering; DefaultBoxWidth (90) is the
+// full box width rendered on a wide-enough terminal, clamped down by
+// BoxInnerWidth once the terminal is narrower.
 const (
 	DefaultBoxWidth         = 90
 	MinBoxWidth             = 20
@@ -18,18 +19,22 @@ const (
 	ContentPadding          = 2
 )
 
+// borderCols is the width consumed by a box's two vertical border characters.
+const borderCols = 2
+
 type boxConfig struct {
 	borderColor color.Color
 	titleColor  color.Color
 	compact     bool
 }
 
-func maxLineWidth(content string) int {
-	var m int
-	for line := range strings.SplitSeq(content, "\n") {
-		m = max(m, lipgloss.Width(line))
+// BoxInnerWidth reports the content width available inside a box requested
+// at width columns, clamped to the terminal and floored at MinBoxWidth.
+func BoxInnerWidth(width int) int {
+	if width < MinBoxWidth {
+		width = DefaultBoxWidthFallback
 	}
-	return m
+	return max(min(width, TerminalWidth())-borderCols, MinBoxWidth-borderCols)
 }
 
 // normalizeVerticalPadding trims blank lines from both ends of content and
@@ -47,16 +52,10 @@ func normalizeVerticalPadding(content string) string {
 }
 
 func boxedSectionCore(content, title string, width int, cfg boxConfig) string {
-	if width < MinBoxWidth {
-		width = DefaultBoxWidthFallback
-	}
-
 	content = normalizeVerticalPadding(content)
 
 	borderStyle := lipgloss.NewStyle().Foreground(cfg.borderColor)
 	titleStyle := lipgloss.NewStyle().Foreground(cfg.titleColor).Bold(true)
-
-	maxContentWidth := maxLineWidth(content)
 
 	titleUpper := strings.ToUpper(title)
 	titleLen := lipgloss.Width(titleUpper)
@@ -68,7 +67,7 @@ func boxedSectionCore(content, title string, width int, cfg boxConfig) string {
 		minWidthForTitle = titleLen + TitlePadding
 	}
 
-	innerWidth := max(width-ContentPadding, maxContentWidth+ContentPadding, minWidthForTitle)
+	innerWidth := max(BoxInnerWidth(width), minWidthForTitle) // content never widens the box
 
 	var topBorder string
 	var titleRow string
@@ -108,8 +107,8 @@ func boxedSectionCore(content, title string, width int, cfg boxConfig) string {
 
 	var contentRows []string
 	for line := range strings.SplitSeq(content, "\n") {
-		padding := max(innerWidth-lipgloss.Width(line), 0)
-		row := borderStyle.Render("│") + line + strings.Repeat(" ", padding) + borderStyle.Render("│")
+		line = Truncate(line, innerWidth) // rune-safe "…" guard for raw lines
+		row := borderStyle.Render("│") + line + strings.Repeat(" ", innerWidth-lipgloss.Width(line)) + borderStyle.Render("│")
 		contentRows = append(contentRows, row)
 	}
 

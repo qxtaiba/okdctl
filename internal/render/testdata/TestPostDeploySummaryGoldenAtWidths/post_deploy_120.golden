@@ -1,0 +1,41 @@
+
+╭───────────────────────────────── DEPLOYMENT COMPLETE ──────────────────────────────────╮
+│                                                                                        │
+│  ✓ cluster deployed                                                                    │
+│                                                                                        │
+│    run_id ................................... run-42                                   │
+│                                                                                        │
+│  access                                                                                │
+│    cluster .................................. mycluster.k8s.local                      │
+│    console .................................. https://console-openshift-console.apps.m…│
+│    api ...................................... https://api.mycluster.k8s.local:6443     │
+│                                                                                        │
+│  dns records                                                                           │
+│    api.mycluster.k8s.local .................. 192.168.1.50 (kube-vip)                  │
+│    *.apps.mycluster.k8s.local ............... 192.168.1.20 (haproxy)                   │
+│                                                                                        │
+│  status                                                                                │
+│    bootstrap ................................ cleaned up                               │
+│    api routing .............................. kube-vip (192.168.1.50)                  │
+│    ingress routing .......................... haproxy (bastion)                        │
+│                                                                                        │
+│  steps                                                                                 │
+│    download-tools ........................... ok    3s                                 │
+│    deploy-infrastructure .................... ok    1m30s                              │
+│    total .................................... 1m33s                                    │
+│                                                                                        │
+│  credentials                                                                           │
+│    username ................................. kubeadmin                                │
+│    password ................................. cat okd-install/cluster-config/auth/kube…│
+│                                                                                        │
+│  quick start                                                                           │
+│    export KUBECONFIG=~/.kube/config                                                    │
+│    oc get nodes                                                                        │
+│                                                                                        │
+│  next steps                                                                            │
+│    cluster deployed with haproxy handling ingress on the bastion.                      │
+│    if you deploy a loadbalancer provider (e.g., metallb), run:                         │
+│      okdctl update-ingress                                                             │
+│    to auto-detect loadbalancer ips and switch dns over.                                │
+│                                                                                        │
+╰────────────────────────────────────────────────────────────────────────────────────────╯

@@ -56,7 +56,7 @@ func (s *DoneStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 // for a failure, sized to fit the wizard frame's inner width.
 func (s *DoneStep) View(width, height int) string {
 	s.SetSize(width, height)
-	w := min(width-2, tui.DefaultBoxWidth)
+	w := min(width, tui.DefaultBoxWidth)
 	if s.st.Result != nil {
 		return strings.Trim(render.ErrorCard(string(s.st.Op)+" failed", s.st.Result.Error(),
 			"re-run the same operation to resume at the recorded step", w), "\n")
