@@ -7,9 +7,9 @@
   │    ✓ vm settings                                                                             │  
   │                                                                                              │  
   │    vm id base                                                                                │  
-  │    ╭──────────╮                                                                              │  
-  │    │ 6000     │                                                                              │  
-  │    ╰──────────╯                                                                              │  
+  │    ╭──────────────╮                                                                          │  
+  │    │ 6000         │                                                                          │  
+  │    ╰──────────────╯                                                                          │  
   │                                                                                              │  
   │    ● proxmox vm settings                                                                     │  
   │                                                                                              │  
@@ -20,9 +20,9 @@
   │    host gives best performance, x86-64-v2 or kvm64 allow live migration                      │  
   │                                                                                              │  
   │    enable numa                                                                               │  
-  │    ╭──────────────╮                                                                          │  
-  │    │ ● no  ○ yes  │                                                                          │  
-  │    ╰──────────────╯                                                                          │  
+  │    ╭────────────────╮                                                                        │  
+  │    │ ● no  ○ yes    │                                                                        │  
+  │    ╰────────────────╯                                                                        │  
   │                                                                                              │  
   │───────────────────── ↑ ↓  scroll down for more ───────────────────── ▸ okd 4.22.0-okd-scos.7 │  
   │  ↑↓/tab navigate • enter continue • esc back • pgup/pgdn scroll                              │  

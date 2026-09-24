@@ -13,7 +13,7 @@ import (
 )
 
 func TestInputField_BoxIsExactlyBoxWidth(t *testing.T) {
-	for _, outer := range []int{12, 32, 56} {
+	for _, outer := range []int{16, 40, 64} {
 		f := NewInputField("cluster name", "")
 		f.SetWidth(90)
 		f.SetBoxWidth(outer)
@@ -198,6 +198,55 @@ func TestInputField_DefaultArrowKeepsText(t *testing.T) {
 	}
 	if !f.IsDefault() {
 		t.Fatal("IsDefault() after an arrow key = false, want true (pure navigation keeps the default tag)")
+	}
+}
+
+// TestInputField_DefaultTagFitsAtPathWidthNarrowAvail pins the
+// secretstore_op_connect_host regression: a Path-width (64) field with a
+// default must reserve room for the " default" tag out of its available
+// width, so box+tag join into exactly avail columns instead of overflowing
+// it by the tag's width.
+func TestInputField_DefaultTagFitsAtPathWidthNarrowAvail(t *testing.T) {
+	f := NewInputField("connect host", "")
+	f.SetBoxWidth(64) // wizard.FieldWidthPath
+	f.SetWidth(70)
+	f.SetDefault("http://onepassword-connect:8080")
+
+	rows := strings.Split(tuitest.StripANSI(f.View()), "\n")
+	contentRow := rows[2]
+	if got := lipgloss.Width(contentRow); got != 70 {
+		t.Fatalf("box+tag row width = %d, want 70 (62-wide box + 8-wide tag, attached): %q", got, contentRow)
+	}
+	if !strings.Contains(contentRow, "default") {
+		t.Fatalf("content row = %q, want the default tag attached on the same row as the box", contentRow)
+	}
+}
+
+// TestInputField_BoxWidthStableAcrossDefaultTagDrop pins geometry
+// stability: a field that has ever carried a default reserves the tag's
+// room for its whole life (hasDefault, permanent), so the box itself never
+// widens when the user's first keystroke drops the (now-cleared) default
+// tag — only isDefault clears; boxOuterWidth must not. A reserve keyed off
+// isDefault instead would pass TestInputField_DefaultTagFitsAtPathWidthNarrowAvail
+// but fail here: the box would jump from 62 to 70 wide the instant the tag
+// drops.
+func TestInputField_BoxWidthStableAcrossDefaultTagDrop(t *testing.T) {
+	f := NewInputField("connect host", "")
+	f.SetBoxWidth(64)
+	f.SetWidth(70)
+	f.SetDefault("http://onepassword-connect:8080")
+	_ = f.Focus()
+
+	before := f.boxOuterWidth()
+
+	f.Update(tea.KeyPressMsg{Code: 'h', Text: "h"})
+	if f.IsDefault() {
+		t.Fatal("IsDefault() after typing = true, want false")
+	}
+
+	after := f.boxOuterWidth()
+	if before != after {
+		t.Fatalf("box width before typing = %d, after the default tag dropped = %d, want unchanged", before, after)
 	}
 }
 

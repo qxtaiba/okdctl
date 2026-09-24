@@ -48,9 +48,9 @@ type FieldWidth int
 
 // Field width classes for data-driven step definitions.
 const (
-	FieldWidthAuto   FieldWidth = 0 // zero value — 32 columns
-	FieldWidthNumber FieldWidth = 12
-	FieldWidthPath   FieldWidth = 56
+	FieldWidthAuto   FieldWidth = 0 // zero value — 40 columns
+	FieldWidthNumber FieldWidth = 16
+	FieldWidthPath   FieldWidth = 64
 	FieldWidthFull   FieldWidth = -1 // the whole inner width
 )
 
@@ -61,7 +61,7 @@ func (w FieldWidth) Cols(avail int) int {
 		return avail
 	}
 	if w == FieldWidthAuto {
-		return min(32, avail)
+		return min(40, avail)
 	}
 	return min(int(w), avail)
 }

@@ -49,13 +49,13 @@ func TestSelectField_BoxWidthFromWidestOption(t *testing.T) {
 	}
 }
 
-func TestSelectField_MinBoxWidth12(t *testing.T) {
+func TestSelectField_MinBoxWidth14(t *testing.T) {
 	f := NewSelectField("mode", []string{"a", "b"})
 	f.SetWidth(90)
 
 	rows := strings.Split(tuitest.StripANSI(f.View()), "\n")
-	if got := lipgloss.Width(rows[1]); got != 12 {
-		t.Fatalf("box width = %d, want 12: %q", got, rows[1])
+	if got := lipgloss.Width(rows[1]); got != 14 {
+		t.Fatalf("box width = %d, want 14: %q", got, rows[1])
 	}
 }
 
@@ -80,6 +80,51 @@ func TestSelectField_DefaultTagBesideBox(t *testing.T) {
 	}
 	if strings.Contains(got, "(default)") {
 		t.Fatalf("View() = %q, want no (default) suffix", got)
+	}
+}
+
+// TestSelectField_DefaultTagFitsAtExplicitWidthNarrowAvail mirrors
+// InputField's secretstore_op_connect_host regression for SelectField: an
+// explicitly wide box (e.g. FieldWidthPath, 64) with a default must reserve
+// room for the " default" tag out of its available width, so box+tag join
+// into exactly avail columns instead of overflowing it by the tag's width.
+func TestSelectField_DefaultTagFitsAtExplicitWidthNarrowAvail(t *testing.T) {
+	f := NewSelectField("git repository", []string{"https://example.com/repo.git"})
+	f.SetBoxWidth(64) // wizard.FieldWidthPath
+	f.SetWidth(70)
+	f.SetDefault("https://example.com/repo.git")
+
+	rows := strings.Split(tuitest.StripANSI(f.View()), "\n")
+	contentRow := rows[2]
+	if got := lipgloss.Width(contentRow); got != 70 {
+		t.Fatalf("box+tag row width = %d, want 70 (62-wide box + 8-wide tag, attached): %q", got, contentRow)
+	}
+	if !strings.Contains(contentRow, "default") {
+		t.Fatalf("content row = %q, want the default tag attached on the same row as the box", contentRow)
+	}
+}
+
+// TestSelectField_BoxWidthStableAcrossDefaultTagDrop pins geometry
+// stability: a field that has ever carried a default reserves the tag's
+// room for its whole life (hasDefault, permanent), so the box itself never
+// widens once the user picks a different option and the (now-cleared)
+// default tag drops.
+func TestSelectField_BoxWidthStableAcrossDefaultTagDrop(t *testing.T) {
+	f := NewSelectField("git repository", []string{"https://example.com/repo.git", "https://example.com/other.git"})
+	f.SetBoxWidth(64)
+	f.SetWidth(70)
+	f.SetDefault("https://example.com/repo.git")
+
+	before := f.boxOuterWidth()
+
+	f.SetValue("https://example.com/other.git")
+	if f.isDefault {
+		t.Fatal("isDefault after SetValue = true, want false")
+	}
+
+	after := f.boxOuterWidth()
+	if before != after {
+		t.Fatalf("box width before the change = %d, after the default tag dropped = %d, want unchanged", before, after)
 	}
 }
 

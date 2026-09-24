@@ -18,11 +18,12 @@ type SelectField struct {
 	Note    string
 	Options []string
 
-	selected  int
-	focused   bool
-	width     int
-	boxWidth  int
-	isDefault bool
+	selected   int
+	focused    bool
+	width      int
+	boxWidth   int
+	isDefault  bool
+	hasDefault bool // set by SetDefault, never cleared — see boxOuterWidth
 }
 
 // NewSelectField builds a SelectField with the given label and option list.
@@ -54,8 +55,12 @@ func (f *SelectField) SetValue(value string) {
 }
 
 // SetDefault sets the starting selection and marks the field as unchanged.
+// hasDefault latches permanently — unlike isDefault, it never clears — so
+// the box keeps reserving the "default" tag's room for the field's whole
+// life; see boxOuterWidth.
 func (f *SelectField) SetDefault(value string) {
 	f.isDefault = true
+	f.hasDefault = true
 	for i, opt := range f.Options {
 		if opt == value {
 			f.selected = i
@@ -148,8 +153,7 @@ func (f *SelectField) View() string {
 		content = f.booleanContent()
 	}
 
-	outer := min(f.nominalBoxWidth(), f.width)
-	box := fieldBox(content, outer, f.focused, false)
+	box := fieldBox(content, f.boxOuterWidth(), f.focused, false)
 	if f.isDefault {
 		box = lipgloss.JoinHorizontal(lipgloss.Center, box, " "+tagStyle.Render("default"))
 	}
@@ -165,20 +169,33 @@ func (f *SelectField) View() string {
 }
 
 // nominalBoxWidth returns the field's box width before clamping to the
-// available width: an explicit SetBoxWidth value, else 16 for a boolean
+// available width: an explicit SetBoxWidth value, else 18 for a boolean
 // field, else the widest option plus room for arrows, padding, and border.
 func (f *SelectField) nominalBoxWidth() int {
 	if f.boxWidth > 0 {
 		return f.boxWidth
 	}
 	if f.IsBoolean() {
-		return 16
+		return 18
 	}
 	widest := 0
 	for _, opt := range f.Options {
 		widest = max(widest, lipgloss.Width(opt))
 	}
-	return max(widest+8, 12)
+	return max(widest+8, 14)
+}
+
+// boxOuterWidth returns the box's render width: min(nominalBoxWidth, the
+// width from SetWidth), minus defaultTagReserve once the field has ever
+// carried a default value (hasDefault, not isDefault) — so the box
+// reserves the "default" tag's room for its whole life and never resizes
+// when the user's first change drops the tag.
+func (f *SelectField) boxOuterWidth() int {
+	avail := f.width
+	if f.hasDefault {
+		avail -= defaultTagReserve
+	}
+	return min(f.nominalBoxWidth(), max(avail, 0))
 }
 
 // arrowContent renders the current value (a dim "none" when it's blank, so

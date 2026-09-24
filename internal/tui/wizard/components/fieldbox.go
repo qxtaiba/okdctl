@@ -25,6 +25,14 @@ func fieldBox(content string, outer int, focused, hasErr bool) string {
 		Render(content)
 }
 
+// defaultTagReserve is the on-screen width of the " default" tag (a
+// leading space plus "default"'s 7 characters) that InputField and
+// SelectField join beside their box. Both types reserve this much room out
+// of their box's available width for the field's entire life once it has
+// ever carried a default value — not just while the tag is still visible —
+// so the box never resizes when the user's first edit drops the tag.
+const defaultTagReserve = 8
+
 var (
 	labelStyle = lipgloss.NewStyle().Foreground(tui.ColorSlate300)
 	errStyle   = lipgloss.NewStyle().Foreground(tui.ColorError)

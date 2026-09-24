@@ -508,9 +508,9 @@ func TestFieldWidth_Cols(t *testing.T) {
 		avail int
 		want  int
 	}{
-		{FieldWidthAuto, 90, 32},
-		{FieldWidthNumber, 90, 12},
-		{FieldWidthPath, 90, 56},
+		{FieldWidthAuto, 90, 40},
+		{FieldWidthNumber, 90, 16},
+		{FieldWidthPath, 90, 64},
 		{FieldWidthFull, 90, 90},
 		{FieldWidthPath, 50, 50},
 	}

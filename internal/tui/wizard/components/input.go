@@ -39,14 +39,15 @@ type InputField struct {
 	Password    bool
 	Validator   func(string) error
 
-	input     textinput.Model
-	focused   bool
-	width     int
-	boxWidth  int
-	isDefault bool
-	touched   bool
-	savedPos  int
-	err       error
+	input      textinput.Model
+	focused    bool
+	width      int
+	boxWidth   int
+	isDefault  bool
+	hasDefault bool // set by SetDefault, never cleared — see boxOuterWidth
+	touched    bool
+	savedPos   int
+	err        error
 }
 
 // NewInputField builds a plain-text InputField from label and placeholder.
@@ -61,7 +62,7 @@ func NewInputField(label, placeholder string) *InputField {
 		Label:       label,
 		Placeholder: placeholder,
 		input:       ti,
-		boxWidth:    32,
+		boxWidth:    40,
 	}
 }
 
@@ -121,10 +122,13 @@ func (f *InputField) SetValue(value string) {
 
 // SetDefault sets the field's value to v and marks it as an unmodified
 // default, which View renders dim with a "default" tag until the value
-// changes.
+// changes. hasDefault latches permanently — unlike isDefault, it never
+// clears — so the box keeps reserving the tag's room for the field's whole
+// life; see boxOuterWidth.
 func (f *InputField) SetDefault(v string) {
 	f.input.SetValue(v)
 	f.isDefault = true
+	f.hasDefault = true
 }
 
 // IsDefault reports whether the field's value is still its unmodified default.
@@ -187,9 +191,22 @@ func (f *InputField) SetPlaceholder(p string) {
 // + padding 2 + cursor cell 1) and recomputes its scroll window — bubbles'
 // SetWidth alone leaves a stale window after a resize.
 func (f *InputField) applyBox() {
-	w := min(f.boxWidth, f.width)
+	w := f.boxOuterWidth()
 	f.input.SetWidth(w - 5)
 	f.input.SetCursor(f.input.Position())
+}
+
+// boxOuterWidth returns the box's render width: min(f.boxWidth, the width
+// from SetWidth), minus defaultTagReserve once the field has ever carried a
+// default value (hasDefault, not isDefault) — so the box reserves the
+// "default" tag's room for its whole life and never resizes out from under
+// the cursor when the user's first edit drops the tag.
+func (f *InputField) boxOuterWidth() int {
+	avail := f.width
+	if f.hasDefault {
+		avail -= defaultTagReserve
+	}
+	return min(f.boxWidth, max(avail, 0))
 }
 
 // Check runs the Required check and Validator without recording the
@@ -271,7 +288,7 @@ func (f *InputField) View() string {
 		content = tagStyle.Render("·")
 	}
 
-	box := fieldBox(content, min(f.boxWidth, f.width), f.focused, f.err != nil)
+	box := fieldBox(content, f.boxOuterWidth(), f.focused, f.err != nil)
 	if f.isDefault {
 		box = lipgloss.JoinHorizontal(lipgloss.Center, box, " "+tagStyle.Render("default"))
 	}

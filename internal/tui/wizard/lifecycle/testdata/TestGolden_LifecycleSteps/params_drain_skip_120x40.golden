@@ -13,14 +13,14 @@
   │    how pods leave the node                                                                                       │  
   │                                                                                                                  │  
   │    drain timeout                                                                                                 │  
-  │    ╭──────────────────────────────╮                                                                              │  
-  │    │ 10m                          │                                                                              │  
-  │    ╰──────────────────────────────╯                                                                              │  
+  │    ╭──────────────────────────────────────╮                                                                      │  
+  │    │ 10m                                  │                                                                      │  
+  │    ╰──────────────────────────────────────╯                                                                      │  
   │                                                                                                                  │  
   │    force storage                                                                                                 │  
-  │    ╭──────────────╮                                                                                              │  
-  │    │ ● no  ○ yes  │ default                                                                                      │  
-  │    ╰──────────────╯                                                                                              │  
+  │    ╭────────────────╮                                                                                            │  
+  │    │ ● no  ○ yes    │ default                                                                                    │  
+  │    ╰────────────────╯                                                                                            │  
   │                                                                                                                  │  
   │    ⚠ skip-drain: the node is power-cycled without evacuating pods —                                              │  
   │      they die with the vm and restart in place on the resized node.                                              │  

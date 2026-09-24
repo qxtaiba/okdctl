@@ -7,9 +7,9 @@
   │    ● vm settings                                                         │  
   │                                                                          │  
   │    vm id base                                                            │  
-  │    ╭──────────╮                                                          │  
-  │    │ 6000     │                                                          │  
-  │    ╰──────────╯                                                          │  
+  │    ╭──────────────╮                                                      │  
+  │    │ 6000         │                                                      │  
+  │    ╰──────────────╯                                                      │  
   │    starting vm id in proxmox (e.g., 6000, 6001, ...)                     │  
   │                                                                          │  
   │    ✓ proxmox vm settings                                                 │  

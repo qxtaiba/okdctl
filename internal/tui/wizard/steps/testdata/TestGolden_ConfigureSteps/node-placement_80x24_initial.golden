@@ -9,9 +9,9 @@
   │    ● infrastructure                                                      │  
   │                                                                          │  
   │    bridge                                                                │  
-  │    ╭───────────╮                                                         │  
-  │    │ ◂ vmbr0 ▸ │                                                         │  
-  │    ╰───────────╯                                                         │  
+  │    ╭────────────╮                                                        │  
+  │    │ ◂ vmbr0 ▸  │                                                        │  
+  │    ╰────────────╯                                                        │  
   │    network bridge for vms                                                │  
   │                                                                          │  
   │    additional networks                                                   │  
