@@ -36,9 +36,11 @@ The wizard package lives under `internal/tui/wizard/`:
 
 Each step's file declares a single `StepDefinition` literal plus its
 helper validators. Adding a new step takes three additive edits: create
-the file under `steps/`, add a `StepType` constant and a `DefaultConfig()`
-entry in `internal/tui/wizard/config.go`, and register a factory in
-`defaultStepRegistrations` in `internal/cli/wizard_setup.go`.
+the file under `steps/`, and add a `StepType` constant and a
+`DefaultConfig()` entry in `internal/tui/wizard/config.go`. The third
+edit registers a factory in the `RegisterAll` list in
+`internal/tui/wizard/steps/register.go`, which `internal/cli/wizard_setup.go`
+calls.
 
 ## FieldDefinition: the smallest unit
 

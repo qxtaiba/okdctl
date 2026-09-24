@@ -118,10 +118,10 @@ func configureLogging(cmd *cobra.Command) error {
 	// auto-switch to json when stderr is piped and --log-format wasn't set
 	// explicitly, mirroring the progress-bar TTY gate
 	if !cmd.Root().PersistentFlags().Changed(flagLogFormat) && !stderrIsTTY {
-		logFormat = outputJSON
+		logFormat = tui.FormatJSON
 	}
 
-	progressBars := stderrIsTTY && stdoutIsTTY && logFormat != outputJSON && !colorOff
+	progressBars := stderrIsTTY && stdoutIsTTY && logFormat != tui.FormatJSON && !colorOff
 
 	// pin the render profile to stdout's real capabilities so a piped/NO_COLOR
 	// run strips box escapes like charm/log strips level badges; --no-color
@@ -146,7 +146,7 @@ func configureLogging(cmd *cobra.Command) error {
 	}
 	// suppress Info/Warn under json for clean pipelines, except deploy-family
 	// flows which keep milestones/degraded-notices visible
-	if logFormat == outputJSON && !logVerbose && !wantsDefaultLogSink(cmd) {
+	if logFormat == tui.FormatJSON && !logVerbose && !wantsDefaultLogSink(cmd) {
 		tui.SuppressInfo()
 	}
 	return nil

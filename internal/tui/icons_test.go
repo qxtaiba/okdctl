@@ -17,7 +17,7 @@ func TestIconsAreCheckAndCross(t *testing.T) {
 }
 
 func TestNoLiteralStatusGlyphsOutsideIcons(t *testing.T) {
-	bad := []rune{'✓', '✗', '✔', '✖', '●', '○'}
+	bad := []rune{'✓', '✗', '✔', '✖', '●', '○', '⚠'}
 	fset := token.NewFileSet()
 	err := filepath.WalkDir("..", func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") || filepath.Base(path) == "icons.go" {
