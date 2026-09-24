@@ -12,6 +12,16 @@ const (
 	maxDropdownVisible  = 5
 )
 
+// dropdownBudget returns the effective visible-row budget: maxVisible when
+// set, or the maxDropdownVisible floor for a Selector that never called
+// SetDropdownBudget.
+func (s *Selector) dropdownBudget() int {
+	if s.maxVisible == 0 {
+		return maxDropdownVisible
+	}
+	return s.maxVisible
+}
+
 // moveUp moves selection up by one option, wrapping to the last option from
 // the first; a dropdown's first patch flows straight into the parent minor
 // above it rather than trapping the cursor inside the dropdown.
@@ -66,16 +76,27 @@ func (s *Selector) adjustDropdownScroll() {
 		return
 	}
 
-	posInDropdown := s.selected - dropdownStart
-	dropdownCount := dropdownEnd - dropdownStart + 1
+	s.clampDropdownOffset(dropdownStart, dropdownEnd, s.dropdownBudget())
+}
 
-	if posInDropdown < s.dropdownScrollOffset {
-		s.dropdownScrollOffset = posInDropdown
-	} else if posInDropdown >= s.dropdownScrollOffset+maxDropdownVisible {
-		s.dropdownScrollOffset = posInDropdown - maxDropdownVisible + 1
+// clampDropdownOffset re-clamps the scroll offset so the current selection
+// (when it sits inside [start,end]) stays within the visible window, and
+// the window itself stays within [0, itemCount-budget]; called on every
+// render as well as every cursor move, since a budget that grows or shrinks
+// between renders (a resize) can otherwise strand the offset either
+// direction — past where a larger budget would show everything, or past
+// the selection when a smaller budget no longer reaches it.
+func (s *Selector) clampDropdownOffset(start, end, budget int) {
+	if s.selected >= start && s.selected <= end {
+		posInDropdown := s.selected - start
+		if posInDropdown < s.dropdownScrollOffset {
+			s.dropdownScrollOffset = posInDropdown
+		} else if posInDropdown >= s.dropdownScrollOffset+budget {
+			s.dropdownScrollOffset = posInDropdown - budget + 1
+		}
 	}
 
-	maxOffset := max(dropdownCount-maxDropdownVisible, 0)
+	maxOffset := max(end-start+1-budget, 0)
 	if s.dropdownScrollOffset > maxOffset {
 		s.dropdownScrollOffset = maxOffset
 	}
@@ -104,8 +125,11 @@ func (s *Selector) getDropdownBounds() (start, end int) {
 func (s *Selector) renderDropdownRegion(start, end int, scrollStyle, borderStyle *lipgloss.Style) (lines []string, selectedRow int) {
 	selectedRow = -1
 
+	budget := s.dropdownBudget()
+	s.clampDropdownOffset(start, end, budget)
+
 	visibleStart := start + s.dropdownScrollOffset
-	visibleEnd := min(visibleStart+maxDropdownVisible-1, end)
+	visibleEnd := min(visibleStart+budget-1, end)
 
 	itemsAbove := s.dropdownScrollOffset
 	itemsBelow := end - visibleEnd

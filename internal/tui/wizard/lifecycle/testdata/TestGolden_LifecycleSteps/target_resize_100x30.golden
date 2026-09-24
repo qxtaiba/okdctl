@@ -3,25 +3,25 @@
   │ O K D C T L                                                                                  │  
   │ nodes to resize                                     op · target · params · plan · run · done │  
   │──────────────────────────────────────────────────────────────────────────────────────────────│  
-  │  ○ masters — all 1 control-plane nodes                                                       │  
+  │  ○ masters — all 3 control-plane nodes                                                       │  
   │    │ rolled one at a time; etcd-gated before and after every node                            │  
   │    │                                                                                         │  
-  │  ○ workers — all 1 worker nodes                                                              │  
+  │  ○ workers — all 3 worker nodes                                                              │  
   │    │ rolled one at a time; no etcd gate                                                      │  
   │    ┌────────────────────                                                                     │  
   │    │   NODE             ROLE    READY                                                        │  
   │    │ ● homelab-master0  master  ✓ ready                                                      │  
   │    │   │                                                                                     │  
+  │    │ ○ homelab-master1  master  ✓ ready                                                      │  
+  │    │   │                                                                                     │  
+  │    │ ○ homelab-master2  master  ✓ ready                                                      │  
+  │    │   │                                                                                     │  
   │    │ ○ homelab-worker0  worker  ✓ ready                                                      │  
+  │    │   │                                                                                     │  
+  │    │ ○ homelab-worker1  worker  ✓ ready                                                      │  
+  │    │   │                                                                                     │  
+  │    │ ○ homelab-worker2  worker  ✓ ready                                                      │  
   │    └────────────────────                                                                     │  
-  │                                                                                              │  
-  │                                                                                              │  
-  │                                                                                              │  
-  │                                                                                              │  
-  │                                                                                              │  
-  │                                                                                              │  
-  │                                                                                              │  
-  │                                                                                              │  
   │                                                                                              │  
   │                                                                                              │  
   │─────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  

@@ -167,6 +167,40 @@ func TestTargetStepLoadErrorBlocksCompletion(t *testing.T) {
 	}
 }
 
+func TestTargetResizeTallTerminalShowsAllNodesWithoutMoreMarker(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Cluster.Name = "homelab"
+	st := &State{Cfg: cfg, Op: node.OpResize}
+
+	m := wizard.NewFlowModel(NewSteps(st, Hooks{}), st.Cfg, Chrome())
+	_ = tuitest.RenderAt(t, m, 120, 40)
+	m.Update(wizard.JumpToStepMsg{StepID: StepIDTarget})
+	m.Update(nodesLoadedMsg{nodes: []cluster.NodeDetail{
+		{Name: "homelab-master0", Role: nodetypes.RoleMaster, Ready: true},
+		{Name: "homelab-master1", Role: nodetypes.RoleMaster, Ready: true},
+		{Name: "homelab-master2", Role: nodetypes.RoleMaster, Ready: true},
+		{Name: "homelab-worker0", Role: nodetypes.RoleWorker, Ready: true},
+		{Name: "homelab-worker1", Role: nodetypes.RoleWorker, Ready: true},
+		{Name: "homelab-worker2", Role: nodetypes.RoleWorker, Ready: true},
+	}})
+
+	frame := tuitest.RenderAt(t, m, 120, 40)
+	view := tuitest.StripANSI(frame)
+
+	for _, name := range []string{
+		"homelab-master0", "homelab-master1", "homelab-master2",
+		"homelab-worker0", "homelab-worker1", "homelab-worker2",
+	} {
+		if !strings.Contains(view, name) {
+			t.Errorf("120x40 must show %s without windowing it away, got:\n%s", name, view)
+		}
+	}
+	if strings.Contains(view, "more") {
+		t.Errorf("120x40 has room for all 6 nodes, must not show a more-marker:\n%s", view)
+	}
+	tuitest.AssertFits(t, frame, 120, 40)
+}
+
 func TestTargetStepShouldShow(t *testing.T) {
 	cfg := config.DefaultConfig()
 	for _, tc := range []struct {

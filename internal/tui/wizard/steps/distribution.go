@@ -63,6 +63,19 @@ type DistributionStep struct {
 	expandedMinor  int // -1 = none expanded (show latest per minor)
 	loadingSpinner spinner.Model
 	loadError      error
+
+	// contentHeight: the step's real inner height from the last genuine
+	// SetSize call, kept apart from BaseStep's own field since View() is
+	// re-run with an unbounded placeholder height on every viewport sync.
+	contentHeight int
+}
+
+// SetSize updates the step's inner width and height, remembering the real
+// content height so the dropdown's render-time budget survives renders that
+// carry a placeholder height.
+func (s *DistributionStep) SetSize(width, height int) {
+	s.BaseStep.SetSize(width, height)
+	s.contentHeight = height
 }
 
 // NewDistributionStep constructs the distribution step.
@@ -259,7 +272,7 @@ func (s *DistributionStep) syncSelectedVersion(selected *components.Option) {
 // View renders the loading indicator, the error state, or the version
 // selector, depending on phase.
 func (s *DistributionStep) View(width, height int) string {
-	s.SetSize(width, height)
+	s.BaseStep.SetSize(width, height)
 
 	switch s.phase {
 	case phaseVersionLoading:
@@ -267,10 +280,68 @@ func (s *DistributionStep) View(width, height int) string {
 	case phaseVersionError:
 		return s.viewErrorPhase(width)
 	case phaseVersionSelect:
+		s.applyDropdownBudget()
 		return s.viewVersionPhase()
 	}
 
 	return ""
+}
+
+// applyDropdownBudget sizes the selector's dropdown window to fit the step's
+// real content height around its own chrome: the collapsed minor rows above
+// and below the expanded series, the expanded series' own title+description
+// row immediately above its dropdown (plus its connector to the last
+// collapsed row, when there is one above it), the blank line and hint row
+// beneath the selector, and the dropdown box's own border rows. Patch rows
+// each carry a description, so N shown items cost 3N-1 lines (title,
+// description, and a connector between every consecutive pair); the budget
+// is solved for the largest N that still fits.
+func (s *DistributionStep) applyDropdownBudget() {
+	if s.expandedMinor < 0 {
+		s.versionSelector.SetDropdownBudget(0)
+		return
+	}
+
+	expandedIdx := -1
+	for i := range s.okdSeries {
+		if s.okdSeries[i].Minor == s.expandedMinor {
+			expandedIdx = i
+			break
+		}
+	}
+	if expandedIdx < 0 {
+		s.versionSelector.SetDropdownBudget(0)
+		return
+	}
+
+	before := expandedIdx
+	after := len(s.okdSeries) - expandedIdx - 1
+	rowLines := func(n int) int {
+		lines := n * 2 // title + description per row
+		if n > 1 {
+			lines += n - 1 // a connector line between consecutive rows
+		}
+		return lines
+	}
+
+	// The expanded series renders its own title+description row right
+	// above its patch dropdown (Selector.View never inserts a connector
+	// between that row and the dropdown itself), joined to the last
+	// collapsed row above it by a connector when before > 0.
+	above := rowLines(before) + 2
+	if before > 0 {
+		above++
+	}
+	below := rowLines(after)
+
+	const (
+		blankLine      = 1
+		hintLines      = 2 // "showing patch versions..." + "press tab to collapse"
+		dropdownChrome = 2 // top + bottom border; versionSelector never sets DropdownHeader
+	)
+
+	avail := s.contentHeight - above - below - blankLine - hintLines - dropdownChrome
+	s.versionSelector.SetDropdownBudget((avail + 1) / 3)
 }
 
 // viewLoadingPhase renders the fetch-in-progress spinner and its dim

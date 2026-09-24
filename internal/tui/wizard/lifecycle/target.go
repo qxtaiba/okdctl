@@ -55,6 +55,21 @@ type TargetStep struct {
 	header string
 	// blocked: remove-ineligible workers, rendered dimmed to teach the top-down constraint.
 	blocked []string
+	// dropdownAbove: non-dropdown option rows (masters/workers) rendered
+	// above the dropdown region, used to size its per-render budget.
+	dropdownAbove int
+	// contentHeight: the step's real inner height from the last genuine
+	// SetSize call, kept apart from BaseStep's own field since View() is
+	// re-run with an unbounded placeholder height on every viewport sync.
+	contentHeight int
+}
+
+// SetSize updates the step's inner width and height, remembering the real
+// content height so the dropdown's render-time budget survives renders that
+// carry a placeholder height.
+func (s *TargetStep) SetSize(width, height int) {
+	s.BaseStep.SetSize(width, height)
+	s.contentHeight = height
 }
 
 // NewTargetStep constructs the target-select step.
@@ -144,6 +159,7 @@ func (s *TargetStep) buildChoices(nodes []cluster.NodeDetail) {
 	s.choices = nil
 	s.header = ""
 	s.blocked = nil
+	s.dropdownAbove = 0
 	var opts []components.Option
 	var dropdownHeader string
 
@@ -174,6 +190,7 @@ func (s *TargetStep) buildChoices(nodes []cluster.NodeDetail) {
 				Title:       fmt.Sprintf("masters — all %d control-plane nodes", len(masters)),
 				Description: "rolled one at a time; etcd-gated before and after every node",
 			})
+			s.dropdownAbove++
 		}
 		if len(workers) > 0 {
 			s.choices = append(s.choices, targetChoice{role: nodetypes.RoleWorker})
@@ -182,6 +199,7 @@ func (s *TargetStep) buildChoices(nodes []cluster.NodeDetail) {
 				Title:       fmt.Sprintf("workers — all %d worker nodes", len(workers)),
 				Description: "rolled one at a time; no etcd gate",
 			})
+			s.dropdownAbove++
 		}
 		allNodes := make([]cluster.NodeDetail, 0, len(masters)+len(workers))
 		allNodes = append(allNodes, masters...)
@@ -256,7 +274,7 @@ func sortByIndex(nodes []cluster.NodeDetail, descending bool) {
 // View renders the spinner, a load error, or the target selector plus any
 // blocked-worker lines.
 func (s *TargetStep) View(width, height int) string {
-	s.SetSize(width, height)
+	s.BaseStep.SetSize(width, height)
 
 	if s.phase == targetLoading {
 		return s.loadingSpinner.View() + " listing cluster nodes..."
@@ -271,6 +289,8 @@ func (s *TargetStep) View(width, height int) string {
 		return lipgloss.NewStyle().Foreground(tui.ColorWarning).Render("no eligible nodes found")
 	}
 
+	s.applyDropdownBudget()
+
 	out := s.selector.View()
 	if s.header != "" {
 		out = "  " + s.header + "\n" + out
@@ -282,6 +302,35 @@ func (s *TargetStep) View(width, height int) string {
 		}
 	}
 	return out
+}
+
+// applyDropdownBudget sizes the selector's dropdown window to fit the step's
+// real content height around its own chrome: the masters/workers rows above
+// the dropdown, the remove header/blocked lines outside it, and the
+// dropdown box's own border and header rows. Node rows carry no
+// description, so N shown items cost 2N-1 lines (a connector between every
+// consecutive pair); the budget is solved for the largest N that still fits.
+func (s *TargetStep) applyDropdownBudget() {
+	above := s.dropdownAbove * 2 // title + description per row
+	if s.dropdownAbove > 1 {
+		above += s.dropdownAbove - 1 // a connector line between consecutive rows
+	}
+	// outer is always 0 today: header/blocked are only ever set for
+	// OpRemove, which has no dropdown at all (getDropdownBounds finds
+	// nothing InDropdown), so this call is a harmless no-op on that path.
+	// Charged anyway so a future change that adds a header or blocked
+	// rows to the resize path doesn't silently under-budget the dropdown.
+	outer := len(s.blocked)
+	if s.header != "" {
+		outer++
+	}
+	dropdownChrome := 2 // top + bottom border
+	if s.selector.DropdownHeader != "" {
+		dropdownChrome++
+	}
+
+	avail := s.contentHeight - above - outer - dropdownChrome
+	s.selector.SetDropdownBudget((avail + 1) / 2)
 }
 
 // Apply writes the selected target into the shared state.
