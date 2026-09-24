@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 )
 
@@ -79,6 +80,24 @@ func TestKeyValueField_AddRowTrailer(t *testing.T) {
 	f.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
 	if len(f.rows) != 2 {
 		t.Fatalf("rows after 'a' = %d, want 2", len(f.rows))
+	}
+}
+
+func TestKeyValueField_RowInputsUseFieldStyles(t *testing.T) {
+	f := NewKeyValueField("vaults")
+	f.SetValue("homelab=1")
+	f.SetWidth(40)
+	_ = f.Focus()
+	f.Update(tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl})
+
+	// SetValue leaves the cursor at the end of the text, so "homelab"
+	// renders entirely through styles.Text rather than the cursor cell —
+	// the same shared fieldInputStyles InputField applies, not bubbles'
+	// unstyled textinput.New() default.
+	raw := f.View()
+	want := ansiPrefix(t, tui.ColorText)
+	if !strings.Contains(raw, want+"homelab") {
+		t.Fatalf("View() = %q, want the focused key cell styled with fieldInputStyles's ColorText like InputField", raw)
 	}
 }
 

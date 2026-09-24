@@ -39,15 +39,22 @@ type kvRow struct {
 	valInput textinput.Model
 }
 
+// newKVRow builds a row's two textinputs, applying the same fieldInputStyles
+// InputField uses (isDefault=false — a kv cell has no default-text concept)
+// so both share its static, non-blinking cursor instead of bubbles'
+// textinput.New() default styling, which still blinks and hits the glyph
+// glitch fieldInputStyles's Blink:false exists to avoid.
 func newKVRow(k, v string) kvRow {
 	ki := textinput.New()
 	ki.CharLimit = 128
 	ki.SetWidth(20)
+	ki.SetStyles(fieldInputStyles(false))
 	ki.SetValue(k)
 
 	vi := textinput.New()
 	vi.CharLimit = 128
 	vi.SetWidth(20)
+	vi.SetStyles(fieldInputStyles(false))
 	vi.SetValue(v)
 
 	return kvRow{keyInput: ki, valInput: vi}
