@@ -560,7 +560,9 @@ func validateHTTPServer(cfg *Config, result *ValidationResult) {
 	}
 }
 
-func validateOKDVersion(version string) error {
+// ValidateOKDVersion rejects an empty version and one not shaped
+// X.Y.Z-okd-<suffix> (e.g., 4.22.0-okd-scos.7), the real OKD release tag format.
+func ValidateOKDVersion(version string) error {
 	if version == "" {
 		return fmt.Errorf("okd version is required")
 	}
@@ -587,7 +589,7 @@ func ValidateOKDConfig(cfg *Config, result *ValidationResult) {
 		return
 	}
 
-	if err := validateOKDVersion(cfg.Distribution.Version); err != nil {
+	if err := ValidateOKDVersion(cfg.Distribution.Version); err != nil {
 		result.AddError(FieldDistributionVersion, fmt.Sprintf("invalid okd version: %v", err))
 	}
 

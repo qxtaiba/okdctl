@@ -3,6 +3,7 @@ package steps
 import (
 	"testing"
 
+	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/releases"
 )
 
@@ -18,6 +19,11 @@ func TestDemoReleaseSeriesWellFormed(t *testing.T) {
 		}
 		if i > 0 && s.Minor >= series[i-1].Minor {
 			t.Errorf("series[%d].Minor = %d, want < series[%d].Minor = %d (descending)", i, s.Minor, i-1, series[i-1].Minor)
+		}
+		for _, v := range s.Versions {
+			if err := config.ValidateOKDVersion(v.Version); err != nil {
+				t.Errorf("series[%d] (%d.%d): Version %q fails the real okd version validator: %v", i, s.Major, s.Minor, v.Version, err)
+			}
 		}
 	}
 
