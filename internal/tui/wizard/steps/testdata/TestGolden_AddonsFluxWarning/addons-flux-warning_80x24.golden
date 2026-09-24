@@ -16,7 +16,7 @@
   │    ╭────────────────╮                                                    │  
   │    │ ● no  ○ yes    │                                                    │  
   │    ╰────────────────╯                                                    │  
-  │    bootstrap ESO provider credentials and SecretStore CRD                │  
+  │    bootstrap eso provider credentials and secretstore crd                │  
   │                                                                          │  
   │────────── ↑ ↓  23% • scroll for more ─────────── ▸ okd 4.22.0-okd-scos.7 │  
   │  ↑↓/tab navigate • enter continue • esc back • pgup/pgdn scroll          │  

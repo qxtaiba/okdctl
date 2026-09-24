@@ -74,7 +74,7 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 					Label:       "token id",
 					Default:     "",
 					Placeholder: "user@pve!okdctl",
-					Help:        "api token id (user@realm!tokenname) — saved to config; used at deploy time with PROXMOX_VE_API_TOKEN_SECRET",
+					Help:        "api token id (user@realm!tokenname) — saved to config; combined with the token secret at deploy time via PROXMOX_VE_API_TOKEN in id=secret form",
 					ConfigSet:   proxmoxSet(func(p *config.ProxmoxConfig, v string) { p.TokenID = v }),
 					ConfigGet:   proxmoxGet(func(p *config.ProxmoxConfig) string { return p.TokenID }),
 				},

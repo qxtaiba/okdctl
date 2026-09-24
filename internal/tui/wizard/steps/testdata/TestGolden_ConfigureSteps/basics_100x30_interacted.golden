@@ -15,7 +15,7 @@
   │    ╭──────────────────────────────────────╮                                                  │  
   │    │ k8s.local                            │                                                  │  
   │    ╰──────────────────────────────────────╯                                                  │  
-  │    base domain for cluster services                                                          │  
+  │    dot-separated domain name for cluster services, e.g. example.com                          │  
   │                                                                                              │  
   │    ✓ node topology                                                                           │  
   │                                                                                              │  

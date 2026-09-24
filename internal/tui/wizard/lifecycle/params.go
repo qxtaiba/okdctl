@@ -90,7 +90,7 @@ func (s *ParamsStep) buildForm() {
 	switch s.st.Op {
 	case node.OpAdd:
 		s.countField = components.NewInputField("workers to add", "1")
-		s.countField.Help = "number of workers created in this batch"
+		s.countField.Help = "number of workers created in this batch (at least 1)"
 		s.countField.SetValue("1")
 		s.countField.Validator = validatePositiveInt
 		sections = append(sections, wizard.FormSection{
@@ -112,7 +112,7 @@ func (s *ParamsStep) buildForm() {
 			current = s.st.Cfg.Topology.ControlPlane
 		}
 		s.memField = components.NewInputField("memory (mb)", strconv.Itoa(current.MemoryMB))
-		s.memField.Help = fmt.Sprintf("per-node memory — current: %d, 0 keeps current", current.MemoryMB)
+		s.memField.Help = fmt.Sprintf("per-node memory — okd minimum: %d mb, current: %d, 0 keeps current", okdMinMemoryMB, current.MemoryMB)
 		s.memField.Validator = validateMemoryMB
 		s.cpuField = components.NewInputField("vcpus", strconv.Itoa(current.CPU))
 		s.cpuField.Help = fmt.Sprintf("per-node cpu cores — current: %d, 0 keeps current", current.CPU)
@@ -140,7 +140,7 @@ func (s *ParamsStep) buildDisruptionFields() {
 	s.drainModeField.Help = "how pods leave the node"
 	s.drainModeField.SetDefault(drainModeDefault)
 	s.timeoutField = components.NewInputField("drain timeout", defaultDrainTimeout)
-	s.timeoutField.Help = "per-node"
+	s.timeoutField.Help = "per-node drain limit, a duration like 10m or 1h"
 	s.timeoutField.SetValue(defaultDrainTimeout)
 	s.timeoutField.Validator = validateDuration
 }
