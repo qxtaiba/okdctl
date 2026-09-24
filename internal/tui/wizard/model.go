@@ -12,10 +12,11 @@ import (
 )
 
 const (
-	minWidth  = 80
-	minHeight = 24
+	minTerminalWidth  = 60
+	minTerminalHeight = 20
 
 	headerHeight = 3 // logo + tagline + step indicator
+	statusHeight = 1
 	// footer is 2 rows: the scroll-indicator line (also the top divider) + the help bar.
 	footerHeight         = 2
 	outerVerticalPadding = 4 // wizard border (2) + outer padding (2)
@@ -26,7 +27,7 @@ const (
 	// wizardBorderHorizontal: WizardBorderStyle.Border() = 1 left + 1 right.
 	wizardBorderHorizontal = 2
 
-	fixedLayoutOverhead = headerHeight + footerHeight + outerVerticalPadding
+	fixedLayoutOverhead = headerHeight + statusHeight + footerHeight + outerVerticalPadding
 )
 
 type earlyExiter interface {
@@ -166,13 +167,7 @@ func NewFlowModel(steps []WizardStep, cfg *config.Config, chrome FlowChrome) *Mo
 func getTerminalSize() (width, height int) {
 	w, h, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil {
-		return minWidth, minHeight
-	}
-	if w < minWidth {
-		w = minWidth
-	}
-	if h < minHeight {
-		h = minHeight
+		return 80, 24
 	}
 	return w, h
 }
@@ -196,6 +191,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyPressMsg:
+		m.err = nil
+
 		if key.Matches(msg, m.keyMap.Quit) {
 			if len(m.steps) > 0 && m.currentStep < len(m.steps) {
 				if g, ok := m.steps[m.currentStep].(QuitGuard); ok && g.InterceptQuit() {

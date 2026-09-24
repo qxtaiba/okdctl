@@ -275,10 +275,10 @@ func (s *ExecStep) View(width, height int) string {
 
 	for i := range s.nodes {
 		np := &s.nodes[i]
-		bullet := pendStyle.Render("○")
+		bullet := pendStyle.Render(tui.IconPending)
 		suffix := dimStyle.Render("  pending")
 		if i == s.currentNode || nodeTouched(np) {
-			bullet = lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true).Render("●")
+			bullet = lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true).Render(tui.IconActive)
 			suffix = ""
 		}
 		b.WriteString(bullet + " " + titleStyle.Render(np.name) + suffix + "\n")
@@ -310,13 +310,13 @@ func (s *ExecStep) renderRow(r *execRow, doneStyle, failStyle, pendStyle *lipglo
 	}
 	switch r.status {
 	case rowDone:
-		return doneStyle.Render("✓ "+r.label) + took
+		return doneStyle.Render(tui.IconSuccess+" "+r.label) + took
 	case rowFailed:
-		return failStyle.Render("✗ " + r.label)
+		return failStyle.Render(tui.IconError + " " + r.label)
 	case rowRunning:
 		return s.loadingSpinner.View() + r.label
 	default:
-		return pendStyle.Render("○ " + r.label)
+		return pendStyle.Render(tui.IconPending + " " + r.label)
 	}
 }
 

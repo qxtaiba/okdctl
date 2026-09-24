@@ -10,8 +10,15 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-// View implements tea.Model, rendering header, viewport, scroll indicator,
-// optional error banner, and footer into a bordered box.
+const tooSmallNotice = "okdctl needs at least 60×20 — resize the terminal"
+
+// tooSmall reports whether the terminal is below the floor the wizard chrome needs to render.
+func (m *Model) tooSmall() bool {
+	return m.width < minTerminalWidth || m.height < minTerminalHeight
+}
+
+// View implements tea.Model, rendering header, viewport, status row, and
+// footer into a bordered box drawn at exactly the terminal width.
 func (m *Model) View() tea.View {
 	v := tea.View{AltScreen: true}
 
@@ -24,33 +31,25 @@ func (m *Model) View() tea.View {
 		return v
 	}
 
+	if m.tooSmall() {
+		v.Content = "\n  " + lipgloss.NewStyle().Foreground(tui.ColorTextDim).Render(tooSmallNotice)
+		return v
+	}
+
 	var content strings.Builder
 
 	content.WriteString(m.renderHeader())
 	content.WriteString("\n")
 	content.WriteString(m.viewport.View())
 	content.WriteString("\n")
-
-	if m.err != nil {
-		errorStyle := lipgloss.NewStyle().
-			Foreground(tui.ColorError).
-			Bold(true).
-			Padding(0, 1)
-		content.WriteString(errorStyle.Render(tui.IconError + " " + m.err.Error()))
-		content.WriteString("\n")
-	}
-
+	content.WriteString(m.statusRow())
+	content.WriteString("\n")
 	content.WriteString(m.renderFooter())
 
 	// lipgloss v2 Width(N) counts the border inside N — pass contentWidth+2 or
 	// full-width lines clip by 2 chars.
-	innerWidth := m.contentWidth()
-	if innerWidth < minWidth {
-		innerWidth = minWidth
-	}
-
 	bordered := WizardBorderStyle.
-		Width(innerWidth + wizardBorderHorizontal).
+		Width(m.contentWidth() + wizardBorderHorizontal).
 		Render(content.String())
 
 	v.Content = OuterContainerStyle.Render(bordered)
@@ -60,17 +59,29 @@ func (m *Model) View() tea.View {
 // contentWidth is the inner content area every header/viewport/footer helper sizes itself to.
 func (m *Model) contentWidth() int {
 	width := m.width - outerHorizontalPadding - wizardBorderHorizontal
-	if width < 60 {
-		width = 60
+	if width < minTerminalWidth-6 {
+		width = minTerminalWidth - 6
 	}
 	return width
+}
+
+// statusRow is always exactly one row so the frame never grows; blank when clear.
+func (m *Model) statusRow() string {
+	width := m.contentWidth()
+	if m.err == nil {
+		return ""
+	}
+	// Padding is inert under Inline (lipgloss v2 skips it), so the 2-space
+	// inset — matching the body's viewport inset — is prepended literally.
+	style := lipgloss.NewStyle().Foreground(tui.ColorError).Inline(true).MaxWidth(width - 2)
+	return "  " + style.Render(tui.IconError+" "+m.err.Error())
 }
 
 func (m *Model) contentDimensions() (width, height int) {
 	width = m.contentWidth()
 	height = m.height - fixedLayoutOverhead
-	if height < 10 {
-		height = 10
+	if height < 1 {
+		height = 1
 	}
 	return width, height
 }
@@ -79,9 +90,8 @@ func (m *Model) viewportDimensions() (width, height int) {
 	contentWidth := m.contentWidth()
 
 	viewportHeight := m.height - fixedLayoutOverhead
-
-	if viewportHeight < 5 {
-		viewportHeight = 5
+	if viewportHeight < 1 {
+		viewportHeight = 1
 	}
 
 	return contentWidth, viewportHeight

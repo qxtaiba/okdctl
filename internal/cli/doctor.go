@@ -114,7 +114,7 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 	w := cmd.OutOrStdout()
 	defer fmt.Fprintln(w)
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "🩺 "+tui.HighlightStyle.Render(fmt.Sprintf("doctor: running %d environment checks", len(checks))))
+	fmt.Fprintln(w, tui.SubsectionLabel(fmt.Sprintf("doctor: running %d environment checks", len(checks))))
 	fmt.Fprintln(w)
 
 	for _, cr := range results {
@@ -152,13 +152,13 @@ func severityMarkers(sev doctor.Severity) (icon, label, rawLabel string) {
 	rawLabel = "[" + sev.String() + "]"
 	switch sev {
 	case doctor.Pass:
-		icon = tui.SuccessStyle.Render("✓")
+		icon = tui.SuccessStyle.Render(tui.IconSuccess)
 		label = tui.SuccessStyle.Render(rawLabel)
 	case doctor.Warn:
 		icon = tui.WarningStyle.Render(tui.IconWarning)
 		label = tui.WarningStyle.Render(rawLabel)
 	case doctor.Fail:
-		icon = tui.ErrorStyle.Render("✗")
+		icon = tui.ErrorStyle.Render(tui.IconError)
 		label = tui.ErrorStyle.Render(rawLabel)
 	}
 	return

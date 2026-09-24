@@ -194,10 +194,10 @@ func (s *Selector) renderOptionWithPrefix(opt *Option, selected, showConnector b
 
 	var bullet, title string
 	if selected {
-		bullet = styles.bulletSelected.Render("●")
+		bullet = styles.bulletSelected.Render(tui.IconActive)
 		title = titleStyle.Bold(true).Render(opt.Title)
 	} else {
-		bullet = styles.bulletUnselected.Render("○")
+		bullet = styles.bulletUnselected.Render(tui.IconPending)
 		title = titleStyle.Render(opt.Title)
 	}
 
@@ -297,9 +297,9 @@ func (s *CompactSelector) View() string {
 	for i, opt := range s.options {
 		var line string
 		if i == s.selected {
-			line = selectedStyle.Render("● " + opt)
+			line = selectedStyle.Render(tui.IconActive + " " + opt)
 		} else {
-			line = unselectedStyle.Render("○ " + opt)
+			line = unselectedStyle.Render(tui.IconPending + " " + opt)
 		}
 		lines = append(lines, line)
 	}

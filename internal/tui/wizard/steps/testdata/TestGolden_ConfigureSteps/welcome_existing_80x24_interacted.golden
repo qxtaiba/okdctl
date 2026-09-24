@@ -1,0 +1,24 @@
+                                                                                
+  ╭──────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L                                                              │  
+  │ okd over proxmox, the easy way        ●─○─○─○─○─○─○─○─○─○─○ step 1 of 11 │  
+  │──────────────────────────────────────────────────────────────────────────│  
+  │                                                                          │  
+  │                    okdctl setup                                          │  
+  │                                                                          │  
+  │                    existing configuration detected                       │  
+  │                                                                          │  
+  │                    ○ deploy now                                          │  
+  │                      deploy using current okdctl.yaml                    │  
+  │                                                                          │  
+  │                    ● edit existing                                       │  
+  │                      modify your current settings                        │  
+  │                                                                          │  
+  │                    ○ start fresh                                         │  
+  │                      create a new configuration                          │  
+  │                                                                          │  
+  │                                                                          │  
+  │───────────────────────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
+  │   ↑↓  select    enter  confirm    ctrl+c  quit                           │  
+  ╰──────────────────────────────────────────────────────────────────────────╯  
+                                                                                
