@@ -107,6 +107,32 @@ func TestSelectField_SingleOptionHidesArrows(t *testing.T) {
 	}
 }
 
+func TestSelectField_SingleOptionArrowKeepsDefaultTag(t *testing.T) {
+	f := NewSelectField("proxmox node for bootstrap vm", []string{"pve1"})
+	f.SetDefault("pve1")
+	f.SetWidth(90)
+	_ = f.Focus()
+
+	f.Update(tea.KeyPressMsg{Code: tea.KeyRight})
+
+	if !f.isDefault {
+		t.Fatal("isDefault after a single-option arrow = false, want true (the selection can't change)")
+	}
+}
+
+func TestSelectField_TwoOptionArrowDropsDefaultTag(t *testing.T) {
+	f := NewSelectField("cpu type", []string{"host", "kvm64"})
+	f.SetDefault("host")
+	f.SetWidth(90)
+	_ = f.Focus()
+
+	f.Update(tea.KeyPressMsg{Code: tea.KeyRight})
+
+	if f.isDefault {
+		t.Fatal("isDefault after a two-option arrow = true, want false (the selection changed)")
+	}
+}
+
 // TestSelectField_BlankOptionRendersHonestLabel pins the fcos-iso field's
 // shape (a leading blank option meaning "let okdctl download it"): the
 // blank value must render as a dim "none" between the cycle arrows rather

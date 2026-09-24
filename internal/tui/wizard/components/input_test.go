@@ -95,6 +95,17 @@ func TestInputField_EmptyShowsDot(t *testing.T) {
 	}
 }
 
+func TestInputField_FocusedEmptyNoPlaceholderHidesDot(t *testing.T) {
+	f := NewInputField("name", "")
+	f.SetWidth(40)
+	_ = f.Focus()
+
+	rows := strings.Split(tuitest.StripANSI(f.View()), "\n")
+	if strings.Contains(rows[2], "·") {
+		t.Fatalf("content row = %q, want no dim dot while focused (a real cursor instead)", rows[2])
+	}
+}
+
 func TestInputField_NoPromptInsideBox(t *testing.T) {
 	f := NewInputField("name", "example")
 	f.SetWidth(40)
@@ -184,6 +195,9 @@ func TestInputField_DefaultArrowKeepsText(t *testing.T) {
 
 	if got := f.Value(); got != "mycluster" {
 		t.Fatalf("Value() after an arrow key = %q, want the default text preserved", got)
+	}
+	if !f.IsDefault() {
+		t.Fatal("IsDefault() after an arrow key = false, want true (pure navigation keeps the default tag)")
 	}
 }
 

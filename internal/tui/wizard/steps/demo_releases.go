@@ -14,16 +14,16 @@ func demoDate(year int, month time.Month) time.Time {
 // deterministic wizard demos and golden-frame tests.
 func DemoReleaseSeries() []releases.OKDReleaseSeries {
 	series420 := []releases.OKDVersion{
-		{Version: "4.20.1", Tag: "4.20.1", ReleaseDate: demoDate(2026, time.August), Stable: true, Latest: true, Type: releases.ReleaseTypeLatestStable},
-		{Version: "4.20.0", Tag: "4.20.0", ReleaseDate: demoDate(2026, time.June), Stable: true, Type: releases.ReleaseTypeStable},
+		{Version: "4.20.1-okd-scos.7", Tag: "4.20.1-okd-scos.7", ReleaseDate: demoDate(2026, time.August), Stable: true, Latest: true, Type: releases.ReleaseTypeLatestStable},
+		{Version: "4.20.0-okd-scos.5", Tag: "4.20.0-okd-scos.5", ReleaseDate: demoDate(2026, time.June), Stable: true, Type: releases.ReleaseTypeStable},
 	}
 	series419 := []releases.OKDVersion{
-		{Version: "4.19.4", Tag: "4.19.4", ReleaseDate: demoDate(2026, time.April), Stable: true, Latest: true, Type: releases.ReleaseTypeStable},
-		{Version: "4.19.3", Tag: "4.19.3", ReleaseDate: demoDate(2026, time.February), Stable: true, Type: releases.ReleaseTypeStable},
+		{Version: "4.19.4-okd-scos.3", Tag: "4.19.4-okd-scos.3", ReleaseDate: demoDate(2026, time.April), Stable: true, Latest: true, Type: releases.ReleaseTypeStable},
+		{Version: "4.19.3-okd-scos.2", Tag: "4.19.3-okd-scos.2", ReleaseDate: demoDate(2026, time.February), Stable: true, Type: releases.ReleaseTypeStable},
 	}
 	series418 := []releases.OKDVersion{
-		{Version: "4.18.7", Tag: "4.18.7", ReleaseDate: demoDate(2025, time.December), Stable: true, Latest: true, Type: releases.ReleaseTypeLTS},
-		{Version: "4.18.6", Tag: "4.18.6", ReleaseDate: demoDate(2025, time.October), Stable: true, Type: releases.ReleaseTypeLTS},
+		{Version: "4.18.7-okd-scos.9", Tag: "4.18.7-okd-scos.9", ReleaseDate: demoDate(2025, time.December), Stable: true, Latest: true, Type: releases.ReleaseTypeLTS},
+		{Version: "4.18.6-okd-scos.8", Tag: "4.18.6-okd-scos.8", ReleaseDate: demoDate(2025, time.October), Stable: true, Type: releases.ReleaseTypeLTS},
 	}
 
 	return []releases.OKDReleaseSeries{
