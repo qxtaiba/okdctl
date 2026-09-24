@@ -6,17 +6,17 @@
   │  ● okd 4.20 (recommended)                                                                                        │  
   │    │ ▼ 2 patch versions available                                                                                │  
   │    ┌────────────────────                                                                                         │  
-  │    │ ○   4.20.1 (Latest) (recommended)                                                                           │  
+  │    │ ○   4.20.1-okd-scos.7 (Latest) (recommended)                                                                │  
   │    │   │ released: Aug 2026                                                                                      │  
   │    │   │                                                                                                         │  
-  │    │ ○   4.20.0                                                                                                  │  
+  │    │ ○   4.20.0-okd-scos.5                                                                                       │  
   │    │   │ released: Jun 2026                                                                                      │  
   │    └────────────────────                                                                                         │  
   │  ○ okd 4.19                                                                                                      │  
-  │    │ ▶ stable (4.19.4) (tab to expand)                                                                           │  
+  │    │ ▶ stable (4.19.4-okd-scos.3) (tab to expand)                                                                │  
   │    │                                                                                                             │  
   │  ○ okd 4.18                                                                                                      │  
-  │    │ ▶ lts candidate (4.18.7) (tab to expand)                                                                    │  
+  │    │ ▶ lts candidate (4.18.7-okd-scos.9) (tab to expand)                                                         │  
   │                                                                                                                  │  
   │  showing patch versions for 4.20                                                                                 │  
   │  press tab to collapse                                                                                           │  

@@ -84,10 +84,15 @@ func fieldInputStyles(isDefault bool) textinput.Styles {
 			Text:        blurredText,
 			Placeholder: lipgloss.NewStyle().Foreground(tui.ColorSlate600),
 		},
+		// Blink is off: bubbles' textinput only refreshes its cursor-cell
+		// glyph color on the placeholder/suggestion paths, so a blinking
+		// cursor over real (typed or default) text intermittently renders
+		// that one character unstyled instead of matching its neighbors —
+		// a static reverse-video block sidesteps the glitch entirely.
 		Cursor: textinput.CursorStyle{
 			Color: tui.ColorPrimary,
 			Shape: tea.CursorBlock,
-			Blink: true,
+			Blink: false,
 		},
 	}
 }
@@ -228,10 +233,11 @@ func (f *InputField) Validate() error {
 }
 
 // Update forwards msg to the underlying textinput, clearing any stale
-// validation error on keypress, and — while the value is still an
-// unmodified default — clears the default tag and, for an edit rather
-// than mere cursor movement, the text itself, so the first keystroke
-// replaces the default instead of appending to it.
+// validation error on keypress; a genuine edit (typing over, backspace, or
+// delete) while the value is still an unmodified default clears both the
+// default tag and the text itself, so the first keystroke replaces the
+// default instead of appending to it, while pure cursor movement leaves the
+// default and its tag untouched.
 func (f *InputField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 	if !f.focused {
 		return f, nil
@@ -239,11 +245,9 @@ func (f *InputField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 
 	if k, ok := msg.(tea.KeyPressMsg); ok {
 		f.err = nil
-		if f.isDefault {
+		if f.isDefault && (k.Text != "" || k.Code == tea.KeyBackspace || k.Code == tea.KeyDelete) {
 			f.isDefault = false
-			if k.Text != "" || k.Code == tea.KeyBackspace || k.Code == tea.KeyDelete {
-				f.input.SetValue("")
-			}
+			f.input.SetValue("")
 		}
 	}
 
@@ -263,7 +267,7 @@ func (f *InputField) View() string {
 
 	f.input.SetStyles(fieldInputStyles(f.isDefault))
 	content := f.input.View()
-	if f.input.Value() == "" && f.Placeholder == "" {
+	if !f.focused && f.input.Value() == "" && f.Placeholder == "" {
 		content = tagStyle.Render("·")
 	}
 
