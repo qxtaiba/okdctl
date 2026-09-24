@@ -184,10 +184,10 @@ Wait+Screen@10s /step 9 of 11/
 
 # step 9/11 files — type pull secret, ssh key, web root
 Sleep 1.5s
-Type "~/pull-secret.json"
+Type "pull-secret.json"
 Sleep 1.3s
 Tab
-Type "~/.ssh/id_ed25519.pub"
+Type ".ssh/id_ed25519.pub"
 Sleep 1.4s
 Tab
 Type "/var/www/html"
