@@ -238,7 +238,7 @@ func (s *ParamsStep) View(width, height int) string {
 	if s.drainModeField != nil && s.drainModeField.Value() == drainModeSkip {
 		warn := lipgloss.NewStyle().Foreground(tui.ColorWarning).PaddingLeft(2)
 		out += "\n" + warn.Render(strings.Join([]string{
-			"⚠ skip-drain: the node is power-cycled without evacuating pods —",
+			tui.IconWarning + " skip-drain: the node is power-cycled without evacuating pods —",
 			"  they die with the vm and restart in place on the resized node.",
 			"  use when a memory-saturated cluster cannot reschedule evictions.",
 			"  the etcd and ceph health gates still run.",
