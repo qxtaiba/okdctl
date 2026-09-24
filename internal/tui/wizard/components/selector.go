@@ -42,14 +42,22 @@ type Selector struct {
 	focused              bool
 	dropdownScrollOffset int
 
+	// maxVisible is the dropdown's per-render row budget; zero means unset,
+	// in which case dropdownBudget falls back to maxDropdownVisible.
+	maxVisible int
+
 	// selectedSpan is the line range the selection occupied in the last View;
 	// spanKnown is false until the selector has rendered at least once.
 	selectedSpan struct{ start, end int }
 	spanKnown    bool
 
-	// cachedStyles caches option render styles; safe since tui.Color* only
-	// changes during package init.
-	cachedStyles *optionStyles
+	// cachedStyles caches option render styles; cachedGeneration pins it to
+	// the stylesGeneration it was built from, since tui.Color* tiers rebind
+	// on background detection (SetDarkBackground) — getOptionStyles rebuilds
+	// once stylesGeneration has moved on, instead of assuming the cache is
+	// forever valid.
+	cachedStyles     *optionStyles
+	cachedGeneration int
 
 	// DropdownHeader is a dim, non-selectable line shown above the dropdown's
 	// option rows, or nothing when empty.
@@ -107,6 +115,11 @@ func (s *Selector) SetFocused(focused bool) {
 	s.focused = focused
 }
 
+// SetDropdownBudget sets the dropdown's visible-row budget, clamped to a floor of maxDropdownVisible.
+func (s *Selector) SetDropdownBudget(rows int) {
+	s.maxVisible = max(rows, maxDropdownVisible)
+}
+
 // Update handles up/down and j/k key presses to move the selection.
 func (s *Selector) Update(msg tea.Msg) (*Selector, tea.Cmd) {
 	if !s.focused {
@@ -134,7 +147,7 @@ type optionStyles struct {
 }
 
 func (s *Selector) getOptionStyles() optionStyles {
-	if s.cachedStyles != nil {
+	if s.cachedStyles != nil && s.cachedGeneration == stylesGeneration {
 		return *s.cachedStyles
 	}
 	styles := optionStyles{
@@ -145,6 +158,7 @@ func (s *Selector) getOptionStyles() optionStyles {
 		line:             lipgloss.NewStyle().Foreground(tui.ColorSlate700),
 	}
 	s.cachedStyles = &styles
+	s.cachedGeneration = stylesGeneration
 	return styles
 }
 

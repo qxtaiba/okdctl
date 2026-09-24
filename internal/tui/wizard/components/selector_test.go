@@ -1,6 +1,8 @@
 package components
 
 import (
+	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -8,6 +10,31 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 )
+
+var nodeIDPattern = regexp.MustCompile(`node\d+`)
+
+// shownNodeIDs returns the set of distinct "nodeN" IDs present in a
+// rendered view, whole-token matched so "node1" never false-positives
+// against a rendered "node10"..."node19".
+func shownNodeIDs(view string) map[string]bool {
+	shown := make(map[string]bool)
+	for _, id := range nodeIDPattern.FindAllString(view, -1) {
+		shown[id] = true
+	}
+	return shown
+}
+
+func sixItemDropdownSelector() *Selector {
+	return nItemDropdownSelector(6)
+}
+
+func nItemDropdownSelector(n int) *Selector {
+	opts := make([]Option, n)
+	for i := range opts {
+		opts[i] = Option{ID: fmt.Sprintf("node%d", i), Title: fmt.Sprintf("node%d", i), InDropdown: true}
+	}
+	return NewSelector(opts)
+}
 
 func newSpanSelector() *Selector {
 	return NewSelector([]Option{
@@ -83,6 +110,93 @@ func TestSelector_DownFromLastDropdownItemContinues(t *testing.T) {
 
 	if got := s.Selected().ID; got != "minor:4.19" {
 		t.Fatalf("Selected().ID after moveDown() from the last dropdown item = %q, want minor:4.19 (the next parent)", got)
+	}
+}
+
+func TestSelector_DropdownBudgetShowsAllItemsWhenItFits(t *testing.T) {
+	s := sixItemDropdownSelector()
+	s.SetDropdownBudget(12)
+
+	view := tuitest.StripANSI(s.View())
+	for i := 0; i < 6; i++ {
+		want := fmt.Sprintf("node%d", i)
+		if !strings.Contains(view, want) {
+			t.Fatalf("view missing %s with budget 12:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "more") {
+		t.Fatalf("view shows a more-marker despite the budget covering all items:\n%s", view)
+	}
+}
+
+func TestSelector_DropdownBudgetClampsToFloor(t *testing.T) {
+	s := sixItemDropdownSelector()
+	s.SetDropdownBudget(3)
+
+	view := tuitest.StripANSI(s.View())
+	if !strings.Contains(view, "↓ 1 more") {
+		t.Fatalf("budget 3 should clamp to the floor of 5, hiding exactly 1 of 6 items:\n%s", view)
+	}
+}
+
+func TestSelector_DropdownOffsetReclampsWhenBudgetGrows(t *testing.T) {
+	s := sixItemDropdownSelector()
+	s.SetDropdownBudget(5) // the floor: only 5 of 6 items fit
+
+	for i := 0; i < 5; i++ {
+		s.moveDown()
+	}
+	if s.dropdownScrollOffset == 0 {
+		t.Fatal("scrolling to the last item under a 5-item budget should have moved the offset")
+	}
+
+	// Simulate a resize growing the budget without moving the cursor: the
+	// stale offset must re-clamp on render, not strand the window mid-list.
+	s.SetDropdownBudget(12)
+	view := tuitest.StripANSI(s.View())
+	for i := 0; i < 6; i++ {
+		want := fmt.Sprintf("node%d", i)
+		if !strings.Contains(view, want) {
+			t.Fatalf("growing the budget must re-clamp the stale offset and show %s:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "more") {
+		t.Fatalf("budget 12 covers all items; a stale offset must not still show a more-marker:\n%s", view)
+	}
+}
+
+func TestSelector_DropdownOffsetReclampsWhenBudgetShrinks(t *testing.T) {
+	s := nItemDropdownSelector(20)
+	s.SetDropdownBudget(10) // large enough to still need scrolling, short of the floor's ceiling
+
+	for i := 0; i < 19; i++ {
+		s.moveDown()
+	}
+	if s.Selected().ID != "node19" {
+		t.Fatalf("Selected().ID after 19 moveDown() calls = %q, want node19", s.Selected().ID)
+	}
+
+	// Simulate a resize shrinking the budget toward the floor without
+	// moving the cursor: the window must still contain the selected item
+	// and render a full floor-sized set of rows, not strand the cursor
+	// outside a window sized for the old, larger budget.
+	s.SetDropdownBudget(5)
+	view := tuitest.StripANSI(s.View())
+	shown := shownNodeIDs(view)
+	if !shown["node19"] {
+		t.Fatalf("shrinking the budget must keep the selected item node19 in view:\n%s", view)
+	}
+	if len(shown) != 5 {
+		t.Fatalf("shrunk window shows %d items %v, want exactly 5 (the floor)", len(shown), shown)
+	}
+}
+
+func TestSelector_DropdownBudgetUnsetDefaultsToFloor(t *testing.T) {
+	s := sixItemDropdownSelector()
+
+	view := tuitest.StripANSI(s.View())
+	if !strings.Contains(view, "↓ 1 more") {
+		t.Fatalf("unset budget should default to today's floor of 5, hiding exactly 1 of 6 items:\n%s", view)
 	}
 }
 

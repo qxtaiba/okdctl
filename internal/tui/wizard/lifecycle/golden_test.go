@@ -76,9 +76,21 @@ func lifecycleScenarios() []lifecycleScenario {
 				return &State{Cfg: cfg, Op: node.OpResize}, Hooks{}
 			},
 			seed: func(m *wizard.Model, _ *State) {
+				// Six nodes: the reported case where a tall terminal must
+				// grow the dropdown window past its old 5-row cap instead
+				// of showing "1 more" above acres of empty space. At 80x24
+				// the masters/workers rows above the dropdown leave less
+				// room than even the floor of 5 needs, so the box's
+				// closing border scrolls out of the 24-row viewport and
+				// the generic "scroll down for more" footer takes over —
+				// expected at this size, not a border-rendering bug.
 				m.Update(nodesLoadedMsg{nodes: []cluster.NodeDetail{
-					{Name: "homelab-worker0", Role: nodetypes.RoleWorker, Ready: true},
 					{Name: "homelab-master0", Role: nodetypes.RoleMaster, Ready: true},
+					{Name: "homelab-master1", Role: nodetypes.RoleMaster, Ready: true},
+					{Name: "homelab-master2", Role: nodetypes.RoleMaster, Ready: true},
+					{Name: "homelab-worker0", Role: nodetypes.RoleWorker, Ready: true},
+					{Name: "homelab-worker1", Role: nodetypes.RoleWorker, Ready: true},
+					{Name: "homelab-worker2", Role: nodetypes.RoleWorker, Ready: true},
 				}})
 				// Move selection into the dropdown so its header and a
 				// highlighted node row render together.

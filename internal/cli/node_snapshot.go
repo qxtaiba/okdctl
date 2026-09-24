@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"text/tabwriter"
 	"time"
 	"unicode"
 
@@ -373,11 +372,10 @@ func toNodeSnapshotEntries(snapshots []hostssh.SnapshotInfo) []nodeSnapshotEntry
 
 func printNodeSnapshotList(w io.Writer, entries []nodeSnapshotEntry) error {
 	if len(entries) == 0 {
-		_, err := fmt.Fprintln(w, "no snapshots found")
+		_, err := fmt.Fprintln(w, tui.EmptyState("no snapshots found", "create one with 'okdctl node snapshot create <node>'"))
 		return err
 	}
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "NAME\tSNAPTIME\tPARENT\tDESCRIPTION")
+	rows := make([][]string, 0, len(entries))
 	for _, e := range entries {
 		snapTime := e.SnapTime
 		if snapTime == "" {
@@ -387,9 +385,9 @@ func printNodeSnapshotList(w io.Writer, entries []nodeSnapshotEntry) error {
 		if parent == "" {
 			parent = "-"
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", stripControl(e.Name), snapTime, stripControl(parent), stripControl(e.Description))
+		rows = append(rows, []string{stripControl(e.Name), snapTime, stripControl(parent), stripControl(e.Description)})
 	}
-	return tw.Flush()
+	return printTable(w, []string{headerName, "SNAPTIME", "PARENT", "DESCRIPTION"}, rows, tui.TableOptions{})
 }
 
 // stripControl strips control chars so a hostile snapshot description can't

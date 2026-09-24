@@ -107,25 +107,29 @@ func (f *SelectField) Validate() error {
 	return f.Check()
 }
 
-// Update handles left/right and h/l key presses to cycle through Options.
+// Update handles left/right and h/l key presses to cycle through Options,
+// clearing the default tag only when the selected index actually moves to a
+// different option — a single-option field's arrows are inert and keep it.
 func (f *SelectField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 	if !f.focused || len(f.Options) == 0 {
 		return f, nil
 	}
 
 	if msg, ok := msg.(tea.KeyPressMsg); ok {
+		prev := f.selected
 		switch {
 		case key.Matches(msg, key.NewBinding(key.WithKeys("left", "h"))):
 			f.selected--
 			if f.selected < 0 {
 				f.selected = len(f.Options) - 1
 			}
-			f.isDefault = false
 		case key.Matches(msg, key.NewBinding(key.WithKeys("right", "l"))):
 			f.selected++
 			if f.selected >= len(f.Options) {
 				f.selected = 0
 			}
+		}
+		if f.selected != prev {
 			f.isDefault = false
 		}
 	}
