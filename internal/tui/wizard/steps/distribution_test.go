@@ -2,12 +2,15 @@ package steps
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/releases"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
@@ -214,5 +217,62 @@ func TestDistributionStep_EnterOnEmptyListReportsError(t *testing.T) {
 	}
 	if errMsg.Error == nil || errMsg.Error.Error() != "pick a release first" {
 		t.Fatalf("ErrorSetMsg.Error = %v, want %q", errMsg.Error, "pick a release first")
+	}
+}
+
+// midListSeriesWithManyPatches builds 5 minor series (indices 0..4) where
+// the middle one (index 2) carries patchCount patch versions — enough,
+// once expanded, to exceed the dropdown's floor and expose any
+// undercounted before/after chrome in applyDropdownBudget.
+func midListSeriesWithManyPatches(patchCount int) []releases.OKDReleaseSeries {
+	series := make([]releases.OKDReleaseSeries, 5)
+	for i := range series {
+		minor := 20 - i
+		series[i] = releases.OKDReleaseSeries{
+			Major: 4, Minor: minor,
+			Latest: releases.OKDVersion{Version: fmt.Sprintf("4.%d.0", minor)},
+		}
+	}
+	patches := make([]releases.OKDVersion, patchCount)
+	for i := range patches {
+		patches[i] = releases.OKDVersion{Version: fmt.Sprintf("4.%d.%d", series[2].Minor, i)}
+	}
+	series[2].Versions = patches
+	series[2].Latest = patches[0]
+	return series
+}
+
+func TestDistributionStep_MidListExpansionRespectsContentHeight(t *testing.T) {
+	series := midListSeriesWithManyPatches(10)
+
+	s := NewDistributionStep()
+	s.SetVersionFetcher(StaticVersionFetcher{Series: series})
+	step, _ := s.Update(s.fetchVersions())
+	s = step.(*DistributionStep)
+
+	// Expand the mid-list series (2 collapsed rows before it, 2 after) —
+	// the case where the expanded row's own title+description, plus its
+	// connector to the last collapsed row above it, must be charged
+	// against the budget or the dropdown overflows contentHeight.
+	s.expandedMinor = series[2].Minor
+	s.updateVersionSelector()
+
+	const contentHeight = 40
+	s.SetSize(90, contentHeight)
+	view := s.View(90, contentHeight)
+
+	if h := lipgloss.Height(view); h > contentHeight {
+		t.Errorf("rendered height %d exceeds contentHeight %d — the dropdown budget overflowed the viewport", h, contentHeight)
+	}
+
+	shown := 0
+	for i := 0; i < len(series[2].Versions); i++ {
+		if strings.Contains(view, fmt.Sprintf("4.%d.%d", series[2].Minor, i)) {
+			shown++
+		}
+	}
+	const wantShown = 7 // (avail+1)/3 once the expanded row's own chrome is charged correctly
+	if shown != wantShown {
+		t.Errorf("dropdown shows %d of %d patches, want exactly %d", shown, len(series[2].Versions), wantShown)
 	}
 }

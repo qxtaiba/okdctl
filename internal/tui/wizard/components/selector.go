@@ -42,6 +42,10 @@ type Selector struct {
 	focused              bool
 	dropdownScrollOffset int
 
+	// maxVisible is the dropdown's per-render row budget; zero means unset,
+	// in which case dropdownBudget falls back to maxDropdownVisible.
+	maxVisible int
+
 	// selectedSpan is the line range the selection occupied in the last View;
 	// spanKnown is false until the selector has rendered at least once.
 	selectedSpan struct{ start, end int }
@@ -109,6 +113,11 @@ func (s *Selector) SetSelectedByID(id string) {
 // SetFocused toggles keyboard focus on the selector.
 func (s *Selector) SetFocused(focused bool) {
 	s.focused = focused
+}
+
+// SetDropdownBudget sets the dropdown's visible-row budget, clamped to a floor of maxDropdownVisible.
+func (s *Selector) SetDropdownBudget(rows int) {
+	s.maxVisible = max(rows, maxDropdownVisible)
 }
 
 // Update handles up/down and j/k key presses to move the selection.
