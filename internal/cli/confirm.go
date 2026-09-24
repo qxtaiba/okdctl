@@ -26,7 +26,7 @@ func promptForLine(ctx context.Context, prompt string) (string, error) {
 	r := testStdinReader
 	if r == nil {
 		if !term.IsTerminal(int(os.Stdin.Fd())) {
-			return "", &errtypes.UsageError{Msg: "no TTY and --yes not set; refusing destructive op"}
+			return "", &errtypes.UsageError{Msg: "no TTY and --yes not set; refusing destructive op — pass --yes for non-interactive use"}
 		}
 		r = os.Stdin
 	}

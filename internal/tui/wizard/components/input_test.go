@@ -50,6 +50,32 @@ func TestInputField_ErrorBorderWinsOverFocus(t *testing.T) {
 	}
 }
 
+// TestInputField_RequiredErrorNamesFix pins the R4 fix for the wizard's
+// most-triggered error: a blank required field must say what to do, AND
+// which field, not a generic "this field is required".
+func TestInputField_RequiredErrorNamesFix(t *testing.T) {
+	f := NewInputField("cluster name", "")
+	f.Required = true
+
+	const want = "cluster name is required — enter a value"
+	if err := f.Check(); err == nil || err.Error() != want {
+		t.Fatalf("Check() = %v, want %q", err, want)
+	}
+}
+
+// TestInputField_RequiredErrorFallsBackWithoutLabel covers the defensive
+// branch: a Required field constructed without a label must not render
+// "is required" with an empty subject.
+func TestInputField_RequiredErrorFallsBackWithoutLabel(t *testing.T) {
+	f := NewInputField("", "")
+	f.Required = true
+
+	const want = "this field is required — enter a value"
+	if err := f.Check(); err == nil || err.Error() != want {
+		t.Fatalf("Check() = %v, want %q", err, want)
+	}
+}
+
 func TestInputField_HelpOnlyWhenFocused(t *testing.T) {
 	f := NewInputField("name", "")
 	f.Help = "lowercase letters only"

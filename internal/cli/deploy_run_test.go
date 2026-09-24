@@ -17,6 +17,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/deploy"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/node"
+	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/testutil"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/steps"
@@ -404,6 +405,43 @@ func TestRunDeploy_DryRunShortCircuitsBeforeWizard(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "DEPLOY STEP LISTING") {
 		t.Errorf("step listing missing from output:\n%s", out.String())
+	}
+}
+
+// TestRunDeployDryRun_SurfacesLockConflictNotGenericWrap pins the fix: a
+// concurrent-lock conflict from runlock.Acquire must reach the user as its
+// own specific message, not get buried behind runDeployDryRun's generic
+// "dry-run: plan preview failed" wrap (which errors.As/Describe can't see
+// past, since they only look at the outermost *errtypes.ConfigError).
+//
+// Calls runDeployDryRun directly rather than through runDeploy: runDeploy
+// itself takes an unrelated project lock first (for MaterializeTerraform),
+// which would conflict with a pre-held lock before ever reaching the code
+// under test.
+func TestRunDeployDryRun_SurfacesLockConflictNotGenericWrap(t *testing.T) {
+	resetDeployState(t)
+	isolateProxmoxEnv(t)
+	t.Chdir(t.TempDir())
+	testutil.InstallFakeBin(t, "terraform", "#!/bin/sh\nexit 0\n")
+
+	root, err := resolveWorkspaceRoot()
+	if err != nil {
+		t.Fatalf("resolveWorkspaceRoot: %v", err)
+	}
+	lock, err := runlock.Acquire(root, "some-other-command")
+	if err != nil {
+		t.Fatalf("pre-acquire lock: %v", err)
+	}
+	defer lock.Release()
+
+	var out bytes.Buffer
+	runErr := runDeployDryRun(context.Background(), config.DefaultConfig(), &out)
+	var cfgErr *errtypes.ConfigError
+	if !errors.As(runErr, &cfgErr) {
+		t.Fatalf("want *errtypes.ConfigError, got %T: %v", runErr, runErr)
+	}
+	if !strings.Contains(cfgErr.Msg, "another okdctl process holds the project lock") {
+		t.Fatalf("dry-run must surface the lock-conflict message unwrapped, got Msg=%q", cfgErr.Msg)
 	}
 }
 

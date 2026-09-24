@@ -68,7 +68,7 @@ func discoverProxmox(cfg *config.Config) (*proxmoxDiscovery, error) {
 		return nil, classifyError(err)
 	}
 	if len(rawNodes) == 0 {
-		return nil, fmt.Errorf("no nodes found in cluster")
+		return nil, fmt.Errorf("no nodes found in cluster — check that the proxmox cluster has at least one node")
 	}
 
 	nodes := make([]proxmoxNode, 0, len(rawNodes))
@@ -171,6 +171,6 @@ func classifyError(err error) error {
 	case strings.Contains(msg, "status 401") || strings.Contains(msg, "authentication failure"):
 		return fmt.Errorf("authentication failed — check username and password")
 	default:
-		return fmt.Errorf("connection failed: %w", err)
+		return fmt.Errorf("connection failed — check proxmox connectivity and credentials: %w", err)
 	}
 }

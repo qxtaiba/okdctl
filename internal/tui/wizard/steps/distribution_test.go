@@ -160,6 +160,26 @@ func TestDistributionStep_ErrorStateRendersEmptyState(t *testing.T) {
 	}
 }
 
+// TestDistributionStep_ErrorStateDetailsLabeledOnce pins the R4 fix for the
+// error phase: the raw fetch error renders under a "details:" label, and the
+// retry/back keys appear only in the footer's ShortHelp ribbon, not a second
+// time inline in the step's own EmptyState hint.
+func TestDistributionStep_ErrorStateDetailsLabeledOnce(t *testing.T) {
+	s := NewDistributionStep()
+	s.SetVersionFetcher(StaticVersionFetcher{Err: errors.New("dial tcp: connection refused")})
+	step, _ := s.Update(s.fetchVersions())
+	s = step.(*DistributionStep)
+
+	view := s.View(80, 24)
+	const wantDetails = "details: dial tcp: connection refused"
+	if !strings.Contains(view, wantDetails) {
+		t.Fatalf("View() = %q, want to contain %q", view, wantDetails)
+	}
+	if strings.Contains(view, "r retry") {
+		t.Fatalf("View() = %q, want no inline \"r retry\" (the footer's ShortHelp already shows it)", view)
+	}
+}
+
 func TestDistributionStep_RetryRefetches(t *testing.T) {
 	s := NewDistributionStep()
 	s.SetVersionFetcher(StaticVersionFetcher{Err: errors.New("dial tcp: connection refused")})

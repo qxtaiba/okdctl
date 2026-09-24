@@ -151,7 +151,8 @@ func init() {
 // not REST/API credentials.
 func buildSnapshotRunner(ctx context.Context, cfg *config.Config, dryRun bool) (*nodeRunnerCtx, error) {
 	if cfg.Provider.Proxmox == nil {
-		return nil, &errtypes.ConfigError{Msg: "node snapshot requires provider.proxmox to be configured"}
+		return nil, (&errtypes.ConfigError{Msg: "node snapshot requires provider.proxmox to be configured"}).
+			WithHint("set provider.proxmox in the config file")
 	}
 	px := cfg.Provider.Proxmox
 
@@ -221,11 +222,18 @@ func runNodeSnapshotCreate(cmd *cobra.Command, args []string) error {
 	// validated here too so a --dry-run previews only values a real run would accept
 	if nodeSnapshotCreateName != "" {
 		if err := hostssh.ValidateSnapshotName(nodeSnapshotCreateName); err != nil {
-			return &errtypes.ConfigError{Msg: fmt.Sprintf("invalid --name %q", nodeSnapshotCreateName), Err: err}
+			// Verified credential-free: ValidateSnapshotName's errors only echo a
+			// rejected character/length of the --name value itself
+			// (hostssh/snapshot.go:61-81), never credentials, so folding err into
+			// Msg is safe under ConfigError's "Msg must never contain credentials" rule.
+			return &errtypes.ConfigError{Msg: fmt.Sprintf("invalid --name %q — %s", nodeSnapshotCreateName, err), Err: err}
 		}
 	}
 	if err := hostssh.ValidateSnapshotDescription(nodeSnapshotCreateDescription); err != nil {
-		return &errtypes.ConfigError{Msg: fmt.Sprintf("invalid --description %q", nodeSnapshotCreateDescription), Err: err}
+		// Verified credential-free: same reasoning as ValidateSnapshotName above —
+		// ValidateSnapshotDescription's errors only echo the --description value's
+		// own rejected character/length (hostssh/snapshot.go:87-107).
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("invalid --description %q — %s", nodeSnapshotCreateDescription, err), Err: err}
 	}
 
 	cfg, err := loadConfig(cfgFile)
@@ -273,7 +281,10 @@ func runNodeSnapshotCreate(cmd *cobra.Command, args []string) error {
 func runNodeSnapshotMutate(cmd *cobra.Command, verb string, twoStage, yes, dryRun bool, confirmCluster, warnMsg, target, snapname string, op func(rc *nodeRunnerCtx) error) error {
 	// validated here too so a --dry-run previews only names a real run would accept
 	if err := hostssh.ValidateSnapshotName(snapname); err != nil {
-		return &errtypes.ConfigError{Msg: fmt.Sprintf("invalid snapshot name %q", snapname), Err: err}
+		// Verified credential-free: see runNodeSnapshotCreate's --name check —
+		// ValidateSnapshotName's errors only echo the rejected character/length
+		// of the name argument itself (hostssh/snapshot.go:61-81).
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("invalid snapshot name %q — %s", snapname, err), Err: err}
 	}
 
 	cfg, err := loadConfig(cfgFile)

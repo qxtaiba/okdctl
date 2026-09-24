@@ -69,7 +69,7 @@ install --all   installs every addon enabled in the configuration file in
 	Args: func(_ *cobra.Command, args []string) error {
 		if addonInstallAll {
 			if len(args) != 0 {
-				return &errtypes.UsageError{Msg: "--all and a named addon are mutually exclusive"}
+				return &errtypes.UsageError{Msg: "--all and a named addon are mutually exclusive — pass either --all or a single addon name"}
 			}
 			return nil
 		}
@@ -266,7 +266,7 @@ func runAddonVerify(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	if failed > 0 {
-		return &errtypes.ClusterError{Msg: fmt.Sprintf("%d addon(s) failed verification", failed)}
+		return (&errtypes.ClusterError{Msg: fmt.Sprintf("%d addon(s) failed verification", failed)}).WithHint("see the table above for details")
 	}
 	return vErr
 }

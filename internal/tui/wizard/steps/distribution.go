@@ -359,17 +359,18 @@ func (s *DistributionStep) viewLoadingPhase() string {
 	return content.String()
 }
 
-// viewErrorPhase renders the empty state and retry ribbon shown when the
-// release fetch failed, followed by the wrapped error detail.
+// viewErrorPhase renders the empty state shown when the release fetch
+// failed, followed by the raw error under a "details:" label; the retry/back
+// keys live only in the footer (ShortHelp) so they aren't repeated here.
 func (s *DistributionStep) viewErrorPhase(width int) string {
 	var content strings.Builder
-	content.WriteString(tui.EmptyState("no releases loaded — check your connection", "r retry · esc back"))
+	content.WriteString(tui.EmptyState("no releases loaded — check your connection", ""))
 	if s.loadError != nil {
 		content.WriteString("\n\n")
 		content.WriteString(lipgloss.NewStyle().
 			Foreground(tui.ColorSlate500).
 			Width(width - 2).
-			Render(s.loadError.Error()))
+			Render("details: " + s.loadError.Error()))
 	}
 	return content.String()
 }

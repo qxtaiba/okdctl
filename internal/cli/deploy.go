@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -117,7 +118,8 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 		if loadErr != nil {
 			logutil.Warn("existing config could not be loaded", logutil.LF("err", loadErr))
 			if deployYes || deployWriteConfig {
-				return &errtypes.ConfigError{Msg: "cannot proceed in non-interactive mode with invalid config", Err: loadErr}
+				return (&errtypes.ConfigError{Msg: "cannot proceed in non-interactive mode with invalid config", Err: loadErr}).
+					WithHint("run 'okdctl config validate' to see what's wrong, or drop --yes to use the wizard")
 			}
 			logutil.Info("starting fresh with defaults")
 			configExists = false
@@ -161,7 +163,8 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 
 	result, welcomeMode, err := runWizardFn(ctx, cfg, configExists)
 	if err != nil {
-		return &errtypes.ConfigError{Msg: "wizard failed", Err: err}
+		return (&errtypes.ConfigError{Msg: "wizard failed", Err: err}).
+			WithHint("try again, or use --yes with a saved config for a non-interactive deploy")
 	}
 
 	if result.Cancelled {
@@ -213,6 +216,14 @@ func runDeployDryRun(ctx context.Context, cfg *config.Config, w io.Writer) error
 		Caller:      "deploy --dry-run",
 	})
 	if err != nil {
+		// A specific ConfigError (e.g. runlock's "another okdctl process holds
+		// the project lock") must pass through as-is — re-wrapping it here would
+		// bury its message behind this generic one, since errors.As/Describe
+		// only ever look at the outermost ConfigError in the chain.
+		var cfgErr *errtypes.ConfigError
+		if errors.As(err, &cfgErr) {
+			return err
+		}
 		return &errtypes.ConfigError{Msg: "dry-run: plan preview failed", Err: err}
 	}
 
@@ -300,7 +311,8 @@ func runFullDeployment(ctx context.Context, cfg *config.Config, w io.Writer) err
 	// Hard gate: a hand-edited config is rejected here, not warn-and-proceed like saveConfig.
 	gate := config.ValidationOptions{Scope: deployGateScope, ProjectRoot: projectRoot}
 	if result := config.ValidateWithOptions(cfg, gate); !result.IsValid() {
-		return &errtypes.ConfigError{Msg: "config validation failed", Err: result}
+		return (&errtypes.ConfigError{Msg: "config validation failed", Err: result}).
+			WithHint("run 'okdctl config validate' to see every failing field")
 	}
 
 	envPath := credentials.EnvFilePath(deployOutputFile)

@@ -110,7 +110,8 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 		if st.Started && !st.Executed {
 			return &errtypes.ClusterError{Msg: lifecycleInterruptedMsg, Err: err}
 		}
-		return &errtypes.ConfigError{Msg: "lifecycle wizard", Err: err}
+		return (&errtypes.ConfigError{Msg: "lifecycle wizard failed", Err: err}).
+			WithHint("try again, or use 'okdctl node resize/add/remove' instead")
 	}
 	return reportLifecycleOutcome(cmd, result, st)
 }

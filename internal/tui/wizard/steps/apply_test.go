@@ -132,8 +132,12 @@ func TestNetworkingStepDefinition_Validate(t *testing.T) {
 		"service_cidr": "172.30.0.0/16",
 		fieldGateway:   "192.168.1.1",
 	}
-	if err := NetworkingStepDefinition.Validate(overlap); err == nil {
-		t.Fatal("Validate(overlapping CIDRs) = nil, want error")
+	err := NetworkingStepDefinition.Validate(overlap)
+	// R4: the overlap message names its fix so the operator isn't left
+	// guessing what to do about it.
+	const wantOverlapErr = "machine cidr and pod cidr must not overlap — widen or move one of the ranges"
+	if err == nil || err.Error() != wantOverlapErr {
+		t.Fatalf("Validate(overlapping CIDRs) = %v, want %q", err, wantOverlapErr)
 	}
 
 	badGateway := map[string]string{

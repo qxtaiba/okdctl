@@ -14,8 +14,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-var errKVEmptyKey = errors.New("key cannot be empty")
-
 // KeyValueField renders an editable key=value table (j/k row, h/l col, a
 // add, d delete, ctrl+e edit). enter/tab/shift+tab are reserved by the host
 // DataDrivenStep and can't be edit-commit keys — same constraint as
@@ -120,7 +118,11 @@ func (f *KeyValueField) Check() error {
 	for i := range f.rows {
 		r := &f.rows[i]
 		if strings.TrimSpace(r.keyInput.Value()) == "" && r.valInput.Value() != "" {
-			return errKVEmptyKey
+			label := f.Label
+			if label == "" {
+				return errors.New("key cannot be empty — enter a key")
+			}
+			return fmt.Errorf("%s key cannot be empty — enter a key", label)
 		}
 	}
 	if f.Validator != nil {

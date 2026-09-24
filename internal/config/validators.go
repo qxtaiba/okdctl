@@ -34,17 +34,17 @@ func validateRequired(cfg *Config, result *ValidationResult) {
 		field string
 		msg   string
 	}{
-		{cfg.Cluster.Name == "", FieldClusterName, "cluster name is required"},
-		{cfg.Cluster.Domain == "", FieldClusterDomain, "cluster domain is required"},
-		{cfg.Distribution.Type == "", FieldDistributionType, "distribution type is required"},
-		{cfg.Distribution.Version == "", FieldDistributionVersion, "distribution version is required"},
-		{cfg.Provider.Type == "", FieldProviderType, "provider type is required"},
+		{cfg.Cluster.Name == "", FieldClusterName, "cluster name is required — set it in the config file"},
+		{cfg.Cluster.Domain == "", FieldClusterDomain, "cluster domain is required — set it in the config file"},
+		{cfg.Distribution.Type == "", FieldDistributionType, "distribution type is required — set it in the config file"},
+		{cfg.Distribution.Version == "", FieldDistributionVersion, "distribution version is required — set it in the config file"},
+		{cfg.Provider.Type == "", FieldProviderType, "provider type is required — set it in the config file"},
 		{cfg.Topology.ControlPlane.Count < 1, FieldTopologyControlPlaneCount, "must have at least 1 control plane node"},
-		{cfg.Networking.MachineCIDR == "", FieldNetworkingMachineCIDR, "machine CIDR is required"},
-		{cfg.Networking.PodCIDR == "", FieldNetworkingPodCIDR, "pod CIDR is required"},
-		{cfg.Networking.ServiceCIDR == "", FieldNetworkingServiceCIDR, "service CIDR is required"},
-		{cfg.Networking.Gateway == "", FieldNetworkingGateway, "gateway is required"},
-		{len(cfg.Networking.DNS) == 0, FieldNetworkingDNS, "at least one DNS server is required"},
+		{cfg.Networking.MachineCIDR == "", FieldNetworkingMachineCIDR, "machine CIDR is required — set it in the config file"},
+		{cfg.Networking.PodCIDR == "", FieldNetworkingPodCIDR, "pod CIDR is required — set it in the config file"},
+		{cfg.Networking.ServiceCIDR == "", FieldNetworkingServiceCIDR, "service CIDR is required — set it in the config file"},
+		{cfg.Networking.Gateway == "", FieldNetworkingGateway, "gateway is required — set it in the config file"},
+		{len(cfg.Networking.DNS) == 0, FieldNetworkingDNS, "at least one DNS server is required — set one in the config file"},
 	}
 	for _, c := range checks {
 		if c.bad {
@@ -67,11 +67,13 @@ func validateEnums(cfg *Config, result *ValidationResult) {
 	}
 
 	if cfg.Distribution.Type != "" && !isValidDistribution(cfg.Distribution.Type) {
-		result.AddError(FieldDistributionType, fmt.Sprintf("unsupported distribution: %s", cfg.Distribution.Type))
+		result.AddError(FieldDistributionType, fmt.Sprintf("unsupported distribution: %s — supported: %s",
+			cfg.Distribution.Type, strings.Join(supportedDistributionNames(), ", ")))
 	}
 
 	if cfg.Provider.Type != "" && !isValidProvider(cfg.Provider.Type) {
-		result.AddError(FieldProviderType, fmt.Sprintf("unsupported provider: %s", cfg.Provider.Type))
+		result.AddError(FieldProviderType, fmt.Sprintf("unsupported provider: %s — supported: %s",
+			cfg.Provider.Type, strings.Join(supportedProviderNames(), ", ")))
 	}
 
 	// env becomes root-privileged terraform's cwd, so "../" must fail closed
@@ -93,7 +95,8 @@ func validateTerraformEnvDir(cfg *Config, projectRoot string, result *Validation
 	}
 	dir := workspace.TerraformEnvDir(projectRoot, env)
 	if !system.DirExists(dir) {
-		result.AddError(FieldDeploymentTerraformEnv, fmt.Sprintf("no environment directory at %s", dir))
+		result.AddError(FieldDeploymentTerraformEnv,
+			fmt.Sprintf("no environment directory at %s — create it or fix deployment.terraform_env", dir))
 	}
 }
 
@@ -105,7 +108,7 @@ func checkCIDROverlap(cidr1, cidr2, field, otherName string, result *ValidationR
 	if err != nil {
 		result.AddError(field, fmt.Sprintf("cannot check overlap with %s: %v", otherName, err))
 	} else if overlap {
-		result.AddError(field, "overlaps with "+otherName)
+		result.AddError(field, "overlaps with "+otherName+" — widen or move one of the ranges")
 	}
 }
 
@@ -135,34 +138,34 @@ func checkNodeResources(node NodeConfig, minCPU, minMemory, minDisk int, cpuFiel
 
 func validateNetworking(cfg *Config, result *ValidationResult) {
 	if cfg.Networking.MachineCIDR != "" && !IsValidCIDR(cfg.Networking.MachineCIDR) {
-		result.AddError(FieldNetworkingMachineCIDR, "must be a valid CIDR notation")
+		result.AddError(FieldNetworkingMachineCIDR, "must be a valid CIDR notation (e.g., 192.168.1.0/24)")
 	}
 
 	if cfg.Networking.PodCIDR != "" && !IsValidCIDR(cfg.Networking.PodCIDR) {
-		result.AddError(FieldNetworkingPodCIDR, "must be a valid CIDR notation")
+		result.AddError(FieldNetworkingPodCIDR, "must be a valid CIDR notation (e.g., 192.168.1.0/24)")
 	}
 
 	if cfg.Networking.ServiceCIDR != "" && !IsValidCIDR(cfg.Networking.ServiceCIDR) {
-		result.AddError(FieldNetworkingServiceCIDR, "must be a valid CIDR notation")
+		result.AddError(FieldNetworkingServiceCIDR, "must be a valid CIDR notation (e.g., 192.168.1.0/24)")
 	}
 
 	if cfg.Networking.Gateway != "" && !IsValidIP(cfg.Networking.Gateway) {
-		result.AddError(FieldNetworkingGateway, "must be a valid IP address")
+		result.AddError(FieldNetworkingGateway, "must be a valid IP address (e.g., 192.168.1.10)")
 	}
 
 	for i, dns := range cfg.Networking.DNS {
 		if !IsValidIP(dns) {
-			result.AddError(fmt.Sprintf("%s[%d]", FieldNetworkingDNS, i), "must be a valid IP address")
+			result.AddError(fmt.Sprintf("%s[%d]", FieldNetworkingDNS, i), "must be a valid IP address (e.g., 192.168.1.10)")
 		}
 	}
 
 	// bastion.ip/static_ip.dns feed the kernel cmdline verbatim
 	// (nameserver=%s via --live-karg-append); a non-IP value injects extra kargs.
 	if cfg.Networking.Bastion.IP != "" && !IsValidIP(cfg.Networking.Bastion.IP) {
-		result.AddError(FieldNetworkingBastionIP, "must be a valid IP address")
+		result.AddError(FieldNetworkingBastionIP, "must be a valid IP address (e.g., 192.168.1.10)")
 	}
 	if cfg.Networking.StaticIP.DNS != "" && !IsValidIP(cfg.Networking.StaticIP.DNS) {
-		result.AddError(FieldNetworkingStaticIPDNS, "must be a valid IP address")
+		result.AddError(FieldNetworkingStaticIPDNS, "must be a valid IP address (e.g., 192.168.1.10)")
 	}
 
 	if cfg.Networking.NTPServer != "" && !isValidHostOrIP(cfg.Networking.NTPServer) {
@@ -185,10 +188,10 @@ func validateAdvancedNetworking(cfg *Config, result *ValidationResult) {
 	staticIPStart := cfg.Networking.StaticIP.Start
 
 	if bastionIP != "" && !IsValidIP(bastionIP) {
-		result.AddError(FieldNetworkingBastionIP, "must be a valid IP address")
+		result.AddError(FieldNetworkingBastionIP, "must be a valid IP address (e.g., 192.168.1.10)")
 	}
 	if staticIPStart != "" && !IsValidIP(staticIPStart) {
-		result.AddError(FieldNetworkingStaticIPStart, "must be a valid IP address")
+		result.AddError(FieldNetworkingStaticIPStart, "must be a valid IP address (e.g., 192.168.1.10)")
 	}
 
 	if machineCIDR == "" || !IsValidCIDR(machineCIDR) {
@@ -201,7 +204,7 @@ func validateAdvancedNetworking(cfg *Config, result *ValidationResult) {
 
 	if cfg.Networking.Bastion.VIP != "" {
 		if !IsValidIP(cfg.Networking.Bastion.VIP) {
-			result.AddError("networking.bastion.vip", "must be a valid IP address")
+			result.AddError("networking.bastion.vip", "must be a valid IP address (e.g., 192.168.1.10)")
 		} else {
 			checkIPInCIDR(cfg.Networking.Bastion.VIP, machineCIDR, "networking.bastion.vip", result)
 			if cfg.Networking.Bastion.VIP == gateway {
@@ -451,13 +454,13 @@ func validatePlacementCounts(cfg *Config, result *ValidationResult) {
 
 func validateProxmoxConfig(proxmox *ProxmoxConfig, result *ValidationResult) {
 	if proxmox == nil {
-		result.AddError(FieldProviderProxmox, "proxmox configuration is required when using proxmox provider")
+		result.AddError(FieldProviderProxmox, "proxmox configuration is required when using proxmox provider — add a provider.proxmox block")
 		return
 	}
 
 	switch {
 	case proxmox.Host == "":
-		result.AddError(FieldProxmoxHost, "proxmox host is required")
+		result.AddError(FieldProxmoxHost, "proxmox host is required — set it in the config file")
 	case strings.HasPrefix(proxmox.Host, "http://") && !proxmox.InsecureHTTP:
 		result.AddError(FieldProxmoxHost,
 			"http:// endpoint transmits credentials in plaintext; set provider.proxmox.insecure_http: true to opt in")
@@ -468,13 +471,13 @@ func validateProxmoxConfig(proxmox *ProxmoxConfig, result *ValidationResult) {
 	}
 
 	if proxmox.Node == "" {
-		result.AddError(FieldProxmoxNode, "proxmox node name is required")
+		result.AddError(FieldProxmoxNode, "proxmox node name is required — set it in the config file")
 	} else if !proxmoxNamePattern.MatchString(proxmox.Node) {
 		result.AddError(FieldProxmoxNode, "must be a valid Proxmox node name (alphanumeric, hyphens, underscores)")
 	}
 
 	if proxmox.Storage == "" {
-		result.AddError(FieldProxmoxStorage, "proxmox storage is required")
+		result.AddError(FieldProxmoxStorage, "proxmox storage is required — set it in the config file")
 	} else if !proxmoxNamePattern.MatchString(proxmox.Storage) {
 		result.AddError(FieldProxmoxStorage, "must be a valid Proxmox storage name (alphanumeric, hyphens, underscores)")
 	}
@@ -610,14 +613,14 @@ func validateFiles(cfg *Config, result *ValidationResult) {
 	if cfg.Files.PullSecret != "" {
 		path := system.ExpandPath(cfg.Files.PullSecret)
 		if !system.FileExists(path) {
-			result.AddError(FieldFilesPullSecret, "file does not exist: "+cfg.Files.PullSecret)
+			result.AddError(FieldFilesPullSecret, "file does not exist: "+cfg.Files.PullSecret+" — check the path")
 		}
 	}
 
 	if cfg.Files.SSHPublicKey != "" {
 		path := system.ExpandPath(cfg.Files.SSHPublicKey)
 		if !system.FileExists(path) {
-			result.AddError(FieldFilesSSHPublicKey, "file does not exist: "+cfg.Files.SSHPublicKey)
+			result.AddError(FieldFilesSSHPublicKey, "file does not exist: "+cfg.Files.SSHPublicKey+" — check the path")
 		}
 	}
 }
@@ -696,6 +699,28 @@ func isValidProvider(p ProviderType) bool {
 	return slices.Contains(supportedProviders(), p)
 }
 
+// supportedDistributionNames renders supportedDistributions as plain strings
+// for error messages, so a new entry can't drift the two lists apart.
+func supportedDistributionNames() []string {
+	distros := supportedDistributions()
+	names := make([]string, len(distros))
+	for i, d := range distros {
+		names[i] = string(d)
+	}
+	return names
+}
+
+// supportedProviderNames renders supportedProviders as plain strings for
+// error messages, so a new entry can't drift the two lists apart.
+func supportedProviderNames() []string {
+	providers := supportedProviders()
+	names := make([]string, len(providers))
+	for i, p := range providers {
+		names[i] = string(p)
+	}
+	return names
+}
+
 func getMinMemoryForDistribution(d DistributionType) int {
 	if d == DistributionOKD {
 		return MinMemoryMBControlPlaneOKD
@@ -756,11 +781,11 @@ func ValidateNTPServer(value string) error {
 	return nil
 }
 
-// ValidateIP returns "invalid ip address" if value does not parse as an
-// IPv4 or IPv6 literal.
+// ValidateIP returns an error naming a valid example if value does not parse
+// as an IPv4 or IPv6 literal.
 func ValidateIP(value string) error {
 	if !IsValidIP(value) {
-		return errors.New("invalid ip address")
+		return errors.New("invalid ip address (e.g., 192.168.1.10)")
 	}
 	return nil
 }

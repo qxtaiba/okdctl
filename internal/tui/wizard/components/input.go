@@ -3,7 +3,7 @@
 package components
 
 import (
-	"errors"
+	"fmt"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -216,7 +216,15 @@ func (f *InputField) boxOuterWidth() int {
 // secrets can't leak.
 func (f *InputField) Check() error {
 	if f.Required && strings.TrimSpace(f.input.Value()) == "" {
-		return errRequired
+		// f.Label is lowercase everywhere it's set (e.g. "cluster name",
+		// "pull secret"), matching the "verb noun" grammar every other error
+		// in the wizard uses; "this field" covers the rare case a Required
+		// field has no label rather than reading as "" is required.
+		label := f.Label
+		if label == "" {
+			label = "this field"
+		}
+		return fmt.Errorf("%s is required — enter a value", label)
 	}
 	if f.Validator == nil {
 		return nil
@@ -316,8 +324,6 @@ func (f *InputField) scrubbed(msg string) string {
 	}
 	return msg
 }
-
-var errRequired = errors.New("this field is required")
 
 // scrubbedError wraps a validator error, rewriting the visible message while keeping Unwrap().
 type scrubbedError struct {

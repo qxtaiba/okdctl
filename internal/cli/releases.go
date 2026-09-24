@@ -141,7 +141,7 @@ func fetchFlatVersions(ctx context.Context) ([]releases.OKDVersion, error) {
 	fetcher := releases.NewOKDVersionFetcher()
 	series, err := fetcher.FetchVersions(ctx)
 	if err != nil {
-		return nil, &errtypes.NetworkError{Msg: "fetch OKD versions", Err: err}
+		return nil, (&errtypes.NetworkError{Msg: "no releases loaded", Err: err}).WithHint("check your connection")
 	}
 	out := make([]releases.OKDVersion, 0, len(series))
 	for _, s := range series {

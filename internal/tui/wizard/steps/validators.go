@@ -21,14 +21,14 @@ var (
 // ValidateFilePath requires a non-empty path that exists on disk.
 func ValidateFilePath(value string) error {
 	if value == "" {
-		return errors.New("path is required")
+		return errors.New("path is required — enter a file path")
 	}
 	expanded := system.ExpandPath(value)
 
 	if _, err := os.Stat(expanded); errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("file does not exist: %s", expanded)
+		return fmt.Errorf("file does not exist: %s — check the path", expanded)
 	} else if err != nil {
-		return fmt.Errorf("cannot access file: %w", err)
+		return fmt.Errorf("cannot access file: %w — check permissions", err)
 	}
 	return nil
 }

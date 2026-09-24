@@ -316,7 +316,7 @@ func TestDataDrivenStep_EnterMarksAllTouchedAndFocusesFirstInvalid(t *testing.T)
 	}
 
 	view := tuitest.StripANSI(step.View(80, 24))
-	if !strings.Contains(view, "this field is required") {
+	if !strings.Contains(view, "name is required") {
 		t.Fatalf("View() after enter = %q, want the required-field error visible", view)
 	}
 }

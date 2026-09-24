@@ -141,7 +141,7 @@ func wrapArgValidators(cmd *cobra.Command) {
 			if errors.As(err, &usageErr) {
 				return err
 			}
-			return &errtypes.UsageError{Msg: err.Error(), Err: err}
+			return (&errtypes.UsageError{Msg: err.Error(), Err: err}).WithHint(fmt.Sprintf("see '%s --help'", c.CommandPath()))
 		}
 	}
 	for _, c := range cmd.Commands() {

@@ -26,7 +26,7 @@ var errDoctorWarn = errors.New("doctor: warnings present, no failures")
 func doctorExitErr(fails, warns int) error {
 	switch {
 	case fails > 0:
-		return &errtypes.ConfigError{Msg: "preflight checks failed"}
+		return (&errtypes.ConfigError{Msg: "preflight checks failed"}).WithHint("see the checks above")
 	case warns > 0:
 		return errDoctorWarn
 	default:

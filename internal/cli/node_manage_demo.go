@@ -32,7 +32,8 @@ func runNodeManageDemo(cmd *cobra.Command) error {
 	st := &lifecycle.State{Cfg: cfg}
 	result, err := wizard.RunFlow(cmd.Context(), lifecycle.NewSteps(st, lifecycle.DemoHooks(demoExecStepDelay)), cfg, lifecycle.Chrome())
 	if err != nil {
-		return &errtypes.ConfigError{Msg: "lifecycle wizard", Err: err}
+		return (&errtypes.ConfigError{Msg: "lifecycle wizard failed", Err: err}).
+			WithHint("try again, or use 'okdctl node resize/add/remove' instead")
 	}
 	return reportLifecycleOutcome(cmd, result, st)
 }
