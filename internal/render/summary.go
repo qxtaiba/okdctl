@@ -306,6 +306,14 @@ const readKubeadminCmd = "cat okd-install/cluster-config/auth/kubeadmin-password
 
 // PostDeploySummary renders the success summary after a cluster deploy: access
 // URLs, credentials, and step results.
+//
+// The box is pinned to tui.DefaultBoxWidth (90) rather than the real
+// terminal width — a deliberate cap, not a bug: this is the CLI's plain
+// stdout summary (no TTY-driven layout the way the wizard's done screen has
+// one), and a fixed reading width keeps URLs/credentials on predictable
+// columns whether the terminal is 90 or 400 columns wide. Any width at or
+// above 90 renders byte-identical output; use PostDeploySummaryWidth to fit
+// a narrower caller-owned box instead.
 func PostDeploySummary(cfg *config.Config, result *postinstall.Result, steps []distribution.StepResult, runID string) string {
 	return PostDeploySummaryWidth(cfg, result, steps, runID, tui.DefaultBoxWidth)
 }

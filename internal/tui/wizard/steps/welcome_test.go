@@ -34,6 +34,23 @@ func hubConfig() *config.Config {
 	return cfg
 }
 
+// TestHubShortHelpEnterLabelIsStart guards E-C5: welcome is the one screen
+// whose enter label reads "start" (see keymap_help.go's rule) — it begins
+// the wizard rather than advancing a form or confirming a decision already
+// made.
+func TestHubShortHelpEnterLabelIsStart(t *testing.T) {
+	s := NewWelcomeStep()
+	for _, b := range s.ShortHelp() {
+		if b.Key == wizard.HelpEnter {
+			if b.Help != wizard.HelpStart {
+				t.Errorf("enter label = %q, want %q", b.Help, wizard.HelpStart)
+			}
+			return
+		}
+	}
+	t.Fatal("ShortHelp() carries no enter binding")
+}
+
 func TestHubFreshMenuIsGetStartedAndQuit(t *testing.T) {
 	s := NewWelcomeStep()
 	if got := s.SelectedVerb(); got != HubVerbGetStarted {

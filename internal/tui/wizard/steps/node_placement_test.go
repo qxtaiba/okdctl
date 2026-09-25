@@ -143,6 +143,28 @@ func TestNodePlacementStep_ShortHelpWhileDiscovering(t *testing.T) {
 	}
 }
 
+// TestNodePlacementStep_ShortHelpEnterLabelIsContinue guards E-C5: node
+// placement collects several fields (bridge, storage, per-node role
+// assignments) before the wizard can advance — a form step, per
+// keymap_help.go's rule, so its enter label must read "continue" like every
+// other form step (DataDrivenStep, ParamsStep), not "confirm".
+func TestNodePlacementStep_ShortHelpEnterLabelIsContinue(t *testing.T) {
+	s := NewNodePlacementStep()
+	s.cfg = newProxmoxTestConfig()
+	s.phase = phasePlacing
+	s.buildInnerStep(nil, []string{"pve"})
+
+	for _, b := range s.ShortHelp() {
+		if b.Key == wizard.HelpEnter {
+			if b.Help != wizard.HelpContinue {
+				t.Errorf("enter label = %q, want %q", b.Help, wizard.HelpContinue)
+			}
+			return
+		}
+	}
+	t.Fatal("ShortHelp() while placing carries no enter binding")
+}
+
 func TestNodePlacementStep_EnterWithInvalidFieldFocusesAndReportsErrFixHighlighted(t *testing.T) {
 	s := NewNodePlacementStep()
 	s.cfg = newProxmoxTestConfig()

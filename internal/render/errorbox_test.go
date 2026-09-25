@@ -97,6 +97,36 @@ func TestErrorBodyChipHasTwoSpaceGap(t *testing.T) {
 	}
 }
 
+// TestErrorCardWrappedHintNeverTouchesTheRightBorder guards the T8 nit. A
+// single unbroken "word" longer than the wrap width hard-splits (see
+// TestWrapTextHardSplitsLongToken) into lines that fill the wrap budget
+// exactly — the worst case for a right-edge gutter — so every wrapped hint
+// row this produces must still leave at least one blank column before the
+// closing "│", never land flush against it the way message/kind rows can.
+func TestErrorCardWrappedHintNeverTouchesTheRightBorder(t *testing.T) {
+	hint := strings.Repeat("a", 200)
+	out := ErrorCard("usage error", "short message", hint, 70)
+	stripped := tuitest.StripANSI(out)
+
+	found := false
+	for _, line := range strings.Split(stripped, "\n") {
+		if !strings.Contains(line, "a") || !strings.HasPrefix(line, "│") {
+			continue
+		}
+		interior := strings.TrimSuffix(strings.TrimPrefix(line, "│"), "│")
+		if !strings.Contains(interior, "aaa") {
+			continue
+		}
+		found = true
+		if !strings.HasSuffix(interior, " ") {
+			t.Errorf("hint row has no gutter before the border: %q", line)
+		}
+	}
+	if !found {
+		t.Fatal("could not locate the wrapped hint's rows in the rendered card")
+	}
+}
+
 func TestErrorSummaryGoldenAtWidths(t *testing.T) {
 	err := (&errtypes.ConfigError{Msg: "ignition tls cert not found at /path/server.crt"}).
 		WithHint("re-run setup to regenerate it")

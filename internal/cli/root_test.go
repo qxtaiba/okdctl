@@ -47,6 +47,33 @@ func TestNoRegisteredFlagNameLooksLikeCredential(t *testing.T) {
 	}
 }
 
+// TestHighestTrafficCommandsCarryExamples guards E-C7: root plus the
+// highest-traffic leaves each carry a non-empty Example, so `--help` shows
+// an EXAMPLES section (installHelp's usage template only renders one when
+// .HasExample is true) — node resize is the model this list follows.
+func TestHighestTrafficCommandsCarryExamples(t *testing.T) {
+	want := []string{
+		"okdctl",
+		"okdctl deploy",
+		"okdctl destroy",
+		"okdctl status",
+		"okdctl node manage",
+		"okdctl config validate",
+	}
+	for _, path := range want {
+		t.Run(path, func(t *testing.T) {
+			args := strings.Fields(path)[1:] // drop the leading "okdctl"
+			cmd, _, err := rootCmd.Find(args)
+			if err != nil {
+				t.Fatalf("Find(%v) = %v", args, err)
+			}
+			if strings.TrimSpace(cmd.Example) == "" {
+				t.Errorf("%s has no Example; --help would show no EXAMPLES section", path)
+			}
+		})
+	}
+}
+
 func TestSignalLoop(t *testing.T) {
 	cases := []struct {
 		name     string

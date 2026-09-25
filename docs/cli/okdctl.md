@@ -12,6 +12,15 @@ bootstrap glue.
 Release builds check api.github.com for a newer release (at most once
 per 24h, cached locally); set OKDCTL_NO_UPDATE_CHECK=1 to disable.
 
+### Examples
+
+```
+  okdctl deploy
+  okdctl status
+  okdctl node manage
+  okdctl destroy
+```
+
 ### Options
 
 ```

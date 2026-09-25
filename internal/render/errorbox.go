@@ -66,7 +66,14 @@ func errorBody(kind, message, hint string, width int) *Builder {
 	if hint != "" {
 		sb.Newline()
 		pointer := tui.HighlightStyle.Render(tui.IconPointer)
-		wrapped := tui.WrapLines(hint, contentWidth-2)
+		// contentWidth-2 covers only the pointer glyph and its trailing
+		// space; both the first line's "pointer " prefix and every
+		// continuation's "    " indent are 4 columns wide against a
+		// 2-column margin already folded into contentWidth, so a line that
+		// reaches the wrap width lands exactly on the box's right border
+		// with no gutter. The extra -1 reserves that column so a wrapped
+		// hint never renders flush against the border.
+		wrapped := tui.WrapLines(hint, contentWidth-3)
 		for i, line := range wrapped {
 			if i == 0 {
 				sb.WriteString("  " + pointer + " " + line + "\n")

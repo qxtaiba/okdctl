@@ -326,11 +326,14 @@ func (s *WelcomeStep) Validate() error {
 	return nil
 }
 
-// ShortHelp returns the hub's help bar.
+// ShortHelp returns the hub's help bar — the one screen whose enter label
+// reads "start" rather than "continue"/"confirm" (see keymap_help.go): the
+// hub begins the wizard, it doesn't advance or confirm anything already in
+// progress.
 func (s *WelcomeStep) ShortHelp() []wizard.KeyBinding {
 	return []wizard.KeyBinding{
 		{Key: "↑↓", Help: "choose"},
-		{Key: wizard.HelpEnter, Help: "go"},
+		{Key: wizard.HelpEnter, Help: wizard.HelpStart},
 		{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
 	}
 }
