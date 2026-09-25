@@ -929,6 +929,37 @@ func TestMultiSectionForm_HiddenSectionSkippedByViewAndNavigation(t *testing.T) 
 	}
 }
 
+// TestMultiSectionForm_EnterMidEditReachesTheField pins bug 4: enter while
+// a KeyValueField is mid-edit must commit the cell edit, not submit the
+// whole step — the form routes enter to a field that consumes it before
+// matching its own submit binding.
+func TestMultiSectionForm_EnterMidEditReachesTheField(t *testing.T) {
+	kv := components.NewKeyValueField("tf env")
+	form := NewMultiSectionForm([]FormSection{{
+		Title: "env",
+		Group: components.NewInputGroup(kv),
+	}})
+	_ = form.Init()
+	_, _ = form.Update(tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl})
+	if !kv.ConsumesTextInput() {
+		t.Fatal("ctrl+e did not enter edit mode")
+	}
+
+	_, enterPressed := form.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	if enterPressed {
+		t.Fatal("enter mid-edit submitted the step, want it routed to the field")
+	}
+	if kv.ConsumesTextInput() {
+		t.Fatal("enter mid-edit did not commit the edit (still in edit mode)")
+	}
+
+	_, enterPressed = form.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if !enterPressed {
+		t.Fatal("enter in navigate mode must still submit the step")
+	}
+}
+
 // TestDataDrivenStep_LoadFromConfig_SelectOutsideOptionsRoundTrips pins the
 // edit-config safety contract: a valid config value the select's Options
 // don't offer (validators accept 1..100 masters) must survive

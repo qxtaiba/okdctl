@@ -7,10 +7,55 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// WrapLines reformats text as space-joined words wrapped to width, returning
-// one string per output line; it never returns an empty slice.
+// WrapLines reformats text as space-joined words wrapped to width, breaking
+// at spaces only — never inside hyphenated tokens, which would corrupt the
+// copy-paste commands and paths this helper wraps — and hard-splitting a
+// word wider than a whole line; it never returns an empty slice.
 func WrapLines(text string, width int) []string {
-	return strings.Split(lipgloss.Wrap(strings.Join(strings.Fields(text), " "), width, ""), "\n")
+	width = max(width, 1)
+	var lines []string
+	cur, curW := "", 0
+	flush := func() {
+		lines = append(lines, cur)
+		cur, curW = "", 0
+	}
+	for _, word := range strings.Fields(text) {
+		wordW := lipgloss.Width(word)
+		if wordW > width {
+			if curW > 0 {
+				flush()
+			}
+			runes := []rune(word)
+			for len(runes) > 0 {
+				head := takeWidth(runes, width)
+				if len(head) == 0 {
+					head = runes[:1]
+				}
+				runes = runes[len(head):]
+				if len(runes) > 0 {
+					lines = append(lines, string(head))
+				} else {
+					cur, curW = string(head), lipgloss.Width(string(head))
+				}
+			}
+			continue
+		}
+		sep := 0
+		if curW > 0 {
+			sep = 1
+		}
+		if curW+sep+wordW > width {
+			flush()
+			sep = 0
+		}
+		if sep == 1 {
+			cur += " "
+		}
+		cur += word
+		curW += sep + wordW
+	}
+	flush()
+	return lines
 }
 
 // PromptLine styles text as an interactive prompt, leading with the

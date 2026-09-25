@@ -58,6 +58,7 @@ type DistributionStep struct {
 	versionSelector *components.Selector
 	phase           selectionPhase
 	selectedVersion string
+	currentVersion  string // the version the loaded config already carries
 
 	versionFetcher VersionFetcher
 	okdSeries      []releases.OKDReleaseSeries
@@ -122,6 +123,7 @@ func (s *DistributionStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		}
 		s.phase = phaseVersionSelect
 		s.updateVersionSelector()
+		s.anchorConfiguredVersion()
 		s.versionSelector.SetFocused(true)
 		return s, nil
 
@@ -172,6 +174,10 @@ func (s *DistributionStep) retry() (wizard.WizardStep, tea.Cmd) {
 	return s, tea.Batch(s.loadingSpinner.Tick, s.fetchVersions)
 }
 
+// handleEnterKey confirms the highlighted release, honouring the footer's
+// "enter confirm" promise on every row: a series row (collapsed or
+// expanded) confirms its latest patch, a patch row confirms itself exactly;
+// tab remains the expand/collapse key.
 func (s *DistributionStep) handleEnterKey() (wizard.WizardStep, tea.Cmd) {
 	selected := s.versionSelector.Selected()
 
@@ -181,17 +187,11 @@ func (s *DistributionStep) handleEnterKey() (wizard.WizardStep, tea.Cmd) {
 
 	if strings.HasPrefix(selected.ID, "minor:") {
 		minor := s.getMinorFromOptionID(selected.ID)
-		if s.expandedMinor == minor {
-			for _, series := range s.okdSeries {
-				if series.Minor == minor {
-					s.selectedVersion = series.Latest.Version
-					break
-				}
+		for _, series := range s.okdSeries {
+			if series.Minor == minor {
+				s.selectedVersion = series.Latest.Version
+				break
 			}
-		} else {
-			s.expandedMinor = minor
-			s.updateVersionSelector()
-			return s, nil
 		}
 	} else {
 		s.selectedVersion = selected.ID
@@ -466,10 +466,38 @@ func (s *DistributionStep) GetSelectedVersion() string {
 	return s.selectedVersion
 }
 
-// SetSelectedVersion pre-selects a version, keeping the UI in sync.
+// SetSelectedVersion pre-selects a version and records it as the loaded
+// config's current release; once the catalog is available (immediately, or
+// at versionsLoadedMsg time) the cursor anchors on its exact patch row.
 func (s *DistributionStep) SetSelectedVersion(version string) {
 	s.selectedVersion = version
+	s.currentVersion = version
+	if len(s.okdSeries) > 0 {
+		s.updateVersionSelector()
+		s.anchorConfiguredVersion()
+		return
+	}
 	s.versionSelector.SetSelectedByID(version)
+}
+
+// anchorConfiguredVersion expands the series containing the configured
+// current version and rebuilds the option list so the cursor lands on that
+// exact patch row — the truth on screen when editing a config — rather than
+// silently sitting on the newest series. A version outside the fetched
+// catalog anchors nothing.
+func (s *DistributionStep) anchorConfiguredVersion() {
+	if s.currentVersion == "" || strings.HasPrefix(s.currentVersion, "minor:") {
+		return
+	}
+	for i := range s.okdSeries {
+		for _, pv := range s.okdSeries[i].Versions {
+			if pv.Version == s.currentVersion {
+				s.expandedMinor = s.okdSeries[i].Minor
+				s.updateVersionSelector()
+				return
+			}
+		}
+	}
 }
 
 // SetVersionFetcher swaps the release-catalog fetcher, used by demo mode and

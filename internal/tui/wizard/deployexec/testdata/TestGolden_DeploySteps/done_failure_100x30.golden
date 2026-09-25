@@ -9,8 +9,8 @@
   │  │                                                                                        │  │  
   │  │  deploy infrastructure failed: proxmox task UPID:pve:0000A1: vm 9001 already exists    │  │  
   │  │                                                                                        │  │  
-  │  │  → re-run 'okdctl deploy' to resume from the recorded phase, or 'okdctl deploy --      │  │  
-  │  │    fresh' to restart from scratch                                                      │  │  
+  │  │  → re-run 'okdctl deploy' to resume from the recorded phase, or 'okdctl deploy         │  │  
+  │  │    --fresh' to restart from scratch                                                    │  │  
   │  │                                                                                        │  │  
   │  ╰────────────────────────────────────────────────────────────────────────────────────────╯  │  
   │                                                                                              │  

@@ -45,6 +45,7 @@ var (
 
 	ColorCyan400 = lipgloss.Color("#22D3EE")
 	ColorCyan500 = lipgloss.Color("#06B6D4")
+	ColorCyan700 = lipgloss.Color("#0E7490")
 
 	ColorSlate100 = lipgloss.Color("#F1F5F9")
 	ColorSlate300 = lipgloss.Color("#CBD5E1")
@@ -56,6 +57,16 @@ var (
 
 	ColorText    = ColorSlate100
 	ColorTextDim = ColorSlate400
+
+	// ColorTextFaint sits one muted tier below ColorTextDim (nested keys);
+	// setTheme remaps it with the other aliases.
+	ColorTextFaint = ColorSlate500
+
+	// ColorCode renders inline code and credentials; ColorAccent drives the
+	// spinner. Both are remapped by setTheme and SetDarkBackground so the
+	// cyan tiers never render illegibly on light or high-contrast terminals.
+	ColorCode   = ColorCyan400
+	ColorAccent = ColorCyan500
 )
 
 // LogoGradient is the six-color gradient painted left to right across the
@@ -79,7 +90,13 @@ var (
 	hcColorTextDim = lipgloss.Color("#AAAAAA")
 )
 
+// currentTheme records the last setTheme choice so SetDarkBackground knows
+// whether the background-tuned default bindings apply or the
+// background-independent high-contrast palette must be left alone.
+var currentTheme = ThemeDefault
+
 func setTheme(theme ColorTheme) {
+	currentTheme = theme
 	switch theme {
 	case ThemeHighContrast:
 		ColorPrimary = hcColorPrimary
@@ -90,6 +107,9 @@ func setTheme(theme ColorTheme) {
 		ColorInfo = hcColorInfo
 		ColorText = hcColorText
 		ColorTextDim = hcColorTextDim
+		ColorTextFaint = hcColorTextDim
+		ColorCode = hcColorInfo
+		ColorAccent = hcColorInfo
 	default:
 		ColorPrimary = ColorPurple600
 		ColorPrimaryDim = ColorPurple800
@@ -99,6 +119,9 @@ func setTheme(theme ColorTheme) {
 		ColorInfo = ColorBlue500
 		ColorText = ColorSlate100
 		ColorTextDim = ColorSlate400
+		ColorTextFaint = ColorSlate500
+		ColorCode = ColorCyan400
+		ColorAccent = ColorCyan500
 	}
 }
 
@@ -118,13 +141,24 @@ func IsDarkBackground() bool {
 func SetDarkBackground(dark bool) {
 	darkBackground = dark
 	if dark {
-		ColorTextDim = ColorSlate400
 		ColorSlate500 = lipgloss.Color(colorSlate500Hex)
 		ColorSlate700 = lipgloss.Color("#334155")
 	} else {
-		ColorTextDim = ColorSlate600
 		ColorSlate500 = lipgloss.Color(colorSlate500Hex)
 		ColorSlate700 = ColorSlate300
+	}
+	// The high-contrast palette is background-independent; only the default
+	// theme's text and code tiers re-tune to the background.
+	if currentTheme == ThemeDefault {
+		if dark {
+			ColorTextDim = ColorSlate400
+			ColorCode = ColorCyan400
+			ColorAccent = ColorCyan500
+		} else {
+			ColorTextDim = ColorSlate600
+			ColorCode = ColorCyan700
+			ColorAccent = ColorCyan700
+		}
 	}
 	rebuildStyles()
 }

@@ -15,9 +15,9 @@ import (
 )
 
 // KeyValueField renders an editable key=value table (j/k row, h/l col, a
-// add, d delete, ctrl+e edit). enter/tab/shift+tab are reserved by the host
-// DataDrivenStep and can't be edit-commit keys — same constraint as
-// MultiSelectField/SelectField.
+// add, d delete, ctrl+e edit). tab/shift+tab are reserved by the host
+// DataDrivenStep; enter commits the active edit (via EnterConsumer) and only
+// submits the step from navigate mode.
 type KeyValueField struct {
 	Label     string
 	Help      string
@@ -63,6 +63,12 @@ func NewKeyValueField(label string) *KeyValueField {
 // (j/k/h/l/a/d/ctrl+e) are all single-purpose commands, so a "?" there is
 // inert and free for the wizard's help-overlay toggle.
 func (f *KeyValueField) ConsumesTextInput() bool {
+	return f.focused && f.editMode
+}
+
+// ConsumesEnter reports true mid-edit, when enter commits the cell edit
+// rather than submitting the step.
+func (f *KeyValueField) ConsumesEnter() bool {
 	return f.focused && f.editMode
 }
 
@@ -154,7 +160,7 @@ func (f *KeyValueField) Validate() error {
 // navigate mode.
 func (f *KeyValueField) KeyHints() []KeyHint {
 	if f.editMode {
-		return []KeyHint{{Key: "ctrl+e", Help: "done"}}
+		return []KeyHint{{Key: "enter/ctrl+e", Help: "done"}}
 	}
 	return []KeyHint{
 		{Key: "j/k", Help: "row"},
@@ -165,8 +171,9 @@ func (f *KeyValueField) KeyHints() []KeyHint {
 	}
 }
 
-// Update routes messages: ctrl+e toggles edit mode; navigate mode uses
-// j/k/h/l/a/d; edit mode forwards other keys to the active textinput.
+// Update routes messages: ctrl+e toggles edit mode and enter commits it;
+// navigate mode uses j/k/h/l/a/d; edit mode forwards other keys to the
+// active textinput.
 func (f *KeyValueField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 	if !f.focused {
 		return f, nil
@@ -175,6 +182,11 @@ func (f *KeyValueField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 		if key.Matches(keyMsg, key.NewBinding(key.WithKeys("ctrl+e"))) {
 			cmd := f.toggleEditMode()
 			return f, cmd
+		}
+		if f.editMode && key.Matches(keyMsg, key.NewBinding(key.WithKeys("enter"))) {
+			f.editMode = false
+			f.blurAllInputs()
+			return f, nil
 		}
 		if !f.editMode {
 			return f.updateNavigate(keyMsg)

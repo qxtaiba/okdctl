@@ -66,6 +66,37 @@ func TestPromptLine(t *testing.T) {
 	}
 }
 
+// TestWrapLinesNeverBreaksAtHyphens pins that copy-paste recovery commands
+// (`okdctl deploy --fresh`, kubeadmin-password paths) wrap on spaces only:
+// a hyphen split silently corrupts the exact strings users copy during
+// failure recovery.
+func TestWrapLinesNeverBreaksAtHyphens(t *testing.T) {
+	cases := []struct {
+		text  string
+		width int
+		token string
+	}{
+		{"resume with okdctl deploy --fresh after cleanup", 16, "--fresh"},
+		{"cat cluster-config/auth/kubeadmin-password to log in", 40, "cluster-config/auth/kubeadmin-password"},
+		{"resume the interrupted power-cycle with okdctl node resize", 28, "power-cycle"},
+	}
+	for _, tc := range cases {
+		lines := WrapLines(tc.text, tc.width)
+		found := false
+		for _, l := range lines {
+			if w := lipgloss.Width(l); w > tc.width {
+				t.Fatalf("width %d: %d-col line %q", tc.width, w, l)
+			}
+			if strings.Contains(l, tc.token) {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("width %d: token %q split across lines: %q", tc.width, tc.token, lines)
+		}
+	}
+}
+
 func TestWrapLinesHardSplitsLongToken(t *testing.T) {
 	long := strings.Repeat("中", 30)
 

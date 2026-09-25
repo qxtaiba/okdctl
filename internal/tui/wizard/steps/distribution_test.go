@@ -82,6 +82,83 @@ func TestDistributionStep_SetVersionFetcher_UsesFixtureError(t *testing.T) {
 	}
 }
 
+// TestDistributionStep_ConfiguredPatchAnchorsCursor pins bug 3's defect
+// half: a config carrying a patch version (not a series ID) must, once the
+// catalog loads, expand its series and land the cursor on that exact patch
+// row with a "current" chip — not silently sit on the newest series.
+func TestDistributionStep_ConfiguredPatchAnchorsCursor(t *testing.T) {
+	s := NewDistributionStep()
+	s.SetSelectedVersion("4.19.4-okd-scos.3")
+
+	step, _ := s.Update(versionsLoadedMsg{series: DemoReleaseSeries()})
+	s = step.(*DistributionStep)
+
+	if got := s.versionSelector.Selected().ID; got != "4.19.4-okd-scos.3" {
+		t.Fatalf("Selected().ID = %q, want the configured patch", got)
+	}
+	if s.expandedMinor != 19 {
+		t.Fatalf("expandedMinor = %d, want 19 (the configured series)", s.expandedMinor)
+	}
+	if view := s.View(80, 30); !strings.Contains(view, "current") {
+		t.Fatalf("View() carries no current chip:\n%s", view)
+	}
+}
+
+// TestDistributionStep_EnterEnterKeepsConfiguredVersion pins the routine
+// that used to bump 4.19.x to the newest series: with a configured patch
+// loaded, pressing enter must complete with that patch untouched.
+func TestDistributionStep_EnterEnterKeepsConfiguredVersion(t *testing.T) {
+	s := NewDistributionStep()
+	s.SetSelectedVersion("4.19.4-okd-scos.3")
+	step, _ := s.Update(versionsLoadedMsg{series: DemoReleaseSeries()})
+	s = step.(*DistributionStep)
+
+	step, _ = s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	s = step.(*DistributionStep)
+	step, _ = s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	s = step.(*DistributionStep)
+
+	cfg := &config.Config{}
+	if err := s.Apply(cfg); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if cfg.Distribution.Version != "4.19.4-okd-scos.3" {
+		t.Fatalf("Distribution.Version = %q, want the configured 4.19.4-okd-scos.3", cfg.Distribution.Version)
+	}
+}
+
+// TestDistributionStep_EnterOnCollapsedSeriesConfirms pins bug 3's UX half:
+// the footer promises "enter confirm", so enter on a collapsed series row
+// completes the step with that series' latest instead of expanding it.
+func TestDistributionStep_EnterOnCollapsedSeriesConfirms(t *testing.T) {
+	s := NewDistributionStep()
+	step, _ := s.Update(versionsLoadedMsg{series: DemoReleaseSeries()})
+	s = step.(*DistributionStep)
+
+	step, cmd := s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	s = step.(*DistributionStep)
+
+	if cmd == nil {
+		t.Fatal("enter on a collapsed series returned no command, want StepCompleteMsg")
+	}
+	if _, ok := cmd().(wizard.StepCompleteMsg); !ok {
+		t.Fatalf("enter on a collapsed series = %T, want StepCompleteMsg", cmd())
+	}
+	if got := s.GetSelectedVersion(); got != "4.20.1-okd-scos.7" {
+		t.Fatalf("GetSelectedVersion() = %q, want the series latest", got)
+	}
+}
+
+func TestDistributionStep_FreshRunCarriesNoCurrentChip(t *testing.T) {
+	s := NewDistributionStep()
+	step, _ := s.Update(versionsLoadedMsg{series: DemoReleaseSeries()})
+	s = step.(*DistributionStep)
+
+	if view := s.View(80, 30); strings.Contains(view, "current") {
+		t.Fatalf("fresh-run View() carries a current chip:\n%s", view)
+	}
+}
+
 // loadedDistributionStep returns a step showing the demo catalog with the
 // newest minor expanded into its patch dropdown.
 func loadedDistributionStep(t *testing.T) *DistributionStep {

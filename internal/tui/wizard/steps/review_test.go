@@ -23,6 +23,57 @@ func reviewTestConfig() *config.Config {
 	return cfg
 }
 
+// TestReviewStep_AdvancedShowsAllAppliedSettings pins bug 8: cpu type, numa,
+// ha anti-affinity, ntp server, and bin dir are applied by the wizard and
+// must be visible at the deploy gate.
+func TestReviewStep_AdvancedShowsAllAppliedSettings(t *testing.T) {
+	cfg := reviewTestConfig()
+	cfg.Provider.Proxmox.CPUType = "x86-64-v2"
+	cfg.Provider.Proxmox.NUMAEnabled = true
+	cfg.Provider.Proxmox.HAEnabled = true
+	cfg.Networking.NTPServer = "pool.ntp.org"
+	cfg.Deployment.BinDir = "/opt/okd/bin"
+	s := NewReviewStep()
+	s.SetConfig(cfg)
+
+	out := tuitest.StripANSI(s.View(100, 100))
+
+	for _, want := range []string{"x86-64-v2", "numa", "ha anti-affinity", "pool.ntp.org", "/opt/okd/bin"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("View() missing applied advanced setting %q", want)
+		}
+	}
+}
+
+// TestReviewStep_AddonRowsSortedWithoutSelfDuplication pins bug 9: addon
+// rows render in deterministic sorted order, and an addon without detail
+// settings never renders its own name as its value.
+func TestReviewStep_AddonRowsSortedWithoutSelfDuplication(t *testing.T) {
+	cfg := reviewTestConfig()
+	cfg.Addons = map[string]config.AddonConfig{
+		"secretstore": {Enabled: true, Settings: map[string]string{"type": "vault"}},
+		"flux":        {Enabled: true},
+	}
+	s := NewReviewStep()
+	s.SetConfig(cfg)
+
+	out := tuitest.StripANSI(s.View(100, 100))
+
+	fluxAt := strings.Index(out, "flux")
+	storeAt := strings.Index(out, "secretstore")
+	if fluxAt < 0 || storeAt < 0 {
+		t.Fatalf("View() missing addon rows:\n%s", out)
+	}
+	if fluxAt > storeAt {
+		t.Fatalf("addon rows not sorted: flux at %d after secretstore at %d", fluxAt, storeAt)
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Count(line, "flux") > 1 {
+			t.Fatalf("flux row duplicates its own name: %q", line)
+		}
+	}
+}
+
 func TestReviewStep_HiddenStepGetsNoIndex(t *testing.T) {
 	s := NewReviewStep()
 	s.SetConfig(reviewTestConfig())

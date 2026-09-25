@@ -483,7 +483,9 @@ func (m *Model) renderHelpRow() string {
 
 // renderFooterRule draws the footer's top row: a "─" rule with the scroll
 // indicator centred in it when the viewport overflows, plus the context
-// badge pinned to the right.
+// badge pinned to the right. The row never exceeds the content width: on a
+// tight fit it degrades to bare arrows, then to a plain rule, and drops the
+// badge itself before it would wrap the frame.
 func (m *Model) renderFooterRule() string {
 	width := m.contentWidth()
 	lineStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate700)
@@ -497,43 +499,47 @@ func (m *Model) renderFooterRule() string {
 			Bold(true).
 			Render(" " + tui.IconCaretRight + " " + contextBadge + " ")
 		badgeWidth = lipgloss.Width(badgeStyled)
+		if badgeWidth > width {
+			badgeStyled, badgeWidth = "", 0
+		}
 	}
 
 	avail := width - badgeWidth
 
-	ind, scrollable := m.scrollIndicator()
-	if !scrollable {
-		lineWidth := max(avail, 10)
-		return lineStyle.Render(strings.Repeat("─", lineWidth)) + badgeStyled
+	if arrows, message, scrollable := m.scrollIndicator(); scrollable {
+		for _, ind := range []string{arrows + "  " + message, arrows} {
+			if lipgloss.Width(ind)+centreInRuleReserve <= avail {
+				return m.centreInRule(ind, avail) + badgeStyled
+			}
+		}
 	}
-
-	return m.centreInRule(ind, avail) + badgeStyled
+	return lineStyle.Render(strings.Repeat("─", max(avail, 0))) + badgeStyled
 }
 
+// centreInRuleReserve is the room centreInRule needs around an indicator:
+// a 3-column rule floor and one space on each side.
+const centreInRuleReserve = 8
+
 // centreInRule centres ind within avail columns of "─" rule, keeping the
-// two sides within one column of each other.
+// two sides within one column of each other; callers must ensure ind fits
+// (its width plus centreInRuleReserve at most avail) or the row overflows.
 func (m *Model) centreInRule(ind string, avail int) string {
 	lineStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate700)
 	indWidth := lipgloss.Width(ind)
 
-	left := (avail - indWidth - 2) / 2
-	right := avail - left - indWidth - 2
-	if left < 3 {
-		left = 3
-	}
-	if right < 3 {
-		right = 3
-	}
+	left := max((avail-indWidth-2)/2, 3)
+	right := max(avail-left-indWidth-2, 3)
 
 	return lineStyle.Render(strings.Repeat("─", left)) + " " + ind + " " + lineStyle.Render(strings.Repeat("─", right))
 }
 
-// scrollIndicator returns the footer's arrows-and-message scroll-state text
-// and whether the viewport currently overflows its height; it returns
-// ("", false) when the content fits without scrolling.
-func (m *Model) scrollIndicator() (string, bool) {
+// scrollIndicator returns the footer's scroll-state arrows and message
+// separately — so renderFooterRule can drop the message alone on a tight
+// fit — and whether the viewport currently overflows its height; it returns
+// ("", "", false) when the content fits without scrolling.
+func (m *Model) scrollIndicator() (arrows, message string, scrollable bool) {
 	if m.viewport.TotalLineCount() <= m.viewport.Height() {
-		return "", false
+		return "", "", false
 	}
 
 	scrollPercent := m.viewport.ScrollPercent()
@@ -544,7 +550,6 @@ func (m *Model) scrollIndicator() (string, bool) {
 	dimArrowStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate600)
 	textStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate400)
 
-	var arrows string
 	switch {
 	case atTop:
 		arrows = dimArrowStyle.Render("↑") + " " + arrowStyle.Render("↓")
@@ -554,7 +559,6 @@ func (m *Model) scrollIndicator() (string, bool) {
 		arrows = arrowStyle.Render("↑") + " " + arrowStyle.Render("↓")
 	}
 
-	var message string
 	switch {
 	case atTop:
 		message = "scroll down for more"
@@ -564,7 +568,7 @@ func (m *Model) scrollIndicator() (string, bool) {
 		message = fmt.Sprintf("%.0f%% • scroll for more", scrollPercent*100)
 	}
 
-	return arrows + "  " + textStyle.Render(message), true
+	return arrows, textStyle.Render(message), true
 }
 
 func (m *Model) renderContextBadge() string {

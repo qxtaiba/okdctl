@@ -48,6 +48,7 @@ func (s *DistributionStep) updateVersionSelector() {
 			Title:       fmt.Sprintf("okd %d.%d", series.Major, series.Minor),
 			Description: desc,
 			Recommended: i == 0,
+			Current:     !isExpanded && s.seriesHasCurrent(series),
 			Style:       releaseTypeToOptionStyle(v.Type),
 		})
 
@@ -63,6 +64,7 @@ func (s *DistributionStep) updateVersionSelector() {
 					Title:       "  " + pv.DisplayName(),
 					Description: patchDesc,
 					Recommended: j == 0 && i == 0,
+					Current:     pv.Version == s.currentVersion,
 					Style:       releaseTypeToOptionStyle(pv.Type),
 					InDropdown:  true,
 				})
@@ -79,6 +81,21 @@ func (s *DistributionStep) updateVersionSelector() {
 		s.selectedVersion = ""
 	}
 	s.versionSelector.SetSelectedByID(s.selectedVersion)
+}
+
+// seriesHasCurrent reports whether the loaded config's current version is
+// one of series' patch releases, so a collapsed row can carry the chip its
+// hidden patch would.
+func (s *DistributionStep) seriesHasCurrent(series *releases.OKDReleaseSeries) bool {
+	if s.currentVersion == "" {
+		return false
+	}
+	for _, pv := range series.Versions {
+		if pv.Version == s.currentVersion {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *DistributionStep) getMinorFromOptionID(id string) int {

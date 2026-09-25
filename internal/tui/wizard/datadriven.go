@@ -286,7 +286,9 @@ func (f *MultiSectionForm) Blur() {
 
 // Update handles tab/shift-tab section navigation and forwards other input
 // to the focused group. On enter it reports enterPressed=true without
-// validating or completing — the caller layers that.
+// validating or completing — the caller layers that — unless the focused
+// field consumes enter for its own editing flow (components.EnterConsumer),
+// in which case the keystroke is routed to the field instead.
 func (f *MultiSectionForm) Update(msg tea.Msg) (cmd tea.Cmd, enterPressed bool) {
 	group := f.currentGroup()
 	if group == nil {
@@ -296,6 +298,11 @@ func (f *MultiSectionForm) Update(msg tea.Msg) (cmd tea.Cmd, enterPressed bool) 
 	if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
 		switch {
 		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("enter"))):
+			if ec, isConsumer := f.FocusedField().(components.EnterConsumer); isConsumer && ec.ConsumesEnter() {
+				var groupCmd tea.Cmd
+				f.sections[f.currentSection].Group, groupCmd = group.Update(msg)
+				return groupCmd, false
+			}
 			return nil, true
 
 		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("tab", "down"))):

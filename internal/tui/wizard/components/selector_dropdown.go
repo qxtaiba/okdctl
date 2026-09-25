@@ -163,31 +163,45 @@ func (s *Selector) renderDropdownRegion(start, end int, scrollStyle, borderStyle
 		}
 	}
 	// "  │ " (the dropdownPrefix) costs 4 columns of bodyWidth that the
-	// border's own "  ┌"/"  └" corner already accounts for.
-	dashes := max(bodyWidth-4, dropdownBorderWidth)
+	// border's own "  ╭"/"  ╰" corner already accounts for; one extra gap
+	// column keeps the widest row off the right wall, matching fieldBox's
+	// one-column padding.
+	inner := max(bodyWidth-4, dropdownBorderWidth) + 2
+	boxWidth := inner + 4 // two-space lead, corner, dashes, corner
 
-	topBorder := "  ┌"
+	topDashes := inner
+	topBorder := "  ╭"
 	if itemsAbove > 0 {
 		hint := " ↑ " + strconv.Itoa(itemsAbove) + " more "
 		topBorder += scrollStyle.Render(hint)
-		dashes = max(dashes-lipgloss.Width(hint), 1)
+		topDashes = max(topDashes-lipgloss.Width(hint), 1)
 	}
-	topBorder += strings.Repeat("─", dashes) + "┐"
+	topBorder += strings.Repeat("─", topDashes) + "╮"
 	lines = append(lines, borderStyle.Render(topBorder))
 
-	lines = append(lines, body...)
+	// Each body entry is a block (title, description, connector rows);
+	// every line inside it gets padded to the wall column.
+	wall := borderStyle.Render("│")
+	for _, block := range body {
+		walled := strings.Split(block, "\n")
+		for i, ln := range walled {
+			pad := boxWidth - 1 - lipgloss.Width(ln)
+			walled[i] = ln + strings.Repeat(" ", max(pad, 0)) + wall
+		}
+		lines = append(lines, strings.Join(walled, "\n"))
+	}
 	if selectedRow >= 0 {
 		selectedRow++ // shift past the topBorder line just prepended
 	}
 
-	bottomDashes := max(bodyWidth-4, dropdownBorderWidth)
-	bottomBorder := "  └"
+	bottomDashes := inner
+	bottomBorder := "  ╰"
 	if itemsBelow > 0 {
 		hint := " ↓ " + strconv.Itoa(itemsBelow) + " more "
 		bottomBorder += scrollStyle.Render(hint)
 		bottomDashes = max(bottomDashes-lipgloss.Width(hint), 1)
 	}
-	bottomBorder += strings.Repeat("─", bottomDashes) + "┘"
+	bottomBorder += strings.Repeat("─", bottomDashes) + "╯"
 	lines = append(lines, borderStyle.Render(bottomBorder))
 
 	return lines, selectedRow

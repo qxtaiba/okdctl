@@ -28,10 +28,10 @@ func rebuildStyles() {
 	TextStyle = lipgloss.NewStyle()
 	MutedStyle = lipgloss.NewStyle().Foreground(ColorSlate500)
 	DimStyle = lipgloss.NewStyle().Foreground(ColorTextDim)
-	CodeInlineStyle = lipgloss.NewStyle().Foreground(ColorCyan400)
+	CodeInlineStyle = lipgloss.NewStyle().Foreground(ColorCode)
 	SuccessStyle = lipgloss.NewStyle().Foreground(ColorSuccess).Bold(true)
 	ErrorStyle = lipgloss.NewStyle().Foreground(ColorError).Bold(true)
 	WarningStyle = lipgloss.NewStyle().Foreground(ColorWarning).Bold(true)
 	HighlightStyle = lipgloss.NewStyle().Foreground(ColorPrimary).Bold(true)
-	SpinnerStyle = lipgloss.NewStyle().Foreground(ColorCyan500).Bold(true)
+	SpinnerStyle = lipgloss.NewStyle().Foreground(ColorAccent).Bold(true)
 }

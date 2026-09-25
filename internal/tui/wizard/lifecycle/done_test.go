@@ -1,7 +1,9 @@
 package lifecycle
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -44,6 +46,24 @@ func TestDoneStepFailureCarriesError(t *testing.T) {
 	}
 	if !strings.Contains(out, "resume") {
 		t.Errorf("failure view must point at the resume path:\n%s", out)
+	}
+}
+
+// TestDoneStepCancelledRendersInterrupted pins bug 13: a graceful ctrl+c
+// cancel ends on "interrupted", not on a failure card claiming the resize
+// failed — the same distinction deployexec's done screen already draws.
+func TestDoneStepCancelledRendersInterrupted(t *testing.T) {
+	st := doneState()
+	st.Result = fmt.Errorf("run resize: %w", context.Canceled)
+	out := tuitest.StripANSI(NewDoneStep(st).View(90, 40))
+	if !strings.Contains(out, "resize interrupted") {
+		t.Fatalf("cancelled view does not say interrupted:\n%s", out)
+	}
+	if strings.Contains(out, "resize failed") {
+		t.Fatalf("cancelled view claims the resize failed:\n%s", out)
+	}
+	if !strings.Contains(out, "resume") {
+		t.Fatalf("cancelled view must point at the resume path:\n%s", out)
 	}
 }
 

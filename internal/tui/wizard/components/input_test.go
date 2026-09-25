@@ -310,6 +310,39 @@ func TestInputField_DefaultTypeToReplace(t *testing.T) {
 	}
 }
 
+// TestInputField_DefaultPasteToReplace pins bracketed paste to the same
+// contract as typing: a paste over an unmodified default replaces the text
+// and drops the default tag instead of merging into it.
+func TestInputField_DefaultPasteToReplace(t *testing.T) {
+	f := NewInputField("username", "")
+	f.SetDefault("root@pam")
+	_ = f.Focus()
+
+	f.Update(tea.PasteMsg{Content: "admin@pve"})
+
+	if got := f.Value(); got != "admin@pve" {
+		t.Fatalf("Value() after pasting over a default = %q, want %q", got, "admin@pve")
+	}
+	if f.IsDefault() {
+		t.Fatal("IsDefault() after a paste = true, want false")
+	}
+}
+
+func TestInputField_PasteClearsStaleError(t *testing.T) {
+	f := NewInputField("username", "")
+	f.Required = true
+	_ = f.Focus()
+	if f.Validate() == nil {
+		t.Fatal("Validate() on an empty required field = nil, want an error")
+	}
+
+	f.Update(tea.PasteMsg{Content: "admin@pve"})
+
+	if f.err != nil {
+		t.Fatalf("err after a paste = %v, want cleared", f.err)
+	}
+}
+
 func TestInputField_DefaultArrowKeepsText(t *testing.T) {
 	f := NewInputField("cluster name", "")
 	f.SetDefault("mycluster")

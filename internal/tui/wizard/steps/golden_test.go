@@ -56,7 +56,6 @@ type configureScenario struct {
 func configureScenarios() []configureScenario {
 	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
 	downKey := tea.KeyPressMsg{Code: 'j', Text: "j"}
-	enterKey := tea.KeyPressMsg{Code: tea.KeyEnter}
 	endKey := tea.KeyPressMsg{Code: tea.KeyEnd}
 
 	return []configureScenario{
@@ -68,12 +67,15 @@ func configureScenarios() []configureScenario {
 			interact: downKey,
 		},
 		{
+			// Tab expands the newest series' patch dropdown (enter now
+			// confirms, honouring the footer's promise), keeping the
+			// dropdown chrome pinned by this golden.
 			name: "distribution",
 			id:   wizard.StepIDDistribution,
 			seed: func(m *wizard.Model) {
 				m.Update(versionsLoadedMsg{series: DemoReleaseSeries()})
 			},
-			interact: enterKey,
+			interact: tabKey,
 		},
 		{name: "proxmox", id: wizard.StepIDProxmox, interact: tabKey},
 		{name: "basics", id: wizard.StepIDBasics, interact: tabKey},

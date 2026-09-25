@@ -1,6 +1,8 @@
 package lifecycle
 
 import (
+	"context"
+	"errors"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -58,13 +60,23 @@ func (s *DoneStep) View(width, height int) string {
 	s.SetSize(width, height)
 	w := min(width, tui.DefaultBoxWidth)
 	if s.st.Result != nil {
-		return strings.Trim(render.ErrorCard(string(s.st.Op)+" failed", s.st.Result.Error(),
+		return strings.Trim(render.ErrorCard(s.failureKind(), s.st.Result.Error(),
 			"re-run the same operation to resume at the recorded step", w), "\n")
 	}
 	if s.st.Plan == nil {
 		return tui.CompletionSuccess("operation complete")
 	}
 	return strings.Trim(render.NodeOpCompleteWidth(s.st.Plan, s.st.Elapsed, w), "\n")
+}
+
+// failureKind names the outcome the error card leads with: a cancelled run
+// was interrupted on purpose, anything else failed — the same distinction
+// deployexec's done screen draws.
+func (s *DoneStep) failureKind() string {
+	if errors.Is(s.st.Result, context.Canceled) {
+		return string(s.st.Op) + " interrupted"
+	}
+	return string(s.st.Op) + " failed"
 }
 
 // ShortHelp returns the completion help bar.

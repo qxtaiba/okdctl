@@ -229,6 +229,37 @@ func scrollTestDefinition() *StepDefinition {
 	}
 }
 
+// TestModel_HomeEndReachFocusedTextInput pins bug 6: home/end while a text
+// input holds focus are line-start/line-end cursor moves inside the field,
+// not viewport scrolls — the same consumes-text-input guard "?" already has.
+func TestModel_HomeEndReachFocusedTextInput(t *testing.T) {
+	def := &StepDefinition{
+		ID:    StepIDBasics,
+		Title: "t",
+		Sections: []SectionDefinition{{
+			Fields: []FieldDefinition{{Key: "name", Label: "name"}},
+		}},
+	}
+	step := NewDataDrivenStep(def)
+	m := NewModel([]WizardStep{step}, config.DefaultConfig())
+	m = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	for _, r := range "abc" {
+		m = update(t, m, tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	m = update(t, m, tea.KeyPressMsg{Code: tea.KeyHome})
+	m = update(t, m, tea.KeyPressMsg{Code: 'x', Text: "x"})
+	if got := step.Value("name"); got != "xabc" {
+		t.Fatalf("value after home+type = %q, want %q", got, "xabc")
+	}
+
+	m = update(t, m, tea.KeyPressMsg{Code: tea.KeyEnd})
+	_ = update(t, m, tea.KeyPressMsg{Code: 'z', Text: "z"})
+	if got := step.Value("name"); got != "xabcz" {
+		t.Fatalf("value after end+type = %q, want %q", got, "xabcz")
+	}
+}
+
 func TestModel_ScrollKeepsFocusedFieldFullyVisible(t *testing.T) {
 	step := NewDataDrivenStep(scrollTestDefinition())
 	m := NewModel([]WizardStep{step}, config.DefaultConfig())

@@ -51,43 +51,49 @@ func newSpanSelector() *Selector {
 // "└...┘" — sized to the body's own widest row, not a fixed 20-column stub
 // with no closing corner at all (which read as a rendering bug: a box that
 // starts but never ends).
-func TestSelector_DropdownBorderClosesOnTheRight(t *testing.T) {
+// TestSelector_DropdownBoxClosedAndRounded pins bug 15: the dropdown draws
+// a fully closed, rounded box — every body row carries a right wall at the
+// column the corners close on — matching every other box in the app, with
+// the border tracking real content width rather than the 20-column stub.
+func TestSelector_DropdownBoxClosedAndRounded(t *testing.T) {
 	s := nItemDropdownSelector(3)
 	for i := range s.options {
-		// A row wide enough that the fixed 20-column stub would visibly fall
-		// short of it, proving the border now tracks real content width.
 		s.options[i].Title = fmt.Sprintf("a-much-longer-node-name-%d", i)
 	}
 	lines := strings.Split(tuitest.StripANSI(s.View()), "\n")
 
-	top, bottom := "", ""
-	for _, l := range lines {
-		trimmed := strings.TrimRight(l, " ")
+	top, bottom := -1, -1
+	for i, l := range lines {
+		trimmed := strings.TrimLeft(strings.TrimRight(l, " "), " ")
 		switch {
-		case strings.HasPrefix(strings.TrimLeft(trimmed, " "), "┌"):
-			top = trimmed
-		case strings.HasPrefix(strings.TrimLeft(trimmed, " "), "└"):
-			bottom = trimmed
+		case strings.HasPrefix(trimmed, "╭"):
+			top = i
+		case strings.HasPrefix(trimmed, "╰"):
+			bottom = i
 		}
 	}
-	if top == "" || bottom == "" {
-		t.Fatalf("could not locate both border rows in view:\n%s", strings.Join(lines, "\n"))
-	}
-	if !strings.HasSuffix(top, "┐") {
-		t.Fatalf("top border never closes on the right: %q", top)
-	}
-	if !strings.HasSuffix(bottom, "┘") {
-		t.Fatalf("bottom border never closes on the right: %q", bottom)
+	if top < 0 || bottom < 0 {
+		t.Fatalf("no rounded border rows in view:\n%s", strings.Join(lines, "\n"))
 	}
 
-	widestRow := 0
-	for _, l := range lines {
-		if w := lipgloss.Width(l); w > widestRow {
-			widestRow = w
-		}
+	topRow := strings.TrimRight(lines[top], " ")
+	bottomRow := strings.TrimRight(lines[bottom], " ")
+	if !strings.HasSuffix(topRow, "╮") || !strings.HasSuffix(bottomRow, "╯") {
+		t.Fatalf("borders not closed with rounded corners: %q / %q", topRow, bottomRow)
 	}
-	if got := lipgloss.Width(top); got < widestRow-4 {
-		t.Fatalf("top border is %d cols wide, want roughly as wide as the %d-col body it brackets", got, widestRow)
+
+	width := lipgloss.Width(topRow)
+	if lipgloss.Width(bottomRow) != width {
+		t.Fatalf("bottom border is %d cols, want %d", lipgloss.Width(bottomRow), width)
+	}
+	for _, l := range lines[top+1 : bottom] {
+		row := strings.TrimRight(l, " ")
+		if !strings.HasSuffix(row, "│") {
+			t.Fatalf("body row has no right wall: %q", row)
+		}
+		if got := lipgloss.Width(row); got != width {
+			t.Fatalf("body row is %d cols, want the box width %d: %q", got, width, row)
+		}
 	}
 }
 

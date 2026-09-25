@@ -36,6 +36,14 @@ type TextInputField interface {
 	ConsumesTextInput() bool
 }
 
+// EnterConsumer is implemented by form fields that use the enter key inside
+// their own editing flow (e.g. KeyValueField committing a cell edit) — the
+// form routes enter to such a field instead of treating it as step
+// submission while ConsumesEnter reports true.
+type EnterConsumer interface {
+	ConsumesEnter() bool
+}
+
 // LabeledField is implemented by every concrete FormField, letting a caller
 // describe the currently focused field without a type switch over each
 // field kind — the wide-terminal context pane's focused-field echo uses it.
@@ -304,19 +312,26 @@ func (f *InputField) Validate() error {
 }
 
 // Update forwards msg to the underlying textinput, clearing any stale
-// validation error on keypress; a genuine edit (typing over, backspace, or
-// delete) while the value is still an unmodified default clears both the
-// default tag and the text itself, so the first keystroke replaces the
-// default instead of appending to it, while pure cursor movement leaves the
-// default and its tag untouched.
+// validation error on keypress; a genuine edit (typing over, backspace,
+// delete, or a bracketed paste) while the value is still an unmodified
+// default clears both the default tag and the text itself, so the first
+// keystroke or paste replaces the default instead of appending to it, while
+// pure cursor movement leaves the default and its tag untouched.
 func (f *InputField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 	if !f.focused {
 		return f, nil
 	}
 
-	if k, ok := msg.(tea.KeyPressMsg); ok {
+	switch k := msg.(type) {
+	case tea.KeyPressMsg:
 		f.err = nil
 		if f.isDefault && (k.Text != "" || k.Code == tea.KeyBackspace || k.Code == tea.KeyDelete) {
+			f.isDefault = false
+			f.input.SetValue("")
+		}
+	case tea.PasteMsg:
+		f.err = nil
+		if f.isDefault {
 			f.isDefault = false
 			f.input.SetValue("")
 		}

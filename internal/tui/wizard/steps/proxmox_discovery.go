@@ -36,6 +36,11 @@ type proxmoxDiscovery struct {
 	Storage []proxmoxStorage
 	Bridges []proxmoxBridge
 	ISOs    []string // storage volids of ISO files, e.g. "local:iso/fcos.iso"
+
+	// Heterogeneous reports that online nodes' inventories differed, so
+	// Storage/Bridges/ISOs hold only what every online node shares and the
+	// placement step should say so.
+	Heterogeneous bool
 }
 
 func discoverProxmox(cfg *config.Config) (*proxmoxDiscovery, error) {
@@ -81,22 +86,73 @@ func discoverProxmox(cfg *config.Config) (*proxmoxDiscovery, error) {
 		})
 	}
 
-	targetNode := nodes[0].Name
+	online := make([]string, 0, len(nodes))
 	for _, n := range nodes {
 		if n.Status == "online" {
-			targetNode = n.Name
-			break
+			online = append(online, n.Name)
 		}
 	}
+	if len(online) == 0 {
+		online = []string{nodes[0].Name}
+	}
 
-	storage, bridges, isos := fetchNodeDetails(ctx, client, targetNode)
+	storage, bridges, isos, heterogeneous := fetchClusterDetails(ctx, client, online)
 
 	return &proxmoxDiscovery{
-		Nodes:   nodes,
-		Storage: storage,
-		Bridges: bridges,
-		ISOs:    isos,
+		Nodes:         nodes,
+		Storage:       storage,
+		Bridges:       bridges,
+		ISOs:          isos,
+		Heterogeneous: heterogeneous,
 	}, nil
+}
+
+// fetchClusterDetails pulls storage/bridges/ISOs from every online node and
+// keeps only what all of them share (by name), so the wizard's single
+// cluster-wide pick lists never offer a resource missing on the node a VM
+// lands on; heterogeneous reports whether any two inventories differed. A
+// category whose fetch failed on a node (nil, best-effort) neither narrows
+// the result nor counts as a difference.
+func fetchClusterDetails(ctx context.Context, client *proxmox.Client, nodeNames []string) ([]proxmoxStorage, []proxmoxBridge, []string, bool) {
+	storage, bridges, isos := fetchNodeDetails(ctx, client, nodeNames[0])
+	heterogeneous := false
+
+	for _, nodeName := range nodeNames[1:] {
+		s, b, i := fetchNodeDetails(ctx, client, nodeName)
+		var differs bool
+		storage, differs = keepShared(storage, s, func(v proxmoxStorage) string { return v.Name })
+		heterogeneous = heterogeneous || differs
+		bridges, differs = keepShared(bridges, b, func(v proxmoxBridge) string { return v.Name })
+		heterogeneous = heterogeneous || differs
+		isos, differs = keepShared(isos, i, func(v string) string { return v })
+		heterogeneous = heterogeneous || differs
+	}
+
+	return storage, bridges, isos, heterogeneous
+}
+
+// keepShared returns the elements of base whose key other also has, plus
+// whether the two sets differed at all; a nil side (that category's fetch
+// errored on that node) never narrows the result and reports no difference,
+// since an unknown inventory is not evidence of a differing one.
+func keepShared[T any](base, other []T, key func(T) string) ([]T, bool) {
+	if other == nil {
+		return base, false
+	}
+	if base == nil {
+		return other, false
+	}
+	seen := make(map[string]bool, len(other))
+	for _, o := range other {
+		seen[key(o)] = true
+	}
+	kept := make([]T, 0, len(base))
+	for _, b := range base {
+		if seen[key(b)] {
+			kept = append(kept, b)
+		}
+	}
+	return kept, len(kept) != len(base) || len(kept) != len(other)
 }
 
 // fetchNodeDetails pulls storage/bridges/ISOs, best-effort — endpoint errors

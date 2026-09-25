@@ -1,9 +1,12 @@
 package tui
 
 import (
+	"bytes"
+	"strings"
 	"testing"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
 )
 
 // TestHighContrastRequested pins the env contract after the legacy
@@ -59,6 +62,42 @@ func TestSetDarkBackgroundRebindsMutedTiers(t *testing.T) {
 	}
 	if ColorSlate700 != lipgloss.Color("#334155") {
 		t.Errorf("dark ColorSlate700 = %v, want #334155", ColorSlate700)
+	}
+}
+
+// TestThemeRemapReachesRenderedRows pins bug 14: the light-background and
+// high-contrast remaps must reach a rendered dottedKV row and CodeInline —
+// not stop at the eight aliases — or credentials and recovery commands
+// render at ~2.4:1 on light terminals with the a11y switch on.
+func TestThemeRemapReachesRenderedRows(t *testing.T) {
+	forced := colorprofile.TrueColor
+	outputProfile.Store(&forced)
+	t.Cleanup(func() {
+		SetColorProfileFor(&bytes.Buffer{})
+		setTheme(ThemeDefault)
+		SetDarkBackground(true)
+	})
+
+	SetDarkBackground(false)
+	row := DottedKeyValueFull("console", "https://example", 12, 60)
+	if strings.Contains(row, "148;163;184") {
+		t.Fatalf("light dottedKV key still renders Slate400: %q", row)
+	}
+	if !strings.Contains(row, "71;85;105") {
+		t.Fatalf("light dottedKV key does not carry the Slate600 remap: %q", row)
+	}
+	if code := CodeInlineStyle.Render("kubeadmin-password"); strings.Contains(code, "34;211;238") {
+		t.Fatalf("light CodeInline still renders Cyan400: %q", code)
+	}
+
+	setTheme(ThemeHighContrast)
+	rebuildStyles()
+	if code := CodeInlineStyle.Render("kubeadmin-password"); strings.Contains(code, "34;211;238") {
+		t.Fatalf("high-contrast CodeInline still renders Cyan400: %q", code)
+	}
+	row = DottedKeyValueFull("console", "https://example", 12, 60)
+	if strings.Contains(row, "148;163;184") || strings.Contains(row, "71;85;105") {
+		t.Fatalf("high-contrast dottedKV key still renders a slate tier: %q", row)
 	}
 }
 

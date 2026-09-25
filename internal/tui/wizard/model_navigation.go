@@ -50,6 +50,9 @@ func (m *Model) resizeViewport() {
 	m.viewport.SetHeight(height)
 }
 
+// handleScrollKey scrolls the viewport on page/home/end keys and reports
+// whether it consumed msg; home/end fall through to a focused text input,
+// where they are line-start/line-end cursor moves rather than scrolls.
 func (m *Model) handleScrollKey(msg tea.KeyPressMsg) bool {
 	if !m.ready {
 		return false
@@ -60,8 +63,14 @@ func (m *Model) handleScrollKey(msg tea.KeyPressMsg) bool {
 	case key.Matches(msg, m.keyMap.PageDown):
 		m.viewport.HalfPageDown()
 	case key.Matches(msg, m.keyMap.Home):
+		if m.currentStepConsumesTextInput() {
+			return false
+		}
 		m.viewport.GotoTop()
 	case key.Matches(msg, m.keyMap.End):
+		if m.currentStepConsumesTextInput() {
+			return false
+		}
 		m.viewport.GotoBottom()
 	default:
 		return false

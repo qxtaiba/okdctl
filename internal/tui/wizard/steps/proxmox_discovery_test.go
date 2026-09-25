@@ -106,6 +106,96 @@ func TestDiscoverProxmox_Success(t *testing.T) {
 	}
 }
 
+// newFakeHeterogeneousServer mocks a two-online-node cluster whose
+// inventories differ: pve1 carries an extra storage pool, bridge, and ISO
+// that pve2 lacks.
+func newFakeHeterogeneousServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api2/json/access/ticket", func(w http.ResponseWriter, _ *http.Request) {
+		writeData(w, map[string]any{"ticket": "PVE:test", "CSRFPreventionToken": "tok", "username": "root@pam"})
+	})
+	mux.HandleFunc("GET /api2/json/nodes", func(w http.ResponseWriter, _ *http.Request) {
+		writeData(w, []map[string]any{
+			{"node": "pve1", "status": "online", "maxcpu": 8, "maxmem": 17179869184},
+			{"node": "pve2", "status": "online", "maxcpu": 4, "maxmem": 8589934592},
+		})
+	})
+	for _, n := range []string{"pve1", "pve2"} {
+		node := n
+		mux.HandleFunc("GET /api2/json/nodes/"+node+"/status", func(w http.ResponseWriter, _ *http.Request) {
+			writeData(w, map[string]any{})
+		})
+		mux.HandleFunc("GET /api2/json/nodes/"+node+"/storage", func(w http.ResponseWriter, _ *http.Request) {
+			stores := []map[string]any{
+				{"storage": "local", "type": "dir", "content": "iso,vztmpl", "enabled": 1, "total": 107374182400},
+				{"storage": "local-lvm", "type": "lvmthin", "content": "images", "enabled": 1, "total": 214748364800},
+			}
+			if node == "pve1" {
+				stores = append(stores, map[string]any{"storage": "tank", "type": "zfspool", "content": "images", "enabled": 1, "total": 4294967296000})
+			}
+			writeData(w, stores)
+		})
+		mux.HandleFunc("GET /api2/json/nodes/"+node+"/network", func(w http.ResponseWriter, _ *http.Request) {
+			bridges := []map[string]any{{"iface": "vmbr0", "active": 1, "cidr": "192.168.1.1/24"}}
+			if node == "pve1" {
+				bridges = append(bridges, map[string]any{"iface": "vmbr1", "active": 1, "cidr": "10.10.0.1/24"})
+			}
+			writeData(w, bridges)
+		})
+		mux.HandleFunc("GET /api2/json/nodes/"+node+"/storage/local/status", func(w http.ResponseWriter, _ *http.Request) {
+			writeData(w, map[string]any{})
+		})
+		mux.HandleFunc("GET /api2/json/nodes/"+node+"/storage/local/content", func(w http.ResponseWriter, _ *http.Request) {
+			isos := []map[string]any{{"volid": "local:iso/fcos-38.iso"}}
+			if node == "pve1" {
+				isos = append(isos, map[string]any{"volid": "local:iso/extra.iso"})
+			}
+			writeData(w, isos)
+		})
+	}
+	return httptest.NewServer(mux)
+}
+
+// TestDiscoverProxmox_IntersectsAcrossOnlineNodes pins bug 10: discovery
+// reads every online node, offers only the storage/bridges/ISOs common to
+// all of them, and flags the cluster heterogeneous so the wizard can warn.
+func TestDiscoverProxmox_IntersectsAcrossOnlineNodes(t *testing.T) {
+	server := newFakeHeterogeneousServer(t)
+	defer server.Close()
+
+	got, err := discoverProxmox(testProxmoxConfig(server.URL))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(got.Storage) != 2 || got.Storage[0].Name != "local" || got.Storage[1].Name != "local-lvm" {
+		t.Errorf("Storage = %+v; want the two pools common to both nodes", got.Storage)
+	}
+	if len(got.Bridges) != 1 || got.Bridges[0].Name != "vmbr0" {
+		t.Errorf("Bridges = %+v; want only vmbr0", got.Bridges)
+	}
+	if len(got.ISOs) != 1 || got.ISOs[0] != "local:iso/fcos-38.iso" {
+		t.Errorf("ISOs = %+v; want only the shared ISO", got.ISOs)
+	}
+	if !got.Heterogeneous {
+		t.Error("Heterogeneous = false, want true for differing inventories")
+	}
+}
+
+func TestDiscoverProxmox_SingleOnlineNodeIsHomogeneous(t *testing.T) {
+	server := newFakeProxmoxServer(t, "pve2")
+	defer server.Close()
+
+	got, err := discoverProxmox(testProxmoxConfig(server.URL))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Heterogeneous {
+		t.Error("Heterogeneous = true for a single online node, want false")
+	}
+}
+
 func TestDiscoverProxmox_NodesEndpointFailures(t *testing.T) {
 	cases := []struct {
 		name    string

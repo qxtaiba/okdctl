@@ -270,14 +270,30 @@ func (s *ParamsStep) View(width, height int) string {
 	out := s.inner.View(width)
 	if s.drainModeField != nil && s.drainModeField.Value() == drainModeSkip {
 		warn := lipgloss.NewStyle().Foreground(tui.ColorWarning).PaddingLeft(2)
-		out += "\n" + warn.Render(strings.Join([]string{
-			tui.IconWarning + " skip-drain: the node is power-cycled without evacuating pods —",
-			"  they die with the vm and restart in place on the resized node.",
-			"  use when a memory-saturated cluster cannot reschedule evictions.",
-			"  the etcd and ceph health gates still run.",
-		}, "\n"))
+		out += "\n" + warn.Render(strings.Join(s.skipDrainWarning(), "\n"))
 	}
 	return out
+}
+
+// skipDrainWarning returns the amber skip-drain copy for the current op,
+// matching what GateRows actually runs: remove destroys the vm (pods
+// reschedule elsewhere, only the ceph gate runs), while resize power-cycles
+// it (pods restart in place, the etcd and ceph gates run).
+func (s *ParamsStep) skipDrainWarning() []string {
+	if s.st.Op == node.OpRemove {
+		return []string{
+			tui.IconWarning + " skip-drain: the node is destroyed without evacuating pods —",
+			"  they die with the vm and reschedule onto the remaining nodes.",
+			"  use when a memory-saturated cluster cannot reschedule evictions.",
+			"  the ceph health gate still runs.",
+		}
+	}
+	return []string{
+		tui.IconWarning + " skip-drain: the node is power-cycled without evacuating pods —",
+		"  they die with the vm and restart in place on the resized node.",
+		"  use when a memory-saturated cluster cannot reschedule evictions.",
+		"  the etcd and ceph health gates still run.",
+	}
 }
 
 // FocusedSpan reports the focused field's lines; View renders the inner form

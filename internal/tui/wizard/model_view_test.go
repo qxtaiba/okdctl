@@ -410,11 +410,11 @@ func TestFooterRule_IndicatorCentredWithinAvail(t *testing.T) {
 	m := NewFlowModel([]WizardStep{newTallStep()}, cfg, chrome)
 	tuitest.RenderAt(t, m, 100, 30)
 
-	ind, scrollable := m.scrollIndicator()
+	arrows, message, scrollable := m.scrollIndicator()
 	if !scrollable {
 		t.Fatal("expected a scrollable viewport")
 	}
-	indPlain := tuitest.StripANSI(ind)
+	indPlain := tuitest.StripANSI(arrows + "  " + message)
 
 	rule := tuitest.StripANSI(m.renderFooterRule())
 	idx := strings.Index(rule, indPlain)
@@ -426,6 +426,24 @@ func TestFooterRule_IndicatorCentredWithinAvail(t *testing.T) {
 	right := strings.Count(rule[idx+len(indPlain):], "─")
 	if d := left - right; d < -1 || d > 1 {
 		t.Fatalf("left=%d right=%d not centred: %q", left, right, rule)
+	}
+}
+
+// TestFooterRule_ClampsAtNarrowWidths pins bug 7: at 60–63 columns the
+// rule + indicator + badge row must never exceed the content width — an
+// overflow wraps inside WizardBorderStyle and shatters the frame.
+func TestFooterRule_ClampsAtNarrowWidths(t *testing.T) {
+	cfg := config.DefaultConfig()
+	chrome := FlowChrome{Badge: func(*config.Config) string { return "okd 4.22.0-okd-scos.7" }}
+	for _, w := range []int{60, 61, 62, 63} {
+		m := NewFlowModel([]WizardStep{newTallStep()}, cfg, chrome)
+		frame := tuitest.RenderAt(t, m, w, 20)
+
+		rule := tuitest.StripANSI(m.renderFooterRule())
+		if got, want := lipgloss.Width(rule), m.contentWidth(); got > want {
+			t.Fatalf("width %d: footer rule = %d cols, want <= %d: %q", w, got, want, rule)
+		}
+		tuitest.AssertFits(t, frame, w, 20)
 	}
 }
 

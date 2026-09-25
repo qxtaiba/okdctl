@@ -3,7 +3,9 @@
 package steps
 
 import (
+	"errors"
 	"os/exec"
+	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/addon/catalog/flux"
 	"github.com/qxtaiba/okdctl/internal/addon/catalog/secretstore"
@@ -13,8 +15,9 @@ import (
 )
 
 const (
-	valYes = "yes"
-	valNo  = "no"
+	valYes     = "yes"
+	valEnabled = "enabled"
+	valNo      = "no"
 
 	// secretstore provider values, shared by the field's Default/Options and
 	// each provider section's Visible gate below.
@@ -72,6 +75,19 @@ var AddonsStepDefinition = wizard.StepDefinition{
 	Title:        "cluster addons",
 	DisplayTitle: "configure cluster addons",
 	Description:  "enable optional cluster features",
+	// Validate rejects an enabled addon missing the endpoint its install
+	// cannot run without, so the wizard fails here rather than the addon
+	// manager an hour into the deploy.
+	Validate: func(values map[string]string) error {
+		if values["flux_enabled"] == valYes && strings.TrimSpace(values["flux_repository"]) == "" {
+			return errors.New("flux repository is required when flux is enabled — enter the git repository url")
+		}
+		if values["secretstore_enabled"] == valYes && values["secretstore_provider"] == providerVault &&
+			strings.TrimSpace(values["secretstore_vault_server"]) == "" {
+			return errors.New("vault server url is required — enter the vault address")
+		}
+		return nil
+	},
 	Sections: []wizard.SectionDefinition{
 		{
 			Title: "gitops (flux)",
@@ -88,7 +104,7 @@ var AddonsStepDefinition = wizard.StepDefinition{
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "flux_enabled",
-					Label:     "enabled",
+					Label:     valEnabled,
 					Default:   "no",
 					Help:      "enable gitops deployment",
 					Type:      wizard.FieldTypeSelect,
@@ -139,7 +155,7 @@ var AddonsStepDefinition = wizard.StepDefinition{
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "secretstore_enabled",
-					Label:     "enabled",
+					Label:     valEnabled,
 					Default:   "no",
 					Help:      "bootstrap eso provider credentials and secretstore crd",
 					Type:      wizard.FieldTypeSelect,

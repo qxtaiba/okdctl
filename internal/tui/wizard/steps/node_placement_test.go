@@ -3,6 +3,7 @@ package steps
 import (
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -58,6 +59,31 @@ func TestNodePlacementApplyWritesFieldsInIndexOrder(t *testing.T) {
 	}
 	if got := cfg.Provider.Proxmox.Node; got != "pve1" {
 		t.Errorf("bootstrap Node = %q, want pve1 (default)", got)
+	}
+}
+
+// TestNodePlacementStep_HeterogeneousClusterWarns pins bug 10's UI half:
+// when discovery found differing per-node inventories, the placement header
+// says so, since the pick lists show only what every online node shares.
+func TestNodePlacementStep_HeterogeneousClusterWarns(t *testing.T) {
+	s := NewNodePlacementStep()
+	s.cfg = newProxmoxTestConfig()
+
+	disc := demoDiscovery()
+	disc.Heterogeneous = true
+	step, _ := s.Update(discoveryCompleteMsg{discovery: disc})
+	s = step.(*NodePlacementStep)
+
+	view := s.View(100, 30)
+	if !strings.Contains(view, "differ") {
+		t.Fatalf("View() carries no heterogeneity warning:\n%s", view)
+	}
+
+	disc = demoDiscovery()
+	step, _ = s.Update(discoveryCompleteMsg{discovery: disc})
+	s = step.(*NodePlacementStep)
+	if view := s.View(100, 30); strings.Contains(view, "differ") {
+		t.Fatalf("homogeneous View() carries a warning:\n%s", view)
 	}
 }
 

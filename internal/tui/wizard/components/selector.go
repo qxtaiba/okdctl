@@ -31,6 +31,7 @@ type Option struct {
 	Title       string
 	Description string
 	Recommended bool
+	Current     bool // marks the value the loaded config already carries
 	Style       OptionStyle
 	InDropdown  bool // part of the scrollable dropdown region
 }
@@ -143,6 +144,7 @@ type optionStyles struct {
 	bulletUnselected lipgloss.Style
 	desc             lipgloss.Style
 	recommended      lipgloss.Style
+	current          lipgloss.Style
 	line             lipgloss.Style
 }
 
@@ -155,6 +157,7 @@ func (s *Selector) getOptionStyles() optionStyles {
 		bulletUnselected: lipgloss.NewStyle().Foreground(tui.ColorSlate600),
 		desc:             lipgloss.NewStyle().Foreground(tui.ColorSlate500),
 		recommended:      lipgloss.NewStyle().Foreground(tui.ColorSuccess).Italic(true),
+		current:          lipgloss.NewStyle().Foreground(tui.ColorInfo).Italic(true),
 		line:             lipgloss.NewStyle().Foreground(tui.ColorSlate700),
 	}
 	s.cachedStyles = &styles
@@ -255,6 +258,9 @@ func (s *Selector) renderOptionWithPrefix(opt *Option, selected, showConnector b
 	titleLine := prefix + bullet + " " + title
 	if opt.Recommended {
 		titleLine += " " + styles.recommended.Render("(recommended)")
+	}
+	if opt.Current {
+		titleLine += " " + styles.current.Render("(current)")
 	}
 	result = append(result, titleLine)
 

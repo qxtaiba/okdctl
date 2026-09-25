@@ -285,7 +285,10 @@ func configureReviewStep(built wizard.BuiltSteps, cfg *config.Config) {
 // config.DefaultConfig() (an empty value is just a gap, so the step's own
 // constructed default survives) — see DataDrivenStep.LoadFromConfig.
 func initializeStepsFromConfig(built wizard.BuiltSteps, cfg *config.Config, configExists bool) {
-	if cfg.Distribution.Version != "" {
+	// A synthetic defaults-only seed carries a placeholder version, not a
+	// choice the user made; anchoring the selector (and its "current" chip)
+	// on it would misrepresent a fresh run as an edit.
+	if cfg.Distribution.Version != "" && configExists {
 		for _, step := range built.Steps {
 			if ds, ok := step.(*steps.DistributionStep); ok {
 				ds.SetSelectedVersion(cfg.Distribution.Version)

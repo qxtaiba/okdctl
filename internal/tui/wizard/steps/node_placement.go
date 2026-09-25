@@ -286,8 +286,13 @@ func (s *NodePlacementStep) discoveryHeader(width int) string {
 	case s.discoveryErr != nil:
 		return warnStyle.Width(width - 2).Render(s.discoveryErr.Error())
 	case s.discovery != nil:
-		return noteStyle.Width(width - 2).Render(fmt.Sprintf("discovered %d node(s), %d storage pool(s), %d bridge(s)",
+		header := noteStyle.Width(width - 2).Render(fmt.Sprintf("discovered %d node(s), %d storage pool(s), %d bridge(s)",
 			len(s.discovery.Nodes), len(s.discovery.Storage), len(s.discovery.Bridges)))
+		if s.discovery.Heterogeneous {
+			header += "\n" + warnStyle.Width(width-2).
+				Render(tui.IconWarning+" node inventories differ — offering only storage, bridges, and isos every online node shares")
+		}
+		return header
 	default:
 		return ""
 	}

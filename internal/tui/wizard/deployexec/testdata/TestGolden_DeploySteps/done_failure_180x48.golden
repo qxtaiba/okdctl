@@ -9,8 +9,8 @@
   │  │                                                                                        │            │09:00:14 deploy step started step=step-02 phase=setup                │  
   │  │  deploy infrastructure failed: proxmox task UPID:pve:0000A1: vm 9001 already exists    │            │09:00:21 deploy step started step=step-03 phase=setup                │  
   │  │                                                                                        │            │09:00:28 deploy step started step=step-04 phase=setup                │  
-  │  │  → re-run 'okdctl deploy' to resume from the recorded phase, or 'okdctl deploy --      │            │09:00:35 deploy step started step=step-05 phase=setup                │  
-  │  │    fresh' to restart from scratch                                                      │            │09:00:42 deploy step started step=step-06 phase=setup                │  
+  │  │  → re-run 'okdctl deploy' to resume from the recorded phase, or 'okdctl deploy         │            │09:00:35 deploy step started step=step-05 phase=setup                │  
+  │  │    --fresh' to restart from scratch                                                    │            │09:00:42 deploy step started step=step-06 phase=setup                │  
   │  │                                                                                        │            │09:00:49 deploy step started step=step-07 phase=setup                │  
   │  ╰────────────────────────────────────────────────────────────────────────────────────────╯            │09:00:56 deploy step started step=step-08 phase=setup                │  
   │                                                                                                        │09:01:03 deploy step started step=step-09 phase=setup                │  

@@ -11,6 +11,48 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 )
 
+// TestAddonsStep_EnabledAddonsRequireTheirEndpoints pins bug 11: flux with
+// an empty repository or vault with an empty server url must fail wizard
+// validation instead of an addon install an hour later.
+func TestAddonsStep_EnabledAddonsRequireTheirEndpoints(t *testing.T) {
+	cases := []struct {
+		name   string
+		values map[string]string
+		want   string
+	}{
+		{
+			name:   "flux enabled without repository",
+			values: map[string]string{"flux_enabled": valYes, "flux_repository": ""},
+			want:   "repository",
+		},
+		{
+			name: "vault provider without server url",
+			values: map[string]string{
+				"secretstore_enabled":      valYes,
+				"secretstore_provider":     providerVault,
+				"secretstore_vault_server": "",
+			},
+			want: "server url",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if AddonsStepDefinition.Validate == nil {
+				t.Fatal("AddonsStepDefinition.Validate is nil")
+			}
+			err := AddonsStepDefinition.Validate(tc.values)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Validate(%v) = %v, want error naming %q", tc.values, err, tc.want)
+			}
+		})
+	}
+
+	disabled := map[string]string{"flux_enabled": valNo, "secretstore_enabled": valNo}
+	if err := AddonsStepDefinition.Validate(disabled); err != nil {
+		t.Fatalf("Validate with everything disabled = %v, want nil", err)
+	}
+}
+
 func TestAddonsStep_OnlyTheSelectedProviderSectionRenders(t *testing.T) {
 	sectionTitles := []string{"secret store (onepassword)", "secret store (vault)", "secret store (bitwarden)"}
 

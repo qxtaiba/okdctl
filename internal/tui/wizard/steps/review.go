@@ -3,6 +3,7 @@ package steps
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -143,7 +144,12 @@ func (s *ReviewStep) sectionVisible(stepID wizard.StepID) bool {
 		return s.anyAddonEnabled()
 	case wizard.StepIDAdvanced:
 		dep := s.cfg.Deployment
-		return s.cfg.Topology.VMIDBase > 0 || dep.BootstrapTimeout > 0 || dep.TerraformEnv != "" || dep.AutoApprove
+		proxmoxTuned := false
+		if p := s.cfg.Provider.Proxmox; p != nil {
+			proxmoxTuned = (p.CPUType != "" && p.CPUType != cpuTypeHost) || p.NUMAEnabled || p.HAEnabled
+		}
+		return s.cfg.Topology.VMIDBase > 0 || dep.BootstrapTimeout > 0 || dep.TerraformEnv != "" ||
+			dep.AutoApprove || proxmoxTuned || s.cfg.Networking.NTPServer != "" || dep.BinDir != ""
 	default:
 		// cluster identity, networking, compute, and files & ignition
 		// always emit at least one always-shown KVEntry.
@@ -452,18 +458,22 @@ func (s *ReviewStep) renderFilesIgnition(st *wizard.SectionStyles) string {
 	return b.String()
 }
 
+// renderFeatures renders one row per enabled addon in sorted (deterministic)
+// name order, valued by its most telling setting — provider type, then
+// repository — or a plain "enabled" when it carries no detail.
 func (s *ReviewStep) renderFeatures(st *wizard.SectionStyles) string {
 	if !s.anyAddonEnabled() {
 		return ""
 	}
 
-	labels := make([]string, 0, len(s.cfg.Addons))
+	names := make([]string, 0, len(s.cfg.Addons))
 	for name, ac := range s.cfg.Addons {
 		if ac.Enabled {
-			labels = append(labels, name)
+			names = append(names, name)
 		}
 	}
-	fitted := st.ForLabels(labels...)
+	slices.Sort(names)
+	fitted := st.ForLabels(names...)
 
 	var b strings.Builder
 
@@ -472,17 +482,15 @@ func (s *ReviewStep) renderFeatures(st *wizard.SectionStyles) string {
 	b.WriteString(fitted.Separator)
 	b.WriteString("\n")
 
-	for name, ac := range s.cfg.Addons {
-		if !ac.Enabled {
-			continue
-		}
-		label := name
+	for _, name := range names {
+		ac := s.cfg.Addons[name]
+		value := valEnabled
 		if detail, ok := ac.Settings["type"]; ok && detail != "" {
-			label = fmt.Sprintf("%s (%s)", name, detail)
+			value = detail
 		} else if repo, ok := ac.Settings[flux.SettingRepository]; ok && repo != "" {
-			label = fmt.Sprintf("%s (%s)", name, repo)
+			value = repo
 		}
-		b.WriteString(fitted.KVPair(name, label))
+		b.WriteString(fitted.KVPair(name, value))
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
@@ -490,6 +498,8 @@ func (s *ReviewStep) renderFeatures(st *wizard.SectionStyles) string {
 	return b.String()
 }
 
+// renderAdvanced renders every non-default advanced setting the wizard
+// applies, so nothing changing deploy behavior is invisible at the gate.
 func (s *ReviewStep) renderAdvanced(st *wizard.SectionStyles) string {
 	bt := s.cfg.Deployment.BootstrapTimeout
 	vmid := s.cfg.Topology.VMIDBase
@@ -498,11 +508,21 @@ func (s *ReviewStep) renderAdvanced(st *wizard.SectionStyles) string {
 		timeouts = fmt.Sprintf("bootstrap %dm, install %dm", bt/60, s.cfg.Deployment.InstallTimeout/60)
 	}
 	dep := s.cfg.Deployment
+	cpuType, numa, ha := "", false, false
+	if p := s.cfg.Provider.Proxmox; p != nil {
+		cpuType, numa, ha = p.CPUType, p.NUMAEnabled, p.HAEnabled
+	}
+	ntp := s.cfg.Networking.NTPServer
 	return wizard.RenderSection(st, s.sectionTitle("advanced", wizard.StepIDAdvanced), []wizard.KVEntry{
 		{Label: "vm id base", Value: fmt.Sprintf("%d", vmid), Skip: vmid <= 0},
+		{Label: "cpu type", Value: cpuType, Skip: cpuType == "" || cpuType == cpuTypeHost},
+		{Label: "numa", Value: valYes, Skip: !numa},
+		{Label: "ha anti-affinity", Value: valYes, Skip: !ha},
+		{Label: "ntp server", Value: ntp, Skip: ntp == ""},
 		{Label: "timeouts", Value: timeouts, Skip: bt <= 0},
 		{Label: "terraform environment", Value: dep.TerraformEnv, Skip: dep.TerraformEnv == ""},
 		{Label: "auto approve", Value: valYes, Skip: !dep.AutoApprove},
+		{Label: "bin dir", Value: dep.BinDir, Skip: dep.BinDir == ""},
 	})
 }
 

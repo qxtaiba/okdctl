@@ -131,6 +131,24 @@ func TestParamsStepSkipDrainSelection(t *testing.T) {
 	}
 }
 
+// TestParamsStepSkipDrainCopyMatchesOp pins bug 12: the amber skip-drain
+// note is per-op — on remove the vm is destroyed (nothing restarts in place
+// and no etcd gate runs), so resize's copy must not render there.
+func TestParamsStepSkipDrainCopyMatchesOp(t *testing.T) {
+	st := &State{Cfg: config.DefaultConfig(), Op: node.OpRemove}
+	s := NewParamsStep(st)
+	_ = s.Init()
+	s.drainModeField.SetValue(drainModeSkip)
+
+	view := tuitest.StripANSI(s.View(100, 40))
+	if strings.Contains(view, "resized node") || strings.Contains(view, "etcd") {
+		t.Fatalf("remove skip-drain note carries resize copy:\n%s", view)
+	}
+	if !strings.Contains(view, "destroyed") {
+		t.Fatalf("remove skip-drain note does not say the vm is destroyed:\n%s", view)
+	}
+}
+
 // TestParamsStepKeepsCurrentNoteSurvivesBlur guards E-L8(a): "0 keeps
 // current" must stay legible on the vcpus/os-disk fields even when they are
 // not the focused field, or an operator glancing at "vcpus: 0" reads it as
