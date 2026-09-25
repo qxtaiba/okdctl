@@ -341,8 +341,13 @@ func (f *InputField) View() string {
 
 	f.input.SetStyles(fieldInputStyles(f.isDefault, f.Disabled))
 	content := f.input.View()
-	if !f.focused && f.input.Value() == "" && f.Placeholder == "" {
-		content = tagStyle.Render("·")
+	if !f.focused {
+		switch {
+		case f.input.Value() != "":
+			content = f.blurredValueView()
+		case f.Placeholder == "":
+			content = tagStyle.Render("·")
+		}
 	}
 
 	box := fieldBox(content, f.boxOuterWidth(), f.focused, f.err != nil, f.Disabled)
@@ -361,6 +366,22 @@ func (f *InputField) View() string {
 		out += "\n" + f.Note
 	}
 	return out
+}
+
+// blurredValueView renders a blurred non-empty value directly in the field's
+// blurred text style, bypassing the textinput's cursor path: Blur parks the
+// cursor on the value's first character, and the blurred cursor cell renders
+// through the cursor's own TextStyle — which the textinput never sets on the
+// value path — so that one character would read bright while the rest of the
+// value stays dim (the same bug family as the Blink:false fix in
+// fieldInputStyles).
+func (f *InputField) blurredValueView() string {
+	v := f.input.Value()
+	if f.Password {
+		v = strings.Repeat(string(f.input.EchoCharacter), lipgloss.Width(v))
+	}
+	style := fieldInputStyles(f.isDefault, f.Disabled).Blurred.Text
+	return style.Render(tui.Truncate(v, max(f.boxOuterWidth()-4, 1)))
 }
 
 // scrubbed redacts the raw value out of msg for password fields so an

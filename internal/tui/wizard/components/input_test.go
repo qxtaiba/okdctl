@@ -4,6 +4,7 @@ import (
 	"image/color"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -424,4 +425,82 @@ func TestInputGroup_FieldViewsEmptyGroup(t *testing.T) {
 	if got := g.View(); got != "" {
 		t.Fatalf("View() = %q, want empty", got)
 	}
+}
+
+// sgrStatesOf returns the accumulated SGR state preceding each visible rune
+// of needle within row, so a test can assert a run of text renders in one
+// uniform style.
+func sgrStatesOf(t *testing.T, row, needle string) []string {
+	t.Helper()
+
+	var visible []rune
+	var states []string
+	state := ""
+	for i := 0; i < len(row); {
+		if strings.HasPrefix(row[i:], "\x1b[") {
+			end := strings.IndexByte(row[i:], 'm')
+			if end < 0 {
+				t.Fatalf("unterminated SGR sequence in %q", row)
+			}
+			seq := row[i : i+end+1]
+			if seq == "\x1b[0m" || seq == "\x1b[m" {
+				state = ""
+			} else {
+				state += seq
+			}
+			i += end + 1
+			continue
+		}
+		r, size := utf8.DecodeRuneInString(row[i:])
+		visible = append(visible, r)
+		states = append(states, state)
+		i += size
+	}
+
+	vis := string(visible)
+	idx := strings.Index(vis, needle)
+	if idx < 0 {
+		t.Fatalf("row %q does not contain %q", vis, needle)
+	}
+	start := utf8.RuneCountInString(vis[:idx])
+	return states[start : start+utf8.RuneCountInString(needle)]
+}
+
+func assertOneUniformStyle(t *testing.T, row, needle string) {
+	t.Helper()
+	states := sgrStatesOf(t, row, needle)
+	if states[0] == "" {
+		t.Fatalf("first rune of %q carries no style at all in %q", needle, row)
+	}
+	for i, st := range states {
+		if st != states[0] {
+			t.Fatalf("rune %d of %q styled %q, want %q as rune 0", i, needle, st, states[0])
+		}
+	}
+}
+
+func TestInputField_BlurredDefaultValueOneUniformStyle(t *testing.T) {
+	f := NewInputField("host", "")
+	f.SetWidth(60)
+	f.SetDefault("192.168.1.100:8006")
+	f.Blur()
+
+	assertOneUniformStyle(t, strings.Split(f.View(), "\n")[2], "192.168.1.100:8006")
+}
+
+func TestInputField_BlurredTypedValueOneUniformStyle(t *testing.T) {
+	f := NewInputField("username", "")
+	f.SetWidth(60)
+	f.SetValue("root@pam")
+	f.Blur()
+
+	assertOneUniformStyle(t, strings.Split(f.View(), "\n")[2], "root@pam")
+}
+
+func TestInputField_BlurredPlaceholderOneUniformStyle(t *testing.T) {
+	f := NewInputField("token id", "root@pam!okdctl")
+	f.SetWidth(60)
+	f.Blur()
+
+	assertOneUniformStyle(t, strings.Split(f.View(), "\n")[2], "root@pam!okdctl")
 }
