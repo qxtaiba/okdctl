@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 )
 
@@ -90,5 +91,53 @@ func TestStagesTrail_UnknownCurrentIDToleratesRenderingAllDim(t *testing.T) {
 	want := stageLabelStyle.Render("op") + stageSeparatorStyle.Render(" · ") + stageLabelStyle.Render("target")
 	if got != want {
 		t.Fatalf("trail = %q, want %q", got, want)
+	}
+}
+
+func TestStagesTrail_ActiveStageDotsTrackWithinPhasePosition(t *testing.T) {
+	stages := []Stage{
+		{Label: "connect", Steps: []StepID{"a", "b", "c"}},
+		{Label: "cluster", Steps: []StepID{"d"}},
+	}
+	trail := StagesTrail(stages)
+
+	got := trail(ProgressInfo{CurrentID: "b", VisibleIDs: []StepID{"a", "b", "c", "d"}})
+	want := "connect " + tui.IconActive + tui.IconActive + tui.IconPending + " · cluster"
+	if stripped := tuitest.StripANSI(got); stripped != want {
+		t.Fatalf("trail = %q, want %q", stripped, want)
+	}
+}
+
+func TestStagesTrail_HiddenStepExcludedFromDotCountAndPosition(t *testing.T) {
+	stages := []Stage{{Label: "cluster", Steps: []StepID{"a", "b", "c", "d"}}}
+	trail := StagesTrail(stages)
+
+	// b is hidden: only a, c, d are visible, and c is now the second of three.
+	got := trail(ProgressInfo{CurrentID: "c", VisibleIDs: []StepID{"a", "c", "d"}})
+	want := "cluster " + tui.IconActive + tui.IconActive + tui.IconPending
+	if stripped := tuitest.StripANSI(got); stripped != want {
+		t.Fatalf("trail = %q, want %q", stripped, want)
+	}
+}
+
+func TestStagesTrail_SingleVisibleStepStageRendersBareLabel(t *testing.T) {
+	stages := []Stage{{Label: "review", Steps: []StepID{"only"}}}
+	trail := StagesTrail(stages)
+
+	got := trail(ProgressInfo{CurrentID: "only", VisibleIDs: []StepID{"only"}})
+	if stripped := tuitest.StripANSI(got); stripped != "review" {
+		t.Fatalf("trail = %q, want %q", stripped, "review")
+	}
+}
+
+func TestStagesTrail_MultiStepStageWithOnlyOneVisibleRendersBareLabel(t *testing.T) {
+	stages := []Stage{{Label: "connect", Steps: []StepID{"a", "b", "c"}}}
+	trail := StagesTrail(stages)
+
+	// b and c are hidden this run: only a is visible, so the stage has no
+	// ribbon to show even though it lists 3 steps.
+	got := trail(ProgressInfo{CurrentID: "a", VisibleIDs: []StepID{"a"}})
+	if stripped := tuitest.StripANSI(got); stripped != "connect" {
+		t.Fatalf("trail = %q, want %q", stripped, "connect")
 	}
 }

@@ -17,3 +17,21 @@ func RegisterAll(b *wizard.StepBuilder) {
 	b.Register(wizard.StepTypeAdvanced, func() (wizard.WizardStep, wizard.StepState) { return NewAdvancedStep(), nil })
 	b.Register(wizard.StepTypeReview, func() (wizard.WizardStep, wizard.StepState) { return NewReviewStep(), nil })
 }
+
+// deployPhases groups every configure-wizard step into the header trail's
+// four phases: connect, cluster, extras, and review.
+func deployPhases() []wizard.Stage {
+	return []wizard.Stage{
+		{Label: "connect", Steps: []wizard.StepID{wizard.StepIDWelcome, wizard.StepIDDistribution, wizard.StepIDProxmox}},
+		{Label: "cluster", Steps: []wizard.StepID{wizard.StepIDBasics, wizard.StepIDNodePlacement, wizard.StepIDNetworking, wizard.StepIDResources}},
+		{Label: "extras", Steps: []wizard.StepID{wizard.StepIDAddons, wizard.StepIDFiles, wizard.StepIDAdvanced}},
+		{Label: "review", Steps: []wizard.StepID{wizard.StepIDReview}},
+	}
+}
+
+// Chrome returns the configure wizard's header chrome: wizard.DefaultChrome extended with the named phase trail.
+func Chrome() wizard.FlowChrome {
+	chrome := wizard.DefaultChrome()
+	chrome.Trail = wizard.StagesTrail(deployPhases())
+	return chrome
+}

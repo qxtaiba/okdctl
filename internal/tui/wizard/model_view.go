@@ -226,21 +226,24 @@ func (m *Model) headerTitle() string {
 // FlowChrome.Trail hooks.
 func (m *Model) progressInfo() ProgressInfo {
 	titles := make([]string, 0, len(m.steps))
+	visibleIDs := make([]StepID, 0, len(m.steps))
 	var currentID StepID
 	for i, step := range m.steps {
 		if !stepShouldShow(step, m.config) {
 			continue
 		}
 		titles = append(titles, step.Title())
+		visibleIDs = append(visibleIDs, step.ID())
 		if i == m.currentStep {
 			currentID = step.ID()
 		}
 	}
 	return ProgressInfo{
-		Current:   m.currentVisibleStepIndex() + 1,
-		Total:     m.countVisibleSteps(),
-		CurrentID: currentID,
-		Titles:    titles,
+		Current:    m.currentVisibleStepIndex() + 1,
+		Total:      m.countVisibleSteps(),
+		CurrentID:  currentID,
+		Titles:     titles,
+		VisibleIDs: visibleIDs,
 	}
 }
 

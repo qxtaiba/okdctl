@@ -21,11 +21,11 @@ Type "okdctl deploy"
 Sleep 450ms
 Enter
 
-Wait+Screen@10s /step 1 of 11/
+Wait+Screen@10s /connect ●○○ · cluster · extras · review/
 Enter
 Sleep 450ms
 
-Wait+Screen@10s /step 2 of 11/
+Wait+Screen@10s /connect ●●○ · cluster · extras · review/
 Sleep 450ms
 Screenshot out/@NAME@-distribution-fail.png
 Ctrl+C

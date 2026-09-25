@@ -16,9 +16,13 @@ terminal capture and `calib-<size>.txt` calibration readout per size.
   a given pixel size, so `run.sh` can confirm a preset's `Set Width`/`Set
   Height` actually maps to its named column/row count before rendering.
 - `wizard.tape.in` is a template that drives the full wizard walkthrough —
-  `okdctl deploy` against the fake Proxmox API from `scripts/demo/fakepve.go`
-  — with `Wait+Screen@10s /step N of 11/` gating each step transition and a
-  `Screenshot` right after. Each `STEP N` block is self-contained: the
+  `okdctl deploy` against the fake Proxmox API from `scripts/demo/fakepve.go`.
+  The wait gates match the header's phase trail (`connect · cluster ·
+  extras · review`), not a step count: each step renders a distinct trail
+  string — its phase bolded, plus an inline dot ribbon once that phase has
+  2 or more visible steps — and that string, unlike the step title, is
+  never clipped by the header's width budget, so it gates reliably at
+  every preset size. Each `STEP N` block is self-contained: the
   wait/screenshot pair that opens it, then the keystrokes that complete that
   step and advance to the next. Keystrokes mirror `docs/assets/demo.tape`
   (the human-paced README recording) with sleeps compressed for unattended

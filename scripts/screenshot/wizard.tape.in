@@ -5,6 +5,15 @@
 # it, then the keystrokes that complete that step and advance to the next
 # one. Keystroke sequences mirror docs/assets/demo.tape (the human-paced
 # README recording) with sleeps compressed for unattended batch rendering.
+#
+# The wait gates match the header's phase trail (connect/cluster/extras/
+# review), not the step title: steps/register.go's deployPhases groups the
+# 11 steps into those 4 phases, and the trail's inline dot ribbon tracks
+# each step's position within its phase's visible steps — a string unique
+# per step that (unlike the title) is never clipped by the header's width
+# budget at 80 cols, verified by
+# internal/tui/wizard/steps/register_test.go's
+# TestPhaseTrailFits80ColsWithLongestTitle.
 Output out/@NAME@.txt
 Set Shell zsh
 Set FontSize 14
@@ -24,13 +33,13 @@ Sleep 450ms
 Enter
 
 # ==================== STEP 1: welcome ====================
-Wait+Screen@10s /step 1 of 11/
+Wait+Screen@10s /connect ●○○ · cluster · extras · review/
 Screenshot out/@NAME@-welcome.png
 Enter
 Sleep 450ms
 
 # ==================== STEP 2: okd version (distribution) ====================
-Wait+Screen@10s /step 2 of 11/
+Wait+Screen@10s /connect ●●○ · cluster · extras · review/
 Screenshot out/@NAME@-distribution.png
 Enter
 Sleep 650ms
@@ -49,7 +58,7 @@ Enter
 Sleep 450ms
 
 # ==================== STEP 3: proxmox connection ====================
-Wait+Screen@10s /step 3 of 11/
+Wait+Screen@10s /connect ●●● · cluster · extras · review/
 Screenshot out/@NAME@-proxmox.png
 Type "127.0.0.1:8006"
 Sleep 450ms
@@ -69,7 +78,7 @@ Enter
 Sleep 450ms
 
 # ==================== STEP 4: basics ====================
-Wait+Screen@10s /step 4 of 11/
+Wait+Screen@10s /connect · cluster ●○○○ · extras · review/
 Screenshot out/@NAME@-basics.png
 Type "homelab"
 Sleep 450ms
@@ -86,7 +95,7 @@ Enter
 Sleep 450ms
 
 # ==================== STEP 5: node placement ====================
-Wait+Screen@10s /step 5 of 11/
+Wait+Screen@10s /connect · cluster ●●○○ · extras · review/
 Sleep 2s
 Screenshot out/@NAME@-node-placement.png
 Tab
@@ -117,7 +126,7 @@ Enter
 Sleep 450ms
 
 # ==================== STEP 6: networking ====================
-Wait+Screen@10s /step 6 of 11/
+Wait+Screen@10s /connect · cluster ●●●○ · extras · review/
 Screenshot out/@NAME@-networking.png
 Type "192.168.1.0/24"
 Sleep 450ms
@@ -150,7 +159,7 @@ Enter
 Sleep 450ms
 
 # ==================== STEP 7: resources ====================
-Wait+Screen@10s /step 7 of 11/
+Wait+Screen@10s /connect · cluster ●●●● · extras · review/
 Screenshot out/@NAME@-resources.png
 Type "4"
 Sleep 350ms
@@ -179,7 +188,7 @@ Enter
 Sleep 450ms
 
 # ==================== STEP 8: addons ====================
-Wait+Screen@10s /step 8 of 11/
+Wait+Screen@10s /connect · cluster · extras ●○○ · review/
 Screenshot out/@NAME@-addons.png
 Down
 Sleep 450ms
@@ -197,7 +206,7 @@ Sleep 450ms
 # (system.InvokingUserHomeDir, not $HOME — see internal/system/elevation.go),
 # so a literal "~/pull-secret.json" validates against the operator's real
 # home, not $OKDCTL_DEMO_HOME. Type the demo home's absolute path instead.
-Wait+Screen@10s /step 9 of 11/
+Wait+Screen@10s /connect · cluster · extras ●●○ · review/
 Screenshot out/@NAME@-files.png
 Type "@HOME@/pull-secret.json"
 Sleep 450ms
@@ -211,7 +220,7 @@ Enter
 Sleep 450ms
 
 # ==================== STEP 10: advanced ====================
-Wait+Screen@10s /step 10 of 11/
+Wait+Screen@10s /connect · cluster · extras ●●● · review/
 Screenshot out/@NAME@-advanced.png
 Type "6000"
 Sleep 450ms
@@ -240,7 +249,7 @@ Enter
 Sleep 450ms
 
 # ==================== STEP 11: review ====================
-Wait+Screen@10s /step 11 of 11/
+Wait+Screen@10s /connect · cluster · extras · review/
 Screenshot out/@NAME@-review.png
 Down
 Sleep 350ms

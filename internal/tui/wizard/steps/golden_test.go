@@ -137,7 +137,7 @@ func newGoldenModel(t *testing.T) *wizard.Model {
 			ds.LoadFromConfig(cfg, false)
 		}
 	}
-	return wizard.NewModel(built.Steps, cfg)
+	return wizard.NewFlowModel(built.Steps, cfg, Chrome())
 }
 
 func demoDiscovery() *proxmoxDiscovery {
@@ -402,7 +402,7 @@ func newGoldenModelFreshDefaults(t *testing.T) *wizard.Model {
 	builder := wizard.NewStepBuilder()
 	RegisterAll(builder)
 	built := wizard.BuildSteps(wizard.DefaultConfig(), builder)
-	return wizard.NewModel(built.Steps, config.DefaultConfig())
+	return wizard.NewFlowModel(built.Steps, config.DefaultConfig(), Chrome())
 }
 
 // pumpCmd recursively runs cmd, flattening tea.BatchMsg, and delivers every

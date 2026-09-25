@@ -9,12 +9,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 )
 
-// Run starts the bubbletea wizard with the default chrome and blocks until
-// the user completes or cancels the flow.
-func Run(ctx context.Context, steps []WizardStep, cfg *config.Config) (Result, error) {
-	return RunFlow(ctx, steps, cfg, DefaultChrome())
-}
-
 // RunFlow starts the bubbletea wizard with flow-specific chrome and blocks
 // until the user completes or cancels the flow.
 func RunFlow(ctx context.Context, steps []WizardStep, cfg *config.Config, chrome FlowChrome) (Result, error) {

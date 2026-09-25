@@ -32,7 +32,7 @@ func runWizardWithMode(ctx context.Context, cfg *config.Config, configExists boo
 		}
 	}
 
-	result, err := wizard.Run(ctx, built.Steps, cfg)
+	result, err := wizard.RunFlow(ctx, built.Steps, cfg, steps.Chrome())
 
 	var mode steps.WelcomeMode
 	if welcomeStep != nil {
