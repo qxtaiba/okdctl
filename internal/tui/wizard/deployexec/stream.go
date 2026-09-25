@@ -87,30 +87,54 @@ type StreamStep struct {
 	paneWidth     int
 	paneHeight    int
 
-	boldStyle   lipgloss.Style
-	doneStyle   lipgloss.Style
-	failStyle   lipgloss.Style
-	pendStyle   lipgloss.Style
-	dimStyle    lipgloss.Style
-	warnStyle   lipgloss.Style
-	activeStyle lipgloss.Style
+	styleCache execStyles
+	styleGen   uint64
 }
 
 // NewStreamStep constructs the live deploy step.
 func NewStreamStep(st *State, hooks Hooks) *StreamStep {
 	return &StreamStep{
-		BaseStep:    wizard.NewBaseStepWithDisplayTitle(StepIDStream, "install", "", ""),
-		st:          st,
-		hooks:       hooks,
-		events:      make(chan Event, 64),
-		now:         time.Now,
-		boldStyle:   lipgloss.NewStyle().Foreground(tui.ColorText()).Bold(true),
-		doneStyle:   lipgloss.NewStyle().Foreground(tui.ColorSuccess()),
-		failStyle:   lipgloss.NewStyle().Foreground(tui.ColorError()),
-		pendStyle:   lipgloss.NewStyle().Foreground(tui.ColorSubtle()),
-		dimStyle:    lipgloss.NewStyle().Foreground(tui.ColorTextFaint()),
-		warnStyle:   lipgloss.NewStyle().Foreground(tui.ColorWarning()),
-		activeStyle: lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true),
+		BaseStep: wizard.NewBaseStepWithDisplayTitle(StepIDStream, "install", "", ""),
+		st:       st,
+		hooks:    hooks,
+		events:   make(chan Event, 64),
+		now:      time.Now,
+	}
+}
+
+// styles returns the step's themed style set, rebuilt when the theme
+// generation has moved: a CLI-launched flow constructs its steps before the
+// terminal's background reply flips the theme, so a constructor capture
+// would freeze the dark polarity.
+func (s *StreamStep) styles() *execStyles {
+	if gen := tui.ThemeGeneration(); gen != s.styleGen {
+		s.styleCache = newExecStyles()
+		s.styleGen = gen
+	}
+	return &s.styleCache
+}
+
+// execStyles is one exec surface's themed style set; build it through
+// newExecStyles at render time, never at construction.
+type execStyles struct {
+	bold   lipgloss.Style
+	done   lipgloss.Style
+	fail   lipgloss.Style
+	pend   lipgloss.Style
+	dim    lipgloss.Style
+	warn   lipgloss.Style
+	active lipgloss.Style
+}
+
+func newExecStyles() execStyles {
+	return execStyles{
+		bold:   lipgloss.NewStyle().Foreground(tui.ColorText()).Bold(true),
+		done:   lipgloss.NewStyle().Foreground(tui.ColorSuccess()),
+		fail:   lipgloss.NewStyle().Foreground(tui.ColorError()),
+		pend:   lipgloss.NewStyle().Foreground(tui.ColorSubtle()),
+		dim:    lipgloss.NewStyle().Foreground(tui.ColorTextFaint()),
+		warn:   lipgloss.NewStyle().Foreground(tui.ColorWarning()),
+		active: lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true),
 	}
 }
 
@@ -507,7 +531,7 @@ func (s *StreamStep) View(width, _ int) string {
 		// sink path rides with it — the file keeps every byte the ring evicts.
 		head := []string{s.headline(col)}
 		if s.hooks.LogPath != "" {
-			head = append(head, s.dimStyle.Render(tui.Truncate("full log: "+s.hooks.LogPath, col)))
+			head = append(head, s.styles().dim.Render(tui.Truncate("full log: "+s.hooks.LogPath, col)))
 		}
 		s.fullLogHeight = max(s.bodyHeight-len(head), 2)
 		return strings.Join(head, "\n") + "\n" + renderLogFull(s.hooks.Logs, s.log, col, s.fullLogHeight)
@@ -515,7 +539,7 @@ func (s *StreamStep) View(width, _ int) string {
 
 	lines := []string{s.headline(col)}
 	if s.cancelRequested && !s.finished {
-		lines = append(lines, s.warnStyle.Render(lipgloss.Wrap(
+		lines = append(lines, s.styles().warn.Render(lipgloss.Wrap(
 			"cancel requested — finishing the current step safely, the resume marker stays…", col, "")))
 	}
 
@@ -555,7 +579,7 @@ func (s *StreamStep) View(width, _ int) string {
 	}
 
 	if len(clauses) > 0 {
-		lines = append(lines, "", s.dimStyle.Render(lipgloss.Wrap(strings.Join(clauses, " · "), col, "")))
+		lines = append(lines, "", s.styles().dim.Render(lipgloss.Wrap(strings.Join(clauses, " · "), col, "")))
 	}
 
 	content := strings.Join(lines, "\n")
@@ -569,7 +593,7 @@ func (s *StreamStep) headline(col int) string {
 	done, total := s.stepCounts()
 	left := fmt.Sprintf("%s  %d / %d", s.progressLabel(), done, max(total, 1))
 	right := "elapsed " + fmtDur(s.now().Sub(s.started))
-	return justify(s.boldStyle.Render(left), s.dimStyle.Render(right), col)
+	return justify(s.styles().bold.Render(left), s.styles().dim.Render(right), col)
 }
 
 // progressLabel names the run in the header and the headline.
@@ -602,12 +626,12 @@ func (s *StreamStep) appendPhase(lines []string, i, col int) []string {
 	switch {
 	case i < s.currentPhase || (s.finished && s.st.Result == nil):
 		return append(lines, justify(
-			s.doneStyle.Render(tui.IconSuccess+" "+string(ph.name)),
-			s.dimStyle.Render(fmtDur(ph.end.Sub(ph.start))),
+			s.styles().done.Render(tui.IconSuccess+" "+string(ph.name)),
+			s.styles().dim.Render(fmtDur(ph.end.Sub(ph.start))),
 			col,
 		))
 	case i == s.currentPhase || phaseTouched(ph):
-		lines = append(lines, s.activeStyle.Render(tui.IconActive+" "+string(ph.name)))
+		lines = append(lines, s.styles().active.Render(tui.IconActive+" "+string(ph.name)))
 		for j := range ph.rows {
 			r := &ph.rows[j]
 			if r.status == rowRunning {
@@ -615,12 +639,12 @@ func (s *StreamStep) appendPhase(lines []string, i, col int) []string {
 			}
 			lines = append(lines, "    "+s.renderRow(r, col-4))
 			if r.status == rowRunning && len(ph.extra) > 0 {
-				lines = append(lines, "    "+s.dimStyle.MaxWidth(col-4).Render("… "+ph.extra[len(ph.extra)-1]))
+				lines = append(lines, "    "+s.styles().dim.MaxWidth(col-4).Render("… "+ph.extra[len(ph.extra)-1]))
 			}
 		}
 		return lines
 	default:
-		return append(lines, s.pendStyle.Render(tui.IconPending+" "+string(ph.name)))
+		return append(lines, s.styles().pend.Render(tui.IconPending+" "+string(ph.name)))
 	}
 }
 
@@ -630,15 +654,15 @@ func (s *StreamStep) appendPhase(lines []string, i, col int) []string {
 func (s *StreamStep) renderRow(r *stepRow, col int) string {
 	switch r.status {
 	case rowDone:
-		return justify(s.doneStyle.Render(tui.IconSuccess+" "+r.label), s.dimStyle.Render(rowDur(r)), col)
+		return justify(s.styles().done.Render(tui.IconSuccess+" "+r.label), s.styles().dim.Render(rowDur(r)), col)
 	case rowSkipped:
-		return justify(s.dimStyle.Render(tui.IconSkip+" "+r.label), s.dimStyle.Render("skipped"), col)
+		return justify(s.styles().dim.Render(tui.IconSkip+" "+r.label), s.styles().dim.Render("skipped"), col)
 	case rowFailed:
-		return justify(s.failStyle.Render(tui.IconError+" "+r.label), s.dimStyle.Render(rowDur(r)), col)
+		return justify(s.styles().fail.Render(tui.IconError+" "+r.label), s.styles().dim.Render(rowDur(r)), col)
 	case rowRunning:
-		return justify(wizard.Spinner(s.frame)+s.boldStyle.Render(r.label), s.dimStyle.Render(fmtDur(s.now().Sub(r.start))), col)
+		return justify(wizard.Spinner(s.frame)+s.styles().bold.Render(r.label), s.styles().dim.Render(fmtDur(s.now().Sub(r.start))), col)
 	default:
-		return s.pendStyle.Render(tui.IconPending + " " + r.label)
+		return s.styles().pend.Render(tui.IconPending + " " + r.label)
 	}
 }
 

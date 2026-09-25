@@ -457,3 +457,22 @@ func TestExecAndDoneStepsAreForwardOnly(t *testing.T) {
 		t.Error("done step must intercept esc — going back re-enters a finished run")
 	}
 }
+
+// TestExecStylesFollowThemeFlip pins flip-safety for a CLI-launched flow:
+// the step is constructed before the terminal's background reply lands, so
+// its styles must resolve at render time, not freeze their dark values.
+func TestExecStylesFollowThemeFlip(t *testing.T) {
+	t.Cleanup(func() { tui.SetDarkBackground(true) })
+	tui.SetDarkBackground(true)
+
+	s := NewExecStep(threeMasterState(), Hooks{})
+	base := time.Date(2026, 8, 30, 9, 0, 0, 0, time.UTC)
+	s.now = func() time.Time { return base }
+	s.started = base
+	s.buildRows()
+
+	tui.SetDarkBackground(false)
+	if out := s.View(100, 40); !strings.Contains(out, "15;23;42") {
+		t.Errorf("post-flip headline misses the light Text tier (#0F172A):\n%q", out)
+	}
+}

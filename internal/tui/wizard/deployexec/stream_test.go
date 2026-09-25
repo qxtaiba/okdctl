@@ -445,3 +445,20 @@ func TestStreamWindowTitleCarriesProgress(t *testing.T) {
 		t.Fatalf("WindowTitle = %q, want %q", got, want)
 	}
 }
+
+// TestStreamStylesFollowThemeFlip pins flip-safety for a CLI-launched flow:
+// the step is constructed before the terminal's background reply lands, so
+// its styles must resolve at render time, not freeze their dark values.
+func TestStreamStylesFollowThemeFlip(t *testing.T) {
+	t.Cleanup(func() { tui.SetDarkBackground(true) })
+	tui.SetDarkBackground(true)
+
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	cur := base
+	s := newSeededStreamStep(streamState(), &cur)
+
+	tui.SetDarkBackground(false)
+	if out := s.View(100, 40); !strings.Contains(out, "15;23;42") {
+		t.Errorf("post-flip headline misses the light Text tier (#0F172A):\n%q", out)
+	}
+}

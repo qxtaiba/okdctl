@@ -193,9 +193,20 @@ func ResolveTheme(profile colorprofile.Profile, dark bool, choice ColorTheme) Th
 // concurrent readers always see one consistent Theme.
 var activeTheme atomic.Pointer[Theme]
 
+// themeGeneration counts UseTheme installs; per-instance style caches pin
+// the generation they were built at and rebuild once it moves.
+var themeGeneration atomic.Uint64
+
 // CurrentTheme returns a copy of the active resolved Theme.
 func CurrentTheme() Theme {
 	return *activeTheme.Load()
+}
+
+// ThemeGeneration reports how many times a theme has been installed, so a
+// per-instance style cache built against one install rebuilds after the
+// next instead of freezing its captured polarity.
+func ThemeGeneration() uint64 {
+	return themeGeneration.Load()
 }
 
 // UseTheme installs a copy of t as the active theme and rebuilds the derived
@@ -203,6 +214,7 @@ func CurrentTheme() Theme {
 // style vars are not — install before rendering starts.
 func UseTheme(t Theme) { //nolint:gocritic // hugeParam: value keeps the installed copy immutable — the caller's Theme can't be written through afterwards
 	activeTheme.Store(&t)
+	themeGeneration.Add(1)
 	rebuildStyles()
 }
 
