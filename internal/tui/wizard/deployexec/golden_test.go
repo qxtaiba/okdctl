@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/tui/logview"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
@@ -33,8 +34,8 @@ func goldenHooks() Hooks {
 // full-screen frames pin space-only wrapping instead of …-clipping.
 func wrappedRing() Hooks {
 	h := goldenHooks()
-	r := h.Logs.(*LogRing)
-	r.append(LogLine{
+	r := h.Logs.(*logview.Ring)
+	r.Append(logview.Line{
 		At:    logBase.Add(24 * 7 * time.Second),
 		Level: "ERROR",
 		Text:  "deploy infrastructure failed: proxmox task UPID:pve:0000ABCD:00512F30:66F2A1C4:qmclone:9001:root@pam: refused the clone request because local-lvm is out of space on node pve-02",
@@ -105,7 +106,7 @@ func deployScenarios() []deployScenario {
 			build: streamState,
 			seed: func(m *wizard.Model, st *State) {
 				seedMidRun(m, st)
-				m.Update(tea.KeyPressMsg{Code: keyLogLock, Text: "l"})
+				m.Update(tea.KeyPressMsg{Code: logview.KeyLock, Text: "l"})
 			},
 		},
 		{
@@ -116,7 +117,7 @@ func deployScenarios() []deployScenario {
 			build: streamState,
 			seed: func(m *wizard.Model, st *State) {
 				seedMidRun(m, st)
-				m.Update(tea.KeyPressMsg{Code: keyLogFull, Text: "f"})
+				m.Update(tea.KeyPressMsg{Code: logview.KeyFull, Text: "f"})
 				m.Update(wizard.LayoutChangedMsg{})
 			},
 		},
@@ -129,7 +130,7 @@ func deployScenarios() []deployScenario {
 			hooks: wrappedRing,
 			seed: func(m *wizard.Model, st *State) {
 				seedMidRun(m, st)
-				m.Update(tea.KeyPressMsg{Code: keyLogFull, Text: "f"})
+				m.Update(tea.KeyPressMsg{Code: logview.KeyFull, Text: "f"})
 				m.Update(wizard.LayoutChangedMsg{})
 			},
 		},
@@ -141,7 +142,7 @@ func deployScenarios() []deployScenario {
 			build: streamState,
 			seed: func(m *wizard.Model, st *State) {
 				seedMidRun(m, st)
-				m.Update(tea.KeyPressMsg{Code: keyLogFull, Text: "f"})
+				m.Update(tea.KeyPressMsg{Code: logview.KeyFull, Text: "f"})
 				m.Update(wizard.LayoutChangedMsg{})
 				m.Update(tea.KeyPressMsg{Code: tea.KeyPgUp})
 			},

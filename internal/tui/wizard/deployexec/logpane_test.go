@@ -7,10 +7,10 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/tui/logview"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
@@ -18,12 +18,12 @@ import (
 // logBase is the fixed clock every seeded log fixture stamps from.
 var logBase = time.Date(2026, 9, 25, 9, 0, 0, 0, time.UTC)
 
-// seededRing fills a real ring with n deterministic lines, so pane tests and
-// goldens read the same fixture the production type would hand them.
-func seededRing(n int) *LogRing {
-	r := NewLogRing(LogRingCap)
+// seededRing fills a real ring with n deterministic lines, so step tests and
+// goldens read the same fixture the production tee would hand them.
+func seededRing(n int) *logview.Ring {
+	r := logview.NewRing(logview.DefaultCap)
 	for i := range n {
-		r.append(LogLine{
+		r.Append(logview.Line{
 			At:    logBase.Add(time.Duration(i*7) * time.Second),
 			Level: "INFO",
 			Text:  fmt.Sprintf("deploy step started step=step-%02d phase=setup", i),
@@ -38,97 +38,24 @@ func TestFlowStepCountMatchesNewSteps(t *testing.T) {
 	}
 }
 
-func TestLogPaneFollowsTheTailWithinItsHeight(t *testing.T) {
-	const width, height = 44, 8
-	out := renderLogPane(seededRing(40), logView{}, width, height, false)
-	lines := strings.Split(tuitest.StripANSI(out), "\n")
-
-	if len(lines) > height {
-		t.Fatalf("pane rendered %d rows, want <= %d", len(lines), height)
-	}
-	for i, l := range lines {
-		if w := lipgloss.Width(l); w > width {
-			t.Errorf("row %d is %d cols, want <= %d: %q", i, w, width, l)
-		}
-	}
-	if !strings.HasPrefix(lines[0], "LOG") {
-		t.Errorf("pane must lead with its section header, got %q", lines[0])
-	}
-	if !strings.Contains(out, "step-39") {
-		t.Errorf("a following pane must show the newest line:\n%s", tuitest.StripANSI(out))
-	}
-	if strings.Contains(out, "step-00") {
-		t.Errorf("a following pane must have scrolled past the oldest line:\n%s", tuitest.StripANSI(out))
-	}
-	newest := logBase.Add(39 * 7 * time.Second).Format(logStampFormat)
-	if !strings.Contains(tuitest.StripANSI(out), newest) {
-		t.Errorf("rows must carry their own timestamp; %q missing from:\n%s", newest, tuitest.StripANSI(out))
-	}
-}
-
-func TestLogPaneEmptyRingSaysSoInsteadOfRenderingBlank(t *testing.T) {
-	out := tuitest.StripANSI(renderLogPane(NewLogRing(8), logView{}, 40, 6, false))
-	if !strings.Contains(out, "waiting for the first log line") {
-		t.Errorf("an empty ring must say so:\n%s", out)
-	}
-}
-
-func TestLogWindowLockHoldsItsPointWhileTheTailMovesOn(t *testing.T) {
-	r := seededRing(20)
-	view := logView{locked: true, lockAt: lockedAt(r)}
-
-	for i := 20; i < 40; i++ {
-		r.append(LogLine{At: logBase, Text: fmt.Sprintf("later step-%02d", i)})
-	}
-
-	lines, first := r.Snapshot()
-	window, _ := logWindow(lines, first, view, 4)
-	if len(window) != 4 {
-		t.Fatalf("locked window holds %d rows, want 4", len(window))
-	}
-	if !strings.Contains(window[3].Text, "step-19") {
-		t.Errorf("locked window ends at %q, want the line the lock pinned", window[3].Text)
-	}
-
-	following, _ := logWindow(lines, first, logView{}, 4)
-	if !strings.Contains(following[3].Text, "step-39") {
-		t.Errorf("a released window ends at %q, want the newest line", following[3].Text)
-	}
-}
-
-// TestLogWindowLockOlderThanTheRingFallsBackToWhatIsLeft keeps a long-held lock
-// from blanking the pane once the ring has evicted its point.
-func TestLogWindowLockOlderThanTheRingFallsBackToWhatIsLeft(t *testing.T) {
-	r := NewLogRing(4)
-	for i := range 20 {
-		r.append(LogLine{At: logBase, Text: fmt.Sprintf("step-%02d", i)})
-	}
-	lines, first := r.Snapshot()
-
-	window, _ := logWindow(lines, first, logView{locked: true, lockAt: 1}, 3)
-	if len(window) == 0 {
-		t.Fatal("a lock the ring has outrun must still show what it holds")
-	}
-}
-
 func TestStreamLockKeyTogglesFollow(t *testing.T) {
 	s := NewStreamStep(streamState(), Hooks{Logs: seededRing(10)})
 
-	if _, cmd := s.Update(tea.KeyPressMsg{Code: keyLogLock, Text: "l"}); cmd != nil {
+	if _, cmd := s.Update(tea.KeyPressMsg{Code: logview.KeyLock, Text: "l"}); cmd != nil {
 		t.Error("locking the log must not emit a command")
 	}
-	if !s.log.locked {
+	if !s.log.Locked() {
 		t.Fatal("l must lock the log")
 	}
-	if s.log.lockAt != 10 {
-		t.Errorf("lockAt = %d, want the stream index at lock time (10)", s.log.lockAt)
+	if s.log.LockPoint() != 10 {
+		t.Errorf("lock point = %d, want the stream index at lock time (10)", s.log.LockPoint())
 	}
 	if got := tuitest.StripANSI(s.PaneContent(44, 6)); !strings.Contains(got, "LOG · 6–10 of 10") {
 		t.Errorf("a locked pane must name its window position:\n%s", got)
 	}
 
-	s.Update(tea.KeyPressMsg{Code: keyLogLock, Text: "l"})
-	if s.log.locked {
+	s.Update(tea.KeyPressMsg{Code: logview.KeyLock, Text: "l"})
+	if s.log.Locked() {
 		t.Error("a second l must release the lock")
 	}
 }
@@ -139,7 +66,7 @@ func TestStreamFullKeySwapsTheLogFullScreenAndBack(t *testing.T) {
 	s.SetSize(100, 20)
 	s.SetTerminalSize(180, 48)
 
-	_, cmd := s.Update(tea.KeyPressMsg{Code: keyLogFull, Text: "f"})
+	_, cmd := s.Update(tea.KeyPressMsg{Code: logview.KeyFull, Text: "f"})
 	if cmd == nil {
 		t.Fatal("f must ask the frame to re-measure")
 	}
@@ -161,7 +88,7 @@ func TestStreamFullKeySwapsTheLogFullScreenAndBack(t *testing.T) {
 		t.Errorf("full-screen log rendered %d rows, want <= the body's 20", rows)
 	}
 
-	s.Update(tea.KeyPressMsg{Code: keyLogFull, Text: "f"})
+	s.Update(tea.KeyPressMsg{Code: logview.KeyFull, Text: "f"})
 	if s.SuppressesSplit() {
 		t.Error("a second f must give the checklist back")
 	}
@@ -180,7 +107,7 @@ func TestStreamNarrowFrameCarriesTheTailUnderTheChecklist(t *testing.T) {
 		t.Errorf("a narrow frame must carry the log tail:\n%s", body)
 	}
 	if strings.Contains(body, "step-10") {
-		t.Errorf("the tail must be capped at %d rows:\n%s", narrowTailRows, body)
+		t.Errorf("the tail must be capped at %d rows:\n%s", logview.NarrowTailRows, body)
 	}
 
 	s.SetTerminalSize(180, 48)
@@ -263,8 +190,8 @@ func TestStreamShortHelpAdvertisesTheLogKeys(t *testing.T) {
 		t.Error("the cancel binding must survive alongside the log keys")
 	}
 
-	s.Update(tea.KeyPressMsg{Code: keyLogLock, Text: "l"})
-	s.Update(tea.KeyPressMsg{Code: keyLogFull, Text: "f"})
+	s.Update(tea.KeyPressMsg{Code: logview.KeyLock, Text: "l"})
+	s.Update(tea.KeyPressMsg{Code: logview.KeyFull, Text: "f"})
 	after := map[string]string{}
 	for _, b := range s.ShortHelp() {
 		after[b.Key] = b.Help
@@ -297,7 +224,6 @@ func streamModelAt(t *testing.T, st *State, hooks Hooks, w, h int) *wizard.Model
 	t.Helper()
 	tui.SetTerminalWidth(w)
 	t.Cleanup(func() { tui.SetTerminalWidth(0) })
-
 	m := wizard.NewFlowModel(NewSteps(st, hooks), st.Cfg, Chrome())
 	tuitest.RenderAt(t, m, w, h)
 	return m
@@ -325,7 +251,7 @@ func TestStreamFullScreenRibbonKeepsTheExitKeyAt80Cols(t *testing.T) {
 	st := streamState()
 	m := streamModelAt(t, st, Hooks{Logs: seededRing(24)}, 80, 24)
 
-	m.Update(tea.KeyPressMsg{Code: keyLogFull, Text: "f"})
+	m.Update(tea.KeyPressMsg{Code: logview.KeyFull, Text: "f"})
 	m.Update(wizard.LayoutChangedMsg{})
 
 	frame := tuitest.StripANSI(tuitest.RenderAt(t, m, 80, 24))
@@ -403,157 +329,6 @@ func TestStreamFinalSendAbortsOnACancelledRun(t *testing.T) {
 	}
 }
 
-// TestLogRowsCarryTextualLevelTags pins bug 24's minimal fix: warn and
-// error lines carry their level as text, so the failure screen's evidence
-// tail reads under NO_COLOR instead of riding on tint alone.
-func TestLogRowsCarryTextualLevelTags(t *testing.T) {
-	at := logBase
-	lines := []LogLine{
-		{At: at, Level: "INFO", Text: "deploy step started"},
-		{At: at, Level: "warn", Text: "etcd member slow"},
-		{At: at, Level: "ERROR", Text: "bootstrap wait failed"},
-	}
-
-	rows := logRows(lines, 70, 3, false)
-
-	if plain := tuitest.StripANSI(rows[1]); !strings.Contains(plain, "WARN") {
-		t.Errorf("warn row carries no textual tag: %q", plain)
-	}
-	if plain := tuitest.StripANSI(rows[2]); !strings.Contains(plain, "ERROR") {
-		t.Errorf("error row carries no textual tag: %q", plain)
-	}
-	if plain := tuitest.StripANSI(rows[0]); strings.Contains(plain, "INFO") {
-		t.Errorf("info row must stay untagged to keep the stream quiet: %q", plain)
-	}
-}
-
-func TestLogRowsStyleWarnAndErrorApart(t *testing.T) {
-	at := logBase
-	lines := []LogLine{
-		{At: at, Level: "INFO", Text: "deploy step started"},
-		{At: at, Level: "WARN", Text: "deploy step started"},
-		{At: at, Level: "ERROR", Text: "deploy step started"},
-	}
-
-	rows := logRows(lines, 60, 3, false)
-	if len(rows) != 3 {
-		t.Fatalf("logRows returned %d rows, want 3", len(rows))
-	}
-	if rows[0] == rows[1] || rows[1] == rows[2] || rows[0] == rows[2] {
-		t.Error("warn and error lines must be styled apart from info so a failure screen reads")
-	}
-	for i, row := range rows {
-		if !strings.Contains(tuitest.StripANSI(row), "deploy step started") {
-			t.Errorf("row %d lost its text: %q", i, tuitest.StripANSI(row))
-		}
-	}
-}
-
-// TestScrollLogFollowsThePagerContract pins the pager contract on the view
-// state itself: paging up from follow engages the lock, further pages hold
-// honest window ends, the floor stops at the oldest full window, and paging
-// back past the tail releases the lock and resumes following.
-func TestScrollLogFollowsThePagerContract(t *testing.T) {
-	r := seededRing(40)
-	view := logView{}
-
-	scrollLog(&view, r, -10, 10)
-	if !view.locked {
-		t.Fatal("paging up from follow must engage the lock")
-	}
-	if view.lockAt != 30 {
-		t.Errorf("lockAt = %d after one page up from 40, want 30", view.lockAt)
-	}
-
-	scrollLog(&view, r, -100, 10)
-	if view.lockAt != 10 {
-		t.Errorf("lockAt = %d at the floor, want the oldest full window end 10", view.lockAt)
-	}
-
-	scrollLog(&view, r, 10, 10)
-	if view.lockAt != 20 {
-		t.Errorf("lockAt = %d after one page down from the floor, want 20", view.lockAt)
-	}
-
-	scrollLog(&view, r, 100, 10)
-	if view.locked {
-		t.Error("paging back to the tail must release the lock and resume following")
-	}
-}
-
-// TestScrollLogWholeRingIsReachable walks a ring top to bottom: every line
-// the ring holds must appear in some window along the way.
-func TestScrollLogWholeRingIsReachable(t *testing.T) {
-	const n, budget = 60, 8
-	r := seededRing(n)
-	view := logView{}
-
-	seen := map[string]bool{}
-	record := func() {
-		lines, first := r.Snapshot()
-		window, _ := logWindow(lines, first, view, budget)
-		for i := range window {
-			seen[window[i].Text] = true
-		}
-	}
-	record()
-	for range n {
-		scrollLog(&view, r, -budget, budget)
-		record()
-	}
-	for i := range n {
-		if !seen[fmt.Sprintf("deploy step started step=step-%02d phase=setup", i)] {
-			t.Fatalf("line %d never appeared in any window while paging to the top", i)
-		}
-	}
-}
-
-// TestLogPaneHeaderNamesTheLockedWindowPosition pins the lock indicator's
-// honest coordinates: the shown line span out of the stream's total.
-func TestLogPaneHeaderNamesTheLockedWindowPosition(t *testing.T) {
-	r := seededRing(40)
-	view := logView{locked: true, lockAt: 30}
-
-	out := tuitest.StripANSI(renderLogPane(r, view, 60, 6, false))
-	if !strings.Contains(out, "LOG · 26–30 of 40") {
-		t.Errorf("locked pane header must name its window position, got:\n%s", out)
-	}
-
-	if got := tuitest.StripANSI(logPaneHeader(logView{}, 5, 40, 40, 60)); got != "LOG" {
-		t.Errorf("a following pane keeps the bare label, got %q", got)
-	}
-}
-
-// TestRenderLogPaneWrapKeepsWholeLinesAndHonestCoordinates pins the
-// full-screen wrap contract: long lines wrap (tui.WrapLines, space-only)
-// instead of …-clipping, and the locked header names only lines actually on
-// screen after wrapping trimmed the window.
-func TestRenderLogPaneWrapKeepsWholeLinesAndHonestCoordinates(t *testing.T) {
-	r := NewLogRing(16)
-	for i := range 8 {
-		text := fmt.Sprintf("short line %02d", i)
-		if i%2 == 1 {
-			text = fmt.Sprintf("terraform apply failed on attempt %02d: proxmox task UPID:pve:0000ABCD refused the clone request because the target volume is out of space", i)
-		}
-		r.append(LogLine{At: logBase, Level: "INFO", Text: text})
-	}
-
-	out := tuitest.StripANSI(renderLogPane(r, logView{locked: true, lockAt: 8}, 60, 8, true))
-	if strings.Contains(out, "…") {
-		t.Errorf("full-screen mode must wrap, never …-clip:\n%s", out)
-	}
-	if !strings.Contains(out, "out of space") {
-		t.Errorf("the long line's tail must be readable:\n%s", out)
-	}
-	rows := strings.Split(out, "\n")
-	if len(rows) > 8 {
-		t.Fatalf("rendered %d rows, want <= 8", len(rows))
-	}
-	if !strings.Contains(rows[0], "of 8") {
-		t.Errorf("header must carry the stream total:\n%s", rows[0])
-	}
-}
-
 // TestStreamFullScreenPagingWalksTheRing pins the full-screen pager: pgup
 // engages the lock and pages back through lines the tail had already
 // scrolled past, the header names honest coordinates, and paging back down
@@ -564,14 +339,14 @@ func TestStreamFullScreenPagingWalksTheRing(t *testing.T) {
 	s.SetSize(100, 20)
 	s.SetTerminalSize(120, 40)
 
-	s.Update(tea.KeyPressMsg{Code: keyLogFull, Text: "f"})
+	s.Update(tea.KeyPressMsg{Code: logview.KeyFull, Text: "f"})
 	_ = s.View(104, 1000)
 	if !s.ConsumesPaging() {
 		t.Fatal("the full-screen log must claim the paging keys")
 	}
 
 	s.Update(tea.KeyPressMsg{Code: tea.KeyPgUp})
-	if !s.log.locked {
+	if !s.log.Locked() {
 		t.Fatal("pgup from follow must engage the lock")
 	}
 	body := tuitest.StripANSI(s.View(104, 1000))
@@ -592,7 +367,7 @@ func TestStreamFullScreenPagingWalksTheRing(t *testing.T) {
 	for range 20 {
 		s.Update(tea.KeyPressMsg{Code: tea.KeyPgDown})
 	}
-	if s.log.locked {
+	if s.log.Locked() {
 		t.Error("paging back past the tail must release the lock")
 	}
 	if !strings.Contains(tuitest.StripANSI(s.View(104, 1000)), "step-39") {
@@ -613,18 +388,18 @@ func TestStreamFullScreenArrowsScrollByLine(t *testing.T) {
 		t.Fatal("the checklist must leave the arrows to the frame's viewport")
 	}
 
-	s.Update(tea.KeyPressMsg{Code: keyLogFull, Text: "f"})
+	s.Update(tea.KeyPressMsg{Code: logview.KeyFull, Text: "f"})
 	_ = s.View(104, 1000)
 	if s.ScrollsWithArrows() {
 		t.Fatal("the full-screen log must keep the arrows for itself")
 	}
 
 	s.Update(tea.KeyPressMsg{Code: tea.KeyUp})
-	if !s.log.locked || s.log.lockAt != 39 {
-		t.Fatalf("one arrow up must lock one line back, got locked=%v lockAt=%d", s.log.locked, s.log.lockAt)
+	if !s.log.Locked() || s.log.LockPoint() != 39 {
+		t.Fatalf("one arrow up must lock one line back, got locked=%v lockAt=%d", s.log.Locked(), s.log.LockPoint())
 	}
 	s.Update(tea.KeyPressMsg{Code: tea.KeyDown})
-	if s.log.locked {
+	if s.log.Locked() {
 		t.Error("one arrow back down must release the lock at the tail")
 	}
 }
@@ -639,7 +414,7 @@ func TestStreamLockedPanePagesThroughTheRing(t *testing.T) {
 	if s.ConsumesPaging() {
 		t.Fatal("a following pane must leave paging to the checklist viewport")
 	}
-	s.Update(tea.KeyPressMsg{Code: keyLogLock, Text: "l"})
+	s.Update(tea.KeyPressMsg{Code: logview.KeyLock, Text: "l"})
 	if !s.ConsumesPaging() {
 		t.Fatal("a locked pane must claim the paging keys")
 	}
@@ -662,7 +437,7 @@ func TestStreamFullScreenPgUpPagesInsideTheFrame(t *testing.T) {
 	st := streamState()
 	m := streamModelAt(t, st, Hooks{Logs: seededRing(40)}, 80, 24)
 
-	m.Update(tea.KeyPressMsg{Code: keyLogFull, Text: "f"})
+	m.Update(tea.KeyPressMsg{Code: logview.KeyFull, Text: "f"})
 	m.Update(wizard.LayoutChangedMsg{})
 	_ = tuitest.RenderAt(t, m, 80, 24)
 
@@ -683,7 +458,7 @@ func TestStreamFullScreenHeaderCarriesTheSinkPath(t *testing.T) {
 	s := NewStreamStep(streamState(), Hooks{Logs: seededRing(8), LogPath: "okd-install/okdctl.log"})
 	s.buildRows()
 	s.SetSize(100, 20)
-	s.Update(tea.KeyPressMsg{Code: keyLogFull, Text: "f"})
+	s.Update(tea.KeyPressMsg{Code: logview.KeyFull, Text: "f"})
 
 	body := tuitest.StripANSI(s.View(104, 1000))
 	if !strings.Contains(body, "full log: okd-install/okdctl.log") {
@@ -693,7 +468,7 @@ func TestStreamFullScreenHeaderCarriesTheSinkPath(t *testing.T) {
 	bare := NewStreamStep(streamState(), Hooks{Logs: seededRing(8)})
 	bare.buildRows()
 	bare.SetSize(100, 20)
-	bare.Update(tea.KeyPressMsg{Code: keyLogFull, Text: "f"})
+	bare.Update(tea.KeyPressMsg{Code: logview.KeyFull, Text: "f"})
 	if body := tuitest.StripANSI(bare.View(104, 1000)); strings.Contains(body, "full log") {
 		t.Errorf("with no sink open there is no path to point at:\n%s", body)
 	}

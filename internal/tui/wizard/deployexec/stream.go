@@ -11,6 +11,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/tui/logview"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
@@ -60,7 +61,7 @@ type StreamStep struct {
 	frameSize
 	st    *State
 	hooks Hooks
-	log   logView
+	log   logview.Surface
 
 	events           chan Event
 	started          time.Time
@@ -77,15 +78,6 @@ type StreamStep struct {
 	focusLine    int
 	lastLine     int
 	tailRendered bool
-	// viewCol, fullLogHeight, tailRows, paneWidth, and paneHeight are the
-	// log window's geometry as last rendered — View and PaneContent record
-	// them so a paging key moves by exactly the window the operator is
-	// looking at.
-	viewCol       int
-	fullLogHeight int
-	tailRows      int
-	paneWidth     int
-	paneHeight    int
 
 	styleCache execStyles
 	styleGen   uint64
@@ -97,6 +89,7 @@ func NewStreamStep(st *State, hooks Hooks) *StreamStep {
 		BaseStep: wizard.NewBaseStepWithDisplayTitle(StepIDStream, "install", "", ""),
 		st:       st,
 		hooks:    hooks,
+		log:      logview.Surface{Src: hooks.Logs},
 		events:   make(chan Event, 64),
 		now:      time.Now,
 	}
@@ -261,38 +254,14 @@ func (s *StreamStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	return s, nil
 }
 
-// handleLogKey binds the log viewport's keys: `l` locks the window where it
-// stands (or releases it back to the tail), `f` swaps the log full-screen and
-// back (which changes the frame's own layout gate and so asks for a
-// re-measure), pgup/pgdn page the window through the whole ring wherever
-// ConsumesPaging routes them here, and the arrows walk it line by line in
-// full-screen mode. With no Logs hook (documented-supported) every one of
-// them is inert — an empty full-screen log would blank the whole body.
+// handleLogKey routes the log viewport's keys through the shared surface;
+// only `f` needs a command back — swapping the log full-screen changes the
+// frame's own layout gate and so asks for a re-measure. With no Logs hook
+// (documented-supported) every key is inert — an empty full-screen log
+// would blank the whole body.
 func (s *StreamStep) handleLogKey(msg tea.KeyPressMsg) tea.Cmd {
-	if s.hooks.Logs == nil {
-		return nil
-	}
-	switch msg.Code {
-	case keyLogLock:
-		s.log.locked = !s.log.locked
-		if s.log.locked {
-			s.log.lockAt = lockedAt(s.hooks.Logs)
-		}
-	case keyLogFull:
-		s.log.full = !s.log.full
+	if s.log.HandleKey(msg, s.paneCarriesLog()) {
 		return func() tea.Msg { return wizard.LayoutChangedMsg{} }
-	case tea.KeyPgUp:
-		s.scrollLogBy(-s.logPageSize())
-	case tea.KeyPgDown:
-		s.scrollLogBy(s.logPageSize())
-	case tea.KeyUp:
-		if s.log.full {
-			s.scrollLogBy(-1)
-		}
-	case tea.KeyDown:
-		if s.log.full {
-			s.scrollLogBy(1)
-		}
 	}
 	return nil
 }
@@ -301,60 +270,32 @@ func (s *StreamStep) handleLogKey(msg tea.KeyPressMsg) tea.Cmd {
 // full-screen log always, a locked pane or tail too — so the frame leaves the
 // keys to the step instead of scrolling the checklist viewport.
 func (s *StreamStep) ConsumesPaging() bool {
-	return s.hooks.Logs != nil && (s.log.full || s.log.locked)
+	return s.log.ConsumesPaging()
 }
 
 // ScrollsWithArrows opts the checklist into the frame's line-by-line arrow
 // scroll; in full-screen mode the arrows fall through to handleLogKey and walk
 // the log instead.
 func (s *StreamStep) ScrollsWithArrows() bool {
-	return s.hooks.Logs == nil || !s.log.full
-}
-
-// scrollLogBy moves the log window n lines through the ring at the geometry
-// last rendered, flooring at the stream's oldest full window.
-func (s *StreamStep) scrollLogBy(n int) {
-	w, h, wrap := s.logGeometry()
-	scrollLog(&s.log, s.hooks.Logs, n, topLogLines(s.hooks.Logs, w, h, wrap))
-}
-
-// logPageSize is how many lines one pgup/pgdn moves: exactly the lines the
-// active window is showing, so a page never skips past unread ones.
-func (s *StreamStep) logPageSize() int {
-	w, h, wrap := s.logGeometry()
-	return visibleLogLines(s.hooks.Logs, s.log, w, h, wrap)
-}
-
-// logGeometry names the active log window: the full-screen box, the split
-// pane, or the narrow tail under the checklist.
-func (s *StreamStep) logGeometry() (width, height int, wrap bool) {
-	switch {
-	case s.log.full:
-		return max(s.viewCol, 1), max(s.fullLogHeight, 2), true
-	case s.paneCarriesLog():
-		return max(s.paneWidth, 1), max(s.paneHeight, 2), false
-	default:
-		return max(s.viewCol, 1), max(s.tailRows, narrowTailRows) + 1, false
-	}
+	return s.hooks.Logs == nil || !s.log.Full()
 }
 
 // SuppressesSplit hands the log the whole frame while `f` has it full-screen;
 // the checklist comes back the moment it is toggled off.
 func (s *StreamStep) SuppressesSplit() bool {
-	return s.log.full && s.hooks.Logs != nil
+	return s.log.Full() && s.hooks.Logs != nil
 }
 
 // PaneContent fills the split layout's right pane with the live log, in place of
 // the context pane's step list.
 func (s *StreamStep) PaneContent(width, height int) string {
-	s.paneWidth, s.paneHeight = width, height
-	return renderLogPane(s.hooks.Logs, s.log, width, height, false)
+	return s.log.RenderPane(width, height)
 }
 
 // paneCarriesLog reports whether the log has a pane of its own, in which case
 // the checklist body carries no tail.
 func (s *StreamStep) paneCarriesLog() bool {
-	return s.hooks.Logs != nil && !s.log.full && s.splitsFrame()
+	return s.hooks.Logs != nil && !s.log.Full() && s.splitsFrame()
 }
 
 // applyEvent updates phase/row state for ev: a phase change closes out the
@@ -524,8 +465,8 @@ func (s *StreamStep) InterceptQuit() bool {
 // budget, never the body's real height — SetSize records that.
 func (s *StreamStep) View(width, _ int) string {
 	col := max(width-4, 1)
-	s.viewCol = col
-	if s.log.full {
+	s.log.ViewCol = col
+	if s.log.Full() {
 		// The headline rides above the full-screen log: progress and elapsed are
 		// what an operator would otherwise lose by leaving the checklist. The
 		// sink path rides with it — the file keeps every byte the ring evicts.
@@ -533,8 +474,7 @@ func (s *StreamStep) View(width, _ int) string {
 		if s.hooks.LogPath != "" {
 			head = append(head, s.styles().dim.Render(tui.Truncate("full log: "+s.hooks.LogPath, col)))
 		}
-		s.fullLogHeight = max(s.bodyHeight-len(head), 2)
-		return strings.Join(head, "\n") + "\n" + renderLogFull(s.hooks.Logs, s.log, col, s.fullLogHeight)
+		return strings.Join(head, "\n") + "\n" + s.log.RenderFull(col, max(s.bodyHeight-len(head), 2))
 	}
 
 	lines := []string{s.headline(col)}
@@ -564,14 +504,14 @@ func (s *StreamStep) View(width, _ int) string {
 	if !s.paneCarriesLog() {
 		// The tail's budget is whatever body rows the checklist and the
 		// chrome around the tail (its blank row, the LOG header, and the
-		// clauses block) leave over, floored at narrowTailRows — slack
-		// becomes evidence instead of blank rows.
+		// clauses block) leave over, floored at logview.NarrowTailRows —
+		// slack becomes evidence instead of blank rows.
 		chrome := 2
 		if len(clauses) > 0 {
 			chrome += 2
 		}
-		s.tailRows = max(narrowTailRows, s.bodyHeight-len(lines)-chrome)
-		if tail := renderLogTail(s.hooks.Logs, s.log, col, s.tailRows); len(tail) > 0 {
+		budget := max(logview.NarrowTailRows, s.bodyHeight-len(lines)-chrome)
+		if tail := s.log.RenderTail(col, budget); len(tail) > 0 {
 			lines = append(lines, "")
 			lines = append(lines, tail...)
 			s.tailRendered = true
@@ -734,30 +674,14 @@ func (s *StreamStep) ShortHelp() []wizard.KeyBinding {
 	if s.hooks.Logs == nil {
 		return []wizard.KeyBinding{cancel}
 	}
-	lock := wizard.KeyBinding{Key: string(keyLogLock), Help: s.lockHelp()}
-	full := wizard.KeyBinding{Key: string(keyLogFull), Help: s.fullHelp()}
+	lock := wizard.KeyBinding{Key: string(rune(logview.KeyLock)), Help: s.log.LockHelp()}
+	full := wizard.KeyBinding{Key: string(rune(logview.KeyFull)), Help: s.log.FullHelp()}
 	page := wizard.KeyBinding{Key: "pgup/pgdn", Help: "page the log"}
-	if s.log.full {
+	if s.log.Full() {
 		return []wizard.KeyBinding{full, lock, page, cancel}
 	}
-	if s.log.locked {
+	if s.log.Locked() {
 		return []wizard.KeyBinding{lock, full, page, cancel}
 	}
 	return []wizard.KeyBinding{lock, full, cancel}
-}
-
-// lockHelp and fullHelp name what the key does next, not what it did, so the
-// ribbon reads as an instruction in either state.
-func (s *StreamStep) lockHelp() string {
-	if s.log.locked {
-		return "follow the log tail"
-	}
-	return "lock the log here"
-}
-
-func (s *StreamStep) fullHelp() string {
-	if s.log.full {
-		return "back to checklist"
-	}
-	return "full-screen log"
 }

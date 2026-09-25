@@ -14,6 +14,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/postinstall"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/tui/logview"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
@@ -172,7 +173,7 @@ func TestStreamLogKeysInertWithoutLogs(t *testing.T) {
 	s := newSeededStreamStep(streamState(), &cur)
 
 	before := tuitest.StripANSI(s.View(100, 40))
-	step, _ := s.Update(tea.KeyPressMsg{Code: keyLogFull, Text: "f"})
+	step, _ := s.Update(tea.KeyPressMsg{Code: logview.KeyFull, Text: "f"})
 	s = step.(*StreamStep)
 
 	if got := tuitest.StripANSI(s.View(100, 40)); got != before {
@@ -422,8 +423,8 @@ func TestStreamNarrowTailFillsTheBodySlack(t *testing.T) {
 	seedMidRun(m, st)
 
 	frame := tuitest.StripANSI(tuitest.RenderAt(t, m, 120, 40))
-	if got := strings.Count(frame, "09:0"); got <= narrowTailRows {
-		t.Fatalf("tail shows %d log rows at 120x40, want more than the %d-row floor", got, narrowTailRows)
+	if got := strings.Count(frame, "09:0"); got <= logview.NarrowTailRows {
+		t.Fatalf("tail shows %d log rows at 120x40, want more than the %d-row floor", got, logview.NarrowTailRows)
 	}
 	tuitest.AssertFits(t, frame, 120, 40)
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/postinstall"
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/tui/logview"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
@@ -66,7 +67,7 @@ type Hooks struct {
 	CancelDeploy func()
 	// Logs is the human log stream the log pane reads; nil leaves the pane to
 	// the wizard's own context pane.
-	Logs LogSource
+	Logs logview.Source
 	// LogPath is the resolved path of the run-log sink that keeps every byte
 	// the ring evicts; empty when no file sink is open, and no screen may then
 	// point at one.

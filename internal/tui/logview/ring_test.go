@@ -1,4 +1,4 @@
-package deployexec
+package logview
 
 import (
 	"log/slog"
@@ -11,10 +11,10 @@ import (
 )
 
 func TestLogRingKeepsTheNewestLinesWithinItsCap(t *testing.T) {
-	r := NewLogRing(3)
+	r := NewRing(3)
 	base := time.Date(2026, 9, 25, 9, 0, 0, 0, time.UTC)
 	for i := range 5 {
-		r.append(LogLine{At: base, Text: string(rune('a' + i))})
+		r.Append(Line{At: base, Text: string(rune('a' + i))})
 	}
 
 	lines, first := r.Snapshot()
@@ -32,8 +32,8 @@ func TestLogRingKeepsTheNewestLinesWithinItsCap(t *testing.T) {
 // TestLogRingSnapshotIsACopy proves the render loop can never see a line the
 // writers mutate underneath it.
 func TestLogRingSnapshotIsACopy(t *testing.T) {
-	r := NewLogRing(4)
-	r.append(LogLine{Text: "first"})
+	r := NewRing(4)
+	r.Append(Line{Text: "first"})
 
 	lines, _ := r.Snapshot()
 	lines[0].Text = "clobbered"
@@ -46,7 +46,7 @@ func TestLogRingSnapshotIsACopy(t *testing.T) {
 
 func TestLogRingHandlerCapturesMessageAndFieldsAndForwards(t *testing.T) {
 	var sink strings.Builder
-	r := NewLogRing(LogRingCap)
+	r := NewRing(DefaultCap)
 	log := slog.New(r.Handler(slog.NewTextHandler(&sink, nil)))
 
 	log.Info("deploy step started", "step", "deploy-infrastructure", "phase", "install")
@@ -70,7 +70,7 @@ func TestLogRingHandlerCapturesMessageAndFieldsAndForwards(t *testing.T) {
 // TestLogRingHandlerCarriesWithAttrs keeps a derived logger's fields from
 // disappearing out of the pane.
 func TestLogRingHandlerCarriesWithAttrs(t *testing.T) {
-	r := NewLogRing(LogRingCap)
+	r := NewRing(DefaultCap)
 	slog.New(r.Handler(nil)).With("run_id", "run-42").Info("bootstrap complete")
 
 	lines, _ := r.Snapshot()
@@ -82,7 +82,7 @@ func TestLogRingHandlerCarriesWithAttrs(t *testing.T) {
 // TestLogRingRedactsThroughTheFacade proves the pane can only ever show scrubbed
 // records: the ring sits inside logutil's redaction wrapper.
 func TestLogRingRedactsThroughTheFacade(t *testing.T) {
-	r := NewLogRing(LogRingCap)
+	r := NewRing(DefaultCap)
 	restore := logutil.RedirectHandler(r.Handler(nil))
 	defer restore()
 
@@ -100,7 +100,7 @@ func TestLogRingRedactsThroughTheFacade(t *testing.T) {
 // TestLogRingConcurrentWritesAndReads is the -race gate on the tee: the engine's
 // goroutines write while the render loop snapshots.
 func TestLogRingConcurrentWritesAndReads(t *testing.T) {
-	r := NewLogRing(32)
+	r := NewRing(32)
 	log := slog.New(r.Handler(nil))
 
 	stop := make(chan struct{})
@@ -125,8 +125,8 @@ func TestLogRingConcurrentWritesAndReads(t *testing.T) {
 		defer wg.Done()
 		for range 500 {
 			lines, first := r.Snapshot()
-			window, _ := logWindow(lines, first, logView{}, 8)
-			_ = logRows(window, 40, 8, false)
+			window, _ := window(lines, first, view{}, 8)
+			_ = renderRows(window, 40, 8, false)
 		}
 		close(stop)
 	}()

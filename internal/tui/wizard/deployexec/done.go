@@ -6,10 +6,10 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/tui/logview"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
@@ -24,12 +24,7 @@ type DoneStep struct {
 	frameSize
 	st    *State
 	hooks Hooks
-	log   logView
-	// viewCol, paneWidth, and paneHeight record the log region's geometry as
-	// last rendered, so a paging key moves by the window on screen.
-	viewCol    int
-	paneWidth  int
-	paneHeight int
+	log   logview.Surface
 }
 
 // NewDoneStep constructs the completion step.
@@ -38,6 +33,7 @@ func NewDoneStep(st *State, hooks Hooks) *DoneStep {
 		BaseStep: wizard.NewBaseStep(StepIDDone, "done", ""),
 		st:       st,
 		hooks:    hooks,
+		log:      logview.Surface{Src: hooks.Logs},
 	}
 }
 
@@ -52,8 +48,7 @@ func (s *DoneStep) SetSize(width, height int) {
 // completion screen too: the run just ended, and its last lines are what an
 // operator reads next.
 func (s *DoneStep) PaneContent(width, height int) string {
-	s.paneWidth, s.paneHeight = width, height
-	return renderLogPane(s.hooks.Logs, s.log, width, height, false)
+	return s.log.RenderPane(width, height)
 }
 
 // InterceptBack keeps the flow forward-only: esc from the done screen would
@@ -102,34 +97,23 @@ func (s *DoneStep) ScrollsWithArrows() bool {
 // scrollLogBy moves the log window n lines through the ring at the geometry
 // last rendered: the split pane, or the failure tail under the error card.
 func (s *DoneStep) scrollLogBy(n int) {
-	w, h := s.logGeometry()
-	scrollLog(&s.log, s.hooks.Logs, n, topLogLines(s.hooks.Logs, w, h, false))
+	s.log.ScrollBy(n, s.splitsFrame())
 }
 
 // logPageSize is how many lines one pgup/pgdn moves: the lines the log
 // region is showing.
 func (s *DoneStep) logPageSize() int {
-	w, h := s.logGeometry()
-	return visibleLogLines(s.hooks.Logs, s.log, w, h, false)
-}
-
-// logGeometry names the log region on screen: the split pane, or the narrow
-// failure tail.
-func (s *DoneStep) logGeometry() (width, height int) {
-	if s.splitsFrame() {
-		return max(s.paneWidth, 1), max(s.paneHeight, 2)
-	}
-	return max(s.viewCol, 1), narrowTailRows + 1
+	return s.log.PageSize(s.splitsFrame())
 }
 
 // View renders the CLI post-deploy summary for a success, or the CLI error box
 // for a failed or cancelled run, sized to fit the wizard frame's inner width.
 func (s *DoneStep) View(width, _ int) string {
 	w := min(width, tui.DefaultBoxWidth)
-	s.viewCol = max(width-4, 1)
+	s.log.ViewCol = max(width-4, 1)
 	if s.st.Result != nil {
 		card := strings.Trim(render.ErrorCard(s.failureKind(), s.st.Result.Error(), resumeHint, w), "\n")
-		return card + s.failureTail(s.viewCol) + s.sinkLine(s.viewCol)
+		return card + s.failureTail(s.log.ViewCol) + s.sinkLine(s.log.ViewCol)
 	}
 	if s.st.Cfg == nil {
 		return tui.CompletionSuccess("deployment complete")
@@ -142,24 +126,24 @@ func (s *DoneStep) View(width, _ int) string {
 // so it stays on screen at every width; a success needs none — its summary box
 // is the record.
 func (s *DoneStep) failureTail(col int) string {
-	if s.hooks.Logs == nil || s.splitsFrame() {
+	if s.splitsFrame() {
 		return ""
 	}
-	tail := renderLogTail(s.hooks.Logs, s.log, col, narrowTailRows)
-	if len(tail) == 0 {
+	tail := s.log.FailureTail(col)
+	if tail == "" {
 		return ""
 	}
-	return "\n\n" + strings.Join(tail, "\n")
+	return "\n\n" + tail
 }
 
 // sinkLine names the run-log file under the failure evidence — the ring holds
 // a window, the file keeps every byte — or nothing when no sink is open.
 func (s *DoneStep) sinkLine(col int) string {
-	if s.hooks.LogPath == "" {
+	line := logview.SinkLine(s.hooks.LogPath, col)
+	if line == "" {
 		return ""
 	}
-	dim := lipgloss.NewStyle().Foreground(tui.ColorTextFaint())
-	return "\n\n" + dim.Render(lipgloss.Wrap("full log "+s.hooks.LogPath, col, ""))
+	return "\n\n" + line
 }
 
 // failureKind names the outcome the error card leads with: a cancelled run was

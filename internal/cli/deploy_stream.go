@@ -17,6 +17,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/render"
+	"github.com/qxtaiba/okdctl/internal/tui/logview"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/deployexec"
 )
@@ -57,7 +58,7 @@ func runDeployStream(ctx context.Context, cfg *config.Config, opts *deploy.Optio
 	plan := deploy.PlannedSteps(cfg, opts.ProjectRoot, opts.FreshDeploy)
 
 	st := &deployexec.State{Cfg: cfg, Plan: plan, RunID: logutil.RunID()}
-	ring := deployexec.NewLogRing(deployexec.LogRingCap)
+	ring := logview.NewRing(logview.DefaultCap)
 
 	streamCtx, cancelStream := context.WithCancel(ctx)
 	defer cancelStream()
