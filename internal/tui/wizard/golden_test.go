@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 )
@@ -42,4 +44,18 @@ func TestGolden_ChromeOnly(t *testing.T) {
 		tuitest.Golden(t, "chrome_error_100x30", frame)
 		tuitest.AssertFits(t, frame, 100, 30)
 	})
+}
+
+// TestGolden_HelpOverlayWideSplit pins the overlay's modal claim on the
+// split tier: centered over the full content width, no pane beside it.
+func TestGolden_HelpOverlayWideSplit(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Cluster.Name = "homelab"
+	m := NewFlowModel([]WizardStep{newNopStep()}, cfg, DefaultChrome())
+	_ = tuitest.RenderAt(t, m, 180, 48)
+
+	mm, _ := m.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
+	frame := mm.(*Model).View().Content
+	tuitest.Golden(t, "help_overlay_180x48", frame)
+	tuitest.AssertFits(t, frame, 180, 48)
 }

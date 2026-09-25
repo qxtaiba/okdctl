@@ -1,6 +1,7 @@
 package components
 
 import (
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -36,6 +37,14 @@ type MultiSelectField struct {
 	cursor   int
 	focused  bool
 	width    int
+	// baseLen is how many options the constructor supplied; entries past it
+	// were injected by SetValue for loaded values the list does not offer,
+	// rendered as extra checked chips labeled (current).
+	baseLen int
+	// loaded is SetValue's exact argument, echoed by Value until the first
+	// toggle edits the selection, so an untouched field round-trips its
+	// config value byte-identical whatever order it listed entries in.
+	loaded string
 }
 
 // NewMultiSelectField returns a multi-select field with options unchecked.
@@ -44,11 +53,16 @@ func NewMultiSelectField(label string, options []string) *MultiSelectField {
 		Label:    label,
 		Options:  options,
 		selected: make([]bool, len(options)),
+		baseLen:  len(options),
 	}
 }
 
-// Value returns a comma-separated list of the selected options.
+// Value returns the loaded value verbatim while the selection is untouched,
+// then a comma-separated list of the selected options in option order.
 func (f *MultiSelectField) Value() string {
+	if f.loaded != "" {
+		return f.loaded
+	}
 	var parts []string
 	for i, opt := range f.Options {
 		if i < len(f.selected) && f.selected[i] {
@@ -64,18 +78,36 @@ func (f *MultiSelectField) FieldLabel() string { return f.Label }
 // FieldHelp returns the field's help text.
 func (f *MultiSelectField) FieldHelp() string { return f.Help }
 
-// SetValue marks each option present in the comma-separated value as selected.
+// SetValue marks each option present in the comma-separated value as
+// selected. An entry the option list does not offer is never dropped: it
+// joins the list as an extra checked chip labeled (current), so a valid
+// loaded config round-trips instead of being silently pruned to the catalog.
 func (f *MultiSelectField) SetValue(value string) {
+	f.Options = f.Options[:f.baseLen]
 	f.selected = make([]bool, len(f.Options))
+	f.loaded = ""
+	if f.cursor >= len(f.Options) {
+		f.cursor = max(len(f.Options)-1, 0)
+	}
 	if value == "" {
 		return
 	}
+	f.loaded = value
 	chosen := make(map[string]bool)
+	var unknown []string
 	for _, v := range strings.Split(value, ",") {
-		chosen[strings.TrimSpace(v)] = true
+		v = strings.TrimSpace(v)
+		if !chosen[v] && !slices.Contains(f.Options, v) {
+			unknown = append(unknown, v)
+		}
+		chosen[v] = true
 	}
 	for i, opt := range f.Options {
 		f.selected[i] = chosen[opt]
+	}
+	for _, v := range unknown {
+		f.Options = append(f.Options, v)
+		f.selected = append(f.selected, true)
 	}
 }
 
@@ -135,6 +167,8 @@ func (f *MultiSelectField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("space"))):
 			if f.cursor >= 0 && f.cursor < len(f.selected) {
 				f.selected[f.cursor] = !f.selected[f.cursor]
+				// The selection is edited: Value regenerates from it now.
+				f.loaded = ""
 			}
 		}
 	}
@@ -188,6 +222,9 @@ func (f *MultiSelectField) chipsContent(innerWidth int) string {
 		}
 
 		name := opt
+		if i >= f.baseLen {
+			name += " (current)"
+		}
 		if nameBudget := innerWidth - chipCoreWidth; lipgloss.Width(name) > nameBudget {
 			name = ellipsize(name, nameBudget)
 		}

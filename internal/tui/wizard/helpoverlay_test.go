@@ -1,6 +1,7 @@
 package wizard
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -266,4 +267,54 @@ func TestFooterBindings_AlwaysAdvertisesHelp(t *testing.T) {
 	if last.Key != HelpQuestion || last.Help != HelpOverlay {
 		t.Fatalf("footerBindings must end with the %q hint, got %+v", HelpQuestion, last)
 	}
+}
+
+// TestHelpOverlay_OwnsTheFullFrameOnSplitTiers pins the overlay's modal
+// claim at ≥150 cols: it centers over the whole content width — not the form
+// column beside a still-rendered context pane.
+func TestHelpOverlay_OwnsTheFullFrameOnSplitTiers(t *testing.T) {
+	m := NewModel([]WizardStep{newNopStep()}, config.DefaultConfig())
+	tuitest.RenderAt(t, m, 180, 48)
+
+	if !strings.Contains(tuitest.StripANSI(m.View().Content), "PROGRESS") {
+		t.Fatal("setup: the split tier must be showing the context pane")
+	}
+
+	m = update(t, m, questionMark())
+	frame := tuitest.StripANSI(m.View().Content)
+	if strings.Contains(frame, "PROGRESS") {
+		t.Fatalf("the overlay is a modal moment — the pane must not render beside it:\n%s", frame)
+	}
+
+	// The panel must sit centered in the full frame: the margins between the
+	// frame's walls and the panel's own border within a column of each other.
+	var panelRow string
+	for _, row := range strings.Split(frame, "\n") {
+		if inner := strings.Trim(row, " "); strings.HasPrefix(inner, "│") && strings.Contains(row, "╭") {
+			panelRow = row
+			break
+		}
+	}
+	if panelRow == "" {
+		t.Fatalf("no overlay panel border row on screen:\n%s", frame)
+	}
+	runes := []rune(panelRow)
+	leftWall := slices.Index(runes, '│')
+	rightWall := lastIndexRune(runes, '│')
+	left := slices.Index(runes, '╭') - leftWall
+	right := rightWall - lastIndexRune(runes, '╮')
+	if diff := left - right; diff < -2 || diff > 2 {
+		t.Errorf("overlay panel off-center: left margin %d, right margin %d\n%s", left, right, panelRow)
+	}
+	tuitest.AssertFits(t, m.View().Content, 180, 48)
+}
+
+// lastIndexRune returns the last index of r within runes, or -1.
+func lastIndexRune(runes []rune, r rune) int {
+	for i := len(runes) - 1; i >= 0; i-- {
+		if runes[i] == r {
+			return i
+		}
+	}
+	return -1
 }

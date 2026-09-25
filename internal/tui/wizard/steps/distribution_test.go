@@ -11,6 +11,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/releases"
+	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
@@ -384,5 +385,58 @@ func TestDistributionStep_MidListExpansionRespectsContentHeight(t *testing.T) {
 	const wantShown = 7 // (avail+1)/3 once the expanded row's own chrome is charged correctly
 	if shown != wantShown {
 		t.Errorf("dropdown shows %d of %d patches, want exactly %d", shown, len(series[2].Versions), wantShown)
+	}
+}
+
+// TestDistributionStep_CatalogAbsentVersionInjectsCurrentRow extends the
+// bug-1 ruling to the version selector: a configured version older than the
+// fetched release window anchors a synthetic, selectable row instead of
+// anchoring nothing, and enter confirms the configured version verbatim.
+func TestDistributionStep_CatalogAbsentVersionInjectsCurrentRow(t *testing.T) {
+	s := NewDistributionStep()
+	s.SetSelectedVersion("4.19.1-okd-scos.9")
+
+	step, _ := s.Update(versionsLoadedMsg{series: DemoReleaseSeries()})
+	s = step.(*DistributionStep)
+
+	if got := s.versionSelector.Selected().ID; got != "4.19.1-okd-scos.9" {
+		t.Fatalf("Selected().ID = %q, want the cursor anchored on the injected row", got)
+	}
+	view := tuitest.StripANSI(s.View(90, 30))
+	if !strings.Contains(view, "4.19.1-okd-scos.9") || !strings.Contains(view, "(current)") {
+		t.Fatalf("the injected row must name the configured version with its chip:\n%s", view)
+	}
+	if !strings.Contains(view, "not in the fetched catalog") {
+		t.Fatalf("the injected row must say the catalog does not offer it:\n%s", view)
+	}
+
+	step, cmd := s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	s = step.(*DistributionStep)
+	if cmd == nil {
+		t.Fatal("enter on the injected row must complete the step")
+	}
+	if _, ok := cmd().(wizard.StepCompleteMsg); !ok {
+		t.Fatalf("enter emitted %T, want StepCompleteMsg", cmd())
+	}
+	cfg := &config.Config{}
+	if err := s.Apply(cfg); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if cfg.Distribution.Version != "4.19.1-okd-scos.9" {
+		t.Fatalf("Distribution.Version = %q, want the configured version byte-identical", cfg.Distribution.Version)
+	}
+}
+
+// TestDistributionStep_CatalogPresentVersionInjectsNothing keeps the
+// synthetic row a last resort: an in-catalog version anchors its real patch
+// row only.
+func TestDistributionStep_CatalogPresentVersionInjectsNothing(t *testing.T) {
+	s := NewDistributionStep()
+	s.SetSelectedVersion("4.19.4-okd-scos.3")
+	step, _ := s.Update(versionsLoadedMsg{series: DemoReleaseSeries()})
+	s = step.(*DistributionStep)
+
+	if view := tuitest.StripANSI(s.View(90, 30)); strings.Contains(view, "not in the fetched catalog") {
+		t.Fatalf("an in-catalog version must not inject a synthetic row:\n%s", view)
 	}
 }

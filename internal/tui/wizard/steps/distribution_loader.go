@@ -3,6 +3,7 @@ package steps
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -26,6 +27,19 @@ func (s *DistributionStep) fetchVersions() tea.Msg {
 
 func (s *DistributionStep) updateVersionSelector() {
 	var options []components.Option
+
+	// The bug-1 ruling, extended to the version selector: a configured
+	// version the fetched window no longer offers leads the list as a
+	// selectable row instead of anchoring nothing, and enter confirms it
+	// byte-identical.
+	if s.injectsCurrentVersion() {
+		options = append(options, components.Option{
+			ID:          s.currentVersion,
+			Title:       "okd " + s.currentVersion,
+			Description: "not in the fetched catalog — enter keeps this version",
+			Current:     true,
+		})
+	}
 
 	for i := range s.okdSeries {
 		series := &s.okdSeries[i]
@@ -96,6 +110,21 @@ func (s *DistributionStep) seriesHasCurrent(series *releases.OKDReleaseSeries) b
 		}
 	}
 	return false
+}
+
+// injectsCurrentVersion reports whether the configured current version needs
+// a synthetic row: non-empty, not a series id, and absent from every fetched
+// series.
+func (s *DistributionStep) injectsCurrentVersion() bool {
+	if s.currentVersion == "" || strings.HasPrefix(s.currentVersion, "minor:") || len(s.okdSeries) == 0 {
+		return false
+	}
+	for i := range s.okdSeries {
+		if s.seriesHasCurrent(&s.okdSeries[i]) || s.okdSeries[i].Latest.Version == s.currentVersion {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *DistributionStep) getMinorFromOptionID(id string) int {

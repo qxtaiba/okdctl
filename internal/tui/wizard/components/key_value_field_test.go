@@ -91,3 +91,70 @@ func TestKeyValueField_ValueRoundTrip(t *testing.T) {
 		t.Fatalf("Value() = %q, want %q", got, "homelab=1,shared=2")
 	}
 }
+
+// TestKeyValueField_EditModeBlurredCellOneUniformStyle pins the same
+// blurred-cursor-cell family InputField's blurredValueView works around: the
+// edit row's unfocused cell must render its whole value in one explicit
+// style — never its cursor-parked character through the textinput's cursor
+// path, which leaves that one character styled apart from its neighbours.
+func TestKeyValueField_EditModeBlurredCellOneUniformStyle(t *testing.T) {
+	f := NewKeyValueField("vaults")
+	f.SetWidth(60)
+	f.SetValue("environment=production")
+	_ = f.Focus()
+
+	// Park the value cell's cursor on its first character, then hop to the
+	// key cell — the blurred value must still read as one uniform run.
+	f.Update(tea.KeyPressMsg{Code: 'l', Text: "l"})
+	f.Update(tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl})
+	f.Update(tea.KeyPressMsg{Code: tea.KeyHome})
+	f.Update(tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl})
+	f.Update(tea.KeyPressMsg{Code: 'h', Text: "h"})
+	f.Update(tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl})
+	if !f.editMode || f.col != 0 {
+		t.Fatal("setup: ctrl+e must have re-opened edit mode on the key cell")
+	}
+
+	valRow := rowContaining(t, f.View(), "production")
+	assertOneUniformStyle(t, valRow, "production")
+
+	f.Update(tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl})
+	f.Update(tea.KeyPressMsg{Code: 'l', Text: "l"})
+	f.Update(tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl})
+	keyRow := rowContaining(t, f.View(), "environment")
+	assertOneUniformStyle(t, keyRow, "environment")
+}
+
+// TestKeyValueField_EditModeBlurredCellShowsTheValueHead keeps the blurred
+// cell readable: a long value shows its head, not the window the textinput's
+// parked cursor last scrolled to.
+func TestKeyValueField_EditModeBlurredCellShowsTheValueHead(t *testing.T) {
+	f := NewKeyValueField("vaults")
+	f.SetWidth(60)
+	f.SetValue("environment=production-cluster-primary-west-annex")
+	_ = f.Focus()
+
+	f.Update(tea.KeyPressMsg{Code: 'l', Text: "l"})
+	f.Update(tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl})
+	f.Update(tea.KeyPressMsg{Code: tea.KeyEnd})
+	f.Update(tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl})
+	f.Update(tea.KeyPressMsg{Code: 'h', Text: "h"})
+	f.Update(tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl})
+
+	if view := tuitest.StripANSI(f.View()); !strings.Contains(view, "production-cluster") {
+		t.Errorf("the blurred cell must show the value's head:\n%s", view)
+	}
+}
+
+// rowContaining returns the first raw (styled) view row whose visible text
+// carries needle.
+func rowContaining(t *testing.T, view, needle string) string {
+	t.Helper()
+	for _, row := range strings.Split(view, "\n") {
+		if strings.Contains(tuitest.StripANSI(row), needle) {
+			return row
+		}
+	}
+	t.Fatalf("no view row carries %q:\n%s", needle, tuitest.StripANSI(view))
+	return ""
+}

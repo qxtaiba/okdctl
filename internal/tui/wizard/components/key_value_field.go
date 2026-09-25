@@ -337,8 +337,12 @@ func (f *KeyValueField) viewRow(i, colW int) string {
 
 	if f.editMode && isCursor {
 		focusedKey := f.col == 0
-		keyBox := fieldBox(r.keyInput.View(), colW, focusedKey, false, false)
-		valBox := fieldBox(r.valInput.View(), colW, !focusedKey, false, false)
+		keyCell, valCell := r.keyInput.View(), kvBlurredCell(&r.valInput, colW)
+		if !focusedKey {
+			keyCell, valCell = kvBlurredCell(&r.keyInput, colW), r.valInput.View()
+		}
+		keyBox := fieldBox(keyCell, colW, focusedKey, false, false)
+		valBox := fieldBox(valCell, colW, !focusedKey, false, false)
 		// JoinHorizontal zips the boxes' rows together; "+" concatenation
 		// would instead glue keyBox's last row to valBox's first row.
 		return lipgloss.JoinHorizontal(lipgloss.Top, keyBox, "  ", valBox)
@@ -350,6 +354,18 @@ func (f *KeyValueField) viewRow(i, colW int) string {
 	}
 	content := fmt.Sprintf("%-*s  %-*s", colW, r.keyInput.Value(), colW, r.valInput.Value())
 	return prefix + style.Render(content)
+}
+
+// kvBlurredCell renders an unfocused edit cell's prompt and value head
+// directly in the shared blurred text style, bypassing the textinput's
+// cursor path — its parked cursor cell renders through the cursor's own
+// TextStyle (never set on the value path), reading as one odd character in
+// a uniform cell, and its scroll window can hide the value's head: the same
+// family InputField.blurredValueView works around.
+func kvBlurredCell(in *textinput.Model, colW int) string {
+	style := fieldInputStyles(false, false).Blurred.Text
+	budget := max(colW-4-lipgloss.Width(in.Prompt), 1)
+	return style.Render(in.Prompt + tui.Truncate(in.Value(), budget))
 }
 
 // viewAddRow renders the trailing "+ add" row that the 'a' key acts on.

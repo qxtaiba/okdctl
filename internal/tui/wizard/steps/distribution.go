@@ -328,10 +328,15 @@ func (s *DistributionStep) applyDropdownBudget() {
 	// The expanded series renders its own title+description row right
 	// above its patch dropdown (Selector.View never inserts a connector
 	// between that row and the dropdown itself), joined to the last
-	// collapsed row above it by a connector when before > 0.
+	// collapsed row above it by a connector when before > 0. A synthetic
+	// catalog-absent row leads the list with its own title, description,
+	// and connector.
 	above := rowLines(before) + 2
 	if before > 0 {
 		above++
+	}
+	if s.injectsCurrentVersion() {
+		above += 3
 	}
 	below := rowLines(after)
 
@@ -484,7 +489,8 @@ func (s *DistributionStep) SetSelectedVersion(version string) {
 // current version and rebuilds the option list so the cursor lands on that
 // exact patch row — the truth on screen when editing a config — rather than
 // silently sitting on the newest series. A version outside the fetched
-// catalog anchors nothing.
+// catalog needs no expansion: updateVersionSelector injects it as the list's
+// leading synthetic row and the cursor is already anchored there.
 func (s *DistributionStep) anchorConfiguredVersion() {
 	if s.currentVersion == "" || strings.HasPrefix(s.currentVersion, "minor:") {
 		return

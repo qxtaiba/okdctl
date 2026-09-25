@@ -39,14 +39,15 @@ func (m *Model) View() tea.View {
 		return v
 	}
 
-	viewportContent := m.viewport.View()
-	if m.helpOpen {
-		viewportContent = m.renderHelpOverlay()
-	}
-
-	body := viewportContent
+	body := m.viewport.View()
 	if m.splitLayout() {
-		body = m.composeWideBody(viewportContent)
+		body = m.composeWideBody(body)
+	}
+	// The overlay is a modal moment: it replaces the whole body region —
+	// on a split tier it centers over the full content width rather than
+	// sitting in the form column beside a still-rendered pane.
+	if m.helpOpen {
+		body = m.renderHelpOverlay()
 	}
 
 	var content strings.Builder
@@ -445,10 +446,13 @@ func (m *Model) withHubEscape(bindings []KeyBinding) []KeyBinding {
 }
 
 // renderHelpOverlay renders the full, untruncated key-binding list (the
-// same bindings footerBindings feeds the ribbon) over the viewport region,
-// sized to exactly replace it.
+// same bindings footerBindings feeds the ribbon) over the body region,
+// sized to exactly replace it — the full content width on a split tier.
 func (m *Model) renderHelpOverlay() string {
 	width, height := m.viewportDimensions()
+	if m.splitLayout() {
+		width = m.contentWidth()
+	}
 
 	bindings := m.footerBindings()
 	hints := make([]components.KeyHint, len(bindings))
