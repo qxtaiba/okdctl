@@ -93,10 +93,14 @@ func (m *Model) contentWidth() int {
 	return width
 }
 
-// splitLayout reports whether the terminal is wide enough to split the frame
-// into a form column and a context pane.
+// splitLayout reports whether the terminal is both wide enough and tall
+// enough to split the frame into a form column and a context pane — width
+// alone isn't sufficient: below splitMinHeight's floor the pane's own STEPS
+// section wouldn't have room to render without truncating, so the frame
+// falls back to the capped single-column tier instead of splitting into
+// something unusably short.
 func (m *Model) splitLayout() bool {
-	return m.width >= wideSplitWidth
+	return m.width >= wideSplitWidth && m.height >= splitMinHeight(m.countVisibleSteps())
 }
 
 // formPaneWidths returns the split layout's form column width (capped at
@@ -134,7 +138,7 @@ func (m *Model) composeWideBody(form string) string {
 	height := m.viewport.Height()
 
 	rule := renderPaneRule(height)
-	pane := lipgloss.NewStyle().Width(paneWidth).Height(height).Render("")
+	pane := lipgloss.NewStyle().Width(paneWidth).Height(height).Render(m.renderContextPane(paneWidth, height))
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, form, rule, pane)
 }

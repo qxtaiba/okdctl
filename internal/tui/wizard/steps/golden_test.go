@@ -267,6 +267,117 @@ func TestGolden_WideSplit(t *testing.T) {
 	}
 }
 
+// TestModel_HeightGateAtReproSizes pins the exact sizes a real overflow was
+// reproduced at (150x20/24/30, on the proxmox step, whose Answered() and
+// FocusedFieldHelp() both contribute pane content): every one must render
+// exactly the requested rows now, whether or not the split actually engages.
+// 150x20 sits one row below the 11-step wizard's height floor (22, see
+// splitMinHeight in the wizard package) so it must fall back to the
+// single-column tier — the other two sit at/above the floor, so the split
+// stays on and the pane itself squeezes instead.
+func TestModel_HeightGateAtReproSizes(t *testing.T) {
+	const w = 150
+	cases := []struct {
+		h         int
+		wantSplit bool
+	}{
+		{20, false},
+		{24, true},
+		{30, true},
+	}
+
+	for _, c := range cases {
+		t.Run(fmt.Sprintf("%dx%d", w, c.h), func(t *testing.T) {
+			tui.SetTerminalWidth(w)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+			m := newGoldenModel(t)
+			_ = tuitest.RenderAt(t, m, w, c.h)
+			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDProxmox})
+			m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+
+			frame := tuitest.RenderAt(t, m, w, c.h)
+			tuitest.AssertFits(t, frame, w, c.h)
+
+			plain := tuitest.StripANSI(frame)
+			if got := strings.Count(plain, "\n") + 1; got != c.h {
+				t.Errorf("%dx%d: frame = %d rows, want exactly %d", w, c.h, got, c.h)
+			}
+			if hasSplit := strings.Contains(plain, "STEPS"); hasSplit != c.wantSplit {
+				t.Errorf("%dx%d: split active = %v, want %v", w, c.h, hasSplit, c.wantSplit)
+			}
+		})
+	}
+}
+
+// TestGolden_WideSplitSqueezed pins the squeezed-pane visual state: 150x24
+// sits just above the 11-step wizard's split-layout height floor (22), so
+// the split stays on but there's only room for the STEPS section — SO FAR
+// and FOCUSED FIELD both drop rather than overflowing the frame.
+func TestGolden_WideSplitSqueezed(t *testing.T) {
+	const w, h = 150, 24
+
+	tui.SetTerminalWidth(w)
+	t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+	m := newGoldenModel(t)
+	_ = tuitest.RenderAt(t, m, w, h)
+	m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDProxmox})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+
+	frame := tuitest.RenderAt(t, m, w, h)
+	tuitest.Golden(t, fmt.Sprintf("proxmox-squeezed_%dx%d", w, h), frame)
+	tuitest.AssertFits(t, frame, w, h)
+
+	plain := tuitest.StripANSI(frame)
+	if !strings.Contains(plain, "STEPS") {
+		t.Fatal("squeezed pane must still show STEPS")
+	}
+	if strings.Contains(plain, "SO FAR") || strings.Contains(plain, "FOCUSED FIELD") {
+		t.Errorf("squeezed pane at 150x24 should have dropped SO FAR and FOCUSED FIELD:\n%s", plain)
+	}
+}
+
+// TestModel_PasswordNeverLeaksIntoContextPane drives real keystrokes typing
+// a sentinel password into the proxmox password field one character at a
+// time, rendering the full composed frame after every keystroke: neither
+// the sentinel nor any prefix of it 3 characters or longer may ever appear
+// anywhere in the output. This proves the credential-exclusion guarantee
+// end-to-end, through the real form/focus/pane pipeline, rather than only
+// at the StepDefinition.Answered() layer
+// TestProxmoxStepDefinition_AnsweredExcludesCredentials (apply_test.go)
+// already pins on its own.
+func TestModel_PasswordNeverLeaksIntoContextPane(t *testing.T) {
+	const w, h = 180, 48
+	const sentinel = "hunter2sentinel"
+
+	tui.SetTerminalWidth(w)
+	t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+	m := newGoldenModel(t)
+	_ = tuitest.RenderAt(t, m, w, h)
+	m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDProxmox})
+
+	// host is focused first; two tabs reach username, then password.
+	m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+
+	for i, r := range sentinel {
+		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+
+		frame := tuitest.StripANSI(tuitest.RenderAt(t, m, w, h))
+		typed := sentinel[:i+1]
+		if len(typed) >= 3 && strings.Contains(frame, typed) {
+			t.Fatalf("typed prefix %q leaked into the frame after keystroke %d:\n%s", typed, i, frame)
+		}
+	}
+
+	frame := tuitest.StripANSI(tuitest.RenderAt(t, m, w, h))
+	if strings.Contains(frame, sentinel) {
+		t.Fatalf("full sentinel %q leaked into the frame:\n%s", sentinel, frame)
+	}
+}
+
 // TestGolden_HelpOverlay pins the "?" help overlay open on the addons step —
 // key-event-driven, matching how a real terminal session would trigger it.
 // The overlay must replace only the viewport region (header/footer chrome

@@ -9,6 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
@@ -68,6 +69,67 @@ func testStepDefinition() *StepDefinition {
 		ShouldShow: func(cfg *config.Config) bool {
 			return cfg.Distribution.Type != "skip-me"
 		},
+	}
+}
+
+func TestDataDrivenStep_Answered(t *testing.T) {
+	def := testStepDefinition()
+	def.Answered = func(values map[string]string) []render.Fact {
+		return []render.Fact{{Key: "name", Value: values["name"]}}
+	}
+	step := NewDataDrivenStep(def)
+	step.setValue("name", "homelab")
+
+	facts := step.Answered()
+	if len(facts) != 1 || facts[0] != (render.Fact{Key: "name", Value: "homelab"}) {
+		t.Fatalf("Answered() = %+v", facts)
+	}
+}
+
+func TestDataDrivenStep_AnsweredNilWhenDefinitionLeavesItUnset(t *testing.T) {
+	step := NewDataDrivenStep(testStepDefinition())
+	if facts := step.Answered(); facts != nil {
+		t.Fatalf("Answered() = %+v, want nil", facts)
+	}
+}
+
+func TestDataDrivenStep_FocusedFieldHelp(t *testing.T) {
+	def := testStepDefinition()
+	def.Sections[0].Fields[0].Help = "cluster name help"
+	step := NewDataDrivenStep(def)
+	_ = step.form.Focus()
+
+	label, help, ok := step.FocusedFieldHelp()
+	if !ok || label != "name" || help != "cluster name help" {
+		t.Fatalf("FocusedFieldHelp() = %q, %q, %v", label, help, ok)
+	}
+}
+
+func TestDataDrivenStep_FocusedFieldHelpFalseWithoutHelpText(t *testing.T) {
+	step := NewDataDrivenStep(testStepDefinition()) // "name" field has no Help
+	_ = step.form.Focus()
+
+	if _, _, ok := step.FocusedFieldHelp(); ok {
+		t.Fatal("FocusedFieldHelp() ok = true, want false for a field with no help text")
+	}
+}
+
+func TestDataDrivenStep_FocusedFieldHelpFollowsFocus(t *testing.T) {
+	def := testStepDefinition()
+	def.Sections[0].Fields[0].Help = "name help"
+	def.Sections[0].Fields[1].Help = "count help"
+	step := NewDataDrivenStep(def)
+	_ = step.form.Focus()
+
+	if label, _, ok := step.FocusedFieldHelp(); !ok || label != "name" {
+		t.Fatalf("initial focus = %q, %v", label, ok)
+	}
+
+	step.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+
+	label, help, ok := step.FocusedFieldHelp()
+	if !ok || label != "count" || help != "count help" {
+		t.Fatalf("after tab = %q, %q, %v", label, help, ok)
 	}
 }
 

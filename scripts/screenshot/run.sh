@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Renders the 11-step configure wizard against the fakepve fixture, plus the
 # Cluster Lifecycle wizard against lifecycle.DemoHooks' static fixture, at
-# three terminal sizes (80x24, 100x30, 120x40), screenshotting every step.
-# Requires vhs (github.com/charmbracelet/vhs) + go; nothing touches a real
-# hypervisor or deploys.
+# four terminal sizes (80x24, 100x30, 120x40, 180x48), screenshotting every
+# step. Requires vhs (github.com/charmbracelet/vhs) + go; nothing touches a
+# real hypervisor or deploys.
 set -euo pipefail
 
 command -v vhs >/dev/null || { echo "vhs not found — brew install vhs" >&2; exit 1; }
@@ -60,6 +60,7 @@ PRESETS=(
   "80x24:80:24:750:408"
   "100x30:100:30:930:492"
   "120x40:120:40:1108:652"
+  "180x48:180:48:1650:784"
 )
 
 # Steps in wizard order (wizard.DefaultConfig); must match the Screenshot

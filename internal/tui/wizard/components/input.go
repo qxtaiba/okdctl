@@ -36,6 +36,14 @@ type TextInputField interface {
 	ConsumesTextInput() bool
 }
 
+// LabeledField is implemented by every concrete FormField, letting a caller
+// describe the currently focused field without a type switch over each
+// field kind — the wide-terminal context pane's focused-field echo uses it.
+type LabeledField interface {
+	FieldLabel() string
+	FieldHelp() string
+}
+
 // InputField is a single text input FormField. Password fields mask input
 // in View and scrub the raw value out of validator error messages.
 type InputField struct {
@@ -120,6 +128,12 @@ func NewPasswordField(label, placeholder string) *InputField {
 func (f *InputField) Value() string {
 	return f.input.Value()
 }
+
+// FieldLabel returns the field's label.
+func (f *InputField) FieldLabel() string { return f.Label }
+
+// FieldHelp returns the field's help text.
+func (f *InputField) FieldHelp() string { return f.Help }
 
 // ConsumesTextInput always reports true while focused: a focused InputField
 // forwards every printable keystroke — including "?" — into the textinput.

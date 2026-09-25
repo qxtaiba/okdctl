@@ -213,6 +213,67 @@ func TestProxmoxStepDefinition_FieldsOnNilProxmoxConfig(t *testing.T) {
 	}
 }
 
+// TestProxmoxStepDefinition_AnsweredExcludesCredentials pins the context
+// pane's credential-safety contract: host and username echo, password and
+// token_id never do, no matter what values are present.
+func TestProxmoxStepDefinition_AnsweredExcludesCredentials(t *testing.T) {
+	values := map[string]string{
+		fieldHost:  "10.0.0.5:8006",
+		"username": "root@pam",
+		"password": "s3cret",
+		"token_id": "root@pam!okdctl",
+	}
+
+	facts := ProxmoxStepDefinition.Answered(values)
+
+	want := map[string]string{"host": "10.0.0.5:8006", "username": "root@pam"}
+	if len(facts) != len(want) {
+		t.Fatalf("Answered() = %+v, want exactly %+v", facts, want)
+	}
+	for _, f := range facts {
+		if want[f.Key] != f.Value {
+			t.Errorf("fact %q = %q, want %q", f.Key, f.Value, want[f.Key])
+		}
+	}
+
+	for _, f := range facts {
+		if f.Key == "password" || f.Key == "token_id" || f.Value == values["password"] || f.Value == values["token_id"] {
+			t.Fatalf("Answered() leaked a credential: %+v", facts)
+		}
+	}
+}
+
+func TestProxmoxStepDefinition_AnsweredOmitsBlankFields(t *testing.T) {
+	if facts := ProxmoxStepDefinition.Answered(map[string]string{}); len(facts) != 0 {
+		t.Fatalf("Answered({}) = %+v, want none", facts)
+	}
+}
+
+func TestBasicsStepDefinition_Answered(t *testing.T) {
+	values := map[string]string{
+		"cluster_name":        "homelab",
+		fieldDomain:           "k8s.local",
+		"control_plane_count": "3",
+		"worker_count":        "3",
+	}
+
+	facts := BasicsStepDefinition.Answered(values)
+	want := map[string]string{
+		"cluster":       "homelab",
+		"domain":        "k8s.local",
+		"control plane": "3",
+		"workers":       "3",
+	}
+	if len(facts) != len(want) {
+		t.Fatalf("Answered() = %+v, want exactly %+v", facts, want)
+	}
+	for _, f := range facts {
+		if want[f.Key] != f.Value {
+			t.Errorf("fact %q = %q, want %q", f.Key, f.Value, want[f.Key])
+		}
+	}
+}
+
 func TestProxmoxStepDefinition_ApplySetsProviderType(t *testing.T) {
 	cfg := &config.Config{}
 	if err := ProxmoxStepDefinition.Apply(nil, cfg); err != nil {

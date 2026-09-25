@@ -2,6 +2,7 @@ package steps
 
 import (
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
@@ -64,6 +65,23 @@ var BasicsStepDefinition = wizard.StepDefinition{
 				},
 			},
 		},
+	},
+
+	Answered: func(values map[string]string) []render.Fact {
+		var facts []render.Fact
+		if v := values["cluster_name"]; v != "" {
+			facts = append(facts, render.Fact{Key: labelCluster, Value: v})
+		}
+		if v := values[fieldDomain]; v != "" {
+			facts = append(facts, render.Fact{Key: "domain", Value: v})
+		}
+		if v := values["control_plane_count"]; v != "" {
+			facts = append(facts, render.Fact{Key: "control plane", Value: v})
+		}
+		if v := values["worker_count"]; v != "" {
+			facts = append(facts, render.Fact{Key: "workers", Value: v})
+		}
+		return facts
 	},
 }
 

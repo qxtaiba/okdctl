@@ -42,6 +42,12 @@ func (f *SelectField) Value() string {
 	return ""
 }
 
+// FieldLabel returns the field's label.
+func (f *SelectField) FieldLabel() string { return f.Label }
+
+// FieldHelp returns the field's help text.
+func (f *SelectField) FieldHelp() string { return f.Help }
+
 // SetValue selects the first option equal to value and marks the field as
 // user-modified. Unknown values are silently ignored.
 func (f *SelectField) SetValue(value string) {

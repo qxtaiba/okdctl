@@ -64,6 +64,63 @@ func TestModel_SplitLayoutEngagesAt150(t *testing.T) {
 	}
 }
 
+func TestSplitMinHeight_Derivation(t *testing.T) {
+	cases := []struct{ stepCount, want int }{
+		{1, 12},  // fixedLayoutOverhead(10) + header(1) + 1
+		{7, 18},  // the lifecycle flow's step count
+		{11, 22}, // the configure wizard's step count
+	}
+	for _, c := range cases {
+		if got := splitMinHeight(c.stepCount); got != c.want {
+			t.Errorf("splitMinHeight(%d) = %d, want %d", c.stepCount, got, c.want)
+		}
+	}
+}
+
+// TestModel_SplitLayoutGatedByHeight pins the exact boundary splitMinHeight
+// derives for an 11-step wizard (floor 22, per TestSplitMinHeight_Derivation):
+// one row short of it, the layout must not split no matter how wide the
+// terminal is — a wide-enough-but-short terminal falls back to the capped
+// single-column tier rather than a pane with no room for its own STEPS list.
+func TestModel_SplitLayoutGatedByHeight(t *testing.T) {
+	steps := make([]WizardStep, 11)
+	for i := range steps {
+		steps[i] = newNopStep()
+	}
+
+	m := NewModel(steps, config.DefaultConfig())
+	tuitest.RenderAt(t, m, 150, 21)
+	if m.splitLayout() {
+		t.Fatal("150x21 (one row below the 11-step floor of 22) should not split")
+	}
+	if m.bodyWidth() != m.contentWidth() {
+		t.Errorf("150x21: bodyWidth()=%d != contentWidth()=%d — split layout leaked into a gated frame", m.bodyWidth(), m.contentWidth())
+	}
+
+	m2 := NewModel(steps, config.DefaultConfig())
+	tuitest.RenderAt(t, m2, 150, 22)
+	if !m2.splitLayout() {
+		t.Fatal("150x22 (exactly the 11-step floor) should split")
+	}
+}
+
+// TestModel_SplitLayoutHeightGateFrameFitsExactly confirms that when the
+// height gate falls back to the single-column tier, the frame still renders
+// exactly the requested rows — the same guarantee TestModel_TooSmallRendersNotice
+// pins for the width floor, now covering the height floor too.
+func TestModel_SplitLayoutHeightGateFrameFitsExactly(t *testing.T) {
+	steps := make([]WizardStep, 11)
+	for i := range steps {
+		steps[i] = newNopStep()
+	}
+	m := NewModel(steps, config.DefaultConfig())
+	frame := tuitest.StripANSI(tuitest.RenderAt(t, m, 150, 21))
+	tuitest.AssertFits(t, frame, 150, 21)
+	if got := strings.Count(frame, "\n") + 1; got != 21 {
+		t.Errorf("150x21 frame = %d rows, want exactly 21", got)
+	}
+}
+
 // TestModel_SplitLayoutFormPaneInvariant pins the form/rule/pane budget
 // arithmetic: their widths always sum to exactly contentWidth, the form
 // never exceeds formMaxWidth, and the pane always stays within

@@ -8,4 +8,6 @@ const (
 	fieldInterface   = "interface"
 	fieldBridge      = "bridge"
 	fieldDataStorage = "data storage"
+	fieldUsername    = "username"
+	labelCluster     = "cluster"
 )
