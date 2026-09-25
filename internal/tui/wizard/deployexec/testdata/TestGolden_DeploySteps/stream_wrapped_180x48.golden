@@ -4,6 +4,7 @@
   │ deploying homelab                                                                                                                                             install · done │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
   │  deploying homelab  2 / 7                                                                                                                                 elapsed 1m15s      │  
+  │  ██████████████████████████████████████████████│░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░│░░░░░░░░░░░░░░░░░░░░░░│░░░░░░░░░░░░░░░░░░░░░░│░░░░░░░░░░░░░░░░░░░░░░  28%      │  
   │  full log: okd-install/okdctl.log                                                                                                                                            │  
   │  LOG                                                                                                                                                                         │  
   │  09:00:00 deploy step started step=step-00 phase=setup                                                                                                                       │  
@@ -32,7 +33,6 @@
   │  09:02:41 deploy step started step=step-23 phase=setup                                                                                                                       │  
   │  09:02:48 ERROR deploy infrastructure failed: proxmox task UPID:pve:0000ABCD:00512F30:66F2A1C4:qmclone:9001:root@pam: refused the clone request because local-lvm is         │  
   │           out of space on node pve-02                                                                                                                                        │  
-  │                                                                                                                                                                              │  
   │                                                                                                                                                                              │  
   │                                                                                                                                                                              │  
   │                                                                                                                                                                              │  

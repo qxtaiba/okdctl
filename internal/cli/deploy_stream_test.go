@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -13,10 +14,12 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/deploy"
 	"github.com/qxtaiba/okdctl/internal/distribution"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/setup"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/deployexec"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 func TestDeployNoTUIFlagIsLongFormOnly(t *testing.T) {
@@ -342,5 +345,38 @@ func TestDeployStreamSessionBoundsTheEngineGoroutine(t *testing.T) {
 	case <-hooks.Done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("cancelling the run never fired the screen's stop signal")
+	}
+}
+
+// TestDeployHistorySeedsAndRecordsAroundTheStream pins the weight model's
+// persistence loop: a finished run's measured durations land in the history
+// file, and the next session's stream state is seeded from them.
+func TestDeployHistorySeedsAndRecordsAroundTheStream(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(workspace.WorkDir(root), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.DefaultConfig()
+	cfg.Cluster.Name = "homelab"
+
+	done := &deployexec.State{Cfg: cfg, RunID: "run-1", Steps: []distribution.StepResult{
+		{StepID: setup.StepInstallPackages, Success: true, Duration: 40 * time.Second},
+	}}
+	recordDeployHistory(done, root)
+
+	next := &deployexec.State{Cfg: cfg}
+	loadDeployHistory(next, root)
+	if next.History[setup.StepInstallPackages] != 40*time.Second {
+		t.Fatalf("History = %v, want the recorded 40s seed", next.History)
+	}
+
+	// The demo feed must neither read nor write schedule data.
+	t.Setenv(wizardDemoEnv, "1")
+	demo := &deployexec.State{Cfg: cfg, RunID: "run-2", Steps: done.Steps}
+	recordDeployHistory(demo, root)
+	fresh := &deployexec.State{Cfg: cfg}
+	loadDeployHistory(fresh, root)
+	if fresh.History != nil {
+		t.Errorf("demo run must not touch the history store, got %v", fresh.History)
 	}
 }

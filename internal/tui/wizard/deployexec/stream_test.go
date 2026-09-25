@@ -52,14 +52,22 @@ func newSeededStreamStep(st *State, clock *time.Time) *StreamStep {
 	return s
 }
 
-// pump replays bubbletea's cmd loop to StepCompleteMsg, dropping spinner ticks
-// so it terminates.
+// pump replays bubbletea's cmd loop to StepCompleteMsg, driving the shared
+// clock by hand once the feed drains — the settle-to-100% completes from a
+// frame, not an event.
 func pump(t *testing.T, s *StreamStep, first tea.Cmd) tea.Msg {
 	t.Helper()
 	queue := []tea.Cmd{first}
+	var frame uint64
 	for range 200 {
 		if len(queue) == 0 {
-			t.Fatal("command queue drained before completion")
+			if !s.Animating() {
+				t.Fatal("command queue drained before completion")
+			}
+			frame++
+			_, next := s.Update(wizard.FrameMsg{Frame: frame})
+			queue = append(queue, next)
+			continue
 		}
 		cmd := queue[0]
 		queue = queue[1:]

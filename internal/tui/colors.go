@@ -28,6 +28,25 @@ var LogoGradient = [6]color.Color{
 	lipgloss.Color("#22D3EE"),
 }
 
+// BlendAt returns the color t of the way from a to b (t clamped to [0, 1]),
+// interpolating in RGB space; the install instrument paints its gradient
+// fill with it.
+func BlendAt(a, b color.Color, t float64) color.Color {
+	t = min(max(t, 0), 1)
+	ar, ag, ab_, _ := a.RGBA()
+	br, bg, bb, _ := b.RGBA()
+	lerp := func(x, y uint32) uint8 {
+		return uint8(uint32(float64(x>>8) + (float64(y>>8)-float64(x>>8))*t)) //nolint:gosec // G115: 8-bit channel values
+	}
+	return color.RGBA{R: lerp(ar, br), G: lerp(ag, bg), B: lerp(ab_, bb), A: 0xFF}
+}
+
+// Lighten returns c moved amount of the way toward white (amount clamped to
+// [0, 1]); the progress bar's drifting highlight band renders with it.
+func Lighten(c color.Color, amount float64) color.Color {
+	return BlendAt(c, color.RGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF}, amount)
+}
+
 func highContrastRequested() bool {
 	v := os.Getenv("OKDCTL_HIGH_CONTRAST")
 	return v == "1" || v == "true"

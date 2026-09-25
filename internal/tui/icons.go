@@ -14,3 +14,14 @@ const (
 	IconBar        = "┃"
 	IconBullet     = "•"
 )
+
+// Progress-bar glyphs: the filled cell, the empty track, the phase-boundary
+// separator, the last-run tick, and the eighth-block ramp that renders a
+// fractional final cell.
+const (
+	IconBarFill    = "█"
+	IconBarTrack   = "░"
+	IconBarSegment = "│"
+	IconBarTick    = "▎"
+	IconBarEighths = "▏▎▍▌▋▊▉"
+)

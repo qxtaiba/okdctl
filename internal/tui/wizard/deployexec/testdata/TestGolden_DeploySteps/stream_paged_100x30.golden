@@ -4,8 +4,9 @@
   │ deploying homelab                                                             install · done │  
   │──────────────────────────────────────────────────────────────────────────────────────────────│  
   │  deploying homelab  2 / 7                                                 elapsed 1m15s      │  
+  │  ███████████████████████│░░░░░░░░░░░░░░░░░░░░░░│░░░░░░░░░░░│░░░░░░░░░░│░░░░░░░░░░░  28%      │  
   │  full log: okd-install/okdctl.log                                                            │  
-  │  LOG · 1–17 of 24                                                                            │  
+  │  LOG · 1–16 of 24                                                                            │  
   │  09:00:00 deploy step started step=step-00 phase=setup                                       │  
   │  09:00:07 deploy step started step=step-01 phase=setup                                       │  
   │  09:00:14 deploy step started step=step-02 phase=setup                                       │  
@@ -22,7 +23,6 @@
   │  09:01:31 deploy step started step=step-13 phase=setup                                       │  
   │  09:01:38 deploy step started step=step-14 phase=setup                                       │  
   │  09:01:45 deploy step started step=step-15 phase=setup                                       │  
-  │  09:01:52 deploy step started step=step-16 phase=setup                                       │  
   │                                                                                              │  
   │─────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
   │  f back to checklist … • ctrl+c cancel (twice to force-quit) • ? help                        │  

@@ -31,6 +31,11 @@ type State struct {
 	Plan  []tui.StepMeta
 	RunID string
 
+	// History is the per-step duration seed for the progress weight model
+	// and the ETA (LoadStepHistory's result); nil on a first install, which
+	// renders even weights and no ETA.
+	History map[distribution.StepID]time.Duration
+
 	// Started marks the engine goroutine began; Executed marks it returned —
 	// the gap is an interrupted run.
 	Started  bool

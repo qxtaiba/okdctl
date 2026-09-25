@@ -4,6 +4,7 @@
   │ deploying homelab                                                             install · done │  
   │──────────────────────────────────────────────────────────────────────────────────────────────│  
   │  deploying homelab  2 / 7                                                 elapsed 1m15s      │  
+  │  ███████████████████████│░░░░░░░░░░░░░░░░░░░░░░│░░░░░░░░░░░│░░░░░░░░░░│░░░░░░░░░░░  28%      │  
   │  cancel requested — finishing the current step safely, the resume marker stays…              │  
   │  ✓ prep                                                                             40s      │  
   │  ● ignition                                                                                  │  
@@ -14,7 +15,6 @@
   │  ○ verify                                                                                    │  
   │                                                                                              │  
   │  LOG                                                                                         │  
-  │  09:01:59 deploy step started step=step-17 phase=setup                                       │  
   │  09:02:06 deploy step started step=step-18 phase=setup                                       │  
   │  09:02:13 deploy step started step=step-19 phase=setup                                       │  
   │  09:02:20 deploy step started step=step-20 phase=setup                                       │  

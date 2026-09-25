@@ -4,9 +4,9 @@
   │ deploying homelab                                         install · done │  
   │──────────────────────────────────────────────────────────────────────────│  
   │  deploying homelab  2 / 7                             elapsed 1m15s      │  
+  │  █████████████████│░░░░░░░░░░░░░░░░░│░░░░░░░░│░░░░░░░│░░░░░░░░  28%      │  
   │  full log: okd-install/okdctl.log                                        │  
   │  LOG                                                                     │  
-  │  09:01:31 deploy step started step=step-13 phase=setup                   │  
   │  09:01:38 deploy step started step=step-14 phase=setup                   │  
   │  09:01:45 deploy step started step=step-15 phase=setup                   │  
   │  09:01:52 deploy step started step=step-16 phase=setup                   │  

@@ -17,10 +17,12 @@ func TestIconsAreCheckAndCross(t *testing.T) {
 }
 
 func TestNoLiteralStatusGlyphsOutsideIcons(t *testing.T) {
-	bad := []rune{'✓', '✗', '✔', '✖', '●', '○', '⚠', '◂', '▸'}
+	bad := []rune{'✓', '✗', '✔', '✖', '●', '○', '⚠', '◂', '▸', '█', '░', '▏', '▎', '▍', '▌', '▋', '▊', '▉'}
+	// hero.go's block-letter bitmap is art, not a status glyph.
+	exempt := map[string]bool{"icons.go": true, "hero.go": true}
 	fset := token.NewFileSet()
 	err := filepath.WalkDir("..", func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") || filepath.Base(path) == "icons.go" {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") || exempt[filepath.Base(path)] {
 			return err
 		}
 		f, err := parser.ParseFile(fset, path, nil, 0)

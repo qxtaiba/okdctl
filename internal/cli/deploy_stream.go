@@ -20,6 +20,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/logview"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/deployexec"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // deployInterruptedMsg is shared so runDeployStream's tea-failure path and
@@ -58,6 +59,7 @@ func runDeployStream(ctx context.Context, cfg *config.Config, opts *deploy.Optio
 	plan := deploy.PlannedSteps(cfg, opts.ProjectRoot, opts.FreshDeploy)
 
 	st := &deployexec.State{Cfg: cfg, Plan: plan, RunID: logutil.RunID()}
+	loadDeployHistory(st, opts.ProjectRoot)
 	ring := logview.NewRing(logview.DefaultCap)
 
 	streamCtx, cancelStream := context.WithCancel(ctx)
@@ -84,6 +86,7 @@ func runDeployStream(ctx context.Context, cfg *config.Config, opts *deploy.Optio
 
 	_, err := wizard.RunFlow(ctx, deployexec.NewSteps(st, hooks), cfg, deployexec.Chrome())
 	restoreLogs()
+	recordDeployHistory(st, opts.ProjectRoot)
 	if err != nil {
 		// A tea failure mid-install must still surface the resume marker, not
 		// read as a configuration problem.
@@ -94,6 +97,28 @@ func runDeployStream(ctx context.Context, cfg *config.Config, opts *deploy.Optio
 			WithHint("try again, or re-run with --no-tui for the plain checklist")
 	}
 	return reportDeployStreamOutcome(out, st)
+}
+
+// loadDeployHistory seeds the stream screen's weight model and ETA from
+// the persisted per-step durations beside the deploy-state marker; the
+// scripted demo feed renders without one.
+func loadDeployHistory(st *deployexec.State, projectRoot string) {
+	if os.Getenv(wizardDemoEnv) != "" {
+		return
+	}
+	st.History = deployexec.LoadStepHistory(workspace.WorkDir(projectRoot), st.Cfg.Cluster.Name)
+}
+
+// recordDeployHistory folds the run's measured step durations back into the
+// history store — failures included, since their finished steps carry real
+// measurements; a demo run must not write schedule data into the project.
+func recordDeployHistory(st *deployexec.State, projectRoot string) {
+	if os.Getenv(wizardDemoEnv) != "" || len(st.Steps) == 0 {
+		return
+	}
+	if err := deployexec.RecordStepHistory(workspace.WorkDir(projectRoot), st.RunID, st.Cfg.Cluster.Name, st.Steps); err != nil {
+		logutil.Warn("could not record step duration history", logutil.LF("err", err))
+	}
 }
 
 // deployStreamSession assembles the screen's hooks and wires the cancel its

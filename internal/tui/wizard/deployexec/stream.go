@@ -72,6 +72,27 @@ type StreamStep struct {
 	cancelRequested  bool
 	finished         bool
 	frame            uint64
+
+	// The install instrument's state: the weight table seeded from
+	// persisted history, the monotonic progress fraction, the frame-driven
+	// settle/sweep easing, the ETA correction, and the activity meter.
+	weights     map[distribution.StepID]float64
+	totalWeight float64
+	hasHistory  bool
+	maxFrac     float64
+	settling    bool
+	sweeping    bool
+	blurred     bool
+	animFrom    float64
+	animStart   uint64
+	etaShown    time.Duration
+	ewmaRatio   float64
+	// activityCount advances one unit per observed event or log line;
+	// lastActivity stamps the newest one, lastLogTotal the ring position
+	// already folded in.
+	activityCount uint64
+	lastActivity  time.Time
+	lastLogTotal  int64
 	// focusLine and lastLine are recorded during View: the running row's line,
 	// and the last line of the rendered content. tailRendered records whether
 	// that render put the log tail under the checklist.
@@ -144,21 +165,21 @@ func (s *StreamStep) DisplayTitle() string {
 	return s.progressLabel()
 }
 
-// Animating reports whether the running row's spinner needs frame ticks.
+// Animating reports whether the screen needs frame ticks: any live run,
+// plus the settle window after a clean finish.
 func (s *StreamStep) Animating() bool {
-	return !s.finished
+	return !s.finished || s.settling
 }
 
-// WindowTitle carries the run's live progress into the terminal tab —
-// percent of settled steps plus the running phase — so a backgrounded
-// install stays legible from the tab bar; empty once the run ends, falling
-// back to the header title.
+// WindowTitle carries the run's live progress into the terminal tab — the
+// weight model's percent plus the running phase — so a backgrounded install
+// stays legible from the tab bar; empty once the run ends, falling back to
+// the header title.
 func (s *StreamStep) WindowTitle() string {
 	if s.finished || len(s.phases) == 0 {
 		return ""
 	}
-	done, total := s.stepCounts()
-	return fmt.Sprintf("deploying %d%% · %s", done*100/max(total, 1), s.phases[s.currentPhase].name)
+	return fmt.Sprintf("deploying %d%% · %s", s.percent(), s.phases[s.currentPhase].name)
 }
 
 // Init groups the plan into phases, starts the engine goroutine exactly once,
@@ -207,6 +228,10 @@ func (s *StreamStep) buildRows() {
 	for phase, rows := range byPhase {
 		s.phases = append(s.phases, phaseProgress{name: phase, rows: rows})
 	}
+
+	s.buildWeights()
+	s.ewmaRatio = 1
+	s.lastActivity = s.started
 }
 
 // sendFinal delivers the run's terminal event, abandoning it once the run's
@@ -239,13 +264,32 @@ func (s *StreamStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 				s.st.Elapsed = s.now().Sub(s.started)
 			}
 			s.finish(msg.ev.Err)
+			// A clean finish under full motion holds the screen for the
+			// settle to 100% — the completion fires from the settle's last
+			// frame. A failure, a blurred terminal (1Hz clock), and the
+			// calmer dials complete immediately.
+			if msg.ev.Err == nil && tui.Motion() == tui.MotionFull && !s.blurred {
+				s.settling = true
+				s.animFrom = min(s.maxFrac, barCapFrac)
+				s.animStart = s.frame
+				return s, nil
+			}
 			return s, func() tea.Msg { return wizard.StepCompleteMsg{StepID: StepIDStream} }
 		}
+		s.sampleActivity()
 		s.applyEvent(&msg.ev)
 		return s, tea.Batch(s.listen(), func() tea.Msg { return wizard.FocusChangedMsg{} })
 
 	case wizard.FrameMsg:
 		s.frame = msg.Frame
+		s.sampleActivity()
+		if s.settling && s.frame >= s.animStart+settleFrames {
+			s.settling = false
+			return s, func() tea.Msg { return wizard.StepCompleteMsg{StepID: StepIDStream} }
+		}
+		if s.sweeping && s.frame >= s.animStart+settleFrames {
+			s.sweeping = false
+		}
 
 	case tea.KeyPressMsg:
 		cmd := s.handleLogKey(msg)
@@ -304,6 +348,13 @@ func (s *StreamStep) paneCarriesLog() bool {
 func (s *StreamStep) applyEvent(ev *Event) {
 	if len(s.phases) == 0 {
 		return
+	}
+	s.noteActivity()
+	if ev.Done && !ev.Skipped && ev.Took > 0 && s.hasHistory {
+		// One settled step's actual-vs-schedule ratio corrects the ETA.
+		if predicted, ok := s.weights[ev.StepID]; ok && predicted > 0 {
+			s.ewmaRatio = etaEWMAAlpha*(ev.Took.Seconds()/predicted) + (1-etaEWMAAlpha)*s.ewmaRatio
+		}
 	}
 	pi, ri := s.locate(ev.StepID)
 	if pi < 0 {
@@ -466,11 +517,16 @@ func (s *StreamStep) InterceptQuit() bool {
 func (s *StreamStep) View(width, _ int) string {
 	col := max(width-4, 1)
 	s.log.ViewCol = col
+	s.updateETAShown()
 	if s.log.Full() {
-		// The headline rides above the full-screen log: progress and elapsed are
-		// what an operator would otherwise lose by leaving the checklist. The
-		// sink path rides with it — the file keeps every byte the ring evicts.
+		// The headline and the bar ride above the full-screen log: progress
+		// and elapsed are what an operator would otherwise lose by leaving
+		// the checklist. The sink path rides with them — the file keeps
+		// every byte the ring evicts.
 		head := []string{s.headline(col)}
+		if bar := s.renderBar(col); bar != "" {
+			head = append(head, bar)
+		}
 		if s.hooks.LogPath != "" {
 			head = append(head, s.styles().dim.Render(tui.Truncate("full log: "+s.hooks.LogPath, col)))
 		}
@@ -478,6 +534,9 @@ func (s *StreamStep) View(width, _ int) string {
 	}
 
 	lines := []string{s.headline(col)}
+	if bar := s.renderBar(col); bar != "" {
+		lines = append(lines, bar)
+	}
 	if s.cancelRequested && !s.finished {
 		lines = append(lines, s.styles().warn.Render(lipgloss.Wrap(
 			"cancel requested — finishing the current step safely, the resume marker stays…", col, "")))
@@ -498,6 +557,19 @@ func (s *StreamStep) View(width, _ int) string {
 	}
 	if !s.finished && !s.cancelRequested {
 		clauses = append(clauses, "ctrl+c cancels after the current step")
+	}
+
+	// On the split tier the pane carries the log, so the checklist's dead
+	// lower rows take the per-phase duration bars instead; a narrow frame
+	// spends the same slack on the log tail below.
+	if s.paneCarriesLog() {
+		chrome := 2
+		if len(clauses) > 0 {
+			chrome += 2
+		}
+		if s.bodyHeight-len(lines)-chrome >= s.phaseBarRows() {
+			lines = append(lines, s.renderPhaseBars(col)...)
+		}
 	}
 
 	s.tailRendered = false
@@ -584,7 +656,13 @@ func (s *StreamStep) appendPhase(lines []string, i, col int) []string {
 		}
 		return lines
 	default:
-		return append(lines, s.styles().pend.Render(tui.IconPending+" "+string(ph.name)))
+		label := s.styles().pend.Render(tui.IconPending + " " + string(ph.name))
+		// The schedule annotation: unstarted phases carry their historical
+		// durations, so the trail reads as a plan, not a mystery.
+		if d := s.phasePredicted(ph); d > 0 {
+			return append(lines, justify(label, s.styles().dim.Render("~"+fmtETA(d)), col))
+		}
+		return append(lines, label)
 	}
 }
 
@@ -600,7 +678,11 @@ func (s *StreamStep) renderRow(r *stepRow, col int) string {
 	case rowFailed:
 		return justify(s.styles().fail.Render(tui.IconError+" "+r.label), s.styles().dim.Render(rowDur(r)), col)
 	case rowRunning:
-		return justify(wizard.Spinner(s.frame)+s.styles().bold.Render(r.label), s.styles().dim.Render(fmtDur(s.now().Sub(r.start))), col)
+		if s.stalled(r.id) {
+			return justify(s.stallMarker()+s.styles().warn.Render(r.label),
+				s.styles().warn.Render("last output "+fmtAgo(s.now().Sub(s.lastActivity))+" ago"), col)
+		}
+		return justify(s.runningGlyph()+s.styles().bold.Render(r.label), s.styles().dim.Render(fmtDur(s.now().Sub(r.start))), col)
 	default:
 		return s.styles().pend.Render(tui.IconPending + " " + r.label)
 	}

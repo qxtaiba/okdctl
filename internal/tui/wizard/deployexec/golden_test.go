@@ -66,6 +66,49 @@ func seedMidRun(m *wizard.Model, _ *State) {
 	cur = cur.Add(35 * time.Second)
 }
 
+// seedStalledRun drives the run into wait-bootstrap and then two minutes
+// of silence — past the step's 90s stall threshold.
+func seedStalledRun(m *wizard.Model, _ *State) {
+	s, ok := m.CurrentStep().(*StreamStep)
+	if !ok {
+		return
+	}
+	base := time.Date(2026, 9, 25, 9, 0, 0, 0, time.UTC)
+	cur := base
+	s.now = func() time.Time { return cur }
+	s.started = base
+	s.buildRows()
+
+	for _, meta := range s.st.Plan[:5] {
+		s.applyEvent(&Event{StepID: meta.ID})
+		cur = cur.Add(20 * time.Second)
+		s.applyEvent(&Event{StepID: meta.ID, Done: true, Took: 20 * time.Second})
+	}
+	s.applyEvent(&Event{StepID: s.st.Plan[5].ID})
+	cur = cur.Add(2 * time.Minute)
+}
+
+// seedFullRun settles every step and delivers the final event, leaving the
+// step inside its settle window.
+func seedFullRun(m *wizard.Model, _ *State) {
+	s, ok := m.CurrentStep().(*StreamStep)
+	if !ok {
+		return
+	}
+	base := time.Date(2026, 9, 25, 9, 0, 0, 0, time.UTC)
+	cur := base
+	s.now = func() time.Time { return cur }
+	s.started = base
+	s.buildRows()
+
+	for _, meta := range s.st.Plan {
+		s.applyEvent(&Event{StepID: meta.ID})
+		cur = cur.Add(20 * time.Second)
+		s.applyEvent(&Event{StepID: meta.ID, Done: true, Took: 20 * time.Second})
+	}
+	s.Update(streamEventMsg{ev: Event{Final: true}})
+}
+
 func deployScenarios() []deployScenario {
 	return []deployScenario{
 		{
@@ -75,14 +118,53 @@ func deployScenarios() []deployScenario {
 			seed:  seedMidRun,
 		},
 		{
-			// A pinned mid-animation frame: the running row's glyph is a pure
+			// A pinned mid-animation frame: the running row went quiet 35s
+			// ago, so its glyph pulses on the slow frame cadence — a pure
 			// function of the shared clock's counter, never wall time.
-			name:  "stream_frame5",
+			name:  "stream_frame16",
 			id:    StepIDStream,
 			build: streamState,
 			seed: func(m *wizard.Model, st *State) {
 				seedMidRun(m, st)
-				m.Update(wizard.FrameMsg{Frame: 5})
+				m.Update(wizard.FrameMsg{Frame: 16})
+			},
+		},
+		{
+			// A run with persisted history: the bar's segments follow the
+			// weight table, the ETA is speaking, and pending phases carry
+			// their schedule.
+			name: "stream_history",
+			id:   StepIDStream,
+			build: func() *State {
+				st := streamState()
+				st.History = seededHistory()
+				return st
+			},
+			seed: seedMidRun,
+		},
+		{
+			// The stall detector: two minutes of silence during the
+			// bootstrap wait freezes the running row to the amber marker
+			// with its honest last-output reading.
+			name: "stream_stalled",
+			id:   StepIDStream,
+			build: func() *State {
+				st := streamState()
+				st.History = seededHistory()
+				return st
+			},
+			seed: seedStalledRun,
+		},
+		{
+			// A pinned settle frame: the final event landed, the bar is
+			// two frames into its critically-damped ease from the 96% cap
+			// to 100% — frame-counter-driven, never wall time.
+			name:  "stream_settle_frame2",
+			id:    StepIDStream,
+			build: streamState,
+			seed: func(m *wizard.Model, st *State) {
+				seedFullRun(m, st)
+				m.Update(wizard.FrameMsg{Frame: 2})
 			},
 		},
 		{
