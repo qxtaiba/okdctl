@@ -10,19 +10,19 @@
   │    ╭──────────────────────────────────────╮                                                  │  
   │    │ 20480                                │                                                  │  
   │    ╰──────────────────────────────────────╯                                                  │  
-  │    per-node memory — okd minimum: 8192 mb, current: 20480, 0 keeps current                   │  
+  │    per-node memory — okd minimum: 8192 mb, current: 20480                                    │  
+  │    0 keeps current                                                                           │  
   │                                                                                              │  
   │    vcpus                                                                                     │  
   │    ╭──────────────────────────────────────╮                                                  │  
   │    │ 0                                    │                                                  │  
   │    ╰──────────────────────────────────────╯                                                  │  
+  │    0 keeps current                                                                           │  
   │                                                                                              │  
   │    os disk (gb)                                                                              │  
   │    ╭──────────────────────────────────────╮                                                  │  
   │    │ 0                                    │                                                  │  
   │    ╰──────────────────────────────────────╯                                                  │  
-  │                                                                                              │  
-  │    ✓ disruption                                                                              │  
   │                                                                                              │  
   │─────────────────────────── ↑ ↓  scroll down for more ─────────────────────────── ▸ mycluster │  
   │  ↑↓/tab navigate • ← → change value • enter continue • esc back … • ctrl+c quit • ? help     │  

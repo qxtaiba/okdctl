@@ -145,9 +145,9 @@ func TestHubEmptyFlowSurfacesAnErrorInsteadOfWedging(t *testing.T) {
 	selectVerb(t, s, HubVerbManageNodes)
 	_, cmd := s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
-	failed, ok := cmd().(hubFlowFailedMsg)
+	failed, ok := resolveCmd(t, cmd).(hubFlowFailedMsg)
 	if !ok {
-		t.Fatalf("a provider returning no screens produced %T, want hubFlowFailedMsg", cmd())
+		t.Fatalf("a provider returning no screens produced %T, want hubFlowFailedMsg", resolveCmd(t, cmd))
 	}
 	s.Update(failed)
 	if s.opening != "" {

@@ -3,10 +3,10 @@
   │ O K D C T L                                                              │  
   │ operation parameters            op · target · params · plan · run · done │  
   │──────────────────────────────────────────────────────────────────────────│  
-  │    drain timeout                                                         │  
   │    ╭──────────────────────────────────────╮                              │  
   │    │ 10m                                  │                              │  
   │    ╰──────────────────────────────────────╯                              │  
+  │    ignored — skip-drain selected                                         │  
   │                                                                          │  
   │    force storage                                                         │  
   │    ╭────────────────╮                                                    │  

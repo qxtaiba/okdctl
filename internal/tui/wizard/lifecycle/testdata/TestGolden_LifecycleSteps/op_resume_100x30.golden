@@ -4,7 +4,6 @@
   │ choose an operation                                 op · target · params · plan · run · done │  
   │──────────────────────────────────────────────────────────────────────────────────────────────│  
   │                    cluster lifecycle                                                         │  
-  │                                                                                              │  
   │                    manage nodes on cluster "homelab"                                         │  
   │                                                                                              │  
   │                    ⚠ interrupted resize of homelab-master0 — step: power-                    │  
@@ -23,6 +22,7 @@
   │                      server, join and wait ready                                             │  
   │                                                                                              │  
   │                    ○ remove worker                                                           │  
+  │                      cordon, drain, destroy the vm, delete the node                          │  
   │                                                                                              │  
   │──────────────────────────── ↑ ↓  scroll down for more ──────────────────────────── ▸ homelab │  
   │  ↑↓ select • enter confirm • pgup/pgdn scroll • ctrl+c quit • ? help                         │  

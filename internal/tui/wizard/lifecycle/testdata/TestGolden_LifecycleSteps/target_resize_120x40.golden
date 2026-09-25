@@ -8,7 +8,7 @@
   │    │                                                                                                         │      
   │  ○ workers — all 3 worker nodes                                                                              │      
   │    │ rolled one at a time; no etcd gate                                                                      │      
-  │    ┌────────────────────                                                                                     │      
+  │    ┌──────────────────────────────────┐                                                                      │      
   │    │   NODE             ROLE    READY                                                                        │      
   │    │ ● homelab-master0  master  ✓ ready                                                                      │      
   │    │   │                                                                                                     │      
@@ -21,7 +21,7 @@
   │    │ ○ homelab-worker1  worker  ✓ ready                                                                      │      
   │    │   │                                                                                                     │      
   │    │ ○ homelab-worker2  worker  ✓ ready                                                                      │      
-  │    └────────────────────                                                                                     │      
+  │    └──────────────────────────────────┘                                                                      │      
   │                                                                                                              │      
   │                                                                                                              │      
   │                                                                                                              │      

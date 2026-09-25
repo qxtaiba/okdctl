@@ -103,7 +103,11 @@ func (s *OpStep) View(width, height int) string {
 	titleStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true)
 	subtitleStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate400).Italic(true)
 
-	content := titleStyle.Render("cluster lifecycle") + "\n\n"
+	// Title and subtitle sit tight against each other (no blank row) — they
+	// read as one header block, and the row it reclaims is what keeps the
+	// 3-option case (no resume banner) fitting an 80x24 terminal without
+	// needing to scroll at all.
+	content := titleStyle.Render("cluster lifecycle") + "\n"
 	content += subtitleStyle.Render(fmt.Sprintf("manage nodes on cluster %q", s.st.Cfg.Cluster.Name)) + "\n\n"
 
 	if s.st.Marker != nil {

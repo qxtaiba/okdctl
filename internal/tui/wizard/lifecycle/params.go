@@ -30,6 +30,18 @@ const (
 	defaultDrainTimeout = "10m"
 	// okdMinMemoryMB mirrors the resources step's OKD minimum for node memory.
 	okdMinMemoryMB = 8192
+
+	// keepsCurrentNote is a resize sizing field's always-visible reminder
+	// that 0 means "leave this dimension alone" rather than "set it to
+	// zero" — rendered via InputField.Note so it stays on screen whether or
+	// not the field is focused (the fuller help text with the actual
+	// current value is focus-only).
+	keepsCurrentNote = "0 keeps current"
+
+	// timeoutIgnoredNote explains why the drain-timeout field reads
+	// disabled once skip-drain is selected: the value is collected but
+	// never consulted, since skip-drain never drains.
+	timeoutIgnoredNote = "ignored — skip-drain selected"
 )
 
 // ParamsStep collects the per-op parameters: memory/cpu and drain mode for
@@ -112,14 +124,17 @@ func (s *ParamsStep) buildForm() {
 			current = s.st.Cfg.Topology.ControlPlane
 		}
 		s.memField = components.NewInputField("memory (mb)", strconv.Itoa(current.MemoryMB))
-		s.memField.Help = fmt.Sprintf("per-node memory — okd minimum: %d mb, current: %d, 0 keeps current", okdMinMemoryMB, current.MemoryMB)
+		s.memField.Help = fmt.Sprintf("per-node memory — okd minimum: %d mb, current: %d", okdMinMemoryMB, current.MemoryMB)
+		s.memField.Note = tui.MutedStyle.Render(keepsCurrentNote)
 		s.memField.Validator = validateMemoryMB
 		s.cpuField = components.NewInputField("vcpus", strconv.Itoa(current.CPU))
-		s.cpuField.Help = fmt.Sprintf("per-node cpu cores — current: %d, 0 keeps current", current.CPU)
+		s.cpuField.Help = fmt.Sprintf("per-node cpu cores — current: %d", current.CPU)
+		s.cpuField.Note = tui.MutedStyle.Render(keepsCurrentNote)
 		s.cpuField.SetValue("0")
 		s.cpuField.Validator = validateNonNegativeInt
 		s.diskField = components.NewInputField("os disk (gb)", strconv.Itoa(current.DiskGB))
-		s.diskField.Help = fmt.Sprintf("per-node os disk — current: %d, grow-only, 0 keeps current; disk-only resizes are live (no power-cycle)", current.DiskGB)
+		s.diskField.Help = fmt.Sprintf("per-node os disk — current: %d, grow-only; disk-only resizes are live (no power-cycle)", current.DiskGB)
+		s.diskField.Note = tui.MutedStyle.Render(keepsCurrentNote)
 		s.diskField.SetValue("0")
 		s.diskField.Validator = validateNonNegativeInt
 		sections = append(sections, wizard.FormSection{
@@ -143,6 +158,23 @@ func (s *ParamsStep) buildDisruptionFields() {
 	s.timeoutField.Help = "per-node drain limit, a duration like 10m or 1h"
 	s.timeoutField.SetValue(defaultDrainTimeout)
 	s.timeoutField.Validator = validateDuration
+}
+
+// syncTimeoutFieldDisabled dims the drain-timeout field and explains why
+// once skip-drain is selected — Tesler's law: the operator shouldn't have
+// to submit the form to learn an edit here was silently ignored. Re-run on
+// every View so a live drain-mode change (no rebuild) toggles it back.
+func (s *ParamsStep) syncTimeoutFieldDisabled() {
+	if s.timeoutField == nil || s.drainModeField == nil {
+		return
+	}
+	skipping := s.drainModeField.Value() == drainModeSkip
+	s.timeoutField.Disabled = skipping
+	if skipping {
+		s.timeoutField.Note = tui.MutedStyle.Render(timeoutIgnoredNote)
+	} else {
+		s.timeoutField.Note = ""
+	}
 }
 
 func (s *ParamsStep) resizeRole() nodetypes.NodeRole {
@@ -234,6 +266,7 @@ func (s *ParamsStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 func (s *ParamsStep) View(width, height int) string {
 	s.SetSize(width, height)
 	s.ensureForm()
+	s.syncTimeoutFieldDisabled()
 	out := s.inner.View(width)
 	if s.drainModeField != nil && s.drainModeField.Value() == drainModeSkip {
 		warn := lipgloss.NewStyle().Foreground(tui.ColorWarning).PaddingLeft(2)

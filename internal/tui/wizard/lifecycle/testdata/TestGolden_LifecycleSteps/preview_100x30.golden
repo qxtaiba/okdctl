@@ -24,7 +24,7 @@
   │  ✓ plan gate passed — the safety gate allows exactly the listed changes                      │  
   │                                                                                              │  
   │                                                                                              │  
-  │───────────────────────────────────────────────────────────────────────────────── ▸ mycluster │  
+  │─────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
   │  ● execute resize   ○ back to parameters   ○ exit without changes      ctrl+c quit • ? help  │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                     

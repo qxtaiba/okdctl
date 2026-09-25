@@ -149,7 +149,7 @@ func (f *MultiSelectField) View() string {
 
 	outer := f.width
 	content := f.chipsContent(max(outer-4, 1))
-	box := fieldBox(content, outer, f.focused, false)
+	box := fieldBox(content, outer, f.focused, false, false)
 
 	out := label + "\n" + box
 	if f.focused && f.Help != "" {

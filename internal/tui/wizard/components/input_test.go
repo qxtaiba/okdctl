@@ -181,6 +181,76 @@ func TestInputField_IsDefaultRendersTag(t *testing.T) {
 	}
 }
 
+func TestInputField_PlaceholderStyleDiffersFromDefaultValueStyle(t *testing.T) {
+	placeholderField := NewInputField("repository", "ssh://git@example.com/org/repo.git")
+	placeholderField.SetWidth(60)
+	placeholderRow := strings.Split(placeholderField.View(), "\n")[2]
+
+	defaultField := NewInputField("branch", "")
+	defaultField.SetWidth(60)
+	defaultField.SetDefault("main")
+	defaultRow := strings.Split(defaultField.View(), "\n")[2]
+
+	// Un-stripped: the placeholder's hint text renders italic (a standalone
+	// SGR 3 parameter — "\x1b[3;" preceding a combined code, or a lone
+	// "\x1b[3m") on top of its own dimmer color, while an unmodified
+	// default's text carries no italic — the two must never collapse into
+	// the same look, or an empty box reads as already-filled until a
+	// submit-time validation error. (Checking for "\x1b[3" alone would
+	// false-positive on the unrelated 256/24-bit color codes "38"/"3" + a
+	// digit that both rows also carry.)
+	hasItalic := func(row string) bool {
+		return strings.Contains(row, "\x1b[3;") || strings.Contains(row, "\x1b[3m")
+	}
+	if !hasItalic(placeholderRow) {
+		t.Fatalf("placeholder row has no italic SGR code: %q", placeholderRow)
+	}
+	if hasItalic(defaultRow) {
+		t.Fatalf("default-value row unexpectedly carries an italic SGR code: %q", defaultRow)
+	}
+
+	// Stripped, the two must still read as clearly different: the
+	// placeholder shows its hint text, the default shows its real value
+	// plus the " default" tag.
+	strippedPlaceholder := tuitest.StripANSI(placeholderField.View())
+	strippedDefault := tuitest.StripANSI(defaultField.View())
+	if !strings.Contains(strippedPlaceholder, "ssh://git@example.com/org/repo.git") {
+		t.Fatalf("placeholder view lost its hint text: %q", strippedPlaceholder)
+	}
+	if !strings.Contains(strippedDefault, "default") {
+		t.Fatalf("default view lost its \" default\" tag: %q", strippedDefault)
+	}
+}
+
+func TestInputField_DisabledDimsBorderBeyondUnfocused(t *testing.T) {
+	enabled := NewInputField("drain timeout", "10m")
+	enabled.SetWidth(60)
+	enabled.SetValue("10m")
+
+	disabled := NewInputField("drain timeout", "10m")
+	disabled.SetWidth(60)
+	disabled.SetValue("10m")
+	disabled.Disabled = true
+
+	enabledRows := strings.Split(enabled.View(), "\n")
+	disabledRows := strings.Split(disabled.View(), "\n")
+
+	// The border row must differ (a dimmer color) from the ordinary
+	// unfocused state, or a disabled field looks identical to any other
+	// blurred field — the whole point is a visibly different affordance.
+	if enabledRows[1] == disabledRows[1] {
+		t.Fatalf("disabled top-border row is identical to an ordinary unfocused field: %q", disabledRows[1])
+	}
+	focused := NewInputField("drain timeout", "10m")
+	focused.SetWidth(60)
+	focused.SetValue("10m")
+	_ = focused.Focus()
+	focusedRows := strings.Split(focused.View(), "\n")
+	if disabledRows[1] == focusedRows[1] {
+		t.Fatalf("disabled border must never render the same as a focused border: %q", disabledRows[1])
+	}
+}
+
 func TestInputField_SavedPositionSurvivesRedundantBlur(t *testing.T) {
 	a := NewInputField("a", "")
 	b := NewInputField("b", "")

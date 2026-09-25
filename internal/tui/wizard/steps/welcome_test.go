@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -195,9 +196,9 @@ func TestHubManageVerbSwapsInItsFlow(t *testing.T) {
 		t.Errorf("opening = %q, want the verb being opened", s.opening)
 	}
 
-	swap, ok := cmd().(wizard.SwapFlowMsg)
+	swap, ok := resolveCmd(t, cmd).(wizard.SwapFlowMsg)
 	if !ok {
-		t.Fatalf("command produced %T, want wizard.SwapFlowMsg", cmd())
+		t.Fatalf("command produced %T, want wizard.SwapFlowMsg", resolveCmd(t, cmd))
 	}
 	if calls != 1 {
 		t.Errorf("flow built %d times, want 1", calls)
@@ -217,9 +218,9 @@ func TestHubSurfacesAFlowThatCannotBeBuilt(t *testing.T) {
 	selectVerb(t, s, HubVerbManageNodes)
 	_, cmd := s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
-	failed, ok := cmd().(hubFlowFailedMsg)
+	failed, ok := resolveCmd(t, cmd).(hubFlowFailedMsg)
 	if !ok {
-		t.Fatalf("command produced %T, want hubFlowFailedMsg", cmd())
+		t.Fatalf("command produced %T, want hubFlowFailedMsg", resolveCmd(t, cmd))
 	}
 
 	_, errCmd := s.Update(failed)
@@ -232,6 +233,58 @@ func TestHubSurfacesAFlowThatCannotBeBuilt(t *testing.T) {
 	}
 	if !strings.Contains(setErr.Error.Error(), "no proxmox credentials") {
 		t.Errorf("surfaced error = %v, want the provider's", setErr.Error)
+	}
+}
+
+// TestHubOpeningNoticeAnimatesASpinner guards NEW(T7): the "opening …"
+// notice carries a live spinner (mirroring NodePlacementStep's discovery
+// spinner) rather than sitting static — confirm() must arm the tick, View
+// must render the glyph, and Update must keep re-arming it only while the
+// notice is still up.
+func TestHubOpeningNoticeAnimatesASpinner(t *testing.T) {
+	s := NewWelcomeStep()
+	s.SetConfigExists(true)
+	s.SetFlows(HubFlows{ManageNodes: func() ([]wizard.WizardStep, wizard.FlowChrome, error) {
+		return []wizard.WizardStep{NewStatusStep(nil)}, wizard.FlowChrome{}, nil
+	}})
+	selectVerb(t, s, HubVerbManageNodes)
+
+	_, cmd := s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("confirming manage nodes produced no command")
+	}
+	before := s.View(70, 14)
+	if before == "" || !strings.Contains(before, "opening manage nodes") {
+		t.Fatalf("View() before any tick = %q, want the opening notice present", before)
+	}
+
+	// Feed every tick message the initial batch produced (build cmd plus the
+	// spinner's own tick) back through Update, the way the real run loop
+	// would — the spinner frame must advance.
+	batch, ok := cmd().(tea.BatchMsg)
+	if !ok {
+		t.Fatalf("confirm's command produced %T, want a tea.BatchMsg batching the build with the spinner tick", cmd())
+	}
+	sawTick := false
+	for _, c := range batch {
+		msg := c()
+		if _, isTick := msg.(spinner.TickMsg); isTick {
+			sawTick = true
+			_, tickCmd := s.Update(msg)
+			if tickCmd == nil {
+				t.Error("Update(spinner.TickMsg) while opening produced no re-arming command")
+			}
+		}
+	}
+	if !sawTick {
+		t.Fatal("confirm's batch never produced a spinner.TickMsg")
+	}
+
+	// Once the notice clears (flow opened or failed), a stray tick must not
+	// re-arm another one — the spinner is done animating.
+	s.opening = ""
+	if _, tickCmd := s.Update(spinner.TickMsg{}); tickCmd != nil {
+		t.Error("Update(spinner.TickMsg) after opening cleared re-armed another tick")
 	}
 }
 

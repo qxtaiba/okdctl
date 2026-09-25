@@ -15,6 +15,12 @@ import (
 const (
 	valYes = "yes"
 	valNo  = "no"
+
+	// secretstore provider values, shared by the field's Default/Options and
+	// each provider section's Visible gate below.
+	providerOnepassword = "onepassword"
+	providerVault       = "vault"
+	providerBitwarden   = "bitwarden"
 )
 
 func addonEnabled(name string) wizard.ConfigGetter {
@@ -144,10 +150,10 @@ var AddonsStepDefinition = wizard.StepDefinition{
 				{
 					Key:       "secretstore_provider",
 					Label:     "provider",
-					Default:   "onepassword",
+					Default:   providerOnepassword,
 					Help:      "eso backend: onepassword, vault, bitwarden",
 					Type:      wizard.FieldTypeSelect,
-					Options:   []string{"onepassword", "vault", "bitwarden"},
+					Options:   []string{providerOnepassword, providerVault, providerBitwarden},
 					ConfigSet: setAddonSetting("secretstore", secretstore.SettingProvider),
 					ConfigGet: addonSetting("secretstore", secretstore.SettingProvider),
 				},
@@ -164,6 +170,9 @@ var AddonsStepDefinition = wizard.StepDefinition{
 		{
 			Title: "secret store (onepassword)",
 			Note:  "requires: sops-encrypted 1password-credentials.json and 1password-token.txt + age key on bastion",
+			Visible: func(values map[string]string) bool {
+				return values["secretstore_provider"] == providerOnepassword
+			},
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "secretstore_op_connect_host",
@@ -188,6 +197,9 @@ var AddonsStepDefinition = wizard.StepDefinition{
 		{
 			Title: "secret store (vault)",
 			Note:  "requires: vault-token.txt in secrets directory (plaintext or sops-encrypted)",
+			Visible: func(values map[string]string) bool {
+				return values["secretstore_provider"] == providerVault
+			},
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "secretstore_vault_server",
@@ -219,6 +231,9 @@ var AddonsStepDefinition = wizard.StepDefinition{
 		{
 			Title: "secret store (bitwarden)",
 			Note:  "requires: bitwarden-token.txt in secrets directory (plaintext or sops-encrypted)",
+			Visible: func(values map[string]string) bool {
+				return values["secretstore_provider"] == providerBitwarden
+			},
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "secretstore_bw_org_id",

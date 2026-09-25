@@ -91,9 +91,18 @@ func NodeOpCompleteWidth(plan *node.OpPlan, elapsed time.Duration, width int) st
 
 	if steps := NodeOpNextSteps(plan); len(steps) > 0 {
 		sb.Section("next steps")
-		avail := width - 8
+		// avail is the box's real inner content width (tui.BoxInnerWidth,
+		// the same figure BoxedSectionCompact derives below) less the
+		// 4-column margin every line here carries, matching the indent
+		// tableIndent uses for other Section-body content. A narrow
+		// terminal can still make an authored next-step line too long for
+		// one row; wrap it rather than truncate, so a follow-up instruction
+		// (e.g. "verify with 'okdctl node list'") is never cut mid-word.
+		avail := tui.BoxInnerWidth(width) - 4
 		for _, s := range steps {
-			sb.WriteString("    " + tui.Truncate(s, avail) + "\n")
+			for _, line := range tui.WrapLines(s, avail) {
+				sb.WriteString("    " + line + "\n")
+			}
 		}
 		sb.Newline()
 	}

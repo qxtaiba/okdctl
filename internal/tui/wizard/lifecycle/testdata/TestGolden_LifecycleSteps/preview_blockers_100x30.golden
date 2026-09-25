@@ -24,7 +24,7 @@
   │  ┃ irreversible                                                                              │  
   │  ┃ destroys the listed VM(s) and their data disk; removed data cannot be recovered           │  
   │                                                                                              │  
-  │───────────────────────────────────────────────────────────────────────────────── ▸ mycluster │  
+  │─────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
   │  ● execute removal   ○ back to parameters   ○ exit without changes     ctrl+c quit • ? help  │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                     

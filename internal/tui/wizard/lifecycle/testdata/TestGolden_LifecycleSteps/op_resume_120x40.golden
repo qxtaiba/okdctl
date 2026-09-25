@@ -8,7 +8,6 @@
   │                                                                                                              │      
   │                                                                                                              │      
   │                            cluster lifecycle                                                                 │      
-  │                                                                                                              │      
   │                            manage nodes on cluster "homelab"                                                 │      
   │                                                                                                              │      
   │                            ⚠ interrupted resize of homelab-master0 — step: power-                            │      
@@ -29,6 +28,7 @@
   │                            ○ remove worker                                                                   │      
   │                              cordon, drain, destroy the vm, delete the node                                  │      
   │                              (highest-numbered worker only)                                                  │      
+  │                                                                                                              │      
   │                                                                                                              │      
   │                                                                                                              │      
   │                                                                                                              │      

@@ -134,34 +134,60 @@ func (s *Selector) renderDropdownRegion(start, end int, scrollStyle, borderStyle
 	itemsAbove := s.dropdownScrollOffset
 	itemsBelow := end - visibleEnd
 
-	topBorder := "  ┌"
-	if itemsAbove > 0 {
-		topBorder += scrollStyle.Render(" ↑ " + strconv.Itoa(itemsAbove) + " more ")
-	}
-	topBorder += strings.Repeat("─", dropdownBorderWidth)
-	lines = append(lines, borderStyle.Render(topBorder))
-
 	dropdownPrefix := borderStyle.Render("  │ ")
-	if s.DropdownHeader != "" {
-		lines = append(lines, dropdownPrefix+"  "+s.DropdownHeader)
-	}
 
+	// Render the body (header + visible rows) before either border line, so
+	// the border can close on the right at the body's own widest row
+	// instead of a fixed dash count that has no relation to the table it
+	// brackets — dropdownBorderWidth (a 20-column stub) is only the floor
+	// for a short/empty body, not a target.
+	var body []string
+	if s.DropdownHeader != "" {
+		body = append(body, dropdownPrefix+"  "+s.DropdownHeader)
+	}
 	for i := visibleStart; i <= visibleEnd; i++ {
 		opt := &s.options[i]
 		isSelected := i == s.selected
 		isLast := i == visibleEnd
 		optView := s.renderOptionWithPrefix(opt, isSelected, !isLast, dropdownPrefix)
 		if isSelected {
-			selectedRow = len(lines)
+			selectedRow = len(body)
 		}
-		lines = append(lines, optView)
+		body = append(body, optView)
 	}
 
+	bodyWidth := 0
+	for _, l := range body {
+		if w := lipgloss.Width(l); w > bodyWidth {
+			bodyWidth = w
+		}
+	}
+	// "  │ " (the dropdownPrefix) costs 4 columns of bodyWidth that the
+	// border's own "  ┌"/"  └" corner already accounts for.
+	dashes := max(bodyWidth-4, dropdownBorderWidth)
+
+	topBorder := "  ┌"
+	if itemsAbove > 0 {
+		hint := " ↑ " + strconv.Itoa(itemsAbove) + " more "
+		topBorder += scrollStyle.Render(hint)
+		dashes = max(dashes-lipgloss.Width(hint), 1)
+	}
+	topBorder += strings.Repeat("─", dashes) + "┐"
+	lines = append(lines, borderStyle.Render(topBorder))
+
+	lines = append(lines, body...)
+	if selectedRow >= 0 {
+		selectedRow++ // shift past the topBorder line just prepended
+	}
+
+	bottomDashes := max(bodyWidth-4, dropdownBorderWidth)
 	bottomBorder := "  └"
 	if itemsBelow > 0 {
-		bottomBorder += scrollStyle.Render(" ↓ " + strconv.Itoa(itemsBelow) + " more ")
+		hint := " ↓ " + strconv.Itoa(itemsBelow) + " more "
+		bottomBorder += scrollStyle.Render(hint)
+		bottomDashes = max(bottomDashes-lipgloss.Width(hint), 1)
 	}
-	bottomBorder += strings.Repeat("─", dropdownBorderWidth)
+	bottomBorder += strings.Repeat("─", bottomDashes) + "┘"
 	lines = append(lines, borderStyle.Render(bottomBorder))
 
 	return lines, selectedRow

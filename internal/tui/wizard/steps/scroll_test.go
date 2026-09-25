@@ -14,11 +14,26 @@ import (
 // wizard walks, rendering each label the way the field itself does: text,
 // password, and select fields show their authored-case label alone,
 // key-value fields show their label spliced into the card's top border, and
-// multi-select fields still fold their help into the label row.
+// multi-select fields still fold their help into the label row. Sections
+// hidden for the default field values (e.g. the vault/bitwarden
+// secret-store sections, gated on the "onepassword" default provider) are
+// skipped, matching the tab order a freshly opened step actually walks.
 func addonFieldLabels() []string {
+	values := map[string]string{}
+	for si := range AddonsStepDefinition.Sections {
+		for fi := range AddonsStepDefinition.Sections[si].Fields {
+			def := &AddonsStepDefinition.Sections[si].Fields[fi]
+			values[def.Key] = def.Default
+		}
+	}
+
 	var labels []string
 	for si := range AddonsStepDefinition.Sections {
-		fields := AddonsStepDefinition.Sections[si].Fields
+		section := &AddonsStepDefinition.Sections[si]
+		if section.Visible != nil && !section.Visible(values) {
+			continue
+		}
+		fields := section.Fields
 		for fi := range fields {
 			def := &fields[fi]
 			switch def.Type {
@@ -68,7 +83,7 @@ func TestAddonsStep_FocusedFieldStaysOnScreen(t *testing.T) {
 	_ = tuitest.RenderAt(t, m, 80, 24)
 
 	labels := addonFieldLabels()
-	for i := range 12 {
+	for i := range len(labels) - 1 {
 		m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 		m.Update(wizard.FocusChangedMsg{})
 

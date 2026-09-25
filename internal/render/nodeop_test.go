@@ -257,6 +257,35 @@ func TestShortHost(t *testing.T) {
 	}
 }
 
+// TestNodeOpCompleteWidthWrapsLongNextSteps guards a resize completion's
+// next-steps note at a narrow box width (the width an 80x24 terminal leaves
+// the wizard's done card): the note is long enough to overflow one line at
+// this width, and must wrap onto a continuation line rather than truncate
+// mid-word with an ellipsis — a truncated "verify" reads as "ver…" and loses
+// the actual follow-up instruction.
+func TestNodeOpCompleteWidthWrapsLongNextSteps(t *testing.T) {
+	p := resizePlan()
+	got := NodeOpCompleteWidth(&p, 90*time.Second, 70)
+	stripped := tuitest.StripANSI(got)
+
+	if strings.Contains(stripped, "…") {
+		t.Fatalf("next-steps text was mid-word truncated with an ellipsis, want a wrapped continuation line:\n%s", stripped)
+	}
+	// The whole word must survive somewhere in the box, whichever line word-wrap
+	// lands it on — unlike the old truncate-to-"ver…", nothing is lost.
+	if !strings.Contains(stripped, "verify") {
+		t.Fatalf("next-steps text lost the word \"verify\" to truncation:\n%s", stripped)
+	}
+	if !strings.Contains(stripped, "with") {
+		t.Fatalf("next-steps text lost the word \"with\" to truncation:\n%s", stripped)
+	}
+	for _, line := range strings.Split(got, "\n") {
+		if w := lipgloss.Width(line); w > 70 {
+			t.Errorf("box line %d cols wide, want <= 70: %q", w, line)
+		}
+	}
+}
+
 func TestNodeOpCompleteWidthShrinksBox(t *testing.T) {
 	p := resizePlan()
 	const viewport = 70

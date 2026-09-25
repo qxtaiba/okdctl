@@ -356,7 +356,13 @@ func (s *ExecStep) View(width, height int) string {
 		lines = s.appendNode(lines, i, col)
 	}
 
-	footnote := "marker okd-install/" + node.OpMarkerFileName + " · ctrl+c cancels after the current gate"
+	// The cancel clause only applies while a gate could still run — once the
+	// op has finished there is nothing left to cancel, and repeating the
+	// hint reads as stale advice on an otherwise-done screen.
+	footnote := "marker okd-install/" + node.OpMarkerFileName
+	if !s.finished {
+		footnote += " · ctrl+c cancels after the current gate"
+	}
 	lines = append(lines, "", s.dimStyle.Render(lipgloss.Wrap(footnote, col, "")))
 
 	content := strings.Join(lines, "\n")
@@ -480,9 +486,12 @@ func fmtDur(d time.Duration) string {
 	return d.Truncate(time.Second).String()
 }
 
-// ShortHelp explains the constrained keys: no esc, guarded ctrl+c.
+// ShortHelp explains the constrained keys: no esc, guarded ctrl+c — the
+// label matches the deploy stream screen's own cancel hint verbatim
+// (StreamStep.ShortHelp), so the two full-screen exec surfaces read as one
+// system rather than two different verbs for the same gesture.
 func (s *ExecStep) ShortHelp() []wizard.KeyBinding {
 	return []wizard.KeyBinding{
-		{Key: wizard.HelpCtrlC, Help: "request graceful cancel (twice to force-quit)"},
+		{Key: wizard.HelpCtrlC, Help: "cancel (twice to force-quit)"},
 	}
 }

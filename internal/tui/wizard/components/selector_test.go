@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 )
@@ -43,6 +44,51 @@ func newSpanSelector() *Selector {
 		{ID: "4.20.0", Title: "  4.20.0", Description: "released: Jun 2026", InDropdown: true},
 		{ID: "minor:4.19", Title: "okd 4.19", Description: "stable"},
 	})
+}
+
+// TestSelector_DropdownBorderClosesOnTheRight guards E-L8(e): the
+// dropdown's top and bottom border must be a closed bracket — "┌...┐" and
+// "└...┘" — sized to the body's own widest row, not a fixed 20-column stub
+// with no closing corner at all (which read as a rendering bug: a box that
+// starts but never ends).
+func TestSelector_DropdownBorderClosesOnTheRight(t *testing.T) {
+	s := nItemDropdownSelector(3)
+	for i := range s.options {
+		// A row wide enough that the fixed 20-column stub would visibly fall
+		// short of it, proving the border now tracks real content width.
+		s.options[i].Title = fmt.Sprintf("a-much-longer-node-name-%d", i)
+	}
+	lines := strings.Split(tuitest.StripANSI(s.View()), "\n")
+
+	top, bottom := "", ""
+	for _, l := range lines {
+		trimmed := strings.TrimRight(l, " ")
+		switch {
+		case strings.HasPrefix(strings.TrimLeft(trimmed, " "), "┌"):
+			top = trimmed
+		case strings.HasPrefix(strings.TrimLeft(trimmed, " "), "└"):
+			bottom = trimmed
+		}
+	}
+	if top == "" || bottom == "" {
+		t.Fatalf("could not locate both border rows in view:\n%s", strings.Join(lines, "\n"))
+	}
+	if !strings.HasSuffix(top, "┐") {
+		t.Fatalf("top border never closes on the right: %q", top)
+	}
+	if !strings.HasSuffix(bottom, "┘") {
+		t.Fatalf("bottom border never closes on the right: %q", bottom)
+	}
+
+	widestRow := 0
+	for _, l := range lines {
+		if w := lipgloss.Width(l); w > widestRow {
+			widestRow = w
+		}
+	}
+	if got := lipgloss.Width(top); got < widestRow-4 {
+		t.Fatalf("top border is %d cols wide, want roughly as wide as the %d-col body it brackets", got, widestRow)
+	}
 }
 
 func TestSelector_SelectedSpanTopLevel(t *testing.T) {

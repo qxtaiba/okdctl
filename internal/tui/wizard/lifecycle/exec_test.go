@@ -175,6 +175,49 @@ func TestExecFocusedSpanTracksRunningRow(t *testing.T) {
 	})
 }
 
+// TestExecFootnoteDropsCancelHintOnceFinished guards E-L8(f): once the op
+// has finished there is nothing left to cancel, so repeating "ctrl+c
+// cancels after the current gate" reads as stale advice on an otherwise-done
+// screen — the footnote must still name the marker file, just not the
+// cancel clause.
+func TestExecFootnoteDropsCancelHintOnceFinished(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	cur := base
+	s := newSeededExecStep(threeMasterState(), &cur)
+
+	running := s.View(100, 40)
+	if !strings.Contains(running, "ctrl+c cancels after the current gate") {
+		t.Fatalf("running view must still show the cancel hint:\n%s", running)
+	}
+	if !strings.Contains(running, "marker okd-install/") {
+		t.Fatalf("running view lost the marker path:\n%s", running)
+	}
+
+	s.finished = true
+	finished := s.View(100, 40)
+	if strings.Contains(finished, "ctrl+c cancels after the current gate") {
+		t.Fatalf("finished view still shows the stale cancel hint:\n%s", finished)
+	}
+	if !strings.Contains(finished, "marker okd-install/") {
+		t.Fatalf("finished view lost the marker path:\n%s", finished)
+	}
+}
+
+// TestExecShortHelpMatchesStreamStepCancelLabel guards NEW(T8): the
+// lifecycle exec screen's cancel label must read identically to the deploy
+// stream screen's, so the same gesture reads as one system on both
+// full-screen exec surfaces.
+func TestExecShortHelpMatchesStreamStepCancelLabel(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	cur := base
+	s := newSeededExecStep(threeMasterState(), &cur)
+
+	bindings := s.ShortHelp()
+	if len(bindings) != 1 || bindings[0].Help != "cancel (twice to force-quit)" {
+		t.Fatalf("ShortHelp() = %+v, want a single \"cancel (twice to force-quit)\" binding", bindings)
+	}
+}
+
 func TestExecRowDurationsTruncateToSeconds(t *testing.T) {
 	if got := fmtDur(90*time.Second + 700*time.Millisecond); got != "1m30s" {
 		t.Errorf("fmtDur = %q, want 1m30s", got)

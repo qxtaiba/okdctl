@@ -59,7 +59,7 @@ func TestKeyValueField_EditModeJoinsTwoBoxes(t *testing.T) {
 
 	colW := f.cellWidth()
 	joined := lipgloss.JoinHorizontal(lipgloss.Top,
-		fieldBox("x", colW, true, false), "  ", fieldBox("y", colW, false, false))
+		fieldBox("x", colW, true, false, false), "  ", fieldBox("y", colW, false, false, false))
 	joinedWidth := lipgloss.Width(strings.Split(joined, "\n")[0])
 	if inner := f.width - 2; joinedWidth > inner {
 		t.Fatalf("joined edit row width %d exceeds card inner width %d", joinedWidth, inner)

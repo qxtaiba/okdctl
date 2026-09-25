@@ -18,7 +18,7 @@
   │  ┃ destroys the listed VM(s) and their data disk; removed data cannot    │  
   │  ┃ be recovered                                                          │  
   │                                                                          │  
-  │────────────────── ↑ ↓  scroll up for more ────────────────── ▸ mycluster │  
+  │─────────────────── ↑ ↓  scroll up for more ─────────────────── ▸ homelab │  
   │  ● execute removal   ○ back to parameters   ○ exit without changes    …  │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

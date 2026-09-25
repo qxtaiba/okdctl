@@ -35,6 +35,25 @@ func TestOpStepSelectsOperations(t *testing.T) {
 	}
 }
 
+// TestOpStepEntryScreenFitsWithoutScrollingAt80x24 guards E-L8(d): the
+// no-marker entry screen (three operations, no resume banner) is short
+// enough to fit an 80x24 terminal outright — it must never force the
+// operator to scroll to see "remove worker" just because a title/subtitle
+// pair carried a spare blank row.
+func TestOpStepEntryScreenFitsWithoutScrollingAt80x24(t *testing.T) {
+	st := &State{Cfg: config.DefaultConfig()}
+	m := wizard.NewFlowModel(NewSteps(st, Hooks{}), st.Cfg, Chrome())
+	frame := tuitest.RenderAt(t, m, 80, 24)
+	stripped := tuitest.StripANSI(frame)
+
+	if strings.Contains(stripped, "scroll") {
+		t.Fatalf("entry screen scrolls needlessly at 80x24:\n%s", stripped)
+	}
+	if !strings.Contains(stripped, "(highest-numbered worker only)") {
+		t.Fatalf("entry screen must show the full remove-worker description without scrolling:\n%s", stripped)
+	}
+}
+
 func TestOpStepMarkerAddsResumeOptionAndArmsAck(t *testing.T) {
 	st := &State{
 		Cfg:    config.DefaultConfig(),

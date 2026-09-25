@@ -55,6 +55,14 @@ type InputField struct {
 	Password    bool
 	Validator   func(string) error
 
+	// Disabled dims the label, box, and value to signal the field's current
+	// value has no effect right now (e.g. a drain timeout while skip-drain
+	// is selected) — a Tesler-law affordance so the operator doesn't have to
+	// submit the form to learn an edit was ignored. It does not block focus
+	// or editing: the value still round-trips normally if the condition
+	// that disabled it changes back.
+	Disabled bool
+
 	input      textinput.Model
 	focused    bool
 	width      int
@@ -72,7 +80,7 @@ func NewInputField(label, placeholder string) *InputField {
 	ti.Prompt = ""
 	ti.Placeholder = placeholder
 	ti.CharLimit = 256
-	ti.SetStyles(fieldInputStyles(false))
+	ti.SetStyles(fieldInputStyles(false, false))
 
 	return &InputField{
 		Label:       label,
@@ -83,23 +91,33 @@ func NewInputField(label, placeholder string) *InputField {
 }
 
 // fieldInputStyles builds the textinput color scheme shared by every
-// InputField: brand-purple cursor, dim placeholder, and — while isDefault —
-// Slate500 text so an unmodified default reads as dimmer than a typed value.
-func fieldInputStyles(isDefault bool) textinput.Styles {
+// InputField: brand-purple cursor, dim italic placeholder, and — while
+// isDefault — Slate500 text so an unmodified default reads as dimmer than a
+// typed value. Placeholder is italicized on top of its own dimmer Slate600
+// so an empty box's hint text never reads as an already-filled default at a
+// glance (NO_COLOR strips both the color and the italic, leaving the
+// " default" tag as the only disambiguator there — see SetDefault). disabled
+// wins over isDefault, dimming further to Slate600 — see InputField.Disabled.
+func fieldInputStyles(isDefault, disabled bool) textinput.Styles {
 	focusedText := lipgloss.NewStyle().Foreground(tui.ColorText)
 	blurredText := lipgloss.NewStyle().Foreground(tui.ColorSlate300)
-	if isDefault {
+	switch {
+	case disabled:
+		focusedText = lipgloss.NewStyle().Foreground(tui.ColorSlate600)
+		blurredText = lipgloss.NewStyle().Foreground(tui.ColorSlate600)
+	case isDefault:
 		focusedText = lipgloss.NewStyle().Foreground(tui.ColorSlate500)
 		blurredText = lipgloss.NewStyle().Foreground(tui.ColorSlate500)
 	}
+	placeholder := lipgloss.NewStyle().Foreground(tui.ColorSlate600).Italic(true)
 	return textinput.Styles{
 		Focused: textinput.StyleState{
 			Text:        focusedText,
-			Placeholder: lipgloss.NewStyle().Foreground(tui.ColorSlate600),
+			Placeholder: placeholder,
 		},
 		Blurred: textinput.StyleState{
 			Text:        blurredText,
-			Placeholder: lipgloss.NewStyle().Foreground(tui.ColorSlate600),
+			Placeholder: placeholder,
 		},
 		// Blink is off: bubbles' textinput only refreshes its cursor-cell
 		// glyph color on the placeholder/suggestion paths, so a blinking
@@ -317,14 +335,17 @@ func (f *InputField) View() string {
 	// Never render f.input.Value() directly when Password is true; rely on
 	// EchoMode, and scrub raw value on every text path below.
 	label := labelStyle.Render(f.Label)
+	if f.Disabled {
+		label = helpStyle.Render(f.Label)
+	}
 
-	f.input.SetStyles(fieldInputStyles(f.isDefault))
+	f.input.SetStyles(fieldInputStyles(f.isDefault, f.Disabled))
 	content := f.input.View()
 	if !f.focused && f.input.Value() == "" && f.Placeholder == "" {
 		content = tagStyle.Render("·")
 	}
 
-	box := fieldBox(content, f.boxOuterWidth(), f.focused, f.err != nil)
+	box := fieldBox(content, f.boxOuterWidth(), f.focused, f.err != nil, f.Disabled)
 	if f.isDefault {
 		box = lipgloss.JoinHorizontal(lipgloss.Center, box, " "+tagStyle.Render("default"))
 	}

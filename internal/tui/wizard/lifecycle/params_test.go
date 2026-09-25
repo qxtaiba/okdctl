@@ -7,6 +7,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
+	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 )
 
 func TestParamsStepResizeApplyAndValidation(t *testing.T) {
@@ -127,6 +128,53 @@ func TestParamsStepSkipDrainSelection(t *testing.T) {
 	}
 	if !strings.Contains(s.View(90, 40), "power-cycled without evacuating pods") {
 		t.Error("skip-drain must render its warning note")
+	}
+}
+
+// TestParamsStepKeepsCurrentNoteSurvivesBlur guards E-L8(a): "0 keeps
+// current" must stay legible on the vcpus/os-disk fields even when they are
+// not the focused field, or an operator glancing at "vcpus: 0" reads it as
+// "set to zero cores" instead of "leave it alone".
+func TestParamsStepKeepsCurrentNoteSurvivesBlur(t *testing.T) {
+	st := &State{Cfg: config.DefaultConfig(), Op: node.OpResize, Scope: node.ResizeScope{Role: nodetypes.RoleWorker}}
+	s := NewParamsStep(st)
+	_ = s.Init() // focuses memField; cpuField and diskField start blurred
+
+	view := tuitest.StripANSI(s.View(100, 60))
+	if got := strings.Count(view, "0 keeps current"); got != 3 {
+		t.Fatalf(`View() contains %d "0 keeps current" notes, want 3 (memory, vcpus, os disk) regardless of focus:%s%s`, got, "\n", view)
+	}
+}
+
+// TestParamsStepDrainTimeoutDisabledWhileSkipDrain guards E-L8(b): the
+// drain-timeout field must read as disabled (and say why) once skip-drain
+// is selected, and must return to normal the moment drain mode changes back
+// — Tesler's law, not a one-way flag baked in at form-build time.
+func TestParamsStepDrainTimeoutDisabledWhileSkipDrain(t *testing.T) {
+	st := &State{Cfg: config.DefaultConfig(), Op: node.OpRemove}
+	s := NewParamsStep(st)
+	_ = s.Init()
+
+	if s.timeoutField.Disabled {
+		t.Fatal("drain-timeout field starts disabled with the default drain mode selected")
+	}
+
+	s.drainModeField.SetValue(drainModeSkip)
+	_ = s.View(100, 40)
+	if !s.timeoutField.Disabled {
+		t.Fatal("drain-timeout field must be disabled once skip-drain is selected")
+	}
+	if view := tuitest.StripANSI(s.View(100, 40)); !strings.Contains(view, timeoutIgnoredNote) {
+		t.Fatalf("View() does not explain why drain timeout is disabled:\n%s", view)
+	}
+
+	s.drainModeField.SetValue(drainModeDefault)
+	_ = s.View(100, 40)
+	if s.timeoutField.Disabled {
+		t.Fatal("drain-timeout field must re-enable once drain mode is no longer skip")
+	}
+	if view := tuitest.StripANSI(s.View(100, 40)); strings.Contains(view, timeoutIgnoredNote) {
+		t.Fatalf("View() still explains a disabled state after re-enabling:\n%s", view)
 	}
 }
 

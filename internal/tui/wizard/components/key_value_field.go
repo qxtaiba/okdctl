@@ -325,8 +325,8 @@ func (f *KeyValueField) viewRow(i, colW int) string {
 
 	if f.editMode && isCursor {
 		focusedKey := f.col == 0
-		keyBox := fieldBox(r.keyInput.View(), colW, focusedKey, false)
-		valBox := fieldBox(r.valInput.View(), colW, !focusedKey, false)
+		keyBox := fieldBox(r.keyInput.View(), colW, focusedKey, false, false)
+		valBox := fieldBox(r.valInput.View(), colW, !focusedKey, false, false)
 		// JoinHorizontal zips the boxes' rows together; "+" concatenation
 		// would instead glue keyBox's last row to valBox's first row.
 		return lipgloss.JoinHorizontal(lipgloss.Top, keyBox, "  ", valBox)

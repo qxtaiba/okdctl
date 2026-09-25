@@ -16,6 +16,7 @@
   │    ╭──────────────────────────────────────╮                                                                  │      
   │    │ 10m                                  │                                                                  │      
   │    ╰──────────────────────────────────────╯                                                                  │      
+  │    ignored — skip-drain selected                                                                             │      
   │                                                                                                              │      
   │    force storage                                                                                             │      
   │    ╭────────────────╮                                                                                        │      
@@ -26,7 +27,6 @@
   │      they die with the vm and restart in place on the resized node.                                          │      
   │      use when a memory-saturated cluster cannot reschedule evictions.                                        │      
   │      the etcd and ceph health gates still run.                                                               │      
-  │                                                                                                              │      
   │                                                                                                              │      
   │                                                                                                              │      
   │                                                                                                              │      

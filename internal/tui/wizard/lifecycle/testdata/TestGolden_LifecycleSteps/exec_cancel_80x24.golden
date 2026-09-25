@@ -19,6 +19,6 @@
   │  marker okd-install/.okdctl-node-op.json · ctrl+c cancels after the      │  
   │                                                                          │  
   │───────────────── ↑ ↓  scroll down for more ───────────────── ▸ mycluster │  
-  │  ctrl+c request graceful cancel (twice to force-quit) • ? help           │  
+  │  pgup/pgdn scroll • ctrl+c cancel (twice to force-quit) • ? help         │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

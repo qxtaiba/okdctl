@@ -15,7 +15,7 @@
   │                             ▸ cluster status                             │  
   │                               destroy                                    │  
   │                                                                          │  
-  │                         opening cluster status…                          │  
+  │                        ⣾  opening cluster status…                        │  
   │                                                                          │  
   │                                                                          │  
   │───────────────────────────────────────────────── ▸ okd 4.20.1-okd-scos.7 │  

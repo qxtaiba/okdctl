@@ -4,7 +4,6 @@
   │ choose an operation             op · target · params · plan · run · done │  
   │──────────────────────────────────────────────────────────────────────────│  
   │           cluster lifecycle                                              │  
-  │                                                                          │  
   │           manage nodes on cluster "mycluster"                            │  
   │                                                                          │  
   │           ● resize nodes                                                 │  
@@ -17,8 +16,9 @@
   │                                                                          │  
   │           ○ remove worker                                                │  
   │             cordon, drain, destroy the vm, delete the node               │  
+  │             (highest-numbered worker only)                               │  
   │                                                                          │  
-  │───────────────── ↑ ↓  scroll down for more ───────────────── ▸ mycluster │  
-  │  ↑↓ select • enter confirm • pgup/pgdn scroll • ctrl+c quit • ? help     │  
+  │───────────────────────────────────────────────────────────── ▸ mycluster │  
+  │  ↑↓ select • enter confirm • ctrl+c quit • ? help                        │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

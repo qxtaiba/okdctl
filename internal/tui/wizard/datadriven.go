@@ -97,6 +97,7 @@ type SectionDefinition struct {
 	Note    string // e.g. prerequisites, shown below the title
 	Fields  []FieldDefinition
 	Warning func(values map[string]string) string // non-empty return renders a warning block under the section's fields
+	Visible func(values map[string]string) bool   // nil means always visible; false hides the section from render, navigation, and validation
 }
 
 // StepDefinition is the declarative description of a data-driven wizard step.
@@ -126,6 +127,7 @@ type FormSection struct {
 	Note    string // e.g. prerequisites, shown below the title
 	Group   *components.InputGroup
 	Warning func() string // non-empty return renders a warning block under the section's fields
+	Visible func() bool   // nil means always visible
 }
 
 func (s *FormSection) warningText() string {
@@ -133,6 +135,15 @@ func (s *FormSection) warningText() string {
 		return ""
 	}
 	return s.Warning()
+}
+
+// isVisible reports whether the section should render, receive focus, and
+// participate in validation; a nil Visible predicate means always visible.
+func (s *FormSection) isVisible() bool {
+	if s.Visible == nil {
+		return true
+	}
+	return s.Visible()
 }
 
 // isComplete reports whether every field in the section is non-empty and
@@ -219,19 +230,47 @@ func (f *MultiSectionForm) ConsumesTextInput() bool {
 	return ok && tc.ConsumesTextInput()
 }
 
-// Init focuses the first input group so the user can type immediately.
+// Init focuses the first visible input group so the user can type immediately.
 func (f *MultiSectionForm) Init() tea.Cmd {
-	if len(f.sections) > 0 && f.sections[0].Group != nil {
-		return f.sections[0].Group.Focus()
+	f.currentSection = f.firstVisible()
+	if f.currentSection >= 0 && f.sections[f.currentSection].Group != nil {
+		return f.sections[f.currentSection].Group.Focus()
 	}
 	return nil
 }
 
-// Focus resets navigation to the first section and focuses it.
+// firstVisible returns the index of the first visible section, or -1 if none.
+func (f *MultiSectionForm) firstVisible() int {
+	return f.nextVisible(-1)
+}
+
+// nextVisible returns the index of the first visible section after i, or -1
+// if none of the remaining sections are visible.
+func (f *MultiSectionForm) nextVisible(i int) int {
+	for j := i + 1; j < len(f.sections); j++ {
+		if f.sections[j].isVisible() {
+			return j
+		}
+	}
+	return -1
+}
+
+// prevVisible returns the index of the first visible section before i, or -1
+// if none of the preceding sections are visible.
+func (f *MultiSectionForm) prevVisible(i int) int {
+	for j := i - 1; j >= 0; j-- {
+		if f.sections[j].isVisible() {
+			return j
+		}
+	}
+	return -1
+}
+
+// Focus resets navigation to the first visible section and focuses it.
 func (f *MultiSectionForm) Focus() tea.Cmd {
-	f.currentSection = 0
-	if len(f.sections) > 0 && f.sections[0].Group != nil {
-		return f.sections[0].Group.Focus()
+	f.currentSection = f.firstVisible()
+	if f.currentSection >= 0 && f.sections[f.currentSection].Group != nil {
+		return f.sections[f.currentSection].Group.Focus()
 	}
 	return nil
 }
@@ -261,15 +300,15 @@ func (f *MultiSectionForm) Update(msg tea.Msg) (cmd tea.Cmd, enterPressed bool) 
 
 		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("tab", "down"))):
 			isLastField := group.FocusIndex() >= len(group.Fields())-1
-			isLastSection := f.currentSection >= len(f.sections)-1
+			next := f.nextVisible(f.currentSection)
 
-			if isLastField && isLastSection {
+			if isLastField && next == -1 {
 				return nil, false
 			}
 
 			if isLastField {
 				group.Blur()
-				f.currentSection++
+				f.currentSection = next
 				nextGroup := f.currentGroup()
 				if nextGroup == nil {
 					return focusChanged, false
@@ -284,15 +323,15 @@ func (f *MultiSectionForm) Update(msg tea.Msg) (cmd tea.Cmd, enterPressed bool) 
 
 		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("shift+tab", "up"))):
 			isFirstField := group.FocusIndex() == 0
-			isFirstSection := f.currentSection == 0
+			prev := f.prevVisible(f.currentSection)
 
-			if isFirstField && isFirstSection {
+			if isFirstField && prev == -1 {
 				return nil, false
 			}
 
 			if isFirstField {
 				group.Blur()
-				f.currentSection--
+				f.currentSection = prev
 				prevGroup := f.currentGroup()
 				if prevGroup == nil {
 					return focusChanged, false
@@ -330,14 +369,15 @@ func (f *MultiSectionForm) FocusedSpan() (LineSpan, bool) {
 	return spans[index], true
 }
 
-// Validate returns every error from every section's group, running Check
-// (via each field's Validate) across the whole form rather than stopping at
-// the first invalid section, so every invalid field's error is current for
-// View after a submission attempt.
+// Validate returns every error from every visible section's group, running
+// Check (via each field's Validate) across the whole form rather than
+// stopping at the first invalid section, so every invalid field's error is
+// current for View after a submission attempt. A hidden section's fields
+// never block submission — the operator never saw them.
 func (f *MultiSectionForm) Validate() []error {
 	var errs []error
 	for _, section := range f.sections {
-		if section.Group == nil {
+		if section.Group == nil || !section.isVisible() {
 			continue
 		}
 		errs = append(errs, section.Group.Validate()...)
@@ -345,24 +385,27 @@ func (f *MultiSectionForm) Validate() []error {
 	return errs
 }
 
-// TouchAll marks every field in every section touched and records its
-// current error, ahead of Validate, so enter's forced submission attempt
+// TouchAll marks every field in every visible section touched and records
+// its current error, ahead of Validate, so enter's forced submission attempt
 // paints every field's real state rather than only the ones the user has
-// visited.
+// visited. Hidden sections are left untouched.
 func (f *MultiSectionForm) TouchAll() {
 	for _, section := range f.sections {
-		if section.Group != nil {
+		if section.Group != nil && section.isVisible() {
 			section.Group.TouchAll()
 		}
 	}
 }
 
-// FocusFirstInvalid moves focus to the first field (scanning sections in
-// order) that fails Check, and returns a command that runs any focus side
-// effect followed by FocusChangedMsg so the wizard re-syncs its viewport
-// and scrolls the field into view.
+// FocusFirstInvalid moves focus to the first field in a visible section
+// (scanning sections in order) that fails Check, and returns a command that
+// runs any focus side effect followed by FocusChangedMsg so the wizard
+// re-syncs its viewport and scrolls the field into view.
 func (f *MultiSectionForm) FocusFirstInvalid() tea.Cmd {
 	for si := range f.sections {
+		if !f.sections[si].isVisible() {
+			continue
+		}
 		group := f.sections[si].Group
 		if group == nil {
 			continue
@@ -409,9 +452,10 @@ func (f *MultiSectionForm) sectionHead(i, innerWidth int) string {
 	return head
 }
 
-// View renders each section as a head block followed by one block per field,
-// one blank row apart, recording the line span every field occupies so the
-// wizard can scroll the focused one into view.
+// View renders each visible section as a head block followed by one block
+// per field, one blank row apart, recording the line span every field
+// occupies so the wizard can scroll the focused one into view. A hidden
+// section (Visible returning false) contributes nothing.
 func (f *MultiSectionForm) View(width int) string {
 	f.spans = make([][]LineSpan, len(f.sections))
 	innerWidth := f.innerWidth(width)
@@ -434,6 +478,9 @@ func (f *MultiSectionForm) View(width int) string {
 	}
 
 	for i := range f.sections {
+		if !f.sections[i].isVisible() {
+			continue
+		}
 		group := f.sections[i].Group
 		if group == nil {
 			continue
@@ -506,11 +553,17 @@ func NewDataDrivenStep(def *StepDefinition) *DataDrivenStep {
 			warning = func() string { return sectionDef.Warning(step.values()) }
 		}
 
+		var visible func() bool
+		if sectionDef.Visible != nil {
+			visible = func() bool { return sectionDef.Visible(step.rawValues()) }
+		}
+
 		sections = append(sections, FormSection{
 			Title:   sectionDef.Title,
 			Note:    sectionDef.Note,
 			Group:   components.NewInputGroup(fields...),
 			Warning: warning,
+			Visible: visible,
 		})
 	}
 
@@ -606,9 +659,26 @@ func (s *DataDrivenStep) setValue(fieldKey, value string) {
 	}
 }
 
-func (s *DataDrivenStep) values() map[string]string {
+// rawValues returns every field's current value regardless of section
+// visibility; sectionDef.Visible predicates read this rather than values()
+// so computing a section's visibility never recurses back into a values()
+// that depends on visibility already being known.
+func (s *DataDrivenStep) rawValues() map[string]string {
 	out := make(map[string]string, len(s.fieldKeys))
 	for fieldKey := range s.fieldKeys {
+		if field := s.getField(fieldKey); field != nil {
+			out[fieldKey] = field.Value()
+		}
+	}
+	return out
+}
+
+func (s *DataDrivenStep) values() map[string]string {
+	out := make(map[string]string, len(s.fieldKeys))
+	for fieldKey, loc := range s.fieldKeys {
+		if !s.form.sections[loc.section].isVisible() {
+			continue
+		}
 		if field := s.getField(fieldKey); field != nil {
 			out[fieldKey] = field.Value()
 		}
@@ -727,6 +797,9 @@ func (s *DataDrivenStep) Validate() error {
 // the step-level Apply function if provided.
 func (s *DataDrivenStep) Apply(cfg *config.Config) error {
 	for sIdx := range s.definition.Sections {
+		if !s.form.sections[sIdx].isVisible() {
+			continue
+		}
 		for fIdx := range s.definition.Sections[sIdx].Fields {
 			fieldDef := &s.definition.Sections[sIdx].Fields[fIdx]
 			if fieldDef.ConfigSet == nil {

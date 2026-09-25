@@ -10,8 +10,8 @@
   │                                                                                                              │      
   │                                                                                                              │      
   │                                                                                                              │      
-  │                             cluster lifecycle                                                                │      
   │                                                                                                              │      
+  │                             cluster lifecycle                                                                │      
   │                             manage nodes on cluster "mycluster"                                              │      
   │                                                                                                              │      
   │                             ● resize nodes                                                                   │      

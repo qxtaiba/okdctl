@@ -46,8 +46,15 @@ func masterResizePlan() *node.OpPlan {
 }
 
 func resizePreviewState() *State {
+	cfg := config.DefaultConfig()
+	// Matches masterResizePlan's Cluster/node-name fixture ("homelab"), the
+	// name every other lifecycle golden scenario uses — a stray
+	// config.DefaultConfig() default ("mycluster") here previously left the
+	// preview/confirm goldens showing a "homelab" plan body under a
+	// "mycluster" footer and trail.
+	cfg.Cluster.Name = "homelab"
 	return &State{
-		Cfg: config.DefaultConfig(), Op: node.OpResize,
+		Cfg: cfg, Op: node.OpResize,
 		Scope: node.ResizeScope{Role: nodetypes.RoleMaster},
 	}
 }

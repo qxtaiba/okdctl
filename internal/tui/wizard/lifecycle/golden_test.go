@@ -197,8 +197,12 @@ func lifecycleScenarios() []lifecycleScenario {
 			name: "preview_blockers",
 			id:   StepIDPreview,
 			build: func() (*State, Hooks) {
+				// cfg.Cluster.Name matches removeWorkerPlan's Cluster/target
+				// fixture ("homelab"); see the "confirm" scenario's comment.
+				cfg := config.DefaultConfig()
+				cfg.Cluster.Name = "homelab"
 				return &State{
-					Cfg: config.DefaultConfig(), Op: node.OpRemove,
+					Cfg: cfg, Op: node.OpRemove,
 					Target: "homelab-worker2",
 				}, Hooks{}
 			},
@@ -218,8 +222,14 @@ func lifecycleScenarios() []lifecycleScenario {
 			name: "confirm",
 			id:   StepIDConfirm,
 			build: func() (*State, Hooks) {
+				// cfg.Cluster.Name matches removeWorkerPlan's Cluster/target
+				// fixture ("homelab") — an unmodified config.DefaultConfig()
+				// here previously left the footer/trail reading "mycluster"
+				// under a "homelab" plan body and type-to-confirm target.
+				cfg := config.DefaultConfig()
+				cfg.Cluster.Name = "homelab"
 				return &State{
-					Cfg: config.DefaultConfig(), Op: node.OpRemove,
+					Cfg: cfg, Op: node.OpRemove,
 					Target: "homelab-worker2", Proceed: true,
 					Plan: removeWorkerPlan(),
 				}, Hooks{}

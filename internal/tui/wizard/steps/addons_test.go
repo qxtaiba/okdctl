@@ -11,6 +11,40 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 )
 
+func TestAddonsStep_OnlyTheSelectedProviderSectionRenders(t *testing.T) {
+	sectionTitles := []string{"secret store (onepassword)", "secret store (vault)", "secret store (bitwarden)"}
+
+	cases := []struct {
+		provider string
+		want     string
+	}{
+		{provider: "onepassword", want: "secret store (onepassword)"},
+		{provider: "vault", want: "secret store (vault)"},
+		{provider: "bitwarden", want: "secret store (bitwarden)"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.provider, func(t *testing.T) {
+			cfg := config.DefaultConfig()
+			cfg.Addons = map[string]config.AddonConfig{
+				"secretstore": {Settings: map[string]string{"provider": tc.provider}},
+			}
+
+			step := NewAddonsStep()
+			step.LoadFromConfig(cfg, true)
+
+			view := tuitest.StripANSI(step.View(100, 30))
+			for _, title := range sectionTitles {
+				got := strings.Contains(view, title)
+				want := title == tc.want
+				if got != want {
+					t.Fatalf("provider %q: section %q present=%v, want %v", tc.provider, title, got, want)
+				}
+			}
+		})
+	}
+}
+
 func TestAddonsStep_WarningAttachesToFluxSection(t *testing.T) {
 	if system.FileExists(system.ExpandPath("~/.ssh/flux-deploy-key")) {
 		t.Skip("~/.ssh/flux-deploy-key exists on this machine, so the warning this test checks for would not fire")

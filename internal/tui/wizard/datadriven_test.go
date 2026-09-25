@@ -301,6 +301,139 @@ func TestDataDrivenStep_Apply_PropagatesConfigSetError(t *testing.T) {
 	}
 }
 
+func hiddenSectionStepDefinition() *StepDefinition {
+	return &StepDefinition{
+		ID:           StepIDBasics,
+		Title:        "hidden section",
+		DisplayTitle: "hidden section",
+		Sections: []SectionDefinition{
+			{
+				Title: "visible section",
+				Fields: []FieldDefinition{
+					{
+						Key:       "name",
+						Label:     "name",
+						ConfigSet: SetString(func(c *config.Config, v string) { c.Cluster.Name = v }),
+					},
+				},
+			},
+			{
+				Title:   "hidden section",
+				Visible: func(_ map[string]string) bool { return false },
+				Fields: []FieldDefinition{
+					{
+						Key:       "secret",
+						Label:     "secret",
+						ConfigSet: SetString(func(c *config.Config, v string) { c.Cluster.Domain = v }),
+					},
+				},
+			},
+		},
+	}
+}
+
+func TestDataDrivenStep_Apply_SkipsHiddenSection(t *testing.T) {
+	step := NewDataDrivenStep(hiddenSectionStepDefinition())
+	step.setValue("name", "cluster-a")
+	step.setValue("secret", "stale-value")
+
+	cfg := &config.Config{}
+	if err := step.Apply(cfg); err != nil {
+		t.Fatalf("Apply() error: %v", err)
+	}
+
+	if cfg.Cluster.Name != "cluster-a" {
+		t.Errorf("cfg.Cluster.Name = %q, want cluster-a", cfg.Cluster.Name)
+	}
+	if cfg.Cluster.Domain != "" {
+		t.Errorf("cfg.Cluster.Domain = %q, want empty: hidden section's field must not be applied", cfg.Cluster.Domain)
+	}
+}
+
+func TestDataDrivenStep_Values_ExcludesHiddenSection(t *testing.T) {
+	def := hiddenSectionStepDefinition()
+	var captured map[string]string
+	def.Answered = func(values map[string]string) []render.Fact {
+		captured = values
+		return nil
+	}
+	step := NewDataDrivenStep(def)
+	step.setValue("name", "cluster-a")
+	step.setValue("secret", "stale-value")
+
+	step.Answered()
+
+	if _, ok := captured["secret"]; ok {
+		t.Errorf("values()[secret] = %q, want key absent: hidden section's field must not appear", captured["secret"])
+	}
+	if captured["name"] != "cluster-a" {
+		t.Errorf("values()[name] = %q, want cluster-a", captured["name"])
+	}
+}
+
+func providerSwitchStepDefinition() *StepDefinition {
+	return &StepDefinition{
+		ID:           StepIDBasics,
+		Title:        "provider switch",
+		DisplayTitle: "provider switch",
+		Sections: []SectionDefinition{
+			{
+				Title: "provider",
+				Fields: []FieldDefinition{
+					{
+						Key:     "provider",
+						Label:   "provider",
+						Type:    FieldTypeSelect,
+						Default: "a",
+						Options: []string{"a", "b"},
+					},
+				},
+			},
+			{
+				Title: "provider a",
+				Visible: func(values map[string]string) bool {
+					return values["provider"] == "a"
+				},
+				Fields: []FieldDefinition{
+					{
+						Key:       "field_a",
+						Label:     "field a",
+						ConfigSet: SetString(func(c *config.Config, v string) { c.Cluster.Name = v }),
+					},
+				},
+			},
+			{
+				Title: "provider b",
+				Visible: func(values map[string]string) bool {
+					return values["provider"] == "b"
+				},
+				Fields: []FieldDefinition{
+					{
+						Key:       "field_b",
+						Label:     "field b",
+						ConfigSet: SetString(func(c *config.Config, v string) { c.Cluster.Domain = v }),
+					},
+				},
+			},
+		},
+	}
+}
+
+func TestDataDrivenStep_Apply_ProviderSwitchDropsStaleSection(t *testing.T) {
+	step := NewDataDrivenStep(providerSwitchStepDefinition())
+	step.setValue("field_a", "typed-into-a")
+	step.setValue("provider", "b")
+
+	cfg := &config.Config{}
+	if err := step.Apply(cfg); err != nil {
+		t.Fatalf("Apply() error: %v", err)
+	}
+
+	if cfg.Cluster.Name != "" {
+		t.Errorf("cfg.Cluster.Name = %q, want empty: provider a's typed value must not persist after switching to provider b", cfg.Cluster.Name)
+	}
+}
+
 func TestDataDrivenStep_UpdateEnterValidatesThenCompletes(t *testing.T) {
 	step := NewDataDrivenStep(testStepDefinition())
 	step.SetFocused(true)
@@ -750,6 +883,49 @@ func TestMultiSectionForm_SectionWarningRendersUnderFields(t *testing.T) {
 	}
 	if !strings.Contains(strings.TrimSpace(lines[lastFieldEnd+4]), "section two") {
 		t.Fatalf("row after the warning's blank gap = %q, want section two's head", lines[lastFieldEnd+4])
+	}
+}
+
+func TestMultiSectionForm_HiddenSectionSkippedByViewAndNavigation(t *testing.T) {
+	f := NewMultiSectionForm([]FormSection{
+		{
+			Title: "section one",
+			Group: components.NewInputGroup(components.NewInputField("name", "cluster")),
+		},
+		{
+			Title:   "section two (hidden)",
+			Group:   components.NewInputGroup(components.NewInputField("gateway", "10.0.0.1")),
+			Visible: func() bool { return false },
+		},
+		{
+			Title: "section three",
+			Group: components.NewInputGroup(components.NewInputField("domain", "example.com")),
+		},
+	})
+
+	view := f.View(80)
+	if strings.Contains(view, "section two (hidden)") {
+		t.Fatalf("hidden section rendered:\n%s", view)
+	}
+	if !strings.Contains(view, "section one") || !strings.Contains(view, "section three") {
+		t.Fatalf("visible sections missing from render:\n%s", view)
+	}
+
+	_ = f.Focus()
+	if f.CurrentSection() != 0 {
+		t.Fatalf("Focus() landed on section %d, want 0 (section one)", f.CurrentSection())
+	}
+
+	tab := tea.KeyPressMsg{Code: tea.KeyTab}
+	f.Update(tab) // section one's only field is last, so tab must skip the hidden section
+	if f.CurrentSection() != 2 {
+		t.Fatalf("after tab past section one's last field, CurrentSection() = %d, want 2 (skipping the hidden section)", f.CurrentSection())
+	}
+
+	up := tea.KeyPressMsg{Code: tea.KeyUp} // bound the same as shift+tab
+	f.Update(up)
+	if f.CurrentSection() != 0 {
+		t.Fatalf("after navigating back from section three, CurrentSection() = %d, want 0 (skipping the hidden section)", f.CurrentSection())
 	}
 }
 

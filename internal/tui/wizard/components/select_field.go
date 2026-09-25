@@ -159,7 +159,7 @@ func (f *SelectField) View() string {
 		content = f.booleanContent()
 	}
 
-	box := fieldBox(content, f.boxOuterWidth(), f.focused, false)
+	box := fieldBox(content, f.boxOuterWidth(), f.focused, false, false)
 	if f.isDefault {
 		box = lipgloss.JoinHorizontal(lipgloss.Center, box, " "+tagStyle.Render("default"))
 	}

@@ -8,7 +8,7 @@
   │  ✓ homelab-master1                                                                1m20s      │  
   │  ✓ homelab-master2                                                                 1m0s      │  
   │                                                                                              │  
-  │  marker okd-install/.okdctl-node-op.json · ctrl+c cancels after the current gate             │  
+  │  marker okd-install/.okdctl-node-op.json                                                     │  
   │                                                                                              │  
   │                                                                                              │  
   │                                                                                              │  
@@ -25,6 +25,6 @@
   │                                                                                              │  
   │                                                                                              │  
   │───────────────────────────────────────────────────────────────────────────────── ▸ mycluster │  
-  │  ctrl+c request graceful cancel (twice to force-quit) • ? help                               │  
+  │  ctrl+c cancel (twice to force-quit) • ? help                                                │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                     

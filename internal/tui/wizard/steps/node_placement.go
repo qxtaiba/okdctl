@@ -78,8 +78,8 @@ func NewNodePlacementStep() *NodePlacementStep {
 	return &NodePlacementStep{
 		BaseStep: wizard.NewBaseStepWithDisplayTitle(
 			wizard.StepIDNodePlacement,
-			"proxmox infrastructure",
-			"configure proxmox infrastructure",
+			"node placement",
+			"configure node placement",
 			"auto-discovered from your proxmox cluster",
 		),
 		loadingSpinner: sp,

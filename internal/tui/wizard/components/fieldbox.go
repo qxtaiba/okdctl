@@ -8,10 +8,15 @@ import (
 
 // fieldBox renders content in a rounded-border box exactly outer columns
 // wide; the border colors red on hasErr, purple on focused, and slate
-// otherwise — an error border always wins over a focus border.
-func fieldBox(content string, outer int, focused, hasErr bool) string {
+// otherwise — an error border always wins over a focus border, and a
+// disabled field (its current value has no effect, e.g. a drain timeout
+// while skip-drain is selected) always wins over both, since there is
+// nothing left to flag or focus toward.
+func fieldBox(content string, outer int, focused, hasErr, disabled bool) string {
 	border := tui.ColorSlate600
 	switch {
+	case disabled:
+		border = tui.ColorSlate700
 	case hasErr:
 		border = tui.ColorError
 	case focused:
