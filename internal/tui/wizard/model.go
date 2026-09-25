@@ -121,6 +121,11 @@ type Model struct {
 	steps       []WizardStep
 	currentStep int
 
+	// suspended is the flow SwapFlow put aside — the hub — restored when the
+	// swapped-in flow's first screen is escaped. One level deep by design: the
+	// hub is the only screen that swaps, and a sub-flow never swaps again.
+	suspended *suspendedFlow
+
 	// returnToReview: set on a review jump (JumpToStepMsg), cleared on confirm/escape;
 	// while set, next/previous route to review.
 	returnToReview bool
@@ -138,6 +143,65 @@ type Model struct {
 	// While true every key but ctrl+c (still the global quit guard), esc,
 	// and "?" itself (both close it) is inert — the overlay owns input.
 	helpOpen bool
+}
+
+// suspendedFlow is a flow SwapFlow put aside: its steps, its chrome, and the
+// screen the operator was on, so restoring it lands exactly where they left.
+type suspendedFlow struct {
+	steps       []WizardStep
+	chrome      FlowChrome
+	currentStep int
+}
+
+// SwapFlow replaces the live step set and chrome with another flow's inside the
+// same program, suspending the current flow so escaping the new flow's first
+// screen returns to it. The caller passes freshly built steps on every entry:
+// the swapped-out instances are dropped on return, so nothing a sub-flow
+// collected can bleed into the next entry.
+func (m *Model) SwapFlow(steps []WizardStep, chrome FlowChrome) tea.Cmd {
+	// A second swap is refused outright: accepting it would overwrite the
+	// single suspended return target with the sub-flow being displaced,
+	// leaving esc with nowhere correct to land.
+	if len(steps) == 0 || m.suspended != nil {
+		return nil
+	}
+	if f, ok := m.CurrentStep().(FocusableStep); ok {
+		f.SetFocused(false)
+	}
+
+	m.suspended = &suspendedFlow{steps: m.steps, chrome: m.chrome, currentStep: m.currentStep}
+	m.steps, m.chrome = steps, chrome
+	m.returnToReview = false
+	m.err = nil
+
+	_, cmd := m.focusStep(0)
+	return cmd
+}
+
+// restoreFlow returns to the flow SwapFlow suspended, discarding the swapped-in
+// flow's steps so the next entry rebuilds them.
+func (m *Model) restoreFlow() (tea.Model, tea.Cmd) {
+	prev := m.suspended
+	if prev == nil {
+		return m, nil
+	}
+	if f, ok := m.CurrentStep().(FocusableStep); ok {
+		f.SetFocused(false)
+	}
+
+	m.suspended = nil
+	m.steps, m.chrome = prev.steps, prev.chrome
+	m.returnToReview = false
+	m.err = nil
+
+	return m.focusStep(min(prev.currentStep, len(prev.steps)-1))
+}
+
+// SwapFlowMsg asks the wizard to replace its live step set and chrome with
+// another flow's, in the same program and the same terminal session.
+type SwapFlowMsg struct {
+	Steps  []WizardStep
+	Chrome FlowChrome
 }
 
 // Result is what the wizard returns when it exits.
@@ -283,6 +347,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case StepBackMsg:
 		return m.goToPreviousStep()
 
+	case SwapFlowMsg:
+		cmd := m.SwapFlow(msg.Steps, msg.Chrome)
+		return m, cmd
+
 	case JumpToStepMsg:
 		return m.jumpToStep(msg.StepID)
 
@@ -361,12 +429,20 @@ func (m *Model) handleWizardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) 
 		return m, nil, true
 	}
 
-	if key.Matches(msg, m.keyMap.Back) && m.currentStep > 0 {
-		if g, ok := m.steps[m.currentStep].(BackGuard); ok && g.InterceptBack() {
+	if key.Matches(msg, m.keyMap.Back) {
+		if g, ok := m.CurrentStep().(BackGuard); ok && g.InterceptBack() {
 			return m, nil, true
 		}
-		model, cmd := m.goToPreviousStep()
-		return model, cmd, true
+		if m.currentStep > 0 {
+			model, cmd := m.goToPreviousStep()
+			return model, cmd, true
+		}
+		// Escaping a swapped-in flow's first screen leaves the sub-flow and
+		// returns to the hub that launched it.
+		if m.suspended != nil {
+			model, cmd := m.restoreFlow()
+			return model, cmd, true
+		}
 	}
 
 	return m, nil, false

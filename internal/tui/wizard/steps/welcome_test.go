@@ -1,6 +1,7 @@
 package steps
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -159,6 +160,109 @@ func TestHubConfigExistsFalseClearsSaveSlotFromView(t *testing.T) {
 	body := s.View(70, 14)
 	if strings.Contains(body, "prod-cluster") {
 		t.Errorf("hub body still renders the save-slot line after SetConfigExists(false):\n%s", body)
+	}
+}
+
+// selectVerb walks the pointer to verb with real keypresses.
+func selectVerb(t *testing.T, s *WelcomeStep, verb HubVerb) {
+	t.Helper()
+	for range len(s.entries) {
+		if s.SelectedVerb() == verb {
+			return
+		}
+		press(t, s, keyDown)
+	}
+	t.Fatalf("verb %v is not on the menu", verb)
+}
+
+func TestHubManageVerbSwapsInItsFlow(t *testing.T) {
+	s := NewWelcomeStep()
+	s.SetConfigExists(true)
+
+	want := []wizard.WizardStep{NewStatusStep(nil)}
+	calls := 0
+	s.SetFlows(HubFlows{ManageNodes: func() ([]wizard.WizardStep, wizard.FlowChrome, error) {
+		calls++
+		return want, wizard.FlowChrome{Tagline: "day-2 node operations"}, nil
+	}})
+
+	selectVerb(t, s, HubVerbManageNodes)
+	_, cmd := s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("confirming manage nodes produced no command")
+	}
+	if s.opening != "manage nodes" {
+		t.Errorf("opening = %q, want the verb being opened", s.opening)
+	}
+
+	swap, ok := cmd().(wizard.SwapFlowMsg)
+	if !ok {
+		t.Fatalf("command produced %T, want wizard.SwapFlowMsg", cmd())
+	}
+	if calls != 1 {
+		t.Errorf("flow built %d times, want 1", calls)
+	}
+	if len(swap.Steps) != len(want) || swap.Chrome.Tagline != "day-2 node operations" {
+		t.Errorf("swap carried %d steps with tagline %q, want the provider's flow", len(swap.Steps), swap.Chrome.Tagline)
+	}
+}
+
+func TestHubSurfacesAFlowThatCannotBeBuilt(t *testing.T) {
+	s := NewWelcomeStep()
+	s.SetConfigExists(true)
+	s.SetFlows(HubFlows{ManageNodes: func() ([]wizard.WizardStep, wizard.FlowChrome, error) {
+		return nil, wizard.FlowChrome{}, errors.New("prepare node ops: no proxmox credentials")
+	}})
+
+	selectVerb(t, s, HubVerbManageNodes)
+	_, cmd := s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	failed, ok := cmd().(hubFlowFailedMsg)
+	if !ok {
+		t.Fatalf("command produced %T, want hubFlowFailedMsg", cmd())
+	}
+
+	_, errCmd := s.Update(failed)
+	if s.opening != "" {
+		t.Errorf("opening = %q after a failed build, want it cleared", s.opening)
+	}
+	setErr, ok := errCmd().(wizard.ErrorSetMsg)
+	if !ok {
+		t.Fatalf("follow-up command produced %T, want wizard.ErrorSetMsg", errCmd())
+	}
+	if !strings.Contains(setErr.Error.Error(), "no proxmox credentials") {
+		t.Errorf("surfaced error = %v, want the provider's", setErr.Error)
+	}
+}
+
+func TestHubVerbWithNoFlowCompletesTheStep(t *testing.T) {
+	s := NewWelcomeStep()
+	s.SetConfigExists(true)
+	selectVerb(t, s, HubVerbDestroy)
+
+	_, cmd := s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if _, ok := cmd().(wizard.StepCompleteMsg); !ok {
+		t.Fatalf("command produced %T, want wizard.StepCompleteMsg", cmd())
+	}
+	if s.opening != "" {
+		t.Errorf("opening = %q, want empty for a verb with no in-process flow", s.opening)
+	}
+}
+
+func TestHubClearsTheOpeningNoticeOnReturn(t *testing.T) {
+	s := NewWelcomeStep()
+	s.SetConfigExists(true)
+	s.SetFlows(HubFlows{ClusterStatus: func() ([]wizard.WizardStep, wizard.FlowChrome, error) {
+		return []wizard.WizardStep{NewStatusStep(nil)}, wizard.FlowChrome{}, nil
+	}})
+
+	selectVerb(t, s, HubVerbClusterStatus)
+	s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	s.SetFocused(false)
+	s.SetFocused(true)
+
+	if s.opening != "" {
+		t.Errorf("opening = %q after the hub regained focus, want it cleared", s.opening)
 	}
 }
 

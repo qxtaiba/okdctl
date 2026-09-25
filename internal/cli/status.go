@@ -3,9 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
-	"strconv"
 
-	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/addon"
@@ -18,7 +16,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/render"
-	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
@@ -170,82 +167,8 @@ func (p *proxmoxPowerProber) VMStates(ctx context.Context) (map[int]nodetypes.VM
 }
 
 func printClusterStatus(cmd *cobra.Command, st *okd.ClusterStatus) error {
-	sb := render.NewBuilder()
-	sb.WriteString("\n")
-
-	sb.Section("cluster")
-	sb.KV("phase", string(st.Phase))
-	sb.Newline()
-
-	sb.Section("api")
-	if st.APIReachable {
-		sb.KV("reachable", "yes")
-	} else {
-		sb.KV("reachable", "no (oc get --raw /healthz failed)")
-	}
-	sb.Newline()
-
-	masters := 0
-	workers := 0
-	for _, n := range st.Nodes {
-		switch n.Role {
-		case nodetypes.RoleMaster:
-			masters++
-		case nodetypes.RoleWorker:
-			workers++
-		}
-	}
-	sb.Section("nodes")
-	if len(st.Nodes) == 0 {
-		sb.WriteString("    " + tui.EmptyState("no nodes reported", "deploy a cluster with 'okdctl deploy'") + "\n")
-		sb.Newline()
-	} else {
-		for _, line := range nodeStatusTableLines(st.Nodes) {
-			sb.WriteString("    " + line + "\n")
-		}
-		sb.Newline()
-	}
-	sb.KV("masters", strconv.Itoa(masters))
-	sb.KV("workers", strconv.Itoa(workers))
-	sb.KV("total", strconv.Itoa(len(st.Nodes)))
-	sb.Newline()
-
-	sb.Section("cluster operators")
-	if st.DegradedOperators == 0 {
-		sb.KV("degraded", "0 (all healthy)")
-	} else {
-		sb.KV("degraded", strconv.Itoa(st.DegradedOperators))
-	}
-	sb.Newline()
-
-	if len(st.Addons) > 0 {
-		sb.Section("addons")
-		for _, a := range st.Addons {
-			sb.KV(a.Name, a.Label())
-		}
-		sb.Newline()
-	}
-
-	_, err := fmt.Fprintln(cmd.OutOrStdout(),
-		"\n"+tui.BoxedSectionCompact(sb.String(), "cluster status", tui.DefaultBoxWidth)+"\n")
+	_, err := fmt.Fprintln(cmd.OutOrStdout(), render.ClusterStatusBox(st))
 	return err
-}
-
-// nodeStatusTableLines renders via tui.Table; padding is computed on plain text
-// so a styled row's zero-width escapes never shift a column.
-func nodeStatusTableLines(nodes []okd.NodeStatus) []string {
-	rows := make([][]string, 0, len(nodes))
-	for _, n := range nodes {
-		rows = append(rows, []string{n.Name, string(n.Role), yesNo(n.Ready)})
-	}
-	return tui.Table([]string{headerName, "ROLE", "READY"}, rows, tui.TableOptions{
-		RowStyle: func(i int) (lipgloss.Style, bool) {
-			if !nodes[i].Ready {
-				return tui.ErrorStyle, true
-			}
-			return lipgloss.Style{}, false
-		},
-	})
 }
 
 func runDescribeNode(cmd *cobra.Command, args []string) error {

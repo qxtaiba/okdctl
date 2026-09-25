@@ -406,7 +406,24 @@ func (m *Model) footerBindings() []KeyBinding {
 	if m.viewport.TotalLineCount() > m.viewport.Height() {
 		bindings = append(bindings, KeyBinding{Key: "pgup/pgdn", Help: "scroll"})
 	}
+	bindings = m.withHubEscape(bindings)
 	return append(bindings, KeyBinding{Key: HelpQuestion, Help: HelpOverlay})
+}
+
+// withHubEscape advertises the esc round-trip on a swapped-in flow's first
+// screen, where esc leaves the sub-flow instead of stepping back within it.
+// Steps that already bind esc themselves are left alone — theirs says where it
+// goes, and two esc entries in one ribbon would read as a contradiction.
+func (m *Model) withHubEscape(bindings []KeyBinding) []KeyBinding {
+	if m.suspended == nil || m.currentStep != 0 {
+		return bindings
+	}
+	for _, b := range bindings {
+		if b.Key == HelpEsc {
+			return bindings
+		}
+	}
+	return append(bindings, KeyBinding{Key: HelpEsc, Help: "hub"})
 }
 
 // renderHelpOverlay renders the full, untruncated key-binding list (the

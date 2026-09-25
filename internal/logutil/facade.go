@@ -1,6 +1,7 @@
 package logutil
 
 import (
+	"io"
 	"log/slog"
 	"os"
 	"sync/atomic"
@@ -34,6 +35,18 @@ func init() {
 // internal/tui still log through a plain-text fallback with redaction intact.
 func InstallHandler(h slog.Handler) {
 	facade.Store(slog.New(NewRedactHandler(h)))
+}
+
+// Redirect points the facade at w until the returned restore runs, so a
+// full-screen TUI that owns the terminal is never overdrawn by a log line
+// written behind it — the wizard's own flows load credentials and probe hosts
+// mid-session, and that is exactly the code that logs. Redaction is preserved:
+// w is wrapped the same way InstallHandler wraps its handler. Not nestable
+// across goroutines — restore reinstates whatever was installed at call time.
+func Redirect(w io.Writer) (restore func()) {
+	prev := facade.Load()
+	facade.Store(slog.New(NewRedactHandler(slog.NewTextHandler(w, nil))))
+	return func() { facade.Store(prev) }
 }
 
 // SimpleLogger returns a *slog.Logger backed by the currently installed

@@ -95,3 +95,36 @@ func TestProgressBarsEnabled_DefaultsToDisabled(t *testing.T) {
 		t.Fatal("SetProgressBarsEnabled(true) did not take effect")
 	}
 }
+
+func TestRedirectDivertsAndRestores(t *testing.T) {
+	installed := installBuffer(t)
+
+	var diverted bytes.Buffer
+	restore := Redirect(&diverted)
+	Info("while the tui owns the terminal")
+	restore()
+	Info("after the tui released it")
+
+	if !strings.Contains(diverted.String(), "while the tui owns the terminal") {
+		t.Errorf("redirected sink is missing the line written during the redirect:\n%s", diverted.String())
+	}
+	if strings.Contains(installed.String(), "while the tui owns the terminal") {
+		t.Errorf("the installed sink must see nothing during a redirect:\n%s", installed.String())
+	}
+	if !strings.Contains(installed.String(), "after the tui released it") {
+		t.Errorf("restore must reinstate the previous sink:\n%s", installed.String())
+	}
+}
+
+func TestRedirectKeepsRedaction(t *testing.T) {
+	installBuffer(t)
+
+	var diverted bytes.Buffer
+	restore := Redirect(&diverted)
+	Info("probing host", LF("password", "s3cret-bytes"))
+	restore()
+
+	if strings.Contains(diverted.String(), "s3cret-bytes") {
+		t.Errorf("a redirected sink must still be wrapped in RedactHandler:\n%s", diverted.String())
+	}
+}

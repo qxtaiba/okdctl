@@ -147,22 +147,29 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 		return runFullDeployment(ctx, cfg, out)
 	}
 
-	result, verb, err := runWizardFn(cmd, cfg, configExists)
+	outcome, err := runWizardFn(cmd, cfg, configExists)
 	if err != nil {
 		return (&errtypes.ConfigError{Msg: "wizard failed", Err: err}).
 			WithHint("try again, or use --yes with a saved config for a non-interactive deploy")
 	}
 
-	if result.Cancelled {
+	// A day-2 flow the hub swapped into and executed owns the session's exit:
+	// it has already reported for itself, and nothing it did belongs in the
+	// configure flow's save pipeline.
+	if outcome.DayTwoRan {
+		return outcome.DayTwo
+	}
+
+	if outcome.Result.Cancelled {
 		logutil.Info("wizard cancelled, no changes made")
 		return nil
 	}
 
-	if handled, verbErr := runHubVerb(ctx, verb, cfg, out); handled {
+	if handled, verbErr := runHubVerb(ctx, outcome.Verb, cfg, out); handled {
 		return verbErr
 	}
 
-	cfg = result.Config
+	cfg = outcome.Result.Config
 
 	defer clearConfigCredentials(cfg)
 
@@ -172,7 +179,7 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	switch result.Action {
+	switch outcome.Result.Action {
 	case wizard.ActionDeploy:
 		if err := runFullDeployment(ctx, cfg, out); err != nil {
 			return err
@@ -193,8 +200,8 @@ const destroyHandoff = "run: okdctl destroy"
 // runHubVerb handles the hub verbs that never walk the configure flow,
 // reporting whether verb was one of them so the caller can skip the save
 // pipeline entirely. deploy runs the configuration already on disk untouched;
-// destroy prints its handoff; manage-nodes and cluster-status already ran
-// in-process inside the wizard, so there is nothing left to do here.
+// destroy prints its handoff and lets okdctl destroy's own confirm ladder be
+// the guard; the day-2 verbs ran in-process and have already reported.
 func runHubVerb(ctx context.Context, verb steps.HubVerb, cfg *config.Config, out io.Writer) (handled bool, err error) {
 	switch verb {
 	case steps.HubVerbDeploy:
@@ -202,8 +209,10 @@ func runHubVerb(ctx context.Context, verb steps.HubVerb, cfg *config.Config, out
 	case steps.HubVerbDestroy:
 		fmt.Fprintln(out, destroyHandoff)
 		return true, nil
-	case steps.HubVerbManageNodes, steps.HubVerbClusterStatus, steps.HubVerbQuit:
+	case steps.HubVerbQuit:
 		logutil.Info("no changes made")
+		return true, nil
+	case steps.HubVerbManageNodes, steps.HubVerbClusterStatus:
 		return true, nil
 	default:
 		return false, nil

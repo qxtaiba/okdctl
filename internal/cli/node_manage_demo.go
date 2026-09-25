@@ -3,11 +3,7 @@ package cli
 import (
 	"time"
 
-	"github.com/spf13/cobra"
-
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/lifecycle"
 )
 
@@ -22,18 +18,4 @@ func demoConfig() *config.Config {
 	cfg := config.DefaultConfig()
 	cfg.Cluster.Name = lifecycle.DemoClusterName
 	return cfg
-}
-
-// runNodeManageDemo drives the lifecycle wizard against lifecycle.DemoHooks'
-// static six-node fixture, so OKDCTL_WIZARD_DEMO can screenshot every screen
-// without a live Proxmox/OKD cluster.
-func runNodeManageDemo(cmd *cobra.Command) error {
-	cfg := demoConfig()
-	st := &lifecycle.State{Cfg: cfg}
-	result, err := wizard.RunFlow(cmd.Context(), lifecycle.NewSteps(st, lifecycle.DemoHooks(demoExecStepDelay)), cfg, lifecycle.Chrome())
-	if err != nil {
-		return (&errtypes.ConfigError{Msg: "lifecycle wizard failed", Err: err}).
-			WithHint("try again, or use 'okdctl node resize/add/remove' instead")
-	}
-	return reportLifecycleOutcome(cmd, result, st)
 }

@@ -2,14 +2,19 @@ package cli
 
 import (
 	"errors"
+	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/deploy"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/clusterstatus"
+	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
+	"github.com/qxtaiba/okdctl/internal/tui/wizard/lifecycle"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/steps"
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
@@ -22,7 +27,27 @@ const wizardDemoEnv = "OKDCTL_WIZARD_DEMO"
 // release fetch into its error state, for the error-state screenshot fixture.
 const wizardDemoReleasesEnv = "OKDCTL_DEMO_RELEASES"
 
-func runWizardWithMode(cmd *cobra.Command, cfg *config.Config, configExists bool) (wizard.Result, steps.HubVerb, error) {
+// errWizardExited reports a hub flow that finished assembling after the wizard
+// it was meant for had already quit.
+var errWizardExited = errors.New("open flow: the wizard has already exited")
+
+// hubOutcome is what one hero-hub session leaves behind.
+type hubOutcome struct {
+	// Result is the wizard's own terminal state.
+	Result wizard.Result
+	// Verb is the hub verb the operator last confirmed.
+	Verb steps.HubVerb
+	// DayTwoRan reports that a day-2 flow the hub swapped into began executing,
+	// so that op — not the configure flow's save pipeline — is what this
+	// session did.
+	DayTwoRan bool
+	// DayTwo is that flow's outcome: exactly the error `okdctl node manage`
+	// would have exited with, so a failed or interrupted op is never silently
+	// swallowed by the deploy path.
+	DayTwo error
+}
+
+func runWizardWithMode(cmd *cobra.Command, cfg *config.Config, configExists bool) (hubOutcome, error) {
 	wizardCfg := wizard.DefaultConfig()
 	wizardCfg.InitialConfig = cfg
 	wizardCfg.ConfigExists = configExists
@@ -36,14 +61,139 @@ func runWizardWithMode(cmd *cobra.Command, cfg *config.Config, configExists bool
 		}
 	}
 
-	result, err := wizard.RunFlow(cmd.Context(), built.Steps, cfg, steps.Chrome())
-
-	verb := steps.HubVerbGetStarted
+	var slot lifecycleSlot
 	if hub != nil {
-		verb = hub.SelectedVerb()
+		hub.SetFlows(hubFlows(cmd, cfg, &slot))
 	}
 
-	return result, verb, err
+	result, err := runHubSession(cmd, built.Steps, cfg)
+
+	// take before anything else reads it: a quit can land while the manage
+	// verb's session is still being assembled on a command goroutine, and take
+	// is what tells that goroutine to close its own session instead.
+	manage := slot.take()
+	if manage != nil {
+		defer manage.close()
+	}
+
+	outcome := hubOutcome{Result: result, Verb: steps.HubVerbGetStarted}
+	if hub != nil {
+		outcome.Verb = hub.SelectedVerb()
+	}
+	// Only a day-2 flow that actually began executing has an outcome to report:
+	// one the operator previewed and escaped out of changed nothing, and
+	// reporting on it would print a recap over a session that went on to do
+	// something else entirely.
+	if manage != nil && manage.state.Started {
+		outcome.DayTwoRan = true
+		outcome.DayTwo = reportLifecycleOutcome(cmd, result, manage.state)
+	}
+
+	return outcome, err
+}
+
+// runHubSession runs the wizard with the terminal to itself: the log facade
+// points at the run log and progress bars are off for the duration, since the
+// hub's verbs assemble their flows — loading credentials, probing hosts — while
+// the AltScreen is up, and a log line written behind it would draw over the
+// frame. Both are restored before the caller prints anything.
+func runHubSession(cmd *cobra.Command, flowSteps []wizard.WizardStep, cfg *config.Config) (wizard.Result, error) {
+	restoreLogs := logutil.Redirect(subprocSink())
+	defer restoreLogs()
+
+	progressBars := logutil.ProgressBarsEnabled()
+	logutil.SetProgressBarsEnabled(false)
+	defer logutil.SetProgressBarsEnabled(progressBars)
+
+	return wizard.RunFlow(cmd.Context(), flowSteps, cfg, steps.Chrome())
+}
+
+// hubFlows builds the hub's in-process flow providers. Each is called at the
+// moment its verb is confirmed — on a bubbletea command goroutine, not the main
+// path — so a `okdctl deploy` that never leaves the configure flow pays for
+// neither. The manage-nodes session is published through slot, which decides
+// who closes it: the main path if the wizard is still running, or this
+// goroutine if the wizard has already exited underneath it.
+func hubFlows(cmd *cobra.Command, cfg *config.Config, slot *lifecycleSlot) steps.HubFlows {
+	return steps.HubFlows{
+		ManageNodes: func() ([]wizard.WizardStep, wizard.FlowChrome, error) {
+			sess, err := newLifecycleSession(cmd, cfg)
+			if err != nil {
+				return nil, wizard.FlowChrome{}, err
+			}
+			if !slot.put(sess) {
+				// put closed it: the wizard exited while this was assembling,
+				// so there is no session left to show a flow for.
+				return nil, wizard.FlowChrome{}, errWizardExited
+			}
+			return sess.steps, lifecycle.Chrome(), nil
+		},
+		ClusterStatus: func() ([]wizard.WizardStep, wizard.FlowChrome, error) {
+			flowSteps, chrome := steps.StatusFlow(newHubStatusSource(cmd, cfg))
+			return flowSteps, chrome, nil
+		},
+	}
+}
+
+// newHubStatusSource returns the status seam the hub's cluster-status screen
+// reads: the same clusterstatus.Collect okdctl status runs, or a credential-free
+// fixture under OKDCTL_WIZARD_DEMO.
+func newHubStatusSource(cmd *cobra.Command, cfg *config.Config) steps.StatusSource {
+	if os.Getenv(wizardDemoEnv) != "" {
+		return steps.StaticStatusSource{Status: demoClusterStatus()}
+	}
+	return steps.StatusSource(&collectedStatusSource{cmd: cmd, cfg: cfg})
+}
+
+// demoClusterStatus is the snapshot the hub's status screen renders under
+// OKDCTL_WIZARD_DEMO: lifecycle.DemoHooks' same six nodes, all ready, on a
+// healthy cluster. Deliberately credential-free — no endpoint, no token, no
+// hostname — since it renders into screenshots.
+func demoClusterStatus() *okd.ClusterStatus {
+	nodes := make([]okd.NodeStatus, 0, 6)
+	for i := range 3 {
+		nodes = append(nodes, okd.NodeStatus{
+			Name: fmt.Sprintf("%s-master%d", lifecycle.DemoClusterName, i), Role: nodetypes.RoleMaster, Ready: true,
+		})
+	}
+	for i := range 3 {
+		nodes = append(nodes, okd.NodeStatus{
+			Name: fmt.Sprintf("%s-worker%d", lifecycle.DemoClusterName, i), Role: nodetypes.RoleWorker, Ready: true,
+		})
+	}
+	return &okd.ClusterStatus{
+		Phase:        okd.PhaseRunning,
+		APIReachable: true,
+		Nodes:        nodes,
+		Addons:       []okd.AddonStatus{{Name: "flux", Healthy: true}},
+	}
+}
+
+// collectedStatusSource collects live cluster status for the hub's status
+// screen, resolving the workspace and loading credentials per probe so a
+// refresh reflects whatever is on disk now. Credentials are zeroized before
+// each probe returns.
+type collectedStatusSource struct {
+	cmd *cobra.Command
+	cfg *config.Config
+}
+
+func (s *collectedStatusSource) ClusterStatus() (*okd.ClusterStatus, error) {
+	projectRoot, err := resolveProjectRootOrDie()
+	if err != nil {
+		return nil, err
+	}
+
+	var cl clusterstatus.Client
+	if c, clErr := clusterstatus.NewClient(projectRoot); clErr == nil {
+		cl = c
+	}
+
+	src, cleanup := statusLifecycleSources(s.cfg, projectRoot)
+	defer cleanup()
+
+	cs := clusterstatus.Collect(s.cmd.Context(), cl, newAddonManager(s.cfg, projectRoot), src)
+	return &cs, nil
 }
 
 func buildWizardStepsWithState(wizardCfg wizard.Config) wizard.BuiltSteps {

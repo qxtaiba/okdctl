@@ -1,0 +1,24 @@
+                                                                                
+  ╭──────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L  read-only cluster snapshot                                  │  
+  │ cluster status                                                           │  
+  │──────────────────────────────────────────────────────────────────────────│  
+  │  ╭────────────────────────── CLUSTER STATUS ──────────────────────────╮  │  
+  │  │                                                                    │  │  
+  │  │  cluster                                                           │  │  
+  │  │    phase ................................. Running                 │  │  
+  │  │                                                                    │  │  
+  │  │  api                                                               │  │  
+  │  │    reachable ............................. yes                     │  │  
+  │  │                                                                    │  │  
+  │  │  nodes                                                             │  │  
+  │  │    NAME             ROLE    READY                                  │  │  
+  │  │    homelab-master0  master  yes                                    │  │  
+  │  │    homelab-master1  master  yes                                    │  │  
+  │  │    homelab-master2  master  yes                                    │  │  
+  │  │    homelab-worker0  worker  yes                                    │  │  
+  │                                                                          │  
+  │─────────────── ↑ ↓  scroll down for more ──────────────── ▸ prod-cluster │  
+  │  r refresh • esc hub • pgup/pgdn scroll • ctrl+c quit • ? help           │  
+  ╰──────────────────────────────────────────────────────────────────────────╯  
+                                                                                

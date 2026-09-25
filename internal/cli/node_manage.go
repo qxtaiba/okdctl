@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -48,11 +49,8 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 	if !term.IsTerminal(int(os.Stdout.Fd())) || !term.IsTerminal(int(os.Stdin.Fd())) {
 		return &errtypes.UsageError{Msg: "node manage needs a terminal; use 'okdctl node resize/add/remove' for automation"}
 	}
-	if os.Getenv(wizardDemoEnv) != "" {
-		return runNodeManageDemo(cmd)
-	}
 
-	cfg, err := loadConfig(cfgFile)
+	cfg, err := lifecycleConfig()
 	if err != nil {
 		return err
 	}
@@ -61,26 +59,81 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 	// render beneath the AltScreen.
 	logutil.SetProgressBarsEnabled(false)
 
-	env, err := prepareNodeOpsEnv(ctx, cfg, true)
+	sess, err := newLifecycleSession(cmd, cfg)
 	if err != nil {
 		return err
 	}
-	defer env.close()
+	defer sess.close()
+
+	result, err := wizard.RunFlow(ctx, sess.steps, cfg, lifecycle.Chrome())
+	if err != nil {
+		// A tea failure mid-execution must still surface the resume marker, not
+		// read as a configuration problem.
+		if sess.state.Started && !sess.state.Executed {
+			return &errtypes.ClusterError{Msg: lifecycleInterruptedMsg, Err: err}
+		}
+		return (&errtypes.ConfigError{Msg: "lifecycle wizard failed", Err: err}).
+			WithHint("try again, or use 'okdctl node resize/add/remove' instead")
+	}
+	return reportLifecycleOutcome(cmd, result, sess.state)
+}
+
+// lifecycleConfig resolves the config the Cluster Lifecycle flow runs against:
+// the static demo identity under OKDCTL_WIZARD_DEMO, whose cluster name matches
+// lifecycle.DemoHooks' fixture, or the saved configuration otherwise.
+func lifecycleConfig() (*config.Config, error) {
+	if os.Getenv(wizardDemoEnv) != "" {
+		return demoConfig(), nil
+	}
+	return loadConfig(cfgFile)
+}
+
+// lifecycleSession is an assembled Cluster Lifecycle flow: its steps, the state
+// they write into, and the teardown its environment needs.
+type lifecycleSession struct {
+	steps []wizard.WizardStep
+	state *lifecycle.State
+	// close zeroizes credentials and cancels the op context; it must run only
+	// after the wizard exits, since the hooks the steps call hold both.
+	close func()
+}
+
+// newLifecycleSession assembles the Cluster Lifecycle flow against cfg, driven
+// by the same hooks okdctl node manage builds — or lifecycle.DemoHooks' static
+// six-node fixture under OKDCTL_WIZARD_DEMO. Shared with the hero-hub's
+// manage-nodes verb, which swaps this flow in mid-session, so the two entry
+// points can never drift into different guards.
+func newLifecycleSession(cmd *cobra.Command, cfg *config.Config) (*lifecycleSession, error) {
+	if os.Getenv(wizardDemoEnv) != "" {
+		st := &lifecycle.State{Cfg: cfg}
+		return &lifecycleSession{
+			steps: lifecycle.NewSteps(st, lifecycle.DemoHooks(demoExecStepDelay)),
+			state: st,
+			close: func() {},
+		}, nil
+	}
+
+	ctx := cmd.Context()
+	env, err := prepareNodeOpsEnv(ctx, cfg, true)
+	if err != nil {
+		return nil, err
+	}
 
 	cl, err := clusterstatus.NewClient(env.projectRoot)
 	if err != nil {
-		return err
+		env.close()
+		return nil, err
 	}
 
 	marker, err := node.ReadOpMarker(workspace.WorkDir(env.projectRoot), cfg.Cluster.Name)
 	if err != nil {
-		return err
+		env.close()
+		return nil, err
 	}
 
 	// opCtx is cancelled by the execution screen's graceful-cancel path (first
 	// ctrl+c); the backend unwinds and leaves its resume marker.
 	opCtx, cancelOp := context.WithCancel(ctx)
-	defer cancelOp()
 
 	st := &lifecycle.State{Cfg: cfg, Marker: marker}
 	hooks := lifecycle.Hooks{
@@ -104,17 +157,14 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 		},
 	}
 
-	result, err := wizard.RunFlow(ctx, lifecycle.NewSteps(st, hooks), cfg, lifecycle.Chrome())
-	if err != nil {
-		// A tea failure mid-execution must still surface the resume marker, not
-		// read as a configuration problem.
-		if st.Started && !st.Executed {
-			return &errtypes.ClusterError{Msg: lifecycleInterruptedMsg, Err: err}
-		}
-		return (&errtypes.ConfigError{Msg: "lifecycle wizard failed", Err: err}).
-			WithHint("try again, or use 'okdctl node resize/add/remove' instead")
-	}
-	return reportLifecycleOutcome(cmd, result, st)
+	return &lifecycleSession{
+		steps: lifecycle.NewSteps(st, hooks),
+		state: st,
+		close: func() {
+			cancelOp()
+			env.close()
+		},
+	}, nil
 }
 
 // reportLifecycleOutcome maps wizard terminal state to a truthful exit; an
@@ -234,4 +284,45 @@ func addOptsFromWizard(rc *nodeRunnerCtx, st *lifecycle.State) node.AddOptions {
 	opts := lifecycle.AddOptionsFrom(st)
 	opts.HostTotalMiB, opts.HostAllocatedMiB = rc.HostTotalMiB, rc.HostAllocatedMiB
 	return opts
+}
+
+// lifecycleSlot hands the manage-nodes session between the goroutine that
+// builds it and the main path that closes it, so whichever of the two arrives
+// second — a raced quit or the finished probe — owns the one close.
+type lifecycleSlot struct {
+	mu      sync.Mutex
+	session *lifecycleSession
+	taken   bool
+}
+
+// put registers sess as the session to close, or closes it immediately itself
+// when take has already run, reporting whether it was accepted.
+func (s *lifecycleSlot) put(sess *lifecycleSession) (accepted bool) {
+	s.mu.Lock()
+	if s.taken {
+		s.mu.Unlock()
+		// The main path has already looked and moved on, so no one else will
+		// ever close this. Closing it here, off the lock, is the only thing
+		// standing between a raced quit and live credentials on the heap.
+		sess.close()
+		return false
+	}
+	prev := s.session
+	s.session = sess
+	s.mu.Unlock()
+
+	// The flow prev backed was escaped out of; only one can be live at a time.
+	if prev != nil {
+		prev.close()
+	}
+	return true
+}
+
+// take closes the slot to further registrations and returns whatever session it
+// holds; every put after it closes its own session.
+func (s *lifecycleSlot) take() *lifecycleSession {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.taken = true
+	return s.session
 }

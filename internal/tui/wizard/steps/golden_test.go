@@ -230,6 +230,93 @@ func TestGolden_ConfigureSteps(t *testing.T) {
 	}
 }
 
+// resolveCmd runs cmd and returns the single message it produces, unwrapping
+// the batch the wizard's Update wraps a step's command in.
+func resolveCmd(t *testing.T, cmd tea.Cmd) tea.Msg {
+	t.Helper()
+	if cmd == nil {
+		t.Fatal("expected a command, got none")
+	}
+	msg := cmd()
+	batch, ok := msg.(tea.BatchMsg)
+	if !ok {
+		return msg
+	}
+	for _, inner := range batch {
+		if inner == nil {
+			continue
+		}
+		if m := inner(); m != nil {
+			return m
+		}
+	}
+	t.Fatal("batch produced no message")
+	return nil
+}
+
+// TestGolden_HubReachesClusterStatus drives the hub's cluster-status verb with
+// real keystrokes: the dim "opening …" notice while the flow is still being
+// assembled, then the read-only status box the swapped-in flow renders with its
+// esc-to-hub ribbon, then the hub again once esc is pressed.
+func TestGolden_HubReachesClusterStatus(t *testing.T) {
+	for _, sz := range []struct{ w, h int }{{80, 24}, {100, 30}} {
+		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
+			forceHeroColor(t)
+			tui.SetTerminalWidth(sz.w)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+			m := newGoldenModel(t)
+			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
+			seedHubSaveSlot(m)
+			hub := m.CurrentStep().(*WelcomeStep)
+			hub.SetFlows(HubFlows{ClusterStatus: func() ([]wizard.WizardStep, wizard.FlowChrome, error) {
+				flowSteps, chrome := StatusFlow(StaticStatusSource{Status: statusFixture()})
+				return flowSteps, chrome, nil
+			}})
+
+			downKey := tea.KeyPressMsg{Code: 'j', Text: "j"}
+			for range 3 {
+				m.Update(downKey)
+			}
+			_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+			opening := tuitest.RenderAt(t, m, sz.w, sz.h)
+			tuitest.Golden(t, fmt.Sprintf("hub-opening_%dx%d", sz.w, sz.h), opening)
+			tuitest.AssertFits(t, opening, sz.w, sz.h)
+			if !strings.Contains(tuitest.StripANSI(opening), "opening cluster status") {
+				t.Errorf("the hub must say which flow it is opening, and the notice must fit the body budget:\n%s", opening)
+			}
+			if sz.w == 80 && sz.h == 24 {
+				assertNoScrollIndicator(t, opening)
+			}
+
+			_, initCmd := m.Update(resolveCmd(t, cmd))
+			m.Update(resolveCmd(t, initCmd))
+
+			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
+			tuitest.Golden(t, fmt.Sprintf("cluster-status_%dx%d", sz.w, sz.h), frame)
+			tuitest.AssertFits(t, frame, sz.w, sz.h)
+
+			plain := tuitest.StripANSI(frame)
+			if !strings.Contains(plain, "esc hub") {
+				t.Errorf("the status screen must advertise the esc round-trip:\n%s", plain)
+			}
+			if strings.Contains(plain, "STEPS") {
+				t.Errorf("the status screen must suppress the wide split:\n%s", plain)
+			}
+
+			m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+			back := tuitest.StripANSI(tuitest.RenderAt(t, m, sz.w, sz.h))
+			if !strings.Contains(back, "cluster status") || !strings.Contains(back, "prod-cluster") {
+				t.Errorf("esc must return to the hub:\n%s", back)
+			}
+			if strings.Contains(back, "opening") {
+				t.Errorf("the hub's opening notice must clear on return:\n%s", back)
+			}
+		})
+	}
+}
+
 // heroBlockRows counts the frame rows carrying block-letter hero cells, which
 // is heroRows normally and heroRows*heroScale once the hero doubles.
 func heroBlockRows(frame string) int {

@@ -23,6 +23,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/testutil"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/steps"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 const (
@@ -74,20 +75,20 @@ type wizardCapture struct {
 func stubWizard(t *testing.T, res wizard.Result, verb steps.HubVerb, err error) *wizardCapture {
 	t.Helper()
 	rec := &wizardCapture{}
-	runWizardFn = func(_ *cobra.Command, cfg *config.Config, exists bool) (wizard.Result, steps.HubVerb, error) {
+	runWizardFn = func(_ *cobra.Command, cfg *config.Config, exists bool) (hubOutcome, error) {
 		rec.called = true
 		rec.cfg = cfg
 		rec.configExists = exists
-		return res, verb, err
+		return hubOutcome{Result: res, Verb: verb}, err
 	}
 	return rec
 }
 
 func forbidWizard(t *testing.T) {
 	t.Helper()
-	runWizardFn = func(*cobra.Command, *config.Config, bool) (wizard.Result, steps.HubVerb, error) {
+	runWizardFn = func(*cobra.Command, *config.Config, bool) (hubOutcome, error) {
 		t.Error("wizard must not be constructed on this path")
-		return wizard.Result{Cancelled: true}, steps.HubVerbEditConfig, nil
+		return hubOutcome{Result: wizard.Result{Cancelled: true}, Verb: steps.HubVerbEditConfig}, nil
 	}
 }
 
@@ -384,6 +385,59 @@ func TestRunDeploy_HubDeployVerbSkipsSave(t *testing.T) {
 	}
 	if _, err := os.Stat("okdctl.env"); !os.IsNotExist(err) {
 		t.Errorf("welcome-mode deploy must skip the save pipeline, got stat err %v", err)
+	}
+}
+
+func TestRunDeploy_HubDestroyVerbPrintsHandoffAndDestroysNothing(t *testing.T) {
+	resetDeployState(t)
+	isolateProxmoxEnv(t)
+	t.Chdir(t.TempDir())
+	seedDeployConfig(t)
+	forbidExecute(t)
+
+	before, err := os.ReadFile("okdctl.yaml")
+	if err != nil {
+		t.Fatalf("read seeded config: %v", err)
+	}
+
+	var out bytes.Buffer
+	deployCmd.SetOut(&out)
+	stubWizard(t, wizard.Result{Completed: true}, steps.HubVerbDestroy, nil)
+
+	if err := runDeploy(deployCmd, nil); err != nil {
+		t.Fatalf("runDeploy: %v", err)
+	}
+
+	if !strings.Contains(out.String(), destroyHandoff) {
+		t.Errorf("destroy verb must print the handoff line %q:\n%s", destroyHandoff, out.String())
+	}
+	after, err := os.ReadFile("okdctl.yaml")
+	if err != nil {
+		t.Fatalf("read config after: %v", err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Error("the destroy verb must not run the save pipeline over the on-disk config")
+	}
+	if _, err := os.Stat("okdctl.env"); !os.IsNotExist(err) {
+		t.Errorf("the destroy verb must not write a credential sidecar, got stat err %v", err)
+	}
+	if _, err := os.Stat(workspace.WorkDirName); err == nil {
+		t.Error("the destroy verb must not touch the work directory")
+	}
+}
+
+func TestRunDeploy_HubQuitVerbChangesNothing(t *testing.T) {
+	resetDeployState(t)
+	isolateProxmoxEnv(t)
+	t.Chdir(t.TempDir())
+	forbidExecute(t)
+	stubWizard(t, wizard.Result{Completed: true}, steps.HubVerbQuit, nil)
+
+	if err := runDeploy(deployCmd, nil); err != nil {
+		t.Fatalf("runDeploy: %v", err)
+	}
+	if _, err := os.Stat("okdctl.yaml"); !os.IsNotExist(err) {
+		t.Errorf("the quit verb must not write a config, got stat err %v", err)
 	}
 }
 

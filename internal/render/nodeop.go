@@ -15,13 +15,16 @@ import (
 // a destructive node op that also destroys a data disk.
 const IrreversibleWarning = "destroys the listed VM(s) and their data disk; removed data cannot be recovered"
 
+// colRole is the role column heading shared by every per-node table.
+const colRole = "ROLE"
+
 // nodeRoleStateHeaders labels the per-node table for stop/start plans and
 // for the completion box, none of which carry a terraform address.
-var nodeRoleStateHeaders = []string{"NODE", "ROLE", "STATE"}
+var nodeRoleStateHeaders = []string{"NODE", colRole, "STATE"}
 
 // nodeRoleAddressActionHeaders labels the per-node table for every other op,
 // where the terraform address and its queued action are worth showing.
-var nodeRoleAddressActionHeaders = []string{"NODE", "ROLE", "ADDRESS", "ACTION"}
+var nodeRoleAddressActionHeaders = []string{"NODE", colRole, "ADDRESS", "ACTION"}
 
 // NodeOpConfirm renders the preview before a destructive node op; it prints even under --yes.
 func NodeOpConfirm(plan *node.OpPlan) string {
