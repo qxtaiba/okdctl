@@ -126,17 +126,17 @@ func TestDottedKeyValueSubFullKeyIsMuted(t *testing.T) {
 	full := DottedKeyValueFull("key", "value", DefaultKeyColWidth, 0)
 	sub := DottedKeyValueSubFull("key", "value", DefaultKeyColWidth, 0)
 
-	mutedKey := lipgloss.NewStyle().Foreground(ColorSlate500).Render("key")
-	plainKey := lipgloss.NewStyle().Foreground(ColorSlate400).Render("key")
+	mutedKey := lipgloss.NewStyle().Foreground(ColorTextFaint()).Render("key")
+	plainKey := lipgloss.NewStyle().Foreground(ColorTextDim()).Render("key")
 
 	if !strings.Contains(sub, mutedKey) {
-		t.Errorf("SubFull's key must render with the muted ColorSlate500 foreground:\n%q", sub)
+		t.Errorf("SubFull's key must render with the muted ColorTextFaint() foreground:\n%q", sub)
 	}
 	if !strings.Contains(full, plainKey) {
-		t.Errorf("Full's key must render with the normal ColorSlate400 foreground:\n%q", full)
+		t.Errorf("Full's key must render with the normal ColorTextDim() foreground:\n%q", full)
 	}
 	if strings.Contains(sub, plainKey) {
-		t.Errorf("SubFull's key must not reuse Full's ColorSlate400 styling:\n%q", sub)
+		t.Errorf("SubFull's key must not reuse Full's ColorTextDim() styling:\n%q", sub)
 	}
 }
 

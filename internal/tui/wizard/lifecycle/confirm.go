@@ -94,10 +94,10 @@ func (s *ConfirmStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 func (s *ConfirmStep) View(width, height int) string {
 	s.SetSize(width, height)
 
-	titleStyle := lipgloss.NewStyle().Foreground(tui.ColorError).Bold(true)
-	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
-	promptStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate300)
-	okStyle := lipgloss.NewStyle().Foreground(tui.ColorSuccess)
+	titleStyle := lipgloss.NewStyle().Foreground(tui.ColorError()).Bold(true)
+	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning())
+	promptStyle := lipgloss.NewStyle().Foreground(tui.ColorTextSoft())
+	okStyle := lipgloss.NewStyle().Foreground(tui.ColorSuccess())
 
 	s.input.SetWidth(min(width-8, 52))
 

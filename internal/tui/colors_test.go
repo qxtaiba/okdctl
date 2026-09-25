@@ -30,51 +30,55 @@ func TestHighContrastRequested(t *testing.T) {
 	}
 }
 
-// TestSetDarkBackgroundRebindsMutedTiers pins the light-background muted
-// tier hex values and confirms SetDarkBackground(true) restores the dark
-// defaults.
-func TestSetDarkBackgroundRebindsMutedTiers(t *testing.T) {
+// TestSetDarkBackgroundResolvesPolarity pins the light-background muted tier
+// hex values and confirms SetDarkBackground(true) restores the dark defaults.
+func TestSetDarkBackgroundResolvesPolarity(t *testing.T) {
 	t.Cleanup(func() { SetDarkBackground(true) })
 
 	SetDarkBackground(false)
 	if IsDarkBackground() {
 		t.Error("IsDarkBackground() = true after SetDarkBackground(false)")
 	}
-	if ColorTextDim != lipgloss.Color("#475569") {
-		t.Errorf("light ColorTextDim = %v, want #475569", ColorTextDim)
+	if ColorText() != lipgloss.Color("#0F172A") {
+		t.Errorf("light ColorText() = %v, want #0F172A", ColorText())
 	}
-	if ColorSlate500 != lipgloss.Color("#64748B") {
-		t.Errorf("light ColorSlate500 = %v, want #64748B", ColorSlate500)
+	if ColorTextDim() != lipgloss.Color("#475569") {
+		t.Errorf("light ColorTextDim() = %v, want #475569", ColorTextDim())
 	}
-	if ColorSlate700 != lipgloss.Color("#CBD5E1") {
-		t.Errorf("light ColorSlate700 = %v, want #CBD5E1", ColorSlate700)
+	if ColorTextFaint() != lipgloss.Color("#64748B") {
+		t.Errorf("light ColorTextFaint() = %v, want #64748B", ColorTextFaint())
+	}
+	if ColorRule() != lipgloss.Color("#CBD5E1") {
+		t.Errorf("light ColorRule() = %v, want #CBD5E1", ColorRule())
 	}
 
 	SetDarkBackground(true)
 	if !IsDarkBackground() {
 		t.Error("IsDarkBackground() = false after SetDarkBackground(true)")
 	}
-	if ColorTextDim != lipgloss.Color("#94A3B8") {
-		t.Errorf("dark ColorTextDim = %v, want #94A3B8", ColorTextDim)
+	if ColorText() != lipgloss.Color("#F1F5F9") {
+		t.Errorf("dark ColorText() = %v, want #F1F5F9", ColorText())
 	}
-	if ColorSlate500 != lipgloss.Color("#64748B") {
-		t.Errorf("dark ColorSlate500 = %v, want #64748B", ColorSlate500)
+	if ColorTextDim() != lipgloss.Color("#94A3B8") {
+		t.Errorf("dark ColorTextDim() = %v, want #94A3B8", ColorTextDim())
 	}
-	if ColorSlate700 != lipgloss.Color("#334155") {
-		t.Errorf("dark ColorSlate700 = %v, want #334155", ColorSlate700)
+	if ColorTextFaint() != lipgloss.Color("#64748B") {
+		t.Errorf("dark ColorTextFaint() = %v, want #64748B", ColorTextFaint())
+	}
+	if ColorRule() != lipgloss.Color("#334155") {
+		t.Errorf("dark ColorRule() = %v, want #334155", ColorRule())
 	}
 }
 
 // TestThemeRemapReachesRenderedRows pins bug 14: the light-background and
-// high-contrast remaps must reach a rendered dottedKV row and CodeInline —
-// not stop at the eight aliases — or credentials and recovery commands
+// high-contrast themes must reach a rendered dottedKV row and CodeInline —
+// not stop at the semantic aliases — or credentials and recovery commands
 // render at ~2.4:1 on light terminals with the a11y switch on.
 func TestThemeRemapReachesRenderedRows(t *testing.T) {
 	forced := colorprofile.TrueColor
 	outputProfile.Store(&forced)
 	t.Cleanup(func() {
 		SetColorProfileFor(&bytes.Buffer{})
-		setTheme(ThemeDefault)
 		SetDarkBackground(true)
 	})
 
@@ -89,16 +93,12 @@ func TestThemeRemapReachesRenderedRows(t *testing.T) {
 	if code := CodeInlineStyle.Render("kubeadmin-password"); strings.Contains(code, "34;211;238") {
 		t.Fatalf("light CodeInline still renders Cyan400: %q", code)
 	}
-	// The faint tier re-tunes alongside its siblings: a nested key renders
-	// one muted tier below the light dim (Slate500), never the dim tier
-	// itself and never nothing.
 	sub := DottedKeyValueSubFull("password", "hunter2-placeholder", 12, 60)
 	if !strings.Contains(sub, "100;116;139") {
 		t.Fatalf("light nested key does not carry the Slate500 faint tier: %q", sub)
 	}
 
-	setTheme(ThemeHighContrast)
-	rebuildStyles()
+	UseTheme(ResolveTheme(colorprofile.TrueColor, true, ThemeHighContrast))
 	if code := CodeInlineStyle.Render("kubeadmin-password"); strings.Contains(code, "34;211;238") {
 		t.Fatalf("high-contrast CodeInline still renders Cyan400: %q", code)
 	}
@@ -112,20 +112,16 @@ func TestThemeRemapReachesRenderedRows(t *testing.T) {
 	}
 }
 
-// TestHighContrastPropagatesToBaseStyles proves rebuildStyles fixes the
-// init-ordering bug where TitleStyle used to capture ColorPrimary before
-// setTheme could rebind it.
+// TestHighContrastPropagatesToBaseStyles proves UseTheme rebuilds the derived
+// style caches, fixing the init-ordering bug where TitleStyle used to capture
+// the brand hue before the theme swap could rebind it.
 func TestHighContrastPropagatesToBaseStyles(t *testing.T) {
-	t.Cleanup(func() {
-		setTheme(ThemeDefault)
-		rebuildStyles()
-	})
+	t.Cleanup(func() { SetDarkBackground(true) })
 
-	setTheme(ThemeHighContrast)
-	rebuildStyles()
+	UseTheme(ResolveTheme(colorprofile.TrueColor, true, ThemeHighContrast))
 
-	if got := TitleStyle.GetForeground(); got != hcColorPrimary {
-		t.Errorf("TitleStyle.GetForeground() = %v, want %v", got, hcColorPrimary)
+	if got := TitleStyle.GetForeground(); got != lipgloss.Color("#FF00FF") {
+		t.Errorf("TitleStyle.GetForeground() = %v, want #FF00FF", got)
 	}
 }
 

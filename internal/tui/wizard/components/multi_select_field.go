@@ -202,9 +202,9 @@ const chipCoreWidth = 2 + 3 + 1
 // ellipsized to fit one row, since fieldBox's own lipgloss Width() re-wraps
 // (mid-word) any content line it receives that is still too wide.
 func (f *MultiSelectField) chipsContent(innerWidth int) string {
-	checkedStyle := lipgloss.NewStyle().Foreground(tui.ColorSuccess)
-	uncheckedStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
-	cursorStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true)
+	checkedStyle := lipgloss.NewStyle().Foreground(tui.ColorSuccess())
+	uncheckedStyle := lipgloss.NewStyle().Foreground(tui.ColorTextFaint())
+	cursorStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true)
 
 	var rows []string
 	var row strings.Builder

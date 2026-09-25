@@ -165,7 +165,7 @@ func logRows(lines []LogLine, width, budget int, wrap bool) []string {
 	if width <= 0 || budget <= 0 {
 		return nil
 	}
-	stampStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate600)
+	stampStyle := lipgloss.NewStyle().Foreground(tui.ColorSubtle())
 	stampWidth := lipgloss.Width(logStampFormat)
 	textWidth := logTextWidth(width)
 
@@ -224,11 +224,11 @@ func logLevelTag(level string) string {
 func logLevelStyle(level string) lipgloss.Style {
 	switch strings.ToUpper(level) {
 	case "ERROR":
-		return lipgloss.NewStyle().Foreground(tui.ColorError)
+		return lipgloss.NewStyle().Foreground(tui.ColorError())
 	case "WARN":
-		return lipgloss.NewStyle().Foreground(tui.ColorWarning)
+		return lipgloss.NewStyle().Foreground(tui.ColorWarning())
 	default:
-		return lipgloss.NewStyle().Foreground(tui.ColorSlate400)
+		return lipgloss.NewStyle().Foreground(tui.ColorTextDim())
 	}
 }
 
@@ -248,7 +248,7 @@ func renderLogPane(src LogSource, view logView, width, height int, wrap bool) st
 	header := logPaneHeader(view, len(window), end, first+int64(len(lines)), width)
 	rows := logRows(window, width, budget, wrap)
 	if len(rows) == 0 {
-		rows = []string{lipgloss.NewStyle().Foreground(tui.ColorSlate600).Render("waiting for the first log line…")}
+		rows = []string{lipgloss.NewStyle().Foreground(tui.ColorSubtle()).Render("waiting for the first log line…")}
 	}
 	return strings.Join(append([]string{header}, rows...), "\n")
 }
@@ -262,7 +262,7 @@ func logPaneHeader(view logView, shown int, end, total int64, width int) string 
 	if view.locked && shown > 0 {
 		label = fmt.Sprintf("LOG · %d–%d of %d", end-int64(shown)+1, end, total)
 	}
-	return lipgloss.NewStyle().Foreground(tui.ColorSlate500).MaxWidth(width).Render(label)
+	return lipgloss.NewStyle().Foreground(tui.ColorTextFaint()).MaxWidth(width).Render(label)
 }
 
 // renderLogTail renders the rows that ride under a step's own body when the

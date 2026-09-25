@@ -67,7 +67,7 @@ type PreviewStep struct {
 func NewPreviewStep(st *State, hooks Hooks) *PreviewStep {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
-	sp.Style = lipgloss.NewStyle().Foreground(tui.ColorPrimary)
+	sp.Style = lipgloss.NewStyle().Foreground(tui.ColorPrimary())
 
 	return &PreviewStep{
 		BaseStep: wizard.NewBaseStepWithDisplayTitle(StepIDPreview,
@@ -182,11 +182,11 @@ func (s *PreviewStep) View(width, height int) string {
 		return s.loadingSpinner.View() + " running guards and the terraform plan gate (dry-run)..."
 	}
 	if s.st.DryRunErr != nil {
-		errStyle := lipgloss.NewStyle().Foreground(tui.ColorError).Bold(true)
-		hintStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500).Italic(true)
+		errStyle := lipgloss.NewStyle().Foreground(tui.ColorError()).Bold(true)
+		hintStyle := lipgloss.NewStyle().Foreground(tui.ColorTextFaint()).Italic(true)
 		reason := lipgloss.Wrap(s.st.DryRunErr.Error(), width, "")
 		return errStyle.Render("dry-run failed") + "\n\n" +
-			lipgloss.NewStyle().Foreground(tui.ColorText).Render(reason) + "\n\n" +
+			lipgloss.NewStyle().Foreground(tui.ColorText()).Render(reason) + "\n\n" +
 			hintStyle.Render("esc to go back and adjust")
 	}
 	if s.st.Plan == nil {
@@ -273,7 +273,7 @@ func (s *PreviewStep) renderNodes(st *wizard.SectionStyles, width int) string {
 // table, with each node's OSD/ingress destructive-storage warnings (if any)
 // inserted as plain lines directly beneath its row.
 func (s *PreviewStep) renderNodeTable(width int) []string {
-	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
+	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning())
 	nodes := s.st.Plan.Nodes
 
 	data := make([][]string, len(nodes))
@@ -303,7 +303,7 @@ func (s *PreviewStep) renderNodeTable(width int) []string {
 // renderGates renders the "gates per node" section as a numbered gate grid
 // followed by the plan-safety-gate confirmation line.
 func (s *PreviewStep) renderGates(st *wizard.SectionStyles, width int) string {
-	okStyle := lipgloss.NewStyle().Foreground(tui.ColorSuccess)
+	okStyle := lipgloss.NewStyle().Foreground(tui.ColorSuccess())
 	var b strings.Builder
 	b.WriteString(st.Header.Render("gates per node"))
 	b.WriteString("\n")
@@ -396,9 +396,9 @@ func gateColWidths(labels []string, cols int) []int {
 // that destroys a data disk: a bold "irreversible" label line followed by
 // the shared render.IrreversibleWarning wrapped to width−2.
 func (s *PreviewStep) renderIrreversibleBlock(width int) string {
-	barStyle := lipgloss.NewStyle().Foreground(tui.ColorError)
-	labelStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning).Bold(true)
-	textStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
+	barStyle := lipgloss.NewStyle().Foreground(tui.ColorError())
+	labelStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning()).Bold(true)
+	textStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning())
 	bar := barStyle.Render(tui.IconBar)
 
 	var b strings.Builder
@@ -489,7 +489,7 @@ func (s *PreviewStep) PinnedFooter(width int) string {
 		return ""
 	}
 	if !s.gateSeen {
-		dim := lipgloss.NewStyle().Foreground(tui.ColorSlate500).Italic(true)
+		dim := lipgloss.NewStyle().Foreground(tui.ColorTextFaint()).Italic(true)
 		return lipgloss.NewStyle().MaxWidth(width).Render(dim.Render("scroll to review the plan"))
 	}
 	// MaxWidth (not tui.Truncate) because ViewInline is already ANSI-styled;

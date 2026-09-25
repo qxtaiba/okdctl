@@ -44,9 +44,9 @@ type Stage struct {
 }
 
 var (
-	stageLabelStyle        = lipgloss.NewStyle().Foreground(tui.ColorSlate500)
-	stageLabelCurrentStyle = lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText)
-	stageSeparatorStyle    = lipgloss.NewStyle().Foreground(tui.ColorSlate600)
+	stageLabelStyle        = lipgloss.NewStyle().Foreground(tui.ColorTextFaint())
+	stageLabelCurrentStyle = lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText())
+	stageSeparatorStyle    = lipgloss.NewStyle().Foreground(tui.ColorSubtle())
 )
 
 // StagesTrail returns a FlowChrome.Trail hook that renders stages as

@@ -36,7 +36,7 @@ type focusedFieldStep interface {
 // headers in the house label style.
 func (m *Model) renderContextPane(width, height int) string {
 	p := m.progressInfo()
-	lines := paneStepsLines(p.Titles, p.Current-1, width, height)
+	lines := paneStepsLines(&m.theme, p.Titles, p.Current-1, width, height)
 	remaining := height - len(lines)
 
 	// cascadeOK tracks whether every higher-priority section so far either
@@ -46,7 +46,7 @@ func (m *Model) renderContextPane(width, height int) string {
 	cascadeOK := true
 
 	if facts := m.currentStepAnswered(); len(facts) > 0 {
-		factLines := paneFactsLines(width, facts)
+		factLines := paneFactsLines(&m.theme, width, facts)
 		if need := len(factLines) + 1; remaining >= need {
 			lines = append(lines, "")
 			lines = append(lines, factLines...)
@@ -58,7 +58,7 @@ func (m *Model) renderContextPane(width, height int) string {
 
 	if cascadeOK {
 		if label, help, ok := m.currentStepFocusedFieldHelp(); ok {
-			focusLines := paneFocusedFieldLines(width, label, help)
+			focusLines := paneFocusedFieldLines(&m.theme, width, label, help)
 			if need := len(focusLines) + 1; remaining >= need {
 				lines = append(lines, "")
 				lines = append(lines, focusLines...)
@@ -79,15 +79,15 @@ func (m *Model) renderContextPane(width, height int) string {
 // this at all; the sub-3-row path that can drop even the current row (down
 // to the bare header at maxHeight 1-2) is an unreachable defensive floor,
 // since that gate guarantees maxHeight is at least 1+stepCount.
-func paneStepsLines(titles []string, current, width, maxHeight int) []string {
-	header := paneSectionHeader("progress")
+func paneStepsLines(th *tui.Theme, titles []string, current, width, maxHeight int) []string {
+	header := paneSectionHeader(th, "progress")
 	if maxHeight <= 0 {
 		return nil
 	}
 
 	rows := make([]string, len(titles))
 	for i, title := range titles {
-		glyph, label := paneStepStyles(i, current)
+		glyph, label := paneStepStyles(th, i, current)
 		rows[i] = glyph.Render(paneStepIcon(i, current)) + " " + label.Render(truncateTitle(title, width-2))
 	}
 
@@ -131,14 +131,14 @@ func paneStepsLines(titles []string, current, width, maxHeight int) []string {
 			lines = append(lines, row)
 		}
 	}
-	lines = append(lines, paneEllipsisRow())
+	lines = append(lines, paneEllipsisRow(th))
 	return lines
 }
 
 // paneEllipsisRow renders the dim marker paneStepsLines substitutes for
 // whatever steps a too-small height budget couldn't fit.
-func paneEllipsisRow() string {
-	return lipgloss.NewStyle().Foreground(tui.ColorSlate600).Render("…")
+func paneEllipsisRow(th *tui.Theme) string {
+	return lipgloss.NewStyle().Foreground(th.Subtle).Render("…")
 }
 
 // paneStepIcon returns the status glyph for step i relative to current: past
@@ -159,17 +159,17 @@ func paneStepIcon(i, current int) string {
 // label, the current step renders bright with its glyph in the active
 // accent, and pending steps stay dim throughout — so the list carries the
 // same status hierarchy the form does without competing with it.
-func paneStepStyles(i, current int) (glyph, label lipgloss.Style) {
+func paneStepStyles(th *tui.Theme, i, current int) (glyph, label lipgloss.Style) {
 	switch {
 	case i < current:
-		return lipgloss.NewStyle().Foreground(tui.ColorSuccess),
-			lipgloss.NewStyle().Foreground(tui.ColorSlate500)
+		return lipgloss.NewStyle().Foreground(th.Success),
+			lipgloss.NewStyle().Foreground(th.TextFaint)
 	case i == current:
-		return lipgloss.NewStyle().Foreground(tui.ColorPrimary),
-			lipgloss.NewStyle().Foreground(tui.ColorText)
+		return lipgloss.NewStyle().Foreground(th.Primary),
+			lipgloss.NewStyle().Foreground(th.Text)
 	default:
-		return lipgloss.NewStyle().Foreground(tui.ColorSlate600),
-			lipgloss.NewStyle().Foreground(tui.ColorSlate600)
+		return lipgloss.NewStyle().Foreground(th.Subtle),
+			lipgloss.NewStyle().Foreground(th.Subtle)
 	}
 }
 
@@ -189,11 +189,11 @@ func (m *Model) currentStepAnswered() []render.Fact {
 // paneFactsLines renders the CONFIGURED section's lines — a header row plus
 // one "key: value" row per fact, wrapped to width — without padding them to
 // any particular height; the caller decides whether they fit.
-func paneFactsLines(width int, facts []render.Fact) []string {
+func paneFactsLines(th *tui.Theme, width int, facts []render.Fact) []string {
 	lines := make([]string, 0, len(facts)+1)
-	lines = append(lines, paneSectionHeader("configured"))
+	lines = append(lines, paneSectionHeader(th, "configured"))
 	for _, f := range facts {
-		lines = append(lines, paneFactLines(width, f)...)
+		lines = append(lines, paneFactLines(th, width, f)...)
 	}
 	return lines
 }
@@ -202,9 +202,9 @@ func paneFactsLines(width int, facts []render.Fact) []string {
 // value in normal body text. The raw "key: value" line is wrapped first and
 // styled after (styling before wrapping would split ANSI sequences), so the
 // key/value seam is re-found by rune count on each wrapped row.
-func paneFactLines(width int, f render.Fact) []string {
-	keyStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
-	valueStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate300)
+func paneFactLines(th *tui.Theme, width int, f render.Fact) []string {
+	keyStyle := lipgloss.NewStyle().Foreground(th.TextFaint)
+	valueStyle := lipgloss.NewStyle().Foreground(th.TextSoft)
 
 	keyLen := len([]rune(f.Key + ":"))
 	consumed := 0
@@ -243,11 +243,11 @@ func (m *Model) currentStepFocusedFieldHelp() (label, help string, ok bool) {
 // row, the field's label in normal body text, then its help text in dim
 // italic, both wrapped to width — without padding them to any particular
 // height; the caller decides whether they fit.
-func paneFocusedFieldLines(width int, label, help string) []string {
-	labelLine := lipgloss.NewStyle().Foreground(tui.ColorSlate300).Render(lipgloss.Wrap(label, width, ""))
-	helpLine := lipgloss.NewStyle().Foreground(tui.ColorSlate500).Italic(true).Render(lipgloss.Wrap(help, width, ""))
+func paneFocusedFieldLines(th *tui.Theme, width int, label, help string) []string {
+	labelLine := lipgloss.NewStyle().Foreground(th.TextSoft).Render(lipgloss.Wrap(label, width, ""))
+	helpLine := lipgloss.NewStyle().Foreground(th.TextFaint).Italic(true).Render(lipgloss.Wrap(help, width, ""))
 
-	lines := []string{paneSectionHeader("focused field")}
+	lines := []string{paneSectionHeader(th, "focused field")}
 	lines = append(lines, strings.Split(labelLine, "\n")...)
 	lines = append(lines, strings.Split(helpLine, "\n")...)
 	return lines
@@ -257,6 +257,6 @@ func paneFocusedFieldLines(width int, label, help string) []string {
 // subsection style — the same cyan bold SectionStyles.Header gives the
 // review screen's section titles — so the pane's sections read as proper
 // labels rather than more dim body text.
-func paneSectionHeader(title string) string {
-	return lipgloss.NewStyle().Foreground(tui.ColorCyan500).Bold(true).Render(strings.ToUpper(title))
+func paneSectionHeader(th *tui.Theme, title string) string {
+	return lipgloss.NewStyle().Foreground(th.Accent).Bold(true).Render(strings.ToUpper(title))
 }

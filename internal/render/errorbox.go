@@ -42,14 +42,14 @@ func ErrorSummary(err error, exitCode int, runID string) string {
 	footer := fmt.Sprintf("exit %d · run_id %s", exitCode, runID)
 	sb.WriteString("  " + tui.MutedStyle.Render(footer) + "\n")
 
-	return "\n" + tui.BoxedSectionAccent(sb.String(), "error", tui.DefaultBoxWidth, tui.ColorError) + "\n"
+	return "\n" + tui.BoxedSectionAccent(sb.String(), "error", tui.DefaultBoxWidth, tui.ColorError()) + "\n"
 }
 
 // ErrorCard renders the red error box body — kind chip, wrapped message, and
 // pointer-led hint — without the exit-code/run-id footer ErrorSummary adds.
 func ErrorCard(kind, message, hint string, width int) string {
 	sb := errorBody(kind, message, hint, width)
-	return "\n" + tui.BoxedSectionAccent(sb.String(), "error", width, tui.ColorError) + "\n"
+	return "\n" + tui.BoxedSectionAccent(sb.String(), "error", width, tui.ColorError()) + "\n"
 }
 
 // errorBody writes the kind chip, wrapped message, and pointer-led hint

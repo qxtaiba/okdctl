@@ -156,8 +156,8 @@ var resourceSummaryStyles = struct {
 	value lipgloss.Style
 	sep   string
 }{
-	value: lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true),
-	sep:   lipgloss.NewStyle().Foreground(tui.ColorSlate600).Render("  ·  "),
+	value: lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true),
+	sep:   lipgloss.NewStyle().Foreground(tui.ColorSubtle()).Render("  ·  "),
 }
 
 // renderResourceSummary returns the totals line for the resources step's

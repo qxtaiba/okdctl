@@ -99,7 +99,7 @@ type StreamStep struct {
 func NewStreamStep(st *State, hooks Hooks) *StreamStep {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
-	sp.Style = lipgloss.NewStyle().Foreground(tui.ColorPrimary)
+	sp.Style = lipgloss.NewStyle().Foreground(tui.ColorPrimary())
 
 	return &StreamStep{
 		BaseStep:       wizard.NewBaseStepWithDisplayTitle(StepIDStream, "install", "", ""),
@@ -108,13 +108,13 @@ func NewStreamStep(st *State, hooks Hooks) *StreamStep {
 		events:         make(chan Event, 64),
 		now:            time.Now,
 		loadingSpinner: sp,
-		boldStyle:      lipgloss.NewStyle().Foreground(tui.ColorText).Bold(true),
-		doneStyle:      lipgloss.NewStyle().Foreground(tui.ColorSuccess),
-		failStyle:      lipgloss.NewStyle().Foreground(tui.ColorError),
-		pendStyle:      lipgloss.NewStyle().Foreground(tui.ColorSlate600),
-		dimStyle:       lipgloss.NewStyle().Foreground(tui.ColorSlate500),
-		warnStyle:      lipgloss.NewStyle().Foreground(tui.ColorWarning),
-		activeStyle:    lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true),
+		boldStyle:      lipgloss.NewStyle().Foreground(tui.ColorText()).Bold(true),
+		doneStyle:      lipgloss.NewStyle().Foreground(tui.ColorSuccess()),
+		failStyle:      lipgloss.NewStyle().Foreground(tui.ColorError()),
+		pendStyle:      lipgloss.NewStyle().Foreground(tui.ColorSubtle()),
+		dimStyle:       lipgloss.NewStyle().Foreground(tui.ColorTextFaint()),
+		warnStyle:      lipgloss.NewStyle().Foreground(tui.ColorWarning()),
+		activeStyle:    lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true),
 	}
 }
 

@@ -126,10 +126,10 @@ func (s *StatusStep) View(width, height int) string {
 
 	switch {
 	case s.loading:
-		return lipgloss.NewStyle().Foreground(tui.ColorSlate400).Render("reading cluster status…")
+		return lipgloss.NewStyle().Foreground(tui.ColorTextDim()).Render("reading cluster status…")
 	case s.err != nil:
 		return tui.EmptyState("cluster status unavailable", "press r to retry") + "\n\n" +
-			lipgloss.NewStyle().Foreground(tui.ColorSlate500).Render(lipgloss.Wrap(s.err.Error(), width, ""))
+			lipgloss.NewStyle().Foreground(tui.ColorTextFaint()).Render(lipgloss.Wrap(s.err.Error(), width, ""))
 	case s.status == nil:
 		return tui.EmptyState("no cluster status reported", "deploy a cluster with 'okdctl deploy'")
 	default:

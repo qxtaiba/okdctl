@@ -74,7 +74,7 @@ type NodePlacementStep struct {
 func NewNodePlacementStep() *NodePlacementStep {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
-	sp.Style = lipgloss.NewStyle().Foreground(tui.ColorPrimary)
+	sp.Style = lipgloss.NewStyle().Foreground(tui.ColorPrimary())
 
 	return &NodePlacementStep{
 		BaseStep: wizard.NewBaseStepWithDisplayTitle(
@@ -285,8 +285,8 @@ func (s *NodePlacementStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 // the placement form, wrapped to width-2 to match the form's section rows,
 // without the blank row that separates the two.
 func (s *NodePlacementStep) discoveryHeader(width int) string {
-	noteStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500).Italic(true).PaddingLeft(2)
-	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning).PaddingLeft(2)
+	noteStyle := lipgloss.NewStyle().Foreground(tui.ColorTextFaint()).Italic(true).PaddingLeft(2)
+	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning()).PaddingLeft(2)
 
 	switch {
 	case s.discoveryErr != nil:

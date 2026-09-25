@@ -158,7 +158,7 @@ func (s *DoneStep) sinkLine(col int) string {
 	if s.hooks.LogPath == "" {
 		return ""
 	}
-	dim := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
+	dim := lipgloss.NewStyle().Foreground(tui.ColorTextFaint())
 	return "\n\n" + dim.Render(lipgloss.Wrap("full log "+s.hooks.LogPath, col, ""))
 }
 

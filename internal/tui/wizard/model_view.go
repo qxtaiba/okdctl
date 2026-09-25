@@ -35,7 +35,7 @@ func (m *Model) View() tea.View {
 	}
 
 	if m.tooSmall() {
-		v.Content = "\n  " + lipgloss.NewStyle().Foreground(tui.ColorTextDim).Render(tooSmallNotice)
+		v.Content = "\n  " + lipgloss.NewStyle().Foreground(tui.ColorTextDim()).Render(tooSmallNotice)
 		return v
 	}
 
@@ -170,7 +170,7 @@ func renderPaneRule(height int) string {
 	if height < 1 {
 		height = 1
 	}
-	style := lipgloss.NewStyle().Foreground(tui.ColorSlate700)
+	style := lipgloss.NewStyle().Foreground(tui.ColorRule())
 	return style.Render(strings.Repeat("│\n", height-1) + "│")
 }
 
@@ -184,7 +184,7 @@ func (m *Model) statusRow() string {
 	// inset — matching the body's viewport inset — is prepended literally.
 	// truncateTitle, not MaxWidth: a silent clip amputates exactly the
 	// "— fix" suffix every error carries.
-	style := lipgloss.NewStyle().Foreground(tui.ColorError).Inline(true)
+	style := lipgloss.NewStyle().Foreground(tui.ColorError()).Inline(true)
 	return "  " + style.Render(truncateTitle(tui.IconError+" "+m.err.Error(), width-2))
 }
 
@@ -296,7 +296,7 @@ func (m *Model) renderHeader() string {
 	rightW := lipgloss.Width(right)
 
 	titleWidth := max(width-2-rightW-2, 8)
-	title := lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText).Inline(true).
+	title := lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText()).Inline(true).
 		Render(truncateTitle(m.headerTitle(), titleWidth))
 
 	gap := max(width-2-lipgloss.Width(title)-rightW, 1)
@@ -496,14 +496,14 @@ func (m *Model) renderHelpRow() string {
 // badge itself before it would wrap the frame.
 func (m *Model) renderFooterRule() string {
 	width := m.contentWidth()
-	lineStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate700)
+	lineStyle := lipgloss.NewStyle().Foreground(tui.ColorRule())
 
 	contextBadge := m.renderContextBadge()
 	var badgeStyled string
 	badgeWidth := 0
 	if contextBadge != "" {
 		badgeStyled = lipgloss.NewStyle().
-			Foreground(tui.ColorSuccess).
+			Foreground(tui.ColorSuccess()).
 			Bold(true).
 			Render(" " + tui.IconCaretRight + " " + contextBadge + " ")
 		badgeWidth = lipgloss.Width(badgeStyled)
@@ -532,7 +532,7 @@ const centreInRuleReserve = 8
 // two sides within one column of each other; callers must ensure ind fits
 // (its width plus centreInRuleReserve at most avail) or the row overflows.
 func (m *Model) centreInRule(ind string, avail int) string {
-	lineStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate700)
+	lineStyle := lipgloss.NewStyle().Foreground(tui.ColorRule())
 	indWidth := lipgloss.Width(ind)
 
 	left := max((avail-indWidth-2)/2, 3)
@@ -554,9 +554,9 @@ func (m *Model) scrollIndicator() (arrows, message string, scrollable bool) {
 	atTop := m.viewport.YOffset() == 0
 	atBottom := scrollPercent >= 1.0
 
-	arrowStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true)
-	dimArrowStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate600)
-	textStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate400)
+	arrowStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true)
+	dimArrowStyle := lipgloss.NewStyle().Foreground(tui.ColorSubtle())
+	textStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim())
 
 	switch {
 	case atTop:

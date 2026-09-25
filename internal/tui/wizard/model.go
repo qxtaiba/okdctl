@@ -142,6 +142,11 @@ type Model struct {
 	config *config.Config
 	chrome FlowChrome
 
+	// theme is the resolved Theme this frame renders with, injected at
+	// construction and re-resolved once when the terminal reports its
+	// background — the exemplar for per-surface theme injection.
+	theme tui.Theme
+
 	quitting bool
 	result   Result
 	err      error
@@ -303,6 +308,7 @@ func NewFlowModel(steps []WizardStep, cfg *config.Config, chrome FlowChrome) *Mo
 		currentStep: 0,
 		config:      cfg,
 		chrome:      chrome,
+		theme:       tui.CurrentTheme(),
 		keyMap:      defaultKeyMap(),
 	}
 
@@ -351,6 +357,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// terminal's one reply lands here as the sole caller, early — before
 		// the user has had any chance to act on the rendered wizard.
 		tui.SetDarkBackground(msg.IsDark())
+		m.theme = tui.CurrentTheme()
 		rebuildWizardStyles()
 		components.RebuildStyles()
 		return m, nil

@@ -39,6 +39,7 @@ func detect(w io.Writer) colorprofile.Profile {
 func SetColorProfileFor(w io.Writer) {
 	p := detect(w)
 	outputProfile.Store(&p)
+	resolveActiveTheme(IsDarkBackground())
 }
 
 // DisableColor forces the render color profile to strip all ANSI for the
@@ -46,6 +47,7 @@ func SetColorProfileFor(w io.Writer) {
 func DisableColor() {
 	p := colorprofile.NoTTY
 	outputProfile.Store(&p)
+	resolveActiveTheme(IsDarkBackground())
 }
 
 func colorProfile() colorprofile.Profile {

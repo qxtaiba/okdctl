@@ -15,7 +15,7 @@ import (
 
 // TestConfirmHeadingCarriesWarningIcon guards item 4 of the second-cut safety
 // findings: "confirm irreversible removal" was the flow's only color-alone
-// risk signal (ColorError with no glyph), so a NO_COLOR/colorblind operator
+// risk signal (ColorError() with no glyph), so a NO_COLOR/colorblind operator
 // had nothing but hue distinguishing it from any other heading.
 func TestConfirmHeadingCarriesWarningIcon(t *testing.T) {
 	cfg := config.DefaultConfig()

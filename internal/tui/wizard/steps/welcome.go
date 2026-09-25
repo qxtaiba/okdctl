@@ -113,7 +113,7 @@ type WelcomeStep struct {
 func NewWelcomeStep() *WelcomeStep {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
-	sp.Style = lipgloss.NewStyle().Foreground(tui.ColorPrimary)
+	sp.Style = lipgloss.NewStyle().Foreground(tui.ColorPrimary())
 
 	s := &WelcomeStep{
 		BaseStep: wizard.NewBaseStep(wizard.StepIDWelcome, "welcome", ""),

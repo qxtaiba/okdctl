@@ -23,13 +23,13 @@ var helpOverlayGlobalKeys = map[string]bool{
 }
 
 var (
-	helpOverlayTitleStyle   = lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText)
-	helpOverlaySectionStyle = lipgloss.NewStyle().Bold(true).Foreground(tui.ColorSlate400)
-	helpOverlayKeyStyle     = lipgloss.NewStyle().Bold(true).Foreground(tui.ColorSlate300)
-	helpOverlayHintStyle    = lipgloss.NewStyle().Italic(true).Foreground(tui.ColorSlate600)
+	helpOverlayTitleStyle   = lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText())
+	helpOverlaySectionStyle = lipgloss.NewStyle().Bold(true).Foreground(tui.ColorTextDim())
+	helpOverlayKeyStyle     = lipgloss.NewStyle().Bold(true).Foreground(tui.ColorTextSoft())
+	helpOverlayHintStyle    = lipgloss.NewStyle().Italic(true).Foreground(tui.ColorSubtle())
 	helpOverlayPanelStyle   = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
-				BorderForeground(tui.ColorSlate600).
+				BorderForeground(tui.ColorSubtle()).
 				Padding(0, 1)
 )
 

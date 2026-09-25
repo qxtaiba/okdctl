@@ -6,8 +6,7 @@ package tui
 import "charm.land/lipgloss/v2"
 
 // Base text styles used across TUI output; rebuildStyles assigns them from
-// the current colour vars since the vars below initialize before colors.go's
-// init runs setTheme.
+// the active resolved Theme — derived caches, not a second source of truth.
 var (
 	TitleStyle      lipgloss.Style
 	TextStyle       lipgloss.Style
@@ -21,17 +20,17 @@ var (
 	SpinnerStyle    lipgloss.Style
 )
 
-// rebuildStyles assigns TitleStyle through SpinnerStyle from the current
-// colour vars; call after setTheme or SetDarkBackground changes them.
+// rebuildStyles assigns TitleStyle through SpinnerStyle from the active
+// resolved Theme; UseTheme calls it after every theme swap.
 func rebuildStyles() {
-	TitleStyle = lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary)
+	TitleStyle = lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary())
 	TextStyle = lipgloss.NewStyle()
-	MutedStyle = lipgloss.NewStyle().Foreground(ColorSlate500)
-	DimStyle = lipgloss.NewStyle().Foreground(ColorTextDim)
-	CodeInlineStyle = lipgloss.NewStyle().Foreground(ColorCode)
-	SuccessStyle = lipgloss.NewStyle().Foreground(ColorSuccess).Bold(true)
-	ErrorStyle = lipgloss.NewStyle().Foreground(ColorError).Bold(true)
-	WarningStyle = lipgloss.NewStyle().Foreground(ColorWarning).Bold(true)
-	HighlightStyle = lipgloss.NewStyle().Foreground(ColorPrimary).Bold(true)
-	SpinnerStyle = lipgloss.NewStyle().Foreground(ColorAccent).Bold(true)
+	MutedStyle = lipgloss.NewStyle().Foreground(ColorTextFaint())
+	DimStyle = lipgloss.NewStyle().Foreground(ColorTextDim())
+	CodeInlineStyle = lipgloss.NewStyle().Foreground(ColorCode())
+	SuccessStyle = lipgloss.NewStyle().Foreground(ColorSuccess()).Bold(true)
+	ErrorStyle = lipgloss.NewStyle().Foreground(ColorError()).Bold(true)
+	WarningStyle = lipgloss.NewStyle().Foreground(ColorWarning()).Bold(true)
+	HighlightStyle = lipgloss.NewStyle().Foreground(ColorPrimary()).Bold(true)
+	SpinnerStyle = lipgloss.NewStyle().Foreground(ColorAccent()).Bold(true)
 }

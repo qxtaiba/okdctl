@@ -76,7 +76,7 @@ func (s *TargetStep) SetSize(width, height int) {
 func NewTargetStep(st *State, hooks Hooks) *TargetStep {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
-	sp.Style = lipgloss.NewStyle().Foreground(tui.ColorPrimary)
+	sp.Style = lipgloss.NewStyle().Foreground(tui.ColorPrimary())
 
 	return &TargetStep{
 		BaseStep:       wizard.NewBaseStepWithDisplayTitle(StepIDTarget, "target", "", ""),
@@ -223,9 +223,9 @@ func (s *TargetStep) buildChoices(nodes []cluster.NodeDetail) {
 // nodeTable renders nodes as an aligned NODE/ROLE/READY table, pre-styling
 // each READY cell as ready, notready, or blocked-after via blockedAfter.
 func nodeTable(nodes []cluster.NodeDetail, blockedAfter map[string]string) (header string, rows []string) {
-	readyStyle := lipgloss.NewStyle().Foreground(tui.ColorSuccess)
-	notReadyStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
-	blockedStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate600)
+	readyStyle := lipgloss.NewStyle().Foreground(tui.ColorSuccess())
+	notReadyStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning())
+	blockedStyle := lipgloss.NewStyle().Foreground(tui.ColorSubtle())
 
 	data := make([][]string, len(nodes))
 	for i, n := range nodes {
@@ -280,13 +280,13 @@ func (s *TargetStep) View(width, height int) string {
 		return s.loadingSpinner.View() + " listing cluster nodes..."
 	}
 	if s.loadErr != nil {
-		warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
-		hintStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500).Italic(true)
+		warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning())
+		hintStyle := lipgloss.NewStyle().Foreground(tui.ColorTextFaint()).Italic(true)
 		return warnStyle.Render("list nodes: "+s.loadErr.Error()) + "\n\n" +
 			hintStyle.Render("esc to go back")
 	}
 	if s.selector == nil || len(s.choices) == 0 {
-		return lipgloss.NewStyle().Foreground(tui.ColorWarning).Render("no eligible nodes found")
+		return lipgloss.NewStyle().Foreground(tui.ColorWarning()).Render("no eligible nodes found")
 	}
 
 	s.applyDropdownBudget()
@@ -296,7 +296,7 @@ func (s *TargetStep) View(width, height int) string {
 		out = "  " + s.header + "\n" + out
 	}
 	if len(s.blocked) > 0 {
-		dim := lipgloss.NewStyle().Foreground(tui.ColorSlate600)
+		dim := lipgloss.NewStyle().Foreground(tui.ColorSubtle())
 		for _, line := range s.blocked {
 			out += "\n" + dim.Render(line)
 		}

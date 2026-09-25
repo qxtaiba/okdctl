@@ -67,14 +67,14 @@ func TestInputField_ErrorBorderWinsOverFocus(t *testing.T) {
 	rows := strings.Split(f.View(), "\n")
 	borderRow := rows[1]
 
-	errPrefix := ansiPrefix(t, tui.ColorError)
-	focusPrefix := ansiPrefix(t, tui.ColorPrimary)
+	errPrefix := ansiPrefix(t, tui.ColorError())
+	focusPrefix := ansiPrefix(t, tui.ColorPrimary())
 
 	if !strings.Contains(borderRow, errPrefix) {
-		t.Fatalf("border row missing ColorError sequence: %q", borderRow)
+		t.Fatalf("border row missing ColorError() sequence: %q", borderRow)
 	}
 	if strings.Contains(borderRow, focusPrefix) {
-		t.Fatalf("border row unexpectedly contains ColorPrimary sequence: %q", borderRow)
+		t.Fatalf("border row unexpectedly contains ColorPrimary() sequence: %q", borderRow)
 	}
 }
 

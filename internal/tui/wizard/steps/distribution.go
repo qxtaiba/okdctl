@@ -84,7 +84,7 @@ func (s *DistributionStep) SetSize(width, height int) {
 func NewDistributionStep() *DistributionStep {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(tui.ColorPrimary)
+	s.Style = lipgloss.NewStyle().Foreground(tui.ColorPrimary())
 
 	selector := components.NewSelector(nil)
 
@@ -355,11 +355,11 @@ func (s *DistributionStep) applyDropdownBudget() {
 func (s *DistributionStep) viewLoadingPhase() string {
 	var content strings.Builder
 	content.WriteString(lipgloss.NewStyle().
-		Foreground(tui.ColorSlate400).
+		Foreground(tui.ColorTextDim()).
 		Render(s.loadingSpinner.View() + " fetching okd releases"))
 	content.WriteString("\n")
 	content.WriteString(lipgloss.NewStyle().
-		Foreground(tui.ColorSlate500).
+		Foreground(tui.ColorTextFaint()).
 		Italic(true).
 		Render("this can take a few seconds"))
 	return content.String()
@@ -374,7 +374,7 @@ func (s *DistributionStep) viewErrorPhase(width int) string {
 	if s.loadError != nil {
 		content.WriteString("\n\n")
 		content.WriteString(lipgloss.NewStyle().
-			Foreground(tui.ColorSlate500).
+			Foreground(tui.ColorTextFaint()).
 			Width(width - 2).
 			Render("details: " + s.loadError.Error()))
 	}
@@ -391,16 +391,16 @@ func (s *DistributionStep) viewVersionPhase() string {
 	if s.expandedMinor >= 0 {
 		hints = append(hints,
 			lipgloss.NewStyle().
-				Foreground(tui.ColorSlate600).
+				Foreground(tui.ColorSubtle()).
 				Render(fmt.Sprintf("showing patch versions for 4.%d", s.expandedMinor)),
 			lipgloss.NewStyle().
-				Foreground(tui.ColorSlate500).
+				Foreground(tui.ColorTextFaint()).
 				Italic(true).
 				Render("press tab to collapse"),
 		)
 	} else {
 		hints = append(hints, lipgloss.NewStyle().
-			Foreground(tui.ColorSlate500).
+			Foreground(tui.ColorTextFaint()).
 			Italic(true).
 			Render("press tab to expand patch versions"))
 	}

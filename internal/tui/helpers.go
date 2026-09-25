@@ -58,19 +58,18 @@ func wrapValueColumn(value string, valueStart int, valueStyle *lipgloss.Style, t
 }
 
 func dottedKV(key, value string, keyColWidth int, opts dottedKVOpts) string {
-	// Semantic aliases, not raw slate/amber tiers: setTheme and
-	// SetDarkBackground remap these, so the a11y and light-background
-	// palettes reach every rendered row.
-	keyColor := ColorTextDim
+	// Semantic theme roles, not raw palette tiers: the resolved Theme
+	// carries the a11y and light-background variants to every rendered row.
+	keyColor := ColorTextDim()
 	if opts.subKey {
-		keyColor = ColorTextFaint
+		keyColor = ColorTextFaint()
 	}
 	keyStyle := lipgloss.NewStyle().Foreground(keyColor)
-	dotStyle := lipgloss.NewStyle().Foreground(ColorSlate700)
+	dotStyle := lipgloss.NewStyle().Foreground(ColorRule())
 
 	valueStyle := lipgloss.NewStyle()
 	if opts.highlight {
-		valueStyle = lipgloss.NewStyle().Foreground(ColorWarning).Bold(true)
+		valueStyle = lipgloss.NewStyle().Foreground(ColorWarning()).Bold(true)
 	}
 
 	if keyColWidth <= 0 {
@@ -110,7 +109,7 @@ func DottedKeyValueSubFull(key, value string, keyColWidth, totalWidth int) strin
 
 // KeyValueNote renders "key    text" — key padded to keyColWidth with no dot leaders, wrapping text under the value column across several lines when it doesn't fit.
 func KeyValueNote(key, text string, keyColWidth, totalWidth int) string {
-	keyStyle := lipgloss.NewStyle().Foreground(ColorTextDim)
+	keyStyle := lipgloss.NewStyle().Foreground(ColorTextDim())
 	valueStyle := lipgloss.NewStyle()
 
 	if keyColWidth <= 0 {

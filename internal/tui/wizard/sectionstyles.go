@@ -28,21 +28,21 @@ type SectionStyles struct {
 func NewSectionStyles(width int) SectionStyles {
 	return SectionStyles{
 		Header: lipgloss.NewStyle().
-			Foreground(tui.ColorCyan500).
+			Foreground(tui.ColorAccent()).
 			Bold(true),
 		Separator: lipgloss.NewStyle().
-			Foreground(tui.ColorSlate700).
+			Foreground(tui.ColorRule()).
 			Render(strings.Repeat("┄", width)),
 		ThickSeparator: lipgloss.NewStyle().
-			Foreground(tui.ColorSlate600).
+			Foreground(tui.ColorSubtle()).
 			Render(strings.Repeat("═", width)),
 		Label: lipgloss.NewStyle().
-			Foreground(tui.ColorSlate400).
+			Foreground(tui.ColorTextDim()).
 			Width(minLabelWidth),
 		Value: lipgloss.NewStyle().
-			Foreground(tui.ColorText),
+			Foreground(tui.ColorText()),
 		Check: lipgloss.NewStyle().
-			Foreground(tui.ColorSuccess),
+			Foreground(tui.ColorSuccess()),
 	}
 }
 

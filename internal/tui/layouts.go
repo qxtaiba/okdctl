@@ -131,8 +131,8 @@ func boxedSectionCore(content, title string, width int, cfg boxConfig) string {
 // color is stripped under a non-truecolor profile.
 func BoxedSectionCompact(content, title string, width int) string {
 	return boxedSectionCore(content, title, width, boxConfig{
-		borderColor: ColorPrimaryDim,
-		titleColor:  ColorPrimary,
+		borderColor: ColorPrimaryDim(),
+		titleColor:  ColorPrimary(),
 		compact:     true,
 	})
 }

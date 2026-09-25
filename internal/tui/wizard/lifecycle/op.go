@@ -100,8 +100,8 @@ func (s *OpStep) IsCentered() bool {
 func (s *OpStep) View(width, height int) string {
 	s.SetSize(width, height)
 
-	titleStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true)
-	subtitleStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate400).Italic(true)
+	titleStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true)
+	subtitleStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim()).Italic(true)
 
 	// Title and subtitle sit tight against each other (no blank row) — they
 	// read as one header block, and the row it reclaims is what keeps the
@@ -111,7 +111,7 @@ func (s *OpStep) View(width, height int) string {
 	content += subtitleStyle.Render(fmt.Sprintf("manage nodes on cluster %q", s.st.Cfg.Cluster.Name)) + "\n\n"
 
 	if s.st.Marker != nil {
-		warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
+		warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning())
 		banner := fmt.Sprintf("%s interrupted %s of %s — step: %s, recorded %s ago",
 			tui.IconWarning, s.st.Marker.Op, s.st.Marker.Target, s.st.Marker.Step,
 			humanAge(s.now().Sub(s.st.Marker.Timestamp)))
@@ -130,14 +130,14 @@ func (s *OpStep) View(width, height int) string {
 func (s *OpStep) renderOption(o *opChoice, selected bool, width int) string {
 	var bullet, title string
 	if selected {
-		bullet = lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true).Render(tui.IconActive)
-		title = lipgloss.NewStyle().Foreground(tui.ColorText).Bold(true).Render(o.title)
+		bullet = lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true).Render(tui.IconActive)
+		title = lipgloss.NewStyle().Foreground(tui.ColorText()).Bold(true).Render(o.title)
 	} else {
-		bullet = lipgloss.NewStyle().Foreground(tui.ColorSlate600).Render(tui.IconPending)
-		title = lipgloss.NewStyle().Foreground(tui.ColorSlate300).Render(o.title)
+		bullet = lipgloss.NewStyle().Foreground(tui.ColorSubtle()).Render(tui.IconPending)
+		title = lipgloss.NewStyle().Foreground(tui.ColorTextSoft()).Render(o.title)
 	}
 	desc := lipgloss.Wrap(o.desc, min(width, opCardWidth)-8, "")
-	descStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500).PaddingLeft(2)
+	descStyle := lipgloss.NewStyle().Foreground(tui.ColorTextFaint()).PaddingLeft(2)
 	return bullet + " " + title + "\n" + descStyle.Render(desc)
 }
 

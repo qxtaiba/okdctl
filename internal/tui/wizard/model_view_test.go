@@ -241,7 +241,7 @@ func TestModel_WindowTitleFollowsStep(t *testing.T) {
 }
 
 // lightSlate700ANSI and darkSlate700ANSI are the truecolor SGR sequences for
-// ColorSlate700's light (#CBD5E1) and dark (#334155) tier values.
+// ColorRule()'s light (#CBD5E1) and dark (#334155) tier values.
 const (
 	lightSlate700ANSI = "38;2;203;213;225"
 	darkSlate700ANSI  = "38;2;51;65;85"
@@ -268,10 +268,10 @@ func TestModel_BackgroundColorMsgRebuildsStyles(t *testing.T) {
 
 	frame := m.View().Content
 	if !strings.Contains(frame, lightSlate700ANSI) {
-		t.Errorf("light-tier ColorSlate700 (%s) not found in rendered frame:\n%s", lightSlate700ANSI, frame)
+		t.Errorf("light-tier ColorRule() (%s) not found in rendered frame:\n%s", lightSlate700ANSI, frame)
 	}
 	if strings.Contains(frame, darkSlate700ANSI) {
-		t.Errorf("stale dark-tier ColorSlate700 (%s) still rendered:\n%s", darkSlate700ANSI, frame)
+		t.Errorf("stale dark-tier ColorRule() (%s) still rendered:\n%s", darkSlate700ANSI, frame)
 	}
 }
 
@@ -301,17 +301,20 @@ func TestModel_BackgroundColorMsgInvalidatesSelectorCache(t *testing.T) {
 
 	before := step.View(0, 0)
 	if !strings.Contains(before, darkSlate700ANSI) {
-		t.Fatalf("setup: expected dark-tier ColorSlate700 (%s) in the selector's first render:\n%q", darkSlate700ANSI, before)
+		t.Fatalf("setup: expected dark-tier ColorRule() (%s) in the selector's first render:\n%q", darkSlate700ANSI, before)
 	}
 
 	m.Update(tea.BackgroundColorMsg{Color: color.White})
 
+	// The connector cell is the one place the rule tier renders here; the
+	// whole-frame check would false-positive on light TextSoft, whose hex
+	// mirrors the dark rule tier across the slate ladder.
 	after := step.View(0, 0)
-	if !strings.Contains(after, lightSlate700ANSI) {
-		t.Errorf("light-tier ColorSlate700 (%s) not found after BackgroundColorMsg — Selector's cache was not invalidated:\n%q", lightSlate700ANSI, after)
+	if !strings.Contains(after, lightSlate700ANSI+"m  │") {
+		t.Errorf("light-tier ColorRule() (%s) not on the connector after BackgroundColorMsg — Selector's cache was not invalidated:\n%q", lightSlate700ANSI, after)
 	}
-	if strings.Contains(after, darkSlate700ANSI) {
-		t.Errorf("stale dark-tier ColorSlate700 (%s) still rendered — Selector's cache was not invalidated:\n%q", darkSlate700ANSI, after)
+	if strings.Contains(after, darkSlate700ANSI+"m  │") {
+		t.Errorf("stale dark-tier ColorRule() (%s) still on the connector — Selector's cache was not invalidated:\n%q", darkSlate700ANSI, after)
 	}
 }
 

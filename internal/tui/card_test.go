@@ -10,7 +10,7 @@ import (
 )
 
 func TestCard_TitleInBorder(t *testing.T) {
-	card := Card("vaults", "one\ntwo", 40, ColorPrimary)
+	card := Card("vaults", "one\ntwo", 40, ColorPrimary())
 	rows := strings.Split(tuitest.StripANSI(card), "\n")
 
 	if !strings.HasPrefix(rows[0], "╭─ vaults ─") {

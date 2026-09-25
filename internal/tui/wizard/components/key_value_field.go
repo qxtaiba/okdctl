@@ -299,12 +299,12 @@ func (f *KeyValueField) View() string {
 	}
 	rows = append(rows, f.viewAddRow())
 
-	accent := tui.ColorSlate600
+	accent := tui.ColorSubtle()
 	switch {
 	case f.err != nil:
-		accent = tui.ColorError
+		accent = tui.ColorError()
 	case f.focused:
-		accent = tui.ColorPrimary
+		accent = tui.ColorPrimary()
 	}
 
 	out := tui.Card(f.Label, strings.Join(rows, "\n"), f.width, accent)
@@ -328,9 +328,9 @@ func (f *KeyValueField) cellWidth() int {
 // viewRow renders row i as "key  value", dim unless it holds the cursor; in
 // edit mode the cursor row becomes two joined fieldBox cells instead.
 func (f *KeyValueField) viewRow(i, colW int) string {
-	cursorStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true)
-	activeStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate300)
-	dimStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
+	cursorStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true)
+	activeStyle := lipgloss.NewStyle().Foreground(tui.ColorTextSoft())
+	dimStyle := lipgloss.NewStyle().Foreground(tui.ColorTextFaint())
 
 	r := &f.rows[i]
 	isCursor := f.focused && i == f.cursor
@@ -370,7 +370,7 @@ func kvBlurredCell(in *textinput.Model, colW int) string {
 
 // viewAddRow renders the trailing "+ add" row that the 'a' key acts on.
 func (f *KeyValueField) viewAddRow() string {
-	return lipgloss.NewStyle().Foreground(tui.ColorSlate500).Render(" + add")
+	return lipgloss.NewStyle().Foreground(tui.ColorTextFaint()).Render(" + add")
 }
 
 func parseKVString(value string) []kvRow {

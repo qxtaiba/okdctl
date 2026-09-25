@@ -13,14 +13,14 @@ import (
 // while skip-drain is selected) always wins over both, since there is
 // nothing left to flag or focus toward.
 func fieldBox(content string, outer int, focused, hasErr, disabled bool) string {
-	border := tui.ColorSlate600
+	border := tui.ColorSubtle()
 	switch {
 	case disabled:
-		border = tui.ColorSlate700
+		border = tui.ColorRule()
 	case hasErr:
-		border = tui.ColorError
+		border = tui.ColorError()
 	case focused:
-		border = tui.ColorPrimary
+		border = tui.ColorPrimary()
 	}
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -39,11 +39,11 @@ func fieldBox(content string, outer int, focused, hasErr, disabled bool) string 
 const defaultTagReserve = 8
 
 var (
-	labelStyle = lipgloss.NewStyle().Foreground(tui.ColorSlate300)
-	errStyle   = lipgloss.NewStyle().Foreground(tui.ColorError)
+	labelStyle = lipgloss.NewStyle().Foreground(tui.ColorTextSoft())
+	errStyle   = lipgloss.NewStyle().Foreground(tui.ColorError())
 
 	// helpStyle and tagStyle are assigned by RebuildStyles since they
-	// capture ColorSlate500, a tier SetDarkBackground rebinds.
+	// capture ColorTextFaint(), a tier SetDarkBackground rebinds.
 	helpStyle lipgloss.Style
 	tagStyle  lipgloss.Style
 )
@@ -55,12 +55,12 @@ var (
 var stylesGeneration int
 
 // RebuildStyles assigns helpStyle and tagStyle from the current
-// tui.ColorSlate500 value and advances stylesGeneration so per-instance
+// tui.ColorTextFaint() value and advances stylesGeneration so per-instance
 // caches elsewhere in the package invalidate; call at init and whenever
 // tui.SetDarkBackground rebinds a tier.
 func RebuildStyles() {
-	helpStyle = lipgloss.NewStyle().Foreground(tui.ColorSlate500)
-	tagStyle = lipgloss.NewStyle().Foreground(tui.ColorSlate500)
+	helpStyle = lipgloss.NewStyle().Foreground(tui.ColorTextFaint())
+	tagStyle = lipgloss.NewStyle().Foreground(tui.ColorTextFaint())
 	stylesGeneration++
 }
 

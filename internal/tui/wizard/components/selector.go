@@ -153,12 +153,12 @@ func (s *Selector) getOptionStyles() optionStyles {
 		return *s.cachedStyles
 	}
 	styles := optionStyles{
-		bulletSelected:   lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true),
-		bulletUnselected: lipgloss.NewStyle().Foreground(tui.ColorSlate600),
-		desc:             lipgloss.NewStyle().Foreground(tui.ColorSlate500),
-		recommended:      lipgloss.NewStyle().Foreground(tui.ColorSuccess).Italic(true),
-		current:          lipgloss.NewStyle().Foreground(tui.ColorInfo).Italic(true),
-		line:             lipgloss.NewStyle().Foreground(tui.ColorSlate700),
+		bulletSelected:   lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true),
+		bulletUnselected: lipgloss.NewStyle().Foreground(tui.ColorSubtle()),
+		desc:             lipgloss.NewStyle().Foreground(tui.ColorTextFaint()),
+		recommended:      lipgloss.NewStyle().Foreground(tui.ColorSuccess()).Italic(true),
+		current:          lipgloss.NewStyle().Foreground(tui.ColorInfo()).Italic(true),
+		line:             lipgloss.NewStyle().Foreground(tui.ColorRule()),
 	}
 	s.cachedStyles = &styles
 	s.cachedGeneration = stylesGeneration
@@ -168,15 +168,15 @@ func (s *Selector) getOptionStyles() optionStyles {
 func (s *Selector) getTitleStyle(style OptionStyle) lipgloss.Style {
 	switch style {
 	case OptionStyleLatestStable:
-		return lipgloss.NewStyle().Foreground(tui.ColorSuccess)
+		return lipgloss.NewStyle().Foreground(tui.ColorSuccess())
 	case OptionStyleStable:
-		return lipgloss.NewStyle().Foreground(tui.ColorCyan400)
+		return lipgloss.NewStyle().Foreground(tui.ColorCode())
 	case OptionStylePreview, OptionStyleLatestPreview:
-		return lipgloss.NewStyle().Foreground(tui.ColorWarning)
+		return lipgloss.NewStyle().Foreground(tui.ColorWarning())
 	case OptionStyleLTS:
-		return lipgloss.NewStyle().Foreground(tui.ColorInfo)
+		return lipgloss.NewStyle().Foreground(tui.ColorInfo())
 	default:
-		return lipgloss.NewStyle().Foreground(tui.ColorSlate300)
+		return lipgloss.NewStyle().Foreground(tui.ColorTextSoft())
 	}
 }
 
@@ -197,8 +197,8 @@ func (s *Selector) View() string {
 
 	dropdownStart, dropdownEnd := s.getDropdownBounds()
 
-	scrollIndicatorStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
-	dropdownBorderStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate700)
+	scrollIndicatorStyle := lipgloss.NewStyle().Foreground(tui.ColorTextFaint())
+	dropdownBorderStyle := lipgloss.NewStyle().Foreground(tui.ColorRule())
 
 	s.spanKnown = false
 	line := 0
@@ -343,8 +343,8 @@ func (s *CompactSelector) Update(msg tea.Msg) (*CompactSelector, tea.Cmd) {
 func (s *CompactSelector) View() string {
 	var lines []string
 
-	selectedStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true)
-	unselectedStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate400)
+	selectedStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true)
+	unselectedStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim())
 
 	for i, opt := range s.options {
 		var line string
@@ -365,8 +365,8 @@ func (s *CompactSelector) View() string {
 // label's own width — the block is a rectangle, so a caller centering it keeps
 // that column intact instead of centering each row on its own.
 func (s *CompactSelector) ViewPointer() string {
-	selectedStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true)
-	unselectedStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate400)
+	selectedStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true)
+	unselectedStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim())
 
 	widest := 0
 	for _, opt := range s.options {
@@ -389,8 +389,8 @@ func (s *CompactSelector) ViewPointer() string {
 
 // ViewInline renders the options as a single horizontal row of bulleted radios.
 func (s *CompactSelector) ViewInline() string {
-	selectedStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true)
-	unselectedStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate400)
+	selectedStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true)
+	unselectedStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim())
 
 	parts := make([]string, len(s.options))
 	for i, opt := range s.options {

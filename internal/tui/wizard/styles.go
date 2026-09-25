@@ -15,10 +15,10 @@ var (
 
 	WizardBorderStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
-				BorderForeground(tui.ColorSlate600)
+				BorderForeground(tui.ColorSubtle())
 
 	// HeaderStyle and FooterStyle are assigned by rebuildWizardStyles since
-	// they capture ColorSlate700/ColorSlate500, tiers SetDarkBackground rebinds.
+	// they capture ColorRule()/ColorTextFaint(), tiers SetDarkBackground rebinds.
 	HeaderStyle lipgloss.Style
 	FooterStyle lipgloss.Style
 )
@@ -26,29 +26,29 @@ var (
 // Header element styles (logo, tagline, step indicator).
 var (
 	LogoStyle = lipgloss.NewStyle().
-			Foreground(tui.ColorPrimary).
+			Foreground(tui.ColorPrimary()).
 			Bold(true)
 
 	TaglineStyle = lipgloss.NewStyle().
-			Foreground(tui.ColorSlate400).
+			Foreground(tui.ColorTextDim()).
 			Italic(true)
 
-	// StepIndicatorStyle is assigned by rebuildWizardStyles (ColorSlate500).
+	// StepIndicatorStyle is assigned by rebuildWizardStyles (ColorTextFaint()).
 	StepIndicatorStyle lipgloss.Style
 
 	StepIndicatorCurrentStyle = lipgloss.NewStyle().
-					Foreground(tui.ColorPrimary).
+					Foreground(tui.ColorPrimary()).
 					Bold(true)
 )
 
 // Help-ribbon styles for footer key/text/separator rendering.
 var (
 	HelpKeyStyle = lipgloss.NewStyle().
-			Foreground(tui.ColorSlate300).
+			Foreground(tui.ColorTextSoft()).
 			Bold(true)
 
 	// HelpTextStyle and HelpSeparatorStyle are assigned by rebuildWizardStyles
-	// (ColorSlate500, ColorSlate700).
+	// (ColorTextFaint(), ColorRule()).
 	HelpTextStyle      lipgloss.Style
 	HelpSeparatorStyle lipgloss.Style
 )
@@ -56,37 +56,37 @@ var (
 // Step progress-dot styles (completed / current / pending).
 var (
 	StepDotCompletedStyle = lipgloss.NewStyle().
-				Foreground(tui.ColorSuccess)
+				Foreground(tui.ColorSuccess())
 
 	StepDotCurrentStyle = lipgloss.NewStyle().
-				Foreground(tui.ColorPrimary)
+				Foreground(tui.ColorPrimary())
 
 	StepDotPendingStyle = lipgloss.NewStyle().
-				Foreground(tui.ColorSlate600)
+				Foreground(tui.ColorSubtle())
 )
 
 // rebuildWizardStyles assigns HeaderStyle, FooterStyle, StepIndicatorStyle,
-// HelpTextStyle, and HelpSeparatorStyle from the current tui.ColorSlate500/700
+// HelpTextStyle, and HelpSeparatorStyle from the current tui.ColorTextFaint()/700
 // values; call at init and whenever tui.SetDarkBackground rebinds those tiers.
 func rebuildWizardStyles() {
 	HeaderStyle = lipgloss.NewStyle().
 		Padding(0, 1).
 		BorderBottom(true).
 		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(tui.ColorSlate700)
+		BorderForeground(tui.ColorRule())
 
 	FooterStyle = lipgloss.NewStyle().
 		Padding(0, 2).
-		Foreground(tui.ColorSlate500)
+		Foreground(tui.ColorTextFaint())
 
 	StepIndicatorStyle = lipgloss.NewStyle().
-		Foreground(tui.ColorSlate500)
+		Foreground(tui.ColorTextFaint())
 
 	HelpTextStyle = lipgloss.NewStyle().
-		Foreground(tui.ColorSlate500)
+		Foreground(tui.ColorTextFaint())
 
 	HelpSeparatorStyle = lipgloss.NewStyle().
-		Foreground(tui.ColorSlate700)
+		Foreground(tui.ColorRule())
 }
 
 func init() {

@@ -574,10 +574,10 @@ func TestFormSection_IsCompleteHasNoSideEffects(t *testing.T) {
 		t.Fatal("isComplete() with an empty required field = true, want false")
 	}
 
-	errColor := lipgloss.NewStyle().Foreground(tui.ColorError).Render("x")
+	errColor := lipgloss.NewStyle().Foreground(tui.ColorError()).Render("x")
 	prefix := errColor[:strings.IndexByte(errColor, 'x')]
 	if strings.Contains(field.View(), prefix) {
-		t.Fatal("View() after isComplete() carries ColorError styling, want no side effect")
+		t.Fatal("View() after isComplete() carries ColorError() styling, want no side effect")
 	}
 }
 

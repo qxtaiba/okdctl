@@ -269,7 +269,7 @@ func (s *ParamsStep) View(width, height int) string {
 	s.syncTimeoutFieldDisabled()
 	out := s.inner.View(width)
 	if s.drainModeField != nil && s.drainModeField.Value() == drainModeSkip {
-		warn := lipgloss.NewStyle().Foreground(tui.ColorWarning).PaddingLeft(2)
+		warn := lipgloss.NewStyle().Foreground(tui.ColorWarning()).PaddingLeft(2)
 		out += "\n" + warn.Render(strings.Join(s.skipDrainWarning(), "\n"))
 	}
 	return out

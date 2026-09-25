@@ -863,9 +863,9 @@ func (s *DataDrivenStep) ShouldShow(cfg *config.Config) bool {
 // formViewStyles caches DataDrivenStep.View's lipgloss styles, built once at
 // init and never rebuilt: tui.Color* tiers do rebind on background
 // detection (SetDarkBackground), but the one tier this struct captures
-// (note's ColorSlate500) resolves to the same hex on both branches, so the
+// (note's ColorTextFaint()) resolves to the same hex on both branches, so the
 // cache never actually goes stale in value — unlike Selector.cachedStyles,
-// which captures ColorSlate700 and does need a generation check.
+// which captures ColorRule() and does need a generation check.
 var formViewStyles = struct {
 	sectionHeader   lipgloss.Style
 	section         lipgloss.Style
@@ -876,27 +876,27 @@ var formViewStyles = struct {
 	warning         lipgloss.Style
 }{
 	sectionHeader: lipgloss.NewStyle().
-		Foreground(tui.ColorCyan500).
+		Foreground(tui.ColorAccent()).
 		Bold(true),
 	section: lipgloss.NewStyle().
 		PaddingLeft(2),
 	completedRender: lipgloss.NewStyle().
-		Foreground(tui.ColorSuccess).
+		Foreground(tui.ColorSuccess()).
 		Bold(true).
 		Render(tui.IconSuccess),
 	activeRender: lipgloss.NewStyle().
-		Foreground(tui.ColorPrimary).
+		Foreground(tui.ColorPrimary()).
 		Bold(true).
 		Render(tui.IconActive),
 	pendingRender: lipgloss.NewStyle().
-		Foreground(tui.ColorSlate600).
+		Foreground(tui.ColorSubtle()).
 		Render(tui.IconPending),
 	note: lipgloss.NewStyle().
-		Foreground(tui.ColorSlate500).
+		Foreground(tui.ColorTextFaint()).
 		Italic(true).
 		PaddingLeft(2),
 	warning: lipgloss.NewStyle().
-		Foreground(tui.ColorWarning),
+		Foreground(tui.ColorWarning()),
 }
 
 // View renders the step's sections via the embedded form and appends any
@@ -924,7 +924,7 @@ func (s *DataDrivenStep) View(width, height int) string {
 
 // RenderInfoCard renders body as a bordered card titled title, exactly width columns wide.
 func RenderInfoCard(title, body string, width int) string {
-	return tui.Card(title, lipgloss.Wrap(body, width-4, ""), width, tui.ColorSlate600)
+	return tui.Card(title, lipgloss.Wrap(body, width-4, ""), width, tui.ColorSubtle())
 }
 
 // SetString adapts a plain string setter into a ConfigSetter.

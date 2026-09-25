@@ -37,7 +37,7 @@ func TestContextPane_StepsListMirrorsTrailState(t *testing.T) {
 	m.Update(JumpToStepMsg{StepID: steps[1].ID()})
 
 	p := m.progressInfo()
-	rawLines := paneStepsLines(p.Titles, p.Current-1, 40, 40)
+	rawLines := paneStepsLines(currentThemePtr(), p.Titles, p.Current-1, 40, 40)
 	lines := make([]string, len(rawLines))
 	for i, l := range rawLines {
 		lines[i] = tuitest.StripANSI(l)
@@ -201,59 +201,59 @@ func stylePrefix(t *testing.T, fg color.Color) string {
 }
 
 func TestPaneSectionHeader_HouseLabelStyle(t *testing.T) {
-	got := paneSectionHeader("progress")
-	want := lipgloss.NewStyle().Foreground(tui.ColorCyan500).Bold(true).Render("PROGRESS")
+	got := paneSectionHeader(currentThemePtr(), "progress")
+	want := lipgloss.NewStyle().Foreground(tui.ColorAccent()).Bold(true).Render("PROGRESS")
 	if got != want {
 		t.Fatalf("paneSectionHeader = %q, want the SectionStyles.Header look %q", got, want)
 	}
 }
 
 func TestPaneStepRows_StatusHierarchy(t *testing.T) {
-	lines := paneStepsLines([]string{"done step", "current step", "pending step"}, 1, 40, 40)
+	lines := paneStepsLines(currentThemePtr(), []string{"done step", "current step", "pending step"}, 1, 40, 40)
 
-	if want := stylePrefix(t, tui.ColorSuccess) + tui.IconSuccess; !strings.HasPrefix(lines[1], want) {
+	if want := stylePrefix(t, tui.ColorSuccess()) + tui.IconSuccess; !strings.HasPrefix(lines[1], want) {
 		t.Errorf("passed row = %q, want a %q glyph prefix", lines[1], want)
 	}
-	if !strings.Contains(lines[1], stylePrefix(t, tui.ColorSlate500)+"done step") {
+	if !strings.Contains(lines[1], stylePrefix(t, tui.ColorTextFaint())+"done step") {
 		t.Errorf("passed row = %q, want its label muted in Slate500", lines[1])
 	}
-	if want := stylePrefix(t, tui.ColorPrimary) + tui.IconActive; !strings.HasPrefix(lines[2], want) {
+	if want := stylePrefix(t, tui.ColorPrimary()) + tui.IconActive; !strings.HasPrefix(lines[2], want) {
 		t.Errorf("current row = %q, want a %q glyph prefix", lines[2], want)
 	}
-	if !strings.Contains(lines[2], stylePrefix(t, tui.ColorText)+"current step") {
-		t.Errorf("current row = %q, want its label bright in ColorText", lines[2])
+	if !strings.Contains(lines[2], stylePrefix(t, tui.ColorText())+"current step") {
+		t.Errorf("current row = %q, want its label bright in ColorText()", lines[2])
 	}
-	if want := stylePrefix(t, tui.ColorSlate600) + tui.IconPending; !strings.HasPrefix(lines[3], want) {
+	if want := stylePrefix(t, tui.ColorSubtle()) + tui.IconPending; !strings.HasPrefix(lines[3], want) {
 		t.Errorf("pending row = %q, want a %q glyph prefix", lines[3], want)
 	}
-	if !strings.Contains(lines[3], stylePrefix(t, tui.ColorSlate600)+"pending step") {
+	if !strings.Contains(lines[3], stylePrefix(t, tui.ColorSubtle())+"pending step") {
 		t.Errorf("pending row = %q, want its label dim in Slate600", lines[3])
 	}
 }
 
 func TestPaneFactLines_KeyDimValueNormal(t *testing.T) {
-	lines := paneFactLines(40, render.Fact{Key: "host", Value: "10.0.0.1"})
+	lines := paneFactLines(currentThemePtr(), 40, render.Fact{Key: "host", Value: "10.0.0.1"})
 	if len(lines) != 1 {
 		t.Fatalf("paneFactLines = %d lines, want 1: %v", len(lines), lines)
 	}
-	if !strings.HasPrefix(lines[0], stylePrefix(t, tui.ColorSlate500)+"host:") {
+	if !strings.HasPrefix(lines[0], stylePrefix(t, tui.ColorTextFaint())+"host:") {
 		t.Errorf("fact = %q, want its key dim in Slate500", lines[0])
 	}
-	if !strings.Contains(lines[0], stylePrefix(t, tui.ColorSlate300)+" 10.0.0.1") {
+	if !strings.Contains(lines[0], stylePrefix(t, tui.ColorTextSoft())+" 10.0.0.1") {
 		t.Errorf("fact = %q, want its value in Slate300 body text", lines[0])
 	}
 }
 
 func TestPaneFactLines_WrapKeepsTheSeam(t *testing.T) {
-	lines := paneFactLines(12, render.Fact{Key: "host", Value: "a-very-long-value-that-wraps"})
+	lines := paneFactLines(currentThemePtr(), 12, render.Fact{Key: "host", Value: "a-very-long-value-that-wraps"})
 	if len(lines) < 2 {
 		t.Fatalf("fixture must wrap: %v", lines)
 	}
-	if !strings.HasPrefix(lines[0], stylePrefix(t, tui.ColorSlate500)+"host:") {
+	if !strings.HasPrefix(lines[0], stylePrefix(t, tui.ColorTextFaint())+"host:") {
 		t.Errorf("first row = %q, want the key dim", lines[0])
 	}
 	for i, l := range lines[1:] {
-		if !strings.HasPrefix(l, stylePrefix(t, tui.ColorSlate300)) {
+		if !strings.HasPrefix(l, stylePrefix(t, tui.ColorTextSoft())) {
 			t.Errorf("continuation row %d = %q, want value styling only", i+1, l)
 		}
 	}
@@ -265,11 +265,11 @@ func TestPaneFactLines_WrapKeepsTheSeam(t *testing.T) {
 }
 
 func TestPaneFocusedFieldLines_NameNormalHelpItalicDim(t *testing.T) {
-	lines := paneFocusedFieldLines(40, "host", "proxmox host ip")
-	if !strings.HasPrefix(lines[1], stylePrefix(t, tui.ColorSlate300)+"host") {
+	lines := paneFocusedFieldLines(currentThemePtr(), 40, "host", "proxmox host ip")
+	if !strings.HasPrefix(lines[1], stylePrefix(t, tui.ColorTextSoft())+"host") {
 		t.Errorf("field name = %q, want Slate300 body text", lines[1])
 	}
-	wantHelp := lipgloss.NewStyle().Foreground(tui.ColorSlate500).Italic(true).Render("proxmox host ip")
+	wantHelp := lipgloss.NewStyle().Foreground(tui.ColorTextFaint()).Italic(true).Render("proxmox host ip")
 	if lines[2] != wantHelp {
 		t.Errorf("help = %q, want dim italic %q", lines[2], wantHelp)
 	}
@@ -287,13 +287,13 @@ func TestPaneStepsLines_TruncatesUnderAnExtremeHeightBudget(t *testing.T) {
 	}
 
 	for _, maxHeight := range []int{1, 2, 3, 5, 10} {
-		lines := paneStepsLines(titles, 10, 40, maxHeight)
+		lines := paneStepsLines(currentThemePtr(), titles, 10, 40, maxHeight)
 		if len(lines) > maxHeight {
 			t.Errorf("maxHeight=%d: got %d lines", maxHeight, len(lines))
 		}
 	}
 
-	lines := paneStepsLines(titles, 10, 40, 5)
+	lines := paneStepsLines(currentThemePtr(), titles, 10, 40, 5)
 	plain := make([]string, len(lines))
 	for i, l := range lines {
 		plain[i] = tuitest.StripANSI(l)
@@ -314,4 +314,9 @@ func TestPaneStepsLines_TruncatesUnderAnExtremeHeightBudget(t *testing.T) {
 	if !foundCurrent {
 		t.Errorf("current step's row (IconActive) must survive truncation: %v", plain)
 	}
+}
+
+func currentThemePtr() *tui.Theme {
+	th := tui.CurrentTheme()
+	return &th
 }

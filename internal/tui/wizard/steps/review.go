@@ -391,7 +391,7 @@ func (s *ReviewStep) computeTotals() (totalCPU, totalMemGB, totalOSDiskGB, total
 // renderComputeWarnings renders the wrapped, amber ⚠ lines flagging totals
 // that exceed the review's ram/vcpu thresholds, or "" when neither trips.
 func (s *ReviewStep) renderComputeWarnings(totalCPU, totalMemGB, width int) string {
-	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
+	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning())
 	nodeCount := countUniqueNodes(s.cfg)
 	perHost := ""
 	if nodeCount > 1 {

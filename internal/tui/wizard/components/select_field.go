@@ -237,7 +237,7 @@ func (f *SelectField) arrowContent() string {
 	if len(f.Options) < 2 {
 		return value
 	}
-	arrow := lipgloss.NewStyle().Foreground(tui.ColorPrimary)
+	arrow := lipgloss.NewStyle().Foreground(tui.ColorPrimary())
 	if value == "" {
 		value = tagStyle.Render("none")
 	}
@@ -245,10 +245,10 @@ func (f *SelectField) arrowContent() string {
 }
 
 // booleanContent renders both options as a radio pair, lighting the
-// selected side in ColorPrimary and dimming the other to Slate500.
+// selected side in ColorPrimary() and dimming the other to the faint tier.
 func (f *SelectField) booleanContent() string {
-	active := lipgloss.NewStyle().Foreground(tui.ColorPrimary)
-	inactive := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
+	active := lipgloss.NewStyle().Foreground(tui.ColorPrimary())
+	inactive := lipgloss.NewStyle().Foreground(tui.ColorTextFaint())
 
 	parts := make([]string, len(f.Options))
 	for i, opt := range f.Options {

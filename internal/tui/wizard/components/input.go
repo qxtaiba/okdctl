@@ -100,24 +100,24 @@ func NewInputField(label, placeholder string) *InputField {
 
 // fieldInputStyles builds the textinput color scheme shared by every
 // InputField: brand-purple cursor, dim italic placeholder, and — while
-// isDefault — Slate500 text so an unmodified default reads as dimmer than a
-// typed value. Placeholder is italicized on top of its own dimmer Slate600
+// isDefault — the faint tier so an unmodified default reads as dimmer than a
+// typed value. Placeholder is italicized on top of its own dimmer subtle
 // so an empty box's hint text never reads as an already-filled default at a
 // glance (NO_COLOR strips both the color and the italic, leaving the
 // " default" tag as the only disambiguator there — see SetDefault). disabled
-// wins over isDefault, dimming further to Slate600 — see InputField.Disabled.
+// wins over isDefault, dimming further to the subtle tier — see InputField.Disabled.
 func fieldInputStyles(isDefault, disabled bool) textinput.Styles {
-	focusedText := lipgloss.NewStyle().Foreground(tui.ColorText)
-	blurredText := lipgloss.NewStyle().Foreground(tui.ColorSlate300)
+	focusedText := lipgloss.NewStyle().Foreground(tui.ColorText())
+	blurredText := lipgloss.NewStyle().Foreground(tui.ColorTextSoft())
 	switch {
 	case disabled:
-		focusedText = lipgloss.NewStyle().Foreground(tui.ColorSlate600)
-		blurredText = lipgloss.NewStyle().Foreground(tui.ColorSlate600)
+		focusedText = lipgloss.NewStyle().Foreground(tui.ColorSubtle())
+		blurredText = lipgloss.NewStyle().Foreground(tui.ColorSubtle())
 	case isDefault:
-		focusedText = lipgloss.NewStyle().Foreground(tui.ColorSlate500)
-		blurredText = lipgloss.NewStyle().Foreground(tui.ColorSlate500)
+		focusedText = lipgloss.NewStyle().Foreground(tui.ColorTextFaint())
+		blurredText = lipgloss.NewStyle().Foreground(tui.ColorTextFaint())
 	}
-	placeholder := lipgloss.NewStyle().Foreground(tui.ColorSlate600).Italic(true)
+	placeholder := lipgloss.NewStyle().Foreground(tui.ColorSubtle()).Italic(true)
 	return textinput.Styles{
 		Focused: textinput.StyleState{
 			Text:        focusedText,
@@ -133,7 +133,7 @@ func fieldInputStyles(isDefault, disabled bool) textinput.Styles {
 		// that one character unstyled instead of matching its neighbors —
 		// a static reverse-video block sidesteps the glitch entirely.
 		Cursor: textinput.CursorStyle{
-			Color: tui.ColorPrimary,
+			Color: tui.ColorPrimary(),
 			Shape: tea.CursorBlock,
 			Blink: false,
 		},

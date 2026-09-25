@@ -23,9 +23,9 @@ func ConfirmBox(title string, facts []Fact, irreversible string) string {
 	}
 	sb.Newline()
 
-	accent := tui.ColorWarning
+	accent := tui.ColorWarning()
 	if irreversible != "" {
-		accent = tui.ColorError
+		accent = tui.ColorError()
 		for _, line := range tui.WrapLines("irreversible — "+irreversible, sb.ContentWidth()) {
 			sb.WriteString("  " + tui.ErrorStyle.Render(line) + "\n")
 		}
@@ -55,5 +55,5 @@ func DryRunActions(title string, facts []Fact, would []string) string {
 
 	sb.WriteString("  " + tui.HighlightStyle.Render(tui.IconPointer+" re-run without --dry-run to execute") + "\n")
 
-	return "\n" + tui.BoxedSectionAccent(sb.String(), title, tui.DefaultBoxWidth, tui.ColorWarning) + "\n"
+	return "\n" + tui.BoxedSectionAccent(sb.String(), title, tui.DefaultBoxWidth, tui.ColorWarning()) + "\n"
 }
