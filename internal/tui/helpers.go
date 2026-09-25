@@ -60,35 +60,11 @@ func wrapValueColumn(value string, valueStart int, valueStyle *lipgloss.Style, t
 func dottedKV(key, value string, keyColWidth int, opts dottedKVOpts) string {
 	// Semantic theme roles, not raw palette tiers: the resolved Theme
 	// carries the a11y and light-background variants to every rendered row.
-	keyColor := ColorTextDim()
-	if opts.subKey {
-		keyColor = ColorTextFaint()
-	}
-	keyStyle := lipgloss.NewStyle().Foreground(keyColor)
-	dotStyle := lipgloss.NewStyle().Foreground(ColorRule())
-
-	valueStyle := lipgloss.NewStyle()
-	if opts.highlight {
-		valueStyle = lipgloss.NewStyle().Foreground(ColorWarning()).Bold(true)
-	}
-
-	if keyColWidth <= 0 {
-		keyColWidth = DefaultKeyColWidth
-	}
-
-	keyLen := lipgloss.Width(key)
-	// Dots fill to the shared value column; a key close enough that fewer
-	// than three dots remain keeps the column with what's left (floor 1),
-	// and only a key overrunning the column itself shifts its own row —
-	// sibling rows stay aligned.
-	dotsNeeded := keyColWidth - keyLen - 2
-	if dotsNeeded < 1 {
-		dotsNeeded = 3
-	}
-	valueStart := keyLen + 1 + dotsNeeded + 1
-
-	prefix := keyStyle.Render(key) + " " + dotStyle.Render(strings.Repeat(".", dotsNeeded)) + " "
-	return Downsample(prefix + wrapValueColumn(value, valueStart, &valueStyle, opts.totalWidth))
+	lines := RenderFacts(
+		[]FactRow{{Key: key, Value: value, Highlight: opts.highlight, Sub: opts.subKey}},
+		&FactLayout{Leader: FactLeaderDots, KeyWidth: keyColWidth, TotalWidth: opts.totalWidth, Styles: DefaultFactStyles()},
+	)
+	return Downsample(strings.Join(lines, "\n"))
 }
 
 // DottedKeyValueFull renders "key ....... value" padded to totalWidth, wrapping the value under the value column across several lines when it doesn't fit.

@@ -12,16 +12,16 @@
   │  │    reachable ................................ yes                                      │  │  
   │  │                                                                                        │  │  
   │  │  nodes                                                                                 │  │  
-  │  │    NAME             ROLE    READY                                                      │  │  
-  │  │    homelab-master0  master  yes                                                        │  │  
-  │  │    homelab-master1  master  yes                                                        │  │  
-  │  │    homelab-master2  master  yes                                                        │  │  
-  │  │    homelab-worker0  worker  yes                                                        │  │  
-  │  │    homelab-worker1  worker  yes                                                        │  │  
-  │  │    homelab-worker2  worker  yes                                                        │  │  
+  │  │    NAME             READY                                                              │  │  
+  │  │    masters (3)                                                                         │  │  
+  │  │    homelab-master0  yes                                                                │  │  
+  │  │    homelab-master1  yes                                                                │  │  
+  │  │    homelab-master2  yes                                                                │  │  
+  │  │    workers (3)                                                                         │  │  
+  │  │    homelab-worker0  yes                                                                │  │  
+  │  │    homelab-worker1  yes                                                                │  │  
+  │  │    homelab-worker2  yes                                                                │  │  
   │  │                                                                                        │  │  
-  │  │    masters .................................. 3                                        │  │  
-  │  │    workers .................................. 3                                        │  │  
   │  │    total .................................... 6                                        │  │  
   │                                                                                              │  
   │───────────────────────── ↑ ↓  scroll down for more ────────────────────────── ▸ prod-cluster │  

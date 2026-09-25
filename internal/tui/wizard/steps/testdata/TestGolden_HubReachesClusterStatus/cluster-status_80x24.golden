@@ -12,11 +12,11 @@
   │  │    reachable ............................. yes                     │  │  
   │  │                                                                    │  │  
   │  │  nodes                                                             │  │  
-  │  │    NAME             ROLE    READY                                  │  │  
-  │  │    homelab-master0  master  yes                                    │  │  
-  │  │    homelab-master1  master  yes                                    │  │  
-  │  │    homelab-master2  master  yes                                    │  │  
-  │  │    homelab-worker0  worker  yes                                    │  │  
+  │  │    NAME             READY                                          │  │  
+  │  │    masters (3)                                                     │  │  
+  │  │    homelab-master0  yes                                            │  │  
+  │  │    homelab-master1  yes                                            │  │  
+  │  │    homelab-master2  yes                                            │  │  
   │                                                                          │  
   │─────────────── ↑ ↓  scroll down for more ──────────────── ▸ prod-cluster │  
   │  r refresh • esc hub • pgup/pgdn scroll • ctrl+c quit • ? help           │  

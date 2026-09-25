@@ -1,6 +1,8 @@
 package render
 
 import (
+	"fmt"
+	"slices"
 	"strconv"
 
 	"charm.land/lipgloss/v2"
@@ -59,19 +61,10 @@ func ClusterStatusBoxWidth(st *okd.ClusterStatus, width int) string {
 	return "\n" + tui.BoxedSectionCompact(sb.String(), "cluster status", width) + "\n"
 }
 
-// writeStatusNodes writes the nodes section: the per-node table plus the
-// role tallies, or an empty state when the cluster reported none.
+// writeStatusNodes writes the nodes section: the role-grouped per-node
+// table (group titles carry the per-role tallies) plus the total, or an
+// empty state when the cluster reported none.
 func writeStatusNodes(sb *Builder, nodes []okd.NodeStatus) {
-	masters, workers := 0, 0
-	for _, n := range nodes {
-		switch n.Role {
-		case nodetypes.RoleMaster:
-			masters++
-		case nodetypes.RoleWorker:
-			workers++
-		}
-	}
-
 	sb.Section("nodes")
 	if len(nodes) == 0 {
 		sb.WriteString("    " + tui.EmptyState("no nodes reported", "deploy a cluster with 'okdctl deploy'") + "\n")
@@ -82,27 +75,59 @@ func writeStatusNodes(sb *Builder, nodes []okd.NodeStatus) {
 		}
 		sb.Newline()
 	}
-	sb.KV("masters", strconv.Itoa(masters))
-	sb.KV("workers", strconv.Itoa(workers))
 	sb.KV("total", strconv.Itoa(len(nodes)))
 	sb.Newline()
 }
 
-// statusNodeTableLines renders via tui.Table; padding is computed on plain text
-// so a styled row's zero-width escapes never shift a column.
+// statusNodeTableLines renders the role-grouped node table: dim
+// "masters (n)"/"workers (n)" title lines absorb the ROLE column, and
+// padding is computed on plain text so a styled row's zero-width escapes
+// never shift a column.
 func statusNodeTableLines(nodes []okd.NodeStatus) []string {
-	rows := make([][]string, 0, len(nodes))
-	for _, n := range nodes {
-		rows = append(rows, []string{n.Name, string(n.Role), statusYesNo(n.Ready)})
-	}
-	return tui.Table([]string{statusNodeHeader, colRole, "READY"}, rows, tui.TableOptions{
-		RowStyle: func(i int) (lipgloss.Style, bool) {
-			if !nodes[i].Ready {
+	groups, flat := statusNodeGroups(nodes)
+	return tui.ColumnTable(
+		[]tui.Column{{Header: statusNodeHeader}, {Header: "READY"}},
+		groups,
+		tui.TableOptions{RowStyle: func(i int) (lipgloss.Style, bool) {
+			if !flat[i].Ready {
 				return tui.ErrorStyle, true
 			}
 			return lipgloss.Style{}, false
-		},
-	})
+		}},
+	)
+}
+
+// statusNodeGroups buckets nodes into role groups in master, worker, then
+// first-seen order, keeping input order within each; flat mirrors the render
+// order so the table's continuous row index maps back to its node.
+func statusNodeGroups(nodes []okd.NodeStatus) (groups []tui.RowGroup, flat []okd.NodeStatus) {
+	order := []nodetypes.NodeRole{nodetypes.RoleMaster, nodetypes.RoleWorker}
+	for _, n := range nodes {
+		if !slices.Contains(order, n.Role) {
+			order = append(order, n.Role)
+		}
+	}
+	for _, role := range order {
+		var members []okd.NodeStatus
+		for _, n := range nodes {
+			if n.Role == role {
+				members = append(members, n)
+			}
+		}
+		if len(members) == 0 {
+			continue
+		}
+		rows := make([][]string, len(members))
+		for i, n := range members {
+			rows[i] = []string{n.Name, statusYesNo(n.Ready)}
+		}
+		groups = append(groups, tui.RowGroup{
+			Title: fmt.Sprintf("%ss (%d)", role, len(members)),
+			Rows:  rows,
+		})
+		flat = append(flat, members...)
+	}
+	return groups, flat
 }
 
 // statusYesNo renders a readiness bool as the table's yes/no cell.

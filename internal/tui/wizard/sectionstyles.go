@@ -70,9 +70,14 @@ func (st SectionStyles) ForLabels(labels ...string) SectionStyles { //nolint:goc
 	return st
 }
 
-// KVPair renders one label/value line using the section label column.
+// KVPair renders one label/value line using the section label column, via
+// the shared facts renderer's padded-column dialect.
 func (st *SectionStyles) KVPair(label, value string) string {
-	return st.Label.Render(label) + st.Value.Render(value)
+	lines := tui.RenderFacts(
+		[]tui.FactRow{{Key: label, Value: value}},
+		&tui.FactLayout{Leader: tui.FactLeaderPad, KeyWidth: st.Label.GetWidth(), Styles: tui.FactStyles{Key: st.Label, Value: st.Value}},
+	)
+	return strings.Join(lines, "\n")
 }
 
 // KVEntry describes one label/value line; Skip omits it entirely rather than rendering blank.

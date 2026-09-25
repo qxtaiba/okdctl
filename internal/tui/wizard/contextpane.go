@@ -198,31 +198,16 @@ func paneFactsLines(th *tui.Theme, width int, facts []render.Fact) []string {
 	return lines
 }
 
-// paneFactLines renders one fact as wrapped rows with the key dim and the
-// value in normal body text. The raw "key: value" line is wrapped first and
-// styled after (styling before wrapping would split ANSI sequences), so the
-// key/value seam is re-found by rune count on each wrapped row.
+// paneFactLines renders one fact via the shared facts renderer's flowing
+// colon dialect, key faint and value in soft body text.
 func paneFactLines(th *tui.Theme, width int, f render.Fact) []string {
-	keyStyle := lipgloss.NewStyle().Foreground(th.TextFaint)
-	valueStyle := lipgloss.NewStyle().Foreground(th.TextSoft)
-
-	keyLen := len([]rune(f.Key + ":"))
-	consumed := 0
-	var out []string
-	for line := range strings.SplitSeq(lipgloss.Wrap(f.Key+": "+f.Value, width, ""), "\n") {
-		runes := []rune(line)
-		switch {
-		case consumed >= keyLen:
-			out = append(out, valueStyle.Render(line))
-		case len(runes) <= keyLen-consumed:
-			out = append(out, keyStyle.Render(line))
-		default:
-			seam := keyLen - consumed
-			out = append(out, keyStyle.Render(string(runes[:seam]))+valueStyle.Render(string(runes[seam:])))
-		}
-		consumed += len(runes)
-	}
-	return out
+	return tui.RenderFacts(
+		[]tui.FactRow{{Key: f.Key, Value: f.Value}},
+		&tui.FactLayout{Leader: tui.FactLeaderColon, TotalWidth: width, Styles: tui.FactStyles{
+			Key:   lipgloss.NewStyle().Foreground(th.TextFaint),
+			Value: lipgloss.NewStyle().Foreground(th.TextSoft),
+		}},
+	)
 }
 
 // currentStepFocusedFieldHelp returns the active step's focused field's
