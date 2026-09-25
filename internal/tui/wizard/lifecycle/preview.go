@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -52,10 +51,10 @@ type PreviewStep struct {
 	st    *State
 	hooks Hooks
 
-	phase          previewPhase
-	loadingSpinner spinner.Model
-	actions        *components.CompactSelector
-	exitChosen     bool
+	phase      previewPhase
+	frame      uint64
+	actions    *components.CompactSelector
+	exitChosen bool
 	// gateSeen arms the action selector: false until the wizard confirms the
 	// viewport has shown its last line at least once, proving the plan-gate
 	// line (and the irreversible callout, when present) was displayable —
@@ -65,18 +64,18 @@ type PreviewStep struct {
 
 // NewPreviewStep constructs the plan-preview step.
 func NewPreviewStep(st *State, hooks Hooks) *PreviewStep {
-	sp := spinner.New()
-	sp.Spinner = spinner.Dot
-	sp.Style = lipgloss.NewStyle().Foreground(tui.ColorPrimary())
-
 	return &PreviewStep{
 		BaseStep: wizard.NewBaseStepWithDisplayTitle(StepIDPreview,
 			"plan preview", "review the plan", ""),
-		st:             st,
-		hooks:          hooks,
-		phase:          previewRunning,
-		loadingSpinner: sp,
+		st:    st,
+		hooks: hooks,
+		phase: previewRunning,
 	}
+}
+
+// Animating reports whether the dry-run indicator needs frame ticks.
+func (s *PreviewStep) Animating() bool {
+	return s.phase == previewRunning
 }
 
 // Init re-runs the dry-run on every focus so the plan is always fresh, and
@@ -95,10 +94,10 @@ func (s *PreviewStep) Init() tea.Cmd {
 		plan, err := s.hooks.DryRun(s.st)
 		return dryRunDoneMsg{plan: plan, err: err}
 	}
-	return tea.Batch(s.loadingSpinner.Tick, run)
+	return run
 }
 
-// Update handles dry-run completion, spinner ticks, and action selection.
+// Update handles dry-run completion, shared-clock frames, and action selection.
 func (s *PreviewStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	switch msg := msg.(type) {
 	case dryRunDoneMsg:
@@ -115,12 +114,8 @@ func (s *PreviewStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		}
 		return s, nil
 
-	case spinner.TickMsg:
-		if s.phase == previewRunning {
-			var cmd tea.Cmd
-			s.loadingSpinner, cmd = s.loadingSpinner.Update(msg)
-			return s, cmd
-		}
+	case wizard.FrameMsg:
+		s.frame = msg.Frame
 
 	case tea.KeyPressMsg:
 		if s.phase != previewDone || s.st.DryRunErr != nil || s.actions == nil || !s.gateSeen {
@@ -179,7 +174,7 @@ func (s *PreviewStep) View(width, height int) string {
 	s.SetSize(width, height)
 
 	if s.phase == previewRunning {
-		return s.loadingSpinner.View() + " running guards and the terraform plan gate (dry-run)..."
+		return wizard.Spinner(s.frame) + " running guards and the terraform plan gate (dry-run)..."
 	}
 	if s.st.DryRunErr != nil {
 		errStyle := lipgloss.NewStyle().Foreground(tui.ColorError()).Bold(true)

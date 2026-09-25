@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 
-	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -98,9 +97,9 @@ type WelcomeStep struct {
 	// opening names the flow being assembled off the update loop, so a verb
 	// whose hooks take a moment to build says so instead of looking wedged.
 	opening string
-	// spinner animates alongside the opening notice — ticking only while
-	// opening != "", mirroring NodePlacementStep's discovery spinner.
-	spinner spinner.Model
+	// frame is the shared clock's counter, animating the opening notice
+	// while Animating reports true.
+	frame uint64
 
 	// termWidth and termHeight are the terminal's own dimensions, not the
 	// content box View renders into — the hero's double-scale gate is stated
@@ -111,16 +110,16 @@ type WelcomeStep struct {
 
 // NewWelcomeStep constructs the hub step on its blank-slate menu.
 func NewWelcomeStep() *WelcomeStep {
-	sp := spinner.New()
-	sp.Spinner = spinner.Dot
-	sp.Style = lipgloss.NewStyle().Foreground(tui.ColorPrimary())
-
 	s := &WelcomeStep{
 		BaseStep: wizard.NewBaseStep(wizard.StepIDWelcome, "welcome", ""),
-		spinner:  sp,
 	}
 	s.setEntries(hubFreshVerbs)
 	return s
+}
+
+// Animating reports whether the opening notice needs frame ticks.
+func (s *WelcomeStep) Animating() bool {
+	return s.opening != ""
 }
 
 // setEntries rebuilds the menu over entries, clamped so up/down never wraps
@@ -210,12 +209,8 @@ func (s *WelcomeStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 			return s, cmd
 		}
 		s.nav, _ = s.nav.Update(components.ArrowsAsVertical(msg))
-	case spinner.TickMsg:
-		if s.opening != "" {
-			var cmd tea.Cmd
-			s.spinner, cmd = s.spinner.Update(msg)
-			return s, cmd
-		}
+	case wizard.FrameMsg:
+		s.frame = msg.Frame
 	}
 	return s, nil
 }
@@ -252,7 +247,7 @@ func (s *WelcomeStep) confirm() tea.Cmd {
 		}
 		return wizard.SwapFlowMsg{Steps: flowSteps, Chrome: chrome}
 	}
-	return tea.Batch(buildFlow, s.spinner.Tick)
+	return buildFlow
 }
 
 // flowFor returns the in-process flow behind verb, or nil when the verb has none.
@@ -322,7 +317,7 @@ func (s *WelcomeStep) View(width, height int) string {
 	}
 	parts = append(parts, s.nav.ViewPointer())
 	if s.opening != "" {
-		parts = append(parts, "", s.spinner.View()+" "+tui.MutedStyle.Render("opening "+s.opening+"…"))
+		parts = append(parts, "", wizard.Spinner(s.frame)+" "+tui.MutedStyle.Render("opening "+s.opening+"…"))
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Center, parts...)

@@ -37,6 +37,7 @@ var (
 	logQuiet   bool
 	logVerbose bool
 	noColor    bool
+	noMotion   bool
 )
 
 // startLogged records that the "okdctl: started" bookend fired, keeping "finished" symmetric.
@@ -442,6 +443,7 @@ func versionText() string {
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, flagConfig, flagConfigShort, "okdctl.yaml", "configuration file")
 	rootCmd.PersistentFlags().BoolVar(&noColor, flagNoColor, false, "disable colour and progress output (same as NO_COLOR=1)")
+	rootCmd.PersistentFlags().BoolVar(&noMotion, flagNoMotion, false, "disable TUI animation (same as OKDCTL_NO_MOTION=1; NO_COLOR alone reduces it)")
 	rootCmd.PersistentFlags().StringVar(&logLevel, flagLogLevel, "info", "log verbosity (debug, info, warn, error)")
 	_ = rootCmd.RegisterFlagCompletionFunc(flagLogLevel,
 		cobra.FixedCompletions([]string{"debug", "info", "warn", "error"}, cobra.ShellCompDirectiveNoFileComp))

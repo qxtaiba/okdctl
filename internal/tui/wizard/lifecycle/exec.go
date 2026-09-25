@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -65,7 +64,7 @@ type ExecStep struct {
 	currentNode      int
 	cancelRequested  bool
 	finished         bool
-	loadingSpinner   spinner.Model
+	frame            uint64
 	// focusLine and lastLine are recorded during View: the running row's
 	// line, and the last line of the rendered content.
 	focusLine int
@@ -82,25 +81,20 @@ type ExecStep struct {
 
 // NewExecStep constructs the live execution step.
 func NewExecStep(st *State, hooks Hooks) *ExecStep {
-	sp := spinner.New()
-	sp.Spinner = spinner.Dot
-	sp.Style = lipgloss.NewStyle().Foreground(tui.ColorPrimary())
-
 	return &ExecStep{
 		BaseStep: wizard.NewBaseStepWithDisplayTitle(StepIDExec,
 			"execute", "", ""),
-		st:             st,
-		hooks:          hooks,
-		events:         make(chan ExecEvent, 32),
-		now:            time.Now,
-		loadingSpinner: sp,
-		boldStyle:      lipgloss.NewStyle().Foreground(tui.ColorText()).Bold(true),
-		doneStyle:      lipgloss.NewStyle().Foreground(tui.ColorSuccess()),
-		failStyle:      lipgloss.NewStyle().Foreground(tui.ColorError()),
-		pendStyle:      lipgloss.NewStyle().Foreground(tui.ColorSubtle()),
-		dimStyle:       lipgloss.NewStyle().Foreground(tui.ColorTextFaint()),
-		warnStyle:      lipgloss.NewStyle().Foreground(tui.ColorWarning()),
-		activeStyle:    lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true),
+		st:          st,
+		hooks:       hooks,
+		events:      make(chan ExecEvent, 32),
+		now:         time.Now,
+		boldStyle:   lipgloss.NewStyle().Foreground(tui.ColorText()).Bold(true),
+		doneStyle:   lipgloss.NewStyle().Foreground(tui.ColorSuccess()),
+		failStyle:   lipgloss.NewStyle().Foreground(tui.ColorError()),
+		pendStyle:   lipgloss.NewStyle().Foreground(tui.ColorSubtle()),
+		dimStyle:    lipgloss.NewStyle().Foreground(tui.ColorTextFaint()),
+		warnStyle:   lipgloss.NewStyle().Foreground(tui.ColorWarning()),
+		activeStyle: lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true),
 	}
 }
 
@@ -112,6 +106,11 @@ func (s *ExecStep) DisplayTitle() string {
 // ShouldShow gates the step to consented plans.
 func (s *ExecStep) ShouldShow(_ *config.Config) bool {
 	return s.st.Proceed
+}
+
+// Animating reports whether the running row's spinner needs frame ticks.
+func (s *ExecStep) Animating() bool {
+	return !s.finished
 }
 
 // Init derives the checklist from the plan, starts the Runner goroutine
@@ -133,7 +132,7 @@ func (s *ExecStep) Init() tea.Cmd {
 		s.events <- ExecEvent{Final: true, Err: err}
 	}()
 
-	return tea.Batch(s.loadingSpinner.Tick, s.listen())
+	return s.listen()
 }
 
 func (s *ExecStep) buildRows() {
@@ -166,9 +165,9 @@ func (s *ExecStep) listen() tea.Cmd {
 	return func() tea.Msg { return execEventMsg{ev: <-s.events} }
 }
 
-// Update consumes execution events and spinner ticks; every non-final
-// event re-arms the listen command and nudges the viewport to follow the
-// running row.
+// Update consumes execution events and shared-clock frames; every
+// non-final event re-arms the listen command and nudges the viewport to
+// follow the running row.
 func (s *ExecStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	switch msg := msg.(type) {
 	case execEventMsg:
@@ -183,12 +182,8 @@ func (s *ExecStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		s.applyEvent(&msg.ev)
 		return s, tea.Batch(s.listen(), func() tea.Msg { return wizard.FocusChangedMsg{} })
 
-	case spinner.TickMsg:
-		if !s.finished {
-			var cmd tea.Cmd
-			s.loadingSpinner, cmd = s.loadingSpinner.Update(msg)
-			return s, cmd
-		}
+	case wizard.FrameMsg:
+		s.frame = msg.Frame
 	}
 	return s, nil
 }
@@ -450,7 +445,7 @@ func (s *ExecStep) renderRow(r *execRow, col int) string {
 	case rowFailed:
 		return justify(s.failStyle.Render(tui.IconError+" "+r.label), s.dimStyle.Render(rowDur(r)), col)
 	case rowRunning:
-		return justify(s.loadingSpinner.View()+s.boldStyle.Render(r.label), s.dimStyle.Render(fmtDur(s.now().Sub(r.start))), col)
+		return justify(wizard.Spinner(s.frame)+s.boldStyle.Render(r.label), s.dimStyle.Render(fmtDur(s.now().Sub(r.start))), col)
 	default:
 		return s.pendStyle.Render(tui.IconPending + " " + r.label)
 	}

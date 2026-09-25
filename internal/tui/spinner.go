@@ -105,7 +105,7 @@ type spinner struct {
 	prefix string
 	desc   string
 	start  time.Time
-	frame  int
+	frame  uint64
 }
 
 // clearLine implements lineOwner; the caller holds the line lock.
@@ -122,7 +122,7 @@ func (s *spinner) setDesc(d string) {
 func (s *spinner) paint() {
 	lineReg.paint(s, func() {
 		elapsed := formatElapsed(time.Since(s.start))
-		frame := SpinnerStyle.Render(spinnerFrames[s.frame%len(spinnerFrames)])
+		frame := SpinnerStyle.Render(SpinnerGlyph(Motion(), s.frame))
 		if s.prefix == "" {
 			_, _ = fmt.Fprintf(s.w, "\r\x1b[2K%s %s (%s)", frame, s.desc, elapsed)
 		} else {

@@ -123,6 +123,8 @@ func configureLogging(cmd *cobra.Command) error {
 
 	progressBars := stderrIsTTY && stdoutIsTTY && logFormat != tui.FormatJSON && !colorOff
 
+	tui.SetMotion(tui.ResolveMotion(noMotion, os.Getenv))
+
 	// pin the render profile to stdout's real capabilities so a piped/NO_COLOR
 	// run strips box escapes like charm/log strips level badges; --no-color
 	// forces it off outright instead of re-detecting from stdout

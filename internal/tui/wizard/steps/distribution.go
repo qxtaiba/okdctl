@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"charm.land/bubbles/v2/key"
-	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -63,7 +62,7 @@ type DistributionStep struct {
 	versionFetcher VersionFetcher
 	okdSeries      []releases.OKDReleaseSeries
 	expandedMinor  int // -1 = none expanded (show latest per minor)
-	loadingSpinner spinner.Model
+	frame          uint64
 	loadError      error
 
 	// contentHeight: the step's real inner height from the last genuine
@@ -82,10 +81,6 @@ func (s *DistributionStep) SetSize(width, height int) {
 
 // NewDistributionStep constructs the distribution step.
 func NewDistributionStep() *DistributionStep {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(tui.ColorPrimary())
-
 	selector := components.NewSelector(nil)
 
 	return &DistributionStep{
@@ -99,19 +94,21 @@ func NewDistributionStep() *DistributionStep {
 		phase:           phaseVersionLoading,
 		versionFetcher:  releases.NewOKDVersionFetcher(),
 		expandedMinor:   -1,
-		loadingSpinner:  s,
 	}
 }
 
-// Init starts the release fetch and spins the loading indicator.
+// Init starts the release fetch; the shared frame clock animates the
+// loading indicator while Animating reports true.
 func (s *DistributionStep) Init() tea.Cmd {
-	return tea.Batch(
-		s.loadingSpinner.Tick,
-		s.fetchVersions,
-	)
+	return s.fetchVersions
 }
 
-// Update handles version-load messages, spinner ticks, and navigation keys.
+// Animating reports whether the loading indicator needs frame ticks.
+func (s *DistributionStep) Animating() bool {
+	return s.phase == phaseVersionLoading
+}
+
+// Update handles version-load messages, shared-clock frames, and navigation keys.
 func (s *DistributionStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	switch msg := msg.(type) {
 	case versionsLoadedMsg:
@@ -127,12 +124,8 @@ func (s *DistributionStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		s.versionSelector.SetFocused(true)
 		return s, nil
 
-	case spinner.TickMsg:
-		if s.phase == phaseVersionLoading {
-			var cmd tea.Cmd
-			s.loadingSpinner, cmd = s.loadingSpinner.Update(msg)
-			return s, cmd
-		}
+	case wizard.FrameMsg:
+		s.frame = msg.Frame
 
 	case tea.KeyPressMsg:
 		switch s.phase {
@@ -171,7 +164,7 @@ func (s *DistributionStep) handleErrorKeyMsg(msg tea.KeyPressMsg) (wizard.Wizard
 func (s *DistributionStep) retry() (wizard.WizardStep, tea.Cmd) {
 	s.phase = phaseVersionLoading
 	s.loadError = nil
-	return s, tea.Batch(s.loadingSpinner.Tick, s.fetchVersions)
+	return s, s.fetchVersions
 }
 
 // handleEnterKey confirms the highlighted release, honouring the footer's
@@ -356,7 +349,7 @@ func (s *DistributionStep) viewLoadingPhase() string {
 	var content strings.Builder
 	content.WriteString(lipgloss.NewStyle().
 		Foreground(tui.ColorTextDim()).
-		Render(s.loadingSpinner.View() + " fetching okd releases"))
+		Render(wizard.Spinner(s.frame) + " fetching okd releases"))
 	content.WriteString("\n")
 	content.WriteString(lipgloss.NewStyle().
 		Foreground(tui.ColorTextFaint()).

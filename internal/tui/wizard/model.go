@@ -147,6 +147,14 @@ type Model struct {
 	// background — the exemplar for per-surface theme injection.
 	theme tui.Theme
 
+	// The shared frame clock (see motion.go): motion is the resolved dial,
+	// frame the monotonic counter, clockGen/clockRunning the identity and
+	// liveness of the single tea.Tick chain.
+	motion       tui.MotionMode
+	frame        uint64
+	clockGen     uint64
+	clockRunning bool
+
 	quitting bool
 	result   Result
 	err      error
@@ -309,6 +317,7 @@ func NewFlowModel(steps []WizardStep, cfg *config.Config, chrome FlowChrome) *Mo
 		config:      cfg,
 		chrome:      chrome,
 		theme:       tui.CurrentTheme(),
+		motion:      tui.Motion(),
 		keyMap:      defaultKeyMap(),
 	}
 
@@ -331,18 +340,33 @@ func getTerminalSize() (width, height int) {
 }
 
 // Init implements tea.Model; it fires the first step's Init command
-// alongside a terminal background-color request.
+// alongside a terminal background-color request and, when that first step
+// is already animating, the frame clock.
 func (m *Model) Init() tea.Cmd {
 	var stepCmd tea.Cmd
 	if len(m.steps) > 0 {
 		stepCmd = m.steps[m.currentStep].Init()
 	}
-	return tea.Batch(tea.RequestBackgroundColor, stepCmd)
+	return tea.Batch(tea.RequestBackgroundColor, stepCmd, m.armClock())
 }
 
-// Update processes wizard-level messages (navigation, resize, quit) and
-// delegates the rest to the currently-active step.
+// Update processes wizard-level messages (navigation, resize, quit),
+// delegates the rest to the currently-active step, and keeps the frame
+// clock armed exactly while the active step animates.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if tick, ok := msg.(clockTickMsg); ok {
+		return m.handleClockTick(tick)
+	}
+	model, cmd := m.update(msg)
+	if clockCmd := m.armClock(); clockCmd != nil {
+		cmd = tea.Batch(cmd, clockCmd)
+	}
+	return model, cmd
+}
+
+// update is Update's body, split out so handleClockTick can route a frame
+// through the same step-delegation path without re-entering the clock.
+func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {

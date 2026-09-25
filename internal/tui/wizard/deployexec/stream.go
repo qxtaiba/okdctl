@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -71,7 +70,7 @@ type StreamStep struct {
 	currentPhase     int
 	cancelRequested  bool
 	finished         bool
-	loadingSpinner   spinner.Model
+	frame            uint64
 	// focusLine and lastLine are recorded during View: the running row's line,
 	// and the last line of the rendered content. tailRendered records whether
 	// that render put the log tail under the checklist.
@@ -97,24 +96,19 @@ type StreamStep struct {
 
 // NewStreamStep constructs the live deploy step.
 func NewStreamStep(st *State, hooks Hooks) *StreamStep {
-	sp := spinner.New()
-	sp.Spinner = spinner.Dot
-	sp.Style = lipgloss.NewStyle().Foreground(tui.ColorPrimary())
-
 	return &StreamStep{
-		BaseStep:       wizard.NewBaseStepWithDisplayTitle(StepIDStream, "install", "", ""),
-		st:             st,
-		hooks:          hooks,
-		events:         make(chan Event, 64),
-		now:            time.Now,
-		loadingSpinner: sp,
-		boldStyle:      lipgloss.NewStyle().Foreground(tui.ColorText()).Bold(true),
-		doneStyle:      lipgloss.NewStyle().Foreground(tui.ColorSuccess()),
-		failStyle:      lipgloss.NewStyle().Foreground(tui.ColorError()),
-		pendStyle:      lipgloss.NewStyle().Foreground(tui.ColorSubtle()),
-		dimStyle:       lipgloss.NewStyle().Foreground(tui.ColorTextFaint()),
-		warnStyle:      lipgloss.NewStyle().Foreground(tui.ColorWarning()),
-		activeStyle:    lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true),
+		BaseStep:    wizard.NewBaseStepWithDisplayTitle(StepIDStream, "install", "", ""),
+		st:          st,
+		hooks:       hooks,
+		events:      make(chan Event, 64),
+		now:         time.Now,
+		boldStyle:   lipgloss.NewStyle().Foreground(tui.ColorText()).Bold(true),
+		doneStyle:   lipgloss.NewStyle().Foreground(tui.ColorSuccess()),
+		failStyle:   lipgloss.NewStyle().Foreground(tui.ColorError()),
+		pendStyle:   lipgloss.NewStyle().Foreground(tui.ColorSubtle()),
+		dimStyle:    lipgloss.NewStyle().Foreground(tui.ColorTextFaint()),
+		warnStyle:   lipgloss.NewStyle().Foreground(tui.ColorWarning()),
+		activeStyle: lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true),
 	}
 }
 
@@ -129,6 +123,11 @@ func (s *StreamStep) SetSize(width, height int) {
 // DisplayTitle names the header for the run in progress.
 func (s *StreamStep) DisplayTitle() string {
 	return s.progressLabel()
+}
+
+// Animating reports whether the running row's spinner needs frame ticks.
+func (s *StreamStep) Animating() bool {
+	return !s.finished
 }
 
 // Init groups the plan into phases, starts the engine goroutine exactly once,
@@ -150,7 +149,7 @@ func (s *StreamStep) Init() tea.Cmd {
 		s.sendFinal(err)
 	}()
 
-	return tea.Batch(s.loadingSpinner.Tick, s.listen())
+	return s.listen()
 }
 
 // buildRows groups the plan's steps into phases in execution order, dropping
@@ -193,8 +192,9 @@ func (s *StreamStep) listen() tea.Cmd {
 	return func() tea.Msg { return streamEventMsg{ev: <-s.events} }
 }
 
-// Update consumes engine events and spinner ticks; every non-final event
-// re-arms the listen command and nudges the viewport to follow the running row.
+// Update consumes engine events and shared-clock frames; every non-final
+// event re-arms the listen command and nudges the viewport to follow the
+// running row.
 func (s *StreamStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	switch msg := msg.(type) {
 	case streamEventMsg:
@@ -213,12 +213,8 @@ func (s *StreamStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		s.applyEvent(&msg.ev)
 		return s, tea.Batch(s.listen(), func() tea.Msg { return wizard.FocusChangedMsg{} })
 
-	case spinner.TickMsg:
-		if !s.finished {
-			var cmd tea.Cmd
-			s.loadingSpinner, cmd = s.loadingSpinner.Update(msg)
-			return s, cmd
-		}
+	case wizard.FrameMsg:
+		s.frame = msg.Frame
 
 	case tea.KeyPressMsg:
 		cmd := s.handleLogKey(msg)
@@ -616,7 +612,7 @@ func (s *StreamStep) renderRow(r *stepRow, col int) string {
 	case rowFailed:
 		return justify(s.failStyle.Render(tui.IconError+" "+r.label), s.dimStyle.Render(rowDur(r)), col)
 	case rowRunning:
-		return justify(s.loadingSpinner.View()+s.boldStyle.Render(r.label), s.dimStyle.Render(fmtDur(s.now().Sub(r.start))), col)
+		return justify(wizard.Spinner(s.frame)+s.boldStyle.Render(r.label), s.dimStyle.Render(fmtDur(s.now().Sub(r.start))), col)
 	default:
 		return s.pendStyle.Render(tui.IconPending + " " + r.label)
 	}

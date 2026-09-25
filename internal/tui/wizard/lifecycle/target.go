@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sort"
 
-	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -44,9 +43,9 @@ type TargetStep struct {
 	st    *State
 	hooks Hooks
 
-	phase          targetPhase
-	loadingSpinner spinner.Model
-	loadErr        error
+	phase   targetPhase
+	frame   uint64
+	loadErr error
 
 	selector *components.Selector
 	choices  []targetChoice
@@ -74,17 +73,17 @@ func (s *TargetStep) SetSize(width, height int) {
 
 // NewTargetStep constructs the target-select step.
 func NewTargetStep(st *State, hooks Hooks) *TargetStep {
-	sp := spinner.New()
-	sp.Spinner = spinner.Dot
-	sp.Style = lipgloss.NewStyle().Foreground(tui.ColorPrimary())
-
 	return &TargetStep{
-		BaseStep:       wizard.NewBaseStepWithDisplayTitle(StepIDTarget, "target", "", ""),
-		st:             st,
-		hooks:          hooks,
-		phase:          targetLoading,
-		loadingSpinner: sp,
+		BaseStep: wizard.NewBaseStepWithDisplayTitle(StepIDTarget, "target", "", ""),
+		st:       st,
+		hooks:    hooks,
+		phase:    targetLoading,
 	}
+}
+
+// Animating reports whether the node-fetch indicator needs frame ticks.
+func (s *TargetStep) Animating() bool {
+	return s.phase == targetLoading
 }
 
 // DisplayTitle names the screen for the chosen op; computed at render time
@@ -102,7 +101,8 @@ func (s *TargetStep) ShouldShow(_ *config.Config) bool {
 	return (s.st.Op == node.OpResize || s.st.Op == node.OpRemove) && !s.st.Resume
 }
 
-// Init kicks off the live node fetch and the loading spinner.
+// Init kicks off the live node fetch; the shared frame clock animates the
+// loading indicator while Animating reports true.
 func (s *TargetStep) Init() tea.Cmd {
 	s.phase = targetLoading
 	s.loadErr = nil
@@ -113,11 +113,11 @@ func (s *TargetStep) Init() tea.Cmd {
 		nodes, err := s.hooks.ListNodes()
 		return nodesLoadedMsg{nodes: nodes, err: err}
 	}
-	return tea.Batch(s.loadingSpinner.Tick, fetch)
+	return fetch
 }
 
-// Update handles node-list arrival, spinner ticks, selector navigation,
-// and enter to confirm.
+// Update handles node-list arrival, shared-clock frames, selector
+// navigation, and enter to confirm.
 func (s *TargetStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	switch msg := msg.(type) {
 	case nodesLoadedMsg:
@@ -129,12 +129,8 @@ func (s *TargetStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		}
 		return s, nil
 
-	case spinner.TickMsg:
-		if s.phase == targetLoading {
-			var cmd tea.Cmd
-			s.loadingSpinner, cmd = s.loadingSpinner.Update(msg)
-			return s, cmd
-		}
+	case wizard.FrameMsg:
+		s.frame = msg.Frame
 
 	case tea.KeyPressMsg:
 		if s.phase != targetPicking || s.loadErr != nil || s.selector == nil || len(s.choices) == 0 {
@@ -277,7 +273,7 @@ func (s *TargetStep) View(width, height int) string {
 	s.BaseStep.SetSize(width, height)
 
 	if s.phase == targetLoading {
-		return s.loadingSpinner.View() + " listing cluster nodes..."
+		return wizard.Spinner(s.frame) + " listing cluster nodes..."
 	}
 	if s.loadErr != nil {
 		warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning())

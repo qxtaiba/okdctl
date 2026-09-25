@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -267,11 +266,10 @@ func TestHubSurfacesAFlowThatCannotBeBuilt(t *testing.T) {
 	}
 }
 
-// TestHubOpeningNoticeAnimatesASpinner guards NEW(T7): the "opening …"
-// notice carries a live spinner (mirroring NodePlacementStep's discovery
-// spinner) rather than sitting static — confirm() must arm the tick, View
-// must render the glyph, and Update must keep re-arming it only while the
-// notice is still up.
+// TestHubOpeningNoticeAnimatesASpinner guards NEW(T7): the "opening ..."
+// notice carries a live spinner driven by the wizard's shared frame clock --
+// Animating must report true exactly while the notice is up, and a FrameMsg
+// must advance the rendered glyph.
 func TestHubOpeningNoticeAnimatesASpinner(t *testing.T) {
 	s := NewWelcomeStep()
 	s.SetConfigExists(true)
@@ -280,42 +278,32 @@ func TestHubOpeningNoticeAnimatesASpinner(t *testing.T) {
 	}})
 	selectVerb(t, s, HubVerbManageNodes)
 
+	if s.Animating() {
+		t.Fatal("Animating() = true before any verb was confirmed")
+	}
 	_, cmd := s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatal("confirming manage nodes produced no command")
 	}
 	before := s.View(70, 14)
 	if before == "" || !strings.Contains(before, "opening manage nodes") {
-		t.Fatalf("View() before any tick = %q, want the opening notice present", before)
+		t.Fatalf("View() before any frame = %q, want the opening notice present", before)
+	}
+	if !s.Animating() {
+		t.Fatal("Animating() = false while the opening notice is up")
 	}
 
-	// Feed every tick message the initial batch produced (build cmd plus the
-	// spinner's own tick) back through Update, the way the real run loop
-	// would — the spinner frame must advance.
-	batch, ok := cmd().(tea.BatchMsg)
-	if !ok {
-		t.Fatalf("confirm's command produced %T, want a tea.BatchMsg batching the build with the spinner tick", cmd())
-	}
-	sawTick := false
-	for _, c := range batch {
-		msg := c()
-		if _, isTick := msg.(spinner.TickMsg); isTick {
-			sawTick = true
-			_, tickCmd := s.Update(msg)
-			if tickCmd == nil {
-				t.Error("Update(spinner.TickMsg) while opening produced no re-arming command")
-			}
-		}
-	}
-	if !sawTick {
-		t.Fatal("confirm's batch never produced a spinner.TickMsg")
+	s.Update(wizard.FrameMsg{Frame: 3})
+	after := s.View(70, 14)
+	if after == before {
+		t.Fatal("View() unchanged after a frame - the opening spinner is static")
 	}
 
-	// Once the notice clears (flow opened or failed), a stray tick must not
-	// re-arm another one — the spinner is done animating.
+	// Once the notice clears (flow opened or failed), the step stops asking
+	// for frames and the shared clock winds down.
 	s.opening = ""
-	if _, tickCmd := s.Update(spinner.TickMsg{}); tickCmd != nil {
-		t.Error("Update(spinner.TickMsg) after opening cleared re-armed another tick")
+	if s.Animating() {
+		t.Error("Animating() = true after the opening notice cleared")
 	}
 }
 

@@ -74,6 +74,17 @@ func deployScenarios() []deployScenario {
 			seed:  seedMidRun,
 		},
 		{
+			// A pinned mid-animation frame: the running row's glyph is a pure
+			// function of the shared clock's counter, never wall time.
+			name:  "stream_frame5",
+			id:    StepIDStream,
+			build: streamState,
+			seed: func(m *wizard.Model, st *State) {
+				seedMidRun(m, st)
+				m.Update(wizard.FrameMsg{Frame: 5})
+			},
+		},
+		{
 			// The graceful-cancel amber line, shown under the headline while
 			// the current step finishes.
 			name:  "stream_cancel",

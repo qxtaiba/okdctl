@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -47,9 +46,9 @@ type NodePlacementStep struct {
 	cfg   *config.Config
 	phase placementPhase
 
-	loadingSpinner spinner.Model
-	discovery      *proxmoxDiscovery
-	discoveryErr   error
+	frame        uint64
+	discovery    *proxmoxDiscovery
+	discoveryErr error
 
 	// header caches the last View's rendered discoveryHeader, so headerOffset
 	// doesn't need the render width again.
@@ -72,10 +71,6 @@ type NodePlacementStep struct {
 
 // NewNodePlacementStep constructs the node placement wizard step.
 func NewNodePlacementStep() *NodePlacementStep {
-	sp := spinner.New()
-	sp.Spinner = spinner.Dot
-	sp.Style = lipgloss.NewStyle().Foreground(tui.ColorPrimary())
-
 	return &NodePlacementStep{
 		BaseStep: wizard.NewBaseStepWithDisplayTitle(
 			wizard.StepIDNodePlacement,
@@ -83,9 +78,13 @@ func NewNodePlacementStep() *NodePlacementStep {
 			"configure node placement",
 			"auto-discovered from your proxmox cluster",
 		),
-		loadingSpinner: sp,
-		phase:          phaseDiscovering,
+		phase: phaseDiscovering,
 	}
+}
+
+// Animating reports whether the discovery indicator needs frame ticks.
+func (s *NodePlacementStep) Animating() bool {
+	return s.phase == phaseDiscovering
 }
 
 // ShouldShow shows this step only when the Proxmox provider is selected.
@@ -97,7 +96,6 @@ func (s *NodePlacementStep) ShouldShow(cfg *config.Config) bool {
 	return true
 }
 
-// Init kicks off the Proxmox discovery fetch and spins the loading indicator.
 // Init starts discovery, or — with no Proxmox provider configured — settles
 // immediately into an explanatory error instead of spinning forever on a
 // fetch that was never issued.
@@ -108,7 +106,7 @@ func (s *NodePlacementStep) Init() tea.Cmd {
 		return nil
 	}
 	s.phase = phaseDiscovering
-	return tea.Batch(s.loadingSpinner.Tick, s.fetchDiscovery)
+	return s.fetchDiscovery
 }
 
 func (s *NodePlacementStep) fetchDiscovery() tea.Msg {
@@ -255,12 +253,8 @@ func (s *NodePlacementStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		s.buildInnerStep(s.discovery, nodeNames)
 		return s, s.inner.Init()
 
-	case spinner.TickMsg:
-		if s.phase == phaseDiscovering {
-			var cmd tea.Cmd
-			s.loadingSpinner, cmd = s.loadingSpinner.Update(msg)
-			return s, cmd
-		}
+	case wizard.FrameMsg:
+		s.frame = msg.Frame
 	}
 
 	if s.phase == phasePlacing && s.inner != nil {
@@ -318,7 +312,7 @@ func (s *NodePlacementStep) View(width, height int) string {
 	s.SetSize(width, height)
 
 	if s.phase == phaseDiscovering {
-		return s.loadingSpinner.View() + " discovering proxmox infrastructure..."
+		return wizard.Spinner(s.frame) + " discovering proxmox infrastructure..."
 	}
 
 	s.header = s.discoveryHeader(width)

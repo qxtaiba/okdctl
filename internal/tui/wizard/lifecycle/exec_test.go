@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -34,9 +33,6 @@ func pump(t *testing.T, s *ExecStep, first tea.Cmd) tea.Msg {
 		msg := cmd()
 		if batch, ok := msg.(tea.BatchMsg); ok {
 			queue = append(queue, batch...)
-			continue
-		}
-		if _, ok := msg.(spinner.TickMsg); ok {
 			continue
 		}
 		if _, ok := msg.(wizard.StepCompleteMsg); ok {
