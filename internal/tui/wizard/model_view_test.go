@@ -32,6 +32,85 @@ func TestModel_FrameWidthIsTerminalMinusFour(t *testing.T) {
 	}
 }
 
+func TestModel_ContentWidthCapsBelowSplitThreshold(t *testing.T) {
+	cases := []struct{ w, want int }{
+		{80, 74},
+		{100, 94},
+		{116, 110}, // cap boundary: uncapped and capped agree
+		{117, 110}, // cap engages one column past the boundary
+		{120, 110},
+		{149, 110}, // widest terminal that still doesn't split
+	}
+	for _, c := range cases {
+		m := NewModel([]WizardStep{newNopStep()}, config.DefaultConfig())
+		tuitest.RenderAt(t, m, c.w, 40)
+		if got := m.contentWidth(); got != c.want {
+			t.Errorf("w=%d contentWidth() = %d, want %d", c.w, got, c.want)
+		}
+	}
+}
+
+func TestModel_SplitLayoutEngagesAt150(t *testing.T) {
+	m := NewModel([]WizardStep{newNopStep()}, config.DefaultConfig())
+
+	tuitest.RenderAt(t, m, 149, 40)
+	if m.splitLayout() {
+		t.Fatal("149 cols should not split")
+	}
+
+	tuitest.RenderAt(t, m, 150, 40)
+	if !m.splitLayout() {
+		t.Fatal("150 cols should split")
+	}
+}
+
+// TestModel_SplitLayoutFormPaneInvariant pins the form/rule/pane budget
+// arithmetic: their widths always sum to exactly contentWidth, the form
+// never exceeds formMaxWidth, and the pane always stays within
+// [paneMinWidth, paneMaxWidth] — 180 is wide enough that the pane clamps at
+// paneMaxWidth, leaving surplus width as idle margin rather than stretching
+// either column.
+func TestModel_SplitLayoutFormPaneInvariant(t *testing.T) {
+	for _, w := range []int{150, 151, 180} {
+		m := NewModel([]WizardStep{newNopStep()}, config.DefaultConfig())
+		tuitest.RenderAt(t, m, w, 48)
+
+		form, pane := m.formPaneWidths()
+		if got, want := form+paneRuleWidth+pane, m.contentWidth(); got != want {
+			t.Errorf("w=%d: form(%d)+rule(%d)+pane(%d)=%d, want contentWidth()=%d", w, form, paneRuleWidth, pane, got, want)
+		}
+		if form > formMaxWidth {
+			t.Errorf("w=%d: form=%d exceeds formMaxWidth=%d", w, form, formMaxWidth)
+		}
+		if pane < paneMinWidth || pane > paneMaxWidth {
+			t.Errorf("w=%d: pane=%d outside [%d,%d]", w, pane, paneMinWidth, paneMaxWidth)
+		}
+	}
+
+	m := NewModel([]WizardStep{newNopStep()}, config.DefaultConfig())
+	tuitest.RenderAt(t, m, 180, 48)
+	if _, pane := m.formPaneWidths(); pane != paneMaxWidth {
+		t.Errorf("180 cols: pane=%d, want the clamp paneMaxWidth=%d", pane, paneMaxWidth)
+	}
+}
+
+// TestModel_WideRowsStillFillTerminalWidth extends
+// TestModel_FrameWidthIsTerminalMinusFour past 120 cols: whether the cap
+// (149) or the split layout (150, 180) is what's shrinking the frame, every
+// row still renders at exactly the terminal width — the surplus becomes
+// blank right-hand margin, never a partial row AltScreen would leave dirty.
+func TestModel_WideRowsStillFillTerminalWidth(t *testing.T) {
+	for _, w := range []int{149, 150, 151, 180} {
+		m := NewModel([]WizardStep{newNopStep()}, config.DefaultConfig())
+		frame := tuitest.StripANSI(tuitest.RenderAt(t, m, w, 48))
+		for i, line := range strings.Split(strings.TrimRight(frame, "\n"), "\n") {
+			if lw := lipgloss.Width(line); lw != w {
+				t.Errorf("w=%d row %d width %d: %q", w, i, lw, line)
+			}
+		}
+	}
+}
+
 func TestModel_TooSmallRendersNotice(t *testing.T) {
 	m := NewModel([]WizardStep{newNopStep()}, config.DefaultConfig())
 	for _, sz := range [][2]int{{59, 24}, {80, 19}} {

@@ -44,11 +44,16 @@ func (m *Model) View() tea.View {
 		viewportContent = m.renderHelpOverlay()
 	}
 
+	body := viewportContent
+	if m.splitLayout() {
+		body = m.composeWideBody(viewportContent)
+	}
+
 	var content strings.Builder
 
 	content.WriteString(m.renderHeader())
 	content.WriteString("\n")
-	content.WriteString(viewportContent)
+	content.WriteString(body)
 	content.WriteString("\n")
 	content.WriteString(m.statusRow())
 	content.WriteString("\n")
@@ -60,17 +65,88 @@ func (m *Model) View() tea.View {
 		Width(m.contentWidth() + wizardBorderHorizontal).
 		Render(content.String())
 
-	v.Content = OuterContainerStyle.Render(bordered)
+	// Width(m.width) fills whatever maxFrameWidth's cap left idle back in as
+	// blank right-hand margin — the form never stretches into it, but every
+	// row still spans the terminal exactly, the way AltScreen repaints expect.
+	v.Content = OuterContainerStyle.Width(m.width).Render(bordered)
 	return v
 }
 
-// contentWidth is the inner content area every header/viewport/footer helper sizes itself to.
+// contentWidth is the inner content area every header/status/footer helper
+// sizes itself to: below wideSplitWidth it's the single form column, capped
+// at maxFrameWidth; at and above it, the form column plus the pane rule plus
+// the context pane.
 func (m *Model) contentWidth() int {
-	width := m.width - outerHorizontalPadding - wizardBorderHorizontal
+	if m.splitLayout() {
+		form, pane := m.formPaneWidths()
+		return form + paneRuleWidth + pane
+	}
+
+	frame := m.width - outerHorizontalPadding
+	if frame > maxFrameWidth {
+		frame = maxFrameWidth
+	}
+	width := frame - wizardBorderHorizontal
 	if width < minTerminalWidth-6 {
 		width = minTerminalWidth - 6
 	}
 	return width
+}
+
+// splitLayout reports whether the terminal is wide enough to split the frame
+// into a form column and a context pane.
+func (m *Model) splitLayout() bool {
+	return m.width >= wideSplitWidth
+}
+
+// formPaneWidths returns the split layout's form column width (capped at
+// formMaxWidth) and context pane width (whatever's left after the rule
+// column, clamped to [paneMinWidth, paneMaxWidth] — surplus beyond
+// paneMaxWidth becomes idle margin rather than stretching the pane).
+func (m *Model) formPaneWidths() (form, pane int) {
+	avail := m.width - outerHorizontalPadding - wizardBorderHorizontal
+	form = formMaxWidth
+	pane = avail - form - paneRuleWidth
+	if pane > paneMaxWidth {
+		pane = paneMaxWidth
+	}
+	if pane < paneMinWidth {
+		pane = paneMinWidth
+	}
+	return form, pane
+}
+
+// bodyWidth is the width a step's own content renders at: contentWidth in
+// the single-column layout, or just the form column once the layout splits
+// and the remainder becomes the context pane.
+func (m *Model) bodyWidth() int {
+	if m.splitLayout() {
+		form, _ := m.formPaneWidths()
+		return form
+	}
+	return m.contentWidth()
+}
+
+// composeWideBody joins the step's rendered form with a dim 1-column rule
+// and the context pane, reaching exactly contentWidth columns total.
+func (m *Model) composeWideBody(form string) string {
+	_, paneWidth := m.formPaneWidths()
+	height := m.viewport.Height()
+
+	rule := renderPaneRule(height)
+	pane := lipgloss.NewStyle().Width(paneWidth).Height(height).Render("")
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, form, rule, pane)
+}
+
+// renderPaneRule draws the dim vertical divider between the form and the
+// context pane, height rows tall.
+func renderPaneRule(height int) string {
+	if height < 1 {
+		height = 1
+	}
+	style := lipgloss.NewStyle().Foreground(tui.ColorSlate700)
+	return style.Render(strings.Repeat("│\n", height-1) + "│")
 }
 
 // statusRow is always exactly one row so the frame never grows; blank when clear.
@@ -85,8 +161,10 @@ func (m *Model) statusRow() string {
 	return "  " + style.Render(tui.IconError+" "+m.err.Error())
 }
 
+// contentDimensions sizes a ResizableStep: bodyWidth (the form column, not
+// the pane) by the same fixed-overhead height the viewport uses.
 func (m *Model) contentDimensions() (width, height int) {
-	width = m.contentWidth()
+	width = m.bodyWidth()
 	height = m.height - fixedLayoutOverhead
 	if height < 1 {
 		height = 1
@@ -94,8 +172,10 @@ func (m *Model) contentDimensions() (width, height int) {
 	return width, height
 }
 
+// viewportDimensions sizes the scrollable viewport itself to bodyWidth — the
+// form column alone, since the context pane beside it isn't scrollable.
 func (m *Model) viewportDimensions() (width, height int) {
-	contentWidth := m.contentWidth()
+	contentWidth := m.bodyWidth()
 
 	viewportHeight := m.height - fixedLayoutOverhead
 	if viewportHeight < 1 {
@@ -112,7 +192,7 @@ func (m *Model) syncViewportContent() {
 	}
 
 	step := m.steps[m.currentStep]
-	contentWidth := m.contentWidth()
+	contentWidth := m.bodyWidth()
 
 	innerWidth := contentWidth - 4
 	if innerWidth < 40 {

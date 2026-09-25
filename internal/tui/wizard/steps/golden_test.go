@@ -224,6 +224,49 @@ func TestGolden_ConfigureSteps(t *testing.T) {
 	}
 }
 
+// wideSplitScenarios are the configureScenarios names TestGolden_WideSplit
+// pins at 180x48: proxmox (a short form, so the split's idle vertical space
+// below the form is visible) and review (a long one, so the split survives
+// a scrolling body).
+var wideSplitScenarios = map[string]bool{"proxmox": true, "review": true}
+
+// TestGolden_WideSplit pins the ≥150-col split layout — form column, rule,
+// context pane — at 180x48 for wideSplitScenarios; every other scenario
+// keeps the same goldenSizes coverage TestGolden_ConfigureSteps already
+// pins, so the split layout isn't re-pinned for every step.
+func TestGolden_WideSplit(t *testing.T) {
+	const w, h = 180, 48
+
+	for _, sc := range configureScenarios() {
+		if !wideSplitScenarios[sc.name] {
+			continue
+		}
+		t.Run(fmt.Sprintf("%s_%dx%d", sc.name, w, h), func(t *testing.T) {
+			base := fmt.Sprintf("%s_%dx%d", sc.name, w, h)
+
+			tui.SetTerminalWidth(w)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+			m := newGoldenModel(t)
+			_ = tuitest.RenderAt(t, m, w, h)
+			m.Update(wizard.JumpToStepMsg{StepID: sc.id})
+			if sc.seed != nil {
+				sc.seed(m)
+			}
+			frame := tuitest.RenderAt(t, m, w, h)
+			tuitest.Golden(t, base+"_initial", frame)
+			tuitest.AssertFits(t, frame, w, h)
+
+			if sc.interact != nil {
+				m.Update(sc.interact)
+				frame = tuitest.RenderAt(t, m, w, h)
+				tuitest.Golden(t, base+"_interacted", frame)
+				tuitest.AssertFits(t, frame, w, h)
+			}
+		})
+	}
+}
+
 // TestGolden_HelpOverlay pins the "?" help overlay open on the addons step —
 // key-event-driven, matching how a real terminal session would trigger it.
 // The overlay must replace only the viewport region (header/footer chrome

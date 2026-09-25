@@ -137,17 +137,46 @@ in). The wizard's own floor is 60×20; below it neither the wizard nor a
 screenshot renders reliably, so `contentWidth` clamps to 54 rather than
 shrinking further.
 
-| Terminal      | Outer width (W−4) | Content width (W−6) | Viewport height (H−10) |
-| ------------- | ------------------ | -------------------- | ----------------------- |
-| 60×20 (floor) | 56                  | 54                    | 10                       |
-| 80×24         | 76                  | 74                    | 14                       |
-| 100×30        | 96                  | 94                    | 20                       |
-| 120×40        | 116                 | 114                   | 30                       |
+That `W − 4` frame also has a ceiling: below 150 columns it's capped at
+112, so a wide-but-not-split terminal doesn't stretch the form edge to
+edge just because there's room. `OuterContainerStyle` still renders at
+the full terminal width — the cap's leftover columns become blank
+right-hand margin, never a partial row for AltScreen to leave dirty.
+
+| Terminal      | Outer width (frame) | Content width | Viewport height (H−10) |
+| ------------- | -------------------- | -------------- | ----------------------- |
+| 60×20 (floor) | 56                    | 54              | 10                       |
+| 80×24         | 76                    | 74              | 14                       |
+| 100×30        | 96                    | 94              | 20                       |
+| 120×40        | 112                   | 110             | 30                       |
+| 149×40        | 112                   | 110             | 30                       |
 
 In particular, the same 10-row overhead applies whether the terminal
-sits at the floor or at 120×40, since every row in the budget is a fixed
+sits at the floor or at 149×40, since every row in the budget is a fixed
 chrome row rather than one that scales with terminal size — only the
 viewport's own height absorbs the difference.
+
+## Layout: the wide-terminal split
+
+At and above 150 columns the frame stops growing the form and splits
+instead: a form column capped at 104, a 1-column rule, and a dim context
+pane that takes whatever's left after the rule, clamped to 28–44 columns.
+The form (and every `ResizableStep`) is sized to just the form column,
+not the full frame — `bodyWidth`, not `contentWidth` — while the header,
+status row, and footer still span the whole frame, form and pane both.
+
+| Terminal | Form | Rule | Pane | Content width |
+| -------- | ---- | ---- | ---- | -------------- |
+| 150×48   | 104  | 1    | 39   | 144             |
+| 151×48   | 104  | 1    | 40   | 145             |
+| 180×48   | 104  | 1    | 44   | 149             |
+
+180 is wide enough that the pane hits its 44-column ceiling; the
+remaining width past 104+1+44 becomes idle margin rather than stretching
+the pane further, the same way the sub-150 cap keeps the form itself from
+stretching. See `internal/tui/wizard/contextpane.go` for what the pane
+renders — a dim, unfocusable summary of the step list, the current step's
+answered facts, and the focused field's help text.
 
 ## The status row
 

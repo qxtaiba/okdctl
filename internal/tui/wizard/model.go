@@ -30,6 +30,28 @@ const (
 	wizardBorderHorizontal = 2
 
 	fixedLayoutOverhead = headerHeight + statusHeight + footerHeight + outerVerticalPadding
+
+	// wideSplitWidth is the terminal width at and above which the wizard
+	// splits into a form column and a dim context pane; below it the frame
+	// stays a single column.
+	wideSplitWidth = 150
+
+	// maxFrameWidth caps the bordered frame's outer width (terminal minus
+	// outerHorizontalPadding) below wideSplitWidth, so a wide-but-unsplit
+	// terminal doesn't stretch the form past a comfortable measure — at and
+	// above wideSplitWidth the surplus becomes the context pane instead.
+	maxFrameWidth = 112
+
+	// formMaxWidth caps the split layout's form column measure.
+	formMaxWidth = 104
+
+	// paneRuleWidth is the single-column divider between the form and the
+	// context pane.
+	paneRuleWidth = 1
+
+	// paneMinWidth and paneMaxWidth bound the split layout's context pane.
+	paneMinWidth = 28
+	paneMaxWidth = 44
 )
 
 type earlyExiter interface {
