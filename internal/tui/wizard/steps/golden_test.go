@@ -450,8 +450,8 @@ func TestModel_HeightGateAtReproSizes(t *testing.T) {
 
 // TestGolden_WideSplitSqueezed pins the squeezed-pane visual state: 150x24
 // sits just above the 11-step wizard's split-layout height floor (22), so
-// the split stays on but there's only room for the STEPS section — SO FAR
-// and FOCUSED FIELD both drop rather than overflowing the frame.
+// the split stays on but there's only room for the PROGRESS section —
+// CONFIGURED and FOCUSED FIELD both drop rather than overflowing the frame.
 func TestGolden_WideSplitSqueezed(t *testing.T) {
 	const w, h = 150, 24
 
@@ -469,10 +469,10 @@ func TestGolden_WideSplitSqueezed(t *testing.T) {
 
 	plain := tuitest.StripANSI(frame)
 	if !strings.Contains(plain, "PROGRESS") {
-		t.Fatal("squeezed pane must still show STEPS")
+		t.Fatal("squeezed pane must still show PROGRESS")
 	}
-	if strings.Contains(plain, "SO FAR") || strings.Contains(plain, "FOCUSED FIELD") {
-		t.Errorf("squeezed pane at 150x24 should have dropped SO FAR and FOCUSED FIELD:\n%s", plain)
+	if strings.Contains(plain, "CONFIGURED") || strings.Contains(plain, "FOCUSED FIELD") {
+		t.Errorf("squeezed pane at 150x24 should have dropped CONFIGURED and FOCUSED FIELD:\n%s", plain)
 	}
 }
 

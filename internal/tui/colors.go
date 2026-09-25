@@ -152,10 +152,15 @@ func SetDarkBackground(dark bool) {
 	if currentTheme == ThemeDefault {
 		if dark {
 			ColorTextDim = ColorSlate400
+			ColorTextFaint = ColorSlate500
 			ColorCode = ColorCyan400
 			ColorAccent = ColorCyan500
 		} else {
+			// One muted tier below the light ColorTextDim (Slate600) is the
+			// background's Slate500 — bound explicitly so the faint tier
+			// tracks its siblings instead of a value captured at init.
 			ColorTextDim = ColorSlate600
+			ColorTextFaint = ColorSlate500
 			ColorCode = ColorCyan700
 			ColorAccent = ColorCyan700
 		}

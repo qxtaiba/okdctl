@@ -16,27 +16,31 @@ import (
 )
 
 // TestModel_FrameWidthIsTerminalMinusFour pins the full-width frame at every
-// tier: the bordered box always spans terminal width minus the outer padding
-// — a capped form measure lives inside it, never as a shrunken frame — and
-// every rendered row still spans the terminal exactly.
+// tier and at both a capped-single-column and a split-layout height: the
+// bordered box always spans terminal width minus the outer padding — a
+// capped form measure lives inside it, never as a shrunken frame — and every
+// rendered row still spans the terminal exactly, the surplus becoming blank
+// right-hand margin rather than a partial row AltScreen would leave dirty.
 func TestModel_FrameWidthIsTerminalMinusFour(t *testing.T) {
-	for _, w := range []int{80, 100, 116, 120, 149, 150, 151, 180, 200} {
-		m := NewModel([]WizardStep{newNopStep()}, config.DefaultConfig())
-		frame := tuitest.StripANSI(tuitest.RenderAt(t, m, w, 30))
-		lines := strings.Split(strings.TrimRight(frame, "\n"), "\n")
-		for i, line := range lines {
-			if lw := lipgloss.Width(line); lw != w {
-				t.Errorf("w=%d row %d width %d: %q", w, i, lw, line)
+	for _, h := range []int{30, 48} {
+		for _, w := range []int{80, 100, 116, 120, 149, 150, 151, 180, 200} {
+			m := NewModel([]WizardStep{newNopStep()}, config.DefaultConfig())
+			frame := tuitest.StripANSI(tuitest.RenderAt(t, m, w, h))
+			lines := strings.Split(strings.TrimRight(frame, "\n"), "\n")
+			for i, line := range lines {
+				if lw := lipgloss.Width(line); lw != w {
+					t.Errorf("%dx%d row %d width %d: %q", w, h, i, lw, line)
+				}
 			}
-		}
-		top := "  ╭" + strings.Repeat("─", w-6) + "╮  "
-		if lines[1] != top {
-			t.Errorf("w=%d row 1 = %q, want the full-width border %q", w, lines[1], top)
-		}
-		for i := 2; i < len(lines)-2; i++ {
-			runes := []rune(lines[i])
-			if runes[2] != '│' || runes[w-3] != '│' {
-				t.Errorf("w=%d row %d does not span the frame: %q", w, i, lines[i])
+			top := "  ╭" + strings.Repeat("─", w-6) + "╮  "
+			if lines[1] != top {
+				t.Errorf("%dx%d row 1 = %q, want the full-width border %q", w, h, lines[1], top)
+			}
+			for i := 2; i < len(lines)-2; i++ {
+				runes := []rune(lines[i])
+				if runes[2] != '│' || runes[w-3] != '│' {
+					t.Errorf("%dx%d row %d does not span the frame: %q", w, h, i, lines[i])
+				}
 			}
 		}
 	}
@@ -156,23 +160,6 @@ func TestModel_SplitLayoutFormPaneInvariant(t *testing.T) {
 		}
 		if pane < paneMinWidth {
 			t.Errorf("w=%d: pane=%d below paneMinWidth=%d", w, pane, paneMinWidth)
-		}
-	}
-}
-
-// TestModel_WideRowsStillFillTerminalWidth extends
-// TestModel_FrameWidthIsTerminalMinusFour past 120 cols: whether the cap
-// (149) or the split layout (150, 180) is what's shrinking the frame, every
-// row still renders at exactly the terminal width — the surplus becomes
-// blank right-hand margin, never a partial row AltScreen would leave dirty.
-func TestModel_WideRowsStillFillTerminalWidth(t *testing.T) {
-	for _, w := range []int{149, 150, 151, 180} {
-		m := NewModel([]WizardStep{newNopStep()}, config.DefaultConfig())
-		frame := tuitest.StripANSI(tuitest.RenderAt(t, m, w, 48))
-		for i, line := range strings.Split(strings.TrimRight(frame, "\n"), "\n") {
-			if lw := lipgloss.Width(line); lw != w {
-				t.Errorf("w=%d row %d width %d: %q", w, i, lw, line)
-			}
 		}
 	}
 }

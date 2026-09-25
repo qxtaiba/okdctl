@@ -324,8 +324,9 @@ func (s *PreviewStep) renderGates(st *wizard.SectionStyles, width int) string {
 // gateGridMinCellWidth*2, else one. Each column sizes to its own longest
 // label plus gateGridGutter; a column count whose natural widths overflow
 // the row folds down to fewer, taller columns before any safety-gate name
-// truncates — free rows are cheaper than amputated labels. Only the
-// single-column floor still truncates, against the full width.
+// truncates — free rows are cheaper than amputated labels. Only a
+// single-column layout — the sub-32 floor, or a fold that reached one column
+// — still truncates, against the width left of the gutter.
 func renderGateGrid(gates []string, width int) []string {
 	if len(gates) == 0 {
 		return nil
