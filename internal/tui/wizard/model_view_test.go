@@ -138,10 +138,11 @@ func TestModel_SplitLayoutHeightGateFrameFitsExactly(t *testing.T) {
 	}
 }
 
-// TestModel_SplitLayoutFormPaneInvariant pins the form/rule/pane budget
-// arithmetic: their widths always sum to exactly contentWidth, the form
-// never exceeds formMaxWidth, and the pane absorbs the entire remainder —
-// no ceiling, only the paneMinWidth floor — so a wider terminal widens the
+// TestModel_SplitLayoutFormPaneInvariant pins the form/rule/gutter/pane
+// budget arithmetic: form + rule + the two-column gutter + pane + the
+// one-column edge margin sum to exactly contentWidth, the form never
+// exceeds formMaxWidth, and the pane absorbs the entire remainder — no
+// ceiling, only the paneMinWidth floor — so a wider terminal widens the
 // pane instead of leaving idle margin.
 func TestModel_SplitLayoutFormPaneInvariant(t *testing.T) {
 	for _, w := range []int{150, 151, 180, 200} {
@@ -149,13 +150,13 @@ func TestModel_SplitLayoutFormPaneInvariant(t *testing.T) {
 		tuitest.RenderAt(t, m, w, 48)
 
 		form, pane := m.formPaneWidths()
-		if got, want := form+paneRuleWidth+pane, m.contentWidth(); got != want {
-			t.Errorf("w=%d: form(%d)+rule(%d)+pane(%d)=%d, want contentWidth()=%d", w, form, paneRuleWidth, pane, got, want)
+		if got, want := form+paneRuleWidth+paneGutterWidth+pane+paneEdgeWidth, m.contentWidth(); got != want {
+			t.Errorf("w=%d: form(%d)+rule+gutter+pane(%d)+edge=%d, want contentWidth()=%d", w, form, pane, got, want)
 		}
 		if form > formMaxWidth {
 			t.Errorf("w=%d: form=%d exceeds formMaxWidth=%d", w, form, formMaxWidth)
 		}
-		if want := w - outerHorizontalPadding - wizardBorderHorizontal - formMaxWidth - paneRuleWidth; pane != want {
+		if want := w - outerHorizontalPadding - wizardBorderHorizontal - formMaxWidth - paneRuleWidth - paneGutterWidth - paneEdgeWidth; pane != want {
 			t.Errorf("w=%d: pane=%d, want the full remainder %d", w, pane, want)
 		}
 		if pane < paneMinWidth {

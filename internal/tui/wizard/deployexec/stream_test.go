@@ -407,3 +407,41 @@ func TestJustifyClampsOversizedRight(t *testing.T) {
 		t.Errorf("justify() = %q, width %d, want <= 10", got, w)
 	}
 }
+
+// TestStreamNarrowTailFillsTheBodySlack pins the tail budget: on a narrow
+// frame with rows to spare, the log tail grows past its six-row floor to
+// fill the body instead of idling blank rows under the clauses line.
+func TestStreamNarrowTailFillsTheBodySlack(t *testing.T) {
+	tui.SetTerminalWidth(120)
+	t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+	st := streamState()
+	m := wizard.NewFlowModel(NewSteps(st, goldenHooks()), st.Cfg, Chrome())
+	_ = tuitest.RenderAt(t, m, 120, 40)
+	m.Update(wizard.JumpToStepMsg{StepID: StepIDStream})
+	seedMidRun(m, st)
+
+	frame := tuitest.StripANSI(tuitest.RenderAt(t, m, 120, 40))
+	if got := strings.Count(frame, "09:0"); got <= narrowTailRows {
+		t.Fatalf("tail shows %d log rows at 120x40, want more than the %d-row floor", got, narrowTailRows)
+	}
+	tuitest.AssertFits(t, frame, 120, 40)
+}
+
+// TestStreamWindowTitleCarriesProgress pins the live window title during an
+// install: percent settled plus the running phase, so a backgrounded
+// terminal tab reports the run's state.
+func TestStreamWindowTitleCarriesProgress(t *testing.T) {
+	tui.SetTerminalWidth(100)
+	t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+	st := streamState()
+	m := wizard.NewFlowModel(NewSteps(st, goldenHooks()), st.Cfg, Chrome())
+	_ = tuitest.RenderAt(t, m, 100, 30)
+	m.Update(wizard.JumpToStepMsg{StepID: StepIDStream})
+	seedMidRun(m, st)
+
+	if got, want := m.View().WindowTitle, "okdctl · deploying 28% · ignition"; got != want {
+		t.Fatalf("WindowTitle = %q, want %q", got, want)
+	}
+}

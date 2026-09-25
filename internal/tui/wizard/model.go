@@ -50,6 +50,12 @@ const (
 	// context pane.
 	paneRuleWidth = 1
 
+	// paneGutterWidth is the breathing room between the pane rule and the
+	// pane's first content column; paneEdgeWidth keeps one blank column
+	// between the pane's last content column and the frame border.
+	paneGutterWidth = 2
+	paneEdgeWidth   = 1
+
 	// paneMinWidth floors the split layout's context pane; the pane has no
 	// ceiling — it absorbs everything the form column's cap leaves over.
 	paneMinWidth = 28
@@ -165,6 +171,10 @@ type Model struct {
 	// While true every key but ctrl+c (still the global quit guard), esc,
 	// and "?" itself (both close it) is inert — the overlay owns input.
 	helpOpen bool
+
+	// pendingG: a lone "g" is held one keystroke, completing the vim gg
+	// chord if the next key is "g" again and clearing otherwise.
+	pendingG bool
 }
 
 // suspendedFlow is a flow SwapFlow put aside: its steps, its chrome, and the
@@ -244,17 +254,24 @@ const (
 )
 
 // KeyMap binds wizard-level actions (quit, back, scroll) to keystrokes;
-// everything else is handled inside the active step.
+// everything else is handled inside the active step. The Vim* bindings are
+// footer-silent additions listed only in the "?" overlay's vim group.
 type KeyMap struct {
-	Back     key.Binding
-	Quit     key.Binding
-	Help     key.Binding
-	PageUp   key.Binding
-	PageDown key.Binding
-	Home     key.Binding
-	End      key.Binding
-	Up       key.Binding
-	Down     key.Binding
+	Back        key.Binding
+	Quit        key.Binding
+	Help        key.Binding
+	PageUp      key.Binding
+	PageDown    key.Binding
+	Home        key.Binding
+	End         key.Binding
+	Up          key.Binding
+	Down        key.Binding
+	VimUp       key.Binding
+	VimDown     key.Binding
+	VimHalfUp   key.Binding
+	VimHalfDown key.Binding
+	VimTop      key.Binding
+	VimBottom   key.Binding
 }
 
 func defaultKeyMap() KeyMap {
@@ -295,6 +312,12 @@ func defaultKeyMap() KeyMap {
 			key.WithKeys("down"),
 			key.WithHelp("↓", "scroll down"),
 		),
+		VimUp:       key.NewBinding(key.WithKeys("k")),
+		VimDown:     key.NewBinding(key.WithKeys("j")),
+		VimHalfUp:   key.NewBinding(key.WithKeys("ctrl+u")),
+		VimHalfDown: key.NewBinding(key.WithKeys("ctrl+d")),
+		VimTop:      key.NewBinding(key.WithKeys("g")),
+		VimBottom:   key.NewBinding(key.WithKeys("G", "shift+g")),
 	}
 }
 

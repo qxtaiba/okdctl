@@ -77,11 +77,13 @@ type StreamStep struct {
 	focusLine    int
 	lastLine     int
 	tailRendered bool
-	// viewCol, fullLogHeight, paneWidth, and paneHeight are the log window's
-	// geometry as last rendered — View and PaneContent record them so a paging
-	// key moves by exactly the window the operator is looking at.
+	// viewCol, fullLogHeight, tailRows, paneWidth, and paneHeight are the
+	// log window's geometry as last rendered — View and PaneContent record
+	// them so a paging key moves by exactly the window the operator is
+	// looking at.
 	viewCol       int
 	fullLogHeight int
+	tailRows      int
 	paneWidth     int
 	paneHeight    int
 
@@ -128,6 +130,18 @@ func (s *StreamStep) DisplayTitle() string {
 // Animating reports whether the running row's spinner needs frame ticks.
 func (s *StreamStep) Animating() bool {
 	return !s.finished
+}
+
+// WindowTitle carries the run's live progress into the terminal tab —
+// percent of settled steps plus the running phase — so a backgrounded
+// install stays legible from the tab bar; empty once the run ends, falling
+// back to the header title.
+func (s *StreamStep) WindowTitle() string {
+	if s.finished || len(s.phases) == 0 {
+		return ""
+	}
+	done, total := s.stepCounts()
+	return fmt.Sprintf("deploying %d%% · %s", done*100/max(total, 1), s.phases[s.currentPhase].name)
 }
 
 // Init groups the plan into phases, starts the engine goroutine exactly once,
@@ -296,7 +310,7 @@ func (s *StreamStep) logGeometry() (width, height int, wrap bool) {
 	case s.paneCarriesLog():
 		return max(s.paneWidth, 1), max(s.paneHeight, 2), false
 	default:
-		return max(s.viewCol, 1), narrowTailRows + 1, false
+		return max(s.viewCol, 1), max(s.tailRows, narrowTailRows) + 1, false
 	}
 }
 
@@ -510,15 +524,6 @@ func (s *StreamStep) View(width, _ int) string {
 		lines = s.appendPhase(lines, i, col)
 	}
 
-	s.tailRendered = false
-	if !s.paneCarriesLog() {
-		if tail := renderLogTail(s.hooks.Logs, s.log, col, narrowTailRows); len(tail) > 0 {
-			lines = append(lines, "")
-			lines = append(lines, tail...)
-			s.tailRendered = true
-		}
-	}
-
 	// The cancel clause holds only while a first ctrl+c would still cancel
 	// gracefully; after a cancel (or completion) the next ctrl+c force-quits,
 	// and the promise would be a lie. The sink clause names the real resolved
@@ -530,6 +535,25 @@ func (s *StreamStep) View(width, _ int) string {
 	if !s.finished && !s.cancelRequested {
 		clauses = append(clauses, "ctrl+c cancels after the current step")
 	}
+
+	s.tailRendered = false
+	if !s.paneCarriesLog() {
+		// The tail's budget is whatever body rows the checklist and the
+		// chrome around the tail (its blank row, the LOG header, and the
+		// clauses block) leave over, floored at narrowTailRows — slack
+		// becomes evidence instead of blank rows.
+		chrome := 2
+		if len(clauses) > 0 {
+			chrome += 2
+		}
+		s.tailRows = max(narrowTailRows, s.bodyHeight-len(lines)-chrome)
+		if tail := renderLogTail(s.hooks.Logs, s.log, col, s.tailRows); len(tail) > 0 {
+			lines = append(lines, "")
+			lines = append(lines, tail...)
+			s.tailRendered = true
+		}
+	}
+
 	if len(clauses) > 0 {
 		lines = append(lines, "", s.dimStyle.Render(lipgloss.Wrap(strings.Join(clauses, " · "), col, "")))
 	}

@@ -23,7 +23,7 @@ func (m *Model) tooSmall() bool {
 // footer into a bordered box drawn at exactly the terminal width.
 func (m *Model) View() tea.View {
 	v := tea.View{AltScreen: true}
-	v.WindowTitle = "okdctl · " + m.headerTitle()
+	v.WindowTitle = "okdctl · " + m.windowTitle()
 
 	if m.quitting {
 		return v
@@ -109,12 +109,13 @@ func SplitsFrame(width, height, stepCount int) bool {
 }
 
 // formPaneWidths returns the split layout's form column width (capped at
-// formMaxWidth) and context pane width — the entire remainder after the rule
-// column, floored at paneMinWidth; the pane wraps its content to whatever
-// width the terminal hands it rather than idling surplus as margin.
+// formMaxWidth) and context pane width — the entire remainder after the
+// rule column, the two-column gutter, and the one-column frame-edge margin,
+// floored at paneMinWidth; the pane wraps its content to whatever width the
+// terminal hands it rather than idling surplus as margin.
 func (m *Model) formPaneWidths() (form, pane int) {
 	form = formMaxWidth
-	pane = m.contentWidth() - form - paneRuleWidth
+	pane = m.contentWidth() - form - paneRuleWidth - paneGutterWidth - paneEdgeWidth
 	if pane < paneMinWidth {
 		pane = paneMinWidth
 	}
@@ -139,16 +140,18 @@ func (m *Model) bodyWidth() int {
 	return width
 }
 
-// composeWideBody joins the step's rendered form with a dim 1-column rule
-// and the context pane, reaching exactly contentWidth columns total.
+// composeWideBody joins the step's rendered form with a dim 1-column rule,
+// a two-column gutter, and the context pane, leaving one blank column
+// before the frame edge.
 func (m *Model) composeWideBody(form string) string {
 	_, paneWidth := m.formPaneWidths()
 	height := m.viewport.Height()
 
 	rule := renderPaneRule(height)
+	gutter := lipgloss.NewStyle().Width(paneGutterWidth).Height(height).Render("")
 	pane := lipgloss.NewStyle().Width(paneWidth).Height(height).Render(m.paneBody(paneWidth, height))
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, form, rule, pane)
+	return lipgloss.JoinHorizontal(lipgloss.Top, form, rule, gutter, pane)
 }
 
 // paneBody renders the split layout's right pane: the active step's own content
@@ -445,6 +448,24 @@ func (m *Model) withHubEscape(bindings []KeyBinding) []KeyBinding {
 	return append(bindings, KeyBinding{Key: HelpEsc, Help: "hub"})
 }
 
+// windowTitler is implemented by steps whose terminal-tab title carries
+// live state richer than the on-screen header (the install's percent and
+// phase); an empty return falls back to the header title.
+type windowTitler interface {
+	WindowTitle() string
+}
+
+// windowTitle names the terminal tab: the active step's own live title when
+// it provides one, the header title otherwise.
+func (m *Model) windowTitle() string {
+	if wt, ok := m.CurrentStep().(windowTitler); ok {
+		if t := wt.WindowTitle(); t != "" {
+			return t
+		}
+	}
+	return m.headerTitle()
+}
+
 // renderHelpOverlay renders the full, untruncated key-binding list (the
 // same bindings footerBindings feeds the ribbon) over the body region,
 // sized to exactly replace it — the full content width on a split tier.
@@ -455,10 +476,17 @@ func (m *Model) renderHelpOverlay() string {
 	}
 
 	bindings := m.footerBindings()
-	hints := make([]components.KeyHint, len(bindings))
+	hints := make([]components.KeyHint, len(bindings), len(bindings)+3)
 	for i, b := range bindings {
 		hints[i] = components.KeyHint{Key: b.Key, Help: b.Help}
 	}
+	// The footer-silent vim vocabulary surfaces only here, under its own
+	// overlay group.
+	hints = append(hints,
+		components.KeyHint{Key: "j/k", Help: "scroll"},
+		components.KeyHint{Key: "ctrl+d/u", Help: "half page"},
+		components.KeyHint{Key: "gg/G", Help: "top/bottom"},
+	)
 
 	return components.RenderHelpOverlay(hints, width, height)
 }

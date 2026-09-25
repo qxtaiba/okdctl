@@ -409,3 +409,96 @@ func TestModel_ArrowScrollOnlyForOptedInSteps(t *testing.T) {
 	}
 	t.Fatal("↓ never reached the step's own Update")
 }
+
+// TestModel_VimKeysScrollOptedInViewport pins the additive vim vocabulary:
+// j/k mirror the arrow gate, ctrl+d/u the half-page keys, and gg/G jump to
+// the ends — all footer-silent, none stolen from a step that needs the keys.
+func TestModel_VimKeysScrollOptedInViewport(t *testing.T) {
+	in := &arrowOptInStep{growingStep{BaseStep: NewBaseStep(StepIDWelcome, "reader", ""), rows: 120}}
+	m := NewModel([]WizardStep{in}, config.DefaultConfig())
+	m = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	m = update(t, m, tea.KeyPressMsg{Code: 'j', Text: "j"})
+	if got := m.viewport.YOffset(); got != 1 {
+		t.Fatalf("YOffset() = %d after j, want 1", got)
+	}
+	m = update(t, m, tea.KeyPressMsg{Code: 'k', Text: "k"})
+	if got := m.viewport.YOffset(); got != 0 {
+		t.Fatalf("YOffset() = %d after k, want 0", got)
+	}
+
+	m = update(t, m, tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl})
+	if m.viewport.YOffset() == 0 {
+		t.Fatal("ctrl+d did not scroll the viewport")
+	}
+	m = update(t, m, tea.KeyPressMsg{Code: 'u', Mod: tea.ModCtrl})
+	if got := m.viewport.YOffset(); got != 0 {
+		t.Fatalf("YOffset() = %d after ctrl+u, want 0", got)
+	}
+
+	m = update(t, m, tea.KeyPressMsg{Code: 'G', Text: "G", Mod: tea.ModShift})
+	if !m.viewport.AtBottom() {
+		t.Fatal("G did not reach the bottom")
+	}
+	m = update(t, m, tea.KeyPressMsg{Code: 'g', Text: "g"})
+	m = update(t, m, tea.KeyPressMsg{Code: 'g', Text: "g"})
+	if got := m.viewport.YOffset(); got != 0 {
+		t.Fatalf("YOffset() = %d after gg, want the top", got)
+	}
+}
+
+// TestModel_VimGPendingClearsOnOtherKeys pins the gg chord: a lone g followed
+// by any other key never jumps, and the interloper key still does its job.
+func TestModel_VimGPendingClearsOnOtherKeys(t *testing.T) {
+	in := &arrowOptInStep{growingStep{BaseStep: NewBaseStep(StepIDWelcome, "reader", ""), rows: 120}}
+	m := NewModel([]WizardStep{in}, config.DefaultConfig())
+	m = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	m = update(t, m, tea.KeyPressMsg{Code: 'G', Text: "G", Mod: tea.ModShift})
+	bottom := m.viewport.YOffset()
+
+	m = update(t, m, tea.KeyPressMsg{Code: 'g', Text: "g"})
+	m = update(t, m, tea.KeyPressMsg{Code: 'k', Text: "k"})
+	if got := m.viewport.YOffset(); got != bottom-1 {
+		t.Fatalf("YOffset() = %d after g then k, want %d — k scrolls, no gg jump", got, bottom-1)
+	}
+	m = update(t, m, tea.KeyPressMsg{Code: 'g', Text: "g"})
+	if got := m.viewport.YOffset(); got != bottom-1 {
+		t.Fatalf("YOffset() = %d after a fresh lone g, want %d unchanged", got, bottom-1)
+	}
+}
+
+// TestModel_VimKeysFallThroughToTextInputs pins the additive rule: a step
+// whose focused field consumes text keeps j/k/g as typed characters.
+func TestModel_VimKeysFallThroughToTextInputs(t *testing.T) {
+	out := &recordingTextStep{recordingArrowStep{growingStep: growingStep{BaseStep: NewBaseStep(StepIDBasics, "form", ""), rows: 120}}}
+	m := NewModel([]WizardStep{out}, config.DefaultConfig())
+	m = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	for _, k := range []tea.KeyPressMsg{
+		{Code: 'j', Text: "j"},
+		{Code: 'g', Text: "g"},
+		{Code: 'G', Text: "G", Mod: tea.ModShift},
+	} {
+		m = update(t, m, k)
+	}
+	if got := m.viewport.YOffset(); got != 0 {
+		t.Fatalf("YOffset() = %d, want 0 — vim keys must not scroll under a text input", got)
+	}
+	if len(out.received) < 3 {
+		t.Fatalf("step received %d messages, want all three keys delivered", len(out.received))
+	}
+}
+
+// recordingTextStep is a recordingArrowStep whose focused field consumes
+// typed text, standing in for a form with a live input. Update returns the
+// outer type — the embedded Update would hand the model the inner step and
+// silently drop the TextInputConsumer assertion.
+type recordingTextStep struct{ recordingArrowStep }
+
+func (s *recordingTextStep) ConsumesTextInput() bool { return true }
+
+func (s *recordingTextStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
+	s.received = append(s.received, msg)
+	return s, nil
+}

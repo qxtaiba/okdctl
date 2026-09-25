@@ -13,6 +13,18 @@
   │  ○ verify                                                                                                        │  
   │                                                                                                                  │  
   │  LOG                                                                                                             │  
+  │  09:00:42 deploy step started step=step-06 phase=setup                                                           │  
+  │  09:00:49 deploy step started step=step-07 phase=setup                                                           │  
+  │  09:00:56 deploy step started step=step-08 phase=setup                                                           │  
+  │  09:01:03 deploy step started step=step-09 phase=setup                                                           │  
+  │  09:01:10 deploy step started step=step-10 phase=setup                                                           │  
+  │  09:01:17 deploy step started step=step-11 phase=setup                                                           │  
+  │  09:01:24 deploy step started step=step-12 phase=setup                                                           │  
+  │  09:01:31 deploy step started step=step-13 phase=setup                                                           │  
+  │  09:01:38 deploy step started step=step-14 phase=setup                                                           │  
+  │  09:01:45 deploy step started step=step-15 phase=setup                                                           │  
+  │  09:01:52 deploy step started step=step-16 phase=setup                                                           │  
+  │  09:01:59 deploy step started step=step-17 phase=setup                                                           │  
   │  09:02:06 deploy step started step=step-18 phase=setup                                                           │  
   │  09:02:13 deploy step started step=step-19 phase=setup                                                           │  
   │  09:02:20 deploy step started step=step-20 phase=setup                                                           │  
@@ -21,18 +33,6 @@
   │  09:02:41 deploy step started step=step-23 phase=setup                                                           │  
   │                                                                                                                  │  
   │  full log okd-install/okdctl.log · ctrl+c cancels after the current step                                         │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
   │                                                                                                                  │  
   │─────────────────────────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
   │  l lock the log here • f full-screen log • ctrl+c cancel (twice to force-quit) • ? help                          │  

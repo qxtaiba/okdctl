@@ -40,7 +40,7 @@ func TestPaneRenderer_ReplacesTheContextPane(t *testing.T) {
 	if strings.Contains(frame, "PROGRESS") {
 		t.Errorf("a step that fills the pane must replace the context pane's step list:\n%s", frame)
 	}
-	if want := 180 - outerHorizontalPadding - wizardBorderHorizontal - formMaxWidth - paneRuleWidth; s.lastWidth != want {
+	if want := 180 - outerHorizontalPadding - wizardBorderHorizontal - formMaxWidth - paneRuleWidth - paneGutterWidth - paneEdgeWidth; s.lastWidth != want {
 		t.Errorf("pane width = %d, want the full remainder %d", s.lastWidth, want)
 	}
 	if s.lastRows != 48-fixedLayoutOverhead {

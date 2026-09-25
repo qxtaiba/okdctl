@@ -3,18 +3,18 @@
   │ O K D C T L                                                                                                                                                                  │  
   │ review your configuration                                                                                                                connect · cluster · extras · review │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
-  │  [1] cluster identity                                                                                  │PROGRESS                                                             │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │✓ welcome                                                            │  
-  │  name          mycluster                                                                               │✓ okd version                                                        │  
-  │  domain        k8s.local                                                                               │✓ proxmox configuration                                              │  
-  │  distribution  OKD 4.22.0-okd-scos.7                                                                   │✓ cluster basics                                                     │  
-  │                                                                                                        │✓ node placement                                                     │  
-  │  [2] proxmox                                                                                           │✓ network configuration                                              │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │✓ node resources                                                     │  
-  │  host            192.168.1.100:8006                                                                    │✓ cluster addons                                                     │  
-  │  bootstrap node  pve                                                                                   │✓ files & ignition                                                   │  
-  │  bridge          vmbr0                                                                                 │✓ advanced settings                                                  │  
-  │  storage         local-lvm                                                                             │● review & deploy                                                    │  
+  │  [1] cluster identity                                                                                  │  PROGRESS                                                           │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  ✓ welcome                                                          │  
+  │  name          mycluster                                                                               │  ✓ okd version                                                      │  
+  │  domain        k8s.local                                                                               │  ✓ proxmox configuration                                            │  
+  │  distribution  OKD 4.22.0-okd-scos.7                                                                   │  ✓ cluster basics                                                   │  
+  │                                                                                                        │  ✓ node placement                                                   │  
+  │  [2] proxmox                                                                                           │  ✓ network configuration                                            │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  ✓ node resources                                                   │  
+  │  host            192.168.1.100:8006                                                                    │  ✓ cluster addons                                                   │  
+  │  bootstrap node  pve                                                                                   │  ✓ files & ignition                                                 │  
+  │  bridge          vmbr0                                                                                 │  ✓ advanced settings                                                │  
+  │  storage         local-lvm                                                                             │  ● review & deploy                                                  │  
   │  iso storage     local                                                                                 │                                                                     │  
   │                                                                                                        │                                                                     │  
   │  [3] networking                                                                                        │                                                                     │  

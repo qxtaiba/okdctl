@@ -301,6 +301,14 @@ func (s *CompactSelector) SelectedIndex() int {
 	return s.selected
 }
 
+// Select moves the pointer to index i, clamped to the option list.
+func (s *CompactSelector) Select(i int) {
+	if len(s.options) == 0 {
+		return
+	}
+	s.selected = min(max(i, 0), len(s.options)-1)
+}
+
 // SetFocused toggles keyboard focus on the selector.
 func (s *CompactSelector) SetFocused(focused bool) {
 	s.focused = focused

@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
@@ -353,5 +354,71 @@ func TestHubBodyCarriesOnlyHeroSlotAndVerbs(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("hub body is missing %q:\n%s", want, body)
 		}
+	}
+}
+
+// TestHubVerbAcceleratorsConfirmDirectly pins the hub accelerators: d/e/n/s
+// and digits 1-4 select and confirm their verb in one keystroke, echoing
+// review's [N] jump grammar.
+func TestHubVerbAcceleratorsConfirmDirectly(t *testing.T) {
+	cases := []struct {
+		key  string
+		verb HubVerb
+	}{
+		{"d", HubVerbDeploy},
+		{"e", HubVerbEditConfig},
+		{"n", HubVerbManageNodes},
+		{"s", HubVerbClusterStatus},
+		{"1", HubVerbDeploy},
+		{"2", HubVerbEditConfig},
+		{"3", HubVerbManageNodes},
+		{"4", HubVerbClusterStatus},
+	}
+	for _, c := range cases {
+		s := NewWelcomeStep()
+		s.SetConfigExists(true)
+		_, cmd := s.Update(tea.KeyPressMsg{Code: rune(c.key[0]), Text: c.key})
+		if s.SelectedVerb() != c.verb {
+			t.Errorf("key %q: SelectedVerb() = %v, want %v", c.key, s.SelectedVerb(), c.verb)
+		}
+		if cmd == nil {
+			t.Errorf("key %q: no confirm command returned", c.key)
+		}
+	}
+}
+
+// TestHubDestroyHasNoSingleKeyAccelerator pins the friction ladder: destroy
+// is reachable only by pointer + enter, never one keystroke.
+func TestHubDestroyHasNoSingleKeyAccelerator(t *testing.T) {
+	for _, key := range []string{"x", "5"} {
+		s := NewWelcomeStep()
+		s.SetConfigExists(true)
+		_, cmd := s.Update(tea.KeyPressMsg{Code: rune(key[0]), Text: key})
+		if s.SelectedVerb() == HubVerbDestroy {
+			t.Errorf("key %q selected destroy", key)
+		}
+		if cmd != nil {
+			t.Errorf("key %q confirmed a verb, want it inert", key)
+		}
+	}
+}
+
+// TestHubMenuRendersAcceleratorHints pins the [x] grammar on the five-verb
+// menu — destroy indented with no bracket — and its absence from the
+// blank-slate menu.
+func TestHubMenuRendersAcceleratorHints(t *testing.T) {
+	s := NewWelcomeStep()
+	s.SetConfigExists(true)
+	view := s.View(70, 14)
+	for _, want := range []string{"[d] deploy", "[e] edit config", "[n] manage nodes", "[s] cluster status", "    destroy"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("five-verb menu missing %q:\n%s", want, view)
+		}
+	}
+
+	fresh := NewWelcomeStep()
+	fresh.SetConfigExists(false)
+	if view := tuitest.StripANSI(fresh.View(70, 14)); strings.Contains(view, "[") {
+		t.Errorf("blank-slate menu must carry no accelerator brackets:\n%s", view)
 	}
 }

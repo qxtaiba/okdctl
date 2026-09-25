@@ -22,6 +22,15 @@ var helpOverlayGlobalKeys = map[string]bool{
 	"?":         true,
 }
 
+// helpOverlayVimKeys are the KeyHint.Key values bucketed under the overlay's
+// "vim" section: the footer-silent scroll vocabulary the wizard binds on
+// every scrollable pane.
+var helpOverlayVimKeys = map[string]bool{
+	"j/k":      true,
+	"ctrl+d/u": true,
+	"gg/G":     true,
+}
+
 var (
 	helpOverlayTitleStyle   = lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText())
 	helpOverlaySectionStyle = lipgloss.NewStyle().Bold(true).Foreground(tui.ColorTextDim())
@@ -34,43 +43,47 @@ var (
 )
 
 // RenderHelpOverlay renders every binding in bindings — grouped into a
-// "screen" section (the active step's own keys) and a "global" section
-// (back/quit/scroll/the overlay itself, per helpOverlayGlobalKeys) — as a
-// centered panel sized to exactly width×height, wrapping the screen section
-// into two columns once one would overflow height.
+// "screen" section (the active step's own keys), a "vim" section (the
+// footer-silent scroll vocabulary, per helpOverlayVimKeys), and a "global"
+// section (back/quit/scroll/the overlay itself, per helpOverlayGlobalKeys)
+// — as a centered panel sized to exactly width×height, wrapping the screen
+// section into two columns once one would overflow height.
 func RenderHelpOverlay(bindings []KeyHint, width, height int) string {
-	screen, global := partitionHelpBindings(bindings)
+	screen, vim, global := partitionHelpBindings(bindings)
 
 	innerWidth := max(width-4, 20)  // panel border(2) + padding(2)
 	innerHeight := max(height-2, 1) // panel border only, no vertical padding
 
-	body := renderHelpOverlayBody(screen, global, innerWidth, innerHeight)
+	body := renderHelpOverlayBody(screen, vim, global, innerWidth, innerHeight)
 	panel := clampWidth(helpOverlayPanelStyle.Render(body), width)
 
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, panel)
 }
 
-func partitionHelpBindings(bindings []KeyHint) (screen, global []KeyHint) {
+func partitionHelpBindings(bindings []KeyHint) (screen, vim, global []KeyHint) {
 	for _, b := range bindings {
-		if helpOverlayGlobalKeys[b.Key] {
+		switch {
+		case helpOverlayGlobalKeys[b.Key]:
 			global = append(global, b)
-			continue
+		case helpOverlayVimKeys[b.Key]:
+			vim = append(vim, b)
+		default:
+			screen = append(screen, b)
 		}
-		screen = append(screen, b)
 	}
-	return screen, global
+	return screen, vim, global
 }
 
 // renderHelpOverlayBody lays out the title, the "screen" section (packed
-// into two columns once it would otherwise overflow height), the "global"
-// section (a single ribbon-style line — global is always short), and a
-// closing hint, joined as one block no taller than height. If the screen
-// section still doesn't fit its budget — renderHelpColumns sizes to it by
-// construction, but this is the backstop if that arithmetic ever drifts —
-// rows are dropped from the screen section alone: head (the title) and
-// tail (the global section, which carries ctrl+c/?, plus the closing
+// into two columns once it would otherwise overflow height), the "vim" and
+// "global" sections (one labeled ribbon line each — both are always short),
+// and a closing hint, joined as one block no taller than height. If the
+// screen section still doesn't fit its budget — renderHelpColumns sizes to
+// it by construction, but this is the backstop if that arithmetic ever
+// drifts — rows are dropped from the screen section alone: head (the title)
+// and tail (the vim/global ribbons, which carry ctrl+c/?, plus the closing
 // hint) always survive intact, never the other way around.
-func renderHelpOverlayBody(screen, global []KeyHint, width, height int) string {
+func renderHelpOverlayBody(screen, vim, global []KeyHint, width, height int) string {
 	title := helpOverlayTitleStyle.Render("key bindings")
 	hint := helpOverlayHintStyle.Render("esc or ? closes")
 
@@ -79,11 +92,17 @@ func renderHelpOverlayBody(screen, global []KeyHint, width, height int) string {
 	if len(screen) > 0 {
 		head = append(head, helpOverlaySectionStyle.Render("screen"))
 	}
-	if len(global) > 0 {
+	if len(vim) > 0 {
 		if len(screen) > 0 {
 			tail = append(tail, "")
 		}
-		tail = append(tail, helpOverlaySectionStyle.Render("global"), renderHelpRibbonLine(global, width))
+		tail = append(tail, renderHelpSectionLines("vim", vim, width)...)
+	}
+	if len(global) > 0 {
+		if len(screen) > 0 && len(vim) == 0 {
+			tail = append(tail, "")
+		}
+		tail = append(tail, renderHelpSectionLines("global", global, width)...)
 	}
 	tail = append(tail, "", hint)
 
@@ -152,16 +171,52 @@ func widestCell(items []KeyHint) int {
 	return w
 }
 
-// renderHelpRibbonLine joins items as "key desc • key desc • ...", clipped
-// to width — used for the "global" section, which is always short.
-func renderHelpRibbonLine(items []KeyHint, width int) string {
+// helpSectionLabelWidth aligns the vim and global ribbons on one label
+// column ("global" is the widest label).
+const helpSectionLabelWidth = 6
+
+// renderHelpSectionLines renders one ribbon section — "label  key desc •
+// key desc • ..." — packing items greedily onto as few lines as width
+// allows, continuations indented under the ribbon column so every binding
+// stays listed however narrow the panel.
+func renderHelpSectionLines(label string, items []KeyHint, width int) []string {
 	sep := " " + tui.IconBullet + " "
-	parts := make([]string, len(items))
-	for i, it := range items {
-		parts[i] = formatHelpBinding(it)
+	prefix := padCell(helpOverlaySectionStyle.Render(label), helpSectionLabelWidth) + "  "
+	indent := strings.Repeat(" ", helpSectionLabelWidth+2)
+	budget := max(width-helpSectionLabelWidth-2, 12)
+
+	var lines []string
+	var cur strings.Builder
+	curW := 0
+	for _, it := range items {
+		part := formatHelpBinding(it)
+		partW := lipgloss.Width(part)
+		switch {
+		case curW == 0:
+			cur.WriteString(part)
+			curW = partW
+		case curW+lipgloss.Width(sep)+partW <= budget:
+			cur.WriteString(sep + part)
+			curW += lipgloss.Width(sep) + partW
+		default:
+			lines = append(lines, cur.String())
+			cur.Reset()
+			cur.WriteString(part)
+			curW = partW
+		}
 	}
-	line := "  " + strings.Join(parts, sep)
-	return lipgloss.NewStyle().MaxWidth(width).Inline(true).Render(line)
+	if cur.Len() > 0 {
+		lines = append(lines, cur.String())
+	}
+
+	for i, l := range lines {
+		lead := indent
+		if i == 0 {
+			lead = prefix
+		}
+		lines[i] = clipCell(lead+l, width)
+	}
+	return lines
 }
 
 func formatHelpBinding(b KeyHint) string {

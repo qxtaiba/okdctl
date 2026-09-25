@@ -50,14 +50,22 @@ func (m *Model) resizeViewport() {
 	m.viewport.SetHeight(height)
 }
 
-// handleScrollKey scrolls the viewport on page/home/end/arrow keys and
-// reports whether it consumed msg; home/end fall through to a focused text
-// input (line-start/line-end cursor moves), pgup/pgdn to a step paging a log
-// region of its own, and the arrows scroll only for steps that opted in via
-// arrowScroller — every other step keeps them for its own navigation.
+// handleScrollKey scrolls the viewport on page/home/end/arrow keys — plus
+// the footer-silent vim vocabulary (j/k, ctrl+d/u, gg/G) — and reports
+// whether it consumed msg; home/end fall through to a focused text input
+// (line-start/line-end cursor moves), pgup/pgdn to a step paging a log
+// region of its own, the arrows and j/k scroll only for steps that opted in
+// via arrowScroller, and every vim key falls through while a text input is
+// focused — every other step keeps its own keys.
 func (m *Model) handleScrollKey(msg tea.KeyPressMsg) bool {
 	if !m.ready {
 		return false
+	}
+	if handled, consumed := m.handleVimScrollKey(msg); handled {
+		if consumed {
+			m.notifyIfAtBottom()
+		}
+		return consumed
 	}
 	switch {
 	case key.Matches(msg, m.keyMap.PageUp):
@@ -95,6 +103,53 @@ func (m *Model) handleScrollKey(msg tea.KeyPressMsg) bool {
 	}
 	m.notifyIfAtBottom()
 	return true
+}
+
+// handleVimScrollKey handles the footer-silent vim vocabulary: j/k mirror
+// the arrow gate, ctrl+d/u the half-page keys, gg/G jump to the ends, and
+// every key falls through while a text input is focused. handled reports
+// whether msg was a vim key at all; consumed whether it acted (or, for a
+// lone g, armed the gg chord).
+func (m *Model) handleVimScrollKey(msg tea.KeyPressMsg) (handled, consumed bool) {
+	pendingG := m.pendingG
+	m.pendingG = false
+	switch {
+	case key.Matches(msg, m.keyMap.VimDown), key.Matches(msg, m.keyMap.VimUp):
+		if !m.currentStepScrollsWithArrows() || m.currentStepConsumesTextInput() {
+			return true, false
+		}
+		if key.Matches(msg, m.keyMap.VimDown) {
+			m.viewport.ScrollDown(1)
+		} else {
+			m.viewport.ScrollUp(1)
+		}
+	case key.Matches(msg, m.keyMap.VimHalfDown), key.Matches(msg, m.keyMap.VimHalfUp):
+		if m.currentStepConsumesPaging() || m.currentStepConsumesTextInput() {
+			return true, false
+		}
+		if key.Matches(msg, m.keyMap.VimHalfDown) {
+			m.viewport.HalfPageDown()
+		} else {
+			m.viewport.HalfPageUp()
+		}
+	case key.Matches(msg, m.keyMap.VimBottom):
+		if m.currentStepConsumesTextInput() {
+			return true, false
+		}
+		m.viewport.GotoBottom()
+	case key.Matches(msg, m.keyMap.VimTop):
+		if m.currentStepConsumesTextInput() {
+			return true, false
+		}
+		if !pendingG {
+			m.pendingG = true
+			return true, true
+		}
+		m.viewport.GotoTop()
+	default:
+		return false, false
+	}
+	return true, true
 }
 
 // notifyIfAtBottom tells the active step, if it implements BottomNotifiable,

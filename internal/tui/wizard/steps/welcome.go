@@ -3,6 +3,7 @@ package steps
 import (
 	"errors"
 	"fmt"
+	"strconv"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -40,27 +41,32 @@ const (
 	SaveSlotDeployed   SaveSlotState = "deployed"
 )
 
-// hubEntry pairs a menu label with the verb it selects.
+// hubEntry pairs a menu label with the verb it selects; accel is the verb's
+// single-key accelerator in review's [N] grammar, empty for verbs the
+// friction ladder keeps behind pointer + enter.
 type hubEntry struct {
 	verb  HubVerb
 	label string
+	accel string
 }
 
 // hubVerbs is the menu shown when an okdctl.yaml exists: five verbs, in the
-// order the operator is most likely to want them.
+// order the operator is most likely to want them. Destroy deliberately has
+// no accelerator — and no digit either, since digits address only entries
+// that carry an accelerator.
 var hubVerbs = []hubEntry{
-	{HubVerbDeploy, "deploy"},
-	{HubVerbEditConfig, "edit config"},
-	{HubVerbManageNodes, "manage nodes"},
-	{HubVerbClusterStatus, "cluster status"},
-	{HubVerbDestroy, "destroy"},
+	{HubVerbDeploy, "deploy", "d"},
+	{HubVerbEditConfig, "edit config", "e"},
+	{HubVerbManageNodes, "manage nodes", "n"},
+	{HubVerbClusterStatus, "cluster status", "s"},
+	{HubVerbDestroy, "destroy", ""},
 }
 
 // hubFreshVerbs is the blank-slate menu: there is nothing to deploy, manage,
 // inspect or destroy yet.
 var hubFreshVerbs = []hubEntry{
-	{HubVerbGetStarted, "get started"},
-	{HubVerbQuit, "quit"},
+	{HubVerbGetStarted, "get started", ""},
+	{HubVerbQuit, "quit", ""},
 }
 
 // HubFlow builds one of the flows a hub verb swaps into. Building is deferred
@@ -123,12 +129,28 @@ func (s *WelcomeStep) Animating() bool {
 }
 
 // setEntries rebuilds the menu over entries, clamped so up/down never wraps
-// past either end of a launcher's short list.
+// past either end of a launcher's short list. On a menu with accelerators,
+// each row leads with its "[d]" hint and accelerator-less rows indent to
+// keep the verbs on one column — the missing bracket is the signal.
 func (s *WelcomeStep) setEntries(entries []hubEntry) {
 	s.entries = entries
+	hasAccels := false
+	for _, e := range entries {
+		if e.accel != "" {
+			hasAccels = true
+			break
+		}
+	}
 	labels := make([]string, len(entries))
 	for i, e := range entries {
-		labels[i] = e.label
+		switch {
+		case e.accel != "":
+			labels[i] = "[" + e.accel + "] " + e.label
+		case hasAccels:
+			labels[i] = "    " + e.label
+		default:
+			labels[i] = e.label
+		}
 	}
 	s.nav = components.NewCompactSelector(labels)
 	s.nav.SetWrap(false)
@@ -208,6 +230,11 @@ func (s *WelcomeStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 			cmd := s.confirm()
 			return s, cmd
 		}
+		if i, ok := s.acceleratedEntry(msg.Text); ok {
+			s.nav.Select(i)
+			cmd := s.confirm()
+			return s, cmd
+		}
 		s.nav, _ = s.nav.Update(components.ArrowsAsVertical(msg))
 	case wizard.FrameMsg:
 		s.frame = msg.Frame
@@ -248,6 +275,24 @@ func (s *WelcomeStep) confirm() tea.Cmd {
 		return wizard.SwapFlowMsg{Steps: flowSteps, Chrome: chrome}
 	}
 	return buildFlow
+}
+
+// acceleratedEntry maps a pressed key to its menu entry: a verb's letter
+// accelerator, or the 1-based digit of an accelerator-carrying row — destroy
+// answers to neither, per the friction ladder.
+func (s *WelcomeStep) acceleratedEntry(text string) (int, bool) {
+	if text == "" {
+		return 0, false
+	}
+	for i, e := range s.entries {
+		if e.accel == "" {
+			continue
+		}
+		if text == e.accel || text == strconv.Itoa(i+1) {
+			return i, true
+		}
+	}
+	return 0, false
 }
 
 // flowFor returns the in-process flow behind verb, or nil when the verb has none.

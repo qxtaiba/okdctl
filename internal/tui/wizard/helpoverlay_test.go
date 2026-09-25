@@ -318,3 +318,22 @@ func lastIndexRune(runes []rune, r rune) int {
 	}
 	return -1
 }
+
+// TestHelpOverlay_ListsVimGroupFooterSilently pins the vim vocabulary's home:
+// absent from the footer ribbon, present in the overlay under its own group.
+func TestHelpOverlay_ListsVimGroup(t *testing.T) {
+	m := NewModel([]WizardStep{newNopStep()}, config.DefaultConfig())
+	tuitest.RenderAt(t, m, 100, 30)
+
+	if ribbon := tuitest.StripANSI(m.renderHelpRow()); strings.Contains(ribbon, "gg/G") {
+		t.Fatalf("footer ribbon advertises the vim keys: %q", ribbon)
+	}
+
+	m = update(t, m, questionMark())
+	frame := tuitest.StripANSI(m.View().Content)
+	for _, want := range []string{"vim", "j/k", "ctrl+d/u", "gg/G"} {
+		if !strings.Contains(frame, want) {
+			t.Errorf("overlay missing %q from the vim group:\n%s", want, frame)
+		}
+	}
+}

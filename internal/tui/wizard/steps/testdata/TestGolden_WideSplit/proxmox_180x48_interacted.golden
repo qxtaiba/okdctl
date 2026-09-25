@@ -3,26 +3,26 @@
   │ O K D C T L                                                                                                                                                                  │  
   │ configure proxmox ve connection                                                                                                      connect ✓✓● · cluster · extras · review │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
-  │                                                                                                        │PROGRESS                                                             │  
-  │    ✓ connection                                                                                        │✓ welcome                                                            │  
-  │                                                                                                        │✓ okd version                                                        │  
-  │    host                                                                                                │● proxmox configuration                                              │  
-  │    ╭──────────────────────────────────────╮                                                            │○ cluster basics                                                     │  
-  │    │ 192.168.1.100:8006                   │                                                            │○ node placement                                                     │  
-  │    ╰──────────────────────────────────────╯                                                            │○ network configuration                                              │  
-  │                                                                                                        │○ node resources                                                     │  
-  │    ● credentials                                                                                       │○ cluster addons                                                     │  
-  │                                                                                                        │○ files & ignition                                                   │  
-  │    username                                                                                            │○ advanced settings                                                  │  
-  │    ╭──────────────────────────────────────╮                                                            │○ review & deploy                                                    │  
+  │                                                                                                        │  PROGRESS                                                           │  
+  │    ✓ connection                                                                                        │  ✓ welcome                                                          │  
+  │                                                                                                        │  ✓ okd version                                                      │  
+  │    host                                                                                                │  ● proxmox configuration                                            │  
+  │    ╭──────────────────────────────────────╮                                                            │  ○ cluster basics                                                   │  
+  │    │ 192.168.1.100:8006                   │                                                            │  ○ node placement                                                   │  
+  │    ╰──────────────────────────────────────╯                                                            │  ○ network configuration                                            │  
+  │                                                                                                        │  ○ node resources                                                   │  
+  │    ● credentials                                                                                       │  ○ cluster addons                                                   │  
+  │                                                                                                        │  ○ files & ignition                                                 │  
+  │    username                                                                                            │  ○ advanced settings                                                │  
+  │    ╭──────────────────────────────────────╮                                                            │  ○ review & deploy                                                  │  
   │    │ root@pam                             │ default                                                    │                                                                     │  
-  │    ╰──────────────────────────────────────╯                                                            │CONFIGURED                                                           │  
-  │    proxmox username (user@realm)                                                                       │host: 192.168.1.100:8006                                             │  
-  │                                                                                                        │username: root@pam                                                   │  
+  │    ╰──────────────────────────────────────╯                                                            │  CONFIGURED                                                         │  
+  │    proxmox username (user@realm)                                                                       │  host: 192.168.1.100:8006                                           │  
+  │                                                                                                        │  username: root@pam                                                 │  
   │    password                                                                                            │                                                                     │  
-  │    ╭──────────────────────────────────────╮                                                            │FOCUSED FIELD                                                        │  
-  │    │ ·                                    │                                                            │username                                                             │  
-  │    ╰──────────────────────────────────────╯                                                            │proxmox username (user@realm)                                        │  
+  │    ╭──────────────────────────────────────╮                                                            │  FOCUSED FIELD                                                      │  
+  │    │ ·                                    │                                                            │  username                                                           │  
+  │    ╰──────────────────────────────────────╯                                                            │  proxmox username (user@realm)                                      │  
   │                                                                                                        │                                                                     │  
   │    token id                                                                                            │                                                                     │  
   │    ╭──────────────────────────────────────╮                                                            │                                                                     │  
