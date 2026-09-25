@@ -22,8 +22,11 @@ func (m *Model) tooSmall() bool {
 // View implements tea.Model, rendering header, viewport, status row, and
 // footer into a bordered box drawn at exactly the terminal width.
 func (m *Model) View() tea.View {
-	v := tea.View{AltScreen: true}
+	// ReportFocus is away mode's wire: BlurMsg drops the shared clock to
+	// 1Hz, FocusMsg plays the catch-up sweep.
+	v := tea.View{AltScreen: true, ReportFocus: true}
 	v.WindowTitle = "okdctl · " + m.windowTitle()
+	v.ProgressBar = m.terminalProgress()
 
 	if m.quitting {
 		return v
@@ -453,6 +456,33 @@ func (m *Model) withHubEscape(bindings []KeyBinding) []KeyBinding {
 // phase); an empty return falls back to the header title.
 type windowTitler interface {
 	WindowTitle() string
+}
+
+// terminalProgressStep is implemented by steps that drive the terminal's
+// own progress indication (OSC 9;4 — taskbar and tab progress in the
+// terminals that render it); ProgressBarNone means nothing to report.
+type terminalProgressStep interface {
+	TerminalProgress() (tea.ProgressBarState, int)
+}
+
+// terminalProgress asks the active step for its OSC 9;4 reading, gated on
+// the color profile: a pipe or NO_COLOR run stays byte-identical, and
+// terminals that don't understand the bytes ignore them silently. Nil — the
+// renderer's reset — the moment no step reports one, so the indicator
+// clears on exit.
+func (m *Model) terminalProgress() *tea.ProgressBar {
+	if !tui.ColorEnabled() {
+		return nil
+	}
+	tp, ok := m.CurrentStep().(terminalProgressStep)
+	if !ok {
+		return nil
+	}
+	state, value := tp.TerminalProgress()
+	if state == tea.ProgressBarNone {
+		return nil
+	}
+	return tea.NewProgressBar(state, value)
 }
 
 // windowTitle names the terminal tab: the active step's own live title when

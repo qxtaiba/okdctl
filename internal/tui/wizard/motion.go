@@ -13,6 +13,11 @@ import (
 // frame at the full motion dial.
 const framePeriod = 80 * time.Millisecond
 
+// blurredFramePeriod is the shared clock's cadence while the terminal is
+// unfocused: 1Hz keeps elapsed and stall readings honest at near-zero CPU
+// while the cosmetic animators stand suspended.
+const blurredFramePeriod = time.Second
+
 // FrameMsg advances every live animation on the active step by one frame of
 // the wizard's shared clock; Frame is monotonic for the life of the model.
 // Tests drive animations deterministically by sending FrameMsg with pinned
@@ -57,7 +62,16 @@ func (m *Model) armClock() tea.Cmd {
 
 func (m *Model) clockTickCmd() tea.Cmd {
 	gen := m.clockGen
-	return tea.Tick(framePeriod, func(time.Time) tea.Msg { return clockTickMsg{gen: gen} })
+	return tea.Tick(m.clockPeriod(), func(time.Time) tea.Msg { return clockTickMsg{gen: gen} })
+}
+
+// clockPeriod is the shared clock's active tick interval: away mode's 1Hz
+// while the terminal is blurred, the full 12.5Hz otherwise.
+func (m *Model) clockPeriod() time.Duration {
+	if m.blurred {
+		return blurredFramePeriod
+	}
+	return framePeriod
 }
 
 // handleClockTick advances the monotonic frame counter, delivers the frame

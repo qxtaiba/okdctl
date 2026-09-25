@@ -160,6 +160,9 @@ type Model struct {
 	frame        uint64
 	clockGen     uint64
 	clockRunning bool
+	// blurred is away mode's flag: the terminal reported losing focus, so
+	// the clock idles at 1Hz and cosmetic animators stand suspended.
+	blurred bool
 
 	quitting bool
 	result   Result
@@ -380,11 +383,30 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if tick, ok := msg.(clockTickMsg); ok {
 		return m.handleClockTick(tick)
 	}
+	m.trackFocus(msg)
 	model, cmd := m.update(msg)
 	if clockCmd := m.armClock(); clockCmd != nil {
 		cmd = tea.Batch(cmd, clockCmd)
 	}
 	return model, cmd
+}
+
+// trackFocus keeps the away-mode state: a blur drops the shared clock to
+// 1Hz (the running chain finishes its pending tick at the old cadence), and
+// a focus retires the pending slow tick so the full-cadence chain — and the
+// step's catch-up sweep riding on it — re-arms immediately. Both messages
+// still reach the active step through the normal delegation below.
+func (m *Model) trackFocus(msg tea.Msg) {
+	switch msg.(type) {
+	case tea.BlurMsg:
+		m.blurred = true
+	case tea.FocusMsg:
+		m.blurred = false
+		if m.clockRunning {
+			m.clockGen++
+			m.clockRunning = false
+		}
+	}
 }
 
 // update is Update's body, split out so handleClockTick can route a frame

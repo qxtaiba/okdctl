@@ -3,9 +3,11 @@ package deployexec
 import (
 	"fmt"
 	"math"
+	"os"
 	"strings"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/distribution"
@@ -213,10 +215,11 @@ func (s *StreamStep) updateETAShown() {
 }
 
 // noteActivity records one unit of observed throughput at the injected
-// clock's now.
+// clock's now, re-arming the stall bell.
 func (s *StreamStep) noteActivity() {
 	s.activityCount++
 	s.lastActivity = s.now()
+	s.stallRung = false
 }
 
 // sampleActivity folds new log lines into the activity meter: the ring's
@@ -232,6 +235,7 @@ func (s *StreamStep) sampleActivity() {
 		s.activityCount += uint64(total - s.lastLogTotal) //nolint:gosec // G115: guarded by the comparison above
 		s.lastLogTotal = total
 		s.lastActivity = s.now()
+		s.stallRung = false
 	}
 }
 
@@ -239,12 +243,16 @@ func (s *StreamStep) sampleActivity() {
 // advances one frame per observed event while output flows — motion
 // frequency IS throughput — and decays to a slow, dim, frame-clock pulse
 // once the step has been quiet past quietAfter. Off-motion renders frame
-// zero either way (tui.SpinnerGlyph's own contract).
+// zero either way (tui.SpinnerGlyph's own contract), and a blurred terminal
+// freezes the pulse — away mode suspends the cosmetic animators.
 func (s *StreamStep) runningGlyph() string {
 	idx := s.activityCount
 	quiet := s.now().Sub(s.lastActivity) >= quietAfter
 	if quiet {
 		idx = s.frame / slowPulseDivisor
+		if s.blurred {
+			idx = 0
+		}
 	}
 	g := tui.SpinnerGlyph(tui.Motion(), idx)
 	if quiet {
@@ -265,13 +273,83 @@ func (s *StreamStep) stalled(id distribution.StepID) bool {
 }
 
 // stallMarker renders the stalled row's amber boundary marker, pulsing on
-// the slow cadence under full motion and steady otherwise.
+// the slow cadence under full motion — steady on the calmer dials and while
+// the terminal is blurred.
 func (s *StreamStep) stallMarker() string {
 	glyph := tui.IconActive
-	if tui.Motion() == tui.MotionFull && (s.frame/slowPulseDivisor)%2 == 1 {
+	if tui.Motion() == tui.MotionFull && !s.blurred && (s.frame/slowPulseDivisor)%2 == 1 {
 		glyph = tui.IconPending
 	}
 	return s.styles().warn.Render(glyph + " ")
+}
+
+// runningStepID names the step currently running, false when none is.
+func (s *StreamStep) runningStepID() (distribution.StepID, bool) {
+	if len(s.phases) == 0 {
+		return "", false
+	}
+	ph := &s.phases[s.currentPhase]
+	for i := range ph.rows {
+		if ph.rows[i].status == rowRunning {
+			return ph.rows[i].id, true
+		}
+	}
+	return "", false
+}
+
+// TerminalProgress drives the terminal's own progress indication (OSC 9;4)
+// per the proposal: the weight model's percent while running, indeterminate
+// during the bootstrap wait, the error state on failure, and 100 on a clean
+// finish — the frame clears it once the flow moves on.
+func (s *StreamStep) TerminalProgress() (state tea.ProgressBarState, value int) {
+	switch {
+	case s.finished && s.st.Result != nil:
+		return tea.ProgressBarError, s.percent()
+	case s.finished:
+		return tea.ProgressBarDefault, 100
+	case len(s.phases) == 0:
+		return tea.ProgressBarNone, 0
+	default:
+		if id, ok := s.runningStepID(); ok && id == install.StepWaitBootstrap {
+			return tea.ProgressBarIndeterminate, 0
+		}
+		return tea.ProgressBarDefault, s.percent()
+	}
+}
+
+// bell rings the terminal bell, gated the way every escape emission is: a
+// pipe or NO_COLOR run degrades to nothing and stays byte-identical.
+func (s *StreamStep) bell() tea.Cmd {
+	if !tui.ColorEnabled() {
+		return nil
+	}
+	return func() tea.Msg {
+		_, _ = os.Stdout.WriteString("\a")
+		return nil
+	}
+}
+
+// bellWhileBlurred is the attention escape for real events that land while
+// the operator is away; a focused terminal needs no bell.
+func (s *StreamStep) bellWhileBlurred() tea.Cmd {
+	if !s.blurred {
+		return nil
+	}
+	return s.bell()
+}
+
+// stallBell rings once per stall while blurred: the first frame past the
+// running step's silence threshold, re-armed only by new output.
+func (s *StreamStep) stallBell() tea.Cmd {
+	if !s.blurred || s.stallRung || s.finished {
+		return nil
+	}
+	id, ok := s.runningStepID()
+	if !ok || !s.stalled(id) {
+		return nil
+	}
+	s.stallRung = true
+	return s.bellWhileBlurred()
 }
 
 // renderBar renders the full-width segmented progress bar: gradient fill

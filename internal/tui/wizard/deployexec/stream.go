@@ -87,6 +87,10 @@ type StreamStep struct {
 	animStart   uint64
 	etaShown    time.Duration
 	ewmaRatio   float64
+	// lastSeenFrac is where the bar stood when the terminal blurred — the
+	// catch-up sweep's origin; stallRung debounces the away-mode stall bell.
+	lastSeenFrac float64
+	stallRung    bool
 	// activityCount advances one unit per observed event or log line;
 	// lastActivity stamps the newest one, lastLogTotal the ring position
 	// already folded in.
@@ -272,9 +276,14 @@ func (s *StreamStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 				s.settling = true
 				s.animFrom = min(s.maxFrac, barCapFrac)
 				s.animStart = s.frame
-				return s, nil
+				bell := s.bellWhileBlurred()
+				return s, bell
 			}
-			return s, func() tea.Msg { return wizard.StepCompleteMsg{StepID: StepIDStream} }
+			complete := func() tea.Msg { return wizard.StepCompleteMsg{StepID: StepIDStream} }
+			if bell := s.bellWhileBlurred(); bell != nil {
+				return s, tea.Batch(bell, complete)
+			}
+			return s, complete
 		}
 		s.sampleActivity()
 		s.applyEvent(&msg.ev)
@@ -289,6 +298,25 @@ func (s *StreamStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		}
 		if s.sweeping && s.frame >= s.animStart+settleFrames {
 			s.sweeping = false
+		}
+		bell := s.stallBell()
+		return s, bell
+
+	case tea.BlurMsg:
+		// Away mode: remember where the bar stood so a later focus can
+		// sweep the difference; the cosmetic animators check the flag.
+		s.blurred = true
+		s.lastSeenFrac = s.barFillFrac()
+
+	case tea.FocusMsg:
+		wasBlurred := s.blurred
+		s.blurred = false
+		if wasBlurred && tui.Motion() == tui.MotionFull && !s.finished && s.lastSeenFrac < s.barTarget() {
+			// The catch-up sweep: one eased pass from the last-seen fill to
+			// the current percent — an instant visual diff of the time away.
+			s.sweeping = true
+			s.animFrom = s.lastSeenFrac
+			s.animStart = s.frame
 		}
 
 	case tea.KeyPressMsg:

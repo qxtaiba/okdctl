@@ -230,13 +230,13 @@ func executeLifecycleOp(opCtx context.Context, cmd *cobra.Command, cfg *config.C
 	}
 	rc.runner.Reporter = func(desc string) func() {
 		start := time.Now()
-		sendExecEvent(opCtx, events, lifecycle.ExecEvent{Desc: desc})
+		sendExecEvent(opCtx, events, &lifecycle.ExecEvent{Desc: desc})
 		return func() {
-			sendExecEvent(opCtx, events, lifecycle.ExecEvent{Desc: desc, Done: true, Took: time.Since(start)})
+			sendExecEvent(opCtx, events, &lifecycle.ExecEvent{Desc: desc, Done: true, Took: time.Since(start)})
 		}
 	}
 	rc.runner.OnStep = func(target string, step node.Step) {
-		sendExecEvent(opCtx, events, lifecycle.ExecEvent{Node: target, Step: step})
+		sendExecEvent(opCtx, events, &lifecycle.ExecEvent{Node: target, Step: step})
 	}
 	if err := runLifecycleOp(opCtx, rc, st); err != nil {
 		if errors.Is(err, node.ErrDeclined) {
@@ -271,10 +271,10 @@ func ringSlog(ring *logview.Ring) *slog.Logger {
 // sendExecEvent delivers ev unless the op's context is gone — a chatty
 // unwind after a force-quit must never strand the runner goroutine (holding
 // the run lock and a terraform subprocess) on a feed nobody drains.
-func sendExecEvent(ctx context.Context, events chan<- lifecycle.ExecEvent, ev lifecycle.ExecEvent) {
+func sendExecEvent(ctx context.Context, events chan<- lifecycle.ExecEvent, ev *lifecycle.ExecEvent) {
 	select {
 	case <-ctx.Done():
-	case events <- ev:
+	case events <- *ev:
 	}
 }
 

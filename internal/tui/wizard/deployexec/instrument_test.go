@@ -136,8 +136,10 @@ func TestETANeverTwitchesUpward(t *testing.T) {
 	// A run drifting mildly behind schedule re-estimates a bit higher; the
 	// shown value must hold rather than twitch upward.
 	s.applyEvent(&Event{StepID: st.Plan[2].ID})
-	s.applyEvent(&Event{StepID: st.Plan[2].ID, Done: true,
-		Took: st.History[st.Plan[2].ID] + 10*time.Second})
+	s.applyEvent(&Event{
+		StepID: st.Plan[2].ID, Done: true,
+		Took: st.History[st.Plan[2].ID] + 10*time.Second,
+	})
 	_ = s.View(100, 40)
 	if s.etaShown > first {
 		t.Errorf("etaShown rose %v → %v on a mild re-estimate", first, s.etaShown)
