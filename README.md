@@ -218,6 +218,41 @@ operator needs a `console.redhat.com` token no OKD install has (see
 `okdctl deploy` disables both during post-install. Pass
 `--keep-redhat-catalogs` to leave them as OKD ships them.
 
+## Without the TUI
+
+The full-screen wizard is an enhancement, not a requirement: the config
+file plus command-line flags reach every operation the wizard reaches.
+That flags-and-config path is the accessible route of first resort,
+including for a screen reader, since a screen reader cannot track an
+AltScreen TUI's cursor-addressed redraws.
+
+- **Deploy.** The `--no-tui` flag runs the same install engine behind a
+  plain stderr checklist instead of the full-screen stream screen. The
+  `--yes` flag, combined with `--confirm-cluster`, skips the wizard
+  outright and deploys from the existing `okdctl.yaml` and its
+  `okdctl.env` credential sidecar, with no TTY required.
+- **Destroy and cleanup.** The `--yes` flag, combined with
+  `--confirm-cluster`, skips the confirmation prompt on both `okdctl
+  destroy` and `okdctl cleanup`.
+- **Node lifecycle.** The `okdctl node add`, `remove`, `resize`, `list`,
+  and `snapshot` commands cover the same ground as the wizard's
+  manage-nodes flow, each destructive change gated by the same
+  `--yes`/`--confirm-cluster` pair. That leaves `okdctl node manage` as
+  the one command that still needs a terminal: it refuses outright
+  without one and names the commands above as the scripted alternative.
+- **Configuration.** The `okdctl config show` and `okdctl config
+  validate` commands inspect and check a configuration file directly, so
+  hand-editing `okdctl.yaml` never requires reopening the wizard.
+
+In particular, nothing outside the wizard's own hub, configure flow, and
+deploy-stream screen, plus `okdctl node manage`, ever puts a TUI on
+screen: every other command is plain flags in, stdout/stderr out. This
+guarantee extends to color: `--no-color` and the `NO_COLOR` environment
+variable are honored globally along that same flags path, stripping
+every command's output down to plain text. The [wizard architecture
+doc](docs/architecture/wizard.md) covers the hub, its flows, and the
+deploy stream for when the TUI is what you want.
+
 ## Troubleshooting
 
 Run `okdctl doctor` first. It catches most common failures, and its

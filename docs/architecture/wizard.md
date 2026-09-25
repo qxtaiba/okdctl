@@ -1,9 +1,48 @@
 # The wizard
 
-The wizard is the interactive TUI that walks the user through configuring
-a cluster. It runs the first time `okdctl deploy` is invoked without
-an existing `okdctl.yaml`, and can be re-run on demand to edit an
-existing config.
+The wizard is the interactive TUI behind every hands-on okdctl operation:
+a hero hub screen offering five verbs, the data-driven configure flow
+underneath its `deploy`/`edit config` verbs, and the day-two flows those
+verbs swap into in the same program. In particular, this is not a
+deploy-only walkthrough — the hub is a first-class entry point in its own
+right, and `okdctl node manage` deep-links straight into one of its flows.
+
+## The hub: one program, five verbs
+
+The wizard's entry point is `steps.WelcomeStep`, the hero-hub: a centered
+wordmark screen `okdctl deploy` opens on every time, offering five verbs
+over an existing `okdctl.yaml` (`deploy`, `edit config`, `manage nodes`,
+`cluster status`, `destroy`) or two on a blank slate (`get started`,
+`quit`). The hub is a hand-written `WizardStep`, not a `StepDefinition`,
+since a launcher has no fields to declare; it also implements
+`heroRenderer` and `splitSuppressor`, so the frame drops its own header
+chrome and never puts a context pane beside it — the block-letter
+wordmark is the whole screen's identity.
+
+That five-verb menu resolves one of three ways. The `deploy` and `edit
+config` verbs, plus `get started` on the blank slate, continue forward
+into the data-driven configure flow described below, in the same
+program, on the step-list diagram further down this page. The `manage
+nodes` and `cluster status` verbs instead swap the wizard onto a
+different flow in-process, through `Model.SwapFlow`: the live step set
+and chrome are replaced, the hub's own steps and position are held in a
+single `suspendedFlow`, and escaping the swapped-in flow's first screen
+restores the hub exactly where the operator left it. That single-
+suspension rule is deliberate: `SwapFlow` accepts only one suspended flow
+at a time, since the hub is the only screen that swaps, and a sub-flow it
+swaps into never swaps again. The `destroy` verb resolves to neither: the
+hub reports it back to the CLI, which prints a handoff line and leaves
+`okdctl destroy`'s own confirmation ladder as the guard, rather than
+reimplementing it behind a menu entry.
+
+That said, `okdctl node manage` is a direct deep-link into the
+manage-nodes flow, not a hub verb: it builds the same Cluster Lifecycle
+session the hub's `manage nodes` verb would (`newLifecycleSession`, the
+same `lifecycle.Chrome()`) and runs it as its own top-level
+`wizard.RunFlow` program, skipping the hub screen entirely. This suits a
+scripted or automation-adjacent entry: `okdctl node manage` refuses
+outright without a terminal, naming `okdctl node resize/add/remove` as
+the alternative, while `okdctl deploy` always opens on the hub first.
 
 ## Data-driven, not code-driven
 
@@ -178,6 +217,37 @@ stretching. See `internal/tui/wizard/contextpane.go` for what the pane
 renders — a dim, unfocusable summary of the step list, the current step's
 answered facts, and the focused field's help text.
 
+The split is also gated on height, not width alone: `splitLayout`
+compares the terminal against `splitMinHeight(stepCount)`, defined as
+`fixedLayoutOverhead + paneStepsHeaderRows + stepCount` — the pane's
+STEPS section needs one row per step plus its own header row, on top of
+the same fixed chrome the single-column layout already pays for. That
+floor scales with the flow's own step count, so a longer flow needs a
+taller terminal before it splits at all; below it, even a terminal at or
+past `wideSplitWidth` takes the capped single-column tier instead of
+splitting into a pane too short to hold the step list.
+
+This is what fills the pane once that height floor is cleared:
+`renderContextPane` renders up to three sections in a strict priority
+order — STEPS, then SO FAR, then FOCUSED FIELD — and a height squeeze
+sacrifices them from the bottom of that order upward. The first section
+to go is FOCUSED FIELD: it renders only once SO FAR's own attempt has
+succeeded or had nothing to show, and even then only if its own lines
+still fit whatever rows remain. The next to go is SO FAR, once the pane
+is squeezed tighter still: when its lines do not fit the rows STEPS left
+behind, `renderContextPane` drops it, and that drop alone vetoes FOCUSED
+FIELD too, regardless of whether FOCUSED FIELD's own content would have
+fit on its own. That leaves STEPS itself, which turns to its
+`…`-truncation fallback — keeping rows around the current step and
+marking the rest with a trailing ellipsis — only as a defensive floor
+below the guarantee `splitMinHeight` already gives it; `splitLayout`'s own
+gate keeps that floor unreached in practice. That veto is a real
+distinction: a section absent because its step does not implement the
+relevant interface — no `answeredStep`, no `focusedFieldStep`, or a
+`focusedFieldStep` with nothing currently focused — never counts as a
+drop and never vetoes what comes after it. In particular, only a section
+that had content and did not fit silences the rest of the cascade.
+
 ## The status row
 
 The status row is always exactly one row, whether or not it has anything
@@ -286,6 +356,41 @@ requires Proxmox VE 9 or later plus a multi-node cluster, since a single
 host cannot satisfy the anti-affinity rule. In particular, once enabled,
 ha-manager supersedes the per-VM `startup{}` ordering on any HA-triggered
 relocation.
+
+## The deploy stream: a second program
+
+The screen that actually runs a deploy is never the same program as the
+screen that led to it. The path to it varies: confirming `deploy`
+straight from the hub over an existing configuration skips the configure
+flow entirely and starts the stream screen against the configuration
+already on disk, while confirming it from the review step — at the end
+of a configure flow reached via `get started` or `edit config` — starts
+that same stream screen only after the whole configure flow has run to
+completion and exited. In particular, `--yes` reaches the stream screen
+(or, under `--no-tui`, the plain stderr checklist described in [the
+README](../../README.md#without-the-tui)) without any wizard screen
+running first at all. That stream screen, whenever it does run, is a
+fresh `wizard.RunFlow` over `deployexec.NewSteps`, started only once any
+earlier wizard program has already returned — a genuine two-program
+boundary, unlike the hub's own in-process `SwapFlow` into a day-two
+flow.
+
+The stream groups the install engine's own setup/install/postinstall
+phases into five coarser, human-facing ones — `prep`, `ignition`,
+`infra`, `install`, `verify`, the order `deployexec.PhaseOrder` runs and
+collapses them in — each a checklist section of the steps it owns. That
+checklist shares its screen with a live log pane, in one of three tiers
+depending on how much room the terminal gives it: the wide-split tier
+renders the log as the frame's own right-hand pane (`StreamStep`
+implements `paneRenderer`, filling the same slot the context pane
+otherwise occupies, live rather than static), a narrower terminal instead
+gets a fixed six-line tail riding under the checklist, and either tier
+can be swapped to a third, full-screen view with the `f` key. The `l` key
+locks the visible window in place rather than following the newest line,
+useful for reading a burst of output before it scrolls away. This is the
+same `SplitsFrame` gate the configure flow's context pane uses, evaluated
+against the stream's own two-screen step count rather than the configure
+flow's.
 
 ## Why not huh, survey, or promptui
 
