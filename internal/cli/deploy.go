@@ -33,6 +33,7 @@ var (
 	deployFresh                  bool
 	deployKeepRedHatCatalogs     bool
 	deployAcknowledgeInterrupted bool
+	deployNoTUI                  bool
 )
 
 // Seams for TTY-free tests; production never reassigns them.
@@ -76,6 +77,7 @@ func init() {
 	deployCmd.Flags().BoolVar(&deployFresh, "fresh", false, "wipe the work directory even when live cluster state is detected (credentials will be lost)")
 	deployCmd.Flags().BoolVar(&deployKeepRedHatCatalogs, "keep-redhat-catalogs", false, "keep the Red Hat OperatorHub catalogsources and the InsightsDisabled alert")
 	deployCmd.Flags().BoolVar(&deployAcknowledgeInterrupted, "acknowledge-interrupted-op", false, "deploy despite an in-flight node op marker (deploy would otherwise refuse: reconciling mid-op destroys the in-flight node)")
+	deployCmd.Flags().BoolVar(&deployNoTUI, flagNoTUI, false, "stream the install as a plain stderr checklist instead of the full-screen wizard")
 }
 
 func runDeploy(cmd *cobra.Command, _ []string) error {
@@ -392,7 +394,7 @@ func runFullDeployment(ctx context.Context, cfg *config.Config, w io.Writer) err
 		reportCredentialProvenance(creds)
 	}
 
-	return deployExecuteFn(ctx, cfg, deploy.Options{
+	opts := deploy.Options{
 		ShowStartMessage:   true,
 		Credentials:        creds,
 		FreshDeploy:        deployFresh,
@@ -400,7 +402,12 @@ func runFullDeployment(ctx context.Context, cfg *config.Config, w io.Writer) err
 		ProjectRoot:        projectRoot,
 		LogSink:            runLogSink,
 		Verbose:            logVerbose,
-	}, w)
+	}
+	if deployStreamEnabled() {
+		return runDeployStream(ctx, cfg, &opts, w)
+	}
+	_, execErr := deployExecuteFn(ctx, cfg, &opts, w)
+	return execErr
 }
 
 func writeCredentialsEnv(cfg *config.Config, configPath string) error {

@@ -104,21 +104,21 @@ type executeCapture struct {
 func stubExecute(t *testing.T) *executeCapture {
 	t.Helper()
 	rec := &executeCapture{}
-	deployExecuteFn = func(_ context.Context, cfg *config.Config, opts deploy.Options, _ io.Writer) error {
+	deployExecuteFn = func(_ context.Context, cfg *config.Config, opts *deploy.Options, _ io.Writer) (*deploy.Outcome, error) {
 		rec.called = true
 		rec.cfg = cfg
-		rec.opts = opts
+		rec.opts = *opts
 		rec.credsValid = opts.Credentials != nil && opts.Credentials.IsValid()
-		return nil
+		return &deploy.Outcome{}, nil
 	}
 	return rec
 }
 
 func forbidExecute(t *testing.T) {
 	t.Helper()
-	deployExecuteFn = func(context.Context, *config.Config, deploy.Options, io.Writer) error {
+	deployExecuteFn = func(context.Context, *config.Config, *deploy.Options, io.Writer) (*deploy.Outcome, error) {
 		t.Error("deployment engine must not run on this path")
-		return nil
+		return nil, nil
 	}
 }
 

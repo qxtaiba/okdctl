@@ -106,7 +106,7 @@ type provisioner interface {
 
 // runGuardedSetup runs the guard before writing any marker, so a refusal
 // can't plant a marker that bypasses the guard next run.
-func runGuardedSetup(ctx context.Context, p provisioner, cfg *config.Config, markerPath, runID string, freshDeploy, resumeInProgress bool, started time.Time, w io.Writer) ([]distribution.StepResult, error) {
+func runGuardedSetup(ctx context.Context, p provisioner, cfg *config.Config, markerPath, runID string, freshDeploy, resumeInProgress bool, started time.Time, pr presenter) ([]distribution.StepResult, error) {
 	setupOpts := okd.SetupOpts{FreshDeploy: freshDeploy, ResumeInProgress: resumeInProgress && !freshDeploy}
 	if err := p.GuardSetup(cfg, setupOpts); err != nil {
 		return nil, err
@@ -117,7 +117,7 @@ func runGuardedSetup(ctx context.Context, p provisioner, cfg *config.Config, mar
 	}
 	setupSteps, err := p.Setup(ctx, cfg, setupOpts)
 	if err != nil {
-		return setupSteps, reportDeployPhaseError(w, err, phaseSetup, setupSteps, runID, started,
+		return setupSteps, pr.fail(err, phaseSetup, setupSteps, runID, started,
 			"cancelled during setup — terraform state is empty; run 'okdctl cleanup' to remove local files")
 	}
 	return setupSteps, nil
@@ -144,12 +144,26 @@ func reportDeployFailure(w io.Writer, err error, phase deployPhase, steps []dist
 	}))
 }
 
-// reportDeployPhaseError reports the failure, logs cancelHint on a
-// cancelled run, and returns err unchanged.
-func reportDeployPhaseError(w io.Writer, err error, phase deployPhase, steps []distribution.StepResult, runID string, started time.Time, cancelHint string) error {
-	reportDeployFailure(w, err, phase, steps, runID, started)
+// presenter decides who renders a phase failure. A plain run prints the
+// failure box to w and marks the error presented; a TUI-driven run (Options.
+// Reporter set) leaves both to the caller, which renders in-frame and reports
+// once the screen is released.
+type presenter struct {
+	w       io.Writer
+	enabled bool
+}
+
+// fail reports err for phase, logs cancelHint on a cancelled run, and returns
+// the error the caller should propagate.
+func (p presenter) fail(err error, phase deployPhase, steps []distribution.StepResult, runID string, started time.Time, cancelHint string) error {
+	if p.enabled {
+		reportDeployFailure(p.w, err, phase, steps, runID, started)
+	}
 	if errors.Is(err, context.Canceled) {
 		logutil.Info(cancelHint)
+	}
+	if !p.enabled {
+		return err
 	}
 	// Already presented above; mark it so the top-level handler doesn't stack a second box.
 	return render.Presented(err)
@@ -169,6 +183,21 @@ type Options struct {
 	// Verbose keeps streamed subprocess output on the TTY (tee'd to LogSink)
 	// instead of routing it to the log file only.
 	Verbose bool
+	// Reporter receives per-step progress from the orchestrator while a TUI
+	// owns the screen, in place of the stderr checklist. Execute writes no
+	// summary or failure box to w when it is set: the TUI renders both
+	// in-frame and the caller reports once the screen is released.
+	Reporter distribution.MetricsRecorder
+}
+
+// Outcome is what a finished Execute produced: the postinstall result, every
+// step it executed, the run correlation id, and the wall-clock total — what
+// the post-deploy summary box is rendered from.
+type Outcome struct {
+	Result   *postinstall.Result
+	Steps    []distribution.StepResult
+	RunID    string
+	Duration time.Duration
 }
 
 // checklistRecorder builds a TTY step-checklist seeded only with steps this
@@ -180,6 +209,27 @@ func checklistRecorder(cfg *config.Config, projectRoot string, resumeFrom deploy
 	if !logutil.ProgressBarsEnabled() {
 		return nil
 	}
+	plan := plannedSteps(cfg, projectRoot, resumeFrom)
+	if len(plan) == 0 {
+		return nil
+	}
+	return tui.NewStepProgress(plan, logSink)
+}
+
+// PlannedSteps returns the checklist plan for the next deploy run against
+// projectRoot: every registered step whose phase that run executes, given the
+// on-disk resume marker. A TUI checklist seeds its rows from this so its
+// N/total matches whatever Execute goes on to run.
+func PlannedSteps(cfg *config.Config, projectRoot string, freshDeploy bool) []tui.StepMeta {
+	markerPath := filepath.Join(workspace.WorkDir(projectRoot), StateFileName)
+	resumeFrom, _ := resolveResumePhase(markerPath, cfg.Cluster.Name, freshDeploy)
+	return plannedSteps(cfg, projectRoot, resumeFrom)
+}
+
+// plannedSteps derives the step plan from live phase StepDefs, dropping the
+// phases a resume from resumeFrom skips, so it cannot drift from what the
+// orchestrator runs.
+func plannedSteps(cfg *config.Config, projectRoot string, resumeFrom deployPhase) []tui.StepMeta {
 	all := okd.New(okd.WithProjectRoot(projectRoot), okd.WithLogger(logutil.SimpleLogger())).DeploySteps(cfg)
 	var plan []tui.StepMeta
 	for _, s := range all {
@@ -188,10 +238,7 @@ func checklistRecorder(cfg *config.Config, projectRoot string, resumeFrom deploy
 		}
 		plan = append(plan, tui.StepMeta{ID: s.ID, Name: s.Name, Phase: string(s.Phase)})
 	}
-	if len(plan) == 0 {
-		return nil
-	}
-	return tui.NewStepProgress(plan, logSink)
+	return plan
 }
 
 // checklistPrefix returns rec's current-step prefix, or "" when rec is nil
@@ -212,11 +259,11 @@ func phaseRuns(resumeFrom deployPhase, stepPhase okd.DeployPhase) bool {
 
 // runDeployPhases runs setup/install/postinstall from the marker's resume
 // phase, returning the postinstall result and every executed step.
-func runDeployPhases(ctx context.Context, p provisioner, cfg *config.Config, projectRoot, markerPath, runID string, resumeFrom deployPhase, marker *deployState, freshDeploy, keepRedHatCatalogs bool, started time.Time, w io.Writer) (*postinstall.Result, []distribution.StepResult, error) {
+func runDeployPhases(ctx context.Context, p provisioner, cfg *config.Config, projectRoot, markerPath, runID string, resumeFrom deployPhase, marker *deployState, freshDeploy, keepRedHatCatalogs bool, started time.Time, pr presenter) (*postinstall.Result, []distribution.StepResult, error) {
 	var setupSteps []distribution.StepResult
 	var err error
 	if resumeFrom == phaseSetup {
-		setupSteps, err = runGuardedSetup(ctx, p, cfg, markerPath, runID, freshDeploy, marker != nil, started, w)
+		setupSteps, err = runGuardedSetup(ctx, p, cfg, markerPath, runID, freshDeploy, marker != nil, started, pr)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -234,7 +281,7 @@ func runDeployPhases(ctx context.Context, p provisioner, cfg *config.Config, pro
 		installOpts := install.NewOptions(cfg, projectRoot)
 		installSteps, err = p.Install(ctx, cfg, &installOpts)
 		if err != nil {
-			return nil, nil, reportDeployPhaseError(w, err, phaseInstall, slices.Concat(setupSteps, installSteps), runID, started,
+			return nil, nil, pr.fail(err, phaseInstall, slices.Concat(setupSteps, installSteps), runID, started,
 				"cancelled during install — terraform state likely populated; run 'okdctl destroy' to clean up")
 		}
 	}
@@ -250,7 +297,7 @@ func runDeployPhases(ctx context.Context, p provisioner, cfg *config.Config, pro
 		result, postinstallSteps, err = p.PostInstall(ctx, cfg, keepRedHatCatalogs)
 	}
 	if err != nil {
-		return nil, nil, reportDeployPhaseError(w, err, phasePostInstall, slices.Concat(setupSteps, installSteps, postinstallSteps), runID, started,
+		return nil, nil, pr.fail(err, phasePostInstall, slices.Concat(setupSteps, installSteps, postinstallSteps), runID, started,
 			"cancelled during postinstall — terraform state likely populated; run 'okdctl destroy' to clean up")
 	}
 
@@ -278,12 +325,14 @@ func announceEmbeddedDrift(root string) {
 
 // Execute runs the full deploy pipeline under the project run lock, resuming
 // from the on-disk marker's phase and writing the post-deploy summary to w.
-func Execute(ctx context.Context, cfg *config.Config, opts Options, w io.Writer) error {
+// Options.Reporter suppresses every box it would write, leaving the returned
+// outcome for the caller to present.
+func Execute(ctx context.Context, cfg *config.Config, opts *Options, w io.Writer) (*Outcome, error) {
 	projectRoot := opts.ProjectRoot
 
 	lock, err := runlock.Acquire(projectRoot, "deploy")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer lock.Release()
 
@@ -304,7 +353,12 @@ func Execute(ctx context.Context, cfg *config.Config, opts Options, w io.Writer)
 	markerPath := filepath.Join(workDir, StateFileName)
 	resumeFrom, marker := resolveResumePhase(markerPath, cfg.Cluster.Name, opts.FreshDeploy)
 
-	rec := checklistRecorder(cfg, projectRoot, resumeFrom, opts.LogSink)
+	// A TUI-driven run owns the screen, so the stderr checklist is never built:
+	// its rewriting line would paint under the AltScreen.
+	var rec *tui.StepProgress
+	if opts.Reporter == nil {
+		rec = checklistRecorder(cfg, projectRoot, resumeFrom, opts.LogSink)
+	}
 	provOpts := []okd.ProvisionerOption{
 		okd.WithProgressReporter(func(desc string) func() {
 			return tui.StartSpinnerWithPrefix(ctx, checklistPrefix(rec), desc)
@@ -313,7 +367,10 @@ func Execute(ctx context.Context, cfg *config.Config, opts Options, w io.Writer)
 			return tui.StartStatusLineWithPrefix(ctx, checklistPrefix(rec), desc)
 		}),
 	}
-	if rec != nil {
+	switch {
+	case opts.Reporter != nil:
+		provOpts = append(provOpts, okd.WithMetricsRecorder(opts.Reporter))
+	case rec != nil:
 		provOpts = append(provOpts, okd.WithMetricsRecorder(rec))
 	}
 	if so, se := streamWriters(opts.LogSink, opts.Verbose); so != nil {
@@ -323,7 +380,7 @@ func Execute(ctx context.Context, cfg *config.Config, opts Options, w io.Writer)
 	defer p.ZeroizeEnv()
 
 	if err := p.Validate(cfg); err != nil {
-		return fmt.Errorf("validate deploy config: %w", err)
+		return nil, fmt.Errorf("validate deploy config: %w", err)
 	}
 
 	if opts.ShowStartMessage {
@@ -333,18 +390,26 @@ func Execute(ctx context.Context, cfg *config.Config, opts Options, w io.Writer)
 
 	startTime := time.Now()
 
-	result, allSteps, err := runDeployPhases(ctx, p, cfg, projectRoot, markerPath, runID, resumeFrom, marker, opts.FreshDeploy, opts.KeepRedHatCatalogs, startTime, w)
+	pr := presenter{w: w, enabled: opts.Reporter == nil}
+	result, allSteps, err := runDeployPhases(ctx, p, cfg, projectRoot, markerPath, runID, resumeFrom, marker, opts.FreshDeploy, opts.KeepRedHatCatalogs, startTime, pr)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	clearDeployMarker(markerPath, runID, cfg.Cluster.Name)
 
 	duration := time.Since(startTime).Round(time.Second)
+	// Logged before the presenter gate so a TUI-driven run records its
+	// completion in okdctl.log too, where its only durable record lives.
+	logutil.Info("deployment complete", logutil.LF("duration", duration))
+
+	outcome := &Outcome{Result: result, Steps: allSteps, RunID: runID, Duration: duration}
+	if !pr.enabled {
+		return outcome, nil
+	}
 
 	fmt.Fprintln(w)
-	logutil.Info("deployment complete", logutil.LF("duration", duration))
 	fmt.Fprintln(w, render.PostDeploySummary(cfg, result, allSteps, runID))
 
-	return nil
+	return outcome, nil
 }

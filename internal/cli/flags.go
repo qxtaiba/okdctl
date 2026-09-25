@@ -14,6 +14,7 @@ const (
 	flagLogFormat   = "log-format"
 	flagLogLevel    = "log-level"
 	flagNoColor     = "no-color"
+	flagNoTUI       = "no-tui"
 	flagOnly        = "only"
 	flagOutput      = "output"
 	flagOutputFile  = "output-file"

@@ -180,3 +180,60 @@ func TestPostDeploySummaryGoldenAtWidths(t *testing.T) {
 		})
 	}
 }
+
+// TestPostDeploySummaryWidthFitsAnExplicitWidth pins the seam the wizard's done
+// screen renders through: the box must fit the frame's inner width whatever the
+// real terminal is, not tui.DefaultBoxWidth's own derivation.
+func TestPostDeploySummaryWidthFitsAnExplicitWidth(t *testing.T) {
+	tui.SetTerminalWidth(200)
+	t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+	cfg := config.DefaultConfig()
+	result := &postinstall.Result{KubeVipIP: "192.168.1.50", BootstrapCleaned: true, DNSDeployed: true}
+	steps := []distribution.StepResult{{StepID: "download-tools", Success: true, Duration: 3 * time.Second}}
+
+	for _, w := range []int{60, 76, 96} {
+		out := PostDeploySummaryWidth(cfg, result, steps, "run-42", w)
+		tuitest.AssertFits(t, out, w, 0)
+		if !strings.Contains(out, "cluster deployed") {
+			t.Errorf("w=%d: summary lost its headline:\n%s", w, out)
+		}
+	}
+}
+
+func TestPostDeployRecapLinesNameAccessAndNextStep(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Cluster.Name = "homelab"
+	cfg.Cluster.Domain = "lab.example.com"
+
+	lines := PostDeployRecapLines(cfg, "run-42", 42*time.Minute+30*time.Second)
+	joined := strings.Join(lines, "\n")
+
+	for _, want := range []string{
+		"cluster deployed · homelab.lab.example.com · 42m30s",
+		"run_id: run-42",
+		"https://console-openshift-console.apps.homelab.lab.example.com",
+		"https://api.homelab.lab.example.com:6443",
+		readKubeadminCmd,
+		"oc get nodes",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("recap missing %q:\n%s", want, joined)
+		}
+	}
+	// The recap replaces the box in scrollback; it must never redraw one.
+	if strings.ContainsAny(joined, "╭╮╰╯│") {
+		t.Errorf("recap must be plain lines, never a box:\n%s", joined)
+	}
+}
+
+// TestPostDeployRecapLinesDropAnEmptyRunID keeps the recap from printing a
+// bare "run_id:" label on a run that never pinned one.
+func TestPostDeployRecapLinesDropAnEmptyRunID(t *testing.T) {
+	lines := PostDeployRecapLines(config.DefaultConfig(), "", time.Minute)
+	for _, l := range lines {
+		if strings.HasPrefix(l, "run_id") {
+			t.Errorf("recap printed %q with no run id", l)
+		}
+	}
+}

@@ -291,14 +291,31 @@ func ValidationSummary(result *config.ValidationResult) string {
 	return tui.Downsample(sb.String())
 }
 
+// deployURLs returns cfg's cluster FQDN and its console and api URLs, the
+// three strings the post-deploy summary and its recap both name.
+func deployURLs(cfg *config.Config) (fqdn, console, api string) {
+	fqdn = cfg.Cluster.Name + "." + cfg.Cluster.Domain
+	return fqdn,
+		fmt.Sprintf("https://console-openshift-console.apps.%s", fqdn),
+		fmt.Sprintf("https://api.%s:6443", fqdn)
+}
+
+// readKubeadminCmd is the command that reads the generated kubeadmin
+// password, named by both the summary box and its recap.
+const readKubeadminCmd = "cat okd-install/cluster-config/auth/kubeadmin-password"
+
 // PostDeploySummary renders the success summary after a cluster deploy: access
 // URLs, credentials, and step results.
 func PostDeploySummary(cfg *config.Config, result *postinstall.Result, steps []distribution.StepResult, runID string) string {
-	clusterFQDN := cfg.Cluster.Name + "." + cfg.Cluster.Domain
-	consoleURL := fmt.Sprintf("https://console-openshift-console.apps.%s", clusterFQDN)
-	apiURL := fmt.Sprintf("https://api.%s:6443", clusterFQDN)
+	return PostDeploySummaryWidth(cfg, result, steps, runID, tui.DefaultBoxWidth)
+}
 
-	sb := NewBuilder()
+// PostDeploySummaryWidth renders PostDeploySummary sized to fit inside a box
+// of the given width, for callers that must fit a narrower viewport.
+func PostDeploySummaryWidth(cfg *config.Config, result *postinstall.Result, steps []distribution.StepResult, runID string, width int) string {
+	clusterFQDN, consoleURL, apiURL := deployURLs(cfg)
+
+	sb := NewBuilderWidth(width)
 	sb.WriteString("\n")
 	sb.WriteString("  " + tui.CompletionSuccess("cluster deployed") + "\n")
 	sb.Newline()
@@ -356,7 +373,7 @@ func PostDeploySummary(cfg *config.Config, result *postinstall.Result, steps []d
 
 	sb.Section("credentials")
 	sb.KVHighlight("username", "kubeadmin")
-	sb.KVWide("password", "cat okd-install/cluster-config/auth/kubeadmin-password")
+	sb.KVWide("password", readKubeadminCmd)
 	sb.Newline()
 
 	sb.Section("quick start")
@@ -371,7 +388,25 @@ func PostDeploySummary(cfg *config.Config, result *postinstall.Result, steps []d
 	sb.Para("to auto-detect loadbalancer ips and switch dns over.")
 	sb.Newline()
 
-	return "\n" + tui.BoxedSectionCompact(sb.String(), "deployment complete", tui.DefaultBoxWidth) + "\n"
+	return "\n" + tui.BoxedSectionCompact(sb.String(), "deployment complete", width) + "\n"
+}
+
+// PostDeployRecapLines renders the short plain-text recap printed to stdout
+// after a deploy that ran behind the wizard — the durable record the
+// AltScreen clears on exit — reusing deployURLs so its access lines can never
+// drift from the summary box's own.
+func PostDeployRecapLines(cfg *config.Config, runID string, elapsed time.Duration) []string {
+	clusterFQDN, consoleURL, apiURL := deployURLs(cfg)
+	lines := []string{fmt.Sprintf("cluster deployed · %s · %s", clusterFQDN, elapsed.Truncate(time.Second))}
+	if runID != "" {
+		lines = append(lines, "run_id: "+runID)
+	}
+	return append(lines,
+		"console: "+consoleURL,
+		"api: "+apiURL,
+		"kubeadmin password: "+readKubeadminCmd,
+		"next: export KUBECONFIG=~/.kube/config && oc get nodes",
+	)
 }
 
 // InterruptSummary renders a partial-progress box for a Ctrl-C interruption;

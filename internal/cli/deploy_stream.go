@@ -1,0 +1,165 @@
+package cli
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"sync"
+	"time"
+
+	"golang.org/x/term"
+
+	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/deploy"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/render"
+	"github.com/qxtaiba/okdctl/internal/tui/wizard"
+	"github.com/qxtaiba/okdctl/internal/tui/wizard/deployexec"
+)
+
+// deployInterruptedMsg is shared so runDeployStream's tea-failure path and
+// reportDeployStreamOutcome present identical guidance.
+const deployInterruptedMsg = "deploy was interrupted mid-install; the deploy-state marker records the phase — re-run 'okdctl deploy' to resume, or 'okdctl deploy --fresh' to restart from scratch (wipes cluster credentials)"
+
+// demoStreamStepDelay paces each demo deploy step so the stream screen has
+// visible in-progress rows to screenshot instead of finishing instantly.
+const demoStreamStepDelay = 120 * time.Millisecond
+
+// deployStreamOptedOut reports whether this run has asked for the plain stderr
+// checklist rather than the full-screen stream. --no-tui says so outright; --yes
+// is a scripted deploy whose durable record is the operator's scrollback, which
+// an AltScreen erases on exit.
+func deployStreamOptedOut() bool {
+	return deployNoTUI || deployYes
+}
+
+// deployStreamEnabled reports whether the deploy stream screen may own the
+// terminal: the opt-outs decline it, and both stdio ends must be a terminal,
+// the same gate every other interactive okdctl screen is defined by.
+func deployStreamEnabled() bool {
+	if deployStreamOptedOut() {
+		return false
+	}
+	return term.IsTerminal(int(os.Stdout.Fd())) && term.IsTerminal(int(os.Stdin.Fd()))
+}
+
+// runDeployStream runs the deploy engine behind the wizard's stream screen: the
+// checklist is seeded from the same plan the engine will execute, the engine's
+// metrics-recorder seam feeds the screen, and the human log stream goes to the
+// run log instead of the stderr the AltScreen owns.
+func runDeployStream(ctx context.Context, cfg *config.Config, opts *deploy.Options, out io.Writer) error {
+	// Resolved before the log redirect so a stale-marker warning still reaches
+	// the operator's scrollback rather than only the run log.
+	plan := deploy.PlannedSteps(cfg, opts.ProjectRoot, opts.FreshDeploy)
+
+	st := &deployexec.State{Cfg: cfg, Plan: plan, RunID: logutil.RunID()}
+
+	streamCtx, cancelStream := context.WithCancel(ctx)
+	defer cancelStream()
+
+	hooks := deployStreamSession(streamCtx, cancelStream, cfg, opts)
+
+	// The stream screen owns the terminal from here on: no spinner or rewriting
+	// checklist may paint beneath the AltScreen, and every log line goes to the
+	// run log the screen reads back. Both are restored before anything is
+	// printed, so the recap lands on a terminal the wizard has released.
+	progressBars := logutil.ProgressBarsEnabled()
+	logutil.SetProgressBarsEnabled(false)
+	defer logutil.SetProgressBarsEnabled(progressBars)
+	restoreLogs := sync.OnceFunc(logutil.Redirect(subprocSink()))
+	defer restoreLogs()
+
+	_, err := wizard.RunFlow(ctx, deployexec.NewSteps(st, hooks), cfg, deployexec.Chrome())
+	restoreLogs()
+	if err != nil {
+		// A tea failure mid-install must still surface the resume marker, not
+		// read as a configuration problem.
+		if st.Started && !st.Executed {
+			return &errtypes.ClusterError{Msg: deployInterruptedMsg, Err: err}
+		}
+		return (&errtypes.ConfigError{Msg: "deploy wizard failed", Err: err}).
+			WithHint("try again, or re-run with --no-tui for the plain checklist")
+	}
+	return reportDeployStreamOutcome(out, st)
+}
+
+// deployStreamSession assembles the screen's hooks and wires the cancel its
+// ctrl+c guard calls. A feed that brings its own cancel keeps it: the demo's
+// events come from its own context, so the engine's cancel would leave it
+// running.
+func deployStreamSession(streamCtx context.Context, cancel context.CancelFunc, cfg *config.Config, opts *deploy.Options) deployexec.Hooks {
+	hooks := deployStreamHooks(streamCtx, cfg, opts)
+	if hooks.CancelDeploy == nil {
+		hooks.CancelDeploy = cancel
+	}
+	return hooks
+}
+
+// deployStreamHooks builds the stream screen's engine hook: the real deploy
+// engine, or deployexec.DemoHooks' scripted feed under OKDCTL_WIZARD_DEMO.
+func deployStreamHooks(streamCtx context.Context, cfg *config.Config, opts *deploy.Options) deployexec.Hooks {
+	if os.Getenv(wizardDemoEnv) != "" {
+		return deployexec.DemoHooks(demoStreamStepDelay)
+	}
+	return deployexec.Hooks{
+		Execute: func(st *deployexec.State, events chan<- deployexec.Event) error {
+			// A copy, so arming the reporter never reaches back into the
+			// caller's own options.
+			run := *opts
+			run.Reporter = deployexec.NewRecorder(streamCtx, events)
+			// The screen owns the terminal, so the engine must not tee raw
+			// subprocess output onto it; the sink still keeps every byte.
+			run.Verbose = false
+			// io.Discard, not the command's stdout: Options.Reporter already
+			// suppresses every box Execute would write, and the screen owns the
+			// terminal while it runs.
+			outcome, err := deployExecuteFn(streamCtx, cfg, &run, io.Discard)
+			if outcome != nil {
+				st.Summary, st.Steps, st.RunID = outcome.Result, outcome.Steps, outcome.RunID
+				// The engine's own span excludes the run lock and config
+				// validation the screen was already up for.
+				st.Elapsed = outcome.Duration
+			}
+			return err
+		},
+	}
+}
+
+// reportDeployStreamOutcome maps the stream screen's terminal state to a
+// truthful exit; an interrupted mid-install run exits non-zero instead of
+// claiming a deployed cluster.
+func reportDeployStreamOutcome(out io.Writer, st *deployexec.State) error {
+	switch {
+	case st.Started && !st.Executed:
+		return &errtypes.ClusterError{Msg: deployInterruptedMsg}
+	case errors.Is(st.Result, context.Canceled):
+		// A graceful cancel unwound the engine cleanly, so it returns only
+		// context.Canceled — on its own that reads as a bare failure and drops
+		// the resume guidance the plain checklist prints.
+		return &errtypes.ClusterError{Msg: deployInterruptedMsg}
+	case st.Executed && st.Result != nil:
+		return st.Result
+	case st.Executed:
+		printDeployRecap(out, st)
+		return nil
+	default:
+		logutil.Info("no changes made")
+		return nil
+	}
+}
+
+// printDeployRecap prints the short plain-text recap of a finished deploy: the
+// wizard's AltScreen already cleared the summary box from scrollback on exit,
+// leaving no durable record, so this reprints the access lines plus the
+// operator's next step — never the box itself.
+func printDeployRecap(out io.Writer, st *deployexec.State) {
+	if st.Cfg == nil {
+		return
+	}
+	for _, line := range render.PostDeployRecapLines(st.Cfg, st.RunID, st.Elapsed) {
+		fmt.Fprintln(out, line)
+	}
+}

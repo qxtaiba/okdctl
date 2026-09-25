@@ -1,0 +1,24 @@
+                                                                                
+  ╭──────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L  installing okd over proxmox                                 │  
+  │ deploying homelab                                         install · done │  
+  │──────────────────────────────────────────────────────────────────────────│  
+  │  deploying homelab  2 / 7                             elapsed 1m15s      │  
+  │  ✓ prep                                                         40s      │  
+  │  ● ignition                                                              │  
+  │      ⣾ generate ignition                                        35s      │  
+  │      ○ build isos                                                        │  
+  │  ○ infra                                                                 │  
+  │  ○ install                                                               │  
+  │  ○ verify                                                                │  
+  │                                                                          │  
+  │  full log okdctl.log · ctrl+c cancels after the current step             │  
+  │                                                                          │  
+  │                                                                          │  
+  │                                                                          │  
+  │                                                                          │  
+  │                                                                          │  
+  │─────────────────────────────────────────────────────────────── ▸ homelab │  
+  │  ctrl+c request graceful cancel (twice to force-quit) • ? help           │  
+  ╰──────────────────────────────────────────────────────────────────────────╯  
+                                                                                

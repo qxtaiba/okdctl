@@ -1,0 +1,40 @@
+                                                                                                                        
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────╮      
+  │ O K D C T L                                                                                                  │      
+  │ done                                                                                          install · done │      
+  │──────────────────────────────────────────────────────────────────────────────────────────────────────────────│      
+  │  ╭───────────────────────────────── DEPLOYMENT COMPLETE ──────────────────────────────────╮                  │      
+  │  │                                                                                        │                  │      
+  │  │  ✓ cluster deployed                                                                    │                  │      
+  │  │                                                                                        │                  │      
+  │  │    run_id ................................... run-01                                   │                  │      
+  │  │                                                                                        │                  │      
+  │  │  access                                                                                │                  │      
+  │  │    cluster .................................. homelab.lab.example.com                  │                  │      
+  │  │    console ............. https://console-openshift-console.apps.homelab.lab.example.com│                  │      
+  │  │    api ................. https://api.homelab.lab.example.com:6443                      │                  │      
+  │  │                                                                                        │                  │      
+  │  │  dns records                                                                           │                  │      
+  │  │    api.homelab.lab.example.com .............. 192.0.2.10 (kube-vip)                    │                  │      
+  │  │    *.apps.homelab.lab.example.com ........... 192.168.1.20 (haproxy)                   │                  │      
+  │  │                                                                                        │                  │      
+  │  │  status                                                                                │                  │      
+  │  │    bootstrap ................................ cleaned up                               │                  │      
+  │  │    api routing .............................. kube-vip (192.0.2.10)                    │                  │      
+  │  │    ingress routing .......................... haproxy (bastion)                        │                  │      
+  │  │                                                                                        │                  │      
+  │  │  steps                                                                                 │                  │      
+  │  │    deploy-infrastructure .................... ok    1m30s                              │                  │      
+  │  │    wait-bootstrap ........................... ok    12m0s                              │                  │      
+  │  │    total .................................... 13m30s                                   │                  │      
+  │  │                                                                                        │                  │      
+  │  │  credentials                                                                           │                  │      
+  │  │    username ................................. kubeadmin                                │                  │      
+  │  │    password ............ cat okd-install/cluster-config/auth/kubeadmin-password        │                  │      
+  │  │                                                                                        │                  │      
+  │  │  quick start                                                                           │                  │      
+  │                                                                                                              │      
+  │──────────────────────────────────── ↑ ↓  scroll down for more ──────────────────────────────────── ▸ homelab │      
+  │  enter exit • pgup/pgdn scroll • ? help                                                                      │      
+  ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────╯      
+                                                                                                                        

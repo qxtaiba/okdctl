@@ -39,6 +39,7 @@ okdctl deploy [flags]
   -h, --help                         help for deploy
       --keep-redhat-catalogs         keep the Red Hat OperatorHub catalogsources and the InsightsDisabled alert
       --minimal                      use minimal defaults (single-node cluster)
+      --no-tui                       stream the install as a plain stderr checklist instead of the full-screen wizard
       --output-file string           config file to write wizard output to (reused if present; overrides --config) (default "okdctl.yaml")
       --write-config                 write configuration non-interactively; does not deploy
   -y, --yes                          skip the wizard and deploy from the existing configuration file (requires --confirm-cluster)

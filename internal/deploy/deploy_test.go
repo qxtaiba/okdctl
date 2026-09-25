@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -15,6 +16,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/install"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/postinstall"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 type fakeProvisioner struct {
@@ -74,7 +76,7 @@ func TestRunDeployPhases_FailureSummaryResumeFirst(t *testing.T) {
 	}
 	var buf bytes.Buffer
 	resumeFrom, marker := resolveResumePhase(markerPath, cfg.Cluster.Name, false)
-	_, _, err := runDeployPhases(context.Background(), f, cfg, dir, markerPath, "run-77", resumeFrom, marker, false, false, time.Now(), &buf)
+	_, _, err := runDeployPhases(context.Background(), f, cfg, dir, markerPath, "run-77", resumeFrom, marker, false, false, time.Now(), presenter{w: &buf, enabled: true})
 	if err == nil {
 		t.Fatal("expected install error to propagate; got nil")
 	}
@@ -155,7 +157,7 @@ func TestRunDeployPhases_ResumeRouting(t *testing.T) {
 			f := &fakeProvisioner{}
 			var buf bytes.Buffer
 			resumeFrom, marker := resolveResumePhase(markerPath, cfg.Cluster.Name, false)
-			if _, _, err := runDeployPhases(context.Background(), f, cfg, dir, markerPath, "new-run", resumeFrom, marker, false, false, time.Now(), &buf); err != nil {
+			if _, _, err := runDeployPhases(context.Background(), f, cfg, dir, markerPath, "new-run", resumeFrom, marker, false, false, time.Now(), presenter{w: &buf, enabled: true}); err != nil {
 				t.Fatalf("runDeployPhases: %v", err)
 			}
 
@@ -203,5 +205,84 @@ func TestChecklistRecorder_NilWhenProgressOff(t *testing.T) {
 	}
 	if got := checklistPrefix(rec); got != "" {
 		t.Errorf("checklistPrefix(nil) = %q, want empty", got)
+	}
+}
+
+// TestPresenterDisabledLeavesBoxAndPresentationToTheCaller pins the seam a
+// TUI-driven run relies on: no box on w, and the raw error, so the wizard can
+// render in-frame and the top-level handler still reports once it exits.
+func TestPresenterDisabledLeavesBoxAndPresentationToTheCaller(t *testing.T) {
+	boom := errors.New("terraform apply failed")
+	steps := []distribution.StepResult{{StepID: "deploy-infrastructure", Duration: time.Second, Error: boom}}
+
+	var quiet bytes.Buffer
+	got := presenter{w: &quiet, enabled: false}.fail(boom, phaseInstall, steps, "run-1", time.Now(), "cancel hint")
+	if quiet.Len() != 0 {
+		t.Errorf("a TUI-driven run must write no box; got %q", quiet.String())
+	}
+	if !errors.Is(got, boom) {
+		t.Errorf("fail() = %v, want the engine error unchanged", got)
+	}
+
+	var loud bytes.Buffer
+	got = presenter{w: &loud, enabled: true}.fail(boom, phaseInstall, steps, "run-1", time.Now(), "cancel hint")
+	if !strings.Contains(loud.String(), "deploy failed") {
+		t.Errorf("a plain run must print the failure box; got %q", loud.String())
+	}
+	if !strings.Contains(got.Error(), boom.Error()) {
+		t.Errorf("fail() = %v, want it to still carry the engine error", got)
+	}
+}
+
+func TestPlannedStepsCoversEveryPhaseOnAFreshRun(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Cluster.Name = "prod"
+
+	plan := PlannedSteps(cfg, t.TempDir(), false)
+	if len(plan) == 0 {
+		t.Fatal("a fresh run must plan every registered step")
+	}
+
+	seen := map[string]bool{}
+	for _, s := range plan {
+		seen[s.Phase] = true
+		if s.ID == "" || s.Name == "" {
+			t.Errorf("planned step %+v is missing an id or name", s)
+		}
+	}
+	for _, phase := range []okd.DeployPhase{okd.PhaseSetup, okd.PhaseInstall, okd.PhasePostInstall} {
+		if !seen[string(phase)] {
+			t.Errorf("fresh plan is missing the %s phase", phase)
+		}
+	}
+}
+
+// TestPlannedStepsDropsPhasesAResumeSkips proves the wizard checklist's total
+// matches what a resumed run actually executes.
+func TestPlannedStepsDropsPhasesAResumeSkips(t *testing.T) {
+	dir := t.TempDir()
+	cfg := config.DefaultConfig()
+	cfg.Cluster.Name = "prod"
+
+	workDir := workspace.WorkDir(dir)
+	if err := os.MkdirAll(workDir, 0o750); err != nil {
+		t.Fatalf("seed work dir: %v", err)
+	}
+	if err := markDeployPhaseFatal(filepath.Join(workDir, StateFileName), phasePostInstall, "run-1", cfg.Cluster.Name); err != nil {
+		t.Fatalf("seed marker: %v", err)
+	}
+
+	plan := PlannedSteps(cfg, dir, false)
+	if len(plan) == 0 {
+		t.Fatal("a postinstall resume must still plan its own phase")
+	}
+	for _, s := range plan {
+		if s.Phase != string(okd.PhasePostInstall) {
+			t.Fatalf("a postinstall resume planned a %s step (%s)", s.Phase, s.ID)
+		}
+	}
+
+	if fresh := PlannedSteps(cfg, dir, true); len(fresh) <= len(plan) {
+		t.Errorf("--fresh planned %d steps, want more than the resume's %d", len(fresh), len(plan))
 	}
 }

@@ -1,0 +1,134 @@
+// Package deployexec implements the deploy wizard flow: a phase checklist fed
+// by the deploy engine's metrics-recorder seam, and the post-deploy summary or
+// error card rendered in-frame once the run ends.
+package deployexec
+
+import (
+	"context"
+	"time"
+
+	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/postinstall"
+	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/tui/wizard"
+)
+
+// StepIDs for the deploy flow's two screens.
+const (
+	StepIDStream wizard.StepID = "deploy-stream"
+	StepIDDone   wizard.StepID = "deploy-done"
+)
+
+// State is shared by pointer across both deploy steps — the role
+// *config.Config plays for the configure wizard. The stream step writes the
+// run's outcome into it; the done step renders from it.
+type State struct {
+	Cfg *config.Config
+	// Plan is the checklist the stream step seeds its rows from, in execution
+	// order (deploy.PlannedSteps).
+	Plan  []tui.StepMeta
+	RunID string
+
+	// Started marks the engine goroutine began; Executed marks it returned —
+	// the gap is an interrupted run.
+	Started  bool
+	Executed bool
+
+	// Summary is the postinstall result the done screen's completion box reads.
+	Summary *postinstall.Result
+	// Steps is every step the engine executed, in order.
+	Steps []distribution.StepResult
+
+	Result  error
+	Elapsed time.Duration
+}
+
+// Event is one progress event on the deploy stream's feed: a step transition
+// (StepID set, Done marking the closing bracket), or the terminal event
+// (Final) the Execute hook sends once the engine returns.
+type Event struct {
+	StepID  distribution.StepID
+	Done    bool
+	Skipped bool
+	Took    time.Duration
+	Err     error
+	Final   bool
+}
+
+// Hooks are the CLI-supplied closures the deploy steps call into, so this
+// package never imports the cli package's assembly code.
+type Hooks struct {
+	// Execute runs the deploy engine to completion, feeding events as steps
+	// start and finish.
+	Execute func(st *State, events chan<- Event) error
+	// CancelDeploy requests a graceful cancel of the run in flight.
+	CancelDeploy func()
+}
+
+// NewSteps assembles the deploy flow's ordered steps. Direct construction
+// instead of a StepBuilder registry: the registry's indirection earns its keep
+// only with multiple assembly sites.
+func NewSteps(st *State, hooks Hooks) []wizard.WizardStep {
+	return []wizard.WizardStep{
+		NewStreamStep(st, hooks),
+		NewDoneStep(st),
+	}
+}
+
+// Stages returns the deploy flow's two-stage breadcrumb.
+func Stages() []wizard.Stage {
+	return []wizard.Stage{
+		{Label: "install", Steps: []wizard.StepID{StepIDStream}},
+		{Label: "done", Steps: []wizard.StepID{StepIDDone}},
+	}
+}
+
+// Chrome returns the deploy flow's header chrome, pairing the install tagline
+// and cluster badge with the fixed two-stage trail.
+func Chrome() wizard.FlowChrome {
+	return wizard.FlowChrome{
+		Tagline: "installing okd over proxmox",
+		Badge:   func(cfg *config.Config) string { return cfg.Cluster.Name },
+		Trail:   wizard.StagesTrail(Stages()),
+	}
+}
+
+// NewRecorder returns the deploy engine's metrics-recorder seam, translating
+// every step transition into an Event. Each send aborts on ctx, so a quit
+// never strands the engine's goroutine on a channel nobody drains.
+func NewRecorder(ctx context.Context, events chan<- Event) distribution.MetricsRecorder {
+	return &recorder{ctx: ctx, events: events}
+}
+
+type recorder struct {
+	ctx    context.Context
+	events chan<- Event
+}
+
+// StepStarted opens the step's row on the checklist.
+func (r *recorder) StepStarted(id distribution.StepID) {
+	r.send(Event{StepID: id})
+}
+
+// StepFinished closes the step's row with its outcome and duration.
+func (r *recorder) StepFinished(res *distribution.StepResult) {
+	r.send(Event{
+		StepID:  res.StepID,
+		Done:    true,
+		Skipped: res.Skipped,
+		Took:    res.Duration,
+		Err:     res.Error,
+	})
+}
+
+// DeployFinished is inert: the orchestrator calls it once per phase, so it
+// cannot mark the run's end — the Execute hook's return does.
+func (r *recorder) DeployFinished(time.Duration) {}
+
+func (r *recorder) send(ev Event) {
+	select {
+	case <-r.ctx.Done():
+	case r.events <- ev:
+	}
+}
