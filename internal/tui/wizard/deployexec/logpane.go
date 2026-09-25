@@ -1,6 +1,7 @@
 package deployexec
 
 import (
+	"fmt"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -57,23 +58,102 @@ func (f *frameSize) splitsFrame() bool {
 	return wizard.SplitsFrame(f.termWidth, f.termHeight, flowStepCount)
 }
 
-// logWindow picks the rows a viewport shows from a ring snapshot: the tail while
-// following, or the budget of lines ending at view.lockAt while locked, clamped
-// to whatever the ring still holds.
-func logWindow(lines []LogLine, first int64, view logView, budget int) []LogLine {
+// logWindow picks the rows a viewport shows from a ring snapshot — the tail
+// while following, or the budget of lines ending at view.lockAt while locked,
+// clamped to whatever the ring still holds — and reports the absolute stream
+// index just past the window's last line.
+func logWindow(lines []LogLine, first int64, view logView, budget int) (window []LogLine, end int64) {
 	if budget <= 0 || len(lines) == 0 {
-		return nil
+		return nil, first + int64(len(lines))
 	}
-	end := len(lines)
+	at := len(lines)
 	if view.locked {
-		end = min(max(int(view.lockAt-first), 0), len(lines))
+		at = min(max(int(view.lockAt-first), 0), len(lines))
 	}
 	// A lock older than everything the ring still holds shows the oldest rows it
 	// has rather than nothing at all.
-	if end == 0 {
-		end = min(budget, len(lines))
+	if at == 0 {
+		at = min(budget, len(lines))
 	}
-	return lines[max(end-budget, 0):end]
+	return lines[max(at-budget, 0):at], first + int64(at)
+}
+
+// scrollLog moves view's window n lines through src's stream (negative is
+// older), engaging the lock on the first move up and releasing it once the
+// window's end returns to the tail — the standard pager contract. minLines
+// floors the window's end so paging up stops with the stream's first line at
+// the top of a full window, never past it.
+func scrollLog(view *logView, src LogSource, n, minLines int) {
+	if src == nil || n == 0 {
+		return
+	}
+	lines, first := src.Snapshot()
+	total := first + int64(len(lines))
+	at := total
+	if view.locked {
+		at = min(view.lockAt, total)
+	}
+	at += int64(n)
+	at = max(at, min(first+int64(max(minLines, 1)), total))
+	if at >= total {
+		view.locked, view.lockAt = false, 0
+		return
+	}
+	view.locked, view.lockAt = true, at
+}
+
+// visibleLogLines reports how many lines view's window is currently showing
+// at width×height — the page one pgup/pgdn moves by.
+func visibleLogLines(src LogSource, view logView, width, height int, wrap bool) int {
+	if src == nil {
+		return 1
+	}
+	lines, first := src.Snapshot()
+	budget := max(height-1, 1)
+	window, _ := logWindow(lines, first, view, budget)
+	if wrap {
+		window = fitWrapped(window, width, budget)
+	}
+	return max(len(window), 1)
+}
+
+// topLogLines reports how many of the stream's oldest lines fill one window
+// at width×height — the floor scrollLog stops paging up at.
+func topLogLines(src LogSource, width, height int, wrap bool) int {
+	if src == nil {
+		return 1
+	}
+	lines, _ := src.Snapshot()
+	budget := max(height-1, 1)
+	if !wrap {
+		return max(min(budget, len(lines)), 1)
+	}
+	rows, n := 0, 0
+	textWidth := logTextWidth(width)
+	for i := range lines {
+		rows += len(tui.WrapLines(logLineText(&lines[i]), textWidth))
+		if rows > budget {
+			break
+		}
+		n++
+	}
+	return max(n, 1)
+}
+
+// fitWrapped trims window's oldest lines until the remainder wraps within
+// budget rows at width, so the header's coordinates name only lines actually
+// on screen; a single line taller than the whole budget stays, and logRows
+// clips its oldest rows as the backstop.
+func fitWrapped(window []LogLine, width, budget int) []LogLine {
+	textWidth := logTextWidth(width)
+	rows := 0
+	for i := len(window) - 1; i >= 0; i-- {
+		rows += len(tui.WrapLines(logLineText(&window[i]), textWidth))
+		if rows > budget && i < len(window)-1 {
+			return window[i+1:]
+		}
+	}
+	return window
 }
 
 // logRows renders lines as dim, stamped rows within width columns, never
@@ -87,23 +167,19 @@ func logRows(lines []LogLine, width, budget int, wrap bool) []string {
 	}
 	stampStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate600)
 	stampWidth := lipgloss.Width(logStampFormat)
-	textWidth := max(width-stampWidth-1, 8)
+	textWidth := logTextWidth(width)
 
 	var rows []string
 	for i := range lines {
 		l := &lines[i]
 		stamp := stampStyle.Render(l.At.Format(logStampFormat))
 		textStyle := logLevelStyle(l.Level)
-		text := l.Text
-		if tag := logLevelTag(l.Level); tag != "" {
-			text = tag + " " + text
-		}
+		text := logLineText(l)
 		if !wrap {
 			rows = append(rows, stamp+" "+textStyle.Render(tui.Truncate(text, textWidth)))
 			continue
 		}
-		wrapped := strings.Split(lipgloss.Wrap(text, textWidth, ""), "\n")
-		for j, part := range wrapped {
+		for j, part := range tui.WrapLines(text, textWidth) {
 			if j == 0 {
 				rows = append(rows, stamp+" "+textStyle.Render(part))
 				continue
@@ -111,9 +187,23 @@ func logRows(lines []LogLine, width, budget int, wrap bool) []string {
 			rows = append(rows, strings.Repeat(" ", stampWidth+1)+textStyle.Render(part))
 		}
 	}
-	// Wrapping can turn one line into several, so the drop happens after
-	// rendering: the newest rows are the ones worth keeping.
+	// A single line can still wrap taller than the whole budget, so the drop
+	// happens after rendering: the newest rows are the ones worth keeping.
 	return rows[max(len(rows)-budget, 0):]
+}
+
+// logTextWidth is the column budget a row's text gets beside its stamp.
+func logTextWidth(width int) int {
+	return max(width-lipgloss.Width(logStampFormat)-1, 8)
+}
+
+// logLineText returns the one line a LogLine renders as: the WARN/ERROR tag,
+// then the message with its fields.
+func logLineText(l *LogLine) string {
+	if tag := logLevelTag(l.Level); tag != "" {
+		return tag + " " + l.Text
+	}
+	return l.Text
 }
 
 // logLevelTag returns the textual severity a rendered row leads with — WARN
@@ -149,21 +239,28 @@ func renderLogPane(src LogSource, view logView, width, height int, wrap bool) st
 	if src == nil || height <= 0 {
 		return ""
 	}
-	header := logPaneHeader(view, width)
+	budget := max(height-1, 1)
 	lines, first := src.Snapshot()
-	rows := logRows(logWindow(lines, first, view, height-1), width, height-1, wrap)
+	window, end := logWindow(lines, first, view, budget)
+	if wrap {
+		window = fitWrapped(window, width, budget)
+	}
+	header := logPaneHeader(view, len(window), end, first+int64(len(lines)), width)
+	rows := logRows(window, width, budget, wrap)
 	if len(rows) == 0 {
 		rows = []string{lipgloss.NewStyle().Foreground(tui.ColorSlate600).Render("waiting for the first log line…")}
 	}
 	return strings.Join(append([]string{header}, rows...), "\n")
 }
 
-// logPaneHeader renders the pane's dim section label, marking a locked window so
-// a stalled tail never reads as a stalled install.
-func logPaneHeader(view logView, width int) string {
+// logPaneHeader renders the pane's dim section label; a locked window names
+// the shown lines' span out of the stream's total — "LOG · 212–260 of 412" —
+// so a stalled tail reads as the paused pager it is, and paging always says
+// where it stands.
+func logPaneHeader(view logView, shown int, end, total int64, width int) string {
 	label := "LOG"
-	if view.locked {
-		label = "LOG · LOCKED"
+	if view.locked && shown > 0 {
+		label = fmt.Sprintf("LOG · %d–%d of %d", end-int64(shown)+1, end, total)
 	}
 	return lipgloss.NewStyle().Foreground(tui.ColorSlate500).MaxWidth(width).Render(label)
 }
@@ -175,11 +272,12 @@ func renderLogTail(src LogSource, view logView, width, budget int) []string {
 		return nil
 	}
 	lines, first := src.Snapshot()
-	rows := logRows(logWindow(lines, first, view, budget), width, budget, false)
+	window, end := logWindow(lines, first, view, budget)
+	rows := logRows(window, width, budget, false)
 	if len(rows) == 0 {
 		return nil
 	}
-	return append([]string{logPaneHeader(view, width)}, rows...)
+	return append([]string{logPaneHeader(view, len(window), end, first+int64(len(lines)), width)}, rows...)
 }
 
 // renderLogFull renders the log across the whole body once `f` has swapped it

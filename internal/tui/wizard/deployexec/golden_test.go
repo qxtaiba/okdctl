@@ -18,12 +18,28 @@ type deployScenario struct {
 	id    wizard.StepID
 	build func() *State
 	seed  func(m *wizard.Model, st *State)
+	// hooks overrides goldenHooks for scenarios needing their own ring.
+	hooks func() Hooks
 }
 
 // goldenHooks is the seeded feed every deploy golden renders against: no engine,
-// and a fixed log ring so the pane and the narrow tail are deterministic.
+// a fixed log ring, and a fixed sink path so the pane, the narrow tail, and the
+// full-log pointers are deterministic.
 func goldenHooks() Hooks {
-	return Hooks{Logs: seededRing(24)}
+	return Hooks{Logs: seededRing(24), LogPath: "okd-install/okdctl.log"}
+}
+
+// wrappedRing seeds goldenHooks' ring plus one long error line, so the
+// full-screen frames pin space-only wrapping instead of …-clipping.
+func wrappedRing() Hooks {
+	h := goldenHooks()
+	r := h.Logs.(*LogRing)
+	r.append(LogLine{
+		At:    logBase.Add(24 * 7 * time.Second),
+		Level: "ERROR",
+		Text:  "deploy infrastructure failed: proxmox task UPID:pve:0000ABCD:00512F30:66F2A1C4:qmclone:9001:root@pam: refused the clone request because local-lvm is out of space on node pve-02",
+	})
+	return h
 }
 
 // seedMidRun drives the stream step to a fixed mid-install frame: prep
@@ -83,7 +99,7 @@ func deployScenarios() []deployScenario {
 		},
 		{
 			// `f` swapped the log full-screen: the checklist steps aside and the
-			// log takes the whole frame.
+			// log takes the whole frame, its sink path in the header.
 			name:  "stream_full",
 			id:    StepIDStream,
 			build: streamState,
@@ -91,6 +107,32 @@ func deployScenarios() []deployScenario {
 				seedMidRun(m, st)
 				m.Update(tea.KeyPressMsg{Code: keyLogFull, Text: "f"})
 				m.Update(wizard.LayoutChangedMsg{})
+			},
+		},
+		{
+			// A long error line wraps whole in full-screen mode instead of
+			// …-clipping, its stamp column held by indented continuation rows.
+			name:  "stream_wrapped",
+			id:    StepIDStream,
+			build: streamState,
+			hooks: wrappedRing,
+			seed: func(m *wizard.Model, st *State) {
+				seedMidRun(m, st)
+				m.Update(tea.KeyPressMsg{Code: keyLogFull, Text: "f"})
+				m.Update(wizard.LayoutChangedMsg{})
+			},
+		},
+		{
+			// pgup in full-screen mode engages the lock and pages back through
+			// the ring; the header names the window's honest coordinates.
+			name:  "stream_paged",
+			id:    StepIDStream,
+			build: streamState,
+			seed: func(m *wizard.Model, st *State) {
+				seedMidRun(m, st)
+				m.Update(tea.KeyPressMsg{Code: keyLogFull, Text: "f"})
+				m.Update(wizard.LayoutChangedMsg{})
+				m.Update(tea.KeyPressMsg{Code: tea.KeyPgUp})
 			},
 		},
 		{
@@ -132,7 +174,11 @@ func TestGolden_DeploySteps(t *testing.T) {
 				t.Cleanup(func() { tui.SetTerminalWidth(0) })
 
 				st := sc.build()
-				m := wizard.NewFlowModel(NewSteps(st, goldenHooks()), st.Cfg, Chrome())
+				hooks := goldenHooks
+				if sc.hooks != nil {
+					hooks = sc.hooks
+				}
+				m := wizard.NewFlowModel(NewSteps(st, hooks()), st.Cfg, Chrome())
 
 				_ = tuitest.RenderAt(t, m, sz.w, sz.h)
 				m.Update(wizard.JumpToStepMsg{StepID: sc.id})

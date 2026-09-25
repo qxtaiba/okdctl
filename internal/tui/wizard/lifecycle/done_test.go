@@ -145,3 +145,33 @@ func TestDoneScreenPagesWithPgKeys(t *testing.T) {
 		t.Fatalf("pgup did not return the window to the top:\n%s", got)
 	}
 }
+
+// TestDoneScreenScrollsWithArrowKeys pins the arrowScroller opt-in beside the
+// pgup/pgdn pin above: on the lifecycle done screen ↑/↓ move the viewport one
+// line, exactly as the footer's arrow glyphs promise.
+func TestDoneScreenScrollsWithArrowKeys(t *testing.T) {
+	tui.SetTerminalWidth(80)
+	t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+	st := doneState()
+	st.Elapsed = 90 * time.Second
+	m := wizard.NewFlowModel(NewSteps(st, Hooks{}), st.Cfg, Chrome())
+	_ = tuitest.RenderAt(t, m, 80, 24)
+	m.Update(wizard.JumpToStepMsg{StepID: StepIDDone})
+
+	before := tuitest.StripANSI(tuitest.RenderAt(t, m, 80, 24))
+	if !strings.Contains(before, "scroll down for more") {
+		t.Fatalf("done screen at 80x24 must overflow the viewport:\n%s", before)
+	}
+
+	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	after := tuitest.StripANSI(next.View().Content)
+	if after == before {
+		t.Fatal("↓ did not move the visible window")
+	}
+
+	next, _ = next.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	if got := tuitest.StripANSI(next.View().Content); got != before {
+		t.Fatalf("↑ did not return the window to the top:\n%s", got)
+	}
+}

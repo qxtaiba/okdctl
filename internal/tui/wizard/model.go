@@ -240,6 +240,8 @@ type KeyMap struct {
 	PageDown key.Binding
 	Home     key.Binding
 	End      key.Binding
+	Up       key.Binding
+	Down     key.Binding
 }
 
 func defaultKeyMap() KeyMap {
@@ -271,6 +273,14 @@ func defaultKeyMap() KeyMap {
 		End: key.NewBinding(
 			key.WithKeys("end"),
 			key.WithHelp("end", "bottom"),
+		),
+		Up: key.NewBinding(
+			key.WithKeys("up"),
+			key.WithHelp("↑", "scroll up"),
+		),
+		Down: key.NewBinding(
+			key.WithKeys("down"),
+			key.WithHelp("↓", "scroll down"),
 		),
 	}
 }
@@ -497,6 +507,42 @@ func (m *Model) currentStepConsumesTextInput() bool {
 	}
 	tc, ok := m.steps[m.currentStep].(TextInputConsumer)
 	return ok && tc.ConsumesTextInput()
+}
+
+// arrowScroller is implemented by steps that opt in to ↑/↓ scrolling the
+// frame's viewport one line — read-only screens with no field for the arrows
+// to drive; a form or list step keeps the keys for its own navigation.
+type arrowScroller interface {
+	ScrollsWithArrows() bool
+}
+
+// currentStepScrollsWithArrows reports whether the active step has opted its
+// viewport into line-by-line arrow scrolling, mirroring the
+// currentStepConsumesTextInput opt-in: an unimplemented interface leaves the
+// arrows to the step's own Update.
+func (m *Model) currentStepScrollsWithArrows() bool {
+	if len(m.steps) == 0 || m.currentStep < 0 || m.currentStep >= len(m.steps) {
+		return false
+	}
+	a, ok := m.steps[m.currentStep].(arrowScroller)
+	return ok && a.ScrollsWithArrows()
+}
+
+// logPager is implemented by steps that page a log region of their own with
+// pgup/pgdn; while it reports true the frame leaves those keys to the step
+// instead of scrolling the viewport.
+type logPager interface {
+	ConsumesPaging() bool
+}
+
+// currentStepConsumesPaging reports whether the active step is paging a log
+// region of its own right now.
+func (m *Model) currentStepConsumesPaging() bool {
+	if len(m.steps) == 0 || m.currentStep < 0 || m.currentStep >= len(m.steps) {
+		return false
+	}
+	p, ok := m.steps[m.currentStep].(logPager)
+	return ok && p.ConsumesPaging()
 }
 
 // Result returns the wizard's terminal state. Valid only after tea.Quit.

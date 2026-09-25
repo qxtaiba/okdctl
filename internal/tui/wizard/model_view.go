@@ -419,7 +419,9 @@ func (m *Model) footerBindings() []KeyBinding {
 			bindings = h.ShortHelp()
 		}
 	}
-	if m.viewport.TotalLineCount() > m.viewport.Height() {
+	// A step paging its own log region owns pgup/pgdn (and says so in its
+	// ShortHelp); advertising a viewport scroll beside it would be a lie.
+	if m.viewport.TotalLineCount() > m.viewport.Height() && !m.currentStepConsumesPaging() {
 		bindings = append(bindings, KeyBinding{Key: "pgup/pgdn", Help: "scroll"})
 	}
 	bindings = m.withHubEscape(bindings)

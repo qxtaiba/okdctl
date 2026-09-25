@@ -67,6 +67,10 @@ type Hooks struct {
 	// Logs is the human log stream the log pane reads; nil leaves the pane to
 	// the wizard's own context pane.
 	Logs LogSource
+	// LogPath is the resolved path of the run-log sink that keeps every byte
+	// the ring evicts; empty when no file sink is open, and no screen may then
+	// point at one.
+	LogPath string
 	// Done is closed once the run's context is cancelled. The step's own final
 	// send selects on it, so a force-quit never strands the engine goroutine on
 	// a feed nobody drains; a nil channel simply never fires.

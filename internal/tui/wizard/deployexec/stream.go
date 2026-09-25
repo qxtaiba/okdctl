@@ -11,7 +11,6 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
-	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
@@ -79,6 +78,13 @@ type StreamStep struct {
 	focusLine    int
 	lastLine     int
 	tailRendered bool
+	// viewCol, fullLogHeight, paneWidth, and paneHeight are the log window's
+	// geometry as last rendered — View and PaneContent record them so a paging
+	// key moves by exactly the window the operator is looking at.
+	viewCol       int
+	fullLogHeight int
+	paneWidth     int
+	paneHeight    int
 
 	boldStyle   lipgloss.Style
 	doneStyle   lipgloss.Style
@@ -221,11 +227,13 @@ func (s *StreamStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	return s, nil
 }
 
-// handleLogKey binds the log viewport's two keys: `l` locks the window where it
-// stands (or releases it back to the tail) and `f` swaps the log full-screen and
-// back, which changes the frame's own layout gate and so asks for a re-measure.
-// With no Logs hook (documented-supported) both keys are inert — an empty
-// full-screen log would blank the whole body.
+// handleLogKey binds the log viewport's keys: `l` locks the window where it
+// stands (or releases it back to the tail), `f` swaps the log full-screen and
+// back (which changes the frame's own layout gate and so asks for a
+// re-measure), pgup/pgdn page the window through the whole ring wherever
+// ConsumesPaging routes them here, and the arrows walk it line by line in
+// full-screen mode. With no Logs hook (documented-supported) every one of
+// them is inert — an empty full-screen log would blank the whole body.
 func (s *StreamStep) handleLogKey(msg tea.KeyPressMsg) tea.Cmd {
 	if s.hooks.Logs == nil {
 		return nil
@@ -239,8 +247,61 @@ func (s *StreamStep) handleLogKey(msg tea.KeyPressMsg) tea.Cmd {
 	case keyLogFull:
 		s.log.full = !s.log.full
 		return func() tea.Msg { return wizard.LayoutChangedMsg{} }
+	case tea.KeyPgUp:
+		s.scrollLogBy(-s.logPageSize())
+	case tea.KeyPgDown:
+		s.scrollLogBy(s.logPageSize())
+	case tea.KeyUp:
+		if s.log.full {
+			s.scrollLogBy(-1)
+		}
+	case tea.KeyDown:
+		if s.log.full {
+			s.scrollLogBy(1)
+		}
 	}
 	return nil
+}
+
+// ConsumesPaging reports whether pgup/pgdn page the log window itself — the
+// full-screen log always, a locked pane or tail too — so the frame leaves the
+// keys to the step instead of scrolling the checklist viewport.
+func (s *StreamStep) ConsumesPaging() bool {
+	return s.hooks.Logs != nil && (s.log.full || s.log.locked)
+}
+
+// ScrollsWithArrows opts the checklist into the frame's line-by-line arrow
+// scroll; in full-screen mode the arrows fall through to handleLogKey and walk
+// the log instead.
+func (s *StreamStep) ScrollsWithArrows() bool {
+	return s.hooks.Logs == nil || !s.log.full
+}
+
+// scrollLogBy moves the log window n lines through the ring at the geometry
+// last rendered, flooring at the stream's oldest full window.
+func (s *StreamStep) scrollLogBy(n int) {
+	w, h, wrap := s.logGeometry()
+	scrollLog(&s.log, s.hooks.Logs, n, topLogLines(s.hooks.Logs, w, h, wrap))
+}
+
+// logPageSize is how many lines one pgup/pgdn moves: exactly the lines the
+// active window is showing, so a page never skips past unread ones.
+func (s *StreamStep) logPageSize() int {
+	w, h, wrap := s.logGeometry()
+	return visibleLogLines(s.hooks.Logs, s.log, w, h, wrap)
+}
+
+// logGeometry names the active log window: the full-screen box, the split
+// pane, or the narrow tail under the checklist.
+func (s *StreamStep) logGeometry() (width, height int, wrap bool) {
+	switch {
+	case s.log.full:
+		return max(s.viewCol, 1), max(s.fullLogHeight, 2), true
+	case s.paneCarriesLog():
+		return max(s.paneWidth, 1), max(s.paneHeight, 2), false
+	default:
+		return max(s.viewCol, 1), narrowTailRows + 1, false
+	}
 }
 
 // SuppressesSplit hands the log the whole frame while `f` has it full-screen;
@@ -252,6 +313,7 @@ func (s *StreamStep) SuppressesSplit() bool {
 // PaneContent fills the split layout's right pane with the live log, in place of
 // the context pane's step list.
 func (s *StreamStep) PaneContent(width, height int) string {
+	s.paneWidth, s.paneHeight = width, height
 	return renderLogPane(s.hooks.Logs, s.log, width, height, false)
 }
 
@@ -428,10 +490,17 @@ func (s *StreamStep) InterceptQuit() bool {
 // budget, never the body's real height — SetSize records that.
 func (s *StreamStep) View(width, _ int) string {
 	col := max(width-4, 1)
+	s.viewCol = col
 	if s.log.full {
 		// The headline rides above the full-screen log: progress and elapsed are
-		// what an operator would otherwise lose by leaving the checklist.
-		return s.headline(col) + "\n" + renderLogFull(s.hooks.Logs, s.log, col, s.bodyHeight-1)
+		// what an operator would otherwise lose by leaving the checklist. The
+		// sink path rides with it — the file keeps every byte the ring evicts.
+		head := []string{s.headline(col)}
+		if s.hooks.LogPath != "" {
+			head = append(head, s.dimStyle.Render(tui.Truncate("full log: "+s.hooks.LogPath, col)))
+		}
+		s.fullLogHeight = max(s.bodyHeight-len(head), 2)
+		return strings.Join(head, "\n") + "\n" + renderLogFull(s.hooks.Logs, s.log, col, s.fullLogHeight)
 	}
 
 	lines := []string{s.headline(col)}
@@ -456,12 +525,18 @@ func (s *StreamStep) View(width, _ int) string {
 
 	// The cancel clause holds only while a first ctrl+c would still cancel
 	// gracefully; after a cancel (or completion) the next ctrl+c force-quits,
-	// and the promise would be a lie.
-	footnote := "full log " + logutil.DefaultLogFileName
-	if !s.finished && !s.cancelRequested {
-		footnote += " · ctrl+c cancels after the current step"
+	// and the promise would be a lie. The sink clause names the real resolved
+	// path, or nothing at all when no file sink is open — never a guess.
+	var clauses []string
+	if s.hooks.LogPath != "" {
+		clauses = append(clauses, "full log "+s.hooks.LogPath)
 	}
-	lines = append(lines, "", s.dimStyle.Render(lipgloss.Wrap(footnote, col, "")))
+	if !s.finished && !s.cancelRequested {
+		clauses = append(clauses, "ctrl+c cancels after the current step")
+	}
+	if len(clauses) > 0 {
+		lines = append(lines, "", s.dimStyle.Render(lipgloss.Wrap(strings.Join(clauses, " · "), col, "")))
+	}
 
 	content := strings.Join(lines, "\n")
 	s.lastLine = strings.Count(content, "\n")
@@ -617,8 +692,12 @@ func (s *StreamStep) ShortHelp() []wizard.KeyBinding {
 	}
 	lock := wizard.KeyBinding{Key: string(keyLogLock), Help: s.lockHelp()}
 	full := wizard.KeyBinding{Key: string(keyLogFull), Help: s.fullHelp()}
+	page := wizard.KeyBinding{Key: "pgup/pgdn", Help: "page the log"}
 	if s.log.full {
-		return []wizard.KeyBinding{full, lock, cancel}
+		return []wizard.KeyBinding{full, lock, page, cancel}
+	}
+	if s.log.locked {
+		return []wizard.KeyBinding{lock, full, page, cancel}
 	}
 	return []wizard.KeyBinding{lock, full, cancel}
 }

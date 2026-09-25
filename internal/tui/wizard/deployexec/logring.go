@@ -9,9 +9,10 @@ import (
 	"time"
 )
 
-// LogRingCap is how many human log lines the pane keeps: enough to read a
-// step's chatter back, small enough to snapshot on every frame.
-const LogRingCap = 500
+// LogRingCap is how many human log lines the pane keeps: enough headroom to
+// page back through a whole failed run's info-level chatter (a few hundred
+// lines), while a per-frame Snapshot still copies only ~112KB of headers.
+const LogRingCap = 2000
 
 // LogLine is one captured human log line: when it was logged, its level, and
 // the message with its structured fields appended.

@@ -22,9 +22,9 @@
   │  09:02:34 deploy step started step=step-22 phase=setup                                       │  
   │  09:02:41 deploy step started step=step-23 phase=setup                                       │  
   │                                                                                              │  
-  │                                                                                              │  
+  │  full log okd-install/okdctl.log                                                             │  
   │                                                                                              │  
   │─────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
-  │  enter exit • ? help                                                                         │  
+  │  enter exit • pgup/pgdn page the log • ? help                                                │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                     

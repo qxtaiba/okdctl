@@ -64,6 +64,9 @@ func runDeployStream(ctx context.Context, cfg *config.Config, opts *deploy.Optio
 
 	hooks := deployStreamSession(streamCtx, cancelStream, cfg, opts)
 	hooks.Logs = ring
+	// The resolved sink path, so the screen's "full log" pointers name the
+	// file this run actually writes — or nothing at all when no sink opened.
+	hooks.LogPath = runLogPath
 
 	// The stream screen owns the terminal from here on: no spinner or rewriting
 	// checklist may paint beneath the AltScreen, and every log line goes to the

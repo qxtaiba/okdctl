@@ -358,3 +358,54 @@ func TestModel_FocusChangedResyncsBeforeScroll(t *testing.T) {
 		t.Fatal("YOffset() = 0; want the focused last row scrolled into view")
 	}
 }
+
+// arrowOptInStep is a growingStep that opts into arrowScroller, standing in
+// for the read-only done screens.
+type arrowOptInStep struct{ growingStep }
+
+func (s *arrowOptInStep) ScrollsWithArrows() bool { return true }
+
+// recordingArrowStep records every message reaching its Update, standing in
+// for a form step whose fields own the arrow keys.
+type recordingArrowStep struct {
+	growingStep
+	received []tea.Msg
+}
+
+func (s *recordingArrowStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
+	s.received = append(s.received, msg)
+	return s, nil
+}
+
+// TestModel_ArrowScrollOnlyForOptedInSteps pins the arrowScroller gate: an
+// opted-in read-only step gets one-line viewport scrolling, while every other
+// step keeps ↑/↓ for its own navigation and the viewport stays put.
+func TestModel_ArrowScrollOnlyForOptedInSteps(t *testing.T) {
+	in := &arrowOptInStep{growingStep{BaseStep: NewBaseStep(StepIDWelcome, "reader", ""), rows: 120}}
+	m := NewModel([]WizardStep{in}, config.DefaultConfig())
+	m = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	m = update(t, m, tea.KeyPressMsg{Code: tea.KeyDown})
+	if got := m.viewport.YOffset(); got != 1 {
+		t.Fatalf("YOffset() = %d after ↓ on an opted-in step, want 1", got)
+	}
+	m = update(t, m, tea.KeyPressMsg{Code: tea.KeyUp})
+	if got := m.viewport.YOffset(); got != 0 {
+		t.Fatalf("YOffset() = %d after ↑, want back at 0", got)
+	}
+
+	out := &recordingArrowStep{growingStep: growingStep{BaseStep: NewBaseStep(StepIDBasics, "form", ""), rows: 120}}
+	m = NewModel([]WizardStep{out}, config.DefaultConfig())
+	m = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	m = update(t, m, tea.KeyPressMsg{Code: tea.KeyDown})
+	if got := m.viewport.YOffset(); got != 0 {
+		t.Fatalf("YOffset() = %d after ↓ on a non-opted-in step, want 0 — the step owns the arrows", got)
+	}
+	for _, msg := range out.received {
+		if key, ok := msg.(tea.KeyPressMsg); ok && key.Code == tea.KeyDown {
+			return
+		}
+	}
+	t.Fatal("↓ never reached the step's own Update")
+}

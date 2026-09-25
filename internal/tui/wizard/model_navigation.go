@@ -50,17 +50,25 @@ func (m *Model) resizeViewport() {
 	m.viewport.SetHeight(height)
 }
 
-// handleScrollKey scrolls the viewport on page/home/end keys and reports
-// whether it consumed msg; home/end fall through to a focused text input,
-// where they are line-start/line-end cursor moves rather than scrolls.
+// handleScrollKey scrolls the viewport on page/home/end/arrow keys and
+// reports whether it consumed msg; home/end fall through to a focused text
+// input (line-start/line-end cursor moves), pgup/pgdn to a step paging a log
+// region of its own, and the arrows scroll only for steps that opted in via
+// arrowScroller — every other step keeps them for its own navigation.
 func (m *Model) handleScrollKey(msg tea.KeyPressMsg) bool {
 	if !m.ready {
 		return false
 	}
 	switch {
 	case key.Matches(msg, m.keyMap.PageUp):
+		if m.currentStepConsumesPaging() {
+			return false
+		}
 		m.viewport.HalfPageUp()
 	case key.Matches(msg, m.keyMap.PageDown):
+		if m.currentStepConsumesPaging() {
+			return false
+		}
 		m.viewport.HalfPageDown()
 	case key.Matches(msg, m.keyMap.Home):
 		if m.currentStepConsumesTextInput() {
@@ -72,6 +80,16 @@ func (m *Model) handleScrollKey(msg tea.KeyPressMsg) bool {
 			return false
 		}
 		m.viewport.GotoBottom()
+	case key.Matches(msg, m.keyMap.Up):
+		if !m.currentStepScrollsWithArrows() {
+			return false
+		}
+		m.viewport.ScrollUp(1)
+	case key.Matches(msg, m.keyMap.Down):
+		if !m.currentStepScrollsWithArrows() {
+			return false
+		}
+		m.viewport.ScrollDown(1)
 	default:
 		return false
 	}

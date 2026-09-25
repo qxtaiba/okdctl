@@ -36,6 +36,12 @@ func (s *DoneStep) InterceptBack() bool {
 	return true
 }
 
+// ScrollsWithArrows opts the read-only completion screen into the frame's
+// line-by-line arrow scroll.
+func (s *DoneStep) ScrollsWithArrows() bool {
+	return true
+}
+
 // ShouldShow gates the step to consented (executed) runs.
 func (s *DoneStep) ShouldShow(_ *config.Config) bool {
 	return s.st.Proceed

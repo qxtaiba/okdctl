@@ -125,7 +125,8 @@ func TestLogRingConcurrentWritesAndReads(t *testing.T) {
 		defer wg.Done()
 		for range 500 {
 			lines, first := r.Snapshot()
-			_ = logRows(logWindow(lines, first, logView{}, 8), 40, 8, false)
+			window, _ := logWindow(lines, first, logView{}, 8)
+			_ = logRows(window, 40, 8, false)
 		}
 		close(stop)
 	}()

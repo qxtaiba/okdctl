@@ -30,8 +30,8 @@
   │  09:02:27 deploy step started step=step-21 phase=setup                                                                                                                       │  
   │  09:02:34 deploy step started step=step-22 phase=setup                                                                                                                       │  
   │  09:02:41 deploy step started step=step-23 phase=setup                                                                                                                       │  
-  │                                                                                                                                                                              │  
-  │                                                                                                                                                                              │  
+  │  09:02:48 ERROR deploy infrastructure failed: proxmox task UPID:pve:0000ABCD:00512F30:66F2A1C4:qmclone:9001:root@pam: refused the clone request because local-lvm is         │  
+  │           out of space on node pve-02                                                                                                                                        │  
   │                                                                                                                                                                              │  
   │                                                                                                                                                                              │  
   │                                                                                                                                                                              │  
