@@ -353,6 +353,34 @@ func (s *CompactSelector) View() string {
 	return strings.Join(lines, "\n")
 }
 
+// ViewPointer renders the options one per line as a verb menu: the selection
+// carries a tui.IconCaretRight pointer and every other row is indented to
+// match, so the labels share one left column. Rows are padded to the widest
+// label's own width — the block is a rectangle, so a caller centering it keeps
+// that column intact instead of centering each row on its own.
+func (s *CompactSelector) ViewPointer() string {
+	selectedStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true)
+	unselectedStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate400)
+
+	widest := 0
+	for _, opt := range s.options {
+		if w := lipgloss.Width(opt); w > widest {
+			widest = w
+		}
+	}
+
+	lines := make([]string, len(s.options))
+	for i, opt := range s.options {
+		prefix, styled := "  ", unselectedStyle.Render(opt)
+		if i == s.selected {
+			prefix, styled = selectedStyle.Render(tui.IconCaretRight)+" ", selectedStyle.Render(opt)
+		}
+		lines[i] = prefix + styled + strings.Repeat(" ", widest-lipgloss.Width(opt))
+	}
+
+	return strings.Join(lines, "\n")
+}
+
 // ViewInline renders the options as a single horizontal row of bulleted radios.
 func (s *CompactSelector) ViewInline() string {
 	selectedStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true)

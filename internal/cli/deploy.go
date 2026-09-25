@@ -147,7 +147,7 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 		return runFullDeployment(ctx, cfg, out)
 	}
 
-	result, welcomeMode, err := runWizardFn(ctx, cfg, configExists)
+	result, verb, err := runWizardFn(cmd, cfg, configExists)
 	if err != nil {
 		return (&errtypes.ConfigError{Msg: "wizard failed", Err: err}).
 			WithHint("try again, or use --yes with a saved config for a non-interactive deploy")
@@ -158,8 +158,8 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	if welcomeMode == steps.WelcomeModeDeploy {
-		return runFullDeployment(ctx, cfg, out)
+	if handled, verbErr := runHubVerb(ctx, verb, cfg, out); handled {
+		return verbErr
 	}
 
 	cfg = result.Config
@@ -183,6 +183,31 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 	}
 
 	return nil
+}
+
+// destroyHandoff is the line the hub's destroy verb prints once the TUI has
+// released the terminal; okdctl destroy owns the confirm ladder, which the
+// wizard must never re-implement behind a menu entry.
+const destroyHandoff = "run: okdctl destroy"
+
+// runHubVerb handles the hub verbs that never walk the configure flow,
+// reporting whether verb was one of them so the caller can skip the save
+// pipeline entirely. deploy runs the configuration already on disk untouched;
+// destroy prints its handoff; manage-nodes and cluster-status already ran
+// in-process inside the wizard, so there is nothing left to do here.
+func runHubVerb(ctx context.Context, verb steps.HubVerb, cfg *config.Config, out io.Writer) (handled bool, err error) {
+	switch verb {
+	case steps.HubVerbDeploy:
+		return true, runFullDeployment(ctx, cfg, out)
+	case steps.HubVerbDestroy:
+		fmt.Fprintln(out, destroyHandoff)
+		return true, nil
+	case steps.HubVerbManageNodes, steps.HubVerbClusterStatus, steps.HubVerbQuit:
+		logutil.Info("no changes made")
+		return true, nil
+	default:
+		return false, nil
+	}
 }
 
 // loadDeployConfig resolves the config deploy runs against — an existing,

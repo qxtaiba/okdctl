@@ -1,13 +1,17 @@
 package cli
 
 import (
-	"context"
 	"errors"
 	"os"
 
+	"github.com/spf13/cobra"
+
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/deploy"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/clusterstatus"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/steps"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // wizardDemoEnv enables README-demo recording mode: blank fields, no sudo
@@ -18,28 +22,28 @@ const wizardDemoEnv = "OKDCTL_WIZARD_DEMO"
 // release fetch into its error state, for the error-state screenshot fixture.
 const wizardDemoReleasesEnv = "OKDCTL_DEMO_RELEASES"
 
-func runWizardWithMode(ctx context.Context, cfg *config.Config, configExists bool) (wizard.Result, steps.WelcomeMode, error) {
+func runWizardWithMode(cmd *cobra.Command, cfg *config.Config, configExists bool) (wizard.Result, steps.HubVerb, error) {
 	wizardCfg := wizard.DefaultConfig()
 	wizardCfg.InitialConfig = cfg
 	wizardCfg.ConfigExists = configExists
 
 	built := buildWizardStepsWithState(wizardCfg)
 
-	var welcomeStep *steps.WelcomeStep
+	var hub *steps.WelcomeStep
 	if len(built.Steps) > 0 {
 		if ws, ok := built.Steps[0].(*steps.WelcomeStep); ok {
-			welcomeStep = ws
+			hub = ws
 		}
 	}
 
-	result, err := wizard.RunFlow(ctx, built.Steps, cfg, steps.Chrome())
+	result, err := wizard.RunFlow(cmd.Context(), built.Steps, cfg, steps.Chrome())
 
-	var mode steps.WelcomeMode
-	if welcomeStep != nil {
-		mode = welcomeStep.GetMode()
+	verb := steps.HubVerbGetStarted
+	if hub != nil {
+		verb = hub.SelectedVerb()
 	}
 
-	return result, mode, err
+	return result, verb, err
 }
 
 func buildWizardStepsWithState(wizardCfg wizard.Config) wizard.BuiltSteps {
@@ -60,19 +64,38 @@ func buildWizardStepsWithState(wizardCfg wizard.Config) wizard.BuiltSteps {
 	return built
 }
 
-// configureWelcomeStep marks the welcome step's config state, passing the
-// loaded config through for its found line when one exists.
+// configureWelcomeStep marks the hub's config state, passing the loaded config
+// and its save-slot state through for the dim slot line when one exists.
 func configureWelcomeStep(built wizard.BuiltSteps, wizardCfg wizard.Config) {
 	for _, step := range built.Steps {
 		if ws, ok := step.(*steps.WelcomeStep); ok {
 			if wizardCfg.ConfigExists && wizardCfg.InitialConfig != nil {
-				ws.SetExistingConfig(wizardCfg.InitialConfig)
+				ws.SetExistingConfig(wizardCfg.InitialConfig, saveSlotState(wizardCfg.InitialConfig))
 			} else {
 				ws.SetConfigExists(wizardCfg.ConfigExists)
 			}
 			break
 		}
 	}
+}
+
+// saveSlotState reports how far the saved configuration has got, using only
+// what local files can honestly prove: an install marker means a deploy is
+// mid-flight, terraform state holding resources means infrastructure exists,
+// and anything else is a configuration and nothing more. Probes no network and
+// reads no credential — the hub's slot line must never overstate a cluster.
+func saveSlotState(cfg *config.Config) steps.SaveSlotState {
+	projectRoot, err := resolveWorkspaceRoot()
+	if err != nil {
+		return steps.SaveSlotConfigured
+	}
+	if deploy.InstallInProgress(workspace.WorkDir(projectRoot), cfg.Cluster.Name) {
+		return steps.SaveSlotDeploying
+	}
+	if clusterstatus.TerraformStateHasResources(projectRoot, cfg.TerraformEnvName()) {
+		return steps.SaveSlotDeployed
+	}
+	return steps.SaveSlotConfigured
 }
 
 // configureDemoVersionFetcher injects a deterministic release-catalog

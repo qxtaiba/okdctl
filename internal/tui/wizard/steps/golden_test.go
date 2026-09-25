@@ -21,18 +21,29 @@ import (
 func assertNoScrollIndicator(t *testing.T, frame string) {
 	t.Helper()
 	if strings.Contains(tuitest.StripANSI(frame), "scroll") {
-		t.Errorf("frame shows a scroll indicator, want the welcome body to fit without scrolling:\n%s", frame)
+		t.Errorf("frame shows a scroll indicator, want the hub body to fit without scrolling:\n%s", frame)
 	}
 }
 
 // forceHeroColor forces tui.ColorEnabled() true for the duration of t, so
-// the welcome step's block-letter hero renders instead of its no-color
+// the hub's block-letter hero renders instead of its no-color
 // fallback, restoring the prior color profile on cleanup.
 func forceHeroColor(t *testing.T) {
 	t.Helper()
 	t.Cleanup(func() { tui.SetColorProfileFor(&bytes.Buffer{}) })
 	t.Setenv("CLICOLOR_FORCE", "1")
 	tui.SetColorProfileFor(&bytes.Buffer{})
+}
+
+// seedHubSaveSlot puts the hub on its five-verb menu with the dim save-slot
+// line a loaded configuration produces.
+func seedHubSaveSlot(m *wizard.Model) {
+	cfg := m.Config()
+	cfg.Cluster.Name = "prod-cluster"
+	cfg.Distribution.Version = "4.20.1-okd-scos.7"
+	cfg.Topology.ControlPlane.Count = 3
+	cfg.Topology.Workers.Count = 3
+	m.CurrentStep().(*WelcomeStep).SetExistingConfig(cfg, SaveSlotDeployed)
 }
 
 type configureScenario struct {
@@ -49,16 +60,11 @@ func configureScenarios() []configureScenario {
 	endKey := tea.KeyPressMsg{Code: tea.KeyEnd}
 
 	return []configureScenario{
-		{name: "welcome_fresh", id: wizard.StepIDWelcome},
+		{name: "hub_fresh", id: wizard.StepIDWelcome},
 		{
-			name: "welcome_existing",
-			id:   wizard.StepIDWelcome,
-			seed: func(m *wizard.Model) {
-				cfg := config.DefaultConfig()
-				cfg.Cluster.Name = "prod-cluster"
-				cfg.Topology.Workers.Count = 3
-				m.CurrentStep().(*WelcomeStep).SetExistingConfig(cfg)
-			},
+			name:     "hub_existing",
+			id:       wizard.StepIDWelcome,
+			seed:     seedHubSaveSlot,
 			interact: downKey,
 		},
 		{
@@ -184,7 +190,7 @@ func TestGolden_ConfigureSteps(t *testing.T) {
 	for _, sz := range goldenSizes {
 		for _, sc := range configureScenarios() {
 			t.Run(fmt.Sprintf("%s_%dx%d", sc.name, sz.w, sz.h), func(t *testing.T) {
-				if strings.HasPrefix(sc.name, "welcome") {
+				if strings.HasPrefix(sc.name, "hub") {
 					forceHeroColor(t)
 				}
 				base := fmt.Sprintf("%s_%dx%d", sc.name, sz.w, sz.h)
@@ -207,7 +213,7 @@ func TestGolden_ConfigureSteps(t *testing.T) {
 				if sz.fits {
 					tuitest.AssertFits(t, frame, sz.w, sz.h)
 				}
-				if strings.HasPrefix(sc.name, "welcome") && sz.w == 80 && sz.h == 24 {
+				if strings.HasPrefix(sc.name, "hub") && sz.w == 80 && sz.h == 24 {
 					assertNoScrollIndicator(t, frame)
 				}
 
@@ -221,6 +227,48 @@ func TestGolden_ConfigureSteps(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// heroBlockRows counts the frame rows carrying block-letter hero cells, which
+// is heroRows normally and heroRows*heroScale once the hero doubles.
+func heroBlockRows(frame string) int {
+	rows := 0
+	for _, line := range strings.Split(tuitest.StripANSI(frame), "\n") {
+		if strings.Contains(line, "█") {
+			rows++
+		}
+	}
+	return rows
+}
+
+// TestGolden_HubWideTerminals pins the hub on the two wide tiers goldenSizes
+// doesn't cover: 140x40, where the hero draws at double scale inside a
+// single-column frame, and 180x48, where the ≥150-col split would engage for
+// any other step — the hub declines it, so no context pane may appear beside a
+// centered launcher.
+func TestGolden_HubWideTerminals(t *testing.T) {
+	for _, sz := range []struct{ w, h int }{{140, 40}, {180, 48}} {
+		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
+			forceHeroColor(t)
+			tui.SetTerminalWidth(sz.w)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+			m := newGoldenModel(t)
+			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
+			seedHubSaveSlot(m)
+
+			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
+			tuitest.Golden(t, fmt.Sprintf("hub-wide_%dx%d", sz.w, sz.h), frame)
+			tuitest.AssertFits(t, frame, sz.w, sz.h)
+
+			if got, want := heroBlockRows(frame), heroRows*heroScale; got != want {
+				t.Errorf("hero occupies %d rows at %dx%d, want the double-scale %d", got, sz.w, sz.h, want)
+			}
+			if strings.Contains(tuitest.StripANSI(frame), "STEPS") {
+				t.Errorf("the hub must suppress the wide split, got a context pane:\n%s", frame)
+			}
+		})
 	}
 }
 

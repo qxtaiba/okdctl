@@ -217,7 +217,7 @@ func (f *SelectField) arrowContent() string {
 	if value == "" {
 		value = tagStyle.Render("none")
 	}
-	return arrow.Render("◂") + " " + value + " " + arrow.Render("▸")
+	return arrow.Render(tui.IconCaretLeft) + " " + value + " " + arrow.Render(tui.IconCaretRight)
 }
 
 // booleanContent renders both options as a radio pair, lighting the

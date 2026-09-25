@@ -59,6 +59,14 @@ type ResizableStep interface {
 	SetSize(width, height int)
 }
 
+// TerminalSizer is implemented by steps that lay themselves out against the
+// terminal's own dimensions rather than the content box they render into — a
+// gate stated in terminal columns and rows cannot be re-derived from the
+// content width, which the frame's own caps flatten.
+type TerminalSizer interface {
+	SetTerminalSize(width, height int)
+}
+
 // AutoCompletingStep marks steps that complete without user interaction; they
 // are skipped when navigating back with ESC.
 type AutoCompletingStep interface {

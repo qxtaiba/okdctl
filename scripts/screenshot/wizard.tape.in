@@ -6,10 +6,10 @@
 # one. Keystroke sequences mirror docs/assets/demo.tape (the human-paced
 # README recording) with sleeps compressed for unattended batch rendering.
 #
-# The wait gates match the header's phase trail (connect/cluster/extras/
-# review), not the step title: steps/register.go's deployPhases groups the
-# 11 steps into those 4 phases, and the trail's inline dot ribbon tracks
-# each step's position within its phase's visible steps — a string unique
+# The wait gates from step 2 on match the header's phase trail (connect/
+# cluster/extras/review), not the step title: steps/register.go's deployPhases
+# groups the 11 steps into those 4 phases, and the trail's inline dot ribbon
+# tracks each step's position within its phase's visible steps — a string unique
 # per step that (unlike the title) is never clipped by the header's width
 # budget at 80 cols, verified by
 # internal/tui/wizard/steps/register_test.go's
@@ -32,9 +32,23 @@ Type "okdctl deploy"
 Sleep 450ms
 Enter
 
-# ==================== STEP 1: welcome ====================
-Wait+Screen@10s /connect ●○○ · cluster · extras · review/
+# ==================== STEP 1: the hero-hub ====================
+# The hub's own gate, not the phase trail: "cluster status" is a verb only the
+# five-verb menu carries, so the gate also proves run.sh's seeded okdctl.yaml
+# loaded. Had it not, the hub would show its two-verb blank slate and the Down
+# below would land on "quit" instead of "edit config".
+Wait+Screen@10s /cluster status/
+# The gate releases as soon as the matching text lands in the screen buffer,
+# which on this screen is mid-paint: the hero alone is five (or ten) rows of
+# block characters, and a Screenshot fired at the gate captures a half-drawn
+# frame. Every later step gates on text the wizard paints last, so only this
+# one needs to settle.
+Sleep 500ms
 Screenshot out/@NAME@-welcome.png
+# deploy is the first verb and deploys the saved configuration outright; the
+# walkthrough wants the configure flow, which is the second verb.
+Down
+Sleep 450ms
 Enter
 Sleep 450ms
 

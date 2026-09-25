@@ -51,8 +51,10 @@ func (m *Model) View() tea.View {
 
 	var content strings.Builder
 
-	content.WriteString(m.renderHeader())
-	content.WriteString("\n")
+	if header := m.renderHeader(); header != "" {
+		content.WriteString(header)
+		content.WriteString("\n")
+	}
 	content.WriteString(body)
 	content.WriteString("\n")
 	content.WriteString(m.statusRow())
@@ -98,8 +100,12 @@ func (m *Model) contentWidth() int {
 // alone isn't sufficient: below splitMinHeight's floor the pane's own STEPS
 // section wouldn't have room to render without truncating, so the frame
 // falls back to the capped single-column tier instead of splitting into
-// something unusably short.
+// something unusably short. A splitSuppressor step declines the split at any
+// size.
 func (m *Model) splitLayout() bool {
+	if s, ok := m.CurrentStep().(splitSuppressor); ok && s.SuppressesSplit() {
+		return false
+	}
 	return m.width >= wideSplitWidth && m.height >= splitMinHeight(m.countVisibleSteps())
 }
 
@@ -169,7 +175,7 @@ func (m *Model) statusRow() string {
 // the pane) by the same fixed-overhead height the viewport uses.
 func (m *Model) contentDimensions() (width, height int) {
 	width = m.bodyWidth()
-	height = m.height - fixedLayoutOverhead
+	height = m.height - m.layoutOverhead()
 	if height < 1 {
 		height = 1
 	}
@@ -181,7 +187,7 @@ func (m *Model) contentDimensions() (width, height int) {
 func (m *Model) viewportDimensions() (width, height int) {
 	contentWidth := m.bodyWidth()
 
-	viewportHeight := m.height - fixedLayoutOverhead
+	viewportHeight := m.height - m.layoutOverhead()
 	if viewportHeight < 1 {
 		viewportHeight = 1
 	}
@@ -258,6 +264,10 @@ func padContent(content string, width int) (padded string, rows []int) {
 // visible step) on row one, the step's display title and the progress
 // trail on row two.
 func (m *Model) renderHeader() string {
+	if m.headerRows() == 0 {
+		return ""
+	}
+
 	width := m.contentWidth()
 
 	brand := LogoStyle.Render("O K D C T L")
@@ -276,6 +286,22 @@ func (m *Model) renderHeader() string {
 	row2 := title + strings.Repeat(" ", gap) + right
 
 	return HeaderStyle.Width(width).Render(brand + "\n" + row2)
+}
+
+// headerRows is the number of rows renderHeader draws: none at all on a step
+// that renders the wordmark itself, the full three otherwise.
+func (m *Model) headerRows() int {
+	if h, ok := m.CurrentStep().(heroRenderer); ok && h.RendersHero() {
+		return 0
+	}
+	return headerHeight
+}
+
+// layoutOverhead is the frame's non-body row budget for the active step:
+// fixedLayoutOverhead, less whatever header rows a hero step drops, so the
+// reclaimed rows become viewport instead of blank frame.
+func (m *Model) layoutOverhead() int {
+	return fixedLayoutOverhead - (headerHeight - m.headerRows())
 }
 
 // renderTrail renders the header's right-hand progress indicator: the
@@ -438,7 +464,7 @@ func (m *Model) renderFooterRule() string {
 		badgeStyled = lipgloss.NewStyle().
 			Foreground(tui.ColorSuccess).
 			Bold(true).
-			Render(" ▸ " + contextBadge + " ")
+			Render(" " + tui.IconCaretRight + " " + contextBadge + " ")
 		badgeWidth = lipgloss.Width(badgeStyled)
 	}
 

@@ -36,6 +36,27 @@ echo "building demo binary..."
 export OKDCTL_DEMO_BIN="$WORK/okdctl"
 go build -o "$OKDCTL_DEMO_BIN" "$ROOT/cmd/okdctl"
 
+# The hero-hub shows its five-verb menu and save-slot line only when a saved
+# okdctl.yaml is present, so every render cwd gets this fixture (seed_cwd).
+# Checked up front: an unloadable fixture silently drops the hub back to its
+# two-verb blank slate, which the tapes' keystrokes would then walk into
+# "quit". `config validate` alone is not enough — a fixture whose body the
+# loader skips still validates, since compiled-in defaults are themselves
+# valid — so the check reads the loaded cluster name back.
+DEMO_CONFIG="$SCREENSHOT_DIR/demo-config.yaml"
+DEMO_CLUSTER=homelab
+if ! "$OKDCTL_DEMO_BIN" config validate --config "$DEMO_CONFIG" >/dev/null ||
+   ! "$OKDCTL_DEMO_BIN" config show --config "$DEMO_CONFIG" | grep -q "name: $DEMO_CLUSTER"; then
+  echo "scripts/screenshot/demo-config.yaml does not load as cluster '$DEMO_CLUSTER' — fix it before rendering" >&2
+  exit 1
+fi
+
+# seed_cwd creates a render cwd holding the demo configuration.
+seed_cwd() {
+  mkdir -p "$1"
+  cp "$DEMO_CONFIG" "$1/okdctl.yaml"
+}
+
 echo "starting fake proxmox api..."
 # Built to a binary (not `go run`) so $! below is the actual server's PID,
 # not a `go run` wrapper's — `go run` doesn't forward signals to the child
@@ -102,7 +123,7 @@ render_wizard() {
   local attempt
   for attempt in 1 2 3; do
     local cwd="$WORK/cwd-$name-$attempt"
-    mkdir -p "$cwd"
+    seed_cwd "$cwd"
     local tape="$WORK/wizard-$name.tape"
     render_tape "$SCREENSHOT_DIR/wizard.tape.in" "$name" "$w" "$h" "$tape"
 
@@ -168,7 +189,7 @@ render_distribution_fail() {
   local attempt
   for attempt in 1 2 3; do
     local cwd="$WORK/cwd-fail-$name-$attempt"
-    mkdir -p "$cwd"
+    seed_cwd "$cwd"
     local tape="$WORK/distribution-fail-$name.tape"
     render_tape "$SCREENSHOT_DIR/distribution-fail.tape.in" "$name" "$w" "$h" "$tape"
 

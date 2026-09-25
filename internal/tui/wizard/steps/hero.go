@@ -9,8 +9,18 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
-// heroMinWidth is the narrowest width renderHero draws the block-letter hero at.
-const heroMinWidth = 60
+// Hero sizing gates: heroMinWidth is the narrowest terminal renderHero draws
+// the block-letter wordmark at, and heroDoubleWidth by heroDoubleHeight is the
+// terminal it draws that wordmark at heroScale times glyph size on both axes.
+const (
+	heroMinWidth     = 60
+	heroDoubleWidth  = 120
+	heroDoubleHeight = 34
+	heroScale        = 2
+)
+
+// heroRows is the row count of every letter's bitmap in heroGlyphs.
+const heroRows = 5
 
 // heroGlyphs holds each OKDCTL letter's 5-row block-character bitmap, left
 // to right; repeated row strings (a straight stroke drawn the same way on
@@ -18,7 +28,7 @@ const heroMinWidth = 60
 // goconst is suppressed.
 //
 //nolint:goconst,nolintlint // block-character bitmap rows repeat by design
-var heroGlyphs = [6][5]string{
+var heroGlyphs = [6][heroRows]string{
 	{" ██████  ", "██    ██ ", "██    ██ ", "██    ██ ", " ██████  "}, // O
 	{"██   ██ ", "██  ██  ", "█████   ", "██  ██  ", "██   ██ "},      // K
 	{"██████  ", "██   ██ ", "██   ██ ", "██   ██ ", "██████  "},      // D
@@ -28,18 +38,47 @@ var heroGlyphs = [6][5]string{
 }
 
 // renderHero renders the OKDCTL block-letter hero gradient-colored across its
-// six letters, or the spaced LogoStyle wordmark below heroMinWidth or without color.
-func renderHero(width int, colorOK bool) string {
+// six letters — 5 rows by 50 cols normally, heroScale times that on both axes
+// once the terminal reaches heroDoubleWidth by heroDoubleHeight — or the
+// spaced LogoStyle wordmark below heroMinWidth or without color.
+func renderHero(width, height int, colorOK bool) string {
 	if width < heroMinWidth || !colorOK {
 		return wizard.LogoStyle.Render("O K D C T L")
 	}
-	rows := make([]string, 5)
-	for r := range 5 {
+
+	scale := 1
+	if width >= heroDoubleWidth && height >= heroDoubleHeight {
+		scale = heroScale
+	}
+
+	rows := make([]string, 0, heroRows*scale)
+	for r := range heroRows {
 		var b strings.Builder
 		for l := range heroGlyphs {
-			b.WriteString(lipgloss.NewStyle().Foreground(tui.LogoGradient[l]).Render(heroGlyphs[l][r]))
+			cells := stretchCells(heroGlyphs[l][r], scale)
+			b.WriteString(lipgloss.NewStyle().Foreground(tui.LogoGradient[l]).Render(cells))
 		}
-		rows[r] = b.String()
+		for range scale {
+			rows = append(rows, b.String())
+		}
 	}
 	return strings.Join(rows, "\n")
+}
+
+// stretchCells repeats every cell of one glyph bitmap row scale times — the
+// horizontal half of the double-scale hero, whose vertical half repeats the
+// row itself. Every bitmap rune is one column wide, so the row's rendered
+// width scales exactly.
+func stretchCells(row string, scale int) string {
+	if scale == 1 {
+		return row
+	}
+	var b strings.Builder
+	b.Grow(len(row) * scale)
+	for _, r := range row {
+		for range scale {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }

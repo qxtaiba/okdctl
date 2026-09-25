@@ -83,6 +83,20 @@ type centerable interface {
 	IsCentered() bool
 }
 
+// heroRenderer is implemented by steps that draw the product wordmark
+// themselves, so the frame drops its own header — brand row, tagline, progress
+// trail — entirely.
+type heroRenderer interface {
+	RendersHero() bool
+}
+
+// splitSuppressor is implemented by steps that own the frame's whole width
+// however wide the terminal is — a centered launcher, where the context pane
+// would be chrome describing work the screen isn't doing.
+type splitSuppressor interface {
+	SuppressesSplit() bool
+}
+
 // displayTitler is implemented by steps with a header prompt distinct from
 // their Title(); an empty DisplayTitle falls back to Title() instead.
 type displayTitler interface {
@@ -210,10 +224,7 @@ func NewFlowModel(steps []WizardStep, cfg *config.Config, chrome FlowChrome) *Mo
 	}
 
 	if len(steps) > 0 {
-		contentWidth, contentHeight := m.contentDimensions()
-		if r, ok := steps[0].(ResizableStep); ok {
-			r.SetSize(contentWidth, contentHeight)
-		}
+		m.sizeCurrentStep()
 		if f, ok := steps[0].(FocusableStep); ok {
 			f.SetFocused(true)
 		}

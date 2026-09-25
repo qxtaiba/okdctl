@@ -141,3 +141,53 @@ func TestStagesTrail_MultiStepStageWithOnlyOneVisibleRendersBareLabel(t *testing
 		t.Fatalf("trail = %q, want %q", stripped, "connect")
 	}
 }
+
+// heroNopStep renders the product wordmark itself, so the frame must drop its
+// own header rather than printing a second identity above it.
+type heroNopStep struct{ nopStep }
+
+func (s *heroNopStep) RendersHero() bool { return true }
+
+func TestHeroStepDropsBrandTaglineAndTrail(t *testing.T) {
+	const w, h = 100, 30
+	cfg := config.DefaultConfig()
+	chrome := FlowChrome{
+		Tagline: "okd over proxmox, the easy way",
+		Trail:   func(ProgressInfo) string { return "connect · cluster · extras · review" },
+	}
+
+	hero := &heroNopStep{*newNopStep()}
+	m := NewFlowModel([]WizardStep{hero, newNopStep()}, cfg, chrome)
+	plain := tuitest.StripANSI(tuitest.RenderAt(t, m, w, h))
+
+	for _, gone := range []string{"O K D C T L", chrome.Tagline, "connect · cluster", "nop"} {
+		if strings.Contains(plain, gone) {
+			t.Errorf("hero step must drop %q from the frame header:\n%s", gone, plain)
+		}
+	}
+	if got, want := m.viewport.Height(), h-fixedLayoutOverhead+headerHeight; got != want {
+		t.Errorf("viewport height = %d, want %d — the dropped header's rows belong to the body", got, want)
+	}
+	tuitest.AssertFits(t, tuitest.RenderAt(t, m, w, h), w, h)
+}
+
+func TestNonHeroStepKeepsTheFrameHeader(t *testing.T) {
+	const w, h = 100, 30
+	cfg := config.DefaultConfig()
+	chrome := FlowChrome{
+		Tagline: "okd over proxmox, the easy way",
+		Trail:   func(ProgressInfo) string { return "connect · cluster · extras · review" },
+	}
+
+	m := NewFlowModel([]WizardStep{newNopStep(), newNopStep()}, cfg, chrome)
+	plain := tuitest.StripANSI(tuitest.RenderAt(t, m, w, h))
+
+	for _, want := range []string{"O K D C T L", chrome.Tagline, "connect · cluster"} {
+		if !strings.Contains(plain, want) {
+			t.Errorf("a step that renders no hero must keep %q:\n%s", want, plain)
+		}
+	}
+	if got, want := m.viewport.Height(), h-fixedLayoutOverhead; got != want {
+		t.Errorf("viewport height = %d, want the full-header %d", got, want)
+	}
+}

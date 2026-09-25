@@ -2,7 +2,6 @@ package steps
 
 import (
 	"fmt"
-	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -13,114 +12,143 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
 )
 
-// WelcomeMode selects the welcome-step flow chosen by the user.
-type WelcomeMode int
+// HubVerb names one entry of the hub's menu — the single action the operator
+// picked on the welcome screen.
+type HubVerb int
 
-// Welcome mode values, index-aligned with welcomeOptions.
+// The hub's verbs: the first five are the menu shown over an existing
+// configuration, the last two the blank-slate menu.
 const (
-	WelcomeModeDeploy WelcomeMode = iota
-	WelcomeModeEdit
-	WelcomeModeFresh
+	HubVerbDeploy HubVerb = iota
+	HubVerbEditConfig
+	HubVerbManageNodes
+	HubVerbClusterStatus
+	HubVerbDestroy
+	HubVerbGetStarted
+	HubVerbQuit
 )
 
-var welcomeOptions = []struct {
-	title string
-	desc  string
-}{
-	{"deploy now", "deploy using current okdctl.yaml"},
-	{"edit existing", "modify your current settings"},
-	{"start fresh", "create a new configuration"},
-}
+// SaveSlotState is how far the loaded configuration has got, as far as the hub
+// can honestly tell from local files alone.
+type SaveSlotState string
 
-// welcomeNeedItems lists the "you'll need" checklist rendered beside the hero.
-var welcomeNeedItems = []string{
-	"a proxmox host",
-	"proxmox credentials",
-	"an okd pull secret",
-}
-
-// welcomeTakesItems lists the "it takes" timing estimates rendered beside the hero.
-var welcomeTakesItems = []string{
-	"≈ 10 min to configure",
-	"≈ 45 min to deploy",
-}
-
-var (
-	welcomeTaglineStyle     = lipgloss.NewStyle().Foreground(tui.ColorSlate400).Italic(true)
-	welcomeColumnTitleStyle = tui.TextStyle.Bold(true)
+// SaveSlotState values, ordered by how much of a cluster each implies exists.
+const (
+	SaveSlotConfigured SaveSlotState = "configured"
+	SaveSlotDeploying  SaveSlotState = "deploying"
+	SaveSlotDeployed   SaveSlotState = "deployed"
 )
 
-// WelcomeStep is the wizard's entry screen, offering deploy/edit/fresh options
-// when a config already exists.
+// hubEntry pairs a menu label with the verb it selects.
+type hubEntry struct {
+	verb  HubVerb
+	label string
+}
+
+// hubVerbs is the menu shown when an okdctl.yaml exists: five verbs, in the
+// order the operator is most likely to want them.
+var hubVerbs = []hubEntry{
+	{HubVerbDeploy, "deploy"},
+	{HubVerbEditConfig, "edit config"},
+	{HubVerbManageNodes, "manage nodes"},
+	{HubVerbClusterStatus, "cluster status"},
+	{HubVerbDestroy, "destroy"},
+}
+
+// hubFreshVerbs is the blank-slate menu: there is nothing to deploy, manage,
+// inspect or destroy yet.
+var hubFreshVerbs = []hubEntry{
+	{HubVerbGetStarted, "get started"},
+	{HubVerbQuit, "quit"},
+}
+
+// WelcomeStep is the hero-hub: okdctl's single entry screen, pairing the
+// block-letter wordmark with the verb menu every flow is reached from.
 type WelcomeStep struct {
 	wizard.BaseStep
 	configExists bool
-	foundLine    string
+	saveSlot     string
+	entries      []hubEntry
 	nav          *components.CompactSelector
+
+	// termWidth and termHeight are the terminal's own dimensions, not the
+	// content box View renders into — the hero's double-scale gate is stated
+	// in terminal columns and rows.
+	termWidth  int
+	termHeight int
 }
 
-// NewWelcomeStep constructs the welcome wizard step.
+// NewWelcomeStep constructs the hub step on its blank-slate menu.
 func NewWelcomeStep() *WelcomeStep {
-	return &WelcomeStep{
-		BaseStep: wizard.NewBaseStep(
-			wizard.StepIDWelcome,
-			"welcome",
-			"",
-		),
-		nav: newWelcomeSelect(false),
+	s := &WelcomeStep{
+		BaseStep: wizard.NewBaseStep(wizard.StepIDWelcome, "welcome", ""),
 	}
+	s.setEntries(hubFreshVerbs)
+	return s
 }
 
-// newWelcomeSelect builds a clamped (non-wrapping) selector over
-// deploy/edit/fresh, or a single "get started" entry.
-func newWelcomeSelect(configExists bool) *components.CompactSelector {
-	options := []string{"get started"}
-	if configExists {
-		options = make([]string, len(welcomeOptions))
-		for i, opt := range welcomeOptions {
-			options[i] = opt.title
-		}
+// setEntries rebuilds the menu over entries, clamped so up/down never wraps
+// past either end of a launcher's short list.
+func (s *WelcomeStep) setEntries(entries []hubEntry) {
+	s.entries = entries
+	labels := make([]string, len(entries))
+	for i, e := range entries {
+		labels[i] = e.label
 	}
-	selector := components.NewCompactSelector(options)
-	selector.SetWrap(false)
-	return selector
+	s.nav = components.NewCompactSelector(labels)
+	s.nav.SetWrap(false)
 }
 
-// SetConfigExists tells the step whether okdctl.yaml exists, switching between
-// the deploy/edit/fresh and blank onboarding branches.
+// SetConfigExists tells the hub whether okdctl.yaml exists, switching between
+// the five-verb and blank-slate menus.
 func (s *WelcomeStep) SetConfigExists(exists bool) {
 	s.configExists = exists
 	if exists {
-		s.nav = newWelcomeSelect(true)
+		s.setEntries(hubVerbs)
+		return
 	}
+	// The blank slate has no slot to describe; a line left over from an
+	// earlier SetExistingConfig would name a configuration that is gone.
+	s.saveSlot = ""
+	s.setEntries(hubFreshVerbs)
 }
 
-// SetExistingConfig marks an existing okdctl.yaml as present and derives the
-// found line's cluster name and node counts from cfg.
-func (s *WelcomeStep) SetExistingConfig(cfg *config.Config) {
+// SetExistingConfig switches the hub to its five-verb menu and derives the dim
+// save-slot line from cfg and the state the caller could honestly determine.
+func (s *WelcomeStep) SetExistingConfig(cfg *config.Config, state SaveSlotState) {
 	s.SetConfigExists(true)
 	if cfg == nil {
 		return
 	}
-	s.foundLine = fmt.Sprintf("found okdctl.yaml · cluster %s · %d + %d nodes",
-		cfg.Cluster.Name, cfg.Topology.ControlPlane.Count, cfg.Topology.Workers.Count)
+	nodes := cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count
+	s.saveSlot = fmt.Sprintf("%s · okd %s · %s · %s",
+		cfg.Cluster.Name, cfg.Distribution.Version, pluralNodes(nodes), state)
 }
 
-// GetMode returns the currently-selected welcome mode.
-func (s *WelcomeStep) GetMode() WelcomeMode {
-	if !s.configExists {
-		return WelcomeModeFresh
+// pluralNodes renders a node count with its noun agreeing.
+func pluralNodes(n int) string {
+	if n == 1 {
+		return "1 node"
 	}
-	return WelcomeMode(s.nav.SelectedIndex())
+	return fmt.Sprintf("%d nodes", n)
 }
 
-// Init returns nil; the step has no async startup work.
+// SelectedVerb returns the verb the operator has highlighted.
+func (s *WelcomeStep) SelectedVerb() HubVerb {
+	i := s.nav.SelectedIndex()
+	if i < 0 || i >= len(s.entries) {
+		return HubVerbQuit
+	}
+	return s.entries[i].verb
+}
+
+// Init returns nil; the hub has no async startup work.
 func (s *WelcomeStep) Init() tea.Cmd {
 	return nil
 }
 
-// Update handles left/right/up/down navigation (arrows remapped onto the
-// selector's vertical bindings) and enter/space to advance.
+// Update moves the pointer down the verb menu (arrows remapped onto the
+// selector's vertical bindings) and confirms on enter or space.
 func (s *WelcomeStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	keyMsg, ok := msg.(tea.KeyPressMsg)
 	if !ok {
@@ -133,94 +161,74 @@ func (s *WelcomeStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	return s, nil
 }
 
-// IsCentered returns true so the welcome screen is rendered centered.
+// IsCentered returns true so the launcher sits in the middle of the frame.
 func (s *WelcomeStep) IsCentered() bool {
 	return true
 }
 
-// View renders the block-letter hero, the you'll-need/it-takes checklist
-// columns, an optional found-config line, and the horizontal mode radio.
+// RendersHero returns true so the frame drops its own header: the block-letter
+// wordmark below is the screen's identity, and the configure flow's phase trail
+// would describe a walkthrough four of the five verbs never enter.
+func (s *WelcomeStep) RendersHero() bool {
+	return true
+}
+
+// SuppressesSplit returns true so a wide terminal never puts a context pane
+// beside the hub: a centered launcher owns its whole width, and the pane is a
+// work-screen device with no work to describe here.
+func (s *WelcomeStep) SuppressesSplit() bool {
+	return true
+}
+
+// SetTerminalSize records the terminal's own dimensions, which gate the hero's
+// double-scale rendering.
+func (s *WelcomeStep) SetTerminalSize(width, height int) {
+	s.termWidth, s.termHeight = width, height
+}
+
+// View renders the hero, the dim save-slot line when a configuration exists,
+// and the verb menu — no tagline, no checklist columns, no per-verb copy.
 func (s *WelcomeStep) View(width, height int) string {
 	s.SetSize(width, height)
 
-	hero := renderHero(width, tui.ColorEnabled())
-	tagline := welcomeTaglineStyle.Render("answer a few questions, then deploy")
-	columns := lipgloss.JoinHorizontal(lipgloss.Top, s.renderNeedList(), "    ", s.renderTakesList())
-
-	parts := []string{hero, tagline, columns, ""}
-	if s.foundLine != "" {
-		parts = append(parts, tui.MutedStyle.Render(s.foundLine))
+	parts := []string{renderHero(s.termWidth, s.termHeight, tui.ColorEnabled()), ""}
+	if s.saveSlot != "" {
+		parts = append(parts, tui.MutedStyle.Render(s.saveSlot), "")
 	}
-	parts = append(parts, s.nav.ViewInline(), tui.MutedStyle.Render(s.selectedDesc()))
+	parts = append(parts, s.nav.ViewPointer())
 
 	return lipgloss.JoinVertical(lipgloss.Center, parts...)
 }
 
-// renderNeedList renders the "you'll need" checklist column.
-func (s *WelcomeStep) renderNeedList() string {
-	lines := make([]string, 0, len(welcomeNeedItems)+1)
-	lines = append(lines, welcomeColumnTitleStyle.Render("you'll need"))
-	for _, item := range welcomeNeedItems {
-		lines = append(lines, tui.SuccessStyle.Render(tui.IconSuccess)+" "+tui.TextStyle.Render(item))
-	}
-	return strings.Join(lines, "\n")
-}
-
-// renderTakesList renders the "it takes" timing-estimate column.
-func (s *WelcomeStep) renderTakesList() string {
-	lines := make([]string, 0, len(welcomeTakesItems)+1)
-	lines = append(lines, welcomeColumnTitleStyle.Render("it takes"))
-	for _, item := range welcomeTakesItems {
-		lines = append(lines, tui.TextStyle.Render(item))
-	}
-	return strings.Join(lines, "\n")
-}
-
-// selectedDesc returns the description shown dim beneath the radio for the currently-selected option.
-func (s *WelcomeStep) selectedDesc() string {
-	if !s.configExists {
-		return "create your first configuration"
-	}
-	return welcomeOptions[s.nav.SelectedIndex()].desc
-}
-
-// Validate always returns nil; the welcome step has no inputs to validate.
+// Validate always returns nil; the hub has no inputs to validate.
 func (s *WelcomeStep) Validate() error {
 	return nil
 }
 
-// Apply resets cfg to package defaults when the user picked WelcomeModeFresh
-// over an existing configuration.
-func (s *WelcomeStep) Apply(cfg *config.Config) error {
-	if s.GetMode() == WelcomeModeFresh && s.configExists {
-		freshCfg := config.DefaultConfig()
-		*cfg = *freshCfg
-	}
-	return nil
-}
-
-// ShortHelp returns the help bar shown on the welcome screen.
+// ShortHelp returns the hub's help bar.
 func (s *WelcomeStep) ShortHelp() []wizard.KeyBinding {
-	var bindings []wizard.KeyBinding
-	if s.configExists {
-		bindings = append(bindings, wizard.KeyBinding{Key: "←/→", Help: "choose"})
+	return []wizard.KeyBinding{
+		{Key: "↑↓", Help: "choose"},
+		{Key: wizard.HelpEnter, Help: "go"},
+		{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
 	}
-	bindings = append(bindings,
-		wizard.KeyBinding{Key: wizard.HelpEnter, Help: "start"},
-		wizard.KeyBinding{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
-	)
-	return bindings
 }
 
-// GetSelectedAction maps the chosen welcome mode to a wizard.Action.
+// GetSelectedAction maps the highlighted verb to the wizard's terminal action.
 func (s *WelcomeStep) GetSelectedAction() wizard.Action {
-	if s.GetMode() == WelcomeModeDeploy {
+	if s.SelectedVerb() == HubVerbDeploy {
 		return wizard.ActionDeploy
 	}
 	return wizard.ActionExit
 }
 
-// ShouldExitEarly reports whether the user chose deploy-now, skipping the rest of the wizard.
+// ShouldExitEarly reports whether the highlighted verb is handled outside the
+// configure flow, so confirming it leaves the wizard rather than advancing.
 func (s *WelcomeStep) ShouldExitEarly() bool {
-	return s.GetMode() == WelcomeModeDeploy
+	switch s.SelectedVerb() {
+	case HubVerbEditConfig, HubVerbGetStarted:
+		return false
+	default:
+		return true
+	}
 }

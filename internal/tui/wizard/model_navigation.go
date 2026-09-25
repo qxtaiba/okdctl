@@ -10,24 +10,44 @@ func (m *Model) handleResize(msg tea.WindowSizeMsg) {
 	m.width = msg.Width
 	m.height = msg.Height
 
-	viewportWidth, viewportHeight := m.viewportDimensions()
-
-	if !m.ready {
-		m.viewport = viewport.New(viewport.WithWidth(viewportWidth), viewport.WithHeight(viewportHeight))
-		m.ready = true
-	} else {
-		m.viewport.SetWidth(viewportWidth)
-		m.viewport.SetHeight(viewportHeight)
-	}
-
-	if len(m.steps) > 0 && m.currentStep < len(m.steps) {
-		contentWidth, contentHeight := m.contentDimensions()
-		if r, ok := m.steps[m.currentStep].(ResizableStep); ok {
-			r.SetSize(contentWidth, contentHeight)
-		}
-	}
+	m.sizeCurrentStep()
+	m.resizeViewport()
 	m.syncViewportContent()
 	m.notifyIfAtBottom()
+}
+
+// sizeCurrentStep hands the active step the terminal's own dimensions and then
+// the content box it renders into: a TerminalSizer's layout decision is stated
+// in terminal columns and rows, which the frame's width caps flatten out of the
+// content box.
+func (m *Model) sizeCurrentStep() {
+	if len(m.steps) == 0 || m.currentStep < 0 || m.currentStep >= len(m.steps) {
+		return
+	}
+	step := m.steps[m.currentStep]
+	if ts, ok := step.(TerminalSizer); ok {
+		ts.SetTerminalSize(m.width, m.height)
+	}
+	contentWidth, contentHeight := m.contentDimensions()
+	if r, ok := step.(ResizableStep); ok {
+		r.SetSize(contentWidth, contentHeight)
+	}
+}
+
+// resizeViewport re-fits the scrollable viewport to the active step's body
+// width and the frame's fixed height budget, constructing it on first call.
+// Called on every step transition as well as every terminal resize: a
+// splitSuppressor step changes the body width without the terminal changing at
+// all.
+func (m *Model) resizeViewport() {
+	width, height := m.viewportDimensions()
+	if !m.ready {
+		m.viewport = viewport.New(viewport.WithWidth(width), viewport.WithHeight(height))
+		m.ready = true
+		return
+	}
+	m.viewport.SetWidth(width)
+	m.viewport.SetHeight(height)
 }
 
 func (m *Model) handleScrollKey(msg tea.KeyPressMsg) bool {
@@ -260,10 +280,7 @@ func (m *Model) indexOfStepByID(id StepID) int {
 func (m *Model) focusStep(idx int) (tea.Model, tea.Cmd) {
 	m.currentStep = idx
 
-	contentWidth, contentHeight := m.contentDimensions()
-	if r, ok := m.steps[idx].(ResizableStep); ok {
-		r.SetSize(contentWidth, contentHeight)
-	}
+	m.sizeCurrentStep()
 	if f, ok := m.steps[idx].(FocusableStep); ok {
 		f.SetFocused(true)
 	}
@@ -271,6 +288,7 @@ func (m *Model) focusStep(idx int) (tea.Model, tea.Cmd) {
 	m.syncJumpTargets()
 
 	if m.ready {
+		m.resizeViewport()
 		m.viewport.GotoTop()
 		m.syncViewportContent()
 		m.notifyIfAtBottom()

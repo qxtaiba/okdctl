@@ -21,7 +21,11 @@ Type "okdctl deploy"
 Sleep 450ms
 Enter
 
-Wait+Screen@10s /connect ●○○ · cluster · extras · review/
+# The hero-hub: Down moves off "deploy" (which would deploy the seeded
+# configuration outright) onto "edit config", which walks the configure flow.
+Wait+Screen@10s /cluster status/
+Down
+Sleep 450ms
 Enter
 Sleep 450ms
 
