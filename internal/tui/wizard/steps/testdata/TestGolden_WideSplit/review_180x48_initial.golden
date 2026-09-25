@@ -3,7 +3,7 @@
   │ O K D C T L                                                                                                                                                                  │  
   │ review your configuration                                                                                                                connect · cluster · extras · review │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
-  │  [1] cluster identity                                                                                  │STEPS                                                                │  
+  │  [1] cluster identity                                                                                  │PROGRESS                                                             │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │✓ welcome                                                            │  
   │  name          mycluster                                                                               │✓ okd version                                                        │  
   │  domain        k8s.local                                                                               │✓ proxmox configuration                                              │  

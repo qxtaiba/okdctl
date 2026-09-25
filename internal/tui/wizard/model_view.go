@@ -87,7 +87,7 @@ func (m *Model) contentWidth() int {
 
 // splitLayout reports whether the terminal is both wide enough and tall
 // enough to split the frame into a form column and a context pane — width
-// alone isn't sufficient: below splitMinHeight's floor the pane's own STEPS
+// alone isn't sufficient: below splitMinHeight's floor the pane's own PROGRESS
 // section wouldn't have room to render without truncating, so the frame
 // falls back to the capped single-column tier instead of splitting into
 // something unusably short. A splitSuppressor step declines the split at any

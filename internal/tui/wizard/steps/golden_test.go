@@ -301,7 +301,7 @@ func TestGolden_HubReachesClusterStatus(t *testing.T) {
 			if !strings.Contains(plain, "esc hub") {
 				t.Errorf("the status screen must advertise the esc round-trip:\n%s", plain)
 			}
-			if strings.Contains(plain, "STEPS") {
+			if strings.Contains(plain, "PROGRESS") {
 				t.Errorf("the status screen must suppress the wide split:\n%s", plain)
 			}
 
@@ -438,7 +438,7 @@ func TestModel_HeightGateAtReproSizes(t *testing.T) {
 			if got := strings.Count(plain, "\n") + 1; got != c.h {
 				t.Errorf("%dx%d: frame = %d rows, want exactly %d", w, c.h, got, c.h)
 			}
-			if hasSplit := strings.Contains(plain, "STEPS"); hasSplit != c.wantSplit {
+			if hasSplit := strings.Contains(plain, "PROGRESS"); hasSplit != c.wantSplit {
 				t.Errorf("%dx%d: split active = %v, want %v", w, c.h, hasSplit, c.wantSplit)
 			}
 		})
@@ -465,7 +465,7 @@ func TestGolden_WideSplitSqueezed(t *testing.T) {
 	tuitest.AssertFits(t, frame, w, h)
 
 	plain := tuitest.StripANSI(frame)
-	if !strings.Contains(plain, "STEPS") {
+	if !strings.Contains(plain, "PROGRESS") {
 		t.Fatal("squeezed pane must still show STEPS")
 	}
 	if strings.Contains(plain, "SO FAR") || strings.Contains(plain, "FOCUSED FIELD") {

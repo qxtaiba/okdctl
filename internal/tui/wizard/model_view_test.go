@@ -94,7 +94,7 @@ func TestSplitMinHeight_Derivation(t *testing.T) {
 // derives for an 11-step wizard (floor 22, per TestSplitMinHeight_Derivation):
 // one row short of it, the layout must not split no matter how wide the
 // terminal is — a wide-enough-but-short terminal falls back to the capped
-// single-column tier rather than a pane with no room for its own STEPS list.
+// single-column tier rather than a pane with no room for its own PROGRESS list.
 func TestModel_SplitLayoutGatedByHeight(t *testing.T) {
 	steps := make([]WizardStep, 11)
 	for i := range steps {

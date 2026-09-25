@@ -3,7 +3,7 @@
   │ O K D C T L                                                                                                                                                                  │  
   │ configure proxmox ve connection                                                                                                      connect ●●● · cluster · extras · review │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
-  │                                                                                                        │STEPS                                                                │  
+  │                                                                                                        │PROGRESS                                                             │  
   │    ● connection                                                                                        │✓ welcome                                                            │  
   │                                                                                                        │✓ okd version                                                        │  
   │    host                                                                                                │● proxmox configuration                                              │  
@@ -16,7 +16,7 @@
   │                                                                                                        │○ advanced settings                                                  │  
   │    username                                                                                            │○ review & deploy                                                    │  
   │    ╭──────────────────────────────────────╮                                                            │                                                                     │  
-  │    │ root@pam                             │ default                                                    │SO FAR                                                               │  
+  │    │ root@pam                             │ default                                                    │CONFIGURED                                                           │  
   │    ╰──────────────────────────────────────╯                                                            │host: 192.168.1.100:8006                                             │  
   │                                                                                                        │username: root@pam                                                   │  
   │    password                                                                                            │                                                                     │  

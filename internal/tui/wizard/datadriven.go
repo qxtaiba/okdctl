@@ -115,7 +115,7 @@ type StepDefinition struct {
 	ExtraContentTitle string // info card title used when ExtraContent renders non-empty content
 
 	// Answered, when set, summarizes the step's current values as facts for
-	// the wide-terminal context pane's SO FAR section; a definition that
+	// the wide-terminal context pane's CONFIGURED section; a definition that
 	// leaves it nil contributes nothing there.
 	Answered func(values map[string]string) []render.Fact
 }

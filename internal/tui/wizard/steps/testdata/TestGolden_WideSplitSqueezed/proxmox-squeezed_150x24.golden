@@ -3,7 +3,7 @@
   │ O K D C T L                                                                                                                                    │  
   │ configure proxmox ve connection                                                                        connect ●●● · cluster · extras · review │  
   │────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
-  │                                                                                                        │STEPS                                  │  
+  │                                                                                                        │PROGRESS                               │  
   │    ✓ connection                                                                                        │✓ welcome                              │  
   │                                                                                                        │✓ okd version                          │  
   │    host                                                                                                │● proxmox configuration                │  

@@ -10,8 +10,8 @@ import (
 )
 
 // answeredStep is implemented by steps that can summarize their current
-// values as facts for the context pane's SO FAR section; a step without one
-// contributes nothing there.
+// values as facts for the context pane's CONFIGURED section; a step without
+// one contributes nothing there.
 type answeredStep interface {
 	Answered() []render.Fact
 }
@@ -28,11 +28,12 @@ type focusedFieldStep interface {
 // it may itself truncate under an extreme height budget), then the current
 // step's answered facts, then the focused field's help text — a strict
 // priority cascade, not three independent fit checks: FOCUSED FIELD may
-// render only if SO FAR either rendered or was absent by interface, never
-// after SO FAR was dropped for space, the same essentials-last-dropped
-// order the footer's help ribbon uses. Every section is styled dim so the
-// pane stays visually subordinate to the form and never competes with it
-// for attention.
+// render only if CONFIGURED either rendered or was absent by interface,
+// never after CONFIGURED was dropped for space, the same
+// essentials-last-dropped order the footer's help ribbon uses. The pane
+// stays subordinate to the form — most rows are muted — but carries real
+// hierarchy: green checks on passed steps, one bright current row, section
+// headers in the house label style.
 func (m *Model) renderContextPane(width, height int) string {
 	p := m.progressInfo()
 	lines := paneStepsLines(p.Titles, p.Current-1, width, height)
@@ -68,8 +69,8 @@ func (m *Model) renderContextPane(width, height int) string {
 	return strings.Join(lines, "\n")
 }
 
-// paneStepsLines renders the STEPS section — a header row plus one row per
-// visible step, prefixed with tui.IconSuccess/IconActive/IconPending for
+// paneStepsLines renders the PROGRESS section — a header row plus one row
+// per visible step, prefixed with tui.IconSuccess/IconActive/IconPending for
 // steps already passed, the current one, and the ones still ahead (the same
 // three-tier status the header's own progress trail uses) — never exceeding
 // maxHeight rows, and keeping the current step's row over any other once
@@ -79,14 +80,15 @@ func (m *Model) renderContextPane(width, height int) string {
 // to the bare header at maxHeight 1-2) is an unreachable defensive floor,
 // since that gate guarantees maxHeight is at least 1+stepCount.
 func paneStepsLines(titles []string, current, width, maxHeight int) []string {
-	header := paneSectionHeader("steps")
+	header := paneSectionHeader("progress")
 	if maxHeight <= 0 {
 		return nil
 	}
 
 	rows := make([]string, len(titles))
 	for i, title := range titles {
-		rows[i] = paneStepStyle(i, current).Render(paneStepIcon(i, current) + " " + truncateTitle(title, width-2))
+		glyph, label := paneStepStyles(i, current)
+		rows[i] = glyph.Render(paneStepIcon(i, current)) + " " + label.Render(truncateTitle(title, width-2))
 	}
 
 	if 1+len(rows) <= maxHeight {
@@ -152,17 +154,22 @@ func paneStepIcon(i, current int) string {
 	}
 }
 
-// paneStepStyle returns the dim style for step i relative to current: a
-// lighter tier for the current step, darker tiers for past and future ones,
-// all within the pane's muted palette.
-func paneStepStyle(i, current int) lipgloss.Style {
+// paneStepStyles returns the glyph and label styles for step i relative to
+// current: a passed step's glyph is the real success green over a muted
+// label, the current step renders bright with its glyph in the active
+// accent, and pending steps stay dim throughout — so the list carries the
+// same status hierarchy the form does without competing with it.
+func paneStepStyles(i, current int) (glyph, label lipgloss.Style) {
 	switch {
 	case i < current:
-		return lipgloss.NewStyle().Foreground(tui.ColorSlate500)
+		return lipgloss.NewStyle().Foreground(tui.ColorSuccess),
+			lipgloss.NewStyle().Foreground(tui.ColorSlate500)
 	case i == current:
-		return lipgloss.NewStyle().Foreground(tui.ColorSlate300)
+		return lipgloss.NewStyle().Foreground(tui.ColorPrimary),
+			lipgloss.NewStyle().Foreground(tui.ColorText)
 	default:
-		return lipgloss.NewStyle().Foreground(tui.ColorSlate600)
+		return lipgloss.NewStyle().Foreground(tui.ColorSlate600),
+			lipgloss.NewStyle().Foreground(tui.ColorSlate600)
 	}
 }
 
@@ -179,18 +186,43 @@ func (m *Model) currentStepAnswered() []render.Fact {
 	return ar.Answered()
 }
 
-// paneFactsLines renders the SO FAR section's lines — a header row plus one
-// "key: value" row per fact, wrapped to width — without padding them to any
-// particular height; the caller decides whether they fit.
+// paneFactsLines renders the CONFIGURED section's lines — a header row plus
+// one "key: value" row per fact, wrapped to width — without padding them to
+// any particular height; the caller decides whether they fit.
 func paneFactsLines(width int, facts []render.Fact) []string {
 	lines := make([]string, 0, len(facts)+1)
-	lines = append(lines, paneSectionHeader("so far"))
+	lines = append(lines, paneSectionHeader("configured"))
 	for _, f := range facts {
-		wrapped := lipgloss.Wrap(f.Key+": "+f.Value, width, "")
-		styled := lipgloss.NewStyle().Foreground(tui.ColorSlate400).Render(wrapped)
-		lines = append(lines, strings.Split(styled, "\n")...)
+		lines = append(lines, paneFactLines(width, f)...)
 	}
 	return lines
+}
+
+// paneFactLines renders one fact as wrapped rows with the key dim and the
+// value in normal body text. The raw "key: value" line is wrapped first and
+// styled after (styling before wrapping would split ANSI sequences), so the
+// key/value seam is re-found by rune count on each wrapped row.
+func paneFactLines(width int, f render.Fact) []string {
+	keyStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
+	valueStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate300)
+
+	keyLen := len([]rune(f.Key + ":"))
+	consumed := 0
+	var out []string
+	for line := range strings.SplitSeq(lipgloss.Wrap(f.Key+": "+f.Value, width, ""), "\n") {
+		runes := []rune(line)
+		switch {
+		case consumed >= keyLen:
+			out = append(out, valueStyle.Render(line))
+		case len(runes) <= keyLen-consumed:
+			out = append(out, keyStyle.Render(line))
+		default:
+			seam := keyLen - consumed
+			out = append(out, keyStyle.Render(string(runes[:seam]))+valueStyle.Render(string(runes[seam:])))
+		}
+		consumed += len(runes)
+	}
+	return out
 }
 
 // currentStepFocusedFieldHelp returns the active step's focused field's
@@ -208,9 +240,9 @@ func (m *Model) currentStepFocusedFieldHelp() (label, help string, ok bool) {
 }
 
 // paneFocusedFieldLines renders the FOCUSED FIELD section's lines — a header
-// row, the field's label, then its help text, both wrapped to width —
-// without padding them to any particular height; the caller decides whether
-// they fit.
+// row, the field's label in normal body text, then its help text in dim
+// italic, both wrapped to width — without padding them to any particular
+// height; the caller decides whether they fit.
 func paneFocusedFieldLines(width int, label, help string) []string {
 	labelLine := lipgloss.NewStyle().Foreground(tui.ColorSlate300).Render(lipgloss.Wrap(label, width, ""))
 	helpLine := lipgloss.NewStyle().Foreground(tui.ColorSlate500).Italic(true).Render(lipgloss.Wrap(help, width, ""))
@@ -221,7 +253,10 @@ func paneFocusedFieldLines(width int, label, help string) []string {
 	return lines
 }
 
-// paneSectionHeader renders a dim, uppercased section label for the context pane.
+// paneSectionHeader renders an uppercased section label in the house
+// subsection style — the same cyan bold SectionStyles.Header gives the
+// review screen's section titles — so the pane's sections read as proper
+// labels rather than more dim body text.
 func paneSectionHeader(title string) string {
-	return lipgloss.NewStyle().Foreground(tui.ColorSlate500).Render(strings.ToUpper(title))
+	return lipgloss.NewStyle().Foreground(tui.ColorCyan500).Bold(true).Render(strings.ToUpper(title))
 }

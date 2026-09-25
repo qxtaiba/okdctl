@@ -37,7 +37,7 @@ func TestPaneRenderer_ReplacesTheContextPane(t *testing.T) {
 	if !strings.Contains(frame, "deploy step started") {
 		t.Fatalf("the step's pane content must render:\n%s", frame)
 	}
-	if strings.Contains(frame, "STEPS") {
+	if strings.Contains(frame, "PROGRESS") {
 		t.Errorf("a step that fills the pane must replace the context pane's step list:\n%s", frame)
 	}
 	if want := 180 - outerHorizontalPadding - wizardBorderHorizontal - formMaxWidth - paneRuleWidth; s.lastWidth != want {
@@ -54,7 +54,7 @@ func TestPaneRenderer_EmptyContentFallsBackToTheContextPane(t *testing.T) {
 	m := NewFlowModel([]WizardStep{newPaneOwnerStep("")}, config.DefaultConfig(), DefaultChrome())
 
 	frame := tuitest.StripANSI(tuitest.RenderAt(t, m, 180, 48))
-	if !strings.Contains(frame, "STEPS") {
+	if !strings.Contains(frame, "PROGRESS") {
 		t.Errorf("empty pane content must fall back to the context pane:\n%s", frame)
 	}
 }

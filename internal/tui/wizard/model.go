@@ -54,19 +54,19 @@ const (
 	// ceiling — it absorbs everything the form column's cap leaves over.
 	paneMinWidth = 28
 
-	// paneStepsHeaderRows is the STEPS section's own header row, counted
+	// paneStepsHeaderRows is the PROGRESS section's own header row, counted
 	// separately from its one-row-per-step body in splitMinHeight.
 	paneStepsHeaderRows = 1
 )
 
 // splitMinHeight is the terminal height at and above which a stepCount-step
-// wizard's context pane has room for its STEPS section — the header plus one
+// wizard's context pane has room for its PROGRESS section — the header plus one
 // row per step — without truncating it: fixedLayoutOverhead's fixed chrome
 // rows, plus the header, plus stepCount. Below it, splitLayout falls back to
 // the capped single-column tier rather than splitting into an unusably
-// short pane; at or above it, renderContextPane may still drop SO FAR and
+// short pane; at or above it, renderContextPane may still drop CONFIGURED and
 // FOCUSED FIELD (and, defensively, truncate the step list itself) if their
-// content doesn't fit — the STEPS section's own minimum is the one thing
+// content doesn't fit — the PROGRESS section's own minimum is the one thing
 // this floor guarantees room for.
 func splitMinHeight(stepCount int) int {
 	return fixedLayoutOverhead + paneStepsHeaderRows + stepCount
