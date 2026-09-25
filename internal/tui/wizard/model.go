@@ -36,11 +36,12 @@ const (
 	// stays a single column.
 	wideSplitWidth = 150
 
-	// maxFrameWidth caps the bordered frame's outer width (terminal minus
-	// outerHorizontalPadding) below wideSplitWidth, so a wide-but-unsplit
-	// terminal doesn't stretch the form past a comfortable measure — at and
-	// above wideSplitWidth the surplus becomes the context pane instead.
-	maxFrameWidth = 112
+	// singleFormMaxWidth caps the single-column tier's form measure — the
+	// frame itself always spans the terminal, so a wide-but-unsplit terminal
+	// keeps a readable column inside the full-width frame rather than
+	// stretching the form; at and above wideSplitWidth the surplus becomes
+	// the context pane instead.
+	singleFormMaxWidth = 110
 
 	// formMaxWidth caps the split layout's form column measure.
 	formMaxWidth = 104
@@ -49,9 +50,9 @@ const (
 	// context pane.
 	paneRuleWidth = 1
 
-	// paneMinWidth and paneMaxWidth bound the split layout's context pane.
+	// paneMinWidth floors the split layout's context pane; the pane has no
+	// ceiling — it absorbs everything the form column's cap leaves over.
 	paneMinWidth = 28
-	paneMaxWidth = 44
 
 	// paneStepsHeaderRows is the STEPS section's own header row, counted
 	// separately from its one-row-per-step body in splitMinHeight.

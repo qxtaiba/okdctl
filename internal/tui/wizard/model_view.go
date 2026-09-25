@@ -67,28 +67,18 @@ func (m *Model) View() tea.View {
 		Width(m.contentWidth() + wizardBorderHorizontal).
 		Render(content.String())
 
-	// Width(m.width) fills whatever maxFrameWidth's cap left idle back in as
-	// blank right-hand margin — the form never stretches into it, but every
-	// row still spans the terminal exactly, the way AltScreen repaints expect.
+	// Width(m.width) restores the outer padding around the frame so every
+	// row spans the terminal exactly, the way AltScreen repaints expect.
 	v.Content = OuterContainerStyle.Width(m.width).Render(bordered)
 	return v
 }
 
 // contentWidth is the inner content area every header/status/footer helper
-// sizes itself to: below wideSplitWidth it's the single form column, capped
-// at maxFrameWidth; at and above it, the form column plus the pane rule plus
-// the context pane.
+// sizes itself to: the terminal width minus the outer padding and the frame
+// border — the frame always spans the terminal, whatever the tier; the
+// readable measure is bodyWidth's business, inside the frame.
 func (m *Model) contentWidth() int {
-	if m.splitLayout() {
-		form, pane := m.formPaneWidths()
-		return form + paneRuleWidth + pane
-	}
-
-	frame := m.width - outerHorizontalPadding
-	if frame > maxFrameWidth {
-		frame = maxFrameWidth
-	}
-	width := frame - wizardBorderHorizontal
+	width := m.width - outerHorizontalPadding - wizardBorderHorizontal
 	if width < minTerminalWidth-6 {
 		width = minTerminalWidth - 6
 	}
@@ -118,31 +108,34 @@ func SplitsFrame(width, height, stepCount int) bool {
 }
 
 // formPaneWidths returns the split layout's form column width (capped at
-// formMaxWidth) and context pane width (whatever's left after the rule
-// column, clamped to [paneMinWidth, paneMaxWidth] — surplus beyond
-// paneMaxWidth becomes idle margin rather than stretching the pane).
+// formMaxWidth) and context pane width — the entire remainder after the rule
+// column, floored at paneMinWidth; the pane wraps its content to whatever
+// width the terminal hands it rather than idling surplus as margin.
 func (m *Model) formPaneWidths() (form, pane int) {
-	avail := m.width - outerHorizontalPadding - wizardBorderHorizontal
 	form = formMaxWidth
-	pane = avail - form - paneRuleWidth
-	if pane > paneMaxWidth {
-		pane = paneMaxWidth
-	}
+	pane = m.contentWidth() - form - paneRuleWidth
 	if pane < paneMinWidth {
 		pane = paneMinWidth
 	}
 	return form, pane
 }
 
-// bodyWidth is the width a step's own content renders at: contentWidth in
-// the single-column layout, or just the form column once the layout splits
-// and the remainder becomes the context pane.
+// bodyWidth is the width a step's own content renders at: the form column
+// once the layout splits, the whole frame for a step that owns the full
+// width (splitSuppressor), and the capped single-column measure otherwise.
 func (m *Model) bodyWidth() int {
 	if m.splitLayout() {
 		form, _ := m.formPaneWidths()
 		return form
 	}
-	return m.contentWidth()
+	if s, ok := m.CurrentStep().(splitSuppressor); ok && s.SuppressesSplit() {
+		return m.contentWidth()
+	}
+	width := m.contentWidth()
+	if width > singleFormMaxWidth {
+		width = singleFormMaxWidth
+	}
+	return width
 }
 
 // composeWideBody joins the step's rendered form with a dim 1-column rule

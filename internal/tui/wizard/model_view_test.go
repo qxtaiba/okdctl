@@ -15,24 +15,34 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
 )
 
+// TestModel_FrameWidthIsTerminalMinusFour pins the full-width frame at every
+// tier: the bordered box always spans terminal width minus the outer padding
+// — a capped form measure lives inside it, never as a shrunken frame — and
+// every rendered row still spans the terminal exactly.
 func TestModel_FrameWidthIsTerminalMinusFour(t *testing.T) {
-	for _, w := range []int{80, 100, 120} {
+	for _, w := range []int{80, 100, 116, 120, 149, 150, 151, 180, 200} {
 		m := NewModel([]WizardStep{newNopStep()}, config.DefaultConfig())
 		frame := tuitest.StripANSI(tuitest.RenderAt(t, m, w, 30))
-		for i, line := range strings.Split(strings.TrimRight(frame, "\n"), "\n") {
-			// Every row — including the blank outer-padding rows — renders at
-			// exactly the terminal width; the P0 bug drew an 86-wide frame at w=80.
+		lines := strings.Split(strings.TrimRight(frame, "\n"), "\n")
+		for i, line := range lines {
 			if lw := lipgloss.Width(line); lw != w {
 				t.Errorf("w=%d row %d width %d: %q", w, i, lw, line)
 			}
-			if i == 1 && !strings.HasPrefix(line, "  ╭") {
-				t.Errorf("row 1 = %q", line)
+		}
+		top := "  ╭" + strings.Repeat("─", w-6) + "╮  "
+		if lines[1] != top {
+			t.Errorf("w=%d row 1 = %q, want the full-width border %q", w, lines[1], top)
+		}
+		for i := 2; i < len(lines)-2; i++ {
+			runes := []rune(lines[i])
+			if runes[2] != '│' || runes[w-3] != '│' {
+				t.Errorf("w=%d row %d does not span the frame: %q", w, i, lines[i])
 			}
 		}
 	}
 }
 
-func TestModel_ContentWidthCapsBelowSplitThreshold(t *testing.T) {
+func TestModel_BodyWidthCapsBelowSplitThreshold(t *testing.T) {
 	cases := []struct{ w, want int }{
 		{80, 74},
 		{100, 94},
@@ -44,8 +54,11 @@ func TestModel_ContentWidthCapsBelowSplitThreshold(t *testing.T) {
 	for _, c := range cases {
 		m := NewModel([]WizardStep{newNopStep()}, config.DefaultConfig())
 		tuitest.RenderAt(t, m, c.w, 40)
-		if got := m.contentWidth(); got != c.want {
-			t.Errorf("w=%d contentWidth() = %d, want %d", c.w, got, c.want)
+		if got := m.bodyWidth(); got != c.want {
+			t.Errorf("w=%d bodyWidth() = %d, want %d", c.w, got, c.want)
+		}
+		if got, want := m.contentWidth(), c.w-outerHorizontalPadding-wizardBorderHorizontal; got != want {
+			t.Errorf("w=%d contentWidth() = %d, want the full frame interior %d", c.w, got, want)
 		}
 	}
 }
@@ -93,8 +106,8 @@ func TestModel_SplitLayoutGatedByHeight(t *testing.T) {
 	if m.splitLayout() {
 		t.Fatal("150x21 (one row below the 11-step floor of 22) should not split")
 	}
-	if m.bodyWidth() != m.contentWidth() {
-		t.Errorf("150x21: bodyWidth()=%d != contentWidth()=%d — split layout leaked into a gated frame", m.bodyWidth(), m.contentWidth())
+	if got := m.bodyWidth(); got != singleFormMaxWidth {
+		t.Errorf("150x21: bodyWidth()=%d, want the single-column measure %d — split layout leaked into a gated frame", got, singleFormMaxWidth)
 	}
 
 	m2 := NewModel(steps, config.DefaultConfig())
@@ -123,12 +136,11 @@ func TestModel_SplitLayoutHeightGateFrameFitsExactly(t *testing.T) {
 
 // TestModel_SplitLayoutFormPaneInvariant pins the form/rule/pane budget
 // arithmetic: their widths always sum to exactly contentWidth, the form
-// never exceeds formMaxWidth, and the pane always stays within
-// [paneMinWidth, paneMaxWidth] — 180 is wide enough that the pane clamps at
-// paneMaxWidth, leaving surplus width as idle margin rather than stretching
-// either column.
+// never exceeds formMaxWidth, and the pane absorbs the entire remainder —
+// no ceiling, only the paneMinWidth floor — so a wider terminal widens the
+// pane instead of leaving idle margin.
 func TestModel_SplitLayoutFormPaneInvariant(t *testing.T) {
-	for _, w := range []int{150, 151, 180} {
+	for _, w := range []int{150, 151, 180, 200} {
 		m := NewModel([]WizardStep{newNopStep()}, config.DefaultConfig())
 		tuitest.RenderAt(t, m, w, 48)
 
@@ -139,15 +151,12 @@ func TestModel_SplitLayoutFormPaneInvariant(t *testing.T) {
 		if form > formMaxWidth {
 			t.Errorf("w=%d: form=%d exceeds formMaxWidth=%d", w, form, formMaxWidth)
 		}
-		if pane < paneMinWidth || pane > paneMaxWidth {
-			t.Errorf("w=%d: pane=%d outside [%d,%d]", w, pane, paneMinWidth, paneMaxWidth)
+		if want := w - outerHorizontalPadding - wizardBorderHorizontal - formMaxWidth - paneRuleWidth; pane != want {
+			t.Errorf("w=%d: pane=%d, want the full remainder %d", w, pane, want)
 		}
-	}
-
-	m := NewModel([]WizardStep{newNopStep()}, config.DefaultConfig())
-	tuitest.RenderAt(t, m, 180, 48)
-	if _, pane := m.formPaneWidths(); pane != paneMaxWidth {
-		t.Errorf("180 cols: pane=%d, want the clamp paneMaxWidth=%d", pane, paneMaxWidth)
+		if pane < paneMinWidth {
+			t.Errorf("w=%d: pane=%d below paneMinWidth=%d", w, pane, paneMinWidth)
+		}
 	}
 }
 
