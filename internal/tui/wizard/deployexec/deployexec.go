@@ -64,6 +64,13 @@ type Hooks struct {
 	Execute func(st *State, events chan<- Event) error
 	// CancelDeploy requests a graceful cancel of the run in flight.
 	CancelDeploy func()
+	// Logs is the human log stream the log pane reads; nil leaves the pane to
+	// the wizard's own context pane.
+	Logs LogSource
+	// Done is closed once the run's context is cancelled. The step's own final
+	// send selects on it, so a force-quit never strands the engine goroutine on
+	// a feed nobody drains; a nil channel simply never fires.
+	Done <-chan struct{}
 }
 
 // NewSteps assembles the deploy flow's ordered steps. Direct construction
@@ -72,7 +79,7 @@ type Hooks struct {
 func NewSteps(st *State, hooks Hooks) []wizard.WizardStep {
 	return []wizard.WizardStep{
 		NewStreamStep(st, hooks),
-		NewDoneStep(st),
+		NewDoneStep(st, hooks),
 	}
 }
 

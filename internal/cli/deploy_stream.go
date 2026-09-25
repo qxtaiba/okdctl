@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"sync"
 	"time"
@@ -56,11 +57,13 @@ func runDeployStream(ctx context.Context, cfg *config.Config, opts *deploy.Optio
 	plan := deploy.PlannedSteps(cfg, opts.ProjectRoot, opts.FreshDeploy)
 
 	st := &deployexec.State{Cfg: cfg, Plan: plan, RunID: logutil.RunID()}
+	ring := deployexec.NewLogRing(deployexec.LogRingCap)
 
 	streamCtx, cancelStream := context.WithCancel(ctx)
 	defer cancelStream()
 
 	hooks := deployStreamSession(streamCtx, cancelStream, cfg, opts)
+	hooks.Logs = ring
 
 	// The stream screen owns the terminal from here on: no spinner or rewriting
 	// checklist may paint beneath the AltScreen, and every log line goes to the
@@ -69,7 +72,10 @@ func runDeployStream(ctx context.Context, cfg *config.Config, opts *deploy.Optio
 	progressBars := logutil.ProgressBarsEnabled()
 	logutil.SetProgressBarsEnabled(false)
 	defer logutil.SetProgressBarsEnabled(progressBars)
-	restoreLogs := sync.OnceFunc(logutil.Redirect(subprocSink()))
+	// The ring tees the human log stream into the pane on its way to the run
+	// log, so nothing the operator sees on screen is missing from okdctl.log.
+	restoreLogs := sync.OnceFunc(logutil.RedirectHandler(
+		ring.Handler(slog.NewTextHandler(subprocSink(), nil))))
 	defer restoreLogs()
 
 	_, err := wizard.RunFlow(ctx, deployexec.NewSteps(st, hooks), cfg, deployexec.Chrome())
@@ -94,6 +100,9 @@ func deployStreamSession(streamCtx context.Context, cancel context.CancelFunc, c
 	hooks := deployStreamHooks(streamCtx, cfg, opts)
 	if hooks.CancelDeploy == nil {
 		hooks.CancelDeploy = cancel
+	}
+	if hooks.Done == nil {
+		hooks.Done = streamCtx.Done()
 	}
 	return hooks
 }

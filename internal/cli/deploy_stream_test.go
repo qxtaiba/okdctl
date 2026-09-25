@@ -249,7 +249,7 @@ func TestDeployStreamDemoCancelStopsTheFeed(t *testing.T) {
 	}
 
 	st.Result, st.Executed = err, true
-	card := tuitest.StripANSI(deployexec.NewDoneStep(st).View(96, 40))
+	card := tuitest.StripANSI(deployexec.NewDoneStep(st, hooks).View(96, 40))
 	if !strings.Contains(card, "deploy interrupted") {
 		t.Errorf("a cancelled demo must land on the interrupted card, not the success box:\n%s", card)
 	}
@@ -316,5 +316,31 @@ func TestDeployStreamRecapUsesTheEnginesOwnDuration(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "42m0s") {
 		t.Errorf("recap = %q, want the engine's duration", out.String())
+	}
+}
+
+// TestDeployStreamSessionBoundsTheEngineGoroutine proves the screen's feed guard
+// is actually armed: without a Done channel the step's final send could outlive a
+// force-quit on a feed nobody drains.
+func TestDeployStreamSessionBoundsTheEngineGoroutine(t *testing.T) {
+	engineCtx, engineCancel := context.WithCancel(context.Background())
+	defer engineCancel()
+
+	hooks := deployStreamSession(engineCtx, engineCancel, config.DefaultConfig(), &deploy.Options{})
+	if hooks.Done == nil {
+		t.Fatal("the session must hand the screen a stop signal for its own feed")
+	}
+
+	select {
+	case <-hooks.Done:
+		t.Fatal("the stop signal fired before the run was cancelled")
+	default:
+	}
+
+	engineCancel()
+	select {
+	case <-hooks.Done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("cancelling the run never fired the screen's stop signal")
 	}
 }

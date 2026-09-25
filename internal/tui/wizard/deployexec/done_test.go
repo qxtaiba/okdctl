@@ -29,7 +29,7 @@ func doneState() *State {
 }
 
 func TestDoneViewRendersTheDeploySummaryBoxInFrame(t *testing.T) {
-	s := NewDoneStep(doneState())
+	s := NewDoneStep(doneState(), Hooks{})
 	out := tuitest.StripANSI(s.View(96, 40))
 
 	for _, want := range []string{"DEPLOYMENT COMPLETE", "cluster deployed", "console", "kubeadmin"} {
@@ -40,7 +40,7 @@ func TestDoneViewRendersTheDeploySummaryBoxInFrame(t *testing.T) {
 }
 
 func TestDoneViewFitsANarrowerFrame(t *testing.T) {
-	s := NewDoneStep(doneState())
+	s := NewDoneStep(doneState(), Hooks{})
 	const width = 70
 	tuitest.AssertFits(t, s.View(width, 40), width, 0)
 }
@@ -48,7 +48,7 @@ func TestDoneViewFitsANarrowerFrame(t *testing.T) {
 func TestDoneViewRendersTheErrorCardOnFailure(t *testing.T) {
 	st := doneState()
 	st.Result = errors.New("terraform apply failed: vm 9001 already exists")
-	out := tuitest.StripANSI(NewDoneStep(st).View(96, 40))
+	out := tuitest.StripANSI(NewDoneStep(st, Hooks{}).View(96, 40))
 
 	if !strings.Contains(out, "deploy failed") {
 		t.Errorf("failure view must lead with the failure kind:\n%s", out)
@@ -64,13 +64,13 @@ func TestDoneViewRendersTheErrorCardOnFailure(t *testing.T) {
 func TestDoneViewNamesACancelledRunInterrupted(t *testing.T) {
 	st := doneState()
 	st.Result = context.Canceled
-	if out := tuitest.StripANSI(NewDoneStep(st).View(96, 40)); !strings.Contains(out, "deploy interrupted") {
+	if out := tuitest.StripANSI(NewDoneStep(st, Hooks{}).View(96, 40)); !strings.Contains(out, "deploy interrupted") {
 		t.Errorf("a cancelled run must read as interrupted, not failed:\n%s", out)
 	}
 }
 
 func TestDoneCompletesOnEnter(t *testing.T) {
-	s := NewDoneStep(doneState())
+	s := NewDoneStep(doneState(), Hooks{})
 	_, cmd := s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatal("enter must complete the flow")
@@ -79,3 +79,6 @@ func TestDoneCompletesOnEnter(t *testing.T) {
 		t.Errorf("enter must emit StepCompleteMsg, got %T", cmd())
 	}
 }
+
+// errStreamFailed is the engine failure the done-screen tests render.
+var errStreamFailed = errors.New("deploy infrastructure failed: proxmox task refused")

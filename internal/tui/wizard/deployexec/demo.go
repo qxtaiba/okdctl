@@ -22,6 +22,7 @@ func DemoHooks(stepDelay time.Duration) Hooks {
 	ctx, cancel := context.WithCancel(context.Background())
 	return Hooks{
 		CancelDeploy: cancel,
+		Done:         ctx.Done(),
 		Execute: func(st *State, events chan<- Event) error {
 			return demoExecute(ctx, st, events, stepDelay)
 		},

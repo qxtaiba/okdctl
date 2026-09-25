@@ -97,6 +97,14 @@ type splitSuppressor interface {
 	SuppressesSplit() bool
 }
 
+// paneRenderer is implemented by steps that fill the split layout's right pane
+// themselves, in place of the context pane — a live log beside the work it
+// narrates says more than a step list the screen isn't walking. The same height
+// clamp the context pane obeys applies: content must fit the rows it is given.
+type paneRenderer interface {
+	PaneContent(width, height int) string
+}
+
 // displayTitler is implemented by steps with a header prompt distinct from
 // their Title(); an empty DisplayTitle falls back to Title() instead.
 type displayTitler interface {
@@ -346,6 +354,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case StepBackMsg:
 		return m.goToPreviousStep()
+
+	case LayoutChangedMsg:
+		if m.ready {
+			m.sizeCurrentStep()
+			m.resizeViewport()
+			m.syncViewportContent()
+			m.notifyIfAtBottom()
+		}
+		return m, nil
 
 	case SwapFlowMsg:
 		cmd := m.SwapFlow(msg.Steps, msg.Chrome)

@@ -1,18 +1,18 @@
                                                                                                                                                                                     
   ╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮                           
-  │ O K D C T L                                                                                                                                         │                           
-  │ done                                                                                                                                 install · done │                           
+  │ O K D C T L  installing okd over proxmox                                                                                                            │                           
+  │ deploying homelab                                                                                                                    install · done │                           
   │─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│                           
-  │  ╭──────────────────────────────────────── ERROR ─────────────────────────────────────────╮            │LOG                                         │                           
-  │  │                                                                                        │            │09:00:00 deploy step started step=step-00 p…│                           
-  │  │  ✗  deploy failed                                                                      │            │09:00:07 deploy step started step=step-01 p…│                           
-  │  │                                                                                        │            │09:00:14 deploy step started step=step-02 p…│                           
-  │  │  deploy infrastructure failed: proxmox task UPID:pve:0000A1: vm 9001 already exists    │            │09:00:21 deploy step started step=step-03 p…│                           
-  │  │                                                                                        │            │09:00:28 deploy step started step=step-04 p…│                           
-  │  │  → re-run 'okdctl deploy' to resume from the recorded phase, or 'okdctl deploy --fresh'│            │09:00:35 deploy step started step=step-05 p…│                           
-  │  │    to restart from scratch                                                             │            │09:00:42 deploy step started step=step-06 p…│                           
-  │  │                                                                                        │            │09:00:49 deploy step started step=step-07 p…│                           
-  │  ╰────────────────────────────────────────────────────────────────────────────────────────╯            │09:00:56 deploy step started step=step-08 p…│                           
+  │  deploying homelab  2 / 7                                                           elapsed 1m15s      │LOG · LOCKED                                │                           
+  │  ✓ prep                                                                                       40s      │09:00:00 deploy step started step=step-00 p…│                           
+  │  ● ignition                                                                                            │09:00:07 deploy step started step=step-01 p…│                           
+  │      ⣾ generate ignition                                                                      35s      │09:00:14 deploy step started step=step-02 p…│                           
+  │      ○ build isos                                                                                      │09:00:21 deploy step started step=step-03 p…│                           
+  │  ○ infra                                                                                               │09:00:28 deploy step started step=step-04 p…│                           
+  │  ○ install                                                                                             │09:00:35 deploy step started step=step-05 p…│                           
+  │  ○ verify                                                                                              │09:00:42 deploy step started step=step-06 p…│                           
+  │                                                                                                        │09:00:49 deploy step started step=step-07 p…│                           
+  │  full log okdctl.log · ctrl+c cancels after the current step                                           │09:00:56 deploy step started step=step-08 p…│                           
   │                                                                                                        │09:01:03 deploy step started step=step-09 p…│                           
   │                                                                                                        │09:01:10 deploy step started step=step-10 p…│                           
   │                                                                                                        │09:01:17 deploy step started step=step-11 p…│                           
@@ -43,6 +43,6 @@
   │                                                                                                        │                                            │                           
   │                                                                                                                                                     │                           
   │────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── ▸ homelab │                           
-  │  enter exit • ? help                                                                                                                                │                           
+  │  l follow the log tail • f full-screen log • ctrl+c cancel (twice to force-quit) • ? help                                                           │                           
   ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯                           
                                                                                                                                                                                     

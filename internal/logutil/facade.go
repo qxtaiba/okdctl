@@ -44,8 +44,16 @@ func InstallHandler(h slog.Handler) {
 // w is wrapped the same way InstallHandler wraps its handler. Not nestable
 // across goroutines — restore reinstates whatever was installed at call time.
 func Redirect(w io.Writer) (restore func()) {
+	return RedirectHandler(slog.NewTextHandler(w, nil))
+}
+
+// RedirectHandler is Redirect's handler form, for a TUI that renders the log
+// stream itself and needs the records rather than their encoded bytes.
+// Redaction is preserved: h is wrapped the same way InstallHandler wraps its
+// handler, so nothing h sees has skipped the scrubber.
+func RedirectHandler(h slog.Handler) (restore func()) {
 	prev := facade.Load()
-	facade.Store(slog.New(NewRedactHandler(slog.NewTextHandler(w, nil))))
+	facade.Store(slog.New(NewRedactHandler(h)))
 	return func() { facade.Store(prev) }
 }
 

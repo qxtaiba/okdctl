@@ -191,6 +191,12 @@ type StepCompleteMsg struct {
 // StepBackMsg signals that the wizard should step back one position.
 type StepBackMsg struct{}
 
+// LayoutChangedMsg asks the wizard to re-measure the active step: a step that
+// flips its own layout gate — a full-screen toggle turning SuppressesSplit on —
+// changes the body width without the terminal changing at all, and nothing else
+// resizes the viewport before the next real resize.
+type LayoutChangedMsg struct{}
+
 // ErrorSetMsg signals an error to display in the wizard's status row, emitted
 // on a failed step-level validation or when a ConfigApplier returns an error
 // during a step transition.

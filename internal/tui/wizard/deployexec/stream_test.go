@@ -359,7 +359,7 @@ func TestStreamAndDoneStepsAreForwardOnly(t *testing.T) {
 	if !NewStreamStep(st, Hooks{}).InterceptBack() {
 		t.Error("stream step must intercept esc — navigating away orphans the event pump")
 	}
-	if !NewDoneStep(st).InterceptBack() {
+	if !NewDoneStep(st, Hooks{}).InterceptBack() {
 		t.Error("done step must intercept esc — going back re-enters a finished run")
 	}
 }

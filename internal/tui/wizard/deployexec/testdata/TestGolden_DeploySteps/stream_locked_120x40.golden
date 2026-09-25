@@ -4,7 +4,6 @@
   │ deploying homelab                                                                             install · done │      
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────│      
   │  deploying homelab  2 / 7                                                                 elapsed 1m15s      │      
-  │  cancel requested — finishing the current step safely, the resume marker stays…                              │      
   │  ✓ prep                                                                                             40s      │      
   │  ● ignition                                                                                                  │      
   │      ⣾ generate ignition                                                                            35s      │      
@@ -13,7 +12,7 @@
   │  ○ install                                                                                                   │      
   │  ○ verify                                                                                                    │      
   │                                                                                                              │      
-  │  LOG                                                                                                         │      
+  │  LOG · LOCKED                                                                                                │      
   │  09:02:06 deploy step started step=step-18 phase=setup                                                       │      
   │  09:02:13 deploy step started step=step-19 phase=setup                                                       │      
   │  09:02:20 deploy step started step=step-20 phase=setup                                                       │      
@@ -34,7 +33,8 @@
   │                                                                                                              │      
   │                                                                                                              │      
   │                                                                                                              │      
+  │                                                                                                              │      
   │─────────────────────────────────────────────────────────────────────────────────────────────────── ▸ homelab │      
-  │  l lock the log here • f full-screen log • ctrl+c cancel (twice to force-quit) • ? help                      │      
+  │  l follow the log tail • f full-screen log • ctrl+c cancel (twice to force-quit) • ? help                    │      
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────╯      
                                                                                                                         

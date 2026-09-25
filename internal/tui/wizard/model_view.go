@@ -106,7 +106,15 @@ func (m *Model) splitLayout() bool {
 	if s, ok := m.CurrentStep().(splitSuppressor); ok && s.SuppressesSplit() {
 		return false
 	}
-	return m.width >= wideSplitWidth && m.height >= splitMinHeight(m.countVisibleSteps())
+	return SplitsFrame(m.width, m.height, m.countVisibleSteps())
+}
+
+// SplitsFrame reports whether a width×height terminal gives a stepCount-step
+// flow a right-hand pane. Exported for the steps that render one thing beside a
+// pane and another without it, so they ask the frame's own gate instead of
+// re-deriving it from a body width the caps have already flattened.
+func SplitsFrame(width, height, stepCount int) bool {
+	return width >= wideSplitWidth && height >= splitMinHeight(stepCount)
 }
 
 // formPaneWidths returns the split layout's form column width (capped at
@@ -144,9 +152,22 @@ func (m *Model) composeWideBody(form string) string {
 	height := m.viewport.Height()
 
 	rule := renderPaneRule(height)
-	pane := lipgloss.NewStyle().Width(paneWidth).Height(height).Render(m.renderContextPane(paneWidth, height))
+	pane := lipgloss.NewStyle().Width(paneWidth).Height(height).Render(m.paneBody(paneWidth, height))
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, form, rule, pane)
+}
+
+// paneBody renders the split layout's right pane: the active step's own content
+// when it fills the pane itself, the context pane otherwise. An empty string
+// from a paneRenderer falls back too, so a step with nothing to show yet keeps
+// the pane useful rather than blank.
+func (m *Model) paneBody(width, height int) string {
+	if p, ok := m.CurrentStep().(paneRenderer); ok {
+		if content := p.PaneContent(width, height); content != "" {
+			return content
+		}
+	}
+	return m.renderContextPane(width, height)
 }
 
 // renderPaneRule draws the dim vertical divider between the form and the

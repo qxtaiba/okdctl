@@ -20,15 +20,32 @@ const resumeHint = "re-run 'okdctl deploy' to resume from the recorded phase, or
 // post-deploy summary box, or the error card with the resume hint.
 type DoneStep struct {
 	wizard.BaseStep
-	st *State
+	frameSize
+	st    *State
+	hooks Hooks
 }
 
 // NewDoneStep constructs the completion step.
-func NewDoneStep(st *State) *DoneStep {
+func NewDoneStep(st *State, hooks Hooks) *DoneStep {
 	return &DoneStep{
 		BaseStep: wizard.NewBaseStep(StepIDDone, "done", ""),
 		st:       st,
+		hooks:    hooks,
 	}
+}
+
+// SetSize records the body box the frame gives the step, which the failure
+// tail's own budget is measured against.
+func (s *DoneStep) SetSize(width, height int) {
+	s.BaseStep.SetSize(width, height)
+	s.bodyHeight = height
+}
+
+// PaneContent keeps the live log in the split layout's right pane on the
+// completion screen too: the run just ended, and its last lines are what an
+// operator reads next.
+func (s *DoneStep) PaneContent(width, height int) string {
+	return renderLogPane(s.hooks.Logs, logView{}, width, height, false)
 }
 
 // InterceptBack keeps the flow forward-only: esc from the done screen would
@@ -55,12 +72,28 @@ func (s *DoneStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 func (s *DoneStep) View(width, _ int) string {
 	w := min(width, tui.DefaultBoxWidth)
 	if s.st.Result != nil {
-		return strings.Trim(render.ErrorCard(s.failureKind(), s.st.Result.Error(), resumeHint, w), "\n")
+		card := strings.Trim(render.ErrorCard(s.failureKind(), s.st.Result.Error(), resumeHint, w), "\n")
+		return card + s.failureTail(max(width-4, 1))
 	}
 	if s.st.Cfg == nil {
 		return tui.CompletionSuccess("deployment complete")
 	}
 	return strings.Trim(render.PostDeploySummaryWidth(s.st.Cfg, s.st.Summary, s.st.Steps, s.st.RunID, w), "\n")
+}
+
+// failureTail appends the log's last lines under the error card on a frame with
+// no pane to carry them. A failure's evidence is the chatter that led up to it,
+// so it stays on screen at every width; a success needs none — its summary box
+// is the record.
+func (s *DoneStep) failureTail(col int) string {
+	if s.hooks.Logs == nil || s.splitsFrame() {
+		return ""
+	}
+	tail := renderLogTail(s.hooks.Logs, logView{}, col, narrowTailRows)
+	if len(tail) == 0 {
+		return ""
+	}
+	return "\n\n" + strings.Join(tail, "\n")
 }
 
 // failureKind names the outcome the error card leads with: a cancelled run was

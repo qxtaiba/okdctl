@@ -55,8 +55,10 @@ type streamEventMsg struct {
 // quit (second press).
 type StreamStep struct {
 	wizard.BaseStep
+	frameSize
 	st    *State
 	hooks Hooks
+	log   logView
 
 	events           chan Event
 	started          time.Time
@@ -68,9 +70,11 @@ type StreamStep struct {
 	finished         bool
 	loadingSpinner   spinner.Model
 	// focusLine and lastLine are recorded during View: the running row's line,
-	// and the last line of the rendered content.
-	focusLine int
-	lastLine  int
+	// and the last line of the rendered content. tailRendered records whether
+	// that render put the log tail under the checklist.
+	focusLine    int
+	lastLine     int
+	tailRendered bool
 
 	boldStyle   lipgloss.Style
 	doneStyle   lipgloss.Style
@@ -104,6 +108,14 @@ func NewStreamStep(st *State, hooks Hooks) *StreamStep {
 	}
 }
 
+// SetSize records the body box the frame gives the step: the full-screen log
+// sizes itself to that height, which View's own fixed 1000-row budget cannot
+// report.
+func (s *StreamStep) SetSize(width, height int) {
+	s.BaseStep.SetSize(width, height)
+	s.bodyHeight = height
+}
+
 // DisplayTitle names the header for the run in progress.
 func (s *StreamStep) DisplayTitle() string {
 	return s.progressLabel()
@@ -125,7 +137,7 @@ func (s *StreamStep) Init() tea.Cmd {
 		if s.hooks.Execute != nil {
 			err = s.hooks.Execute(s.st, s.events)
 		}
-		s.events <- Event{Final: true, Err: err}
+		s.sendFinal(err)
 	}()
 
 	return tea.Batch(s.loadingSpinner.Tick, s.listen())
@@ -154,6 +166,16 @@ func (s *StreamStep) buildRows() {
 	// five known ones, rather than vanishing from the checklist.
 	for phase, rows := range byPhase {
 		s.phases = append(s.phases, phaseProgress{name: phase, rows: rows})
+	}
+}
+
+// sendFinal delivers the run's terminal event, abandoning it once the run's
+// context is gone: the engine goroutine must not outlive a force-quit waiting on
+// a feed nobody drains.
+func (s *StreamStep) sendFinal(err error) {
+	select {
+	case <-s.hooks.Done:
+	case s.events <- Event{Final: true, Err: err}:
 	}
 }
 
@@ -187,8 +209,47 @@ func (s *StreamStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 			s.loadingSpinner, cmd = s.loadingSpinner.Update(msg)
 			return s, cmd
 		}
+
+	case tea.KeyPressMsg:
+		cmd := s.handleLogKey(msg)
+		return s, cmd
 	}
 	return s, nil
+}
+
+// handleLogKey binds the log viewport's two keys: `l` locks the window where it
+// stands (or releases it back to the tail) and `f` swaps the log full-screen and
+// back, which changes the frame's own layout gate and so asks for a re-measure.
+func (s *StreamStep) handleLogKey(msg tea.KeyPressMsg) tea.Cmd {
+	switch msg.Code {
+	case keyLogLock:
+		s.log.locked = !s.log.locked
+		if s.log.locked {
+			s.log.lockAt = lockedAt(s.hooks.Logs)
+		}
+	case keyLogFull:
+		s.log.full = !s.log.full
+		return func() tea.Msg { return wizard.LayoutChangedMsg{} }
+	}
+	return nil
+}
+
+// SuppressesSplit hands the log the whole frame while `f` has it full-screen;
+// the checklist comes back the moment it is toggled off.
+func (s *StreamStep) SuppressesSplit() bool {
+	return s.log.full && s.hooks.Logs != nil
+}
+
+// PaneContent fills the split layout's right pane with the live log, in place of
+// the context pane's step list.
+func (s *StreamStep) PaneContent(width, height int) string {
+	return renderLogPane(s.hooks.Logs, s.log, width, height, false)
+}
+
+// paneCarriesLog reports whether the log has a pane of its own, in which case
+// the checklist body carries no tail.
+func (s *StreamStep) paneCarriesLog() bool {
+	return s.hooks.Logs != nil && !s.log.full && s.splitsFrame()
 }
 
 // applyEvent updates phase/row state for ev: a phase change closes out the
@@ -352,10 +413,15 @@ func (s *StreamStep) InterceptQuit() bool {
 // View renders the phase checklist: a finished phase collapses to a single line
 // with its total, the running phase stays expanded with right-aligned
 // durations and a live elapsed reading, and untouched phases show a bare
-// pending bullet.
-func (s *StreamStep) View(width, height int) string {
-	s.SetSize(width, height)
+// pending bullet. The height argument is the frame's fixed 1000-row scratch
+// budget, never the body's real height — SetSize records that.
+func (s *StreamStep) View(width, _ int) string {
 	col := max(width-4, 1)
+	if s.log.full {
+		// The headline rides above the full-screen log: progress and elapsed are
+		// what an operator would otherwise lose by leaving the checklist.
+		return s.headline(col) + "\n" + renderLogFull(s.hooks.Logs, s.log, col, s.bodyHeight-1)
+	}
 
 	lines := []string{s.headline(col)}
 	if s.cancelRequested && !s.finished {
@@ -366,6 +432,15 @@ func (s *StreamStep) View(width, height int) string {
 	s.focusLine = -1
 	for i := range s.phases {
 		lines = s.appendPhase(lines, i, col)
+	}
+
+	s.tailRendered = false
+	if !s.paneCarriesLog() {
+		if tail := renderLogTail(s.hooks.Logs, s.log, col, narrowTailRows); len(tail) > 0 {
+			lines = append(lines, "")
+			lines = append(lines, tail...)
+			s.tailRendered = true
+		}
 	}
 
 	footnote := "full log " + logutil.DefaultLogFileName + " · ctrl+c cancels after the current step"
@@ -464,11 +539,17 @@ func phaseTouched(ph *phaseProgress) bool {
 	return len(ph.extra) > 0
 }
 
-// FocusedSpan reports the running row's line, falling back to the last
-// rendered line once the run has finished or no row is running.
+// FocusedSpan reports the running row's line, falling back to the last rendered
+// line once the run has finished or no row is running. A narrow frame follows
+// the tail instead: the log rides at the bottom of the body, and a checklist
+// longer than the viewport would otherwise park the newest line below the fold,
+// leaving the operator scrolling for the one thing still moving.
 func (s *StreamStep) FocusedSpan() (wizard.LineSpan, bool) {
 	if len(s.phases) == 0 {
 		return wizard.LineSpan{}, false
+	}
+	if s.tailRendered {
+		return wizard.LineSpan{Start: s.lastLine, End: s.lastLine}, true
 	}
 	line := s.focusLine
 	if s.finished || line < 0 {
@@ -496,9 +577,35 @@ func fmtDur(d time.Duration) string {
 	return d.Truncate(time.Second).String()
 }
 
-// ShortHelp explains the constrained keys: no esc, guarded ctrl+c.
+// ShortHelp explains the log viewport's keys plus the constrained ones: no esc,
+// guarded ctrl+c. The ribbon reserves only ctrl+c and "?" and then drops the
+// rest front to back, so in full-screen mode f leads the list — it is the only
+// way back to the checklist, and losing it would strand the operator on the log.
 func (s *StreamStep) ShortHelp() []wizard.KeyBinding {
-	return []wizard.KeyBinding{
-		{Key: wizard.HelpCtrlC, Help: "request graceful cancel (twice to force-quit)"},
+	cancel := wizard.KeyBinding{Key: wizard.HelpCtrlC, Help: "cancel (twice to force-quit)"}
+	if s.hooks.Logs == nil {
+		return []wizard.KeyBinding{cancel}
 	}
+	lock := wizard.KeyBinding{Key: string(keyLogLock), Help: s.lockHelp()}
+	full := wizard.KeyBinding{Key: string(keyLogFull), Help: s.fullHelp()}
+	if s.log.full {
+		return []wizard.KeyBinding{full, lock, cancel}
+	}
+	return []wizard.KeyBinding{lock, full, cancel}
+}
+
+// lockHelp and fullHelp name what the key does next, not what it did, so the
+// ribbon reads as an instruction in either state.
+func (s *StreamStep) lockHelp() string {
+	if s.log.locked {
+		return "follow the log tail"
+	}
+	return "lock the log here"
+}
+
+func (s *StreamStep) fullHelp() string {
+	if s.log.full {
+		return "back to checklist"
+	}
+	return "full-screen log"
 }

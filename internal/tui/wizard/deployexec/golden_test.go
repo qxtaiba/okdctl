@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
@@ -16,6 +18,12 @@ type deployScenario struct {
 	id    wizard.StepID
 	build func() *State
 	seed  func(m *wizard.Model, st *State)
+}
+
+// goldenHooks is the seeded feed every deploy golden renders against: no engine,
+// and a fixed log ring so the pane and the narrow tail are deterministic.
+func goldenHooks() Hooks {
+	return Hooks{Logs: seededRing(24)}
 }
 
 // seedMidRun drives the stream step to a fixed mid-install frame: prep
@@ -63,6 +71,29 @@ func deployScenarios() []deployScenario {
 			},
 		},
 		{
+			// The log window frozen where `l` locked it, header marked so a
+			// still tail never reads as a stalled install.
+			name:  "stream_locked",
+			id:    StepIDStream,
+			build: streamState,
+			seed: func(m *wizard.Model, st *State) {
+				seedMidRun(m, st)
+				m.Update(tea.KeyPressMsg{Code: keyLogLock, Text: "l"})
+			},
+		},
+		{
+			// `f` swapped the log full-screen: the checklist steps aside and the
+			// log takes the whole frame.
+			name:  "stream_full",
+			id:    StepIDStream,
+			build: streamState,
+			seed: func(m *wizard.Model, st *State) {
+				seedMidRun(m, st)
+				m.Update(tea.KeyPressMsg{Code: keyLogFull, Text: "f"})
+				m.Update(wizard.LayoutChangedMsg{})
+			},
+		},
+		{
 			name:  "done",
 			id:    StepIDDone,
 			build: doneState,
@@ -101,7 +132,7 @@ func TestGolden_DeploySteps(t *testing.T) {
 				t.Cleanup(func() { tui.SetTerminalWidth(0) })
 
 				st := sc.build()
-				m := wizard.NewFlowModel(NewSteps(st, Hooks{}), st.Cfg, Chrome())
+				m := wizard.NewFlowModel(NewSteps(st, goldenHooks()), st.Cfg, Chrome())
 
 				_ = tuitest.RenderAt(t, m, sz.w, sz.h)
 				m.Update(wizard.JumpToStepMsg{StepID: sc.id})
