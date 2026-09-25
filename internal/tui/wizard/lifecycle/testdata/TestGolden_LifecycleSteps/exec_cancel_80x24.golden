@@ -16,9 +16,9 @@
   │  ○ homelab-master1                                                       │  
   │  ○ homelab-master2                                                       │  
   │                                                                          │  
-  │  marker okd-install/.okdctl-node-op.json                                 │  
+  │  LOG                                                                     │  
   │                                                                          │  
-  │─────────────────────────────────────────────────────────────── ▸ homelab │  
-  │  ctrl+c cancel (twice to force-quit) • ? help                            │  
+  │────────────────── ↑ ↓  scroll down for more ────────────────── ▸ homelab │  
+  │  l lock the log here … • ctrl+c cancel (twice to force-quit) • ? help    │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

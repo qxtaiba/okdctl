@@ -1,0 +1,45 @@
+                                                                                                                                                      
+  ╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L                                                                                                                                    │  
+  │ nodes to resize                                                                                       op · target · params · plan · run · done │  
+  │────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
+  │  ○ masters — all 3 control-plane nodes                                                                 │  PROGRESS                             │  
+  │    │ rolled one at a time; etcd-gated before and after every node                                      │  ✓ operation                          │  
+  │    │                                                                                                   │  ● target                             │  
+  │  ○ workers — all 3 worker nodes                                                                        │  ○ parameters                         │  
+  │    │ rolled one at a time; no etcd gate                                                                │  ○ plan preview                       │  
+  │    ╭────────────────────────────────────╮                                                              │                                       │  
+  │    │   NODE             ROLE    READY   │                                                              │                                       │  
+  │    │ ● homelab-master0  master  ✓ ready │                                                              │                                       │  
+  │    │   │                                │                                                              │                                       │  
+  │    │ ○ homelab-master1  master  ✓ ready │                                                              │                                       │  
+  │    │   │                                │                                                              │                                       │  
+  │    │ ○ homelab-master2  master  ✓ ready │                                                              │                                       │  
+  │    │   │                                │                                                              │                                       │  
+  │    │ ○ homelab-worker0  worker  ✓ ready │                                                              │                                       │  
+  │    │   │                                │                                                              │                                       │  
+  │    │ ○ homelab-worker1  worker  ✓ ready │                                                              │                                       │  
+  │    │   │                                │                                                              │                                       │  
+  │    │ ○ homelab-worker2  worker  ✓ ready │                                                              │                                       │  
+  │    ╰────────────────────────────────────╯                                                              │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                                                                │  
+  │───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
+  │  ↑↓ select • enter confirm • esc back • ctrl+c quit • ? help                                                                                   │  
+  ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
+                                                                                                                                                      

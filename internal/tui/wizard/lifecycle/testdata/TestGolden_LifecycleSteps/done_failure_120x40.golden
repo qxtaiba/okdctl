@@ -13,15 +13,15 @@
   │  │                                                                                        │                      │  
   │  ╰────────────────────────────────────────────────────────────────────────────────────────╯                      │  
   │                                                                                                                  │  
+  │  LOG                                                                                                             │  
+  │  09:02:06 terraform apply step=step-18 node=homelab-master0                                                      │  
+  │  09:02:13 terraform apply step=step-19 node=homelab-master0                                                      │  
+  │  09:02:20 terraform apply step=step-20 node=homelab-master0                                                      │  
+  │  09:02:27 terraform apply step=step-21 node=homelab-master0                                                      │  
+  │  09:02:34 terraform apply step=step-22 node=homelab-master0                                                      │  
+  │  09:02:41 terraform apply step=step-23 node=homelab-master0                                                      │  
   │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
+  │  full log okd-install/okdctl.log                                                                                 │  
   │                                                                                                                  │  
   │                                                                                                                  │  
   │                                                                                                                  │  
@@ -35,6 +35,6 @@
   │                                                                                                                  │  
   │                                                                                                                  │  
   │─────────────────────────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
-  │  enter exit • ? help                                                                                             │  
+  │  enter exit • pgup/pgdn page the log • ? help                                                                    │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                                         

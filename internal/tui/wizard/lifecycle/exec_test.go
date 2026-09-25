@@ -453,7 +453,7 @@ func TestExecAndDoneStepsAreForwardOnly(t *testing.T) {
 	if !NewExecStep(st, Hooks{}).InterceptBack() {
 		t.Error("exec step must intercept esc — navigating away orphans the event pump")
 	}
-	if !NewDoneStep(st).InterceptBack() {
+	if !NewDoneStep(st, Hooks{}).InterceptBack() {
 		t.Error("done step must intercept esc — going back re-enters a finished run")
 	}
 }

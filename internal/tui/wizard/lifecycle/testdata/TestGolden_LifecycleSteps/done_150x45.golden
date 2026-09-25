@@ -1,0 +1,45 @@
+                                                                                                                                                      
+  ╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L                                                                                                                                    │  
+  │ done                                                                                                  op · target · params · plan · run · done │  
+  │────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
+  │  ╭───────────────────────────────────── NODE RESIZE ──────────────────────────────────────╮            │  LOG                                  │  
+  │  │                                                                                        │            │  09:00:00 terraform apply step=step-… │  
+  │  │  ✓ resize complete                                                                     │            │  09:00:07 terraform apply step=step-… │  
+  │  │                                                                                        │            │  09:00:14 terraform apply step=step-… │  
+  │  │    cluster .................................. homelab                                  │            │  09:00:21 terraform apply step=step-… │  
+  │  │    elapsed .................................. 1m30s                                    │            │  09:00:28 terraform apply step=step-… │  
+  │  │                                                                                        │            │  09:00:35 terraform apply step=step-… │  
+  │  │  nodes                                                                                 │            │  09:00:42 terraform apply step=step-… │  
+  │  │    NODE             ROLE    STATE                                                      │            │  09:00:49 terraform apply step=step-… │  
+  │  │    homelab-master0  master  resized                                                    │            │  09:00:56 terraform apply step=step-… │  
+  │  │                                                                                        │            │  09:01:03 terraform apply step=step-… │  
+  │  │  next steps                                                                            │            │  09:01:10 terraform apply step=step-… │  
+  │  │    each resized node was power-cycled to realize the change; verify with               │            │  09:01:17 terraform apply step=step-… │  
+  │  │    'okdctl node list' or 'oc debug node/<name> -- free -m'                             │            │  09:01:24 terraform apply step=step-… │  
+  │  │                                                                                        │            │  09:01:31 terraform apply step=step-… │  
+  │  ╰────────────────────────────────────────────────────────────────────────────────────────╯            │  09:01:38 terraform apply step=step-… │  
+  │                                                                                                        │  09:01:45 terraform apply step=step-… │  
+  │                                                                                                        │  09:01:52 terraform apply step=step-… │  
+  │                                                                                                        │  09:01:59 terraform apply step=step-… │  
+  │                                                                                                        │  09:02:06 terraform apply step=step-… │  
+  │                                                                                                        │  09:02:13 terraform apply step=step-… │  
+  │                                                                                                        │  09:02:20 terraform apply step=step-… │  
+  │                                                                                                        │  09:02:27 terraform apply step=step-… │  
+  │                                                                                                        │  09:02:34 terraform apply step=step-… │  
+  │                                                                                                        │  09:02:41 terraform apply step=step-… │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                                                                │  
+  │───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
+  │  enter exit • ? help                                                                                                                           │  
+  ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
+                                                                                                                                                      

@@ -13,12 +13,12 @@
   │  │                                                                    │  │  
   │  ╰────────────────────────────────────────────────────────────────────╯  │  
   │                                                                          │  
+  │  LOG                                                                     │  
+  │  09:02:06 terraform apply step=step-18 node=homelab-master0              │  
+  │  09:02:13 terraform apply step=step-19 node=homelab-master0              │  
+  │  09:02:20 terraform apply step=step-20 node=homelab-master0              │  
   │                                                                          │  
-  │                                                                          │  
-  │                                                                          │  
-  │                                                                          │  
-  │                                                                          │  
-  │─────────────────────────────────────────────────────────────── ▸ homelab │  
-  │  enter exit • ? help                                                     │  
+  │────────────────── ↑ ↓  scroll down for more ────────────────── ▸ homelab │  
+  │  enter exit • pgup/pgdn page the log • ? help                            │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

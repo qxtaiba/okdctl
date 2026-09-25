@@ -12,6 +12,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/tui/logview"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
@@ -53,8 +54,10 @@ type execEventMsg struct {
 // (first press) then a force quit (second press).
 type ExecStep struct {
 	wizard.BaseStep
+	frameSize
 	st    *State
 	hooks Hooks
+	log   logview.Surface
 
 	events           chan ExecEvent
 	started          time.Time
@@ -66,9 +69,11 @@ type ExecStep struct {
 	finished         bool
 	frame            uint64
 	// focusLine and lastLine are recorded during View: the running row's
-	// line, and the last line of the rendered content.
-	focusLine int
-	lastLine  int
+	// line, and the last line of the rendered content. tailRendered records
+	// whether that render put the log tail under the checklist.
+	focusLine    int
+	lastLine     int
+	tailRendered bool
 
 	styleCache execStyles
 	styleGen   uint64
@@ -81,6 +86,7 @@ func NewExecStep(st *State, hooks Hooks) *ExecStep {
 			"execute", "", ""),
 		st:     st,
 		hooks:  hooks,
+		log:    logview.Surface{Src: hooks.Logs},
 		events: make(chan ExecEvent, 32),
 		now:    time.Now,
 	}
@@ -122,6 +128,14 @@ func newExecStyles() execStyles {
 	}
 }
 
+// SetSize records the body box the frame gives the step: the full-screen
+// log and the tail budget size themselves to that height, which View's own
+// fixed 1000-row budget cannot report.
+func (s *ExecStep) SetSize(width, height int) {
+	s.BaseStep.SetSize(width, height)
+	s.bodyHeight = height
+}
+
 // DisplayTitle names the header for the operation in progress.
 func (s *ExecStep) DisplayTitle() string {
 	return opProgressLabel(s.st.Op, s.execRole())
@@ -153,7 +167,7 @@ func (s *ExecStep) Init() tea.Cmd {
 		if s.hooks.Execute != nil {
 			err = s.hooks.Execute(s.st, s.events)
 		}
-		s.events <- ExecEvent{Final: true, Err: err}
+		s.sendFinal(err)
 	}()
 
 	return s.listen()
@@ -185,6 +199,16 @@ func (s *ExecStep) execRole() nodetypes.NodeRole {
 	return nodetypes.RoleWorker
 }
 
+// sendFinal delivers the run's terminal event, abandoning it once the op's
+// context is gone: the runner goroutine holds the run lock and must not
+// outlive a force-quit waiting on a feed nobody drains.
+func (s *ExecStep) sendFinal(err error) {
+	select {
+	case <-s.hooks.Done:
+	case s.events <- ExecEvent{Final: true, Err: err}:
+	}
+}
+
 func (s *ExecStep) listen() tea.Cmd {
 	return func() tea.Msg { return execEventMsg{ev: <-s.events} }
 }
@@ -208,8 +232,55 @@ func (s *ExecStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 
 	case wizard.FrameMsg:
 		s.frame = msg.Frame
+
+	case tea.KeyPressMsg:
+		cmd := s.handleLogKey(msg)
+		return s, cmd
 	}
 	return s, nil
+}
+
+// handleLogKey routes the log viewport's keys through the shared surface;
+// only `f` needs a command back — swapping the log full-screen changes the
+// frame's own layout gate and so asks for a re-measure. With no Logs hook
+// every key is inert — an empty full-screen log would blank the whole body.
+func (s *ExecStep) handleLogKey(msg tea.KeyPressMsg) tea.Cmd {
+	if s.log.HandleKey(msg, s.paneCarriesLog()) {
+		return func() tea.Msg { return wizard.LayoutChangedMsg{} }
+	}
+	return nil
+}
+
+// ConsumesPaging reports whether pgup/pgdn page the log window itself — the
+// full-screen log always, a locked pane or tail too — so the frame leaves
+// the keys to the step instead of scrolling the checklist viewport.
+func (s *ExecStep) ConsumesPaging() bool {
+	return s.log.ConsumesPaging()
+}
+
+// ScrollsWithArrows opts the checklist into the frame's line-by-line arrow
+// scroll; in full-screen mode the arrows fall through to handleLogKey and
+// walk the log instead.
+func (s *ExecStep) ScrollsWithArrows() bool {
+	return s.hooks.Logs == nil || !s.log.Full()
+}
+
+// SuppressesSplit hands the log the whole frame while `f` has it
+// full-screen; the checklist comes back the moment it is toggled off.
+func (s *ExecStep) SuppressesSplit() bool {
+	return s.log.Full() && s.hooks.Logs != nil
+}
+
+// PaneContent fills the split layout's right pane with the live log, in
+// place of the context pane's step list.
+func (s *ExecStep) PaneContent(width, height int) string {
+	return s.log.RenderPane(width, height)
+}
+
+// paneCarriesLog reports whether the log has a pane of its own, in which
+// case the checklist body carries no tail.
+func (s *ExecStep) paneCarriesLog() bool {
+	return s.hooks.Logs != nil && !s.log.Full() && s.splitsFrame()
 }
 
 // applyEvent updates node/row state for ev: a node change closes out the
@@ -391,9 +462,20 @@ func (s *ExecStep) InterceptQuit() bool {
 // single line with its total, the running node stays expanded with
 // right-aligned durations and a live elapsed reading, and untouched nodes
 // show a bare pending bullet.
-func (s *ExecStep) View(width, height int) string {
-	s.SetSize(width, height)
+func (s *ExecStep) View(width, _ int) string {
 	col := max(width-4, 1)
+	s.log.ViewCol = col
+	if s.log.Full() {
+		// The headline rides above the full-screen log: progress and elapsed
+		// are what an operator would otherwise lose by leaving the checklist.
+		// The sink path rides with it — the file keeps every byte the ring
+		// evicts.
+		head := []string{s.headline(col)}
+		if s.hooks.LogPath != "" {
+			head = append(head, s.styles().dim.Render(tui.Truncate("full log: "+s.hooks.LogPath, col)))
+		}
+		return strings.Join(head, "\n") + "\n" + s.log.RenderFull(col, max(s.bodyHeight-len(head), 2))
+	}
 
 	lines := []string{s.headline(col)}
 	if s.cancelRequested && !s.finished {
@@ -408,11 +490,31 @@ func (s *ExecStep) View(width, height int) string {
 
 	// The cancel clause only applies while a first ctrl+c would still cancel
 	// gracefully — after completion there is nothing to cancel, and after a
-	// requested cancel the next ctrl+c force-quits.
+	// requested cancel the next ctrl+c force-quits. The sink clause names
+	// the real resolved path, or nothing at all when no file sink is open —
+	// never a guess.
 	footnote := "marker okd-install/" + node.OpMarkerFileName
+	if s.hooks.LogPath != "" {
+		footnote += " · full log " + s.hooks.LogPath
+	}
 	if !s.finished && !s.cancelRequested {
 		footnote += " · ctrl+c cancels after the current gate"
 	}
+
+	s.tailRendered = false
+	if !s.paneCarriesLog() {
+		// The tail's budget is whatever body rows the checklist and the
+		// chrome around the tail (its blank row, the LOG header, and the
+		// footnote block) leave over, floored at logview.NarrowTailRows —
+		// slack becomes evidence instead of blank rows.
+		budget := max(logview.NarrowTailRows, s.bodyHeight-len(lines)-4)
+		if tail := s.log.RenderTail(col, budget); len(tail) > 0 {
+			lines = append(lines, "")
+			lines = append(lines, tail...)
+			s.tailRendered = true
+		}
+	}
+
 	lines = append(lines, "", s.styles().dim.Render(lipgloss.Wrap(footnote, col, "")))
 
 	content := strings.Join(lines, "\n")
@@ -485,10 +587,16 @@ func nodeTouched(np *nodeProgress) bool {
 }
 
 // FocusedSpan reports the running row's line, falling back to the last
-// rendered line once the run has finished or no row is running.
+// rendered line once the run has finished or no row is running. A narrow
+// frame follows the tail instead: the log rides at the bottom of the body,
+// and a checklist longer than the viewport would otherwise park the newest
+// line below the fold.
 func (s *ExecStep) FocusedSpan() (wizard.LineSpan, bool) {
 	if len(s.nodes) == 0 {
 		return wizard.LineSpan{}, false
+	}
+	if s.tailRendered {
+		return wizard.LineSpan{Start: s.lastLine, End: s.lastLine}, true
 	}
 	line := s.focusLine
 	if s.finished || line < 0 {
@@ -548,12 +656,25 @@ func rowDur(r *execRow) string {
 	return fmtDur(r.took)
 }
 
-// ShortHelp explains the constrained keys: no esc, guarded ctrl+c — the
-// label matches the deploy stream screen's own cancel hint verbatim
-// (StreamStep.ShortHelp), so the two full-screen exec surfaces read as one
-// system rather than two different verbs for the same gesture.
+// ShortHelp explains the log viewport's keys plus the constrained ones: no
+// esc, guarded ctrl+c — the label matches the deploy stream screen's own
+// cancel hint verbatim (StreamStep.ShortHelp), so the two full-screen exec
+// surfaces read as one system rather than two different verbs for the same
+// gesture. In full-screen mode f leads the list — it is the only way back
+// to the checklist, and losing it would strand the operator on the log.
 func (s *ExecStep) ShortHelp() []wizard.KeyBinding {
-	return []wizard.KeyBinding{
-		{Key: wizard.HelpCtrlC, Help: "cancel (twice to force-quit)"},
+	cancel := wizard.KeyBinding{Key: wizard.HelpCtrlC, Help: "cancel (twice to force-quit)"}
+	if s.hooks.Logs == nil {
+		return []wizard.KeyBinding{cancel}
 	}
+	lock := wizard.KeyBinding{Key: string(rune(logview.KeyLock)), Help: s.log.LockHelp()}
+	full := wizard.KeyBinding{Key: string(rune(logview.KeyFull)), Help: s.log.FullHelp()}
+	page := wizard.KeyBinding{Key: "pgup/pgdn", Help: "page the log"}
+	if s.log.Full() {
+		return []wizard.KeyBinding{full, lock, page, cancel}
+	}
+	if s.log.Locked() {
+		return []wizard.KeyBinding{lock, full, page, cancel}
+	}
+	return []wizard.KeyBinding{lock, full, cancel}
 }

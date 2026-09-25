@@ -15,7 +15,7 @@
   │      ○ uncordon + ceph health gate                                                                               │  
   │  ○ homelab-master2                                                                                               │  
   │                                                                                                                  │  
-  │  LOG                                                                                                             │  
+  │  LOG · 10–24 of 24                                                                                               │  
   │  09:01:03 terraform apply step=step-09 node=homelab-master0                                                      │  
   │  09:01:10 terraform apply step=step-10 node=homelab-master0                                                      │  
   │  09:01:17 terraform apply step=step-11 node=homelab-master0                                                      │  
@@ -35,6 +35,6 @@
   │  marker okd-install/.okdctl-node-op.json · full log okd-install/okdctl.log · ctrl+c cancels after the            │  
   │                                                                                                                  │  
   │────────────────────────────────────── ↑ ↓  scroll down for more ────────────────────────────────────── ▸ homelab │  
-  │  l lock the log here • f full-screen log • pgup/pgdn scroll • ctrl+c cancel (twice to force-quit) • ? help       │  
+  │  l follow the log tail • f full-screen log … • ctrl+c cancel (twice to force-quit) • ? help                      │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                                         

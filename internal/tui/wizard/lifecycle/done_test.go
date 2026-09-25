@@ -30,7 +30,7 @@ func doneState() *State {
 func TestDoneStepRendersOutcomeAndNextSteps(t *testing.T) {
 	st := doneState()
 	st.Elapsed = 90 * time.Second
-	s := NewDoneStep(st)
+	s := NewDoneStep(st, Hooks{})
 	out := s.View(90, 40)
 	for _, want := range []string{"resize complete", "homelab-master0", "1m30s", "power-cycled"} {
 		if !strings.Contains(out, want) {
@@ -42,7 +42,7 @@ func TestDoneStepRendersOutcomeAndNextSteps(t *testing.T) {
 func TestDoneStepFailureCarriesError(t *testing.T) {
 	st := doneState()
 	st.Result = errors.New("etcd health gate (post-master0) failed: quorum lost")
-	out := NewDoneStep(st).View(90, 40)
+	out := NewDoneStep(st, Hooks{}).View(90, 40)
 	if !strings.Contains(out, "quorum lost") {
 		t.Errorf("failure view must carry the backend error:\n%s", out)
 	}
@@ -57,7 +57,7 @@ func TestDoneStepFailureCarriesError(t *testing.T) {
 func TestDoneStepCancelledRendersInterrupted(t *testing.T) {
 	st := doneState()
 	st.Result = fmt.Errorf("run resize: %w", context.Canceled)
-	out := tuitest.StripANSI(NewDoneStep(st).View(90, 40))
+	out := tuitest.StripANSI(NewDoneStep(st, Hooks{}).View(90, 40))
 	if !strings.Contains(out, "resize interrupted") {
 		t.Fatalf("cancelled view does not say interrupted:\n%s", out)
 	}
@@ -72,7 +72,7 @@ func TestDoneStepCancelledRendersInterrupted(t *testing.T) {
 func TestDoneStepFitsNarrowWidth(t *testing.T) {
 	st := doneState()
 	st.Elapsed = 90 * time.Second
-	out := NewDoneStep(st).View(70, 24)
+	out := NewDoneStep(st, Hooks{}).View(70, 24)
 	for _, line := range strings.Split(out, "\n") {
 		if w := lipgloss.Width(line); w > 70 {
 			t.Errorf("done view line %d cols wide, want <= 70: %q", w, line)
@@ -83,7 +83,7 @@ func TestDoneStepFitsNarrowWidth(t *testing.T) {
 func TestDoneStepFailureFitsNarrowWidth(t *testing.T) {
 	st := doneState()
 	st.Result = errors.New("etcd health gate (post-master0) failed: quorum lost")
-	out := NewDoneStep(st).View(70, 24)
+	out := NewDoneStep(st, Hooks{}).View(70, 24)
 	for _, line := range strings.Split(out, "\n") {
 		if w := lipgloss.Width(line); w > 70 {
 			t.Errorf("failure view line %d cols wide, want <= 70: %q", w, line)
@@ -94,7 +94,7 @@ func TestDoneStepFailureFitsNarrowWidth(t *testing.T) {
 func TestDoneStepFailureShowsChipAndPointer(t *testing.T) {
 	st := doneState()
 	st.Result = errors.New("etcd health gate (post-master0) failed: quorum lost")
-	out := NewDoneStep(st).View(90, 40)
+	out := NewDoneStep(st, Hooks{}).View(90, 40)
 	if !strings.Contains(out, "✗  resize failed") {
 		t.Errorf("failure view must show the failed-op chip:\n%s", out)
 	}
@@ -107,7 +107,7 @@ func TestDoneStepFailureShowsChipAndPointer(t *testing.T) {
 }
 
 func TestDoneStepEnterCompletes(t *testing.T) {
-	s := NewDoneStep(doneState())
+	s := NewDoneStep(doneState(), Hooks{})
 	_, cmd := s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatal("enter must complete the wizard")

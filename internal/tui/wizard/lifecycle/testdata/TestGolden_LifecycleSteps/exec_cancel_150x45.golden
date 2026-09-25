@@ -1,0 +1,45 @@
+                                                                                                                                                      
+  ╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L                                                                                                                                    │  
+  │ resizing masters                                                                                      op · target · params · plan · run · done │  
+  │────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
+  │  resizing masters  1 / 3                                                              elapsed 30s      │  LOG                                  │  
+  │  cancel requested — finishing the current terraform/oc call safely…                                    │  09:00:00 terraform apply step=step-… │  
+  │  ● homelab-master0                                                                                     │  09:00:07 terraform apply step=step-… │  
+  │      ✓ etcd health gate (pre)                                                                   —      │  09:00:14 terraform apply step=step-… │  
+  │      ✓ cordon + drain                                                                           —      │  09:00:21 terraform apply step=step-… │  
+  │      ⣾ terraform apply (in-place update)                                                      30s      │  09:00:28 terraform apply step=step-… │  
+  │      ○ power-cycle vm                                                                                  │  09:00:35 terraform apply step=step-… │  
+  │      ○ wait for node ready                                                                             │  09:00:42 terraform apply step=step-… │  
+  │      ○ etcd health gate (post)                                                                         │  09:00:49 terraform apply step=step-… │  
+  │      ○ uncordon + ceph health gate                                                                     │  09:00:56 terraform apply step=step-… │  
+  │  ○ homelab-master1                                                                                     │  09:01:03 terraform apply step=step-… │  
+  │  ○ homelab-master2                                                                                     │  09:01:10 terraform apply step=step-… │  
+  │                                                                                                        │  09:01:17 terraform apply step=step-… │  
+  │  marker okd-install/.okdctl-node-op.json · full log okd-install/okdctl.log                             │  09:01:24 terraform apply step=step-… │  
+  │                                                                                                        │  09:01:31 terraform apply step=step-… │  
+  │                                                                                                        │  09:01:38 terraform apply step=step-… │  
+  │                                                                                                        │  09:01:45 terraform apply step=step-… │  
+  │                                                                                                        │  09:01:52 terraform apply step=step-… │  
+  │                                                                                                        │  09:01:59 terraform apply step=step-… │  
+  │                                                                                                        │  09:02:06 terraform apply step=step-… │  
+  │                                                                                                        │  09:02:13 terraform apply step=step-… │  
+  │                                                                                                        │  09:02:20 terraform apply step=step-… │  
+  │                                                                                                        │  09:02:27 terraform apply step=step-… │  
+  │                                                                                                        │  09:02:34 terraform apply step=step-… │  
+  │                                                                                                        │  09:02:41 terraform apply step=step-… │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                                                                │  
+  │───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
+  │  l lock the log here • f full-screen log • ctrl+c cancel (twice to force-quit) • ? help                                                        │  
+  ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
+                                                                                                                                                      

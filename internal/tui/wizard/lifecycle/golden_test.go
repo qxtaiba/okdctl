@@ -15,6 +15,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/tui/logview"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
@@ -24,6 +25,32 @@ type lifecycleScenario struct {
 	id    wizard.StepID
 	build func() (*State, Hooks)
 	seed  func(m *wizard.Model, st *State)
+}
+
+// goldenHooks is the seeded feed the exec and done goldens render against:
+// no backend, a fixed log ring, and a fixed sink path so the pane, the
+// narrow tail, and the full-log pointers are deterministic.
+func goldenHooks() Hooks {
+	return Hooks{Logs: seededRing(24), LogPath: "okd-install/okdctl.log"}
+}
+
+// seedExecMidRun drives the exec step to a fixed mid-run frame: m0
+// collapsed with its total, m1 expanded around a running row, m2 pending.
+func seedExecMidRun(m *wizard.Model, _ *State) {
+	s, ok := m.CurrentStep().(*ExecStep)
+	if !ok {
+		return
+	}
+	base := time.Date(2026, 8, 30, 9, 0, 0, 0, time.UTC)
+	cur := base
+	s.now = func() time.Time { return cur }
+	s.started = base
+	s.buildRows()
+
+	s.applyEvent(&ExecEvent{Node: "homelab-master0", Step: node.StepTFApply})
+	cur = base.Add(60 * time.Second)
+	s.applyEvent(&ExecEvent{Node: "homelab-master1", Step: node.StepTFApply})
+	cur = base.Add(75 * time.Second)
 }
 
 func removeWorkerPlan() *node.OpPlan {
@@ -273,27 +300,41 @@ func lifecycleScenarios() []lifecycleScenario {
 		},
 		{
 			// Mid-run: m0 collapsed with its total, m1 expanded with a
-			// spinner row and right-aligned durations, m2 still pending.
+			// spinner row and right-aligned durations, m2 still pending;
+			// the log tail rides under the checklist (or in the pane on
+			// the split tier).
 			name: "exec",
 			id:   StepIDExec,
 			build: func() (*State, Hooks) {
-				return threeMasterState(), Hooks{}
+				return threeMasterState(), goldenHooks()
 			},
-			seed: func(m *wizard.Model, _ *State) {
-				s, ok := m.CurrentStep().(*ExecStep)
-				if !ok {
-					return
-				}
-				base := time.Date(2026, 8, 30, 9, 0, 0, 0, time.UTC)
-				cur := base
-				s.now = func() time.Time { return cur }
-				s.started = base
-				s.buildRows()
-
-				s.applyEvent(&ExecEvent{Node: "homelab-master0", Step: node.StepTFApply})
-				cur = base.Add(60 * time.Second)
-				s.applyEvent(&ExecEvent{Node: "homelab-master1", Step: node.StepTFApply})
-				cur = base.Add(75 * time.Second)
+			seed: seedExecMidRun,
+		},
+		{
+			// The log window frozen where `l` locked it, header marked so
+			// a still tail never reads as a stalled run.
+			name: "exec_locked",
+			id:   StepIDExec,
+			build: func() (*State, Hooks) {
+				return threeMasterState(), goldenHooks()
+			},
+			seed: func(m *wizard.Model, st *State) {
+				seedExecMidRun(m, st)
+				m.Update(tea.KeyPressMsg{Code: logview.KeyLock, Text: "l"})
+			},
+		},
+		{
+			// `f` swapped the log full-screen: the checklist steps aside
+			// and the log takes the whole frame, its sink path in the header.
+			name: "exec_full",
+			id:   StepIDExec,
+			build: func() (*State, Hooks) {
+				return threeMasterState(), goldenHooks()
+			},
+			seed: func(m *wizard.Model, st *State) {
+				seedExecMidRun(m, st)
+				m.Update(tea.KeyPressMsg{Code: logview.KeyFull, Text: "f"})
+				m.Update(wizard.LayoutChangedMsg{})
 			},
 		},
 		{
@@ -302,7 +343,7 @@ func lifecycleScenarios() []lifecycleScenario {
 			name: "exec_cancel",
 			id:   StepIDExec,
 			build: func() (*State, Hooks) {
-				return threeMasterState(), Hooks{}
+				return threeMasterState(), goldenHooks()
 			},
 			seed: func(m *wizard.Model, _ *State) {
 				s, ok := m.CurrentStep().(*ExecStep)
@@ -326,7 +367,7 @@ func lifecycleScenarios() []lifecycleScenario {
 			name: "exec_finished",
 			id:   StepIDExec,
 			build: func() (*State, Hooks) {
-				return threeMasterState(), Hooks{}
+				return threeMasterState(), goldenHooks()
 			},
 			seed: func(m *wizard.Model, _ *State) {
 				s, ok := m.CurrentStep().(*ExecStep)
@@ -354,7 +395,7 @@ func lifecycleScenarios() []lifecycleScenario {
 			build: func() (*State, Hooks) {
 				st := doneState()
 				st.Elapsed = 90 * time.Second
-				return st, Hooks{}
+				return st, goldenHooks()
 			},
 		},
 		{
@@ -366,7 +407,7 @@ func lifecycleScenarios() []lifecycleScenario {
 				st := doneState()
 				st.Elapsed = 90 * time.Second
 				st.Result = errors.New("etcd health gate (post-master0) failed: quorum lost")
-				return st, Hooks{}
+				return st, goldenHooks()
 			},
 		},
 	}
@@ -379,6 +420,8 @@ var lifecycleGoldenSizes = []struct {
 	{80, 24, true},
 	{100, 30, true},
 	{120, 40, true},
+	{150, 45, true},
+	{180, 48, true},
 }
 
 func TestGolden_LifecycleSteps(t *testing.T) {

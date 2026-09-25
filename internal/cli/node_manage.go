@@ -20,6 +20,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/render"
+	"github.com/qxtaiba/okdctl/internal/tui/logview"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/lifecycle"
 	"github.com/qxtaiba/okdctl/internal/workspace"
@@ -135,11 +136,17 @@ func newLifecycleSession(cmd *cobra.Command, cfg *config.Config) (*lifecycleSess
 	// ctrl+c); the backend unwinds and leaves its resume marker.
 	opCtx, cancelOp := context.WithCancel(ctx)
 
+	// The ring tees the human log stream into the exec screen's log surface
+	// on its way to the run log, so terraform applies, drains, and
+	// power-cycles stream onto the screen instead of running blind.
+	ring := logview.NewRing(logview.DefaultCap)
+	lg := ringSlog(ring)
+
 	st := &lifecycle.State{Cfg: cfg, Marker: marker}
 	hooks := lifecycle.Hooks{
 		ListNodes: func() ([]cluster.NodeDetail, error) { return cl.ListNodes(ctx) },
 		DryRun: func(s *lifecycle.State) (*node.OpPlan, error) {
-			rc, err := env.newRunner(cmd, cfg, "manage", nodeConsent{dryRun: true}, fileOnlySlog(), subprocSink())
+			rc, err := env.newRunner(cmd, cfg, "manage", nodeConsent{dryRun: true}, lg, subprocSink())
 			if err != nil {
 				return nil, err
 			}
@@ -152,8 +159,11 @@ func newLifecycleSession(cmd *cobra.Command, cfg *config.Config) (*lifecycleSess
 			return captured, nil
 		},
 		CancelOp: cancelOp,
+		Logs:     ring,
+		LogPath:  runLogPath,
+		Done:     opCtx.Done(),
 		Execute: func(s *lifecycle.State, events chan<- lifecycle.ExecEvent) error {
-			return executeLifecycleOp(opCtx, cmd, cfg, env, s, events)
+			return executeLifecycleOp(opCtx, cmd, cfg, env, s, events, lg)
 		},
 	}
 
@@ -207,8 +217,8 @@ func printLifecycleRecap(cmd *cobra.Command, st *lifecycle.State) {
 // executeLifecycleOp runs the wizard-approved op inside the AltScreen;
 // ConfirmFunc only cross-checks the world still matches the plan already
 // approved on the preview screen.
-func executeLifecycleOp(opCtx context.Context, cmd *cobra.Command, cfg *config.Config, env *nodeOpsEnv, st *lifecycle.State, events chan<- lifecycle.ExecEvent) error {
-	rc, err := env.newRunner(cmd, cfg, "manage", nodeConsent{}, fileOnlySlog(), subprocSink())
+func executeLifecycleOp(opCtx context.Context, cmd *cobra.Command, cfg *config.Config, env *nodeOpsEnv, st *lifecycle.State, events chan<- lifecycle.ExecEvent, lg *slog.Logger) error {
+	rc, err := env.newRunner(cmd, cfg, "manage", nodeConsent{}, lg, subprocSink())
 	if err != nil {
 		return err
 	}
@@ -220,11 +230,13 @@ func executeLifecycleOp(opCtx context.Context, cmd *cobra.Command, cfg *config.C
 	}
 	rc.runner.Reporter = func(desc string) func() {
 		start := time.Now()
-		events <- lifecycle.ExecEvent{Desc: desc}
-		return func() { events <- lifecycle.ExecEvent{Desc: desc, Done: true, Took: time.Since(start)} }
+		sendExecEvent(opCtx, events, lifecycle.ExecEvent{Desc: desc})
+		return func() {
+			sendExecEvent(opCtx, events, lifecycle.ExecEvent{Desc: desc, Done: true, Took: time.Since(start)})
+		}
 	}
 	rc.runner.OnStep = func(target string, step node.Step) {
-		events <- lifecycle.ExecEvent{Node: target, Step: step}
+		sendExecEvent(opCtx, events, lifecycle.ExecEvent{Node: target, Step: step})
 	}
 	if err := runLifecycleOp(opCtx, rc, st); err != nil {
 		if errors.Is(err, node.ErrDeclined) {
@@ -244,13 +256,26 @@ func subprocSink() io.Writer {
 	return runLogSink
 }
 
-// fileOnlySlog writes only to the okdctl.log sink, never stderr, which the
-// AltScreen wizard owns during execution.
-func fileOnlySlog() *slog.Logger {
-	if runLogSink == nil {
-		return logutil.NopLogger
+// ringSlog tees the session's log stream into the exec screen's log ring on
+// its way to the okdctl.log sink, never stderr, which the AltScreen wizard
+// owns during execution; redaction wraps the tee, so the on-screen pane
+// only ever sees scrubbed records.
+func ringSlog(ring *logview.Ring) *slog.Logger {
+	var next slog.Handler
+	if runLogSink != nil {
+		next = slog.NewTextHandler(runLogSink, nil)
 	}
-	return slog.New(logutil.NewRedactHandler(slog.NewTextHandler(runLogSink, nil)))
+	return slog.New(logutil.NewRedactHandler(ring.Handler(next)))
+}
+
+// sendExecEvent delivers ev unless the op's context is gone — a chatty
+// unwind after a force-quit must never strand the runner goroutine (holding
+// the run lock and a terraform subprocess) on a feed nobody drains.
+func sendExecEvent(ctx context.Context, events chan<- lifecycle.ExecEvent, ev lifecycle.ExecEvent) {
+	select {
+	case <-ctx.Done():
+	case events <- ev:
+	}
 }
 
 // runLifecycleOp dispatches the wizard-collected op onto the runner, merging

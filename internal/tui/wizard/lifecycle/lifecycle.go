@@ -9,6 +9,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/node"
+	"github.com/qxtaiba/okdctl/internal/tui/logview"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
@@ -86,4 +87,16 @@ type Hooks struct {
 	DryRun    func(st *State) (*node.OpPlan, error)
 	Execute   func(st *State, events chan<- ExecEvent) error
 	CancelOp  func()
+	// Logs is the human log stream the log surface reads; nil leaves the
+	// pane to the wizard's own context pane.
+	Logs logview.Source
+	// LogPath is the resolved path of the run-log sink that keeps every
+	// byte the ring evicts; empty when no file sink is open, and no screen
+	// may then point at one.
+	LogPath string
+	// Done is closed once the op's context is cancelled. The exec step's
+	// final send selects on it, so a force-quit never strands the runner
+	// goroutine (holding the run lock) on a feed nobody drains; a nil
+	// channel simply never fires.
+	Done <-chan struct{}
 }

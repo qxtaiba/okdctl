@@ -10,6 +10,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
+	"github.com/qxtaiba/okdctl/internal/tui/logview"
 )
 
 // DemoClusterName is the fixed cluster identity DemoHooks' static node list
@@ -23,17 +24,21 @@ const demoTFPrefix = "module.okd_cluster.proxmox_virtual_environment_vm."
 
 // DemoHooks returns Hooks that drive the lifecycle wizard against a static
 // six-node fixture and a GateRows-derived execution script paced by
-// stepDelay, so every screen renders without a live Proxmox/OKD cluster.
+// stepDelay, so every screen renders without a live Proxmox/OKD cluster —
+// the scripted feed fills the same log surface a real run tees into.
 func DemoHooks(stepDelay time.Duration) Hooks {
 	// ctx has no caller context to inherit — a demo run's only cancellation
 	// source is the wizard's exec-step graceful cancel, wired through CancelOp.
 	ctx, cancel := context.WithCancel(context.Background())
+	ring := logview.NewRing(logview.DefaultCap)
 	return Hooks{
 		ListNodes: func() ([]cluster.NodeDetail, error) { return demoNodes(), nil },
 		DryRun:    demoPlan,
 		CancelOp:  cancel,
+		Logs:      ring,
+		Done:      ctx.Done(),
 		Execute: func(st *State, events chan<- ExecEvent) error {
-			return demoExecute(ctx, st, events, stepDelay)
+			return demoExecute(ctx, st, events, ring, stepDelay)
 		},
 	}
 }
@@ -163,8 +168,9 @@ func demoAddress(role nodetypes.NodeRole, idx int) string {
 // demoExecute replays a scripted event feed for every plan node, honouring
 // ctx cancellation (wired to Hooks.CancelOp) between every event so a
 // graceful cancel on the exec screen unblocks promptly instead of running
-// the fixture to completion.
-func demoExecute(ctx context.Context, st *State, events chan<- ExecEvent, stepDelay time.Duration) error {
+// the fixture to completion. Each event also appends one human line to the
+// ring, so the log surface fills from the same script the checklist reads.
+func demoExecute(ctx context.Context, st *State, events chan<- ExecEvent, ring *logview.Ring, stepDelay time.Duration) error {
 	if st.Plan == nil {
 		return nil
 	}
@@ -175,12 +181,26 @@ func demoExecute(ctx context.Context, st *State, events chan<- ExecEvent, stepDe
 				return ctx.Err()
 			case events <- ev:
 			}
+			ring.Append(demoLogLine(&ev))
 			if err := demoWait(ctx, stepDelay); err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+// demoLogLine renders ev as the one human line a real backend would log for
+// the same transition.
+func demoLogLine(ev *ExecEvent) logview.Line {
+	text := ev.Desc
+	if text == "" {
+		text = fmt.Sprintf("%s node=%s", ev.Step, ev.Node)
+	}
+	if ev.Done {
+		text += " done"
+	}
+	return logview.Line{At: time.Now(), Level: "INFO", Text: text}
 }
 
 // demoWait pauses for d, or returns ctx's error the moment it's cancelled —
