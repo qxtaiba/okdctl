@@ -64,6 +64,16 @@ func ColorEnabled() bool {
 	return colorEnabled()
 }
 
+// Hyperlink wraps text in an OSC 8 terminal hyperlink to url when the
+// active color profile renders escapes at all; off-TTY and under NO_COLOR
+// the text comes back plain.
+func Hyperlink(url, text string) string {
+	if url == "" || !colorEnabled() {
+		return text
+	}
+	return "\x1b]8;;" + url + "\x1b\\" + text + "\x1b]8;;\x1b\\"
+}
+
 // Downsample rewrites s so ANSI escapes match the active profile —
 // unchanged under TrueColor, downgraded for ANSI/ANSI256, stripped
 // otherwise. Boxed* helpers apply it internally; callers printing styled

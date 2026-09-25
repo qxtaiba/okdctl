@@ -3,15 +3,15 @@
   │ O K D C T L                                                                                                      │  
   │ configure cluster addons                                                 connect · cluster · extras ●○○ · review │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
-  │    enabled                                                                                                       │  
-  │    ╭────────────────╮                                                                                            │  
-  │    │ ○ no  ● yes    │                                                                                            │  
-  │    ╰────────────────╯                                                                                            │  
+  │                                                                                                                  │  
+  │    ○ flux settings                                                                                               │  
+  │      requires: ssh deploy key at ~/.ssh/flux-deploy-key                                                          │  
   │                                                                                                                  │  
   │    repository                                                                                                    │  
   │    ╭──────────────────────────────────────────────────────────────╮                                              │  
   │    │ ·                                                            │                                              │  
   │    ╰──────────────────────────────────────────────────────────────╯                                              │  
+  │    ✗ repository is required — enter a value                                                                      │  
   │                                                                                                                  │  
   │    branch                                                                                                        │  
   │    ╭──────────────────────────────────────╮                                                                      │  
@@ -34,7 +34,7 @@
   │    ╰────────────────╯                                                                                            │  
   │    bootstrap eso provider credentials and secretstore crd                                                        │  
   │                                                                                                                  │  
-  │────────────────────────────── ↑ ↓  14% • scroll for more ─────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
+  │────────────────────────────── ↑ ↓  88% • scroll for more ─────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
   │  ↑↓/tab navigate • enter continue • esc back • pgup/pgdn scroll • ctrl+c quit • ? help                           │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                                         

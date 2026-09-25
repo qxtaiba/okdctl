@@ -83,6 +83,7 @@ type kvOpts struct {
 	keyColWidth int // 0 = use the Builder's default keyWidth
 	highlight   bool
 	sub         bool
+	link        bool // hyperlink the value to itself (the value is a URL)
 }
 
 // kv renders key/value through the tui dotted-line variant opts selects and
@@ -100,6 +101,8 @@ func (s *Builder) kv(key, value string, opts kvOpts) {
 		rendered = tui.DottedKeyValueSubFull("  "+key, value, keyColWidth, s.kvWidth)
 	case opts.highlight:
 		rendered = tui.DottedKeyValueHighlightFull("  "+key, value, keyColWidth, s.kvWidth)
+	case opts.link:
+		rendered = tui.DottedKeyValueLinkFull("  "+key, value, keyColWidth, s.kvWidth)
 	default:
 		rendered = tui.DottedKeyValueFull("  "+key, value, keyColWidth, s.kvWidth)
 	}
@@ -145,6 +148,12 @@ func (s *Builder) KVHighlight(key, value string) {
 // KVWide writes a dotted key/value line with a 24-column key, leaving long command or URL values more room before they wrap.
 func (s *Builder) KVWide(key, value string) {
 	s.kv(key, value, kvOpts{keyColWidth: tui.DefaultKeyColWidth})
+}
+
+// KVLink writes KVWide's row with the URL value OSC 8-hyperlinked to itself,
+// degrading to KVWide's plain text off-TTY and under NO_COLOR.
+func (s *Builder) KVLink(key, url string) {
+	s.kv(key, url, kvOpts{keyColWidth: tui.DefaultKeyColWidth, link: true})
 }
 
 // SubKV writes a nested dotted key/value line with a muted key and a key column narrowed by two.
@@ -332,8 +341,8 @@ func PostDeploySummaryWidth(cfg *config.Config, result *postinstall.Result, step
 
 	sb.Section("access")
 	sb.KV("cluster", clusterFQDN)
-	sb.KVWide("console", consoleURL)
-	sb.KVWide("api", apiURL)
+	sb.KVLink("console", consoleURL)
+	sb.KVLink("api", apiURL)
 	sb.Newline()
 
 	sb.Section("dns records")

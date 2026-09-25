@@ -1,8 +1,11 @@
 package tui
 
 import (
+	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/colorprofile"
 
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 )
@@ -74,5 +77,41 @@ func TestRenderFactsSubAndHighlightSelectStyles(t *testing.T) {
 	}
 	if !strings.Contains(rows[2], styles.Highlight.Render("v")) {
 		t.Errorf("highlight row = %q, want the Highlight style on the value", rows[2])
+	}
+}
+
+func TestHyperlinkGatesOnColorProfile(t *testing.T) {
+	forced := colorprofile.TrueColor
+	outputProfile.Store(&forced)
+	t.Cleanup(func() { SetColorProfileFor(&bytes.Buffer{}) })
+
+	linked := Hyperlink("https://example.com", "console")
+	if !strings.Contains(linked, "\x1b]8;;https://example.com\x1b\\") || !strings.Contains(linked, "console") {
+		t.Fatalf("Hyperlink = %q, want the OSC 8 wrap around the text", linked)
+	}
+
+	DisableColor()
+	if got := Hyperlink("https://example.com", "console"); got != "console" {
+		t.Fatalf("Hyperlink under NO_COLOR/off-TTY = %q, want plain text", got)
+	}
+}
+
+func TestRenderFactsLinksEveryValueLine(t *testing.T) {
+	forced := colorprofile.TrueColor
+	outputProfile.Store(&forced)
+	t.Cleanup(func() { SetColorProfileFor(&bytes.Buffer{}) })
+
+	url := "https://console-openshift-console.apps.lab.example.com"
+	lines := RenderFacts(
+		[]FactRow{{Key: "console", Value: url, Link: url}},
+		&FactLayout{Leader: FactLeaderDots, KeyWidth: 12, TotalWidth: 40, Styles: DefaultFactStyles()},
+	)
+	if len(lines) < 2 {
+		t.Fatalf("lines = %q, want the URL wrapped across rows", lines)
+	}
+	for i, l := range lines {
+		if !strings.Contains(l, "\x1b]8;;"+url+"\x1b\\") {
+			t.Errorf("line %d = %q, want each wrapped segment linked to the full URL", i, l)
+		}
 	}
 }

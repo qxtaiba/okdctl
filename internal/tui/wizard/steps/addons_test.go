@@ -11,40 +11,22 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 )
 
-// TestAddonsStep_EnabledAddonsRequireTheirEndpoints pins bug 11: flux with
-// an empty repository or vault with an empty server url must fail wizard
-// validation instead of an addon install an hour later.
+// TestAddonsStep_EnabledAddonsRequireTheirEndpoints pins bug 11's vault
+// half: vault with an empty server url must fail wizard validation instead
+// of an addon install an hour later — the flux repository moved to a
+// field-level Required, covered by TestAddonsRequiredFieldsGateOnEnable.
 func TestAddonsStep_EnabledAddonsRequireTheirEndpoints(t *testing.T) {
-	cases := []struct {
-		name   string
-		values map[string]string
-		want   string
-	}{
-		{
-			name:   "flux enabled without repository",
-			values: map[string]string{"flux_enabled": valYes, "flux_repository": ""},
-			want:   "repository",
-		},
-		{
-			name: "vault provider without server url",
-			values: map[string]string{
-				"secretstore_enabled":      valYes,
-				"secretstore_provider":     providerVault,
-				"secretstore_vault_server": "",
-			},
-			want: "server url",
-		},
+	if AddonsStepDefinition.Validate == nil {
+		t.Fatal("AddonsStepDefinition.Validate is nil")
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if AddonsStepDefinition.Validate == nil {
-				t.Fatal("AddonsStepDefinition.Validate is nil")
-			}
-			err := AddonsStepDefinition.Validate(tc.values)
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("Validate(%v) = %v, want error naming %q", tc.values, err, tc.want)
-			}
-		})
+	values := map[string]string{
+		"secretstore_enabled":      valYes,
+		"secretstore_provider":     providerVault,
+		"secretstore_vault_server": "",
+	}
+	err := AddonsStepDefinition.Validate(values)
+	if err == nil || !strings.Contains(err.Error(), "server url") {
+		t.Fatalf("Validate(%v) = %v, want error naming the server url", values, err)
 	}
 
 	disabled := map[string]string{"flux_enabled": valNo, "secretstore_enabled": valNo}
@@ -69,7 +51,7 @@ func TestAddonsStep_OnlyTheSelectedProviderSectionRenders(t *testing.T) {
 		t.Run(tc.provider, func(t *testing.T) {
 			cfg := config.DefaultConfig()
 			cfg.Addons = map[string]config.AddonConfig{
-				"secretstore": {Settings: map[string]string{"provider": tc.provider}},
+				"secretstore": {Enabled: true, Settings: map[string]string{"provider": tc.provider}},
 			}
 
 			step := NewAddonsStep()

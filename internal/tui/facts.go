@@ -7,9 +7,12 @@ import (
 )
 
 // FactRow is one key/value fact for RenderFacts; Sub marks a nested key
-// (one tier fainter) and Highlight an amber-emphasized value.
+// (one tier fainter), Highlight an amber-emphasized value, and a non-empty
+// Link wraps every rendered value segment in an OSC 8 hyperlink to it
+// (degrading to plain text off-TTY and under NO_COLOR).
 type FactRow struct {
 	Key, Value string
+	Link       string
 	Highlight  bool
 	Sub        bool
 }
@@ -103,7 +106,7 @@ func renderFactRow(row *FactRow, l *FactLayout) []string {
 		prefix = keyStyle.Render(row.Key) + " " + l.Styles.Leader.Render(strings.Repeat(".", dotsNeeded)) + " "
 	}
 
-	return strings.Split(prefix+wrapValueColumn(row.Value, valueStart, &valueStyle, l.TotalWidth), "\n")
+	return strings.Split(prefix+wrapValueColumn(row.Value, valueStart, &valueStyle, l.TotalWidth, row.Link), "\n")
 }
 
 // renderColonFact renders one "key: value" fact flow-wrapped to TotalWidth.

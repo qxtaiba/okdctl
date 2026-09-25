@@ -620,6 +620,7 @@ func TestGolden_DistributionErrorState(t *testing.T) {
 // scrolled into view, then ctrl+e enters edit mode.
 func TestGolden_AddonsVaultsEditMode(t *testing.T) {
 	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
+	rightKey := tea.KeyPressMsg{Code: tea.KeyRight}
 	ctrlE := tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl}
 
 	for _, sz := range goldenSizes {
@@ -631,7 +632,12 @@ func TestGolden_AddonsVaultsEditMode(t *testing.T) {
 			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
 			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDAddons})
 
-			for range 8 {
+			// The settings fold behind the enable toggles: tab to the secret
+			// store toggle, enable it, then tab to the unfolded vaults field.
+			m.Update(tabKey)
+			m.Update(wizard.FocusChangedMsg{})
+			m.Update(rightKey)
+			for range 4 {
 				m.Update(tabKey)
 				m.Update(wizard.FocusChangedMsg{})
 			}

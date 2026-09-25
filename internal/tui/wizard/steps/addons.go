@@ -77,11 +77,10 @@ var AddonsStepDefinition = wizard.StepDefinition{
 	Description:  "enable optional cluster features",
 	// Validate rejects an enabled addon missing the endpoint its install
 	// cannot run without, so the wizard fails here rather than the addon
-	// manager an hour into the deploy.
+	// manager an hour into the deploy; the flux repository and bitwarden ids
+	// are field-level Required instead, live exactly while their sections
+	// are unfolded.
 	Validate: func(values map[string]string) error {
-		if values["flux_enabled"] == valYes && strings.TrimSpace(values["flux_repository"]) == "" {
-			return errors.New("flux repository is required when flux is enabled — enter the git repository url")
-		}
 		if values["secretstore_enabled"] == valYes && values["secretstore_provider"] == providerVault &&
 			strings.TrimSpace(values["secretstore_vault_server"]) == "" {
 			return errors.New("vault server url is required — enter the vault address")
@@ -91,16 +90,6 @@ var AddonsStepDefinition = wizard.StepDefinition{
 	Sections: []wizard.SectionDefinition{
 		{
 			Title: "gitops (flux)",
-			Note:  "requires: ssh deploy key at ~/.ssh/flux-deploy-key",
-			Warning: func(values map[string]string) string {
-				if values["flux_enabled"] != valYes {
-					return ""
-				}
-				if system.FileExists(system.ExpandPath("~/.ssh/flux-deploy-key")) {
-					return ""
-				}
-				return "flux requires ssh deploy key at ~/.ssh/flux-deploy-key — create it before deploying"
-			},
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "flux_enabled",
@@ -112,12 +101,31 @@ var AddonsStepDefinition = wizard.StepDefinition{
 					ConfigSet: setAddonEnabled("flux"),
 					ConfigGet: addonEnabled("flux"),
 				},
+			},
+		},
+		{
+			Title: "flux settings",
+			Note:  "requires: ssh deploy key at ~/.ssh/flux-deploy-key",
+			Visible: func(values map[string]string) bool {
+				return values["flux_enabled"] == valYes
+			},
+			Warning: func(values map[string]string) string {
+				if values["flux_enabled"] != valYes {
+					return ""
+				}
+				if system.FileExists(system.ExpandPath("~/.ssh/flux-deploy-key")) {
+					return ""
+				}
+				return "flux requires ssh deploy key at ~/.ssh/flux-deploy-key — create it before deploying"
+			},
+			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "flux_repository",
 					Label:     "repository",
 					Default:   "",
 					Help:      "git repository url (e.g., ssh://git@github.com/org/repo.git)",
 					Width:     wizard.FieldWidthPath,
+					Required:  true,
 					ConfigSet: setAddonSetting("flux", flux.SettingRepository),
 					ConfigGet: addonSetting("flux", flux.SettingRepository),
 				},
@@ -143,15 +151,6 @@ var AddonsStepDefinition = wizard.StepDefinition{
 		{
 			Title: "secret store (common)",
 			Note:  "supports onepassword, vault, and bitwarden via external-secrets-operator",
-			Warning: func(values map[string]string) string {
-				if values["secretstore_enabled"] != valYes {
-					return ""
-				}
-				if _, err := exec.LookPath("sops"); err == nil {
-					return ""
-				}
-				return "secretstore requires sops — install before deploying"
-			},
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "secretstore_enabled",
@@ -163,6 +162,23 @@ var AddonsStepDefinition = wizard.StepDefinition{
 					ConfigSet: setAddonEnabled("secretstore"),
 					ConfigGet: addonEnabled("secretstore"),
 				},
+			},
+		},
+		{
+			Title: "secret store settings",
+			Visible: func(values map[string]string) bool {
+				return values["secretstore_enabled"] == valYes
+			},
+			Warning: func(values map[string]string) string {
+				if values["secretstore_enabled"] != valYes {
+					return ""
+				}
+				if _, err := exec.LookPath("sops"); err == nil {
+					return ""
+				}
+				return "secretstore requires sops — install before deploying"
+			},
+			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "secretstore_provider",
 					Label:     "provider",
@@ -187,7 +203,7 @@ var AddonsStepDefinition = wizard.StepDefinition{
 			Title: "secret store (onepassword)",
 			Note:  "requires: sops-encrypted 1password-credentials.json and 1password-token.txt + age key on bastion",
 			Visible: func(values map[string]string) bool {
-				return values["secretstore_provider"] == providerOnepassword
+				return values["secretstore_enabled"] == valYes && values["secretstore_provider"] == providerOnepassword
 			},
 			Fields: []wizard.FieldDefinition{
 				{
@@ -214,7 +230,7 @@ var AddonsStepDefinition = wizard.StepDefinition{
 			Title: "secret store (vault)",
 			Note:  "requires: vault-token.txt in secrets directory (plaintext or sops-encrypted)",
 			Visible: func(values map[string]string) bool {
-				return values["secretstore_provider"] == providerVault
+				return values["secretstore_enabled"] == valYes && values["secretstore_provider"] == providerVault
 			},
 			Fields: []wizard.FieldDefinition{
 				{
@@ -248,7 +264,7 @@ var AddonsStepDefinition = wizard.StepDefinition{
 			Title: "secret store (bitwarden)",
 			Note:  "requires: bitwarden-token.txt in secrets directory (plaintext or sops-encrypted)",
 			Visible: func(values map[string]string) bool {
-				return values["secretstore_provider"] == providerBitwarden
+				return values["secretstore_enabled"] == valYes && values["secretstore_provider"] == providerBitwarden
 			},
 			Fields: []wizard.FieldDefinition{
 				{
@@ -256,6 +272,7 @@ var AddonsStepDefinition = wizard.StepDefinition{
 					Label:     "organization id",
 					Default:   "",
 					Help:      "bitwarden organization uuid",
+					Required:  true,
 					ConfigSet: setAddonSetting("secretstore", secretstore.SettingBitwardenOrganizationID),
 					ConfigGet: addonSetting("secretstore", secretstore.SettingBitwardenOrganizationID),
 				},
@@ -264,6 +281,7 @@ var AddonsStepDefinition = wizard.StepDefinition{
 					Label:     "project id",
 					Default:   "",
 					Help:      "bitwarden project uuid",
+					Required:  true,
 					ConfigSet: setAddonSetting("secretstore", secretstore.SettingBitwardenProjectID),
 					ConfigGet: addonSetting("secretstore", secretstore.SettingBitwardenProjectID),
 				},

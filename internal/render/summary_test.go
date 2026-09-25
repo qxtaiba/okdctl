@@ -237,3 +237,25 @@ func TestPostDeployRecapLinesDropAnEmptyRunID(t *testing.T) {
 		}
 	}
 }
+
+// TestPostDeploySummaryHyperlinksAccessURLs pins the done card's OSC 8
+// links: on a color-capable terminal the console and api rows link their
+// URLs; stripped output stays byte-identical to the plain rendering.
+func TestPostDeploySummaryHyperlinksAccessURLs(t *testing.T) {
+	t.Cleanup(func() { tui.SetColorProfileFor(&bytes.Buffer{}) })
+	t.Setenv("CLICOLOR_FORCE", "1")
+	t.Setenv("COLORTERM", "truecolor")
+	t.Setenv("NO_COLOR", "")
+	tui.SetColorProfileFor(&bytes.Buffer{})
+
+	cfg := config.DefaultConfig()
+	cfg.Cluster.Name = "lab"
+	cfg.Cluster.Domain = "example.com"
+	out := PostDeploySummary(cfg, nil, nil, "run-01")
+	if !strings.Contains(out, "\x1b]8;;https://console-openshift-console.apps.") {
+		t.Errorf("done card carries no console hyperlink:\n%q", out)
+	}
+	if !strings.Contains(out, "\x1b]8;;https://api.") {
+		t.Errorf("done card carries no api hyperlink:\n%q", out)
+	}
+}

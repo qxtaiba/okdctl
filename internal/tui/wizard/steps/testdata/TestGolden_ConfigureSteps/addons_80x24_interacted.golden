@@ -4,19 +4,19 @@
   │ configure cluster addons         connect · cluster · extras ●○○ · review │  
   │──────────────────────────────────────────────────────────────────────────│  
   │                                                                          │  
-  │    ● gitops (flux)                                                       │  
-  │      requires: ssh deploy key at ~/.ssh/flux-deploy-key                  │  
+  │    ✓ gitops (flux)                                                       │  
   │                                                                          │  
   │    enabled                                                               │  
   │    ╭────────────────╮                                                    │  
   │    │ ● no  ○ yes    │                                                    │  
   │    ╰────────────────╯                                                    │  
   │                                                                          │  
-  │    repository                                                            │  
-  │    ╭──────────────────────────────────────────────────────────────╮      │  
-  │    │                                                              │      │  
-  │    ╰──────────────────────────────────────────────────────────────╯      │  
-  │    git repository url (e.g., ssh://git@github.com/org/repo.git)          │  
+  │    ● secret store (common)                                               │  
+  │      supports onepassword, vault, and bitwarden via external-secrets-    │  
+  │      operator                                                            │  
+  │                                                                          │  
+  │    enabled                                                               │  
+  │    ╭────────────────╮                                                    │  
   │                                                                          │  
   │─────────── ↑ ↓  scroll down for more ─────────── ▸ okd 4.22.0-okd-scos.7 │  
   │  ↑↓/tab navigate • enter continue • esc back … • ctrl+c quit • ? help    │  
