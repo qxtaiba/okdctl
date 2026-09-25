@@ -93,17 +93,12 @@ func DottedKeyValueLinkFull(key, url string, keyColWidth, totalWidth int) string
 
 // KeyValueNote renders "key    text" — key padded to keyColWidth with no dot leaders, wrapping text under the value column across several lines when it doesn't fit.
 func KeyValueNote(key, text string, keyColWidth, totalWidth int) string {
-	keyStyle := lipgloss.NewStyle().Foreground(ColorTextDim())
-	valueStyle := lipgloss.NewStyle()
-
-	if keyColWidth <= 0 {
-		keyColWidth = DefaultKeyColWidth
-	}
-
-	keyLen := lipgloss.Width(key)
-	pad := max(keyColWidth-keyLen, 1)
-	valueStart := keyLen + pad
-
-	prefix := keyStyle.Render(key) + strings.Repeat(" ", pad)
-	return Downsample(prefix + wrapValueColumn(text, valueStart, &valueStyle, totalWidth, ""))
+	lines := RenderFacts(
+		[]FactRow{{Key: key, Value: text}},
+		&FactLayout{Leader: FactLeaderPad, KeyWidth: keyColWidth, TotalWidth: totalWidth, Styles: FactStyles{
+			Key:   lipgloss.NewStyle().Foreground(ColorTextDim()),
+			Value: lipgloss.NewStyle(),
+		}},
+	)
+	return Downsample(strings.Join(lines, "\n"))
 }

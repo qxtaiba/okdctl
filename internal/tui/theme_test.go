@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"sync"
 	"testing"
 
 	"charm.land/lipgloss/v2"
@@ -94,16 +95,57 @@ func TestResolveThemeHighContrastIsBackgroundIndependent(t *testing.T) {
 	}
 }
 
+// TestUseThemeSwapsAtomically exercises the documented concurrency
+// contract under -race: one goroutine swapping themes (UseTheme has a
+// single writer by contract — the style caches are not write-safe) while
+// several readers pull colors through the getters, every read landing on
+// one whole theme, never a torn mix.
 func TestUseThemeSwapsAtomically(t *testing.T) {
 	t.Cleanup(func() { SetDarkBackground(true) })
 
-	before := CurrentTheme()
-	UseTheme(ResolveTheme(colorprofile.TrueColor, false, ThemeDefault))
-	after := CurrentTheme()
-	if before.Text == after.Text {
-		t.Error("UseTheme did not swap the active theme")
+	dark := ResolveTheme(colorprofile.TrueColor, true, ThemeDefault)
+	light := ResolveTheme(colorprofile.TrueColor, false, ThemeDefault)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := range 500 {
+			if i%2 == 0 {
+				UseTheme(light)
+			} else {
+				UseTheme(dark)
+			}
+		}
+	}()
+
+	for range 4 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range 2000 {
+				th := CurrentTheme()
+				switch th.Text {
+				case dark.Text:
+					if th.Rule != dark.Rule {
+						t.Error("torn read: dark text with a non-dark rule")
+						return
+					}
+				case light.Text:
+					if th.Rule != light.Rule {
+						t.Error("torn read: light text with a non-light rule")
+						return
+					}
+				default:
+					t.Errorf("CurrentTheme().Text = %v, matches neither installed theme", th.Text)
+					return
+				}
+				if c := ColorPrimary(); c != dark.Primary && c != light.Primary {
+					t.Errorf("ColorPrimary() = %v, matches neither installed theme", c)
+					return
+				}
+			}
+		}()
 	}
-	if ColorText() != after.Text {
-		t.Error("getter does not read the active theme")
-	}
+	wg.Wait()
 }

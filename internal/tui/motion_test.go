@@ -8,23 +8,27 @@ func TestResolveMotion(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
-		name    string
-		flagOff bool
-		vars    map[string]string
-		want    MotionMode
+		name        string
+		flagOff     bool
+		flagNoColor bool
+		vars        map[string]string
+		want        MotionMode
 	}{
-		{"default_full", false, nil, MotionFull},
-		{"flag_off", true, nil, MotionOff},
-		{"env_off_1", false, map[string]string{"OKDCTL_NO_MOTION": "1"}, MotionOff},
-		{"env_off_true", false, map[string]string{"OKDCTL_NO_MOTION": "true"}, MotionOff},
-		{"env_off_other_value_ignored", false, map[string]string{"OKDCTL_NO_MOTION": "yes"}, MotionFull},
-		{"no_color_implies_reduced", false, map[string]string{"NO_COLOR": "1"}, MotionReduced},
-		{"flag_beats_no_color", true, map[string]string{"NO_COLOR": "1"}, MotionOff},
-		{"env_beats_no_color", false, map[string]string{"OKDCTL_NO_MOTION": "1", "NO_COLOR": "1"}, MotionOff},
+		{"default_full", false, false, nil, MotionFull},
+		{"flag_off", true, false, nil, MotionOff},
+		{"env_off_1", false, false, map[string]string{"OKDCTL_NO_MOTION": "1"}, MotionOff},
+		{"env_off_true", false, false, map[string]string{"OKDCTL_NO_MOTION": "true"}, MotionOff},
+		{"env_off_other_value_ignored", false, false, map[string]string{"OKDCTL_NO_MOTION": "yes"}, MotionFull},
+		{"no_color_env_implies_reduced", false, false, map[string]string{"NO_COLOR": "1"}, MotionReduced},
+		{"no_color_flag_implies_reduced", false, true, nil, MotionReduced},
+		{"flag_beats_no_color_env", true, false, map[string]string{"NO_COLOR": "1"}, MotionOff},
+		{"flag_beats_no_color_flag", true, true, nil, MotionOff},
+		{"env_beats_no_color", false, false, map[string]string{"OKDCTL_NO_MOTION": "1", "NO_COLOR": "1"}, MotionOff},
+		{"env_beats_no_color_flag", false, true, map[string]string{"OKDCTL_NO_MOTION": "1"}, MotionOff},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := ResolveMotion(tc.flagOff, env(tc.vars)); got != tc.want {
-				t.Errorf("ResolveMotion(%v, %v) = %v, want %v", tc.flagOff, tc.vars, got, tc.want)
+			if got := ResolveMotion(tc.flagOff, tc.flagNoColor, env(tc.vars)); got != tc.want {
+				t.Errorf("ResolveMotion(%v, %v, %v) = %v, want %v", tc.flagOff, tc.flagNoColor, tc.vars, got, tc.want)
 			}
 		})
 	}

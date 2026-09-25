@@ -152,12 +152,12 @@ func NewResourcesStep() (*wizard.DataDrivenStep, *ResourcesStepState) {
 	return step, state
 }
 
-var resourceSummaryStyles = struct {
-	value lipgloss.Style
-	sep   string
-}{
-	value: lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true),
-	sep:   lipgloss.NewStyle().Foreground(tui.ColorSubtle()).Render("  ·  "),
+// resourceSummaryStyles builds the totals line's styles fresh per render —
+// an eager package var would freeze its brand and separator tiers at their
+// init-time polarity.
+func resourceSummaryStyles() (value lipgloss.Style, sep string) {
+	return lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true),
+		lipgloss.NewStyle().Foreground(tui.ColorSubtle()).Render("  ·  ")
 }
 
 // renderResourceSummary returns the totals line for the resources step's
@@ -184,7 +184,7 @@ func renderResourceSummary(step *wizard.DataDrivenStep, state *ResourcesStepStat
 	totalOSDisk := (cpDisk * cpCount) + (workerDisk * workerCount)
 	totalDataDisk := (workerDataDisk * workerCount) + (cpDataDisk * cpCount)
 
-	sep := resourceSummaryStyles.sep
+	value, sep := resourceSummaryStyles()
 
 	var storageStr string
 	if totalDataDisk >= 1000 {
@@ -193,8 +193,8 @@ func renderResourceSummary(step *wizard.DataDrivenStep, state *ResourcesStepStat
 		storageStr = fmt.Sprintf("%d gb storage", totalDataDisk)
 	}
 
-	return resourceSummaryStyles.value.Render(fmt.Sprintf("%d vcpus", totalCPU)) + sep +
-		resourceSummaryStyles.value.Render(fmt.Sprintf("%d gb ram", totalMem/1024)) + sep +
-		resourceSummaryStyles.value.Render(fmt.Sprintf("%d gb os", totalOSDisk)) + sep +
-		resourceSummaryStyles.value.Render(storageStr)
+	return value.Render(fmt.Sprintf("%d vcpus", totalCPU)) + sep +
+		value.Render(fmt.Sprintf("%d gb ram", totalMem/1024)) + sep +
+		value.Render(fmt.Sprintf("%d gb os", totalOSDisk)) + sep +
+		value.Render(storageStr)
 }

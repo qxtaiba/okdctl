@@ -43,10 +43,12 @@ type Stage struct {
 	Steps []StepID
 }
 
+// The stage-trail styles are assigned by rebuildWizardStyles so the
+// background flip reaches them.
 var (
-	stageLabelStyle        = lipgloss.NewStyle().Foreground(tui.ColorTextFaint())
-	stageLabelCurrentStyle = lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText())
-	stageSeparatorStyle    = lipgloss.NewStyle().Foreground(tui.ColorSubtle())
+	stageLabelStyle        lipgloss.Style
+	stageLabelCurrentStyle lipgloss.Style
+	stageSeparatorStyle    lipgloss.Style
 )
 
 // StagesTrail returns a FlowChrome.Trail hook that renders stages as

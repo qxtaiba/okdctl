@@ -151,4 +151,9 @@ func TestKeyValueNoteHasNoDots(t *testing.T) {
 	if strings.Contains(plain, ".") {
 		t.Fatalf("KeyValueNote must not render dot leaders: %q", plain)
 	}
+
+	long := tuitest.StripANSI(KeyValueNote("a-very-long-key", "v", 10, 0))
+	if long != "a-very-long-key v" {
+		t.Fatalf("KeyValueNote overlong key = %q, want exactly one space of separation", long)
+	}
 }

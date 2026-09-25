@@ -267,12 +267,15 @@ func TestModel_BackgroundColorMsgRebuildsStyles(t *testing.T) {
 
 	m.Update(tea.BackgroundColorMsg{Color: color.White})
 
+	// The rule glyph is where ColorRule() renders; a whole-frame absence
+	// check would false-positive on light TextSoft, whose hex mirrors the
+	// dark rule tier across the slate ladder.
 	frame := m.View().Content
 	if !strings.Contains(frame, lightSlate700ANSI) {
 		t.Errorf("light-tier ColorRule() (%s) not found in rendered frame:\n%s", lightSlate700ANSI, frame)
 	}
-	if strings.Contains(frame, darkSlate700ANSI) {
-		t.Errorf("stale dark-tier ColorRule() (%s) still rendered:\n%s", darkSlate700ANSI, frame)
+	if strings.Contains(frame, darkSlate700ANSI+"m─") {
+		t.Errorf("stale dark-tier ColorRule() (%s) still on a rule:\n%s", darkSlate700ANSI, frame)
 	}
 }
 

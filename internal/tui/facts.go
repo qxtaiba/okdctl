@@ -89,9 +89,17 @@ func renderFactRow(row *FactRow, l *FactLayout) []string {
 	var valueStart int
 	switch l.Leader {
 	case FactLeaderPad:
+		// A key at or past the column keeps one space of separation; a key
+		// style carrying its own Width has already padded to the column, so
+		// the floor never fires for it.
 		styled := keyStyle.Render(row.Key)
-		valueStart = max(keyColWidth, lipgloss.Width(styled))
-		prefix = styled + strings.Repeat(" ", valueStart-lipgloss.Width(styled))
+		pad := keyColWidth - lipgloss.Width(styled)
+		if pad < 1 && lipgloss.Width(styled) >= keyColWidth && keyStyle.GetWidth() == 0 {
+			pad = 1
+		}
+		pad = max(pad, 0)
+		valueStart = lipgloss.Width(styled) + pad
+		prefix = styled + strings.Repeat(" ", pad)
 	default: // FactLeaderDots
 		keyLen := lipgloss.Width(row.Key)
 		// Dots fill to the shared value column; a key close enough that fewer

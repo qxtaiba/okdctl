@@ -38,14 +38,14 @@ func fieldBox(content string, outer int, focused, hasErr, disabled bool) string 
 // so the box never resizes when the user's first edit drops the tag.
 const defaultTagReserve = 8
 
+// All four are assigned by RebuildStyles: under the dual-polarity Theme
+// every role rebinds on the background flip, so an init-captured color
+// would freeze its dark value.
 var (
-	labelStyle = lipgloss.NewStyle().Foreground(tui.ColorTextSoft())
-	errStyle   = lipgloss.NewStyle().Foreground(tui.ColorError())
-
-	// helpStyle and tagStyle are assigned by RebuildStyles since they
-	// capture ColorTextFaint(), a tier SetDarkBackground rebinds.
-	helpStyle lipgloss.Style
-	tagStyle  lipgloss.Style
+	labelStyle lipgloss.Style
+	errStyle   lipgloss.Style
+	helpStyle  lipgloss.Style
+	tagStyle   lipgloss.Style
 )
 
 // stylesGeneration counts RebuildStyles calls; a per-instance style cache
@@ -54,13 +54,16 @@ var (
 // instead of assuming tui.Color* never changes after init.
 var stylesGeneration int
 
-// RebuildStyles assigns helpStyle and tagStyle from the current
-// tui.ColorTextFaint() value and advances stylesGeneration so per-instance
-// caches elsewhere in the package invalidate; call at init and whenever
-// tui.SetDarkBackground rebinds a tier.
+// RebuildStyles assigns every themed style in the package from the active
+// resolved Theme and advances stylesGeneration so per-instance caches
+// elsewhere in the package invalidate; call at init and whenever the theme
+// swaps (the wizard's BackgroundColorMsg site).
 func RebuildStyles() {
+	labelStyle = lipgloss.NewStyle().Foreground(tui.ColorTextSoft())
+	errStyle = lipgloss.NewStyle().Foreground(tui.ColorError())
 	helpStyle = lipgloss.NewStyle().Foreground(tui.ColorTextFaint())
 	tagStyle = lipgloss.NewStyle().Foreground(tui.ColorTextFaint())
+	rebuildHelpOverlayStyles()
 	stylesGeneration++
 }
 

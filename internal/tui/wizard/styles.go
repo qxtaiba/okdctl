@@ -8,67 +8,42 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-// Outer container and header/footer frame styles.
+// OuterContainerStyle carries no theme role, so it alone may build at init;
+// every themed style below is assigned by rebuildWizardStyles — under the
+// dual-polarity Theme every role rebinds on the background flip, so an
+// init-captured color would freeze its dark value.
+var OuterContainerStyle = lipgloss.NewStyle().
+	Padding(1, 2)
+
+// Frame, header, help-ribbon, and step-dot styles; all assigned by
+// rebuildWizardStyles.
 var (
-	OuterContainerStyle = lipgloss.NewStyle().
-				Padding(1, 2)
+	WizardBorderStyle lipgloss.Style
+	HeaderStyle       lipgloss.Style
+	FooterStyle       lipgloss.Style
 
-	WizardBorderStyle = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(tui.ColorSubtle())
+	LogoStyle                 lipgloss.Style
+	TaglineStyle              lipgloss.Style
+	StepIndicatorStyle        lipgloss.Style
+	StepIndicatorCurrentStyle lipgloss.Style
 
-	// HeaderStyle and FooterStyle are assigned by rebuildWizardStyles since
-	// they capture ColorRule()/ColorTextFaint(), tiers SetDarkBackground rebinds.
-	HeaderStyle lipgloss.Style
-	FooterStyle lipgloss.Style
-)
-
-// Header element styles (logo, tagline, step indicator).
-var (
-	LogoStyle = lipgloss.NewStyle().
-			Foreground(tui.ColorPrimary()).
-			Bold(true)
-
-	TaglineStyle = lipgloss.NewStyle().
-			Foreground(tui.ColorTextDim()).
-			Italic(true)
-
-	// StepIndicatorStyle is assigned by rebuildWizardStyles (ColorTextFaint()).
-	StepIndicatorStyle lipgloss.Style
-
-	StepIndicatorCurrentStyle = lipgloss.NewStyle().
-					Foreground(tui.ColorPrimary()).
-					Bold(true)
-)
-
-// Help-ribbon styles for footer key/text/separator rendering.
-var (
-	HelpKeyStyle = lipgloss.NewStyle().
-			Foreground(tui.ColorTextSoft()).
-			Bold(true)
-
-	// HelpTextStyle and HelpSeparatorStyle are assigned by rebuildWizardStyles
-	// (ColorTextFaint(), ColorRule()).
+	HelpKeyStyle       lipgloss.Style
 	HelpTextStyle      lipgloss.Style
 	HelpSeparatorStyle lipgloss.Style
+
+	StepDotCompletedStyle lipgloss.Style
+	StepDotCurrentStyle   lipgloss.Style
+	StepDotPendingStyle   lipgloss.Style
 )
 
-// Step progress-dot styles (completed / current / pending).
-var (
-	StepDotCompletedStyle = lipgloss.NewStyle().
-				Foreground(tui.ColorSuccess())
-
-	StepDotCurrentStyle = lipgloss.NewStyle().
-				Foreground(tui.ColorPrimary())
-
-	StepDotPendingStyle = lipgloss.NewStyle().
-				Foreground(tui.ColorSubtle())
-)
-
-// rebuildWizardStyles assigns HeaderStyle, FooterStyle, StepIndicatorStyle,
-// HelpTextStyle, and HelpSeparatorStyle from the current tui.ColorTextFaint()/700
-// values; call at init and whenever tui.SetDarkBackground rebinds those tiers.
+// rebuildWizardStyles assigns every themed wizard style from the active
+// resolved Theme; call at init and whenever the theme swaps (the wizard's
+// BackgroundColorMsg site).
 func rebuildWizardStyles() {
+	WizardBorderStyle = lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(tui.ColorSubtle())
+
 	HeaderStyle = lipgloss.NewStyle().
 		Padding(0, 1).
 		BorderBottom(true).
@@ -79,14 +54,51 @@ func rebuildWizardStyles() {
 		Padding(0, 2).
 		Foreground(tui.ColorTextFaint())
 
+	LogoStyle = lipgloss.NewStyle().
+		Foreground(tui.ColorPrimary()).
+		Bold(true)
+
+	TaglineStyle = lipgloss.NewStyle().
+		Foreground(tui.ColorTextDim()).
+		Italic(true)
+
 	StepIndicatorStyle = lipgloss.NewStyle().
 		Foreground(tui.ColorTextFaint())
+
+	StepIndicatorCurrentStyle = lipgloss.NewStyle().
+		Foreground(tui.ColorPrimary()).
+		Bold(true)
+
+	HelpKeyStyle = lipgloss.NewStyle().
+		Foreground(tui.ColorTextSoft()).
+		Bold(true)
 
 	HelpTextStyle = lipgloss.NewStyle().
 		Foreground(tui.ColorTextFaint())
 
 	HelpSeparatorStyle = lipgloss.NewStyle().
 		Foreground(tui.ColorRule())
+
+	StepDotCompletedStyle = lipgloss.NewStyle().
+		Foreground(tui.ColorSuccess())
+
+	StepDotCurrentStyle = lipgloss.NewStyle().
+		Foreground(tui.ColorPrimary())
+
+	StepDotPendingStyle = lipgloss.NewStyle().
+		Foreground(tui.ColorSubtle())
+
+	stageLabelStyle = lipgloss.NewStyle().
+		Foreground(tui.ColorTextFaint())
+
+	stageLabelCurrentStyle = lipgloss.NewStyle().
+		Bold(true).
+		Foreground(tui.ColorText())
+
+	stageSeparatorStyle = lipgloss.NewStyle().
+		Foreground(tui.ColorSubtle())
+
+	rebuildFormViewStyles()
 }
 
 func init() {

@@ -53,9 +53,9 @@ type Selector struct {
 	spanKnown    bool
 
 	// cachedStyles caches option render styles; cachedGeneration pins it to
-	// the stylesGeneration it was built from, since tui.Color* tiers rebind
-	// on background detection (SetDarkBackground) — getOptionStyles rebuilds
-	// once stylesGeneration has moved on, instead of assuming the cache is
+	// the stylesGeneration it was built from, since every theme role rebinds
+	// on the background flip — getOptionStyles rebuilds once
+	// stylesGeneration has moved on, instead of assuming the cache is
 	// forever valid.
 	cachedStyles     *optionStyles
 	cachedGeneration int

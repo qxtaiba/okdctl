@@ -860,13 +860,10 @@ func (s *DataDrivenStep) ShouldShow(cfg *config.Config) bool {
 	return true
 }
 
-// formViewStyles caches DataDrivenStep.View's lipgloss styles, built once at
-// init and never rebuilt: tui.Color* tiers do rebind on background
-// detection (SetDarkBackground), but the one tier this struct captures
-// (note's ColorTextFaint()) resolves to the same hex on both branches, so the
-// cache never actually goes stale in value — unlike Selector.cachedStyles,
-// which captures ColorRule() and does need a generation check.
-var formViewStyles = struct {
+// formViewStyles caches DataDrivenStep.View's lipgloss styles; it captures
+// accent, brand, and status roles that all rebind on the background flip,
+// so rebuildFormViewStyles rebuilds it with the rest of the wizard styles.
+var formViewStyles struct {
 	sectionHeader   lipgloss.Style
 	section         lipgloss.Style
 	completedRender string
@@ -874,29 +871,31 @@ var formViewStyles = struct {
 	pendingRender   string
 	note            lipgloss.Style
 	warning         lipgloss.Style
-}{
-	sectionHeader: lipgloss.NewStyle().
+}
+
+func rebuildFormViewStyles() {
+	formViewStyles.sectionHeader = lipgloss.NewStyle().
 		Foreground(tui.ColorAccent()).
-		Bold(true),
-	section: lipgloss.NewStyle().
-		PaddingLeft(2),
-	completedRender: lipgloss.NewStyle().
+		Bold(true)
+	formViewStyles.section = lipgloss.NewStyle().
+		PaddingLeft(2)
+	formViewStyles.completedRender = lipgloss.NewStyle().
 		Foreground(tui.ColorSuccess()).
 		Bold(true).
-		Render(tui.IconSuccess),
-	activeRender: lipgloss.NewStyle().
+		Render(tui.IconSuccess)
+	formViewStyles.activeRender = lipgloss.NewStyle().
 		Foreground(tui.ColorPrimary()).
 		Bold(true).
-		Render(tui.IconActive),
-	pendingRender: lipgloss.NewStyle().
+		Render(tui.IconActive)
+	formViewStyles.pendingRender = lipgloss.NewStyle().
 		Foreground(tui.ColorSubtle()).
-		Render(tui.IconPending),
-	note: lipgloss.NewStyle().
+		Render(tui.IconPending)
+	formViewStyles.note = lipgloss.NewStyle().
 		Foreground(tui.ColorTextFaint()).
 		Italic(true).
-		PaddingLeft(2),
-	warning: lipgloss.NewStyle().
-		Foreground(tui.ColorWarning()),
+		PaddingLeft(2)
+	formViewStyles.warning = lipgloss.NewStyle().
+		Foreground(tui.ColorWarning())
 }
 
 // View renders the step's sections via the embedded form and appends any

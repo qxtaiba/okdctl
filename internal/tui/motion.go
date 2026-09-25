@@ -16,16 +16,17 @@ const (
 
 // ResolveMotion resolves the motion dial from its inputs, most explicit
 // first: the --no-motion flag, then OKDCTL_NO_MOTION ("1"/"true"), then
-// NO_COLOR (any value, no-color.org) which implies reduced motion only —
-// off has its own switch and is deliberately NO_COLOR-independent.
-func ResolveMotion(flagOff bool, getenv func(string) string) MotionMode {
+// no-color-by-either-spelling — the --no-color flag or the NO_COLOR env var
+// (any value, no-color.org) — which implies reduced motion only; off has
+// its own switch and is deliberately NO_COLOR-independent.
+func ResolveMotion(flagOff, flagNoColor bool, getenv func(string) string) MotionMode {
 	if flagOff {
 		return MotionOff
 	}
 	if v := getenv("OKDCTL_NO_MOTION"); v == "1" || v == "true" {
 		return MotionOff
 	}
-	if getenv("NO_COLOR") != "" {
+	if flagNoColor || getenv("NO_COLOR") != "" {
 		return MotionReduced
 	}
 	return MotionFull

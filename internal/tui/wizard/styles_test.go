@@ -6,6 +6,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 )
 
@@ -164,5 +165,34 @@ func TestRenderHelpRibbon_NegativeBudgetFloorIsJustEllipsis(t *testing.T) {
 		if out != "…" {
 			t.Errorf("width=%d: want just the ellipsis marker, got %q", width, out)
 		}
+	}
+}
+
+// TestRebuildWizardStylesRebindsInitCapturedStyles pins the same flip for
+// the wizard chrome and the data-driven form's style cache: brand, accent,
+// and status roles all rebind on light, so nothing may freeze init values.
+func TestRebuildWizardStylesRebindsInitCapturedStyles(t *testing.T) {
+	t.Cleanup(resetPackageColorState)
+
+	tui.SetDarkBackground(false)
+	rebuildWizardStyles()
+
+	if logo := LogoStyle.Render("OKDCTL"); !strings.Contains(logo, "126;34;206") {
+		t.Errorf("logo = %q, want the light Primary tier (#7E22CE)", logo)
+	}
+	if tag := TaglineStyle.Render("okd over proxmox"); !strings.Contains(tag, "71;85;105") {
+		t.Errorf("tagline = %q, want the light TextDim tier (#475569)", tag)
+	}
+	if head := formViewStyles.sectionHeader.Render("connection"); !strings.Contains(head, "14;116;144") {
+		t.Errorf("form section header = %q, want the light Accent tier (#0E7490)", head)
+	}
+	if dot := StepDotPendingStyle.Render("o"); !strings.Contains(dot, "148;163;184") {
+		t.Errorf("pending dot = %q, want the light Subtle tier (#94A3B8)", dot)
+	}
+	if label := stageLabelCurrentStyle.Render("connect"); !strings.Contains(label, "15;23;42") {
+		t.Errorf("current stage label = %q, want the light Text tier (#0F172A)", label)
+	}
+	if sep := stageSeparatorStyle.Render(" · "); !strings.Contains(sep, "148;163;184") {
+		t.Errorf("stage separator = %q, want the light Subtle tier (#94A3B8)", sep)
 	}
 }

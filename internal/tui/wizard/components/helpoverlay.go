@@ -31,16 +31,26 @@ var helpOverlayVimKeys = map[string]bool{
 	"gg/G":     true,
 }
 
+// The overlay styles are assigned by rebuildHelpOverlayStyles (via
+// RebuildStyles) so the background flip reaches them.
 var (
-	helpOverlayTitleStyle   = lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText())
-	helpOverlaySectionStyle = lipgloss.NewStyle().Bold(true).Foreground(tui.ColorTextDim())
-	helpOverlayKeyStyle     = lipgloss.NewStyle().Bold(true).Foreground(tui.ColorTextSoft())
-	helpOverlayHintStyle    = lipgloss.NewStyle().Italic(true).Foreground(tui.ColorSubtle())
-	helpOverlayPanelStyle   = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(tui.ColorSubtle()).
-				Padding(0, 1)
+	helpOverlayTitleStyle   lipgloss.Style
+	helpOverlaySectionStyle lipgloss.Style
+	helpOverlayKeyStyle     lipgloss.Style
+	helpOverlayHintStyle    lipgloss.Style
+	helpOverlayPanelStyle   lipgloss.Style
 )
+
+func rebuildHelpOverlayStyles() {
+	helpOverlayTitleStyle = lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText())
+	helpOverlaySectionStyle = lipgloss.NewStyle().Bold(true).Foreground(tui.ColorTextDim())
+	helpOverlayKeyStyle = lipgloss.NewStyle().Bold(true).Foreground(tui.ColorTextSoft())
+	helpOverlayHintStyle = lipgloss.NewStyle().Italic(true).Foreground(tui.ColorSubtle())
+	helpOverlayPanelStyle = lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(tui.ColorSubtle()).
+		Padding(0, 1)
+}
 
 // RenderHelpOverlay renders every binding in bindings — grouped into a
 // "screen" section (the active step's own keys), a "vim" section (the
