@@ -5,10 +5,10 @@
   │──────────────────────────────────────────────────────────────────────────────────────────────│  
   │  dry-run failed                                                                              │  
   │                                                                                              │  
-  │  plan safety gate refused the change                                                         │  
+  │  cluster error: plan safety gate refused the change: plan gate: expected exactly one change  │  
+  │  (update of "m.master0") but plan has 2: [update m.master0, delete m.worker2]                │  
   │                                                                                              │  
   │  esc to go back and adjust                                                                   │  
-  │                                                                                              │  
   │                                                                                              │  
   │                                                                                              │  
   │                                                                                              │  

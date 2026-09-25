@@ -276,6 +276,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if m.ready {
 			m.syncViewportContent()
+			m.notifyIfAtBottom()
 		}
 	}
 

@@ -275,7 +275,9 @@ func printUpdateNotice(w io.Writer, ch <-chan version.CheckResult) {
 // failed" structured so RedactHandler can scrub credentials (stringifying err
 // first would bypass it).
 func announceFailure(err error) {
-	if logutil.ProgressBarsEnabled() && term.IsTerminal(int(os.Stderr.Fd())) && !render.IsPresented(err) {
+	stderrTTY := term.IsTerminal(int(os.Stderr.Fd()))
+	stdoutTTY := term.IsTerminal(int(os.Stdout.Fd()))
+	if shouldRenderErrorBox(stderrTTY, stdoutTTY, logFormat, err) {
 		fmt.Fprintln(os.Stderr, render.ErrorSummary(err, exitCodeFor(err), logutil.RunID()))
 		return
 	}
@@ -284,6 +286,17 @@ func announceFailure(err error) {
 		logutil.Info("full run log persisted; attach it to bug reports or run 'okdctl debug-bundle'",
 			logutil.LF("path", runLogPath))
 	}
+}
+
+// shouldRenderErrorBox reports whether announceFailure draws the boxed
+// ErrorSummary instead of the flat "command failed" log line: both stderr
+// and stdout TTY-shaped, not json, and err isn't already self-presented.
+// NO_COLOR/--no-color is deliberately NOT part of this gate (contrast the
+// progressBars derivation in logging.go, which does fold colorOff in) — box
+// drawing is structure, not color, so the box still renders under NO_COLOR,
+// just Downsampled to ANSI-free by the color profile configureLogging set.
+func shouldRenderErrorBox(stderrTTY, stdoutTTY bool, format string, err error) bool {
+	return stderrTTY && stdoutTTY && format != tui.FormatJSON && !render.IsPresented(err)
 }
 
 // shouldAnnounceFailure reports whether to print "command failed", excluding

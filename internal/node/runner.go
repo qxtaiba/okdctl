@@ -352,7 +352,15 @@ func (r *Runner) planTargeted(ctx context.Context, address string, want terrafor
 			}
 		}
 		cleanup()
-		return "", false, noop, r.TF.WithLockHint(&errtypes.ClusterError{Msg: "plan safety gate refused the change", Err: gateErr})
+		// gateErr's specific reason (which address/action the plan disagreed
+		// with) is folded into Msg, not left only on Err — Msg is the only part
+		// ClusterError.Error() ever surfaces, so a caller like the wizard
+		// preview that just prints .Error() still sees why, not a bare generic
+		// refusal.
+		return "", false, noop, r.TF.WithLockHint(&errtypes.ClusterError{
+			Msg: fmt.Sprintf("plan safety gate refused the change: %s", gateErr),
+			Err: gateErr,
+		})
 	}
 	return planPath, false, cleanup, nil
 }

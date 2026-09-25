@@ -27,6 +27,7 @@ func (m *Model) handleResize(msg tea.WindowSizeMsg) {
 		}
 	}
 	m.syncViewportContent()
+	m.notifyIfAtBottom()
 }
 
 func (m *Model) handleScrollKey(msg tea.KeyPressMsg) bool {
@@ -45,7 +46,27 @@ func (m *Model) handleScrollKey(msg tea.KeyPressMsg) bool {
 	default:
 		return false
 	}
+	m.notifyIfAtBottom()
 	return true
+}
+
+// notifyIfAtBottom tells the active step, if it implements BottomNotifiable,
+// that the viewport currently shows its last line — either because the
+// content fits without scrolling or because the operator has scrolled all
+// the way down. A step cannot see the viewport's own scroll offset, so this
+// is the only signal it gets that content below an initial fold was ever
+// actually displayed.
+func (m *Model) notifyIfAtBottom() {
+	if !m.ready || len(m.steps) == 0 || m.currentStep < 0 || m.currentStep >= len(m.steps) {
+		return
+	}
+	atBottom := m.viewport.TotalLineCount() <= m.viewport.Height() || m.viewport.ScrollPercent() >= 1.0
+	if !atBottom {
+		return
+	}
+	if n, ok := m.steps[m.currentStep].(BottomNotifiable); ok {
+		n.NotifyViewportAtBottom()
+	}
 }
 
 // scrollToFocusedField scrolls the viewport so the active step's focused
@@ -252,6 +273,7 @@ func (m *Model) focusStep(idx int) (tea.Model, tea.Cmd) {
 	if m.ready {
 		m.viewport.GotoTop()
 		m.syncViewportContent()
+		m.notifyIfAtBottom()
 	}
 
 	return m, m.steps[idx].Init()

@@ -98,6 +98,21 @@ func NodeOpCompleteWidth(plan *node.OpPlan, elapsed time.Duration, width int) st
 	return "\n" + tui.BoxedSectionCompact(sb.String(), opTitle(plan.Op), width) + "\n"
 }
 
+// NodeOpRecapLines renders the short plain-text recap printed to stdout
+// after a successful lifecycle-wizard op — the durable record the AltScreen
+// otherwise clears on exit — reusing opComplete and NodeOpNextSteps
+// verbatim so wording never drifts from the done card's own.
+func NodeOpRecapLines(plan *node.OpPlan, elapsed time.Duration) []string {
+	names := make([]string, len(plan.Nodes))
+	for i := range plan.Nodes {
+		names[i] = shortHost(plan.Nodes[i].Name)
+	}
+	lines := []string{
+		fmt.Sprintf("%s · %s · %s", opComplete(plan.Op), strings.Join(names, ", "), elapsed.Truncate(time.Second)),
+	}
+	return append(lines, NodeOpNextSteps(plan)...)
+}
+
 // nodeOpDetails writes the shared header + per-node section for the confirm and dry-run boxes.
 func nodeOpDetails(sb *Builder, plan *node.OpPlan) {
 	sb.KV("cluster", plan.Cluster)

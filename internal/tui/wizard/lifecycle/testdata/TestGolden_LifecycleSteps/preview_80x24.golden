@@ -19,6 +19,6 @@
   │  gates per node                                                          │  
   │                                                                          │  
   │───────────────── ↑ ↓  scroll down for more ───────────────── ▸ mycluster │  
-  │  ● execute resize   ○ back to parameters   ○ exit without changes     …  │  
+  │  scroll to review the plan    esc back • ctrl+c quit • pgup/pgdn scroll  │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

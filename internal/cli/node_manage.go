@@ -18,6 +18,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/node"
+	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/lifecycle"
 	"github.com/qxtaiba/okdctl/internal/workspace"
@@ -119,19 +120,37 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 // reportLifecycleOutcome maps wizard terminal state to a truthful exit; an
 // interrupted mid-execution run exits non-zero instead of claiming a clean
 // state.
-func reportLifecycleOutcome(_ *cobra.Command, result wizard.Result, st *lifecycle.State) error {
+func reportLifecycleOutcome(cmd *cobra.Command, result wizard.Result, st *lifecycle.State) error {
 	switch {
 	case st.Started && !st.Executed:
 		return &errtypes.ClusterError{Msg: lifecycleInterruptedMsg}
 	case st.Executed && st.Result != nil:
 		return st.Result
 	case st.Executed:
+		printLifecycleRecap(cmd, st)
 		return nil
 	case result.Cancelled || !st.Proceed:
 		logutil.Info("no changes made")
 		return nil
 	default:
 		return nil
+	}
+}
+
+// printLifecycleRecap prints a short plain-text recap of the finished op:
+// the wizard's AltScreen already cleared the done card from scrollback on
+// exit, leaving no durable record of what happened, so this reprints a
+// one-line summary plus the operator's next-step commands (RULING —
+// reversing the earlier prints-nothing-on-success ruling; does NOT reprint
+// the box itself, that reversal was ruled in the refit and stands). Gated
+// on the caller: runNodeManage already refuses to start without a TTY, so
+// this print is TTY-gated transitively rather than re-checking here.
+func printLifecycleRecap(cmd *cobra.Command, st *lifecycle.State) {
+	if st.Plan == nil {
+		return
+	}
+	for _, line := range render.NodeOpRecapLines(st.Plan, st.Elapsed) {
+		fmt.Fprintln(cmd.OutOrStdout(), line)
 	}
 }
 

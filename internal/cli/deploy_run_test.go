@@ -389,6 +389,10 @@ func TestRunDeploy_DryRunShortCircuitsBeforeWizard(t *testing.T) {
 	resetDeployState(t)
 	isolateProxmoxEnv(t)
 	t.Chdir(t.TempDir())
+	// Item 6 of the second-cut safety findings: dry-run now requires an
+	// existing config rather than silently planning compiled-in defaults
+	// against whatever terraform workspace sits in cwd.
+	seedDeployConfig(t)
 	forbidWizard(t)
 	forbidExecute(t)
 	testutil.InstallFakeBin(t, "terraform", "#!/bin/sh\nexit 0\n")

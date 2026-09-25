@@ -17,6 +17,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/version"
 )
@@ -144,6 +145,55 @@ func TestShouldAnnounceFailure(t *testing.T) {
 				t.Errorf("shouldAnnounceFailure(%v) = %v, want %v", tc.err, got, tc.want)
 			}
 		})
+	}
+}
+
+// TestShouldRenderErrorBox guards item 7 of the second-cut safety findings:
+// colorOff (NO_COLOR/--no-color) used to flip progressBars, which
+// announceFailure gated on, so NO_COLOR degraded the boxed error to the
+// flat "[ERROR]" line — box drawing is structure, not color. The gate keeps
+// its TTY/json/presented checks but takes no color signal at all, so this
+// table exhaustively covers stderr/stdout TTY-ness and format without ever
+// mentioning NO_COLOR — its absence from the signature is the fix.
+func TestShouldRenderErrorBox(t *testing.T) {
+	plain := errors.New("boom")
+	cases := []struct {
+		name                 string
+		stderrTTY, stdoutTTY bool
+		format               string
+		err                  error
+		want                 bool
+	}{
+		{"both TTY, text format renders the box", true, true, tui.FormatText, plain, true},
+		{"piped stderr gets the flat line", false, true, tui.FormatText, plain, false},
+		{"piped stdout gets the flat line", true, false, tui.FormatText, plain, false},
+		{"json format gets the flat line", true, true, tui.FormatJSON, plain, false},
+		{"already-presented error gets the flat line", true, true, tui.FormatText, render.Presented(plain), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := shouldRenderErrorBox(tc.stderrTTY, tc.stdoutTTY, tc.format, tc.err); got != tc.want {
+				t.Errorf("shouldRenderErrorBox(%v, %v, %q, err) = %v, want %v", tc.stderrTTY, tc.stdoutTTY, tc.format, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestErrorSummaryANSIFreeUnderNoColor proves the other half of item 7's
+// claim: once shouldRenderErrorBox lets a NO_COLOR run through, the box it
+// renders is genuinely color-free (Downsampled) while still carrying its
+// box-drawing structure — NO_COLOR strips color, not the box.
+func TestErrorSummaryANSIFreeUnderNoColor(t *testing.T) {
+	tui.SetColorProfileFor(&bytes.Buffer{}) // a buffer is never a TTY
+	t.Cleanup(func() { tui.SetColorProfileFor(&bytes.Buffer{}) })
+
+	out := render.ErrorSummary(&errtypes.ConfigError{Msg: "bad yaml"}, 2, "run-123")
+
+	if strings.Contains(out, "\x1b[") {
+		t.Errorf("ErrorSummary leaked ANSI escapes under a no-color profile:\n%q", out)
+	}
+	if !strings.Contains(out, "╭") || !strings.Contains(out, "╯") {
+		t.Errorf("ErrorSummary must still draw its box structure under NO_COLOR:\n%s", out)
 	}
 }
 

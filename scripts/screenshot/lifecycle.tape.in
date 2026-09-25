@@ -49,6 +49,15 @@ Sleep 450ms
 # ==================== SCREEN 4: preview ====================
 Wait+Screen@10s /review the plan/
 Screenshot out/@NAME@-lifecycle-preview.png
+# The fold-guard (safety finding S4) leaves the execute action disarmed
+# until the plan-gate line has been scrolled into view at least once; a few
+# PageDowns reach the bottom regardless of preset height, then confirm.
+PageDown
+Sleep 200ms
+PageDown
+Sleep 200ms
+PageDown
+Sleep 350ms
 Enter
 Sleep 450ms
 

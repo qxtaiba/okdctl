@@ -10,6 +10,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
@@ -180,7 +181,16 @@ func lifecycleScenarios() []lifecycleScenario {
 				return resizePreviewState(), Hooks{}
 			},
 			seed: func(m *wizard.Model, _ *State) {
-				m.Update(dryRunDoneMsg{err: errors.New("plan safety gate refused the change")})
+				// A realistic seed, not the old bare generic string: item 3 of
+				// the second-cut safety findings folds the specific gate reason
+				// into this same Msg (see errtypes.ClusterError's Msg-only
+				// Error() contract), so this golden must show a real reason
+				// line, not just the generic refusal. Matches
+				// terraform.AssertOnlyChange's real len(changes)!=1 wording
+				// verbatim.
+				m.Update(dryRunDoneMsg{err: &errtypes.ClusterError{
+					Msg: `plan safety gate refused the change: plan gate: expected exactly one change (update of "m.master0") but plan has 2: [update m.master0, delete m.worker2]`,
+				}})
 			},
 		},
 		{

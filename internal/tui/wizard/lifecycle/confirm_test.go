@@ -9,8 +9,29 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/node"
+	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
+
+// TestConfirmHeadingCarriesWarningIcon guards item 4 of the second-cut safety
+// findings: "confirm irreversible removal" was the flow's only color-alone
+// risk signal (ColorError with no glyph), so a NO_COLOR/colorblind operator
+// had nothing but hue distinguishing it from any other heading.
+func TestConfirmHeadingCarriesWarningIcon(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Cluster.Name = "homelab"
+	plan := &node.OpPlan{
+		Op: node.OpRemove, Cluster: "homelab",
+		Nodes: []node.PlanNode{{Name: "homelab-worker2", Action: terraform.PlanActionDelete}},
+	}
+	st := &State{Cfg: cfg, Op: node.OpRemove, Plan: plan, Proceed: true}
+	s := NewConfirmStep(st)
+	_ = s.Init()
+
+	if got := s.View(80, 40); !strings.Contains(got, tui.IconWarning+" confirm irreversible removal") {
+		t.Errorf("heading must carry the warning glyph, got %q", got)
+	}
+}
 
 func TestConfirmStepGatesOnExactClusterName(t *testing.T) {
 	cfg := config.DefaultConfig()

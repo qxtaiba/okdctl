@@ -10,8 +10,8 @@
   │                                                                          │  
   │  gates per node                                                          │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
-  │  1 cordon + drain            3 delete kubernetes node                    │  
-  │  2 terraform apply (destroy) 4 ceph health gate                          │  
+  │  1 cordon + drain                   3 delete kubernetes node             │  
+  │  2 terraform apply (destroy)        4 ceph health gate                   │  
   │  ✓ plan gate passed — the safety gate allows exactly the listed changes  │  
   │                                                                          │  
   │  ┃ irreversible                                                          │  

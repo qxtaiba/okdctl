@@ -97,7 +97,7 @@ func (s *ConfirmStep) View(width, height int) string {
 
 	wrapWidth := min(width-4, 60)
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("confirm irreversible removal"))
+	b.WriteString(titleStyle.Render(tui.IconWarning + " confirm irreversible removal"))
 	b.WriteString("\n\n")
 	b.WriteString(warnStyle.Render(lipgloss.Wrap(s.destroySummary(), wrapWidth, "")))
 	b.WriteString("\n")

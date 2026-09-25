@@ -200,6 +200,14 @@ type SpanProvider interface {
 	FocusedSpan() (LineSpan, bool)
 }
 
+// BottomNotifiable is implemented by a step that must not trust content
+// below an initial fold until the wizard confirms the viewport has shown
+// its last line at least once — a step has no visibility into the
+// viewport's own scroll offset, so this is the only guarantee it can act on.
+type BottomNotifiable interface {
+	NotifyViewportAtBottom()
+}
+
 // ConfigSyncMsg requests step.Apply(cfg) on the active step without
 // advancing, so a step can publish a tentative selection (e.g. a status
 // badge) while still focused.

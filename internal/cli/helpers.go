@@ -26,16 +26,24 @@ func loadConfig(configFile string) (*config.Config, error) {
 	cfg, err := loader.LoadFile(configFile)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			hint := "run 'okdctl deploy' to create it"
-			if configFile != "okdctl.yaml" {
-				hint = fmt.Sprintf("run 'okdctl deploy --output-file %s' to create it", configFile)
-			}
-			configErr := &errtypes.ConfigError{Msg: "configuration file not found: " + configFile, Err: errtypes.ErrConfigMissing}
-			return nil, configErr.WithHint(hint)
+			return nil, errConfigNotFound(configFile)
 		}
 		return nil, &errtypes.ConfigError{Msg: "load configuration", Err: err}
 	}
 	return cfg, nil
+}
+
+// errConfigNotFound builds the family error every command uses when its
+// config file is missing — destroy and cleanup via loadConfig above, deploy
+// --dry-run directly (deploy's own config loading takes a fresh-defaults
+// fallback loadConfig doesn't) — so the message never drifts between them.
+func errConfigNotFound(configFile string) error {
+	hint := "run 'okdctl deploy' to create it"
+	if configFile != "okdctl.yaml" {
+		hint = fmt.Sprintf("run 'okdctl deploy --output-file %s' to create it", configFile)
+	}
+	configErr := &errtypes.ConfigError{Msg: "configuration file not found: " + configFile, Err: errtypes.ErrConfigMissing}
+	return configErr.WithHint(hint)
 }
 
 // handleCredentials loads the .env file then resolves credentials; callers must

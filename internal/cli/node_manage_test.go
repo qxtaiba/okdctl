@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/node"
+	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/lifecycle"
 )
@@ -50,24 +52,45 @@ func TestReportLifecycleOutcomeInterruptedIsNotSilent(t *testing.T) {
 	}
 }
 
-func TestReportLifecycleOutcomeExecutedPaths(t *testing.T) {
+// TestReportLifecycleOutcomeSuccessPrintsRecap supersedes the former
+// TestReportLifecycleOutcomeExecutedPaths, which asserted success prints
+// nothing ("the done screen already showed the box"). That ruling is
+// reversed: the AltScreen clears the done card from scrollback on exit, so
+// success now prints a short plain recap (item 5, second-cut safety
+// findings) — this test honestly updates the old expectation rather than
+// silently deleting it.
+func TestReportLifecycleOutcomeSuccessPrintsRecap(t *testing.T) {
 	plan := &node.OpPlan{
 		Op: node.OpResize, Cluster: "homelab",
 		Nodes: []node.PlanNode{{Name: "m0", Role: "master", Action: terraform.PlanActionUpdate}},
 	}
 
 	cmd, out := outcomeCmd()
-	st := &lifecycle.State{Proceed: true, Started: true, Executed: true, Plan: plan}
+	st := &lifecycle.State{Proceed: true, Started: true, Executed: true, Plan: plan, Elapsed: 90 * time.Second}
 	if err := reportLifecycleOutcome(cmd, wizard.Result{Completed: true}, st); err != nil {
 		t.Fatalf("successful run: %v", err)
 	}
-	if out.Len() != 0 {
-		t.Errorf("success prints nothing; the done screen already showed the box")
+	got := out.String()
+	for _, want := range []string{"resize complete", "m0", "1m30s"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("success recap missing %q, got %q", want, got)
+		}
 	}
+	for _, step := range render.NodeOpNextSteps(plan) {
+		if !strings.Contains(got, step) {
+			t.Errorf("success recap missing next-step line %q, got %q", step, got)
+		}
+	}
+}
 
+func TestReportLifecycleOutcomeFailurePropagatesBackendError(t *testing.T) {
+	plan := &node.OpPlan{
+		Op: node.OpResize, Cluster: "homelab",
+		Nodes: []node.PlanNode{{Name: "m0", Role: "master", Action: terraform.PlanActionUpdate}},
+	}
 	boom := errors.New("etcd gate failed")
-	cmd, _ = outcomeCmd()
-	st = &lifecycle.State{Proceed: true, Started: true, Executed: true, Plan: plan, Result: boom}
+	cmd, _ := outcomeCmd()
+	st := &lifecycle.State{Proceed: true, Started: true, Executed: true, Plan: plan, Result: boom}
 	if err := reportLifecycleOutcome(cmd, wizard.Result{Completed: true}, st); !errors.Is(err, boom) {
 		t.Errorf("failed run must propagate the backend error, got %v", err)
 	}

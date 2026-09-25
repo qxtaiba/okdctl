@@ -13,7 +13,7 @@
   │                                                                                                                  │  
   │                                                                                                                  │  
   │                                                                                                                  │  
-  │                            confirm irreversible removal                                                          │  
+  │                            ⚠ confirm irreversible removal                                                        │  
   │                                                                                                                  │  
   │                            irreversible: destroys homelab-worker2 and its data disk;                             │  
   │                            removed data cannot be recovered                                                      │  

@@ -35,8 +35,13 @@ const (
 	previewActionExit
 )
 
-// gateGridCellWidth is the fixed column width for one renderGateGrid cell.
-const gateGridCellWidth = 28
+// gateGridMinCellWidth floors a renderGateGrid column so a very narrow width
+// still leaves gate names legible (mirrors the node table's own 16-column floor).
+const gateGridMinCellWidth = 16
+
+// gateGridGutter is the minimum blank run renderGateGrid reserves between
+// columns, so a truncated label's ellipsis never touches the next column's text.
+const gateGridGutter = 2
 
 // PreviewStep runs the real dry-run pass (guards + plan safety gate) and
 // renders the informed plan — nodes, terraform actions, health-gate plan,
@@ -51,6 +56,11 @@ type PreviewStep struct {
 	loadingSpinner spinner.Model
 	actions        *components.CompactSelector
 	exitChosen     bool
+	// gateSeen arms the action selector: false until the wizard confirms the
+	// viewport has shown its last line at least once, proving the plan-gate
+	// line (and the irreversible callout, when present) was displayable —
+	// see NotifyViewportAtBottom.
+	gateSeen bool
 }
 
 // NewPreviewStep constructs the plan-preview step.
@@ -74,6 +84,7 @@ func NewPreviewStep(st *State, hooks Hooks) *PreviewStep {
 func (s *PreviewStep) Init() tea.Cmd {
 	s.phase = previewRunning
 	s.exitChosen = false
+	s.gateSeen = false
 	s.st.Proceed = false
 	s.st.Plan = nil
 	s.st.DryRunErr = nil
@@ -112,7 +123,7 @@ func (s *PreviewStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		}
 
 	case tea.KeyPressMsg:
-		if s.phase != previewDone || s.st.DryRunErr != nil || s.actions == nil {
+		if s.phase != previewDone || s.st.DryRunErr != nil || s.actions == nil || !s.gateSeen {
 			return s, nil
 		}
 		if msg.Code == tea.KeyEnter {
@@ -141,6 +152,17 @@ func (s *PreviewStep) InterceptBack() bool {
 	return s.phase == previewRunning
 }
 
+// NotifyViewportAtBottom implements wizard.BottomNotifiable, arming the
+// selector once the plan-gate line has been shown; the phase guard keeps
+// the trivially-short loading/error views (which never overflow) from
+// arming it before the real plan has even rendered.
+func (s *PreviewStep) NotifyViewportAtBottom() {
+	if s.phase != previewDone || s.actions == nil {
+		return
+	}
+	s.gateSeen = true
+}
+
 // ShouldExitEarly quits the wizard when the operator chose exit-without-
 // changes; execute advances to the confirm/exec steps instead.
 func (s *PreviewStep) ShouldExitEarly() bool {
@@ -162,8 +184,9 @@ func (s *PreviewStep) View(width, height int) string {
 	if s.st.DryRunErr != nil {
 		errStyle := lipgloss.NewStyle().Foreground(tui.ColorError).Bold(true)
 		hintStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500).Italic(true)
+		reason := lipgloss.Wrap(s.st.DryRunErr.Error(), width, "")
 		return errStyle.Render("dry-run failed") + "\n\n" +
-			lipgloss.NewStyle().Foreground(tui.ColorText).Render(s.st.DryRunErr.Error()) + "\n\n" +
+			lipgloss.NewStyle().Foreground(tui.ColorText).Render(reason) + "\n\n" +
 			hintStyle.Render("esc to go back and adjust")
 	}
 	if s.st.Plan == nil {
@@ -296,8 +319,15 @@ func (s *PreviewStep) renderGates(st *wizard.SectionStyles, width int) string {
 	return b.String()
 }
 
-// renderGateGrid lays out gates as a column-major numbered grid of fixed
-// gateGridCellWidth cells: three columns when width is at least 90, else two.
+// renderGateGrid lays out gates as a column-major numbered grid: three
+// columns when width is at least 90, two down to gateGridMinCellWidth*2,
+// else one. Each column's width is derived from the actual width (mirroring
+// the node table's max(16, width/N) pattern above) rather than a fixed cap;
+// width/cols's remainder is distributed one column at a time (widest column
+// first) instead of left on the floor, so the full width is used rather
+// than a few trailing columns going unused. Each column still reserves
+// gateGridGutter blank columns so a truncated label's ellipsis never runs
+// into the next column's text.
 func renderGateGrid(gates []string, width int) []string {
 	if len(gates) == 0 {
 		return nil
@@ -306,9 +336,23 @@ func renderGateGrid(gates []string, width int) []string {
 	if width >= 90 {
 		cols = 3
 	}
-	rowsPerCol := (len(gates) + cols - 1) / cols
-	cell := lipgloss.NewStyle().Width(gateGridCellWidth)
+	if width < gateGridMinCellWidth*2 {
+		cols = 1
+	}
+	base := max(gateGridMinCellWidth, width/cols)
+	remainder := 0
+	if base == width/cols {
+		remainder = width % cols
+	}
+	colWidths := make([]int, cols)
+	for c := range colWidths {
+		colWidths[c] = base
+		if c < remainder {
+			colWidths[c]++
+		}
+	}
 
+	rowsPerCol := (len(gates) + cols - 1) / cols
 	lines := make([]string, rowsPerCol)
 	for r := range lines {
 		var row strings.Builder
@@ -317,8 +361,9 @@ func renderGateGrid(gates []string, width int) []string {
 			if idx >= len(gates) {
 				continue
 			}
-			text := tui.Truncate(fmt.Sprintf("%d %s", idx+1, gates[idx]), gateGridCellWidth)
-			row.WriteString(cell.Render(text))
+			labelWidth := max(1, colWidths[c]-gateGridGutter)
+			text := tui.Truncate(fmt.Sprintf("%d %s", idx+1, gates[idx]), labelWidth)
+			row.WriteString(lipgloss.NewStyle().Width(colWidths[c]).Render(text))
 		}
 		lines[r] = row.String()
 	}
@@ -412,23 +457,32 @@ func (s *PreviewStep) SetFocused(focused bool) {
 }
 
 // PinnedFooter renders the action selector inline on the help row, empty
-// while the dry-run is running or after it fails (no selector to drive).
+// while the dry-run is running or after it fails (no selector to drive); a
+// dim "scroll to review the plan" replaces the radio until the operator has
+// seen the plan's last line at least once (see NotifyViewportAtBottom) — a
+// destructive default must never be actionable before its own safety
+// context has been displayable.
 func (s *PreviewStep) PinnedFooter(width int) string {
 	if s.actions == nil {
 		return ""
+	}
+	if !s.gateSeen {
+		dim := lipgloss.NewStyle().Foreground(tui.ColorSlate500).Italic(true)
+		return lipgloss.NewStyle().MaxWidth(width).Render(dim.Render("scroll to review the plan"))
 	}
 	// MaxWidth (not tui.Truncate) because ViewInline is already ANSI-styled;
 	// lipgloss truncates styled text ANSI-safely, a rune slice would not.
 	return lipgloss.NewStyle().MaxWidth(width).Render(s.actions.ViewInline())
 }
 
-// ShortHelp returns the preview help bar: with no action selector built
-// (still running, or the dry-run failed) it advertises only the keys
-// Update actually handles there — esc-back once InterceptBack releases it,
-// ctrl+c quit always — never the choose/confirm keys the selector alone
-// drives; with a selector, the full action/navigation bar.
+// ShortHelp returns the preview help bar: with no armed action selector
+// (still running, the dry-run failed, or the fold-guard hasn't seen the
+// plan's last line yet) it advertises only the keys Update actually handles
+// there — esc-back once InterceptBack releases it, ctrl+c quit always —
+// never the choose/confirm keys the selector alone drives; once armed, the
+// full action/navigation bar.
 func (s *PreviewStep) ShortHelp() []wizard.KeyBinding {
-	if s.actions == nil {
+	if s.actions == nil || !s.gateSeen {
 		help := []wizard.KeyBinding{}
 		if s.phase != previewRunning {
 			help = append(help, wizard.KeyBinding{Key: wizard.HelpEsc, Help: wizard.HelpBack})

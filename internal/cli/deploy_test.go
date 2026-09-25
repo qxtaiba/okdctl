@@ -127,6 +127,72 @@ func TestRunDeployYesWithoutConfigExitsNoInput(t *testing.T) {
 	}
 }
 
+// TestRunDeployDryRunWithoutConfigFailsFast guards item 6 of the
+// second-cut safety findings: with no okdctl.yaml, --dry-run used to fall
+// back to DefaultConfig and run a real terraform init (network + disk).
+// It must now fail fast with the same family message loadConfig produces
+// for destroy/cleanup, touching terraform zero times — asserted via the
+// terraformPlanPreviewFn seam, not by timing.
+func TestRunDeployDryRunWithoutConfigFailsFast(t *testing.T) {
+	t.Chdir(t.TempDir())
+	deployDryRun = true
+	t.Cleanup(func() { deployDryRun = false })
+
+	calls := 0
+	prev := terraformPlanPreviewFn
+	terraformPlanPreviewFn = func(context.Context, *config.Config, planPreviewOptions) ([]terraform.ResourceChange, error) {
+		calls++
+		return nil, nil
+	}
+	t.Cleanup(func() { terraformPlanPreviewFn = prev })
+
+	err := runDeploy(deployCmd, nil)
+	if !errors.Is(err, errtypes.ErrConfigMissing) {
+		t.Fatalf("want ErrConfigMissing, got %v", err)
+	}
+	want := errConfigNotFound("okdctl.yaml")
+	if err.Error() != want.Error() {
+		t.Errorf("message must match the destroy/cleanup family shape:\ngot  %v\nwant %v", err, want)
+	}
+	if calls != 0 {
+		t.Errorf("dry-run must not touch terraform without a config, got %d plan-preview calls", calls)
+	}
+}
+
+// TestRunDeployDryRunWithInvalidConfigFailsFast is the fold-in half of item
+// 6: an existing-but-unparseable okdctl.yaml is the identical hazard as a
+// missing one (arguably worse — a typo'd config plans compiled-in defaults
+// instead of refusing outright), so --dry-run must fail fast on it too,
+// with the same invalid-config message the --yes path already uses.
+func TestRunDeployDryRunWithInvalidConfigFailsFast(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.WriteFile("okdctl.yaml", []byte("cluster: [this is not valid yaml"), 0o600); err != nil {
+		t.Fatalf("seed invalid config: %v", err)
+	}
+	deployDryRun = true
+	t.Cleanup(func() { deployDryRun = false })
+
+	calls := 0
+	prev := terraformPlanPreviewFn
+	terraformPlanPreviewFn = func(context.Context, *config.Config, planPreviewOptions) ([]terraform.ResourceChange, error) {
+		calls++
+		return nil, nil
+	}
+	t.Cleanup(func() { terraformPlanPreviewFn = prev })
+
+	err := runDeploy(deployCmd, nil)
+	var cfgErr *errtypes.ConfigError
+	if !errors.As(err, &cfgErr) {
+		t.Fatalf("want *errtypes.ConfigError, got %T: %v", err, err)
+	}
+	if !strings.Contains(err.Error(), "cannot proceed in non-interactive mode with invalid config") {
+		t.Errorf("message must match the --yes path's invalid-config shape, got %v", err)
+	}
+	if calls != 0 {
+		t.Errorf("dry-run must not touch terraform on an invalid config, got %d plan-preview calls", calls)
+	}
+}
+
 func TestRunDeployWriteConfigWritesWithoutDeploying(t *testing.T) {
 	t.Chdir(t.TempDir())
 	deployWriteConfig = true

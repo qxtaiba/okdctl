@@ -37,8 +37,9 @@ var (
 
 // Seams for TTY-free tests; production never reassigns them.
 var (
-	runWizardFn     = runWizardWithMode
-	deployExecuteFn = deploy.Execute
+	runWizardFn            = runWizardWithMode
+	deployExecuteFn        = deploy.Execute
+	terraformPlanPreviewFn = runTerraformPlanPreview
 )
 
 var deployCmd = &cobra.Command{
@@ -108,35 +109,20 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 		deployOutputFile = cfgFile
 	}
 
-	configExists := false
-	var cfg *config.Config
-
-	if _, err := os.Stat(deployOutputFile); err == nil {
-		configExists = true
-		loader := config.NewLoader()
-		loadedCfg, loadErr := loader.LoadFile(deployOutputFile)
-		if loadErr != nil {
-			logutil.Warn("existing config could not be loaded", logutil.LF("err", loadErr))
-			if deployYes || deployWriteConfig {
-				return (&errtypes.ConfigError{Msg: "cannot proceed in non-interactive mode with invalid config", Err: loadErr}).
-					WithHint("run 'okdctl config validate' to see what's wrong, or drop --yes to use the wizard")
-			}
-			logutil.Info("starting fresh with defaults")
-			configExists = false
-		} else {
-			cfg = loadedCfg
-		}
-	}
-
-	if cfg == nil {
-		if deployMinimal {
-			cfg = config.MinimalConfig()
-		} else {
-			cfg = config.DefaultConfig()
-		}
+	cfg, configExists, configFileMissing, err := loadDeployConfig(deployOutputFile)
+	if err != nil {
+		return err
 	}
 
 	if deployDryRun {
+		// A missing config (as opposed to an invalid one, handled above) must
+		// fail fast rather than silently plan compiled-in defaults against
+		// whatever terraform workspace happens to sit in cwd — that's a real
+		// terraform init touching network and disk, not a preview of anything
+		// the operator asked for.
+		if !configExists && configFileMissing {
+			return errConfigNotFound(deployOutputFile)
+		}
 		return runDeployDryRun(ctx, cfg, out)
 	}
 
@@ -199,6 +185,49 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
+// loadDeployConfig resolves the config deploy runs against — an existing,
+// valid on-disk file, or compiled-in defaults when none exists — and
+// distinguishes "no file" (configFileMissing) from "file exists but is
+// invalid" for the callers (--yes, --write-config, --dry-run) that must
+// fail fast on the latter rather than silently falling back to defaults,
+// the way an interactive wizard run is allowed to.
+func loadDeployConfig(path string) (cfg *config.Config, configExists, configFileMissing bool, err error) {
+	if _, statErr := os.Stat(path); statErr == nil {
+		configExists = true
+		loadedCfg, loadErr := config.NewLoader().LoadFile(path)
+		if loadErr != nil {
+			logutil.Warn("existing config could not be loaded", logutil.LF("err", loadErr))
+			switch {
+			case deployYes || deployWriteConfig:
+				return nil, false, false, (&errtypes.ConfigError{Msg: "cannot proceed in non-interactive mode with invalid config", Err: loadErr}).
+					WithHint("run 'okdctl config validate' to see what's wrong, or drop --yes to use the wizard")
+			case deployDryRun:
+				// Same hazard as the missing-config short-circuit in
+				// runDeploy: the wizard's warn-and-fall-back-to-defaults
+				// leniency would silently plan compiled-in defaults against
+				// a typo'd config, not preview what's actually on disk.
+				return nil, false, false, (&errtypes.ConfigError{Msg: "cannot proceed in non-interactive mode with invalid config", Err: loadErr}).
+					WithHint("run 'okdctl config validate' to see what's wrong, or drop --dry-run to use the wizard")
+			}
+			logutil.Info("starting fresh with defaults")
+			configExists = false
+		} else {
+			cfg = loadedCfg
+		}
+	} else {
+		configFileMissing = true
+	}
+
+	if cfg == nil {
+		if deployMinimal {
+			cfg = config.MinimalConfig()
+		} else {
+			cfg = config.DefaultConfig()
+		}
+	}
+	return cfg, configExists, configFileMissing, nil
+}
+
 // runDeployDryRun previews a deploy via terraform plan and phase step listing;
 // it exits 0 even when the plan reports drift ('okdctl plan' is the
 // drift-gating surface).
@@ -210,7 +239,7 @@ func runDeployDryRun(ctx context.Context, cfg *config.Config, w io.Writer) error
 
 	logutil.Info("dry-run: running terraform plan (no changes will be made)")
 
-	changes, err := runTerraformPlanPreview(ctx, cfg, planPreviewOptions{
+	changes, err := terraformPlanPreviewFn(ctx, cfg, planPreviewOptions{
 		ConfigPath:  deployOutputFile,
 		ProjectRoot: projectRoot,
 		Caller:      "deploy --dry-run",
