@@ -19,6 +19,7 @@ type SelectField struct {
 	Options []string
 
 	selected   int
+	injected   int // index of the option SetValue injected for an off-list value, or -1
 	focused    bool
 	width      int
 	boxWidth   int
@@ -29,8 +30,9 @@ type SelectField struct {
 // NewSelectField builds a SelectField with the given label and option list.
 func NewSelectField(label string, options []string) *SelectField {
 	return &SelectField{
-		Label:   label,
-		Options: options,
+		Label:    label,
+		Options:  options,
+		injected: -1,
 	}
 }
 
@@ -49,7 +51,10 @@ func (f *SelectField) FieldLabel() string { return f.Label }
 func (f *SelectField) FieldHelp() string { return f.Help }
 
 // SetValue selects the first option equal to value and marks the field as
-// user-modified. Unknown values are silently ignored.
+// user-modified. A non-empty value outside Options is injected as a
+// synthetic option (rendered with a "current" tag) and selected, so a valid
+// config value the option list doesn't offer round-trips through edit-config
+// instead of being silently coerced to whatever the cursor sat on.
 func (f *SelectField) SetValue(value string) {
 	for i, opt := range f.Options {
 		if opt == value {
@@ -58,6 +63,16 @@ func (f *SelectField) SetValue(value string) {
 			return
 		}
 	}
+	if value == "" {
+		return
+	}
+	if f.injected < 0 {
+		f.Options = append(f.Options, "")
+		f.injected = len(f.Options) - 1
+	}
+	f.Options[f.injected] = value
+	f.selected = f.injected
+	f.isDefault = false
 }
 
 // SetDefault sets the starting selection and marks the field as unchanged.
@@ -185,8 +200,12 @@ func (f *SelectField) nominalBoxWidth() int {
 		return 18
 	}
 	widest := 0
-	for _, opt := range f.Options {
-		widest = max(widest, lipgloss.Width(opt))
+	for i, opt := range f.Options {
+		w := lipgloss.Width(opt)
+		if i == f.injected {
+			w += lipgloss.Width(" current")
+		}
+		widest = max(widest, w)
 	}
 	return max(widest+8, 14)
 }
@@ -208,12 +227,17 @@ func (f *SelectField) boxOuterWidth() int {
 // the field never shows an empty gap between the arrows) flanked by cycle
 // arrows, shown even while blurred; a lone option has nothing to cycle to,
 // so it renders bare rather than implying an interaction that doesn't exist.
+// The option SetValue injected for an off-list config value carries a
+// "current" tag so the operator can tell it apart from the offered list.
 func (f *SelectField) arrowContent() string {
+	value := f.Value()
+	if f.selected == f.injected && f.injected >= 0 {
+		value += " " + tagStyle.Render("current")
+	}
 	if len(f.Options) < 2 {
-		return f.Value()
+		return value
 	}
 	arrow := lipgloss.NewStyle().Foreground(tui.ColorPrimary)
-	value := f.Value()
 	if value == "" {
 		value = tagStyle.Render("none")
 	}

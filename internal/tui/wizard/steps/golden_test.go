@@ -167,12 +167,13 @@ func demoDiscovery() *proxmoxDiscovery {
 
 // demoDiscoverySingleNode pins the single-Proxmox-host case: storage and
 // bridges stay multi-option (as demoDiscovery), but Nodes has exactly one
-// entry, so every per-node select (bootstrap, control plane, workers)
-// resolves to exactly one option.
+// entry — named to match the seeded config's node, so the configured value
+// stays on-list — and every per-node select (bootstrap, control plane,
+// workers) resolves to exactly one option.
 func demoDiscoverySingleNode() *proxmoxDiscovery {
 	disc := demoDiscovery()
 	disc.Nodes = []proxmoxNode{
-		{Name: "pve1", Status: "online", CPUs: 32, MemGB: 128},
+		{Name: "pve", Status: "online", CPUs: 32, MemGB: 128},
 	}
 	return disc
 }

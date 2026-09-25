@@ -191,3 +191,46 @@ func TestSelectField_BlankOptionRendersHonestLabel(t *testing.T) {
 		t.Fatalf("content row = %q, want the blank option labeled %q", rows[2], "◂ none ▸")
 	}
 }
+
+// TestSelectField_SetValueUnknownInjectsCurrentOption pins the edit-config
+// contract: a configured value outside Options must be injected and
+// selected (rendered with a "current" tag), never silently coerced to
+// whatever the cursor sat on.
+func TestSelectField_SetValueUnknownInjectsCurrentOption(t *testing.T) {
+	f := NewSelectField("control plane nodes", []string{"1", "3", "5"})
+	f.SetWidth(90)
+
+	f.SetValue("7")
+
+	if got := f.Value(); got != "7" {
+		t.Fatalf("Value() after SetValue(7) = %q, want 7", got)
+	}
+	rows := strings.Split(tuitest.StripANSI(f.View()), "\n")
+	if !strings.Contains(rows[2], "7") || !strings.Contains(rows[2], "current") {
+		t.Fatalf("content row = %q, want the injected value with a current tag", rows[2])
+	}
+}
+
+func TestSelectField_SetValueUnknownTwiceReplacesInjectedOption(t *testing.T) {
+	f := NewSelectField("cpu type", []string{"host", "kvm64"})
+
+	f.SetValue("EPYC")
+	f.SetValue("EPYC-v3")
+
+	if got := f.Value(); got != "EPYC-v3" {
+		t.Fatalf("Value() = %q, want EPYC-v3", got)
+	}
+	if got := len(f.Options); got != 3 {
+		t.Fatalf("len(Options) = %d, want 3 (one injected slot, reused)", got)
+	}
+}
+
+func TestSelectField_SetValueEmptyInjectsNothing(t *testing.T) {
+	f := NewSelectField("cpu type", []string{"host", "kvm64"})
+
+	f.SetValue("")
+
+	if got := len(f.Options); got != 2 {
+		t.Fatalf("len(Options) = %d, want 2 (an empty value must not inject)", got)
+	}
+}

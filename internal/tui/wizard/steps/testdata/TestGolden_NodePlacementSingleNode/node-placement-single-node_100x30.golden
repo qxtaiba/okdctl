@@ -20,7 +20,7 @@
   │                                                                                              │  
   │    mycluster-bootstrap                                                                       │  
   │    ╭────────────╮                                                                            │  
-  │    │ pve1       │ default                                                                    │  
+  │    │ pve        │                                                                            │  
   │    ╰────────────╯                                                                            │  
   │    proxmox node for bootstrap vm                                                             │  
   │                                                                                              │  

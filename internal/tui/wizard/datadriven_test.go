@@ -929,6 +929,41 @@ func TestMultiSectionForm_HiddenSectionSkippedByViewAndNavigation(t *testing.T) 
 	}
 }
 
+// TestDataDrivenStep_LoadFromConfig_SelectOutsideOptionsRoundTrips pins the
+// edit-config safety contract: a valid config value the select's Options
+// don't offer (validators accept 1..100 masters) must survive
+// LoadFromConfig -> Apply byte-identical instead of being coerced to the
+// cursor's default.
+func TestDataDrivenStep_LoadFromConfig_SelectOutsideOptionsRoundTrips(t *testing.T) {
+	def := &StepDefinition{
+		ID: StepIDBasics,
+		Sections: []SectionDefinition{{
+			Fields: []FieldDefinition{{
+				Key:       "count",
+				Label:     "control plane nodes",
+				Default:   "3",
+				Type:      FieldTypeSelect,
+				Options:   []string{"1", "3", "5"},
+				ConfigSet: SetInt(func(c *config.Config, v int) { c.Topology.ControlPlane.Count = v }),
+				ConfigGet: GetInt(func(c *config.Config) int { return c.Topology.ControlPlane.Count }),
+			}},
+		}},
+	}
+	step := NewDataDrivenStep(def)
+	cfg := &config.Config{}
+	cfg.Topology.ControlPlane.Count = 7
+
+	step.LoadFromConfig(cfg, true)
+
+	out := &config.Config{}
+	if err := step.Apply(out); err != nil {
+		t.Fatalf("Apply(): %v", err)
+	}
+	if out.Topology.ControlPlane.Count != 7 {
+		t.Fatalf("Apply() wrote count %d, want 7 preserved", out.Topology.ControlPlane.Count)
+	}
+}
+
 func TestRenderInfoCard_FitsWidth(t *testing.T) {
 	for _, width := range []int{50, 70, 110} {
 		body := lipgloss.Wrap(strings.Repeat("resource totals go here ", 10), width-4, "")
