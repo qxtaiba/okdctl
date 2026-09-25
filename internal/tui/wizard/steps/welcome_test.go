@@ -66,6 +66,20 @@ func TestHubFreshMenuIsGetStartedAndQuit(t *testing.T) {
 	}
 }
 
+// TestHubBlankSlateSuppressesVersionBadge pins bug 37: the blank-slate hub
+// must not advertise the defaults-seed okd version as if a cluster existed;
+// the badge returns once a real configuration is loaded.
+func TestHubBlankSlateSuppressesVersionBadge(t *testing.T) {
+	s := NewWelcomeStep()
+	if !s.SuppressesBadge() {
+		t.Error("blank-slate hub must suppress the version badge")
+	}
+	s.SetConfigExists(true)
+	if s.SuppressesBadge() {
+		t.Error("a hub over a real config must show the badge")
+	}
+}
+
 func TestHubExistingMenuIsTheFiveVerbs(t *testing.T) {
 	s := NewWelcomeStep()
 	s.SetConfigExists(true)

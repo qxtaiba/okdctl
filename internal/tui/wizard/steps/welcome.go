@@ -161,6 +161,13 @@ func (s *WelcomeStep) SetExistingConfig(cfg *config.Config, state SaveSlotState)
 		cfg.Cluster.Name, cfg.Distribution.Version, pluralNodes(nodes), state)
 }
 
+// SuppressesBadge hides the chrome's version badge on the blank-slate hub,
+// where the defaults-seed version would advertise a cluster that doesn't
+// exist; the badge returns once a real configuration is loaded.
+func (s *WelcomeStep) SuppressesBadge() bool {
+	return !s.configExists
+}
+
 // pluralNodes renders a node count with its noun agreeing.
 func pluralNodes(n int) string {
 	if n == 1 {

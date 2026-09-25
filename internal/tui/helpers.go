@@ -32,7 +32,10 @@ type dottedKVOpts struct {
 func wrapValueColumn(value string, valueStart int, valueStyle *lipgloss.Style, totalWidth int) string {
 	lines := []string{value}
 	if totalWidth > 0 {
-		remaining := totalWidth - valueStart
+		// One column stays reserved at the right edge — the same gutter
+		// errorbox keeps — so a full-width value never renders flush
+		// against the enclosing box border.
+		remaining := totalWidth - valueStart - 1
 		switch {
 		case remaining < minValueWrapWidth:
 			lines = []string{Truncate(value, remaining)}
@@ -75,7 +78,14 @@ func dottedKV(key, value string, keyColWidth int, opts dottedKVOpts) string {
 	}
 
 	keyLen := lipgloss.Width(key)
-	dotsNeeded := max(keyColWidth-keyLen-2, 3) // -2 for spaces around dots; floor 3
+	// Dots fill to the shared value column; a key close enough that fewer
+	// than three dots remain keeps the column with what's left (floor 1),
+	// and only a key overrunning the column itself shifts its own row —
+	// sibling rows stay aligned.
+	dotsNeeded := keyColWidth - keyLen - 2
+	if dotsNeeded < 1 {
+		dotsNeeded = 3
+	}
 	valueStart := keyLen + 1 + dotsNeeded + 1
 
 	prefix := keyStyle.Render(key) + " " + dotStyle.Render(strings.Repeat(".", dotsNeeded)) + " "

@@ -6,8 +6,8 @@
   │  resizing masters  1 / 3                                                    elapsed 30s      │  
   │  cancel requested — finishing the current terraform/oc call safely…                          │  
   │  ● homelab-master0                                                                           │  
-  │      ✓ etcd health gate (pre)                                                        0s      │  
-  │      ✓ cordon + drain                                                                0s      │  
+  │      ✓ etcd health gate (pre)                                                         —      │  
+  │      ✓ cordon + drain                                                                 —      │  
   │      ⣾ terraform apply (in-place update)                                            30s      │  
   │      ○ power-cycle vm                                                                        │  
   │      ○ wait for node ready                                                                   │  
@@ -16,7 +16,7 @@
   │  ○ homelab-master1                                                                           │  
   │  ○ homelab-master2                                                                           │  
   │                                                                                              │  
-  │  marker okd-install/.okdctl-node-op.json · ctrl+c cancels after the current gate             │  
+  │  marker okd-install/.okdctl-node-op.json                                                     │  
   │                                                                                              │  
   │                                                                                              │  
   │                                                                                              │  
@@ -24,7 +24,7 @@
   │                                                                                              │  
   │                                                                                              │  
   │                                                                                              │  
-  │───────────────────────────────────────────────────────────────────────────────── ▸ mycluster │  
+  │─────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
   │  ctrl+c cancel (twice to force-quit) • ? help                                                │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                     

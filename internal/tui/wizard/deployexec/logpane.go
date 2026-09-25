@@ -94,11 +94,15 @@ func logRows(lines []LogLine, width, budget int, wrap bool) []string {
 		l := &lines[i]
 		stamp := stampStyle.Render(l.At.Format(logStampFormat))
 		textStyle := logLevelStyle(l.Level)
+		text := l.Text
+		if tag := logLevelTag(l.Level); tag != "" {
+			text = tag + " " + text
+		}
 		if !wrap {
-			rows = append(rows, stamp+" "+textStyle.Render(tui.Truncate(l.Text, textWidth)))
+			rows = append(rows, stamp+" "+textStyle.Render(tui.Truncate(text, textWidth)))
 			continue
 		}
-		wrapped := strings.Split(lipgloss.Wrap(l.Text, textWidth, ""), "\n")
+		wrapped := strings.Split(lipgloss.Wrap(text, textWidth, ""), "\n")
 		for j, part := range wrapped {
 			if j == 0 {
 				rows = append(rows, stamp+" "+textStyle.Render(part))
@@ -110,6 +114,18 @@ func logRows(lines []LogLine, width, budget int, wrap bool) []string {
 	// Wrapping can turn one line into several, so the drop happens after
 	// rendering: the newest rows are the ones worth keeping.
 	return rows[max(len(rows)-budget, 0):]
+}
+
+// logLevelTag returns the textual severity a rendered row leads with — WARN
+// and ERROR only, so severity survives NO_COLOR without tagging the whole
+// dim info stream.
+func logLevelTag(level string) string {
+	switch upper := strings.ToUpper(level); upper {
+	case "ERROR", "WARN":
+		return upper
+	default:
+		return ""
+	}
 }
 
 // logLevelStyle returns the colour a captured line renders in: a warning and a

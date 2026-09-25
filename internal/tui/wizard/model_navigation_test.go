@@ -100,7 +100,7 @@ func advanceToReview(t *testing.T, m *Model) *Model {
 		if m.CurrentStep().ID() == StepIDReview {
 			return m
 		}
-		m = update(t, m, StepCompleteMsg{})
+		m = update(t, m, StepCompleteMsg{StepID: m.CurrentStep().ID()})
 	}
 	t.Fatalf("setup: CurrentStep() = %v, want review", m.CurrentStep().ID())
 	return m
@@ -226,6 +226,43 @@ func scrollTestDefinition() *StepDefinition {
 		ID:       StepIDAddons,
 		Title:    "scroll fixture",
 		Sections: sections,
+	}
+}
+
+// TestModel_BackNeverLandsOnHiddenStep pins bug 17: when every earlier step
+// is ShouldShow-hidden, back stays put instead of focusing a hidden screen.
+func TestModel_BackNeverLandsOnHiddenStep(t *testing.T) {
+	steps, _ := newNavTestSteps([]StepID{StepIDBasics, StepIDProxmox, StepIDNetworking})
+	steps[0].(*fakeStep).shouldShow = func(*config.Config) bool { return false }
+	m := NewModel(steps, &config.Config{})
+	m = update(t, m, StepCompleteMsg{StepID: m.CurrentStep().ID()})
+	if got := m.CurrentStep().ID(); got != StepIDProxmox {
+		t.Fatalf("setup: CurrentStep() = %v, want proxmox", got)
+	}
+
+	m = update(t, m, StepBackMsg{})
+
+	if got := m.CurrentStep().ID(); got != StepIDProxmox {
+		t.Fatalf("back landed on %v, want to stay on proxmox (basics is hidden)", got)
+	}
+}
+
+// TestModel_StaleStepCompleteIgnored pins bug 16: a StepCompleteMsg carrying
+// a step ID other than the current one is a late async completion from a
+// step the user already left, and must not advance (and Apply) the current
+// step.
+func TestModel_StaleStepCompleteIgnored(t *testing.T) {
+	steps, _ := newNavTestSteps([]StepID{StepIDBasics, StepIDProxmox, StepIDNetworking})
+	m := NewModel(steps, &config.Config{})
+
+	m = update(t, m, StepCompleteMsg{StepID: StepIDNetworking})
+	if got := m.CurrentStep().ID(); got != StepIDBasics {
+		t.Fatalf("stale completion advanced the wizard to %v, want basics", got)
+	}
+
+	m = update(t, m, StepCompleteMsg{StepID: StepIDBasics})
+	if got := m.CurrentStep().ID(); got != StepIDProxmox {
+		t.Fatalf("matching completion did not advance: %v", got)
 	}
 }
 

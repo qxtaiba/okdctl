@@ -834,8 +834,8 @@ func TestMultiSectionForm_SectionsJoinedByOneBlankRow(t *testing.T) {
 		t.Fatalf("row two after section one's last field is blank, want section two's head")
 	}
 	next := strings.TrimSpace(lines[lastFieldEnd+2])
-	if !strings.Contains(next, "○") {
-		t.Fatalf("row after the blank gap = %q, want the pending indicator ○", next)
+	if !strings.Contains(next, "section two") {
+		t.Fatalf("row after the blank gap = %q, want section two's head", next)
 	}
 }
 
@@ -957,6 +957,24 @@ func TestMultiSectionForm_EnterMidEditReachesTheField(t *testing.T) {
 	_, enterPressed = form.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if !enterPressed {
 		t.Fatal("enter in navigate mode must still submit the step")
+	}
+}
+
+// TestFormSection_OptionalBlankFieldStillCompletes pins bug 36: a section
+// whose only unfilled fields are optional (token id, vip, ntp server) shows
+// the completed indicator instead of staying pending forever.
+func TestFormSection_OptionalBlankFieldStillCompletes(t *testing.T) {
+	optional := components.NewInputField("token id", "")
+	required := components.NewInputField("host", "")
+	required.Required = true
+	section := FormSection{Group: components.NewInputGroup(required, optional)}
+
+	if section.isComplete() {
+		t.Fatal("section with an empty required field must be incomplete")
+	}
+	required.SetValue("pve.local")
+	if !section.isComplete() {
+		t.Fatal("section with only an optional blank left must be complete")
 	}
 }
 

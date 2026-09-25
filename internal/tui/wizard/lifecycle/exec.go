@@ -30,6 +30,10 @@ type execRow struct {
 	status rowStatus
 	start  time.Time
 	took   time.Duration
+	// implied marks a row whose completion was inferred (never started, then
+	// promoted) rather than measured; rowDur renders it "—" instead of a
+	// fabricated 0s.
+	implied bool
 }
 
 type nodeProgress struct {
@@ -256,13 +260,15 @@ func (s *ExecStep) markEarlierRowsDone(np *nodeProgress, active int) {
 }
 
 // promoteRowDone closes a row that was still running or pending, backfilling
-// a duration from its start when the caller never supplied one.
+// a duration from its start when the caller never supplied one; a row that
+// never started is marked implied so its duration renders "—".
 func promoteRowDone(r *execRow, now time.Time) {
 	if r.status != rowRunning && r.status != rowPending {
 		return
 	}
 	if r.start.IsZero() {
 		r.start = now
+		r.implied = true
 	}
 	r.status = rowDone
 	if r.took == 0 {
@@ -297,16 +303,41 @@ func (s *ExecStep) finish(err error) {
 	s.closeNode(np)
 }
 
+// nodeIndexFor resolves the node an event belongs to: an exact Node match
+// first, then a whole-token description mention — bounded so worker1 never
+// claims worker10's events on a 10+ node cluster.
 func (s *ExecStep) nodeIndexFor(ev *ExecEvent) int {
 	for i := range s.nodes {
 		if ev.Node == s.nodes[i].name {
 			return i
 		}
-		if ev.Desc != "" && strings.Contains(ev.Desc, s.nodes[i].name) {
+	}
+	if ev.Desc == "" {
+		return -1
+	}
+	for i := range s.nodes {
+		if mentionsNode(ev.Desc, s.nodes[i].name) {
 			return i
 		}
 	}
 	return -1
+}
+
+// mentionsNode reports whether desc contains name unextended — an occurrence
+// followed by another digit is a longer sibling's name, not this node's.
+func mentionsNode(desc, name string) bool {
+	for at := 0; at <= len(desc)-len(name); {
+		i := strings.Index(desc[at:], name)
+		if i < 0 {
+			return false
+		}
+		end := at + i + len(name)
+		if end >= len(desc) || desc[end] < '0' || desc[end] > '9' {
+			return true
+		}
+		at += i + 1
+	}
+	return false
 }
 
 func rowLabels(rows []execRow) []string {
@@ -356,11 +387,11 @@ func (s *ExecStep) View(width, height int) string {
 		lines = s.appendNode(lines, i, col)
 	}
 
-	// The cancel clause only applies while a gate could still run — once the
-	// op has finished there is nothing left to cancel, and repeating the
-	// hint reads as stale advice on an otherwise-done screen.
+	// The cancel clause only applies while a first ctrl+c would still cancel
+	// gracefully — after completion there is nothing to cancel, and after a
+	// requested cancel the next ctrl+c force-quits.
 	footnote := "marker okd-install/" + node.OpMarkerFileName
-	if !s.finished {
+	if !s.finished && !s.cancelRequested {
 		footnote += " · ctrl+c cancels after the current gate"
 	}
 	lines = append(lines, "", s.dimStyle.Render(lipgloss.Wrap(footnote, col, "")))
@@ -415,9 +446,9 @@ func (s *ExecStep) appendNode(lines []string, i, col int) []string {
 func (s *ExecStep) renderRow(r *execRow, col int) string {
 	switch r.status {
 	case rowDone:
-		return justify(s.doneStyle.Render(tui.IconSuccess+" "+r.label), s.dimStyle.Render(fmtDur(r.took)), col)
+		return justify(s.doneStyle.Render(tui.IconSuccess+" "+r.label), s.dimStyle.Render(rowDur(r)), col)
 	case rowFailed:
-		return justify(s.failStyle.Render(tui.IconError+" "+r.label), s.dimStyle.Render(fmtDur(r.took)), col)
+		return justify(s.failStyle.Render(tui.IconError+" "+r.label), s.dimStyle.Render(rowDur(r)), col)
 	case rowRunning:
 		return justify(s.loadingSpinner.View()+s.boldStyle.Render(r.label), s.dimStyle.Render(fmtDur(s.now().Sub(r.start))), col)
 	default:
@@ -484,6 +515,18 @@ func justify(left, right string, width int) string {
 // fmtDur renders d truncated to whole seconds, the exec screen's duration format.
 func fmtDur(d time.Duration) string {
 	return d.Truncate(time.Second).String()
+}
+
+// rowDur renders a settled row's duration: "—" for one whose completion was
+// inferred rather than measured, "<1s" for a real sub-second measurement.
+func rowDur(r *execRow) string {
+	if r.implied {
+		return "—"
+	}
+	if r.took < time.Second {
+		return "<1s"
+	}
+	return fmtDur(r.took)
 }
 
 // ShortHelp explains the constrained keys: no esc, guarded ctrl+c — the

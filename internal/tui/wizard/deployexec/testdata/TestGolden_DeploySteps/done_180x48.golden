@@ -11,23 +11,24 @@
   │  │                                                                                        │            │09:00:28 deploy step started step=step-04 phase=setup                │  
   │  │  access                                                                                │            │09:00:35 deploy step started step=step-05 phase=setup                │  
   │  │    cluster .................................. homelab.lab.example.com                  │            │09:00:42 deploy step started step=step-06 phase=setup                │  
-  │  │    console ............. https://console-openshift-console.apps.homelab.lab.example.com│            │09:00:49 deploy step started step=step-07 phase=setup                │  
-  │  │    api ................. https://api.homelab.lab.example.com:6443                      │            │09:00:56 deploy step started step=step-08 phase=setup                │  
-  │  │                                                                                        │            │09:01:03 deploy step started step=step-09 phase=setup                │  
-  │  │  dns records                                                                           │            │09:01:10 deploy step started step=step-10 phase=setup                │  
-  │  │    api.homelab.lab.example.com .............. 192.0.2.10 (kube-vip)                    │            │09:01:17 deploy step started step=step-11 phase=setup                │  
-  │  │    *.apps.homelab.lab.example.com ........... 192.168.1.20 (haproxy)                   │            │09:01:24 deploy step started step=step-12 phase=setup                │  
-  │  │                                                                                        │            │09:01:31 deploy step started step=step-13 phase=setup                │  
-  │  │  status                                                                                │            │09:01:38 deploy step started step=step-14 phase=setup                │  
-  │  │    bootstrap ................................ cleaned up                               │            │09:01:45 deploy step started step=step-15 phase=setup                │  
-  │  │    api routing .............................. kube-vip (192.0.2.10)                    │            │09:01:52 deploy step started step=step-16 phase=setup                │  
-  │  │    ingress routing .......................... haproxy (bastion)                        │            │09:01:59 deploy step started step=step-17 phase=setup                │  
-  │  │                                                                                        │            │09:02:06 deploy step started step=step-18 phase=setup                │  
-  │  │  steps                                                                                 │            │09:02:13 deploy step started step=step-19 phase=setup                │  
-  │  │    deploy-infrastructure .................... ok    1m30s                              │            │09:02:20 deploy step started step=step-20 phase=setup                │  
-  │  │    wait-bootstrap ........................... ok    12m0s                              │            │09:02:27 deploy step started step=step-21 phase=setup                │  
-  │  │    total .................................... 13m30s                                   │            │09:02:34 deploy step started step=step-22 phase=setup                │  
-  │  │                                                                                        │            │09:02:41 deploy step started step=step-23 phase=setup                │  
+  │  │    console ............. https://console-openshift-console.apps.homelab.lab.example.co │            │09:00:49 deploy step started step=step-07 phase=setup                │  
+  │  │                          m                                                             │            │09:00:56 deploy step started step=step-08 phase=setup                │  
+  │  │    api ................. https://api.homelab.lab.example.com:6443                      │            │09:01:03 deploy step started step=step-09 phase=setup                │  
+  │  │                                                                                        │            │09:01:10 deploy step started step=step-10 phase=setup                │  
+  │  │  dns records                                                                           │            │09:01:17 deploy step started step=step-11 phase=setup                │  
+  │  │    api.homelab.lab.example.com .............. 192.0.2.10 (kube-vip)                    │            │09:01:24 deploy step started step=step-12 phase=setup                │  
+  │  │    *.apps.homelab.lab.example.com ........... 192.168.1.20 (haproxy)                   │            │09:01:31 deploy step started step=step-13 phase=setup                │  
+  │  │                                                                                        │            │09:01:38 deploy step started step=step-14 phase=setup                │  
+  │  │  status                                                                                │            │09:01:45 deploy step started step=step-15 phase=setup                │  
+  │  │    bootstrap ................................ cleaned up                               │            │09:01:52 deploy step started step=step-16 phase=setup                │  
+  │  │    api routing .............................. kube-vip (192.0.2.10)                    │            │09:01:59 deploy step started step=step-17 phase=setup                │  
+  │  │    ingress routing .......................... haproxy (bastion)                        │            │09:02:06 deploy step started step=step-18 phase=setup                │  
+  │  │                                                                                        │            │09:02:13 deploy step started step=step-19 phase=setup                │  
+  │  │  steps                                                                                 │            │09:02:20 deploy step started step=step-20 phase=setup                │  
+  │  │    deploy-infrastructure .................... ok    1m30s                              │            │09:02:27 deploy step started step=step-21 phase=setup                │  
+  │  │    wait-bootstrap ........................... ok    12m0s                              │            │09:02:34 deploy step started step=step-22 phase=setup                │  
+  │  │    total .................................... 13m30s                                   │            │09:02:41 deploy step started step=step-23 phase=setup                │  
+  │  │                                                                                        │            │                                                                     │  
   │  │  credentials                                                                           │            │                                                                     │  
   │  │    username ................................. kubeadmin                                │            │                                                                     │  
   │  │    password ............ cat okd-install/cluster-config/auth/kubeadmin-password        │            │                                                                     │  
@@ -40,7 +41,6 @@
   │  │  cluster deployed with haproxy handling ingress on the bastion.                        │            │                                                                     │  
   │  │  if you deploy a loadbalancer provider (e.g., metallb), run:                           │            │                                                                     │  
   │  │      okdctl update-ingress                                                             │            │                                                                     │  
-  │  │  to auto-detect loadbalancer ips and switch dns over.                                  │            │                                                                     │  
   │                                                                                                                                                                              │  
   │──────────────────────────────────────────────────────────────────── ↑ ↓  scroll down for more ──────────────────────────────────────────────────────────────────── ▸ homelab │  
   │  enter exit • pgup/pgdn scroll • ? help                                                                                                                                      │  

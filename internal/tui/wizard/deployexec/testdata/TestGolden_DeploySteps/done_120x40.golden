@@ -11,7 +11,8 @@
   │  │                                                                                        │                      │  
   │  │  access                                                                                │                      │  
   │  │    cluster .................................. homelab.lab.example.com                  │                      │  
-  │  │    console ............. https://console-openshift-console.apps.homelab.lab.example.com│                      │  
+  │  │    console ............. https://console-openshift-console.apps.homelab.lab.example.co │                      │  
+  │  │                          m                                                             │                      │  
   │  │    api ................. https://api.homelab.lab.example.com:6443                      │                      │  
   │  │                                                                                        │                      │  
   │  │  dns records                                                                           │                      │  
@@ -32,7 +33,6 @@
   │  │    username ................................. kubeadmin                                │                      │  
   │  │    password ............ cat okd-install/cluster-config/auth/kubeadmin-password        │                      │  
   │  │                                                                                        │                      │  
-  │  │  quick start                                                                           │                      │  
   │                                                                                                                  │  
   │────────────────────────────────────── ↑ ↓  scroll down for more ────────────────────────────────────── ▸ homelab │  
   │  enter exit • pgup/pgdn scroll • ? help                                                                          │  

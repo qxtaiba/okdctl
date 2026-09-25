@@ -18,9 +18,9 @@
   │                                                                                                                  │  
   │  gates per node                                                                                                  │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
-  │  1 etcd health gate (pre)            4 power-cycle vm                   7 uncordon + ceph health gate            │  
-  │  2 cordon + drain                    5 wait for node ready                                                       │  
-  │  3 terraform apply (in-place updat…  6 etcd health gate (post)                                                   │  
+  │  1 etcd health gate (pre)             4 power-cycle vm           7 uncordon + ceph health gate                   │  
+  │  2 cordon + drain                     5 wait for node ready                                                      │  
+  │  3 terraform apply (in-place update)  6 etcd health gate (post)                                                  │  
   │  ✓ plan gate passed — the safety gate allows exactly the listed changes                                          │  
   │                                                                                                                  │  
   │                                                                                                                  │  

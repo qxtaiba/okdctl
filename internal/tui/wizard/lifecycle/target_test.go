@@ -17,6 +17,26 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
+// TestSortByIndexUnindexedNodesSortLast pins bug 25: an unindexed node
+// sorts after every terraform-indexed one, so remove never offers it as
+// the top-of-stack removal target while blocking the real workers.
+func TestSortByIndexUnindexedNodesSortLast(t *testing.T) {
+	nodes := []cluster.NodeDetail{
+		{Name: "custom-gpu-node"},
+		{Name: "homelab-worker0"},
+		{Name: "homelab-worker1"},
+	}
+
+	sortByIndex(nodes, true)
+
+	if got := nodes[len(nodes)-1].Name; got != "custom-gpu-node" {
+		t.Fatalf("unindexed node did not sort last: %+v", nodes)
+	}
+	if nodes[0].Name != "homelab-worker1" || nodes[1].Name != "homelab-worker0" {
+		t.Fatalf("descending index order broken: %+v", nodes)
+	}
+}
+
 func loadedTarget(t *testing.T, st *State, nodes []cluster.NodeDetail) *TargetStep {
 	t.Helper()
 	s := NewTargetStep(st, Hooks{ListNodes: func() ([]cluster.NodeDetail, error) { return nodes, nil }})

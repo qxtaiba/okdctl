@@ -11,8 +11,8 @@
   │  │                                                                    │  │  
   │  │  access                                                            │  │  
   │  │    cluster ............................... homelab.lab.example.com │  │  
-  │  │    console ............. https://console-openshift-console.apps.hom│  │  
-  │  │                          elab.lab.example.com                      │  │  
+  │  │    console ............. https://console-openshift-console.apps.ho │  │  
+  │  │                          melab.lab.example.com                     │  │  
   │  │    api ................. https://api.homelab.lab.example.com:6443  │  │  
   │  │                                                                    │  │  
   │  │  dns records                                                       │  │  

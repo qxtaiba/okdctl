@@ -24,6 +24,10 @@ func TestValidateFilePath(t *testing.T) {
 	if err := ValidateFilePath(existing); err != nil {
 		t.Fatalf("ValidateFilePath(existing file) = %v, want nil", err)
 	}
+
+	if err := ValidateFilePath(dir); err == nil {
+		t.Fatal("ValidateFilePath(directory) = nil, want error — a pull-secret path pointing at a folder fails at deploy")
+	}
 }
 
 func TestValidateDNSServers(t *testing.T) {

@@ -319,19 +319,22 @@ func (s *PreviewStep) renderGates(st *wizard.SectionStyles, width int) string {
 	return b.String()
 }
 
-// renderGateGrid lays out gates as a column-major numbered grid: three
-// columns when width is at least 90, two down to gateGridMinCellWidth*2,
-// else one. Each column's width is derived from the actual width (mirroring
-// the node table's max(16, width/N) pattern above) rather than a fixed cap;
-// width/cols's remainder is distributed one column at a time (widest column
-// first) instead of left on the floor, so the full width is used rather
-// than a few trailing columns going unused. Each column still reserves
-// gateGridGutter blank columns so a truncated label's ellipsis never runs
-// into the next column's text.
+// renderGateGrid lays out gates as a column-major numbered grid: up to
+// three columns when width is at least 90, two down to
+// gateGridMinCellWidth*2, else one. Each column sizes to its own longest
+// label plus gateGridGutter; a column count whose natural widths overflow
+// the row folds down to fewer, taller columns before any safety-gate name
+// truncates — free rows are cheaper than amputated labels. Only the
+// single-column floor still truncates, against the full width.
 func renderGateGrid(gates []string, width int) []string {
 	if len(gates) == 0 {
 		return nil
 	}
+	labels := make([]string, len(gates))
+	for i, g := range gates {
+		labels[i] = fmt.Sprintf("%d %s", i+1, g)
+	}
+
 	cols := 2
 	if width >= 90 {
 		cols = 3
@@ -339,17 +342,18 @@ func renderGateGrid(gates []string, width int) []string {
 	if width < gateGridMinCellWidth*2 {
 		cols = 1
 	}
-	base := max(gateGridMinCellWidth, width/cols)
-	remainder := 0
-	if base == width/cols {
-		remainder = width % cols
-	}
-	colWidths := make([]int, cols)
-	for c := range colWidths {
-		colWidths[c] = base
-		if c < remainder {
-			colWidths[c]++
+
+	colWidths := []int{width}
+	for ; cols > 1; cols-- {
+		colWidths = gateColWidths(labels, cols)
+		total := 0
+		for _, w := range colWidths {
+			total += w
 		}
+		if total <= width {
+			break
+		}
+		colWidths = []int{width}
 	}
 
 	rowsPerCol := (len(gates) + cols - 1) / cols
@@ -362,12 +366,29 @@ func renderGateGrid(gates []string, width int) []string {
 				continue
 			}
 			labelWidth := max(1, colWidths[c]-gateGridGutter)
-			text := tui.Truncate(fmt.Sprintf("%d %s", idx+1, gates[idx]), labelWidth)
+			text := tui.Truncate(labels[idx], labelWidth)
 			row.WriteString(lipgloss.NewStyle().Width(colWidths[c]).Render(text))
 		}
 		lines[r] = row.String()
 	}
 	return lines
+}
+
+// gateColWidths sizes each column-major column to its longest label plus
+// the gutter.
+func gateColWidths(labels []string, cols int) []int {
+	rowsPerCol := (len(labels) + cols - 1) / cols
+	widths := make([]int, cols)
+	for c := range widths {
+		w := 0
+		for r := range rowsPerCol {
+			if idx := c*rowsPerCol + r; idx < len(labels) {
+				w = max(w, lipgloss.Width(labels[idx]))
+			}
+		}
+		widths[c] = w + gateGridGutter
+	}
+	return widths
 }
 
 // renderIrreversibleBlock renders the two-line red-bar warning for a plan

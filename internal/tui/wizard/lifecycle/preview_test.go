@@ -295,30 +295,35 @@ func TestPreviewGateGridUntruncatedAtRealisticWidths(t *testing.T) {
 	}
 }
 
-// TestPreviewGateGridKeepsGutterOnTruncation guards item 2's collision fix:
-// a label truncated to fill its column must still leave a >=2-space gutter
-// before the next column's text, so the ellipsis never runs into it. The
-// fixture's own gate names are too short to force truncation at any
-// wizard-reachable width, so this seeds an oversized label directly.
-func TestPreviewGateGridKeepsGutterOnTruncation(t *testing.T) {
-	gates := []string{strings.Repeat("x", 60), "short gate"}
-	rows := renderGateGrid(gates, 80)
-	if len(rows) != 1 {
-		t.Fatalf("expected 1 row for 2 gates in a 2-column layout, got %d: %v", len(rows), rows)
+// TestPreviewGateGridPrefersRowsOverTruncation pins bug 41: a column count
+// whose natural (longest-label) widths overflow the row folds down to fewer,
+// taller columns before any safety-gate name truncates — free rows are
+// cheaper than amputated gate names.
+func TestPreviewGateGridPrefersRowsOverTruncation(t *testing.T) {
+	gates := GateRows(node.OpResize, nodetypes.RoleMaster, false, DiskNone)
+	for _, width := range []int{90, 94, 100} {
+		for _, row := range renderGateGrid(gates, width) {
+			if strings.Contains(row, "…") {
+				t.Errorf("width %d: gate name truncated with room to fold into more rows: %q", width, row)
+			}
+		}
 	}
+}
 
-	row := rows[0]
-	ellipsisAt := strings.Index(row, "…")
-	if ellipsisAt < 0 {
-		t.Fatalf("setup: expected the oversized label to be truncated, row: %q", row)
+// TestPreviewGateGridOversizedLabelFoldsToOneColumn pins the fold's floor: a
+// label too wide for any multi-column layout renders in a single untruncated
+// column, one gate per row, instead of colliding with a neighbour.
+func TestPreviewGateGridOversizedLabelFoldsToOneColumn(t *testing.T) {
+	gates := []string{strings.Repeat("x", 60), "short gate"}
+	rows := renderGateGrid(gates, 70)
+	if len(rows) != 2 {
+		t.Fatalf("expected one row per gate after folding, got %d: %v", len(rows), rows)
 	}
-	after := row[ellipsisAt+len("…"):]
-	gutter := len(after) - len(strings.TrimLeft(after, " "))
-	if gutter < gateGridGutter {
-		t.Errorf("gutter after a truncated label = %d spaces, want >= %d: row %q", gutter, gateGridGutter, row)
+	if strings.Contains(rows[0], "…") {
+		t.Errorf("label truncated despite fitting a single column: %q", rows[0])
 	}
-	if !strings.HasPrefix(strings.TrimLeft(after, " "), "2 short gate") {
-		t.Errorf("second column collided with the truncated first column: row %q", row)
+	if !strings.HasPrefix(strings.TrimLeft(rows[1], " "), "2 short gate") {
+		t.Errorf("second gate lost its own row: %q", rows[1])
 	}
 }
 

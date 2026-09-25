@@ -181,8 +181,10 @@ func (m *Model) statusRow() string {
 	}
 	// Padding is inert under Inline (lipgloss v2 skips it), so the 2-space
 	// inset — matching the body's viewport inset — is prepended literally.
-	style := lipgloss.NewStyle().Foreground(tui.ColorError).Inline(true).MaxWidth(width - 2)
-	return "  " + style.Render(tui.IconError+" "+m.err.Error())
+	// truncateTitle, not MaxWidth: a silent clip amputates exactly the
+	// "— fix" suffix every error carries.
+	style := lipgloss.NewStyle().Foreground(tui.ColorError).Inline(true)
+	return "  " + style.Render(truncateTitle(tui.IconError+" "+m.err.Error(), width-2))
 }
 
 // contentDimensions sizes a ResizableStep: bodyWidth (the form column, not
@@ -573,6 +575,9 @@ func (m *Model) scrollIndicator() (arrows, message string, scrollable bool) {
 
 func (m *Model) renderContextBadge() string {
 	if m.chrome.Badge == nil {
+		return ""
+	}
+	if b, ok := m.CurrentStep().(BadgeSuppressor); ok && b.SuppressesBadge() {
 		return ""
 	}
 	return m.chrome.Badge(m.config)

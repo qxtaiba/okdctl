@@ -56,6 +56,36 @@ func TestDottedKVWrapsUnderValueColumn(t *testing.T) {
 	}
 }
 
+// TestDottedKVKeyNearColumnKeepsValueColumn pins bug 23: a key close enough
+// to the column that fewer than three dots remain keeps the shared value
+// column with shorter leaders instead of drifting its value one column
+// right (post_deploy_60's DNS rows).
+func TestDottedKVKeyNearColumnKeepsValueColumn(t *testing.T) {
+	const keyColWidth = 30
+	short := tuitest.StripANSI(DottedKeyValueFull("api.mycluster.k8s.local", "192.168.1.50", keyColWidth, 0))
+	near := tuitest.StripANSI(DottedKeyValueFull("*.apps.mycluster.k8s.local", "192.168.1.20", keyColWidth, 0))
+
+	if si, ni := strings.Index(short, "192."), strings.Index(near, "192."); si != ni {
+		t.Fatalf("value columns drift: %d vs %d\n%q\n%q", si, ni, short, near)
+	}
+}
+
+// TestDottedKVReservesGutterColumn pins bug 22: a value wide enough to fill
+// the row wraps one column early, so it never renders flush against the
+// enclosing box border — the same gutter errorbox reserves.
+func TestDottedKVReservesGutterColumn(t *testing.T) {
+	const totalWidth = 60
+	value := strings.Repeat("x", 120)
+	out := DottedKeyValueFull("console", value, 20, totalWidth)
+
+	for i, line := range strings.Split(tuitest.StripANSI(out), "\n") {
+		trimmed := strings.TrimRight(line, " ")
+		if got := lipgloss.Width(trimmed); got >= totalWidth {
+			t.Fatalf("line %d fills to column %d, want the last column reserved: %q", i, got, line)
+		}
+	}
+}
+
 func TestDottedKVFallsBackToSingleLineWhenBudgetBelowFloor(t *testing.T) {
 	const keyColWidth = 45
 	const totalWidth = 53

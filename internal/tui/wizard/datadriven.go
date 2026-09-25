@@ -146,18 +146,17 @@ func (s *FormSection) isVisible() bool {
 	return s.Visible()
 }
 
-// isComplete reports whether every field in the section is non-empty and
-// passes Check, using the pure check rather than Validate so computing a
-// section-complete indicator on every render never paints error state onto
-// a field the user hasn't touched.
+// isComplete reports whether every field in the section passes Check, using
+// the pure check rather than Validate so computing a section-complete
+// indicator on every render never paints error state onto a field the user
+// hasn't touched. An optional blank field (token id, vip, ntp server) is
+// complete — only Required enforces non-emptiness — so a section is never
+// pinned pending by a field that may legitimately stay empty.
 func (s *FormSection) isComplete() bool {
 	if s.Group == nil {
 		return false
 	}
 	for _, field := range s.Group.Fields() {
-		if field.Value() == "" {
-			return false
-		}
 		if err := field.Check(); err != nil {
 			return false
 		}

@@ -11,7 +11,8 @@
   │  │                                                                                        │  │  
   │  │  access                                                                                │  │  
   │  │    cluster .................................. homelab.lab.example.com                  │  │  
-  │  │    console ............. https://console-openshift-console.apps.homelab.lab.example.com│  │  
+  │  │    console ............. https://console-openshift-console.apps.homelab.lab.example.co │  │  
+  │  │                          m                                                             │  │  
   │  │    api ................. https://api.homelab.lab.example.com:6443                      │  │  
   │  │                                                                                        │  │  
   │  │  dns records                                                                           │  │  
@@ -22,7 +23,6 @@
   │  │    bootstrap ................................ cleaned up                               │  │  
   │  │    api routing .............................. kube-vip (192.0.2.10)                    │  │  
   │  │    ingress routing .......................... haproxy (bastion)                        │  │  
-  │  │                                                                                        │  │  
   │                                                                                              │  
   │──────────────────────────── ↑ ↓  scroll down for more ──────────────────────────── ▸ homelab │  
   │  enter exit • pgup/pgdn scroll • ? help                                                      │  

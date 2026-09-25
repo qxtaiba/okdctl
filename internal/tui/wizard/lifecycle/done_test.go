@@ -19,8 +19,10 @@ import (
 )
 
 func doneState() *State {
+	cfg := config.DefaultConfig()
+	cfg.Cluster.Name = "homelab"
 	return &State{
-		Cfg: config.DefaultConfig(), Op: node.OpResize,
+		Cfg: cfg, Op: node.OpResize,
 		Plan: masterResizePlan(), Proceed: true,
 	}
 }

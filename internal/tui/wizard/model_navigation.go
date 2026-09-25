@@ -231,7 +231,9 @@ func (m *Model) goToPreviousStep() (tea.Model, tea.Cmd) {
 	}
 
 	if prevStep < 0 {
-		prevStep = 0
+		// Every earlier step is hidden or auto-completing; landing on a
+		// screen ShouldShow hides would strand the user, so stay put.
+		return m, nil
 	}
 
 	return m.focusStep(prevStep)

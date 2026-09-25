@@ -167,6 +167,47 @@ func TestStreamViewCollapsesFinishedAndExpandsCurrent(t *testing.T) {
 	}
 }
 
+// TestStreamLogKeysInertWithoutLogs pins bug 27: with no Logs hook the
+// unadvertised f/l keys must do nothing rather than blank the whole body
+// behind an empty full-screen log.
+func TestStreamLogKeysInertWithoutLogs(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	cur := base
+	s := newSeededStreamStep(streamState(), &cur)
+
+	before := tuitest.StripANSI(s.View(100, 40))
+	step, _ := s.Update(tea.KeyPressMsg{Code: keyLogFull, Text: "f"})
+	s = step.(*StreamStep)
+
+	if got := tuitest.StripANSI(s.View(100, 40)); got != before {
+		t.Fatalf("f with a nil Logs hook changed the body:\nbefore:\n%s\nafter:\n%s", before, got)
+	}
+}
+
+// TestStreamCancelDropsCtrlCFootnote pins bug 28: once a cancel is
+// requested the next ctrl+c force-quits, so the footnote must stop
+// promising a safe cancel.
+func TestStreamCancelDropsCtrlCFootnote(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	cur := base
+	s := newSeededStreamStep(streamState(), &cur)
+
+	if out := tuitest.StripANSI(s.View(100, 40)); !strings.Contains(out, "ctrl+c cancels") {
+		t.Fatalf("pre-cancel view must advertise the safe cancel:\n%s", out)
+	}
+
+	if !s.InterceptQuit() {
+		t.Fatal("first ctrl+c must be intercepted as a graceful cancel")
+	}
+	out := tuitest.StripANSI(s.View(100, 40))
+	if !strings.Contains(out, "cancel requested") {
+		t.Fatalf("cancel notice missing:\n%s", out)
+	}
+	if strings.Contains(out, "ctrl+c cancels") {
+		t.Fatalf("stale ctrl+c footnote survives its own cancel:\n%s", out)
+	}
+}
+
 func TestStreamRowDurationsTruncateToSeconds(t *testing.T) {
 	if got := fmtDur(90*time.Second + 700*time.Millisecond); got != "1m30s" {
 		t.Errorf("fmtDur = %q, want 1m30s", got)

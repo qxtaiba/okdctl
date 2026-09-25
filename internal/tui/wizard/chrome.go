@@ -104,15 +104,15 @@ func renderActiveStage(stage Stage, p *ProgressInfo) string {
 	return label + " " + stageDots(position, total)
 }
 
-// stageDots renders total dots, filled through position and hollow after —
-// the same completed/current/pending styling as RenderStepProgress, joined
-// with no connector since the ribbon sits inline with its stage's label.
+// stageDots renders total dots in RenderStepProgress's ✓/●/○ vocabulary,
+// joined with no connector since the ribbon sits inline with its stage's
+// label.
 func stageDots(position, total int) string {
 	dots := make([]string, total)
 	for i := range total {
 		switch {
 		case i < position:
-			dots[i] = StepDotCompletedStyle.Render(tui.IconActive)
+			dots[i] = StepDotCompletedStyle.Render(tui.IconSuccess)
 		case i == position:
 			dots[i] = StepDotCurrentStyle.Render(tui.IconActive)
 		default:
@@ -126,6 +126,13 @@ func stageDots(position, total int) string {
 // footer instead of the wizard's default help bar.
 type PinnedFooter interface {
 	PinnedFooter(width int) string
+}
+
+// BadgeSuppressor is implemented by steps that can declare the chrome's
+// context badge misleading right now — the blank-slate hub, where a
+// defaults-seed version would advertise a cluster that doesn't exist.
+type BadgeSuppressor interface {
+	SuppressesBadge() bool
 }
 
 func distributionBadge(cfg *config.Config) string {

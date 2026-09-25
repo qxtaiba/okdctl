@@ -62,6 +62,25 @@ func TestNodePlacementApplyWritesFieldsInIndexOrder(t *testing.T) {
 	}
 }
 
+// TestNodePlacementStep_NilProviderSettlesIntoError pins bug 33: a nil
+// Provider.Proxmox must not leave the step spinning "discovering…" forever
+// with no tick, error, or retry.
+func TestNodePlacementStep_NilProviderSettlesIntoError(t *testing.T) {
+	s := NewNodePlacementStep()
+	s.cfg = &config.Config{}
+
+	if cmd := s.Init(); cmd != nil {
+		t.Fatal("Init with no provider returned a command, want none")
+	}
+	view := s.View(100, 30)
+	if strings.Contains(view, "discovering") {
+		t.Fatalf("View still claims to be discovering:\n%s", view)
+	}
+	if !strings.Contains(view, "proxmox") {
+		t.Fatalf("View carries no explanatory error:\n%s", view)
+	}
+}
+
 // TestNodePlacementStep_HeterogeneousClusterWarns pins bug 10's UI half:
 // when discovery found differing per-node inventories, the placement header
 // says so, since the pick lists show only what every online node shares.

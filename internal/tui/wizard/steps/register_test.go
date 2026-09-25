@@ -48,7 +48,7 @@ func TestPhaseTrailFits80ColsWithLongestTitle(t *testing.T) {
 
 	stripped := tuitest.StripANSI(frame)
 
-	wantTrail := "connect " + tui.IconActive + tui.IconActive + tui.IconPending + " · cluster · extras · review"
+	wantTrail := "connect " + tui.IconSuccess + tui.IconActive + tui.IconPending + " · cluster · extras · review"
 	if !strings.Contains(stripped, wantTrail) {
 		t.Fatalf("frame missing the full, untruncated trail %q:\n%s", wantTrail, stripped)
 	}

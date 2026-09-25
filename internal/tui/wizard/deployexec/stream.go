@@ -33,6 +33,10 @@ type stepRow struct {
 	status rowStatus
 	start  time.Time
 	took   time.Duration
+	// implied marks a row whose completion was inferred (never started, then
+	// promoted) rather than measured; rowDur renders it "—" instead of a
+	// fabricated 0s.
+	implied bool
 }
 
 // phaseProgress is one checklist group: its rows plus the span it occupied.
@@ -220,7 +224,12 @@ func (s *StreamStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 // handleLogKey binds the log viewport's two keys: `l` locks the window where it
 // stands (or releases it back to the tail) and `f` swaps the log full-screen and
 // back, which changes the frame's own layout gate and so asks for a re-measure.
+// With no Logs hook (documented-supported) both keys are inert — an empty
+// full-screen log would blank the whole body.
 func (s *StreamStep) handleLogKey(msg tea.KeyPressMsg) tea.Cmd {
+	if s.hooks.Logs == nil {
+		return nil
+	}
 	switch msg.Code {
 	case keyLogLock:
 		s.log.locked = !s.log.locked
@@ -343,13 +352,15 @@ func (s *StreamStep) markEarlierRowsDone(ph *phaseProgress, active int) {
 }
 
 // promoteRowDone closes a row that was still running or pending, backfilling a
-// duration from its start when the caller never supplied one.
+// duration from its start when the caller never supplied one; a row that
+// never started is marked implied so its duration renders "—".
 func promoteRowDone(r *stepRow, now time.Time) {
 	if r.status != rowRunning && r.status != rowPending {
 		return
 	}
 	if r.start.IsZero() {
 		r.start = now
+		r.implied = true
 	}
 	r.status = rowDone
 	if r.took == 0 {
@@ -443,7 +454,13 @@ func (s *StreamStep) View(width, _ int) string {
 		}
 	}
 
-	footnote := "full log " + logutil.DefaultLogFileName + " · ctrl+c cancels after the current step"
+	// The cancel clause holds only while a first ctrl+c would still cancel
+	// gracefully; after a cancel (or completion) the next ctrl+c force-quits,
+	// and the promise would be a lie.
+	footnote := "full log " + logutil.DefaultLogFileName
+	if !s.finished && !s.cancelRequested {
+		footnote += " · ctrl+c cancels after the current step"
+	}
 	lines = append(lines, "", s.dimStyle.Render(lipgloss.Wrap(footnote, col, "")))
 
 	content := strings.Join(lines, "\n")
@@ -518,11 +535,11 @@ func (s *StreamStep) appendPhase(lines []string, i, col int) []string {
 func (s *StreamStep) renderRow(r *stepRow, col int) string {
 	switch r.status {
 	case rowDone:
-		return justify(s.doneStyle.Render(tui.IconSuccess+" "+r.label), s.dimStyle.Render(fmtDur(r.took)), col)
+		return justify(s.doneStyle.Render(tui.IconSuccess+" "+r.label), s.dimStyle.Render(rowDur(r)), col)
 	case rowSkipped:
 		return justify(s.dimStyle.Render(tui.IconSkip+" "+r.label), s.dimStyle.Render("skipped"), col)
 	case rowFailed:
-		return justify(s.failStyle.Render(tui.IconError+" "+r.label), s.dimStyle.Render(fmtDur(r.took)), col)
+		return justify(s.failStyle.Render(tui.IconError+" "+r.label), s.dimStyle.Render(rowDur(r)), col)
 	case rowRunning:
 		return justify(s.loadingSpinner.View()+s.boldStyle.Render(r.label), s.dimStyle.Render(fmtDur(s.now().Sub(r.start))), col)
 	default:
@@ -570,6 +587,18 @@ func justify(left, right string, width int) string {
 	left = lipgloss.NewStyle().MaxWidth(leftW).Render(left)
 	gap := max(width-lipgloss.Width(left)-rightW, 0)
 	return left + strings.Repeat(" ", gap) + right
+}
+
+// rowDur renders a settled row's duration: "—" for one whose completion was
+// inferred rather than measured, "<1s" for a real sub-second measurement.
+func rowDur(r *stepRow) string {
+	if r.implied {
+		return "—"
+	}
+	if r.took < time.Second {
+		return "<1s"
+	}
+	return fmtDur(r.took)
 }
 
 // fmtDur renders d truncated to whole seconds, the deploy screen's duration format.

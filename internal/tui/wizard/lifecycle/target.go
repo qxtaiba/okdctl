@@ -262,7 +262,7 @@ func sortByIndex(nodes []cluster.NodeDetail, descending bool) {
 		a, aok := cluster.NodeIndex(nodes[i].Name)
 		b, bok := cluster.NodeIndex(nodes[j].Name)
 		if !aok || !bok {
-			return bok
+			return aok
 		}
 		if descending {
 			return a > b

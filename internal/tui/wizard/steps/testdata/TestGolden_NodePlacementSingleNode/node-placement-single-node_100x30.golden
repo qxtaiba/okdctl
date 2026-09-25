@@ -1,7 +1,7 @@
                                                                                                     
   ╭──────────────────────────────────────────────────────────────────────────────────────────────╮  
   │ O K D C T L                                                                                  │  
-  │ configure node placement                            connect · cluster ●●○○ · extras · review │  
+  │ configure node placement                            connect · cluster ✓●○○ · extras · review │  
   │──────────────────────────────────────────────────────────────────────────────────────────────│  
   │    │ ◂ local-lvm ▸ │                                                                         │  
   │    ╰───────────────╯                                                                         │  

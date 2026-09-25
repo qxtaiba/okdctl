@@ -1,6 +1,7 @@
 package steps
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -97,8 +98,13 @@ func (s *NodePlacementStep) ShouldShow(cfg *config.Config) bool {
 }
 
 // Init kicks off the Proxmox discovery fetch and spins the loading indicator.
+// Init starts discovery, or — with no Proxmox provider configured — settles
+// immediately into an explanatory error instead of spinning forever on a
+// fetch that was never issued.
 func (s *NodePlacementStep) Init() tea.Cmd {
 	if s.cfg == nil || s.cfg.Provider.Proxmox == nil {
+		s.phase = phasePlacing
+		s.discoveryErr = errors.New("no proxmox provider configured — complete the proxmox step first")
 		return nil
 	}
 	s.phase = phaseDiscovering

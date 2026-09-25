@@ -18,11 +18,11 @@
   │                                                                                              │  
   │  gates per node                                                                              │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
-  │  1 etcd health gate (pre)      4 power-cycle vm              7 uncordon + ceph health ga…    │  
-  │  2 cordon + drain              5 wait for node ready                                         │  
-  │  3 terraform apply (in-place…  6 etcd health gate (post)                                     │  
+  │  1 etcd health gate (pre)             5 wait for node ready                                  │  
+  │  2 cordon + drain                     6 etcd health gate (post)                              │  
+  │  3 terraform apply (in-place update)  7 uncordon + ceph health gate                          │  
+  │  4 power-cycle vm                                                                            │  
   │  ✓ plan gate passed — the safety gate allows exactly the listed changes                      │  
-  │                                                                                              │  
   │                                                                                              │  
   │─────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
   │  ● execute resize   ○ back to parameters   ○ exit without changes      ctrl+c quit • ? help  │  

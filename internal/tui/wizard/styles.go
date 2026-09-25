@@ -93,13 +93,15 @@ func init() {
 	rebuildWizardStyles()
 }
 
-// RenderStepProgress renders the step dots: 1..current-1 completed, current active, rest pending.
+// RenderStepProgress renders the step dots — ✓ completed, ● current, ○
+// pending — the context pane's own glyph vocabulary, so state never rides
+// on color alone.
 func RenderStepProgress(current, total int) string {
 	var parts []string
 	for i := range total {
 		switch {
 		case i < current-1:
-			parts = append(parts, StepDotCompletedStyle.Render(tui.IconActive))
+			parts = append(parts, StepDotCompletedStyle.Render(tui.IconSuccess))
 		case i == current-1:
 			parts = append(parts, StepDotCurrentStyle.Render(tui.IconActive))
 		default:

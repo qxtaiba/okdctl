@@ -102,7 +102,7 @@ func TestStagesTrail_ActiveStageDotsTrackWithinPhasePosition(t *testing.T) {
 	trail := StagesTrail(stages)
 
 	got := trail(ProgressInfo{CurrentID: "b", VisibleIDs: []StepID{"a", "b", "c", "d"}})
-	want := "connect " + tui.IconActive + tui.IconActive + tui.IconPending + " · cluster"
+	want := "connect " + tui.IconSuccess + tui.IconActive + tui.IconPending + " · cluster"
 	if stripped := tuitest.StripANSI(got); stripped != want {
 		t.Fatalf("trail = %q, want %q", stripped, want)
 	}
@@ -114,7 +114,7 @@ func TestStagesTrail_HiddenStepExcludedFromDotCountAndPosition(t *testing.T) {
 
 	// b is hidden: only a, c, d are visible, and c is now the second of three.
 	got := trail(ProgressInfo{CurrentID: "c", VisibleIDs: []StepID{"a", "c", "d"}})
-	want := "cluster " + tui.IconActive + tui.IconActive + tui.IconPending
+	want := "cluster " + tui.IconSuccess + tui.IconActive + tui.IconPending
 	if stripped := tuitest.StripANSI(got); stripped != want {
 		t.Fatalf("trail = %q, want %q", stripped, want)
 	}

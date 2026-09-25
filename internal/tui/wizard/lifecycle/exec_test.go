@@ -56,10 +56,14 @@ func execState() *State {
 }
 
 // threeMasterState builds a resize-masters plan with three nodes, so tests
-// can exercise the checklist's collapse/expand/pending states side by side.
+// can exercise the checklist's collapse/expand/pending states side by side;
+// the config's cluster name matches the plan's, so trails never show a
+// default-config name over homelab bodies.
 func threeMasterState() *State {
+	cfg := config.DefaultConfig()
+	cfg.Cluster.Name = "homelab"
 	return &State{
-		Cfg: config.DefaultConfig(), Op: node.OpResize,
+		Cfg: cfg, Op: node.OpResize,
 		Scope: node.ResizeScope{Role: nodetypes.RoleMaster},
 		Plan: &node.OpPlan{
 			Op: node.OpResize, Cluster: "homelab",
@@ -83,6 +87,69 @@ func newSeededExecStep(st *State, clock *time.Time) *ExecStep {
 	s.started = *clock
 	s.buildRows()
 	return s
+}
+
+// TestRowDurDistinguishesImpliedFromMeasured pins bug 29: a row whose
+// completion was inferred renders "—", a real sub-second measurement
+// renders "<1s", and only genuine measurements render as durations.
+func TestRowDurDistinguishesImpliedFromMeasured(t *testing.T) {
+	cases := []struct {
+		name string
+		row  execRow
+		want string
+	}{
+		{"implied", execRow{status: rowDone, implied: true}, "—"},
+		{"sub-second", execRow{status: rowDone, took: 400 * time.Millisecond}, "<1s"},
+		{"measured", execRow{status: rowDone, took: 3 * time.Second}, "3s"},
+	}
+	for _, tc := range cases {
+		if got := rowDur(&tc.row); got != tc.want {
+			t.Errorf("%s: rowDur() = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestPromoteRowDoneMarksBackfilledRowsImplied(t *testing.T) {
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	pending := execRow{status: rowPending}
+	promoteRowDone(&pending, now)
+	if !pending.implied {
+		t.Error("a promoted pending row must be marked implied")
+	}
+
+	measured := execRow{status: rowRunning, start: now.Add(-2 * time.Second)}
+	promoteRowDone(&measured, now)
+	if measured.implied {
+		t.Error("a promoted running row carries a real elapsed, not an implied one")
+	}
+}
+
+// TestNodeIndexForNeverCollidesWorker1WithWorker10 pins bug 26: an event
+// whose description mentions homelab-worker10 must resolve to worker10,
+// not to worker1 via a bare substring match.
+func TestNodeIndexForNeverCollidesWorker1WithWorker10(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	cur := base
+	st := threeMasterState()
+	st.Plan.Nodes = []node.PlanNode{
+		{Name: "homelab-worker1", Role: nodetypes.RoleWorker},
+		{Name: "homelab-worker10", Role: nodetypes.RoleWorker},
+	}
+	s := newSeededExecStep(st, &cur)
+
+	got := s.nodeIndexFor(&ExecEvent{Desc: "power-cycle homelab-worker10"})
+	if got != 1 {
+		t.Fatalf("nodeIndexFor(worker10 desc) = %d, want 1", got)
+	}
+	got = s.nodeIndexFor(&ExecEvent{Node: "homelab-worker10"})
+	if got != 1 {
+		t.Fatalf("nodeIndexFor(worker10 node) = %d, want 1", got)
+	}
+	got = s.nodeIndexFor(&ExecEvent{Desc: "cordon + drain homelab-worker1"})
+	if got != 0 {
+		t.Fatalf("nodeIndexFor(worker1 desc) = %d, want 0", got)
+	}
 }
 
 func TestExecViewCollapsesFinishedAndExpandsCurrent(t *testing.T) {

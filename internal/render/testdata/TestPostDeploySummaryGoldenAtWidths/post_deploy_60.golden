@@ -7,14 +7,14 @@
 │                                                          │
 │  access                                                  │
 │    cluster ..................... mycluster.k8s.local     │
-│    console ............. https://console-openshift-consol│
-│                          e.apps.mycluster.k8s.local      │
-│    api ................. https://api.mycluster.k8s.local:│
-│                          6443                            │
+│    console ............. https://console-openshift-conso │
+│                          le.apps.mycluster.k8s.local     │
+│    api ................. https://api.mycluster.k8s.local │
+│                          :6443                           │
 │                                                          │
 │  dns records                                             │
 │    api.mycluster.k8s.local ..... 192.168.1.50 (kube-vip) │
-│    *.apps.mycluster.k8s.local ... 192.168.1.20 (haproxy) │
+│    *.apps.mycluster.k8s.local .. 192.168.1.20 (haproxy)  │
 │                                                          │
 │  status                                                  │
 │    bootstrap ................... cleaned up              │
@@ -29,8 +29,8 @@
 │  credentials                                             │
 │    username .................... kubeadmin               │
 │    password ............ cat                             │
-│                          okd-install/cluster-config/auth/│
-│                          kubeadmin-password              │
+│                          okd-install/cluster-config/auth │
+│                          /kubeadmin-password             │
 │                                                          │
 │  quick start                                             │
 │    export KUBECONFIG=~/.kube/config                      │

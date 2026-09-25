@@ -412,6 +412,30 @@ func TestStreamFinalSendAbortsOnACancelledRun(t *testing.T) {
 	}
 }
 
+// TestLogRowsCarryTextualLevelTags pins bug 24's minimal fix: warn and
+// error lines carry their level as text, so the failure screen's evidence
+// tail reads under NO_COLOR instead of riding on tint alone.
+func TestLogRowsCarryTextualLevelTags(t *testing.T) {
+	at := logBase
+	lines := []LogLine{
+		{At: at, Level: "INFO", Text: "deploy step started"},
+		{At: at, Level: "warn", Text: "etcd member slow"},
+		{At: at, Level: "ERROR", Text: "bootstrap wait failed"},
+	}
+
+	rows := logRows(lines, 70, 3, false)
+
+	if plain := tuitest.StripANSI(rows[1]); !strings.Contains(plain, "WARN") {
+		t.Errorf("warn row carries no textual tag: %q", plain)
+	}
+	if plain := tuitest.StripANSI(rows[2]); !strings.Contains(plain, "ERROR") {
+		t.Errorf("error row carries no textual tag: %q", plain)
+	}
+	if plain := tuitest.StripANSI(rows[0]); strings.Contains(plain, "INFO") {
+		t.Errorf("info row must stay untagged to keep the stream quiet: %q", plain)
+	}
+}
+
 func TestLogRowsStyleWarnAndErrorApart(t *testing.T) {
 	at := logBase
 	lines := []LogLine{

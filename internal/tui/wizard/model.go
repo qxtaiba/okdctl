@@ -351,6 +351,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case StepCompleteMsg:
+		// A late async completion from a step the user has already left
+		// (esc, SwapFlow) must not advance — and Apply — whichever step is
+		// current now.
+		if len(m.steps) > 0 && m.currentStep < len(m.steps) && msg.StepID != m.steps[m.currentStep].ID() {
+			return m, nil
+		}
 		return m.goToNextStep()
 
 	case StepBackMsg:

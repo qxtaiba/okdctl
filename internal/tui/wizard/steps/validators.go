@@ -18,17 +18,22 @@ var (
 	ValidateProxmoxHost = config.ValidateProxmoxHost
 )
 
-// ValidateFilePath requires a non-empty path that exists on disk.
+// ValidateFilePath requires a non-empty path to an existing regular file —
+// a directory passes os.Stat but fails an hour later at deploy time.
 func ValidateFilePath(value string) error {
 	if value == "" {
 		return errors.New("path is required — enter a file path")
 	}
 	expanded := system.ExpandPath(value)
 
-	if _, err := os.Stat(expanded); errors.Is(err, os.ErrNotExist) {
+	info, err := os.Stat(expanded)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
 		return fmt.Errorf("file does not exist: %s — check the path", expanded)
-	} else if err != nil {
+	case err != nil:
 		return fmt.Errorf("cannot access file: %w — check permissions", err)
+	case info.IsDir():
+		return fmt.Errorf("%s is a directory — point at the file itself", expanded)
 	}
 	return nil
 }
