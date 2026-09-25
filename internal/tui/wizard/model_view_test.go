@@ -325,11 +325,13 @@ func TestFooter_PinnedFooterLeftOfRibbon(t *testing.T) {
 		t.Fatalf("pinned footer text at col %d, want 2: %q", leftIdx, helpRow)
 	}
 
-	quitIdx := strings.LastIndex(helpRow, "quit")
-	if quitIdx < leftIdx+len(pinnedFooterText) {
+	// The ribbon's trailing "? help" hint (always reserved, per
+	// helpEssentialKeys) is now the rightmost item, not "quit".
+	helpIdx := strings.LastIndex(helpRow, "help")
+	if helpIdx < leftIdx+len(pinnedFooterText) {
 		t.Fatalf("ribbon not right of pinned text: %q", helpRow)
 	}
-	if trailing := len(helpRow) - (quitIdx + len("quit")); trailing > 2 {
+	if trailing := len(helpRow) - (helpIdx + len("help")); trailing > 2 {
 		t.Fatalf("ribbon not right-aligned, trailing=%d: %q", trailing, helpRow)
 	}
 }

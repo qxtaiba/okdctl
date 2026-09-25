@@ -76,6 +76,15 @@ type QuitGuard interface {
 	InterceptQuit() bool
 }
 
+// TextInputConsumer is implemented by steps whose currently focused field
+// would consume a "?" keypress as literal typed text rather than the
+// wizard's help-overlay toggle; a step with no text fields need not
+// implement it — an unasserted step never consumes text input, so "?"
+// always opens the overlay there.
+type TextInputConsumer interface {
+	ConsumesTextInput() bool
+}
+
 // BackGuard is implemented by forward-only steps that must intercept esc
 // (navigating away would orphan an in-flight mutation); true consumes the
 // keypress, false navigates back normally.

@@ -25,6 +25,6 @@
   │      the etcd and ceph health gates still run.                                               │  
   │                                                                                              │  
   │───────────────────────────── ↑ ↓  scroll up for more ───────────────────────────── ▸ homelab │  
-  │  ↑↓/tab navigate • ← → change value • enter continue • esc back • pgup/pgdn scroll           │  
+  │  ↑↓/tab navigate • ← → change value • enter continue • esc back … • ctrl+c quit • ? help     │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                     

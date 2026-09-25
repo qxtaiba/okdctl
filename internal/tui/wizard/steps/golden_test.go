@@ -224,6 +224,31 @@ func TestGolden_ConfigureSteps(t *testing.T) {
 	}
 }
 
+// TestGolden_HelpOverlay pins the "?" help overlay open on the addons step —
+// key-event-driven, matching how a real terminal session would trigger it.
+// The overlay must replace only the viewport region (header/footer chrome
+// stays) and fit exactly at both sizes.
+func TestGolden_HelpOverlay(t *testing.T) {
+	questionMark := tea.KeyPressMsg{Code: '?', Text: "?"}
+
+	for _, sz := range []struct{ w, h int }{{80, 24}, {100, 30}} {
+		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
+			tui.SetTerminalWidth(sz.w)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+			m := newGoldenModel(t)
+			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
+			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDAddons})
+
+			m.Update(questionMark)
+
+			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
+			tuitest.Golden(t, fmt.Sprintf("help-overlay-addons_%dx%d", sz.w, sz.h), frame)
+			tuitest.AssertFits(t, frame, sz.w, sz.h)
+		})
+	}
+}
+
 // TestGolden_NodePlacementSingleNode pins the single-Proxmox-host case:
 // the bootstrap field's per-node select has exactly one option and must
 // render the bare value with no cycle arrows. Tabs past the infrastructure

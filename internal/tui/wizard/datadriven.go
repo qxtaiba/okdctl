@@ -199,6 +199,20 @@ func (f *MultiSectionForm) FocusedField() components.FormField {
 	return group.Field(group.FocusIndex())
 }
 
+// ConsumesTextInput reports whether the field currently holding focus would
+// consume a "?" keystroke as literal typed text (components.TextInputField)
+// rather than a keybinding — the answer DataDrivenStep and ParamsStep hand
+// the wizard so it knows whether "?" should type or toggle the help
+// overlay.
+func (f *MultiSectionForm) ConsumesTextInput() bool {
+	field := f.FocusedField()
+	if field == nil {
+		return false
+	}
+	tc, ok := field.(components.TextInputField)
+	return ok && tc.ConsumesTextInput()
+}
+
 // Init focuses the first input group so the user can type immediately.
 func (f *MultiSectionForm) Init() tea.Cmd {
 	if len(f.sections) > 0 && f.sections[0].Group != nil {
@@ -651,6 +665,7 @@ func (s *DataDrivenStep) ShortHelp() []KeyBinding {
 		{Key: "↑↓/tab", Help: HelpNavigate},
 		{Key: HelpEnter, Help: HelpContinue},
 		{Key: HelpEsc, Help: HelpBack},
+		{Key: HelpCtrlC, Help: HelpQuit},
 	}
 	if h, ok := s.form.FocusedField().(components.KeyHinter); ok {
 		for _, hint := range h.KeyHints() {
@@ -658,6 +673,12 @@ func (s *DataDrivenStep) ShortHelp() []KeyBinding {
 		}
 	}
 	return bindings
+}
+
+// ConsumesTextInput reports whether the focused field is mid-text-entry,
+// per TextInputConsumer.
+func (s *DataDrivenStep) ConsumesTextInput() bool {
+	return s.form.ConsumesTextInput()
 }
 
 // Update forwards input to the embedded form and, on enter, touches and

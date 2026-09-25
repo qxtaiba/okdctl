@@ -59,6 +59,13 @@ func NewKeyValueField(label string) *KeyValueField {
 	}
 }
 
+// ConsumesTextInput reports true only mid-edit: navigate mode's keys
+// (j/k/h/l/a/d/ctrl+e) are all single-purpose commands, so a "?" there is
+// inert and free for the wizard's help-overlay toggle.
+func (f *KeyValueField) ConsumesTextInput() bool {
+	return f.focused && f.editMode
+}
+
 // Value serializes rows as "k1=v1,k2=v2", omitting rows with a blank key.
 // Values containing a comma will not round-trip through SetValue.
 func (f *KeyValueField) Value() string {

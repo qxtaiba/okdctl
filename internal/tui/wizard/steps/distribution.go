@@ -426,6 +426,7 @@ func (s *DistributionStep) ShortHelp() []wizard.KeyBinding {
 			{Key: "tab", Help: "expand/collapse"},
 			{Key: wizard.HelpEnter, Help: wizard.HelpConfirm},
 			{Key: wizard.HelpEsc, Help: wizard.HelpBack},
+			{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
 		}
 	}
 

@@ -35,6 +35,6 @@
   │                                                                                                                  │  
   │                                                                                                                  │  
   │───────────────────────────────────────────────────────────────────────────────────────────────────── ▸ mycluster │  
-  │  ● execute resize   ○ back to parameters   ○ exit without changes       ←/→ choose • enter confirm • esc back …  │  
+  │  ● execute resize   ○ back to parameters   ○ exit without changes           ←/→ choose … • ctrl+c quit • ? help  │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                                         

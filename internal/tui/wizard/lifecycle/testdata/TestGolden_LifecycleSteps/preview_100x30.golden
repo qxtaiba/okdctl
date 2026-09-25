@@ -25,6 +25,6 @@
   │                                                                                              │  
   │                                                                                              │  
   │───────────────────────────────────────────────────────────────────────────────── ▸ mycluster │  
-  │  ● execute resize   ○ back to parameters   ○ exit without changes              ←/→ choose …  │  
+  │  ● execute resize   ○ back to parameters   ○ exit without changes      ctrl+c quit • ? help  │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                     

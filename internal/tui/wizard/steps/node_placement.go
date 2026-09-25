@@ -412,6 +412,7 @@ func (s *NodePlacementStep) ShortHelp() []wizard.KeyBinding {
 		{Key: "← →", Help: "change value"},
 		{Key: wizard.HelpEnter, Help: wizard.HelpConfirm},
 		{Key: wizard.HelpEsc, Help: wizard.HelpBack},
+		{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
 	}
 	if s.inner == nil {
 		return help

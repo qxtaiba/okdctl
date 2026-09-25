@@ -62,6 +62,12 @@ func (s *ConfirmStep) matches() bool {
 	return strings.TrimSpace(s.input.Value()) == s.st.Cfg.Cluster.Name
 }
 
+// ConsumesTextInput reports whether the step's sole field is mid-text-entry,
+// per wizard.TextInputConsumer.
+func (s *ConfirmStep) ConsumesTextInput() bool {
+	return s.input.ConsumesTextInput()
+}
+
 // Update forwards typing to the input, revalidating on every keypress so the
 // box paints red until the typed value matches; enter completes only on an
 // exact cluster-name match.

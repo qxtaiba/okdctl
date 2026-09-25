@@ -19,6 +19,6 @@
   │    │ ▶ lts candidate (4.18.7-okd-scos.9) (tab to expand)                 │  
   │                                                                          │  
   │─────────── ↑ ↓  scroll down for more ─────────── ▸ okd 4.22.0-okd-scos.7 │  
-  │  ↑↓ select • tab expand/collapse • enter confirm • esc back …            │  
+  │  ↑↓ select • tab expand/collapse … • ctrl+c quit • ? help                │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

@@ -25,6 +25,6 @@
   │  [4] networking                                                                              │  
   │                                                                                              │  
   │───────────────────── ↑ ↓  scroll down for more ───────────────────── ▸ okd 4.22.0-okd-scos.7 │  
-  │  ● deploy now   ○ save and exit                     ←/→ choose • enter confirm • esc back …  │  
+  │  ● deploy now   ○ save and exit         ←/→ choose • enter confirm … • ctrl+c quit • ? help  │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                     

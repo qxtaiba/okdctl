@@ -19,6 +19,6 @@
   │            a time behind etcd/ceph health gates                          │  
   │                                                                          │  
   │────────────────── ↑ ↓  scroll down for more ────────────────── ▸ homelab │  
-  │  ↑↓ select • enter confirm • ctrl+c quit • pgup/pgdn scroll              │  
+  │  ↑↓ select • enter confirm • pgup/pgdn scroll • ctrl+c quit • ? help     │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

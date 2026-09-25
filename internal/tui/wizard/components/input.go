@@ -28,6 +28,14 @@ type FormField interface {
 	View() string
 }
 
+// TextInputField is implemented by form fields that consume a raw
+// keystroke as literal typed text while focused, rather than interpreting
+// it as a navigation or toggle command — the wizard uses it to decide
+// whether "?" opens the help overlay or types the character.
+type TextInputField interface {
+	ConsumesTextInput() bool
+}
+
 // InputField is a single text input FormField. Password fields mask input
 // in View and scrub the raw value out of validator error messages.
 type InputField struct {
@@ -111,6 +119,12 @@ func NewPasswordField(label, placeholder string) *InputField {
 // Value returns the current text of the field.
 func (f *InputField) Value() string {
 	return f.input.Value()
+}
+
+// ConsumesTextInput always reports true while focused: a focused InputField
+// forwards every printable keystroke — including "?" — into the textinput.
+func (f *InputField) ConsumesTextInput() bool {
+	return f.focused
 }
 
 // SetValue replaces the field value and clears the default tag, since the

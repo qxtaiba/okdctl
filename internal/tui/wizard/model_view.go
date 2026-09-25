@@ -9,6 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
 )
 
 const tooSmallNotice = "okdctl needs at least 60×20 — resize the terminal"
@@ -38,11 +39,16 @@ func (m *Model) View() tea.View {
 		return v
 	}
 
+	viewportContent := m.viewport.View()
+	if m.helpOpen {
+		viewportContent = m.renderHelpOverlay()
+	}
+
 	var content strings.Builder
 
 	content.WriteString(m.renderHeader())
 	content.WriteString("\n")
-	content.WriteString(m.viewport.View())
+	content.WriteString(viewportContent)
 	content.WriteString("\n")
 	content.WriteString(m.statusRow())
 	content.WriteString("\n")
@@ -274,7 +280,9 @@ func defaultKeyBindings() []KeyBinding {
 
 // footerBindings returns the current step's ShortHelp() bindings (falling
 // back to defaultKeyBindings when the step has none), plus a pgup/pgdn hint
-// whenever the viewport content overflows its height.
+// whenever the viewport content overflows its height, plus a trailing "?
+// help" hint — always visible, since it's the wizard's guaranteed discovery
+// path for whatever else the footer ribbon has no room to show.
 func (m *Model) footerBindings() []KeyBinding {
 	bindings := defaultKeyBindings()
 	if len(m.steps) > 0 && m.currentStep >= 0 && m.currentStep < len(m.steps) {
@@ -285,7 +293,22 @@ func (m *Model) footerBindings() []KeyBinding {
 	if m.viewport.TotalLineCount() > m.viewport.Height() {
 		bindings = append(bindings, KeyBinding{Key: "pgup/pgdn", Help: "scroll"})
 	}
-	return bindings
+	return append(bindings, KeyBinding{Key: HelpQuestion, Help: HelpOverlay})
+}
+
+// renderHelpOverlay renders the full, untruncated key-binding list (the
+// same bindings footerBindings feeds the ribbon) over the viewport region,
+// sized to exactly replace it.
+func (m *Model) renderHelpOverlay() string {
+	width, height := m.viewportDimensions()
+
+	bindings := m.footerBindings()
+	hints := make([]components.KeyHint, len(bindings))
+	for i, b := range bindings {
+		hints[i] = components.KeyHint{Key: b.Key, Help: b.Help}
+	}
+
+	return components.RenderHelpOverlay(hints, width, height)
 }
 
 // renderHelpRow draws the footer's help row: a step's PinnedFooter text at

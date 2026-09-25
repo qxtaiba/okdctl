@@ -19,6 +19,6 @@
   │  │      'okdctl node list' or 'oc debug node/<name> -- free -m'       │  │  
   │                                                                          │  
   │───────────────── ↑ ↓  scroll down for more ───────────────── ▸ mycluster │  
-  │  enter exit • pgup/pgdn scroll                                           │  
+  │  enter exit • pgup/pgdn scroll • ? help                                  │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

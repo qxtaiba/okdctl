@@ -80,6 +80,11 @@ type Model struct {
 	err      error
 
 	keyMap KeyMap
+
+	// helpOpen: the "?" help overlay is showing over the viewport region.
+	// While true every key but ctrl+c (still the global quit guard), esc,
+	// and "?" itself (both close it) is inert — the overlay owns input.
+	helpOpen bool
 }
 
 // Result is what the wizard returns when it exits.
@@ -104,6 +109,7 @@ const (
 type KeyMap struct {
 	Back     key.Binding
 	Quit     key.Binding
+	Help     key.Binding
 	PageUp   key.Binding
 	PageDown key.Binding
 	Home     key.Binding
@@ -119,6 +125,10 @@ func defaultKeyMap() KeyMap {
 		Quit: key.NewBinding(
 			key.WithKeys("ctrl+c"),
 			key.WithHelp("ctrl+c", "quit"),
+		),
+		Help: key.NewBinding(
+			key.WithKeys(HelpQuestion),
+			key.WithHelp(HelpQuestion, HelpOverlay),
 		),
 		PageUp: key.NewBinding(
 			key.WithKeys("pgup"),
@@ -213,28 +223,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyPressMsg:
-		m.err = nil
-
-		if key.Matches(msg, m.keyMap.Quit) {
-			if len(m.steps) > 0 && m.currentStep < len(m.steps) {
-				if g, ok := m.steps[m.currentStep].(QuitGuard); ok && g.InterceptQuit() {
-					return m, nil
-				}
-			}
-			m.quitting = true
-			m.result = Result{Cancelled: true}
-			return m, tea.Quit
-		}
-
-		if m.handleScrollKey(msg) {
-			return m, nil
-		}
-
-		if key.Matches(msg, m.keyMap.Back) && m.currentStep > 0 {
-			if g, ok := m.steps[m.currentStep].(BackGuard); ok && g.InterceptBack() {
-				return m, nil
-			}
-			return m.goToPreviousStep()
+		if model, cmd, handled := m.handleWizardKey(msg); handled {
+			return model, cmd
 		}
 
 	case StepCompleteMsg:
@@ -283,6 +273,55 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+// handleWizardKey processes the wizard-level key bindings (quit, the help
+// overlay, scroll, back) ahead of the active step. handled reports whether
+// it fully handled msg — model/cmd are then Update's result — or whether
+// the caller should fall through to the step's own Update instead.
+func (m *Model) handleWizardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
+	m.err = nil
+
+	if key.Matches(msg, m.keyMap.Quit) {
+		if len(m.steps) > 0 && m.currentStep < len(m.steps) {
+			if g, ok := m.steps[m.currentStep].(QuitGuard); ok && g.InterceptQuit() {
+				// The guard's own feedback (e.g. "press again to
+				// force-quit") renders in the viewport region the
+				// overlay would otherwise cover.
+				m.helpOpen = false
+				return m, nil, true
+			}
+		}
+		m.quitting = true
+		m.result = Result{Cancelled: true}
+		return m, tea.Quit, true
+	}
+
+	if m.helpOpen {
+		if key.Matches(msg, m.keyMap.Help) || key.Matches(msg, m.keyMap.Back) {
+			m.helpOpen = false
+		}
+		return m, nil, true
+	}
+
+	if key.Matches(msg, m.keyMap.Help) && !m.currentStepConsumesTextInput() {
+		m.helpOpen = true
+		return m, nil, true
+	}
+
+	if m.handleScrollKey(msg) {
+		return m, nil, true
+	}
+
+	if key.Matches(msg, m.keyMap.Back) && m.currentStep > 0 {
+		if g, ok := m.steps[m.currentStep].(BackGuard); ok && g.InterceptBack() {
+			return m, nil, true
+		}
+		model, cmd := m.goToPreviousStep()
+		return model, cmd, true
+	}
+
+	return m, nil, false
+}
+
 func stepShouldShow(step WizardStep, cfg *config.Config) bool {
 	if c, ok := step.(ConditionalStep); ok {
 		return c.ShouldShow(cfg)
@@ -295,6 +334,19 @@ func stepAutoCompletes(step WizardStep) bool {
 		return a.AutoCompletes()
 	}
 	return false
+}
+
+// currentStepConsumesTextInput reports whether the active step's focused
+// field would consume a "?" keypress as literal typed text — see
+// TextInputConsumer. A step that doesn't implement the interface (no text
+// fields to speak for) always reports false, so "?" opens the help overlay
+// there.
+func (m *Model) currentStepConsumesTextInput() bool {
+	if len(m.steps) == 0 || m.currentStep < 0 || m.currentStep >= len(m.steps) {
+		return false
+	}
+	tc, ok := m.steps[m.currentStep].(TextInputConsumer)
+	return ok && tc.ConsumesTextInput()
 }
 
 // Result returns the wizard's terminal state. Valid only after tea.Quit.

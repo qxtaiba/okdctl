@@ -13,4 +13,6 @@ const (
 	HelpJump      = "jump to section"
 	HelpLeftRight = "←/→"
 	HelpChoose    = "choose"
+	HelpQuestion  = "?"
+	HelpOverlay   = "help"
 )
