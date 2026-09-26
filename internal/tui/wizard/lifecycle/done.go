@@ -19,7 +19,7 @@ import (
 // summary with the resume hint and the run's evidence tail.
 type DoneStep struct {
 	wizard.BaseStep
-	frameSize
+	wizard.FrameSize
 	st    *State
 	hooks Hooks
 	log   logview.Surface
@@ -39,7 +39,7 @@ func NewDoneStep(st *State, hooks Hooks) *DoneStep {
 // tail's own budget is measured against.
 func (s *DoneStep) SetSize(width, height int) {
 	s.BaseStep.SetSize(width, height)
-	s.bodyHeight = height
+	s.SetBodyHeight(height)
 }
 
 // PaneContent keeps the live log in the split layout's right pane on the
@@ -84,9 +84,9 @@ func (s *DoneStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	case tea.KeyEnter:
 		return s, func() tea.Msg { return wizard.StepCompleteMsg{StepID: StepIDDone} }
 	case tea.KeyPgUp:
-		s.log.ScrollBy(-s.log.PageSize(s.splitsFrame()), s.splitsFrame())
+		s.log.ScrollBy(-s.log.PageSize(s.SplitsFrame(flowStepCount)), s.SplitsFrame(flowStepCount))
 	case tea.KeyPgDown:
-		s.log.ScrollBy(s.log.PageSize(s.splitsFrame()), s.splitsFrame())
+		s.log.ScrollBy(s.log.PageSize(s.SplitsFrame(flowStepCount)), s.SplitsFrame(flowStepCount))
 	}
 	return s, nil
 }
@@ -119,7 +119,7 @@ func (s *DoneStep) View(width, _ int) string {
 // with no pane to carry them. A failure's evidence is the chatter that led
 // up to it; a success needs none — its completion box is the record.
 func (s *DoneStep) failureTail(col int) string {
-	if s.splitsFrame() {
+	if s.SplitsFrame(flowStepCount) {
 		return ""
 	}
 	tail := s.log.FailureTail(col)

@@ -54,7 +54,7 @@ type execEventMsg struct {
 // (first press) then a force quit (second press).
 type ExecStep struct {
 	wizard.BaseStep
-	frameSize
+	wizard.FrameSize
 	st    *State
 	hooks Hooks
 	log   logview.Surface
@@ -75,8 +75,7 @@ type ExecStep struct {
 	lastLine     int
 	tailRendered bool
 
-	styleCache execStyles
-	styleGen   uint64
+	wizard.ExecStyleCache
 }
 
 // NewExecStep constructs the live execution step.
@@ -92,48 +91,12 @@ func NewExecStep(st *State, hooks Hooks) *ExecStep {
 	}
 }
 
-// styles returns the step's themed style set, rebuilt when the theme
-// generation has moved: a CLI-launched flow constructs its steps before the
-// terminal's background reply flips the theme, so a constructor capture
-// would freeze the dark polarity.
-func (s *ExecStep) styles() *execStyles {
-	if gen := tui.ThemeGeneration(); gen != s.styleGen {
-		s.styleCache = newExecStyles()
-		s.styleGen = gen
-	}
-	return &s.styleCache
-}
-
-// execStyles is one exec surface's themed style set; build it through
-// newExecStyles at render time, never at construction.
-type execStyles struct {
-	bold   lipgloss.Style
-	done   lipgloss.Style
-	fail   lipgloss.Style
-	pend   lipgloss.Style
-	dim    lipgloss.Style
-	warn   lipgloss.Style
-	active lipgloss.Style
-}
-
-func newExecStyles() execStyles {
-	return execStyles{
-		bold:   lipgloss.NewStyle().Foreground(tui.ColorText()).Bold(true),
-		done:   lipgloss.NewStyle().Foreground(tui.ColorSuccess()),
-		fail:   lipgloss.NewStyle().Foreground(tui.ColorError()),
-		pend:   lipgloss.NewStyle().Foreground(tui.ColorSubtle()),
-		dim:    lipgloss.NewStyle().Foreground(tui.ColorTextFaint()),
-		warn:   lipgloss.NewStyle().Foreground(tui.ColorWarning()),
-		active: lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true),
-	}
-}
-
 // SetSize records the body box the frame gives the step: the full-screen
 // log and the tail budget size themselves to that height, which View's own
 // fixed 1000-row budget cannot report.
 func (s *ExecStep) SetSize(width, height int) {
 	s.BaseStep.SetSize(width, height)
-	s.bodyHeight = height
+	s.SetBodyHeight(height)
 }
 
 // DisplayTitle names the header for the operation in progress.
@@ -289,7 +252,7 @@ func (s *ExecStep) PaneContent(width, height int) string {
 // paneCarriesLog reports whether the log has a pane of its own, in which
 // case the checklist body carries no tail.
 func (s *ExecStep) paneCarriesLog() bool {
-	return s.hooks.Logs != nil && !s.log.Full() && s.splitsFrame()
+	return s.hooks.Logs != nil && !s.log.Full() && s.SplitsFrame(flowStepCount)
 }
 
 // applyEvent updates node/row state for ev: a node change closes out the
@@ -481,14 +444,14 @@ func (s *ExecStep) View(width, _ int) string {
 		// evicts.
 		head := []string{s.headline(col)}
 		if s.hooks.LogPath != "" {
-			head = append(head, s.styles().dim.Render(tui.Truncate("full log: "+s.hooks.LogPath, col)))
+			head = append(head, s.Styles().Dim.Render(tui.Truncate("full log: "+s.hooks.LogPath, col)))
 		}
-		return strings.Join(head, "\n") + "\n" + s.log.RenderFull(col, max(s.bodyHeight-len(head), 2))
+		return strings.Join(head, "\n") + "\n" + s.log.RenderFull(col, max(s.BodyHeight()-len(head), 2))
 	}
 
 	lines := []string{s.headline(col)}
 	if s.cancelRequested && !s.finished {
-		lines = append(lines, s.styles().warn.Render(lipgloss.Wrap(
+		lines = append(lines, s.Styles().Warn.Render(lipgloss.Wrap(
 			"cancel requested — finishing the current terraform/oc call safely…", col, "")))
 	}
 
@@ -516,7 +479,7 @@ func (s *ExecStep) View(width, _ int) string {
 		// chrome around the tail (its blank row, the LOG header, and the
 		// footnote block) leave over, floored at logview.NarrowTailRows —
 		// slack becomes evidence instead of blank rows.
-		budget := max(logview.NarrowTailRows, s.bodyHeight-len(lines)-4)
+		budget := max(logview.NarrowTailRows, s.BodyHeight()-len(lines)-4)
 		if tail := s.log.RenderTail(col, budget); len(tail) > 0 {
 			lines = append(lines, "")
 			lines = append(lines, tail...)
@@ -524,7 +487,7 @@ func (s *ExecStep) View(width, _ int) string {
 		}
 	}
 
-	lines = append(lines, "", s.styles().dim.Render(lipgloss.Wrap(footnote, col, "")))
+	lines = append(lines, "", s.Styles().Dim.Render(lipgloss.Wrap(footnote, col, "")))
 
 	content := strings.Join(lines, "\n")
 	s.lastLine = strings.Count(content, "\n")
@@ -538,7 +501,7 @@ func (s *ExecStep) headline(col int) string {
 	current := min(s.currentNode+1, total)
 	left := fmt.Sprintf("%s  %d / %d", opProgressLabel(s.st.Op, s.execRole()), current, max(total, 1))
 	right := "elapsed " + fmtDur(s.now().Sub(s.started))
-	return justify(s.styles().bold.Render(left), s.styles().dim.Render(right), col)
+	return justify(s.Styles().Bold.Render(left), s.Styles().Dim.Render(right), col)
 }
 
 // appendNode renders node i onto lines: collapsed with its total once
@@ -549,12 +512,12 @@ func (s *ExecStep) appendNode(lines []string, i, col int) []string {
 	switch {
 	case i < s.currentNode || (s.finished && s.st.Result == nil):
 		return append(lines, justify(
-			s.styles().done.Render(tui.IconSuccess+" "+np.name),
-			s.styles().dim.Render(fmtDur(np.end.Sub(np.start))),
+			s.Styles().Done.Render(tui.IconSuccess+" "+np.name),
+			s.Styles().Dim.Render(fmtDur(np.end.Sub(np.start))),
 			col,
 		))
 	case i == s.currentNode || nodeTouched(np):
-		lines = append(lines, s.styles().active.Render(tui.IconActive+" "+np.name))
+		lines = append(lines, s.Styles().Active.Render(tui.IconActive+" "+np.name))
 		for j := range np.rows {
 			r := &np.rows[j]
 			if r.status == rowRunning {
@@ -562,12 +525,12 @@ func (s *ExecStep) appendNode(lines []string, i, col int) []string {
 			}
 			lines = append(lines, "    "+s.renderRow(r, col-4))
 			if r.status == rowRunning && len(np.extra) > 0 {
-				lines = append(lines, "    "+s.styles().dim.MaxWidth(col-4).Render("… "+np.extra[len(np.extra)-1]))
+				lines = append(lines, "    "+s.Styles().Dim.MaxWidth(col-4).Render("… "+np.extra[len(np.extra)-1]))
 			}
 		}
 		return lines
 	default:
-		return append(lines, s.styles().pend.Render(tui.IconPending+" "+np.name))
+		return append(lines, s.Styles().Pend.Render(tui.IconPending+" "+np.name))
 	}
 }
 
@@ -576,13 +539,13 @@ func (s *ExecStep) appendNode(lines []string, i, col int) []string {
 func (s *ExecStep) renderRow(r *execRow, col int) string {
 	switch r.status {
 	case rowDone:
-		return justify(s.styles().done.Render(tui.IconSuccess+" "+r.label), s.styles().dim.Render(rowDur(r)), col)
+		return justify(s.Styles().Done.Render(tui.IconSuccess+" "+r.label), s.Styles().Dim.Render(rowDur(r)), col)
 	case rowFailed:
-		return justify(s.styles().fail.Render(tui.IconError+" "+r.label), s.styles().dim.Render(rowDur(r)), col)
+		return justify(s.Styles().Fail.Render(tui.IconError+" "+r.label), s.Styles().Dim.Render(rowDur(r)), col)
 	case rowRunning:
-		return justify(wizard.Spinner(s.frame)+s.styles().bold.Render(r.label), s.styles().dim.Render(fmtDur(s.now().Sub(r.start))), col)
+		return justify(wizard.Spinner(s.frame)+s.Styles().Bold.Render(r.label), s.Styles().Dim.Render(fmtDur(s.now().Sub(r.start))), col)
 	default:
-		return s.styles().pend.Render(tui.IconPending + " " + r.label)
+		return s.Styles().Pend.Render(tui.IconPending + " " + r.label)
 	}
 }
 

@@ -83,6 +83,11 @@ type Hooks struct {
 	Done <-chan struct{}
 }
 
+// flowStepCount is how many screens NewSteps assembles, the step count the
+// frame's split gate is evaluated against; TestFlowStepCountMatchesNewSteps
+// pins it.
+const flowStepCount = 2
+
 // NewSteps assembles the deploy flow's ordered steps. Direct construction
 // instead of a StepBuilder registry: the registry's indirection earns its keep
 // only with multiple assembly sites.

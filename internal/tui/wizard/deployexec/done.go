@@ -21,7 +21,7 @@ const resumeHint = "re-run 'okdctl deploy' to resume from the recorded phase, or
 // post-deploy summary box, or the error card with the resume hint.
 type DoneStep struct {
 	wizard.BaseStep
-	frameSize
+	wizard.FrameSize
 	st    *State
 	hooks Hooks
 	log   logview.Surface
@@ -41,7 +41,7 @@ func NewDoneStep(st *State, hooks Hooks) *DoneStep {
 // tail's own budget is measured against.
 func (s *DoneStep) SetSize(width, height int) {
 	s.BaseStep.SetSize(width, height)
-	s.bodyHeight = height
+	s.SetBodyHeight(height)
 }
 
 // PaneContent keeps the live log in the split layout's right pane on the
@@ -97,13 +97,13 @@ func (s *DoneStep) ScrollsWithArrows() bool {
 // scrollLogBy moves the log window n lines through the ring at the geometry
 // last rendered: the split pane, or the failure tail under the error card.
 func (s *DoneStep) scrollLogBy(n int) {
-	s.log.ScrollBy(n, s.splitsFrame())
+	s.log.ScrollBy(n, s.SplitsFrame(flowStepCount))
 }
 
 // logPageSize is how many lines one pgup/pgdn moves: the lines the log
 // region is showing.
 func (s *DoneStep) logPageSize() int {
-	return s.log.PageSize(s.splitsFrame())
+	return s.log.PageSize(s.SplitsFrame(flowStepCount))
 }
 
 // View renders the CLI post-deploy summary for a success, or the CLI error box
@@ -126,7 +126,7 @@ func (s *DoneStep) View(width, _ int) string {
 // so it stays on screen at every width; a success needs none — its summary box
 // is the record.
 func (s *DoneStep) failureTail(col int) string {
-	if s.splitsFrame() {
+	if s.SplitsFrame(flowStepCount) {
 		return ""
 	}
 	tail := s.log.FailureTail(col)

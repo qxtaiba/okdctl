@@ -256,9 +256,9 @@ func (s *StreamStep) runningGlyph() string {
 	}
 	g := tui.SpinnerGlyph(tui.Motion(), idx)
 	if quiet {
-		return s.styles().dim.Render(g + " ")
+		return s.Styles().Dim.Render(g + " ")
 	}
-	return s.styles().active.Render(g + " ")
+	return s.Styles().Active.Render(g + " ")
 }
 
 // stalled reports whether the running step has been silent past its
@@ -280,7 +280,7 @@ func (s *StreamStep) stallMarker() string {
 	if tui.Motion() == tui.MotionFull && !s.blurred && (s.frame/slowPulseDivisor)%2 == 1 {
 		glyph = tui.IconPending
 	}
-	return s.styles().warn.Render(glyph + " ")
+	return s.Styles().Warn.Render(glyph + " ")
 }
 
 // runningStepID names the step currently running, false when none is.
@@ -373,9 +373,9 @@ func (s *StreamStep) renderBar(col int) string {
 func (s *StreamStep) barRightText() string {
 	pct := fmt.Sprintf("%d%%", s.percent())
 	if s.etaShown > 0 && !s.finished {
-		return s.styles().dim.Render(pct + " · ~" + fmtETA(s.etaShown) + " left")
+		return s.Styles().Dim.Render(pct + " · ~" + fmtETA(s.etaShown) + " left")
 	}
-	return s.styles().dim.Render(pct)
+	return s.Styles().Dim.Render(pct)
 }
 
 // renderBarCells paints the bar's barW cells: separators at the cumulative
@@ -492,10 +492,10 @@ func (s *StreamStep) renderPhaseBars(col int) []string {
 // history.
 func (s *StreamStep) phaseBarReading(i int, elapsedSecs float64) string {
 	if elapsedSecs > 0 {
-		return s.styles().dim.Render(fmtDur(time.Duration(elapsedSecs * float64(time.Second))))
+		return s.Styles().Dim.Render(fmtDur(time.Duration(elapsedSecs * float64(time.Second))))
 	}
 	if d := s.phasePredicted(&s.phases[i]); d > 0 {
-		return s.styles().dim.Render("~" + fmtETA(d))
+		return s.Styles().Dim.Render("~" + fmtETA(d))
 	}
 	return ""
 }
