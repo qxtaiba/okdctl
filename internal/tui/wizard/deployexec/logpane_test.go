@@ -166,7 +166,7 @@ func TestDoneFailureKeepsTheLastLogLinesOnScreen(t *testing.T) {
 	if strings.Contains(tuitest.StripANSI(s.View(96, 1000)), "step-19") {
 		t.Error("a frame with a log pane must not repeat the tail under the card")
 	}
-	if !strings.Contains(tuitest.StripANSI(s.PaneContent(44, 8)), "step-19") {
+	if !strings.Contains(tuitest.StripANSI(s.PaneContent(47, 8)), "step-19") {
 		t.Error("the pane must carry the tail on the completion screen too")
 	}
 }

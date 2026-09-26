@@ -9,12 +9,12 @@
   │  ✓ homelab-master2                                             1m0s      │  
   │                                                                          │  
   │  LOG                                                                     │  
-  │  09:02:06 terraform apply step=step-18 node=homelab-master0              │  
-  │  09:02:13 terraform apply step=step-19 node=homelab-master0              │  
-  │  09:02:20 terraform apply step=step-20 node=homelab-master0              │  
-  │  09:02:27 terraform apply step=step-21 node=homelab-master0              │  
-  │  09:02:34 terraform apply step=step-22 node=homelab-master0              │  
-  │  09:02:41 terraform apply step=step-23 node=homelab-master0              │  
+  │  · 09:02:06 terraform apply step=step-18 node=homelab-master0     │      │  
+  │  · 09:02:13 terraform apply step=step-19 node=homelab-master0     │      │  
+  │  · 09:02:20 terraform apply step=step-20 node=homelab-master0     │      │  
+  │  · 09:02:27 terraform apply step=step-21 node=homelab-master0     │      │  
+  │  · 09:02:34 terraform apply step=step-22 node=homelab-master0     ▎      │  
+  │  · 09:02:41 terraform apply step=step-23 node=homelab-master0     ▎      │  
   │                                                                          │  
   │  marker okd-install/.okdctl-node-op.json · full log okd-                 │  
   │                                                                          │  

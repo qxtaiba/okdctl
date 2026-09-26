@@ -29,7 +29,9 @@ func seededRing(n int) *Ring {
 }
 
 func TestLogPaneFollowsTheTailWithinItsHeight(t *testing.T) {
-	const width, height = 44, 8
+	// Wide enough that a row's step id survives truncation once the level
+	// gutter and the minimap lane have taken their columns.
+	const width, height = 47, 8
 	out := renderPane(seededRing(40), view{}, width, height, false)
 	lines := strings.Split(tuitest.StripANSI(out), "\n")
 

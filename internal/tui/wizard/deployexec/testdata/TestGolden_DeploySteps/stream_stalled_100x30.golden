@@ -13,14 +13,14 @@
   │  ○ verify                                                                           ~1m      │  
   │                                                                                              │  
   │  LOG                                                                                         │  
-  │  09:01:52 deploy step started step=step-16 phase=setup                                       │  
-  │  09:01:59 deploy step started step=step-17 phase=setup                                       │  
-  │  09:02:06 deploy step started step=step-18 phase=setup                                       │  
-  │  09:02:13 deploy step started step=step-19 phase=setup                                       │  
-  │  09:02:20 deploy step started step=step-20 phase=setup                                       │  
-  │  09:02:27 deploy step started step=step-21 phase=setup                                       │  
-  │  09:02:34 deploy step started step=step-22 phase=setup                                       │  
-  │  09:02:41 deploy step started step=step-23 phase=setup                                       │  
+  │  · 09:01:52 deploy step started step=step-16 phase=setup                              │      │  
+  │  · 09:01:59 deploy step started step=step-17 phase=setup                              │      │  
+  │  · 09:02:06 deploy step started step=step-18 phase=setup                              │      │  
+  │  · 09:02:13 deploy step started step=step-19 phase=setup                              │      │  
+  │  · 09:02:20 deploy step started step=step-20 phase=setup                              │      │  
+  │  · 09:02:27 deploy step started step=step-21 phase=setup                              ▎      │  
+  │  · 09:02:34 deploy step started step=step-22 phase=setup                              ▎      │  
+  │  · 09:02:41 deploy step started step=step-23 phase=setup                              ▎      │  
   │                                                                                              │  
   │  full log okd-install/okdctl.log · ctrl+c cancels after the current step                     │  
   │                                                                                              │  

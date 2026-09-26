@@ -13,6 +13,24 @@ import (
 // resolution is as fine as a step-by-step install needs.
 const stampFormat = "15:04:05"
 
+// levelError and levelWarn are the two severities the surface renders
+// apart from the quiet info stream: a tag, a gutter mark, a tint, and a
+// minimap cell each.
+const (
+	levelError = "ERROR"
+	levelWarn  = "WARN"
+)
+
+// gutterWidth is the level gutter's one column plus the space separating it
+// from the stamp; laneWidth is the minimap's single column at the window's
+// right edge, and minimapMinWidth is the narrowest window that spends a
+// column on it — below that the column is worth more as message text.
+const (
+	gutterWidth     = 2
+	laneWidth       = 1
+	minimapMinWidth = 24
+)
+
 // view is a log viewport's own state: where the window ends while follow is
 // locked, and whether the log has taken the whole frame.
 type view struct {
@@ -130,25 +148,25 @@ func renderRows(lines []Line, width, budget int, wrap bool) []string {
 		return nil
 	}
 	stampStyle := lipgloss.NewStyle().Foreground(tui.ColorSubtle())
-	stampWidth := lipgloss.Width(stampFormat)
+	indent := gutterWidth + lipgloss.Width(stampFormat) + 1
 	tw := textWidth(width)
 
 	var rows []string
 	for i := range lines {
 		l := &lines[i]
-		stamp := stampStyle.Render(l.At.Format(stampFormat))
+		lead := levelStyle(l.Level).Render(levelGutter(l.Level)) + " " + stampStyle.Render(l.At.Format(stampFormat))
 		textStyle := levelStyle(l.Level)
 		text := lineText(l)
 		if !wrap {
-			rows = append(rows, stamp+" "+textStyle.Render(tui.Truncate(text, tw)))
+			rows = append(rows, lead+" "+textStyle.Render(tui.Truncate(text, tw)))
 			continue
 		}
 		for j, part := range tui.WrapLines(text, tw) {
 			if j == 0 {
-				rows = append(rows, stamp+" "+textStyle.Render(part))
+				rows = append(rows, lead+" "+textStyle.Render(part))
 				continue
 			}
-			rows = append(rows, strings.Repeat(" ", stampWidth+1)+textStyle.Render(part))
+			rows = append(rows, strings.Repeat(" ", indent)+textStyle.Render(part))
 		}
 	}
 	// A single line can still wrap taller than the whole budget, so the drop
@@ -156,9 +174,37 @@ func renderRows(lines []Line, width, budget int, wrap bool) []string {
 	return rows[max(len(rows)-budget, 0):]
 }
 
-// textWidth is the column budget a row's text gets beside its stamp.
+// textWidth is the column budget a row's text gets beside its gutter and
+// stamp, inside whatever the minimap lane left of the window.
 func textWidth(width int) int {
-	return max(width-lipgloss.Width(stampFormat)-1, 8)
+	return max(rowWidth(width)-gutterWidth-lipgloss.Width(stampFormat)-1, 8)
+}
+
+// rowWidth is the columns a window's text rows render within: its own width
+// less the minimap lane, on a window wide enough to carry one.
+func rowWidth(width int) int {
+	if !drawsMinimap(width) {
+		return width
+	}
+	return width - laneWidth
+}
+
+// drawsMinimap reports whether a window of this width carries the lane.
+func drawsMinimap(width int) bool {
+	return width >= minimapMinWidth
+}
+
+// levelGutter returns the one-column severity mark a row leads with: the
+// warning and error initials, a faint dot for the quiet info stream.
+func levelGutter(level string) string {
+	switch strings.ToUpper(level) {
+	case levelError:
+		return "E"
+	case levelWarn:
+		return "W"
+	default:
+		return tui.IconLevelInfo
+	}
 }
 
 // lineText returns the one line a Line renders as: the WARN/ERROR tag, then
@@ -175,7 +221,7 @@ func lineText(l *Line) string {
 // dim info stream.
 func levelTag(level string) string {
 	switch upper := strings.ToUpper(level); upper {
-	case "ERROR", "WARN":
+	case levelError, levelWarn:
 		return upper
 	default:
 		return ""
@@ -187,9 +233,9 @@ func levelTag(level string) string {
 // is whatever the tail was carrying when the run stopped.
 func levelStyle(level string) lipgloss.Style {
 	switch strings.ToUpper(level) {
-	case "ERROR":
+	case levelError:
 		return lipgloss.NewStyle().Foreground(tui.ColorError())
-	case "WARN":
+	case levelWarn:
 		return lipgloss.NewStyle().Foreground(tui.ColorWarning())
 	default:
 		return lipgloss.NewStyle().Foreground(tui.ColorTextDim())
@@ -214,7 +260,72 @@ func renderPane(src Source, v view, width, height int, wrap bool) string {
 	if len(rows) == 0 {
 		rows = []string{lipgloss.NewStyle().Foreground(tui.ColorSubtle()).Render("waiting for the first log line…")}
 	}
+	rows = withMinimap(rows, lines, width, int(end-first)-len(w), int(end-first))
 	return strings.Join(append([]string{header}, rows...), "\n")
+}
+
+// withMinimap pads each of rows out to the lane column and appends its own
+// cell. rows come back untouched on a window too narrow to spend a column
+// on, and on one already showing the whole stream — a lane over a stream
+// with nothing off screen would mark scroll targets that are already read.
+func withMinimap(rows []string, lines []Line, width, winStart, winEnd int) []string {
+	if !drawsMinimap(width) || len(rows) == 0 || len(lines) == 0 {
+		return rows
+	}
+	if winStart <= 0 && winEnd >= len(lines) {
+		return rows
+	}
+	lane := minimapLane(lines, len(rows), winStart, winEnd)
+	pad := rowWidth(width)
+	out := make([]string, len(rows))
+	for i, row := range rows {
+		gap := max(pad-lipgloss.Width(row), 0)
+		out[i] = row + strings.Repeat(" ", gap) + lane[i]
+	}
+	return out
+}
+
+// minimapLane maps the stream's whole index range onto rows lane cells, so a
+// scroll target is visible before the operator scrolls: a cell marks the
+// worst level any line in its bucket carried, and the cells the visible
+// window covers read as a thumb against the track. winStart and winEnd bound
+// the visible window in lines' own index space, end exclusive.
+func minimapLane(lines []Line, rows, winStart, winEnd int) []string {
+	track := lipgloss.NewStyle().Foreground(tui.ColorRule()).Render(tui.IconBarSegment)
+	thumb := lipgloss.NewStyle().Foreground(tui.ColorSubtle()).Render(tui.IconBarTick)
+	warn := lipgloss.NewStyle().Foreground(tui.ColorWarning()).Render(tui.IconBar)
+	fail := lipgloss.NewStyle().Foreground(tui.ColorError()).Render(tui.IconBar)
+
+	lane := make([]string, rows)
+	for i := range rows {
+		lo, hi := i*len(lines)/rows, (i+1)*len(lines)/rows
+		switch level := worstLevel(lines[lo:hi]); {
+		case level == levelError:
+			lane[i] = fail
+		case level == levelWarn:
+			lane[i] = warn
+		case lo < winEnd && max(hi, lo+1) > winStart:
+			lane[i] = thumb
+		default:
+			lane[i] = track
+		}
+	}
+	return lane
+}
+
+// worstLevel names the loudest severity in one minimap bucket, empty when
+// the bucket holds nothing louder than info.
+func worstLevel(bucket []Line) string {
+	worst := ""
+	for i := range bucket {
+		switch strings.ToUpper(bucket[i].Level) {
+		case levelError:
+			return levelError
+		case levelWarn:
+			worst = levelWarn
+		}
+	}
+	return worst
 }
 
 // paneHeader renders the pane's dim section label; a locked window names
@@ -241,6 +352,7 @@ func renderTail(src Source, v view, width, budget int) []string {
 	if len(rows) == 0 {
 		return nil
 	}
+	rows = withMinimap(rows, lines, width, int(end-first)-len(w), int(end-first))
 	return append([]string{paneHeader(v, len(w), end, first+int64(len(lines)), width)}, rows...)
 }
 

@@ -17,7 +17,7 @@ func TestIconsAreCheckAndCross(t *testing.T) {
 }
 
 func TestNoLiteralStatusGlyphsOutsideIcons(t *testing.T) {
-	bad := []rune{'✓', '✗', '✔', '✖', '●', '○', '⚠', '◂', '▸', '█', '░', '▏', '▎', '▍', '▌', '▋', '▊', '▉'}
+	bad := []rune{'✓', '✗', '✔', '✖', '●', '○', '⚠', '◂', '▸', '█', '░', '▏', '▎', '▍', '▌', '▋', '▊', '▉', '┃'}
 	// hero.go's block-letter bitmap is art, not a status glyph.
 	exempt := map[string]bool{"icons.go": true, "hero.go": true}
 	fset := token.NewFileSet()

@@ -16,7 +16,7 @@
   │  ○ homelab-master2                                                       │  
   │                                                                          │  
   │  LOG                                                                     │  
-  │  09:02:06 terraform apply step=step-18 node=homelab-master0              │  
+  │  · 09:02:06 terraform apply step=step-18 node=homelab-master0     │      │  
   │                                                                          │  
   │────────────────── ↑ ↓  scroll down for more ────────────────── ▸ homelab │  
   │  l lock the log here … • ctrl+c cancel (twice to force-quit) • ? help    │  

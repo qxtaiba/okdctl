@@ -6,17 +6,17 @@
   │  resizing masters  2 / 3                              elapsed 1m15s      │  
   │  full log: okd-install/okdctl.log                                        │  
   │  LOG                                                                     │  
-  │  09:01:31 terraform apply step=step-13 node=homelab-master0              │  
-  │  09:01:38 terraform apply step=step-14 node=homelab-master0              │  
-  │  09:01:45 terraform apply step=step-15 node=homelab-master0              │  
-  │  09:01:52 terraform apply step=step-16 node=homelab-master0              │  
-  │  09:01:59 terraform apply step=step-17 node=homelab-master0              │  
-  │  09:02:06 terraform apply step=step-18 node=homelab-master0              │  
-  │  09:02:13 terraform apply step=step-19 node=homelab-master0              │  
-  │  09:02:20 terraform apply step=step-20 node=homelab-master0              │  
-  │  09:02:27 terraform apply step=step-21 node=homelab-master0              │  
-  │  09:02:34 terraform apply step=step-22 node=homelab-master0              │  
-  │  09:02:41 terraform apply step=step-23 node=homelab-master0              │  
+  │  · 09:01:31 terraform apply step=step-13 node=homelab-master0     │      │  
+  │  · 09:01:38 terraform apply step=step-14 node=homelab-master0     │      │  
+  │  · 09:01:45 terraform apply step=step-15 node=homelab-master0     │      │  
+  │  · 09:01:52 terraform apply step=step-16 node=homelab-master0     │      │  
+  │  · 09:01:59 terraform apply step=step-17 node=homelab-master0     │      │  
+  │  · 09:02:06 terraform apply step=step-18 node=homelab-master0     │      │  
+  │  · 09:02:13 terraform apply step=step-19 node=homelab-master0     ▎      │  
+  │  · 09:02:20 terraform apply step=step-20 node=homelab-master0     ▎      │  
+  │  · 09:02:27 terraform apply step=step-21 node=homelab-master0     ▎      │  
+  │  · 09:02:34 terraform apply step=step-22 node=homelab-master0     ▎      │  
+  │  · 09:02:41 terraform apply step=step-23 node=homelab-master0     ▎      │  
   │                                                                          │  
   │─────────────────────────────────────────────────────────────── ▸ homelab │  
   │  f back to checklist … • ctrl+c cancel (twice to force-quit) • ? help    │  
