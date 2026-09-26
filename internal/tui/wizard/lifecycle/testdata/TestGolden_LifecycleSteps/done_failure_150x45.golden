@@ -9,20 +9,20 @@
   │  │                                                                                        │            │  · 09:00:14 terraform apply step=st…  │  
   │  │  etcd health gate (post-master0) failed: quorum lost                                   │            │  · 09:00:21 terraform apply step=st…  │  
   │  │                                                                                        │            │  · 09:00:28 terraform apply step=st…  │  
-  │  │  → re-run the same operation to resume at the recorded step                            │            │  · 09:00:35 terraform apply step=st…  │  
-  │  │                                                                                        │            │  · 09:00:42 terraform apply step=st…  │  
-  │  ╰────────────────────────────────────────────────────────────────────────────────────────╯            │  · 09:00:49 terraform apply step=st…  │  
-  │                                                                                                        │  · 09:00:56 terraform apply step=st…  │  
-  │  full log okd-install/okdctl.log                                                                       │  · 09:01:03 terraform apply step=st…  │  
+  │  ╰────────────────────────────────────────────────────────────────────────────────────────╯            │  · 09:00:35 terraform apply step=st…  │  
+  │                                                                                                        │  · 09:00:42 terraform apply step=st…  │  
+  │  operation ..... resize                                                                                │  · 09:00:49 terraform apply step=st…  │  
+  │  elapsed ....... 1m30s                                                                                 │  · 09:00:56 terraform apply step=st…  │  
+  │  cause ......... etcd health gate (post-master0) failed                                                │  · 09:01:03 terraform apply step=st…  │  
   │                                                                                                        │  · 09:01:10 terraform apply step=st…  │  
-  │                                                                                                        │  · 09:01:17 terraform apply step=st…  │  
-  │                                                                                                        │  · 09:01:24 terraform apply step=st…  │  
+  │  NEXT MOVES                                                                                            │  · 09:01:17 terraform apply step=st…  │  
+  │  f   open the full log, filter it, jump between errors                                                 │  · 09:01:24 terraform apply step=st…  │  
   │                                                                                                        │  · 09:01:31 terraform apply step=st…  │  
-  │                                                                                                        │  · 09:01:38 terraform apply step=st…  │  
-  │                                                                                                        │  · 09:01:45 terraform apply step=st…  │  
-  │                                                                                                        │  · 09:01:52 terraform apply step=st…  │  
+  │  run these yourself:                                                                                   │  · 09:01:38 terraform apply step=st…  │  
+  │  okdctl node manage      resume the interrupted operation at the recorded step                         │  · 09:01:45 terraform apply step=st…  │  
+  │  okdctl status           check what the cluster makes of the nodes now                                 │  · 09:01:52 terraform apply step=st…  │  
   │                                                                                                        │  · 09:01:59 terraform apply step=st…  │  
-  │                                                                                                        │  · 09:02:06 terraform apply step=st…  │  
+  │  full log okd-install/okdctl.log                                                                       │  · 09:02:06 terraform apply step=st…  │  
   │                                                                                                        │  · 09:02:13 terraform apply step=st…  │  
   │                                                                                                        │  · 09:02:20 terraform apply step=st…  │  
   │                                                                                                        │  · 09:02:27 terraform apply step=st…  │  
@@ -40,6 +40,6 @@
   │                                                                                                        │                                       │  
   │                                                                                                                                                │  
   │───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
-  │  enter exit • pgup/pgdn page the log • ? help                                                                                                  │  
+  │  / filter the log • l lock the log here • f full-screen log • enter exit • ? help                                                              │  
   ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                                                                       

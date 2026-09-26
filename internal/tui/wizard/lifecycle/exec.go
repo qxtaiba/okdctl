@@ -197,6 +197,7 @@ func (s *ExecStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 			s.st.Result = msg.ev.Err
 			s.st.Elapsed = s.now().Sub(s.started)
 			s.finish(msg.ev.Err)
+			s.st.frozen, s.st.frozenAt = s.nodes, s.currentNode
 			return s, func() tea.Msg { return wizard.StepCompleteMsg{StepID: StepIDExec} }
 		}
 		s.applyEvent(&msg.ev)

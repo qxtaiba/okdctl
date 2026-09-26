@@ -1,40 +1,40 @@
                                                                                                                         
   ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
   │ O K D C T L                                                                                                      │  
-  │ done                                                                    op · target · params · plan · run · done │  
+  │ done                                                                                              install · done │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
+  │  ✓ prep                                                                                             40s          │  
+  │  ✗ ignition                                                                                                      │  
+  │      ✗ generate ignition                                                                            35s          │  
+  │      ○ build isos                                                                                                │  
+  │  ○ infra                                                                                                         │  
+  │  ○ install                                                                                                       │  
+  │  ○ verify                                                                                                        │  
+  │                                                                                                                  │  
   │  ╭──────────────────────────────────────── ERROR ─────────────────────────────────────────╮                      │  
   │  │                                                                                        │                      │  
-  │  │  ✗  resize failed                                                                      │                      │  
+  │  │  ✗  deploy failed                                                                      │                      │  
   │  │                                                                                        │                      │  
-  │  │  etcd health gate (post-master0) failed: quorum lost                                   │                      │  
+  │  │  deploy infrastructure failed: proxmox task UPID:pve:0000A1: vm 9001 already exists    │                      │  
   │  │                                                                                        │                      │  
   │  ╰────────────────────────────────────────────────────────────────────────────────────────╯                      │  
   │                                                                                                                  │  
-  │  operation ..... resize                                                                                          │  
-  │  elapsed ....... 1m30s                                                                                           │  
-  │  cause ......... etcd health gate (post-master0) failed                                                          │  
+  │  run_id ........ run-01                                                                                          │  
+  │  failed step ... generate ignition                                                                               │  
+  │  phase ......... ignition                                                                                        │  
+  │  elapsed ....... 1m15s                                                                                           │  
+  │  cause ......... deploy infrastructure failed                                                                    │  
   │                                                                                                                  │  
   │  NEXT MOVES                                                                                                      │  
   │  f   open the full log, filter it, jump between errors                                                           │  
+  │  c   copy the run id to the clipboard                                                                            │  
   │                                                                                                                  │  
   │  run these yourself:                                                                                             │  
-  │  okdctl node manage      resume the interrupted operation at the recorded step                                   │  
-  │  okdctl status           check what the cluster makes of the nodes now                                           │  
+  │  okdctl deploy           resume from the phase the marker recorded                                               │  
+  │  okdctl deploy --fresh   restart from scratch (wipes cluster credentials)                                        │  
+  │  okdctl destroy          tear down whatever was built                                                            │  
   │                                                                                                                  │  
-  │  LOG                                                                                                             │  
-  │  · 09:02:06 terraform apply step=step-18 node=homelab-master0                                         │          │  
-  │  · 09:02:13 terraform apply step=step-19 node=homelab-master0                                         │          │  
-  │  · 09:02:20 terraform apply step=step-20 node=homelab-master0                                         │          │  
-  │  · 09:02:27 terraform apply step=step-21 node=homelab-master0                                         │          │  
-  │  · 09:02:34 terraform apply step=step-22 node=homelab-master0                                         ▎          │  
-  │  · 09:02:41 terraform apply step=step-23 node=homelab-master0                                         ▎          │  
-  │                                                                                                                  │  
-  │  full log okd-install/okdctl.log                                                                                 │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │─────────────────────────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
-  │  / filter the log • l lock the log here • f full-screen log • enter exit • ? help                                │  
+  │────────────────────────────────────── ↑ ↓  scroll down for more ────────────────────────────────────── ▸ homelab │  
+  │  / filter the log • l lock the log here • f full-screen log • c copy the run id • enter exit • ? help            │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                                         

@@ -239,6 +239,7 @@ func (s *StreamStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 				s.st.Elapsed = s.now().Sub(s.started)
 			}
 			s.finish(msg.ev.Err)
+			s.st.frozen, s.st.frozenAt = s.phases, s.currentPhase
 			// A clean finish under full motion holds the screen for the
 			// settle to 100% — the completion fires from the settle's last
 			// frame. A failure, a blurred terminal (1Hz clock), and the

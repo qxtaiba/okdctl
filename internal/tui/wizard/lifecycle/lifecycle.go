@@ -59,6 +59,14 @@ type State struct {
 
 	Result  error
 	Elapsed time.Duration
+
+	// frozen is the per-node gate checklist exactly as the operation left it,
+	// handed over by the execution screen on its final event so the incident
+	// report can show the run's shape above the error card; frozenAt names the
+	// node that was in flight. Unexported because only this package's two
+	// screens share it.
+	frozen   []nodeProgress
+	frozenAt int
 }
 
 // DiskOnly reports whether the collected resize params grow only the os

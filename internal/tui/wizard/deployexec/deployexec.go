@@ -48,6 +48,13 @@ type State struct {
 
 	Result  error
 	Elapsed time.Duration
+
+	// frozen is the phase checklist exactly as the run left it, handed over by
+	// the stream screen on its final event so the incident report can show the
+	// run's shape above the error card; frozenAt names the phase that was in
+	// flight. Unexported because only this package's two screens share it.
+	frozen   []phaseProgress
+	frozenAt int
 }
 
 // Event is one progress event on the deploy stream's feed: a step transition

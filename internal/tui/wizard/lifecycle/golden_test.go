@@ -53,6 +53,28 @@ func seedExecMidRun(m *wizard.Model, _ *State) {
 	cur = base.Add(75 * time.Second)
 }
 
+// seedExecFailure drives the operation into master1's etcd gate and fails it
+// there, then advances to the done screen — the path that hands the incident
+// report its frozen checklist, which a State built by hand cannot produce.
+func seedExecFailure(m *wizard.Model, _ *State) {
+	s, ok := m.CurrentStep().(*ExecStep)
+	if !ok {
+		return
+	}
+	base := time.Date(2026, 8, 30, 9, 0, 0, 0, time.UTC)
+	cur := base
+	s.now = func() time.Time { return cur }
+	s.started = base
+	s.buildRows()
+
+	s.applyEvent(&ExecEvent{Node: "homelab-master0", Step: node.StepTFApply})
+	cur = base.Add(60 * time.Second)
+	s.applyEvent(&ExecEvent{Node: "homelab-master1", Step: node.StepTFApply})
+	cur = base.Add(90 * time.Second)
+	s.Update(execEventMsg{ev: ExecEvent{Final: true, Err: errGoldenFailure}})
+	m.Update(wizard.JumpToStepMsg{StepID: StepIDDone})
+}
+
 func removeWorkerPlan() *node.OpPlan {
 	return &node.OpPlan{
 		Op: node.OpRemove, Cluster: "homelab",
@@ -406,12 +428,26 @@ func lifecycleScenarios() []lifecycleScenario {
 			build: func() (*State, Hooks) {
 				st := doneState()
 				st.Elapsed = 90 * time.Second
-				st.Result = errors.New("etcd health gate (post-master0) failed: quorum lost")
+				st.Result = errGoldenFailure
 				return st, goldenHooks()
 			},
 		},
+		{
+			// The full incident report, reached the way a real failure reaches
+			// it: the gate checklist frozen where the operation stopped above
+			// the card, the run's identity, the next moves, then the evidence.
+			name: "done_incident",
+			id:   StepIDExec,
+			build: func() (*State, Hooks) {
+				return threeMasterState(), goldenHooks()
+			},
+			seed: seedExecFailure,
+		},
 	}
 }
+
+// errGoldenFailure is the backend failure every failure golden renders.
+var errGoldenFailure = errors.New("etcd health gate (post-master0) failed: quorum lost")
 
 var lifecycleGoldenSizes = []struct {
 	w, h int

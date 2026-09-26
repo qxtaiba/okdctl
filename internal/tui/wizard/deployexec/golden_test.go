@@ -43,6 +43,10 @@ func wrappedRing() Hooks {
 	return h
 }
 
+// errGoldenFailure is the engine failure every failure golden renders.
+var errGoldenFailure = errors.New(
+	"deploy infrastructure failed: proxmox task UPID:pve:0000A1: vm 9001 already exists")
+
 // errorEarlyRing seeds goldenHooks' fixture with an ERROR early in the ring,
 // so the jump keys and the minimap lane both have an off-screen target.
 func errorEarlyRing() Hooks {
@@ -114,6 +118,32 @@ func seedStalledRun(m *wizard.Model, _ *State) {
 	}
 	s.applyEvent(&Event{StepID: s.st.Plan[5].ID})
 	cur = cur.Add(2 * time.Minute)
+}
+
+// seedFailedRun drives the run into the ignition phase and fails it there,
+// then advances to the done screen — the path that hands the incident report
+// its frozen checklist, which a State built by hand has no way to produce.
+func seedFailedRun(m *wizard.Model, st *State) {
+	s, ok := m.CurrentStep().(*StreamStep)
+	if !ok {
+		return
+	}
+	base := time.Date(2026, 9, 25, 9, 0, 0, 0, time.UTC)
+	cur := base
+	s.now = func() time.Time { return cur }
+	s.started = base
+	s.buildRows()
+
+	for _, meta := range s.st.Plan[:2] {
+		s.applyEvent(&Event{StepID: meta.ID})
+		cur = cur.Add(20 * time.Second)
+		s.applyEvent(&Event{StepID: meta.ID, Done: true, Took: 20 * time.Second})
+	}
+	s.applyEvent(&Event{StepID: s.st.Plan[2].ID})
+	cur = cur.Add(35 * time.Second)
+	st.Elapsed = cur.Sub(base)
+	s.Update(streamEventMsg{ev: Event{Final: true, Err: errGoldenFailure}})
+	m.Update(wizard.JumpToStepMsg{StepID: StepIDDone})
 }
 
 // seedFullRun settles every step and delivers the final event, leaving the
@@ -315,9 +345,18 @@ func deployScenarios() []deployScenario {
 			id:   StepIDDone,
 			build: func() *State {
 				st := doneState()
-				st.Result = errors.New("deploy infrastructure failed: proxmox task UPID:pve:0000A1: vm 9001 already exists")
+				st.Result = errGoldenFailure
 				return st
 			},
+		},
+		{
+			// The full incident report, reached the way a real failure reaches
+			// it: the checklist frozen where the run stopped above the card,
+			// the run's identity, the next moves, then the evidence.
+			name:  "done_incident",
+			id:    StepIDStream,
+			build: streamState,
+			seed:  seedFailedRun,
 		},
 	}
 }

@@ -9,10 +9,20 @@
   │  │                                                                                        │                      │  
   │  │  deploy infrastructure failed: proxmox task UPID:pve:0000A1: vm 9001 already exists    │                      │  
   │  │                                                                                        │                      │  
-  │  │  → re-run 'okdctl deploy' to resume from the recorded phase, or 'okdctl deploy         │                      │  
-  │  │    --fresh' to restart from scratch                                                    │                      │  
-  │  │                                                                                        │                      │  
   │  ╰────────────────────────────────────────────────────────────────────────────────────────╯                      │  
+  │                                                                                                                  │  
+  │  run_id ........ run-01                                                                                          │  
+  │  elapsed ....... 42m0s                                                                                           │  
+  │  cause ......... deploy infrastructure failed                                                                    │  
+  │                                                                                                                  │  
+  │  NEXT MOVES                                                                                                      │  
+  │  f   open the full log, filter it, jump between errors                                                           │  
+  │  c   copy the run id to the clipboard                                                                            │  
+  │                                                                                                                  │  
+  │  run these yourself:                                                                                             │  
+  │  okdctl deploy           resume from the phase the marker recorded                                               │  
+  │  okdctl deploy --fresh   restart from scratch (wipes cluster credentials)                                        │  
+  │  okdctl destroy          tear down whatever was built                                                            │  
   │                                                                                                                  │  
   │  LOG                                                                                                             │  
   │  · 09:02:06 deploy step started step=step-18 phase=setup                                              │          │  
@@ -24,17 +34,7 @@
   │                                                                                                                  │  
   │  full log okd-install/okdctl.log                                                                                 │  
   │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
   │─────────────────────────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
-  │  enter exit • pgup/pgdn page the log • ? help                                                                    │  
+  │  / filter the log • l lock the log here • f full-screen log • c copy the run id • enter exit • ? help            │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                                         

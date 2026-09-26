@@ -1,30 +1,30 @@
                                                                                                     
   ╭──────────────────────────────────────────────────────────────────────────────────────────────╮  
   │ O K D C T L                                                                                  │  
-  │ done                                                                          install · done │  
+  │ done                                                op · target · params · plan · run · done │  
   │──────────────────────────────────────────────────────────────────────────────────────────────│  
+  │  ✓ homelab-master0                                                                 1m0s      │  
+  │  ✗ homelab-master1                                                                           │  
+  │      ✓ etcd health gate (pre)                                                         —      │  
+  │      ✓ cordon + drain                                                                 —      │  
+  │      ✗ terraform apply (in-place update)                                            30s      │  
+  │      ○ power-cycle vm                                                                        │  
+  │      ○ wait for node ready                                                                   │  
+  │      ○ etcd health gate (post)                                                               │  
+  │      ○ uncordon + ceph health gate                                                           │  
+  │  ○ homelab-master2                                                                           │  
+  │                                                                                              │  
   │  ╭──────────────────────────────────────── ERROR ─────────────────────────────────────────╮  │  
   │  │                                                                                        │  │  
-  │  │  ✗  deploy failed                                                                      │  │  
+  │  │  ✗  resize failed                                                                      │  │  
   │  │                                                                                        │  │  
-  │  │  deploy infrastructure failed: proxmox task UPID:pve:0000A1: vm 9001 already exists    │  │  
+  │  │  etcd health gate (post-master0) failed: quorum lost                                   │  │  
   │  │                                                                                        │  │  
   │  ╰────────────────────────────────────────────────────────────────────────────────────────╯  │  
   │                                                                                              │  
-  │  run_id ........ run-01                                                                      │  
-  │  elapsed ....... 42m0s                                                                       │  
-  │  cause ......... deploy infrastructure failed                                                │  
-  │                                                                                              │  
-  │  NEXT MOVES                                                                                  │  
-  │  f   open the full log, filter it, jump between errors                                       │  
-  │  c   copy the run id to the clipboard                                                        │  
-  │                                                                                              │  
-  │  run these yourself:                                                                         │  
-  │  okdctl deploy           resume from the phase the marker recorded                           │  
-  │  okdctl deploy --fresh   restart from scratch (wipes cluster credentials)                    │  
-  │  okdctl destroy          tear down whatever was built                                        │  
+  │  operation ..... resize                                                                      │  
   │                                                                                              │  
   │──────────────────────────── ↑ ↓  scroll down for more ──────────────────────────── ▸ homelab │  
-  │  / filter the log • l lock the log here • f full-screen log • c copy the run id … • ? help   │  
+  │  / filter the log • l lock the log here • f full-screen log • enter exit • ? help            │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                     

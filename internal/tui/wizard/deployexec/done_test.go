@@ -157,13 +157,23 @@ func TestDoneFailureScreenPagesTheLogRegion(t *testing.T) {
 	_ = tuitest.RenderAt(t, m, 80, 24)
 	m.Update(wizard.JumpToStepMsg{StepID: StepIDDone})
 
-	before := tuitest.StripANSI(tuitest.RenderAt(t, m, 80, 24))
-	if !strings.Contains(before, "step-34") {
+	// The keys go through the frame, so its own paging gate is under test; the
+	// assertions read the step's body directly, since the incident report is
+	// taller than an 80x24 viewport and its evidence rides below the fold.
+	report := func() string {
+		s, ok := m.CurrentStep().(*DoneStep)
+		if !ok {
+			t.Fatalf("current step is %T, want the done screen", m.CurrentStep())
+		}
+		return tuitest.StripANSI(s.View(76, 1000))
+	}
+
+	if before := report(); !strings.Contains(before, "step-34") {
 		t.Fatalf("the failure tail must be following the newest window:\n%s", before)
 	}
 
 	m.Update(tea.KeyPressMsg{Code: tea.KeyPgUp})
-	paged := tuitest.StripANSI(tuitest.RenderAt(t, m, 80, 24))
+	paged := report()
 	if strings.Contains(paged, "step-34") || !strings.Contains(paged, "of 40") {
 		t.Fatalf("pgup must page the log region back with honest coordinates:\n%s", paged)
 	}
@@ -171,14 +181,14 @@ func TestDoneFailureScreenPagesTheLogRegion(t *testing.T) {
 	for range 12 {
 		m.Update(tea.KeyPressMsg{Code: tea.KeyPgUp})
 	}
-	if top := tuitest.StripANSI(tuitest.RenderAt(t, m, 80, 24)); !strings.Contains(top, "step-00") {
+	if top := report(); !strings.Contains(top, "step-00") {
 		t.Errorf("paging to the top must reach the ring's first line:\n%s", top)
 	}
 
 	for range 20 {
 		m.Update(tea.KeyPressMsg{Code: tea.KeyPgDown})
 	}
-	if got := tuitest.StripANSI(tuitest.RenderAt(t, m, 80, 24)); !strings.Contains(got, "step-34") {
+	if got := report(); !strings.Contains(got, "step-34") {
 		t.Errorf("paging back down must return the tail:\n%s", got)
 	}
 }
@@ -197,7 +207,7 @@ func TestDoneFailureCarriesTheSinkPath(t *testing.T) {
 
 	bare := NewDoneStep(st, Hooks{Logs: seededRing(8)})
 	bare.SetTerminalSize(100, 30)
-	if out := tuitest.StripANSI(bare.View(96, 1000)); strings.Contains(out, "full log") {
+	if out := tuitest.StripANSI(bare.View(96, 1000)); strings.Contains(out, "full log okd-install") {
 		t.Errorf("with no sink open there is no path to point at:\n%s", out)
 	}
 }

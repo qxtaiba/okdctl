@@ -98,8 +98,13 @@ func TestDoneStepFailureShowsChipAndPointer(t *testing.T) {
 	if !strings.Contains(out, "✗  resize failed") {
 		t.Errorf("failure view must show the failed-op chip:\n%s", out)
 	}
-	if !strings.Contains(out, "→") {
-		t.Errorf("failure view must point at the resume hint:\n%s", out)
+	// The fix is stated once, as a next move the operator runs, not as a hint
+	// inside the card.
+	if !strings.Contains(out, handoffResume) {
+		t.Errorf("failure view must name the resume handoff:\n%s", out)
+	}
+	if strings.Contains(out, tui.IconPointer) {
+		t.Errorf("the card must carry no hint of its own now:\n%s", out)
 	}
 	if strings.Contains(out, "run_id") {
 		t.Errorf("failure view must not carry the exit/run_id footer:\n%s", out)
