@@ -56,7 +56,7 @@ type hubEntry struct {
 // no accelerator — and no digit either, since digits address only entries
 // that carry an accelerator.
 var hubVerbs = []hubEntry{
-	{HubVerbDeploy, "deploy", "d"},
+	{HubVerbDeploy, labelDeploy, "d"},
 	{HubVerbEditConfig, "edit config", "e"},
 	{HubVerbManageNodes, "manage nodes", "n"},
 	{HubVerbClusterStatus, "cluster status", "s"},

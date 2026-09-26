@@ -22,7 +22,7 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "vm_id_base",
-					Label:     "vm id base",
+					Label:     labelVMIDBase,
 					Default:   "6000",
 					Help:      "starting vm id in proxmox (e.g., 6000, 6001, ...)",
 					Width:     wizard.FieldWidthNumber,
@@ -38,7 +38,7 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:     "cpu_type",
-					Label:   "cpu type",
+					Label:   labelCPUType,
 					Default: cpuTypeHost,
 					Help:    "host gives best performance, x86-64-v2 or kvm64 allow live migration",
 					Type:    wizard.FieldTypeSelect,
@@ -102,7 +102,7 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:         "ntp_server",
-					Label:       "ntp server",
+					Label:       labelNTPServer,
 					Default:     "",
 					Placeholder: "pool.ntp.org",
 					Help:        "hostname or ip of the chrony source for master/worker nodes, e.g. pool.ntp.org — blank uses the bastion's ignition server ip",
@@ -145,7 +145,7 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:         "terraform_env",
-					Label:       "terraform environment",
+					Label:       labelTerraformEnvironment,
 					Default:     "",
 					Placeholder: "production",
 					Help:        "directory name under infrastructure/terraform/environments/, e.g. production — blank uses the default (production)",
@@ -156,7 +156,7 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 				},
 				{
 					Key:       "auto_approve",
-					Label:     "auto approve",
+					Label:     labelAutoApprove,
 					Default:   valNo,
 					Help:      "skip terraform apply confirmation prompts — use with care",
 					Type:      wizard.FieldTypeSelect,

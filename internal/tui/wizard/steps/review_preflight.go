@@ -28,7 +28,7 @@ func reviewPreflight(cfg *config.Config, capacity ...*WizardCapacitySnapshot) []
 		{label: "ssh public key", status: readableFileStatus(cfg.Files.SSHPublicKey)},
 	}
 	for i := range checks {
-		checks[i].warning = checks[i].status == "unavailable"
+		checks[i].warning = checks[i].status == statusUnavailable
 	}
 
 	networks := []string{
@@ -47,7 +47,7 @@ func reviewPreflight(cfg *config.Config, capacity ...*WizardCapacitySnapshot) []
 			validNetworks = false
 		}
 	}
-	networkStatus := "not checked"
+	networkStatus := statusNotChecked
 	networkWarning := false
 	switch {
 	case configuredNetworks == 0:
@@ -77,14 +77,15 @@ func reviewPreflight(cfg *config.Config, capacity ...*WizardCapacitySnapshot) []
 
 func reviewCapacityCheck(cfg *config.Config, snapshot *WizardCapacitySnapshot) reviewCheck {
 	if cfg.Provider.Proxmox == nil {
-		return reviewCheck{label: "selected capacity", status: "not applicable"}
+		return reviewCheck{label: labelSelectedCapacity, status: "not applicable"}
 	}
 	nodes := snapshot.Nodes()
 	if len(nodes) == 0 {
-		return reviewCheck{label: "selected capacity", status: "not checked"}
+		return reviewCheck{label: labelSelectedCapacity, status: statusNotChecked}
 	}
-	byName := make(map[string]CapacityNode, len(nodes))
-	for _, node := range nodes {
+	byName := make(map[string]*CapacityNode, len(nodes))
+	for i := range nodes {
+		node := &nodes[i]
 		byName[node.Name] = node
 	}
 	use := make(map[string]capacityDemand)
@@ -111,11 +112,12 @@ func reviewCapacityCheck(cfg *config.Config, snapshot *WizardCapacitySnapshot) r
 		add(node, cfg.Topology.Workers.CPU, cfg.Topology.Workers.MemoryMB)
 	}
 	if len(use) == 0 {
-		return reviewCheck{label: "selected capacity", status: "not checked"}
+		return reviewCheck{label: labelSelectedCapacity, status: statusNotChecked}
 	}
 	rows := make([]string, 0, len(use))
 	warning := false
-	for _, node := range nodes {
+	for nodeIndex := range nodes {
+		node := &nodes[nodeIndex]
 		demand, assigned := use[node.Name]
 		if !assigned {
 			continue
@@ -146,7 +148,7 @@ func reviewCapacityCheck(cfg *config.Config, snapshot *WizardCapacitySnapshot) r
 		}
 	}
 	slices.Sort(rows)
-	return reviewCheck{label: "selected capacity", status: strings.Join(rows, "; "), warning: warning}
+	return reviewCheck{label: labelSelectedCapacity, status: strings.Join(rows, "; "), warning: warning}
 }
 
 type capacityDemand struct {
@@ -161,16 +163,16 @@ func readableFileStatus(path string) string {
 	path = system.ExpandPath(path)
 	info, err := os.Lstat(path)
 	if err != nil || !info.Mode().IsRegular() {
-		return "unavailable"
+		return statusUnavailable
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		return "unavailable"
+		return statusUnavailable
 	}
 	defer f.Close()
 	info, err = f.Stat()
 	if err != nil || !info.Mode().IsRegular() {
-		return "unavailable"
+		return statusUnavailable
 	}
 	return "readable"
 }

@@ -61,19 +61,22 @@ func (s *WizardCapacitySnapshot) Nodes() []CapacityNode {
 		return nil
 	}
 	nodes := make([]CapacityNode, len(s.discovery.Nodes))
-	for i, node := range s.discovery.Nodes {
+	for i := range s.discovery.Nodes {
+		node := &s.discovery.Nodes[i]
 		nodes[i] = CapacityNode{
 			Name: node.Name, Status: node.Status, CPUs: node.CPUs, CPUsKnown: node.CPUsKnown,
 			MemoryGB: node.MemGB, MemoryKnown: node.MemKnown,
 			StorageKnown: node.StorageKnown, BridgesKnown: node.BridgesKnown,
 		}
 		nodes[i].Storage = make([]CapacityStorage, len(node.Storage))
-		for j, pool := range node.Storage {
-			nodes[i].Storage[j] = CapacityStorage{Name: pool.Name, Content: pool.Content, TotalGB: pool.TotalGB, TotalKnown: pool.TotalKnown}
+		for j := range node.Storage {
+			pool := node.Storage[j]
+			nodes[i].Storage[j] = CapacityStorage(pool)
 		}
 		nodes[i].Bridges = make([]CapacityBridge, len(node.Bridges))
-		for j, bridge := range node.Bridges {
-			nodes[i].Bridges[j] = CapacityBridge{Name: bridge.Name, CIDR: bridge.CIDR}
+		for j := range node.Bridges {
+			bridge := node.Bridges[j]
+			nodes[i].Bridges[j] = CapacityBridge(bridge)
 		}
 	}
 	return nodes
@@ -86,8 +89,9 @@ func (s *WizardCapacitySnapshot) OnlineTotals() CapacityTotals {
 		return CapacityTotals{}
 	}
 	first := true
-	for _, node := range s.discovery.Nodes {
-		if node.Status != "online" {
+	for i := range s.discovery.Nodes {
+		node := &s.discovery.Nodes[i]
+		if node.Status != proxmoxStatusOnline {
 			continue
 		}
 		if first {
@@ -106,7 +110,7 @@ func (s *WizardCapacitySnapshot) OnlineTotals() CapacityTotals {
 	}
 }
 
-func (s *WizardCapacitySnapshot) counts() (int, int, bool) {
+func (s *WizardCapacitySnapshot) counts() (controlPlanes, workers int, ok bool) {
 	if s == nil || s.cfg == nil {
 		return 0, 0, false
 	}

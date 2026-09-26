@@ -260,12 +260,9 @@ func (s *ReviewStep) PaneContent(width, height int) string {
 	if path == "" {
 		path = "okdctl.yaml"
 	}
-	lines = append(lines, tui.Truncate(path, width))
-	lines = append(lines, "", lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText()).Render("HEADLESS"))
+	lines = append(lines, tui.Truncate(path, width), "", lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText()).Render("HEADLESS"))
 	command := reviewHeadlessCommand(path, s.cfg.Cluster.Name)
-	for _, row := range tui.WrapLines(command, width) {
-		lines = append(lines, row)
-	}
+	lines = append(lines, tui.WrapLines(command, width)...)
 	lines = append(lines, "", tui.DimStyle.Render("p preview install-config.yaml"))
 	if len(lines) > height {
 		lines = lines[:height]
@@ -448,8 +445,8 @@ func reviewConfigSnapshot(cfg *config.Config) map[string]string {
 		values["proxmox.ssh_host_fingerprint"] = p.SSHHostFingerprint
 		values["proxmox.require_pinned_fingerprint"] = strconv.FormatBool(p.RequirePinnedFingerprint)
 		for i, network := range p.AdditionalNetworks {
-			key := fmt.Sprintf("proxmox.additional_networks.%d", i+1)
-			values[key] = fmt.Sprintf("%s / %s / vlan %d", network.Bridge, network.Model, network.VLANTag)
+			fieldPath := fmt.Sprintf("proxmox.additional_networks.%d", i+1)
+			values[fieldPath] = fmt.Sprintf("%s / %s / vlan %d", network.Bridge, network.Model, network.VLANTag)
 		}
 	}
 	values["disks.control_plane_mon_size_gb"] = strconv.Itoa(cfg.Disks.ControlPlaneMonSizeGB)
@@ -459,10 +456,10 @@ func reviewConfigSnapshot(cfg *config.Config) map[string]string {
 	return values
 }
 
-func reviewChangeLabel(key string) string {
+func reviewChangeLabel(fieldPath string) string {
 	labels := map[string]string{
 		"provider.type":  "provider",
-		"cluster.domain": "domain", "cluster.name": "cluster name",
+		"cluster.domain": fieldDomain, "cluster.name": "cluster name",
 		"distribution.type": "distribution", "distribution.version": "version",
 		"topology.vm_id_base": "vm id base", "topology.bootstrap.count": "bootstrap count",
 		"topology.bootstrap.vcpus": "bootstrap vcpus", "topology.bootstrap.memory_mb": "bootstrap memory mb",
@@ -498,13 +495,13 @@ func reviewChangeLabel(key string) string {
 		"proxmox.require_pinned_fingerprint": "require pinned fingerprint",
 		"disks.control_plane_mon_size_gb":    "control plane mon disk gb",
 	}
-	if strings.HasPrefix(key, "proxmox.additional_networks.") {
-		return strings.TrimPrefix(key, "proxmox.")
+	if strings.HasPrefix(fieldPath, "proxmox.additional_networks.") {
+		return strings.TrimPrefix(fieldPath, "proxmox.")
 	}
-	if strings.HasPrefix(key, "addons.") {
-		return strings.TrimSuffix(strings.TrimPrefix(key, "addons."), ".enabled") + " enabled"
+	if strings.HasPrefix(fieldPath, "addons.") {
+		return strings.TrimSuffix(strings.TrimPrefix(fieldPath, "addons."), ".enabled") + " enabled"
 	}
-	return labels[key]
+	return labels[fieldPath]
 }
 
 // PinnedFooter renders the deploy/save action selector inline on the help
@@ -932,7 +929,7 @@ func (s *ReviewStep) GetSelectedAction() wizard.Action {
 // PaletteTargets exposes review actions without dispatching them.
 func (s *ReviewStep) PaletteTargets() []wizard.PaletteTarget {
 	return []wizard.PaletteTarget{
-		{ID: "deploy", Kind: wizard.PaletteTargetAction, Label: "deploy now", Detail: "Select review action"},
+		{ID: labelDeploy, Kind: wizard.PaletteTargetAction, Label: "deploy now", Detail: "Select review action"},
 		{ID: "save", Kind: wizard.PaletteTargetAction, Label: "save and exit", Detail: "Select review action"},
 	}
 }
@@ -940,7 +937,7 @@ func (s *ReviewStep) PaletteTargets() []wizard.PaletteTarget {
 // FocusPaletteTarget highlights a review action without confirming it.
 func (s *ReviewStep) FocusPaletteTarget(id string) tea.Cmd {
 	switch id {
-	case "deploy":
+	case labelDeploy:
 		s.actions.Select(0)
 	case "save":
 		s.actions.Select(1)

@@ -265,8 +265,8 @@ func (s *NodePlacementStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		var nodeNames []string
 		if msg.err == nil && msg.discovery != nil && len(msg.discovery.Nodes) > 0 {
 			nodeNames = make([]string, len(msg.discovery.Nodes))
-			for i, n := range msg.discovery.Nodes {
-				nodeNames[i] = n.Name
+			for i := range msg.discovery.Nodes {
+				nodeNames[i] = msg.discovery.Nodes[i].Name
 			}
 		} else {
 			fallback := s.cfg.Provider.Proxmox.Node
@@ -314,7 +314,8 @@ func (s *NodePlacementStep) discoveryHeader(width int) string {
 	case s.discovery != nil:
 		header := noteStyle.Width(width - 2).Render(fmt.Sprintf("discovered %d node(s), %d storage pool(s), %d bridge(s)",
 			len(s.discovery.Nodes), len(s.discovery.Storage), len(s.discovery.Bridges)))
-		for _, node := range s.discovery.Nodes {
+		for nodeIndex := range s.discovery.Nodes {
+			node := &s.discovery.Nodes[nodeIndex]
 			cpu, memory := "?c", "?g"
 			if node.CPUsKnown {
 				cpu = fmt.Sprintf("%dc", node.CPUs)
@@ -323,7 +324,7 @@ func (s *NodePlacementStep) discoveryHeader(width int) string {
 				memory = fmt.Sprintf("%dg", node.MemGB)
 			}
 			status := lipgloss.NewStyle().Foreground(tui.ColorSuccess()).Render(tui.IconSuccess + " online")
-			if node.Status != "online" {
+			if node.Status != proxmoxStatusOnline {
 				status = lipgloss.NewStyle().Foreground(tui.ColorWarning()).Render("offline")
 			}
 			header += "\n" + noteStyle.Width(width-2).Render(fmt.Sprintf("%s %s · %s · %s", node.Name, status, cpu, memory))
@@ -342,8 +343,9 @@ func (s *NodePlacementStep) discoveryHeader(width int) string {
 }
 
 func nodeDisplayOptions(nodes []proxmoxNode, values []string) []string {
-	byName := make(map[string]proxmoxNode, len(nodes))
-	for _, node := range nodes {
+	byName := make(map[string]*proxmoxNode, len(nodes))
+	for nodeIndex := range nodes {
+		node := &nodes[nodeIndex]
 		byName[node.Name] = node
 	}
 	display := make([]string, len(values))
@@ -361,7 +363,7 @@ func nodeDisplayOptions(nodes []proxmoxNode, values []string) []string {
 			memory = fmt.Sprintf("%dg", node.MemGB)
 		}
 		display[i] = fmt.Sprintf("%s — %s/%s", name, cpu, memory)
-		if node.Status != "online" {
+		if node.Status != proxmoxStatusOnline {
 			display[i] += " " + lipgloss.NewStyle().Foreground(tui.ColorWarning()).Render("offline")
 		}
 	}
@@ -379,8 +381,9 @@ func storageDisplayOptions(discovery *proxmoxDiscovery, values []string) []strin
 	display := make([]string, len(values))
 	for i, name := range values {
 		parts := make([]string, 0, len(discovery.Nodes))
-		for _, node := range discovery.Nodes {
-			if node.Status != "online" {
+		for nodeIndex := range discovery.Nodes {
+			node := &discovery.Nodes[nodeIndex]
+			if node.Status != proxmoxStatusOnline {
 				continue
 			}
 			if !node.StorageKnown {
@@ -449,7 +452,8 @@ func (s *NodePlacementStep) assignmentDemand(width int) string {
 		}
 	}
 	rows := make([]string, 0, len(demand))
-	for _, node := range s.discovery.Nodes {
+	for nodeIndex := range s.discovery.Nodes {
+		node := &s.discovery.Nodes[nodeIndex]
 		used, assigned := demand[node.Name]
 		if !assigned {
 			continue

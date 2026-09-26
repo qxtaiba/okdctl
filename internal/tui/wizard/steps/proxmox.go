@@ -72,7 +72,7 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 				},
 				{
 					Key:         "token_id",
-					Label:       "token id",
+					Label:       labelTokenID,
 					Default:     "",
 					Placeholder: "user@pve!okdctl",
 					Help:        "api token id (user@realm!tokenname) — saved to config; combined with the token secret at deploy time via PROXMOX_VE_API_TOKEN in id=secret form",

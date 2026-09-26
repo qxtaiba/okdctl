@@ -158,10 +158,14 @@ func newGoldenModelWithCapacity(t *testing.T) (*wizard.Model, *WizardCapacitySna
 func demoDiscovery() *proxmoxDiscovery {
 	return &proxmoxDiscovery{
 		Nodes: []proxmoxNode{
-			{Name: "pve1", Status: "online", CPUs: 32, CPUsKnown: true, MemGB: 128, MemKnown: true,
-				Storage: demoNodeStorage(), StorageKnown: true, Bridges: demoNodeBridges(), BridgesKnown: true},
-			{Name: "pve2", Status: "online", CPUs: 24, CPUsKnown: true, MemGB: 96, MemKnown: true,
-				Storage: demoNodeStorage(), StorageKnown: true, Bridges: demoNodeBridges(), BridgesKnown: true},
+			{
+				Name: "pve1", Status: "online", CPUs: 32, CPUsKnown: true, MemGB: 128, MemKnown: true,
+				Storage: demoNodeStorage(), StorageKnown: true, Bridges: demoNodeBridges(), BridgesKnown: true,
+			},
+			{
+				Name: "pve2", Status: "online", CPUs: 24, CPUsKnown: true, MemGB: 96, MemKnown: true,
+				Storage: demoNodeStorage(), StorageKnown: true, Bridges: demoNodeBridges(), BridgesKnown: true,
+			},
 		},
 		Storage: []proxmoxStorage{
 			{Name: "local-lvm", Content: "images,rootdir", TotalGB: 1800},
@@ -184,8 +188,10 @@ func demoDiscovery() *proxmoxDiscovery {
 func demoDiscoverySingleNode() *proxmoxDiscovery {
 	disc := demoDiscovery()
 	disc.Nodes = []proxmoxNode{
-		{Name: "pve", Status: "online", CPUs: 32, CPUsKnown: true, MemGB: 128, MemKnown: true,
-			Storage: demoNodeStorage(), StorageKnown: true, Bridges: demoNodeBridges(), BridgesKnown: true},
+		{
+			Name: "pve", Status: "online", CPUs: 32, CPUsKnown: true, MemGB: 128, MemKnown: true,
+			Storage: demoNodeStorage(), StorageKnown: true, Bridges: demoNodeBridges(), BridgesKnown: true,
+		},
 	}
 	return disc
 }

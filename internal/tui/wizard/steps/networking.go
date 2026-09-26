@@ -27,7 +27,7 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "machine_cidr",
-					Label:     "machine cidr",
+					Label:     labelMachineCIDR,
 					Default:   "192.168.1.0/24",
 					Help:      "network cidr where vms will be deployed, e.g. 192.168.1.0/24",
 					Required:  true,
@@ -47,7 +47,7 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 				},
 				{
 					Key:      "dns_servers",
-					Label:    "upstream dns",
+					Label:    labelUpstreamDNS,
 					Default:  "192.168.1.1",
 					Help:     "comma-separated ip addresses for dnsmasq on bastion — vms resolve through bastion automatically",
 					Required: true,
@@ -74,7 +74,7 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "pod_cidr",
-					Label:     "pod cidr",
+					Label:     labelPodCIDR,
 					Default:   "10.128.0.0/14",
 					Help:      "kubernetes pod network (okd default: 10.128.0.0/14)",
 					Required:  true,
@@ -84,7 +84,7 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 				},
 				{
 					Key:       "service_cidr",
-					Label:     "service cidr",
+					Label:     labelServiceCIDR,
 					Default:   "172.30.0.0/16",
 					Help:      "kubernetes service network (okd default: 172.30.0.0/16)",
 					Required:  true,
@@ -94,7 +94,7 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 				},
 				{
 					Key:       "host_prefix",
-					Label:     "host prefix",
+					Label:     labelHostPrefix,
 					Default:   "23",
 					Help:      "subnet size per node (smaller = more pods)",
 					Type:      wizard.FieldTypeSelect,
@@ -143,7 +143,7 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 				},
 				{
 					Key:         "vip",
-					Label:       "api vip",
+					Label:       labelAPIVIP,
 					Default:     "",
 					Placeholder: "auto",
 					Help:        "virtual ip for kubernetes api — leave blank to auto-derive from static ip start",

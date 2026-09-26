@@ -13,6 +13,8 @@ import (
 	infraproxmox "github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
 )
 
+const proxmoxStatusOnline = "online"
+
 type proxmoxNode struct {
 	Name         string
 	Status       string // "online" or "offline"
@@ -96,8 +98,9 @@ func discoverProxmox(cfg *config.Config) (*proxmoxDiscovery, error) {
 	}
 
 	online := make([]string, 0, len(nodes))
-	for _, n := range nodes {
-		if n.Status == "online" {
+	for i := range nodes {
+		n := &nodes[i]
+		if n.Status == proxmoxStatusOnline {
 			online = append(online, n.Name)
 		}
 	}
@@ -138,12 +141,11 @@ type proxmoxNodeInventory struct {
 	ISOs         []string
 }
 
-func fetchClusterDetails(ctx context.Context, client *proxmox.Client, nodeNames []string) ([]proxmoxStorage, []proxmoxBridge, []string, bool, map[string]proxmoxNodeInventory) {
-	inventories := make(map[string]proxmoxNodeInventory, len(nodeNames))
+func fetchClusterDetails(ctx context.Context, client *proxmox.Client, nodeNames []string) (storage []proxmoxStorage, bridges []proxmoxBridge, isos []string, heterogeneous bool, inventories map[string]proxmoxNodeInventory) {
+	inventories = make(map[string]proxmoxNodeInventory, len(nodeNames))
 	first := fetchNodeDetails(ctx, client, nodeNames[0])
 	inventories[nodeNames[0]] = first
-	storage, bridges, isos := first.Storage, first.Bridges, first.ISOs
-	heterogeneous := false
+	storage, bridges, isos = first.Storage, first.Bridges, first.ISOs
 
 	for _, nodeName := range nodeNames[1:] {
 		details := fetchNodeDetails(ctx, client, nodeName)

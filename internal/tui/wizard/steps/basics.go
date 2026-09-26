@@ -73,7 +73,7 @@ var BasicsStepDefinition = wizard.StepDefinition{
 			facts = append(facts, render.Fact{Key: labelCluster, Value: v})
 		}
 		if v := values[fieldDomain]; v != "" {
-			facts = append(facts, render.Fact{Key: "domain", Value: v})
+			facts = append(facts, render.Fact{Key: fieldDomain, Value: v})
 		}
 		if v := values["control_plane_count"]; v != "" {
 			facts = append(facts, render.Fact{Key: "control plane", Value: v})
