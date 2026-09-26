@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
 )
@@ -103,6 +104,43 @@ func TestNodePlacementStep_HeterogeneousClusterWarns(t *testing.T) {
 	s = step.(*NodePlacementStep)
 	if view := s.View(100, 30); strings.Contains(view, "differ") {
 		t.Fatalf("homogeneous View() carries a warning:\n%s", view)
+	}
+}
+
+func TestNodePlacementCapacityLabelsAndDemandFollowSelection(t *testing.T) {
+	cfg := newProxmoxTestConfig()
+	cfg.Topology.ControlPlane = config.NodeConfig{Count: 1, CPU: 4, MemoryMB: 8192, DiskGB: 50}
+	cfg.Topology.Bootstrap = config.NodeConfig{Count: 1, CPU: 4, MemoryMB: 8192, DiskGB: 50}
+	s := NewNodePlacementStep()
+	s.cfg = cfg
+	disc := &proxmoxDiscovery{Nodes: []proxmoxNode{
+		{Name: "pve1", Status: "online", CPUs: 4, CPUsKnown: true, MemGB: 8, MemKnown: true},
+		{Name: "pve2", Status: "offline", CPUs: 8, CPUsKnown: true, MemGB: 16, MemKnown: true},
+	}}
+	step, _ := s.Update(discoveryCompleteMsg{discovery: disc})
+	s = step.(*NodePlacementStep)
+	initial := s.View(120, 40)
+	plainInitial := tuitest.StripANSI(initial)
+	for _, want := range []string{"pve1", "online", "4c", "8g", "oversubscribed", "pve2 offline · 8c · 16g"} {
+		if !strings.Contains(plainInitial, want) {
+			t.Errorf("initial view does not contain %q:\n%s", want, initial)
+		}
+	}
+	if got := tuitest.StripANSI(strings.Join(nodeDisplayOptions(disc.Nodes, []string{"pve2"}), "")); got != "pve2 — 8c/16g offline" {
+		t.Errorf("offline node option = %q, want annotated value", got)
+	}
+
+	_ = s.bootstrapField.Focus()
+	s.bootstrapField.Update(tea.KeyPressMsg{Code: tea.KeyRight})
+	updated := s.View(120, 40)
+	if !strings.Contains(updated, "pve2: 4c/8g/50gb") {
+		t.Fatalf("updated view has no reassigned bootstrap demand:\n%s", updated)
+	}
+	if strings.Contains(updated, "oversubscribed") {
+		t.Fatalf("updated view still marks a host oversubscribed:\n%s", updated)
+	}
+	if got := s.bootstrapField.Value(); got != "pve2" {
+		t.Fatalf("selected node value = %q, want saved value pve2", got)
 	}
 }
 

@@ -31,6 +31,20 @@ func TestDeployPhases_CoverEveryRegisteredStepExactlyOnce(t *testing.T) {
 	}
 }
 
+func TestRegisterAllSharesCapacitySnapshotWithReviewState(t *testing.T) {
+	builder := wizard.NewStepBuilder()
+	RegisterAll(builder)
+	built := wizard.BuildSteps(wizard.DefaultConfig(), builder)
+	capacity, ok := built.States[wizard.StepTypeReview].(*WizardCapacitySnapshot)
+	if !ok || capacity == nil {
+		t.Fatalf("review state = %T, want *WizardCapacitySnapshot", built.States[wizard.StepTypeReview])
+	}
+	resources, ok := built.States[wizard.StepTypeResources].(*ResourcesStepState)
+	if !ok || resources.Capacity != capacity {
+		t.Fatalf("resource snapshot = %p, review snapshot = %p", resources.Capacity, capacity)
+	}
+}
+
 // TestPhaseTrailFits80ColsWithLongestTitle pins the header's width contract
 // at the narrowest supported terminal: distribution's display title is the
 // longest of any configure step (43 cols), so it's the case most likely to

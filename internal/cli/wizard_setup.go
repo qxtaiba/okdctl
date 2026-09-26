@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/lifecycle"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/steps"
+	"github.com/qxtaiba/okdctl/internal/wizarddraft"
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
@@ -48,11 +50,23 @@ type hubOutcome struct {
 }
 
 func runWizardWithMode(cmd *cobra.Command, cfg *config.Config, configExists bool) (hubOutcome, error) {
+	reviewBaseline := cfg
+	configPath := wizardDraftPath(deployOutputFile)
+	draft, hasDraft := loadWizardDraft(configPath)
+	if hasDraft {
+		cfg = draft.Config
+	}
+
 	wizardCfg := wizard.DefaultConfig()
 	wizardCfg.InitialConfig = cfg
+	wizardCfg.ReviewBaseline = reviewBaseline
 	wizardCfg.ConfigExists = configExists
+	wizardCfg.DraftPresent = hasDraft
 
 	built := buildWizardStepsWithState(wizardCfg)
+	if hasDraft {
+		configureDraftResume(built, draft, time.Now())
+	}
 
 	var hub *steps.WelcomeStep
 	if len(built.Steps) > 0 {
@@ -66,7 +80,9 @@ func runWizardWithMode(cmd *cobra.Command, cfg *config.Config, configExists bool
 		hub.SetFlows(hubFlows(cmd, cfg, &slot))
 	}
 
-	result, err := runHubSession(cmd, built.Steps, cfg)
+	result, err := runHubSessionWithDraft(cmd, built.Steps, cfg, func(cfg *config.Config, stepID wizard.StepID, fieldKey string) error {
+		return wizarddraft.New(configPath).Save(cfg, wizarddraft.Cursor{StepID: stepID, FieldKey: fieldKey}, time.Now())
+	})
 
 	// take before anything else reads it: a quit can land while the manage
 	// verb's session is still being assembled on a command goroutine, and take
@@ -98,6 +114,10 @@ func runWizardWithMode(cmd *cobra.Command, cfg *config.Config, configExists bool
 // the AltScreen is up, and a log line written behind it would draw over the
 // frame. Both are restored before the caller prints anything.
 func runHubSession(cmd *cobra.Command, flowSteps []wizard.WizardStep, cfg *config.Config) (wizard.Result, error) {
+	return runHubSessionWithDraft(cmd, flowSteps, cfg, nil)
+}
+
+func runHubSessionWithDraft(cmd *cobra.Command, flowSteps []wizard.WizardStep, cfg *config.Config, save func(*config.Config, wizard.StepID, string) error) (wizard.Result, error) {
 	restoreLogs := logutil.Redirect(subprocSink())
 	defer restoreLogs()
 
@@ -105,7 +125,7 @@ func runHubSession(cmd *cobra.Command, flowSteps []wizard.WizardStep, cfg *confi
 	logutil.SetProgressBarsEnabled(false)
 	defer logutil.SetProgressBarsEnabled(progressBars)
 
-	return wizard.RunFlow(cmd.Context(), flowSteps, cfg, steps.Chrome())
+	return wizard.RunFlowWithDraft(cmd.Context(), flowSteps, cfg, steps.Chrome(), save)
 }
 
 // hubFlows builds the hub's in-process flow providers. Each is called at the
@@ -206,9 +226,9 @@ func buildWizardStepsWithState(wizardCfg wizard.Config) wizard.BuiltSteps {
 
 	if wizardCfg.InitialConfig != nil {
 		if os.Getenv(wizardDemoEnv) == "" {
-			initializeStepsFromConfig(built, wizardCfg.InitialConfig, wizardCfg.ConfigExists)
+			initializeStepsFromConfig(built, wizardCfg.InitialConfig, wizardCfg.ConfigExists || wizardCfg.DraftPresent)
 		}
-		configureReviewStep(built, wizardCfg.InitialConfig)
+		configureReviewStep(built, wizardCfg.InitialConfig, wizardCfg.ConfigExists, wizardCfg.ReviewBaseline)
 	}
 
 	return built
@@ -270,10 +290,20 @@ func configureDemoVersionFetcher(built wizard.BuiltSteps) {
 	}
 }
 
-func configureReviewStep(built wizard.BuiltSteps, cfg *config.Config) {
+func configureReviewStep(built wizard.BuiltSteps, cfg *config.Config, configExists bool, baseline *config.Config) {
 	for _, step := range built.Steps {
 		if rs, ok := step.(*steps.ReviewStep); ok {
 			rs.SetConfig(cfg)
+			rs.SetConfigPath(deployOutputFile)
+			if capacity, ok := built.States[wizard.StepTypeReview].(*steps.WizardCapacitySnapshot); ok {
+				rs.SetCapacity(capacity)
+			}
+			if configExists {
+				if baseline == nil {
+					baseline = cfg
+				}
+				rs.SetSavedConfig(baseline)
+			}
 			break
 		}
 	}

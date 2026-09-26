@@ -49,6 +49,7 @@ type NodePlacementStep struct {
 	frame        uint64
 	discovery    *proxmoxDiscovery
 	discoveryErr error
+	capacity     *WizardCapacitySnapshot
 
 	// header caches the last View's rendered discoveryHeader, so headerOffset
 	// doesn't need the render width again.
@@ -82,6 +83,11 @@ func NewNodePlacementStep() *NodePlacementStep {
 	}
 }
 
+func (s *NodePlacementStep) withCapacity(snapshot *WizardCapacitySnapshot) *NodePlacementStep {
+	s.capacity = snapshot
+	return s
+}
+
 // Animating reports whether the discovery indicator needs frame ticks.
 func (s *NodePlacementStep) Animating() bool {
 	return s.phase == phaseDiscovering
@@ -93,6 +99,9 @@ func (s *NodePlacementStep) ShouldShow(cfg *config.Config) bool {
 		return false
 	}
 	s.cfg = cfg
+	if s.capacity != nil {
+		s.capacity.cfg = cfg
+	}
 	return true
 }
 
@@ -162,12 +171,20 @@ func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, nodeNames []s
 				Group: components.NewInputGroup(infraFields...),
 			})
 		}
+		for _, field := range []*components.SelectField{s.osStorageField, s.dataStorageField, s.isoStorageField} {
+			if field != nil {
+				field.SetDisplayOptions(storageDisplayOptions(disc, field.Options))
+			}
+		}
 	}
 
 	defaultNode := nodeNames[0]
 
 	s.bootstrapField = newSelectField(clusterName+"-bootstrap", "proxmox node for bootstrap vm",
 		nodeNames, defaultNode, px.Node)
+	if disc != nil {
+		s.bootstrapField.SetDisplayOptions(nodeDisplayOptions(disc.Nodes, nodeNames))
+	}
 	sections = append(sections, wizard.FormSection{
 		Title: "bootstrap",
 		Group: components.NewInputGroup(s.bootstrapField),
@@ -175,6 +192,9 @@ func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, nodeNames []s
 
 	if cpCount := s.cfg.Topology.ControlPlane.Count; cpCount > 0 {
 		s.controlPlaneFields = nodeSelectFields(fieldPrefixMaster, clusterName, cpCount, px.ControlPlaneNodes, defaultNode, nodeNames)
+		if disc != nil {
+			setNodeDisplayOptions(s.controlPlaneFields, disc.Nodes, nodeNames)
+		}
 		sections = append(sections, wizard.FormSection{
 			Title: roleLabelControlPlane,
 			Group: selectFieldGroup(s.controlPlaneFields),
@@ -183,6 +203,9 @@ func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, nodeNames []s
 
 	if wCount := s.cfg.Topology.Workers.Count; wCount > 0 {
 		s.workerFields = nodeSelectFields(fieldPrefixWorker, clusterName, wCount, px.WorkerNodes, defaultNode, nodeNames)
+		if disc != nil {
+			setNodeDisplayOptions(s.workerFields, disc.Nodes, nodeNames)
+		}
 		sections = append(sections, wizard.FormSection{
 			Title: roleLabelWorkers,
 			Group: selectFieldGroup(s.workerFields),
@@ -235,6 +258,9 @@ func (s *NodePlacementStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		s.discovery = msg.discovery
 		s.discoveryErr = msg.err
 		s.phase = phasePlacing
+		if s.capacity != nil {
+			s.capacity.discovery = msg.discovery
+		}
 
 		var nodeNames []string
 		if msg.err == nil && msg.discovery != nil && len(msg.discovery.Nodes) > 0 {
@@ -288,6 +314,23 @@ func (s *NodePlacementStep) discoveryHeader(width int) string {
 	case s.discovery != nil:
 		header := noteStyle.Width(width - 2).Render(fmt.Sprintf("discovered %d node(s), %d storage pool(s), %d bridge(s)",
 			len(s.discovery.Nodes), len(s.discovery.Storage), len(s.discovery.Bridges)))
+		for _, node := range s.discovery.Nodes {
+			cpu, memory := "?c", "?g"
+			if node.CPUsKnown {
+				cpu = fmt.Sprintf("%dc", node.CPUs)
+			}
+			if node.MemKnown {
+				memory = fmt.Sprintf("%dg", node.MemGB)
+			}
+			status := lipgloss.NewStyle().Foreground(tui.ColorSuccess()).Render(tui.IconSuccess + " online")
+			if node.Status != "online" {
+				status = lipgloss.NewStyle().Foreground(tui.ColorWarning()).Render("offline")
+			}
+			header += "\n" + noteStyle.Width(width-2).Render(fmt.Sprintf("%s %s · %s · %s", node.Name, status, cpu, memory))
+		}
+		if demand := s.assignmentDemand(width - 2); demand != "" {
+			header += "\n" + demand
+		}
 		if s.discovery.Heterogeneous {
 			header += "\n" + warnStyle.Width(width-2).
 				Render(tui.IconWarning+" node inventories differ — offering only storage, bridges, and isos every online node shares")
@@ -296,6 +339,132 @@ func (s *NodePlacementStep) discoveryHeader(width int) string {
 	default:
 		return ""
 	}
+}
+
+func nodeDisplayOptions(nodes []proxmoxNode, values []string) []string {
+	byName := make(map[string]proxmoxNode, len(nodes))
+	for _, node := range nodes {
+		byName[node.Name] = node
+	}
+	display := make([]string, len(values))
+	for i, name := range values {
+		node, ok := byName[name]
+		if !ok {
+			display[i] = name
+			continue
+		}
+		cpu, memory := "?c", "?g"
+		if node.CPUsKnown {
+			cpu = fmt.Sprintf("%dc", node.CPUs)
+		}
+		if node.MemKnown {
+			memory = fmt.Sprintf("%dg", node.MemGB)
+		}
+		display[i] = fmt.Sprintf("%s — %s/%s", name, cpu, memory)
+		if node.Status != "online" {
+			display[i] += " " + lipgloss.NewStyle().Foreground(tui.ColorWarning()).Render("offline")
+		}
+	}
+	return display
+}
+
+func setNodeDisplayOptions(fields []*components.SelectField, nodes []proxmoxNode, values []string) {
+	options := nodeDisplayOptions(nodes, values)
+	for _, field := range fields {
+		field.SetDisplayOptions(options)
+	}
+}
+
+func storageDisplayOptions(discovery *proxmoxDiscovery, values []string) []string {
+	display := make([]string, len(values))
+	for i, name := range values {
+		parts := make([]string, 0, len(discovery.Nodes))
+		for _, node := range discovery.Nodes {
+			if node.Status != "online" {
+				continue
+			}
+			if !node.StorageKnown {
+				parts = append(parts, node.Name+" ?")
+				continue
+			}
+			for _, pool := range node.Storage {
+				if pool.Name == name {
+					parts = append(parts, node.Name+" "+formatStorageGB(pool.TotalGB, pool.TotalKnown))
+					break
+				}
+			}
+		}
+		if len(parts) == 0 {
+			display[i] = name + " — capacity unknown"
+		} else {
+			display[i] = name + " — " + strings.Join(parts, " · ")
+		}
+	}
+	return display
+}
+
+func formatStorageGB(gigabytes int, known bool) string {
+	if !known {
+		return "?"
+	}
+	if gigabytes >= 1000 {
+		return fmt.Sprintf("%.1ftb", float64(gigabytes)/1000)
+	}
+	return fmt.Sprintf("%dgb", gigabytes)
+}
+
+func (s *NodePlacementStep) assignmentDemand(width int) string {
+	if s.cfg == nil || s.discovery == nil {
+		return ""
+	}
+	demand := make(map[string][3]int)
+	add := func(node string, cpu, memory, disk int) {
+		current := demand[node]
+		current[0] += cpu
+		current[1] += memory
+		current[2] += disk
+		demand[node] = current
+	}
+	bootstrap := s.cfg.Topology.Bootstrap
+	if bootstrap.CPU == 0 && bootstrap.MemoryMB == 0 {
+		bootstrap.CPU = s.cfg.Topology.ControlPlane.CPU
+		bootstrap.MemoryMB = s.cfg.Topology.ControlPlane.MemoryMB
+	}
+	if bootstrap.DiskGB == 0 {
+		bootstrap.DiskGB = s.cfg.Topology.ControlPlane.DiskGB
+	}
+	if s.bootstrapField != nil {
+		add(s.bootstrapField.Value(), bootstrap.CPU, bootstrap.MemoryMB/1024, bootstrap.DiskGB)
+	}
+	for i, field := range s.controlPlaneFields {
+		if i < s.cfg.Topology.ControlPlane.Count {
+			add(field.Value(), s.cfg.Topology.ControlPlane.CPU, s.cfg.Topology.ControlPlane.MemoryMB/1024,
+				s.cfg.Topology.ControlPlane.DiskGB+s.cfg.Disks.ControlPlaneDataSizeGB)
+		}
+	}
+	for i, field := range s.workerFields {
+		if i < s.cfg.Topology.Workers.Count {
+			add(field.Value(), s.cfg.Topology.Workers.CPU, s.cfg.Topology.Workers.MemoryMB/1024,
+				s.cfg.Topology.Workers.DiskGB+s.cfg.Disks.WorkerDataSizeGB)
+		}
+	}
+	rows := make([]string, 0, len(demand))
+	for _, node := range s.discovery.Nodes {
+		used, assigned := demand[node.Name]
+		if !assigned {
+			continue
+		}
+		row := fmt.Sprintf("%s: %dc/%dg/%dgb", node.Name, used[0], used[1], used[2])
+		if (node.CPUsKnown && used[0] > node.CPUs) || (node.MemKnown && used[1] > node.MemGB) {
+			row = lipgloss.NewStyle().Foreground(tui.ColorWarning()).Render(row + " · oversubscribed")
+		}
+		rows = append(rows, row)
+	}
+	if len(rows) == 0 {
+		return ""
+	}
+	return lipgloss.NewStyle().Width(max(1, width)).PaddingLeft(2).
+		Render("assigned demand · " + strings.Join(rows, " · "))
 }
 
 // headerOffset is how many lines View prepends before the inner form's own
@@ -400,6 +569,22 @@ func (s *NodePlacementStep) SetFocused(focused bool) {
 		return
 	}
 	s.inner.Blur()
+}
+
+// PaletteTargets exposes discovered placement fields without their values.
+func (s *NodePlacementStep) PaletteTargets() []wizard.PaletteTarget {
+	if s.inner == nil {
+		return nil
+	}
+	return s.inner.PaletteTargets()
+}
+
+// FocusPaletteTarget moves focus to a discovered placement field.
+func (s *NodePlacementStep) FocusPaletteTarget(id string) tea.Cmd {
+	if s.inner == nil {
+		return nil
+	}
+	return s.inner.FocusPaletteTarget(id)
 }
 
 // ShortHelp returns the step's help bar — {esc back, ctrl+c quit} while

@@ -3,20 +3,25 @@
   │ O K D C T L                                                                                                                                                                  │  
   │ review your configuration                                                                                                                connect · cluster · extras · review │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
-  │  [1] cluster identity                                                                                  │  PROGRESS                                                           │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  ✓ welcome                                                          │  
-  │  name          mycluster                                                                               │  ✓ okd version                                                      │  
-  │  domain        k8s.local                                                                               │  ✓ proxmox configuration                                            │  
-  │  distribution  OKD 4.22.0-okd-scos.7                                                                   │  ✓ cluster basics                                                   │  
-  │                                                                                                        │  ✓ node placement                                                   │  
-  │  [2] proxmox                                                                                           │  ✓ network configuration                                            │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  ✓ node resources                                                   │  
-  │  host            192.168.1.100:8006                                                                    │  ✓ cluster addons                                                   │  
-  │  bootstrap node  pve                                                                                   │  ✓ files & ignition                                                 │  
-  │  bridge          vmbr0                                                                                 │  ✓ advanced settings                                                │  
-  │  storage         local-lvm                                                                             │  ● review & deploy                                                  │  
-  │  iso storage     local                                                                                 │                                                                     │  
+  │  PREFLIGHT                                                                                             │  PREFLIGHT                                                          │  
+  │    pull secret         not configured                                                                  │    pull secret         not configured                               │  
+  │    ssh public key      not configured                                                                  │    ssh public key      not configured                               │  
+  │    CIDR ranges         no overlap                                                                      │    CIDR ranges         no overlap                                   │  
   │                                                                                                        │                                                                     │  
+  │  [1] cluster identity                                                                                  │  DEPLOY PLAN                                                        │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  role      vms vcpu   ram os disk                                   │  
+  │  name          mycluster                                                                               │  bootstrap   1    4  8 gb   50 gb                                   │  
+  │  domain        k8s.local                                                                               │  masters     3    4 12 gb   50 gb                                   │  
+  │  distribution  OKD 4.22.0-okd-scos.7                                                                   │  workers     3    8 20 gb   50 gb                                   │  
+  │                                                                                                        │                                                                     │  
+  │  [2] proxmox                                                                                           │  WRITES                                                             │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  okdctl.yaml                                                        │  
+  │  host            192.168.1.100:8006                                                                    │                                                                     │  
+  │  bootstrap node  pve                                                                                   │  HEADLESS                                                           │  
+  │  bridge          vmbr0                                                                                 │  okdctl deploy --config 'okdctl.yaml' --yes --confirm-cluster       │  
+  │  storage         local-lvm                                                                             │  'mycluster'                                                        │  
+  │  iso storage     local                                                                                 │                                                                     │  
+  │                                                                                                        │  p preview install-config.yaml                                      │  
   │  [3] networking                                                                                        │                                                                     │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │                                                                     │  
   │  machine cidr     192.168.1.0/24                                                                       │                                                                     │  
@@ -36,13 +41,8 @@
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │                                                                     │  
   │  control plane     3 × (4 vcpu, 12 GB RAM, 50 GB os disk)                                              │                                                                     │  
   │  workers           3 × (8 vcpu, 20 GB RAM, 50 GB os disk)                                              │                                                                     │  
-  │  worker data disk  500 gb per worker (1500 gb total)                                                   │                                                                     │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │                                                                     │  
-  │  total             40 vcpu, 104 gb ram, 1850 gb disk                                                   │                                                                     │  
-  │  ⚠ total ram exceeds 64 gb — verify your proxmox host(s) have sufficient memory                        │                                                                     │  
-  │  ⚠ total vcpu exceeds 32 — verify your proxmox host(s) have sufficient cores                           │                                                                     │  
   │                                                                                                                                                                              │  
   │───────────────────────────────────────────────────────────── ↑ ↓  scroll down for more ───────────────────────────────────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
-  │  ● deploy now   ○ save and exit                                       ←/→ choose • enter confirm • esc back • 1-9 jump to section • pgup/pgdn scroll • ctrl+c quit • ? help  │  
+  │  ● deploy now   ○ save and exit            p preview install config • ←/→ choose • enter confirm • esc back • 1-9 jump to section • pgup/pgdn scroll • ctrl+c quit • ? help  │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                                                                                                     

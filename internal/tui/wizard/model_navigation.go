@@ -1,6 +1,8 @@
 package wizard
 
 import (
+	"fmt"
+
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
@@ -350,6 +352,17 @@ func (m *Model) jumpToStep(id StepID) (tea.Model, tea.Cmd) {
 	return m.focusStep(idx)
 }
 
+func (m *Model) resumeDraft(msg DraftResumeMsg) (tea.Model, tea.Cmd) {
+	idx := m.indexOfStepByID(msg.StepID)
+	if idx < 0 || !stepShouldShow(m.steps[idx], m.config) {
+		return m, nil
+	}
+	if field, ok := m.steps[idx].(interface{ SetDraftFieldKey(string) bool }); ok && msg.FieldKey != "" {
+		field.SetDraftFieldKey(msg.FieldKey)
+	}
+	return m.focusStep(idx)
+}
+
 func (m *Model) indexOfStepByID(id StepID) int {
 	for i, s := range m.steps {
 		if s.ID() == id {
@@ -368,6 +381,16 @@ func (m *Model) focusStep(idx int) (tea.Model, tea.Cmd) {
 	if f, ok := m.steps[idx].(FocusableStep); ok {
 		f.SetFocused(true)
 	}
+	initCmd := m.steps[idx].Init()
+	if m.draftSaver != nil && m.steps[idx].ID() != StepIDWelcome {
+		fieldKey := ""
+		if cursor, ok := m.steps[idx].(interface{ DraftFieldKey() string }); ok {
+			fieldKey = cursor.DraftFieldKey()
+		}
+		if err := m.draftSaver(m.config, m.steps[idx].ID(), fieldKey); err != nil {
+			m.err = fmt.Errorf("save wizard draft: %w", err)
+		}
+	}
 
 	m.syncJumpTargets()
 
@@ -378,7 +401,7 @@ func (m *Model) focusStep(idx int) (tea.Model, tea.Cmd) {
 		m.notifyIfAtBottom()
 	}
 
-	return m, m.steps[idx].Init()
+	return m, initCmd
 }
 
 // syncJumpTargets refreshes the review step's digit-jump table, compacting out

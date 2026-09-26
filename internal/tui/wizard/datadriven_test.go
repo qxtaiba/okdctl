@@ -93,6 +93,30 @@ func TestDataDrivenStep_AnsweredNilWhenDefinitionLeavesItUnset(t *testing.T) {
 	}
 }
 
+func TestDataDrivenStep_PaletteExposesVisibleLabelsAndFocusesField(t *testing.T) {
+	def := testStepDefinition()
+	def.Sections = append(def.Sections, SectionDefinition{
+		Title:   "hidden credentials",
+		Visible: func(map[string]string) bool { return false },
+		Fields:  []FieldDefinition{{Key: "hidden_secret", Label: "hidden secret"}},
+	})
+	step := NewDataDrivenStep(def)
+	step.setValue("name", "cluster-secret-value")
+	targets := step.PaletteTargets()
+	if len(targets) != 3 {
+		t.Fatalf("PaletteTargets() = %+v, want only the three visible fields", targets)
+	}
+	for _, target := range targets {
+		if target.Label == "hidden secret" || strings.Contains(target.Label, "value") {
+			t.Fatalf("palette exposed a hidden field or field value: %+v", target)
+		}
+	}
+	step.FocusPaletteTarget("0.1")
+	if got := step.form.FocusedField().(components.LabeledField).FieldLabel(); got != "count" {
+		t.Fatalf("focused field = %q, want count", got)
+	}
+}
+
 func TestDataDrivenStep_FocusedFieldHelp(t *testing.T) {
 	def := testStepDefinition()
 	def.Sections[0].Fields[0].Help = "cluster name help"
@@ -1024,5 +1048,30 @@ func TestRenderInfoCard_FitsWidth(t *testing.T) {
 				t.Errorf("width %d: row %d = %d columns, want %d", width, i, got, width)
 			}
 		}
+	}
+}
+
+func TestDataDrivenDraftCursorRestoresSafeFieldAndOmitsCredentialField(t *testing.T) {
+	def := testStepDefinition()
+	def.Sections[0].Fields = append(def.Sections[0].Fields,
+		FieldDefinition{Key: "api_token", Label: "API token", Type: FieldTypePassword},
+	)
+	step := NewDataDrivenStep(def)
+	_ = step.form.Focus()
+	step.form.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+
+	if got := step.DraftFieldKey(); got != "count" {
+		t.Fatalf("DraftFieldKey() = %q, want count", got)
+	}
+	if !step.SetDraftFieldKey("name") {
+		t.Fatal("SetDraftFieldKey(name) = false")
+	}
+	step.SetFocused(true)
+	_ = step.Init()
+	if got := step.DraftFieldKey(); got != "name" {
+		t.Errorf("restored DraftFieldKey() = %q, want name", got)
+	}
+	if step.SetDraftFieldKey("api_token") {
+		t.Fatal("SetDraftFieldKey(api_token) = true, want credential fields rejected")
 	}
 }

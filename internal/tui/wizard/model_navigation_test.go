@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 )
 
 // fakeStep is a minimal WizardStep double, avoiding an import cycle with the steps package.
@@ -71,6 +72,20 @@ type fakeReviewStep struct {
 	targets []JumpTarget
 }
 
+type paletteFakeStep struct {
+	fakeStep
+	selected string
+}
+
+func (s *paletteFakeStep) PaletteTargets() []PaletteTarget {
+	return []PaletteTarget{{ID: "host", Kind: "field", Label: "Proxmox host", Detail: "Connection"}}
+}
+
+func (s *paletteFakeStep) FocusPaletteTarget(id string) tea.Cmd {
+	s.selected = id
+	return nil
+}
+
 func (r *fakeReviewStep) JumpOrder() []StepID           { return r.order }
 func (r *fakeReviewStep) SetJumpTargets(t []JumpTarget) { r.targets = t }
 
@@ -119,6 +134,56 @@ func TestModel_JumpFromReview_ConfirmReturnsToReview(t *testing.T) {
 	m = update(t, m, StepCompleteMsg{StepID: StepIDProxmox})
 	if got := m.CurrentStep().ID(); got != StepIDReview {
 		t.Fatalf("after confirm: CurrentStep() = %v, want review (not the intermediate replay)", got)
+	}
+}
+
+func TestCommandPaletteSearchesAndJumpsToField(t *testing.T) {
+	fieldStep := &paletteFakeStep{fakeStep: fakeStep{id: StepIDProxmox}}
+	m := NewModel([]WizardStep{&fakeStep{id: StepIDBasics}, fieldStep, &fakeStep{id: StepIDReview}}, config.DefaultConfig())
+	tuitest.RenderAt(t, m, 100, 30)
+
+	m = update(t, m, tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl})
+	if !m.paletteOpen {
+		t.Fatal("ctrl+k must open the command palette")
+	}
+	m = update(t, m, tea.KeyPressMsg{Code: 'h', Text: "host"})
+	if len(m.paletteMatches) != 1 || m.paletteMatches[0].target.ID != "host" || m.paletteMatches[0].stepIndex != 1 {
+		t.Fatalf("matches = %#v, want the Proxmox host field", m.paletteMatches)
+	}
+	m = update(t, m, tea.KeyPressMsg{Code: tea.KeyEnter})
+	if m.paletteOpen || m.CurrentStep().ID() != StepIDProxmox || fieldStep.selected != "host" {
+		t.Fatalf("palette result = open:%v step:%q target:%q", m.paletteOpen, m.CurrentStep().ID(), fieldStep.selected)
+	}
+}
+
+func TestCommandPaletteFitsCommonTerminalSizes(t *testing.T) {
+	for _, size := range [][2]int{{80, 24}, {100, 30}, {180, 48}} {
+		m := NewModel([]WizardStep{&paletteFakeStep{fakeStep: fakeStep{id: StepIDProxmox}}}, config.DefaultConfig())
+		tuitest.RenderAt(t, m, size[0], size[1])
+		m.openPalette()
+		tuitest.AssertFits(t, m.renderPalette(), m.contentWidth(), m.viewport.Height())
+	}
+}
+
+func TestPaletteScoreOrdersExactPrefixSubstringAndFuzzy(t *testing.T) {
+	queries := []struct {
+		query string
+		label string
+		want  int
+	}{
+		{"networking", "networking", 0},
+		{"net", "networking", 1},
+		{"work", "networking", 2},
+		{"nwr", "networking", 3},
+	}
+	for _, tt := range queries {
+		got, ok := paletteScore(tt.query, tt.label)
+		if !ok || got != tt.want {
+			t.Errorf("paletteScore(%q, %q) = %d, %v; want %d, true", tt.query, tt.label, got, ok, tt.want)
+		}
+	}
+	if _, ok := paletteScore("missing", "networking"); ok {
+		t.Error("unmatched query must not produce a result")
 	}
 }
 
@@ -501,4 +566,48 @@ func (s *recordingTextStep) ConsumesTextInput() bool { return true }
 func (s *recordingTextStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 	s.received = append(s.received, msg)
 	return s, nil
+}
+
+type draftCursorStep struct {
+	fakeStep
+	fieldKey string
+	pending  string
+}
+
+func (s *draftCursorStep) DraftFieldKey() string { return s.fieldKey }
+func (s *draftCursorStep) SetDraftFieldKey(key string) bool {
+	s.pending = key
+	return true
+}
+
+func TestModelSavesDraftAfterStepTransition(t *testing.T) {
+	target := &draftCursorStep{fakeStep: fakeStep{id: StepIDBasics}, fieldKey: "cluster_name"}
+	m := NewModel([]WizardStep{&fakeStep{id: StepIDWelcome}, target}, config.DefaultConfig())
+	var gotID StepID
+	var gotField string
+	m.draftSaver = func(_ *config.Config, id StepID, fieldKey string) error {
+		gotID, gotField = id, fieldKey
+		return nil
+	}
+
+	m = update(t, m, StepCompleteMsg{StepID: StepIDWelcome})
+	if gotID != StepIDBasics || gotField != "cluster_name" {
+		t.Fatalf("saved cursor = %s/%s, want basics/cluster_name", gotID, gotField)
+	}
+}
+
+func TestModelResumesDraftAtStepAndField(t *testing.T) {
+	target := &draftCursorStep{fakeStep: fakeStep{id: StepIDNetworking}}
+	m := NewModel([]WizardStep{&fakeStep{id: StepIDWelcome}, target}, config.DefaultConfig())
+	m = update(t, m, DraftResumeMsg{StepID: StepIDNetworking, FieldKey: "machine_cidr"})
+
+	if got := m.CurrentStep().ID(); got != StepIDNetworking {
+		t.Fatalf("CurrentStep() = %s, want networking", got)
+	}
+	if target.pending != "machine_cidr" {
+		t.Errorf("pending field = %q, want machine_cidr", target.pending)
+	}
+	if m.returnToReview {
+		t.Error("draft resume must use ordinary wizard back/next navigation")
+	}
 }

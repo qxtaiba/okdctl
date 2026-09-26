@@ -4,6 +4,9 @@
   │ configure node placement        connect · cluster ✓●○○ · extras · review │  
   │──────────────────────────────────────────────────────────────────────────│  
   │    discovered 2 node(s), 3 storage pool(s), 2 bridge(s)                  │  
+  │    pve1 ✓ online · 32c · 128g                                            │  
+  │    pve2 ✓ online · 24c · 96g                                             │  
+  │    assigned demand · pve1: 36c/96g/1800gb · oversubscribed               │  
   │                                                                          │  
   │                                                                          │  
   │    ● infrastructure                                                      │  
@@ -14,9 +17,6 @@
   │    ╰────────────╯                                                        │  
   │                                                                          │  
   │    additional networks                                                   │  
-  │    ╭────────────────────────────────────────────────────────────────╮    │  
-  │    │ > [ ] vmbr0    [ ] vmbr1                                       │    │  
-  │    ╰────────────────────────────────────────────────────────────────╯    │  
   │                                                                          │  
   │─────────── ↑ ↓  scroll down for more ─────────── ▸ okd 4.22.0-okd-scos.7 │  
   │  ↑↓ navigate • ← → change value … • ctrl+c quit • ? help                 │  

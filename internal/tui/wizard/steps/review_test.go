@@ -74,6 +74,151 @@ func TestReviewStep_AddonRowsSortedWithoutSelfDuplication(t *testing.T) {
 	}
 }
 
+func TestReviewStep_ShowsChangesFromSavedConfig(t *testing.T) {
+	saved := reviewTestConfig()
+	saved.Cluster.Domain = "k8s.local"
+	saved.Topology.ControlPlane.CPU = 4
+	cfg := reviewTestConfig()
+	cfg.Cluster.Domain = saved.Cluster.Domain
+	cfg.Topology.ControlPlane.CPU = saved.Topology.ControlPlane.CPU
+	cfg.Networking.NTPServer = saved.Networking.NTPServer
+	cfg.Deployment.BinDir = saved.Deployment.BinDir
+	s := NewReviewStep()
+	s.SetConfig(cfg)
+	s.SetSavedConfig(saved)
+
+	cfg.Cluster.Domain = "prod.example"
+	cfg.Topology.ControlPlane.CPU = 8
+	cfg.Networking.NTPServer = "time.example"
+	cfg.Deployment.BinDir = "/opt/okd/bin"
+
+	frame := s.View(120, 100)
+	tuitest.AssertFits(t, frame, 120, 100)
+	out := tuitest.StripANSI(frame)
+	for _, want := range []string{
+		"CONFIG CHANGES · 4",
+		"domain",
+		"k8s.local → prod.example",
+		"control plane vcpus",
+		"4 → 8",
+		"ntp server",
+		"→ time.example",
+		"binary directory",
+		"→ /opt/okd/bin",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("View() missing config change %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestReviewStep_ShowsNewProviderValues(t *testing.T) {
+	saved := reviewTestConfig()
+	saved.Provider.Proxmox = nil
+	cfg := reviewTestConfig()
+	cfg.Provider.Proxmox.AdditionalNetworks = []config.AdditionalNetwork{{Bridge: "vmbr1", Model: "virtio", VLANTag: 42}}
+	cfg.Provider.Proxmox.Password.Set("new-secret")
+	t.Cleanup(cfg.Provider.Proxmox.Password.Zeroize)
+	cfg.Provider.Proxmox.APIToken.Set("api-secret")
+	t.Cleanup(cfg.Provider.Proxmox.APIToken.Zeroize)
+	cfg.Addons["secretstore"] = config.AddonConfig{Enabled: true, Settings: map[string]string{"token": "addon-secret"}}
+	s := NewReviewStep()
+	s.SetConfig(cfg)
+	s.SetSavedConfig(saved)
+
+	frame := s.View(80, 100)
+	tuitest.AssertFits(t, frame, 80, 100)
+	out := tuitest.StripANSI(frame)
+	for _, want := range []string{"proxmox host", "pve.local", "additional_networks.1", "vmbr1 / virtio / vlan 42"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("View() omitted newly configured value %q:\n%s", want, out)
+		}
+	}
+	for _, secret := range []string{"new-secret", "api-secret", "addon-secret"} {
+		if strings.Contains(out, secret) {
+			t.Errorf("View() exposed a credential %q:\n%s", secret, out)
+		}
+	}
+}
+
+func TestReviewStep_PreflightChecksSelectedNodeCapacity(t *testing.T) {
+	cfg := reviewTestConfig()
+	cfg.Provider.Proxmox.Node = "pve1"
+	cfg.Provider.Proxmox.ControlPlaneNodes = []string{"pve1", "pve1", "pve1"}
+	cfg.Provider.Proxmox.WorkerNodes = []string{"pve2", "pve2", "missing"}
+	cfg.Topology.ControlPlane = config.NodeConfig{Count: 3, CPU: 8, MemoryMB: 32768}
+	cfg.Topology.Workers = config.NodeConfig{Count: 3, CPU: 4, MemoryMB: 16384}
+	snapshot := &WizardCapacitySnapshot{discovery: &proxmoxDiscovery{Nodes: []proxmoxNode{
+		{Name: "pve1", Status: "online", CPUs: 24, CPUsKnown: true, MemGB: 96, MemKnown: true},
+		{Name: "pve2", Status: "online", CPUs: 24, CPUsKnown: true, MemGB: 96, MemKnown: true},
+	}}}
+	s := NewReviewStep()
+	s.SetConfig(cfg)
+	s.SetCapacity(snapshot)
+
+	frame := s.View(120, 100)
+	tuitest.AssertFits(t, frame, 120, 100)
+	out := tuitest.StripANSI(frame)
+	for _, want := range []string{"selected capacity", "pve1 over capacity", "pve2 fits", "missing unavailable"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("review omitted capacity status %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestReviewStep_PreviewShowsRedactedInstallConfigAndEscReturns(t *testing.T) {
+	cfg := reviewTestConfig()
+	cfg.Cluster.Name = "qa-cluster"
+	cfg.Cluster.Domain = "example.test"
+	cfg.Provider.Proxmox.Password.Set("never-render-this-password")
+	t.Cleanup(cfg.Provider.Proxmox.Password.Zeroize)
+	cfg.Provider.Proxmox.APIToken.Set("never-render-this-token")
+	t.Cleanup(cfg.Provider.Proxmox.APIToken.Zeroize)
+	s := NewReviewStep()
+	s.SetConfig(cfg)
+
+	_, _ = s.Update(tea.KeyPressMsg{Code: 'p', Text: "p"})
+	if !s.showPreview {
+		t.Fatal("p did not open the install-config preview")
+	}
+	frame := s.View(100, 100)
+	tuitest.AssertFits(t, frame, 100, 100)
+	out := tuitest.StripANSI(frame)
+	for _, want := range []string{"INSTALL-CONFIG PREVIEW", "qa-cluster", "[redacted]"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("preview omitted %q:\n%s", want, out)
+		}
+	}
+	for _, secret := range []string{"never-render-this-password", "never-render-this-token"} {
+		if strings.Contains(out, secret) {
+			t.Errorf("preview exposed secret %q", secret)
+		}
+	}
+	if !s.InterceptBack() || s.showPreview {
+		t.Fatal("esc did not close the preview without leaving the review step")
+	}
+}
+
+func TestReviewPlanIncludesHeadlessCommandAndConfigPath(t *testing.T) {
+	s := NewReviewStep()
+	s.SetConfig(reviewTestConfig())
+	s.SetConfigPath("/tmp/qa cluster.yaml")
+	frame := tuitest.StripANSI(s.PaneContent(70, 30))
+	tuitest.AssertFits(t, frame, 70, 30)
+	for _, want := range []string{"DEPLOY PLAN", "WRITES", "/tmp/qa", "HEADLESS", `--config '/tmp/qa cluster.yaml'`, "--confirm-cluster"} {
+		if !strings.Contains(frame, want) {
+			t.Errorf("review pane omitted %q:\n%s", want, frame)
+		}
+	}
+}
+
+func TestReviewHeadlessCommandShellQuotesArguments(t *testing.T) {
+	got := reviewHeadlessCommand("/tmp/O'Brien config.yaml", "qa cluster")
+	if want := `--config '/tmp/O'\''Brien config.yaml' --yes --confirm-cluster 'qa cluster'`; !strings.Contains(got, want) {
+		t.Fatalf("reviewHeadlessCommand() = %q, want shell-safe arguments containing %q", got, want)
+	}
+}
+
 func TestReviewStep_HiddenStepGetsNoIndex(t *testing.T) {
 	s := NewReviewStep()
 	s.SetConfig(reviewTestConfig())

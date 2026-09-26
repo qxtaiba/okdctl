@@ -93,6 +93,20 @@ type TextInputConsumer interface {
 	ConsumesTextInput() bool
 }
 
+// PaletteTarget is a safe navigation destination exposed by a step.
+type PaletteTarget struct {
+	ID     string
+	Kind   string
+	Label  string
+	Detail string
+}
+
+// PaletteProvider exposes fields or actions without exposing their values.
+type PaletteProvider interface {
+	PaletteTargets() []PaletteTarget
+	FocusPaletteTarget(id string) tea.Cmd
+}
+
 // BackGuard is implemented by forward-only steps that must intercept esc
 // (navigating away would orphan an in-flight mutation); true consumes the
 // keypress, false navigates back normally.
@@ -186,6 +200,12 @@ func (b *BaseStep) AutoCompletes() bool {
 // should advance.
 type StepCompleteMsg struct {
 	StepID StepID
+}
+
+// DraftResumeMsg resumes the configure flow at a saved step and field.
+type DraftResumeMsg struct {
+	StepID   StepID
+	FieldKey string
 }
 
 // StepBackMsg signals that the wizard should step back one position.

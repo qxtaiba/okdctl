@@ -3,6 +3,11 @@
   │ O K D C T L                                                                                                      │  
   │ review your configuration                                                    connect · cluster · extras · review │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
+  │  PREFLIGHT                                                                                                       │  
+  │    pull secret         not configured                                                                            │  
+  │    ssh public key      not configured                                                                            │  
+  │    CIDR ranges         no overlap                                                                                │  
+  │                                                                                                                  │  
   │  [1] cluster identity                                                                                            │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
   │  name          mycluster                                                                                         │  
@@ -28,13 +33,8 @@
   │  gateway          192.168.1.1                                                                                    │  
   │  upstream dns     192.168.1.1                                                                                    │  
   │  bastion          192.168.1.20                                                                                   │  
-  │  api vip          192.168.1.10 (auto)                                                                            │  
-  │  host prefix      23                                                                                             │  
-  │  pod cidr         10.128.0.0/14                                                                                  │  
-  │  service cidr     172.30.0.0/16                                                                                  │  
-  │  static ip start  192.168.1.140                                                                                  │  
   │                                                                                                                  │  
   │─────────────────────────────── ↑ ↓  scroll down for more ─────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
-  │  ● deploy now   ○ save and exit                  ←/→ choose • enter confirm • esc back … • ctrl+c quit • ? help  │  
+  │  ● deploy now   ○ save and exit  p preview install config • ←/→ choose • enter confirm … • ctrl+c quit • ? help  │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                                         

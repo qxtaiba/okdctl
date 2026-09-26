@@ -2,6 +2,8 @@ package steps
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 
 	"charm.land/lipgloss/v2"
 
@@ -13,8 +15,9 @@ import (
 // ResourcesStepState pairs the resources step with the Config it edits, so
 // callers can inspect values after the wizard completes.
 type ResourcesStepState struct {
-	Step *wizard.DataDrivenStep
-	Cfg  *config.Config
+	Step     *wizard.DataDrivenStep
+	Cfg      *config.Config
+	Capacity *WizardCapacitySnapshot
 }
 
 // IsWizardStepState marks ResourcesStepState as a valid wizard.StepState.
@@ -138,15 +141,17 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 }
 
 // NewResourcesStep returns the resources wizard step and its state.
-func NewResourcesStep() (*wizard.DataDrivenStep, *ResourcesStepState) {
+func NewResourcesStep(capacity ...*WizardCapacitySnapshot) (*wizard.DataDrivenStep, *ResourcesStepState) {
 	step := wizard.NewDataDrivenStep(&ResourcesStepDefinition)
 
 	state := &ResourcesStepState{
 		Step: step,
 	}
-
-	step.WithExtraContentFunc("total resources required", func(s *wizard.DataDrivenStep, _ int) string {
-		return renderResourceSummary(s, state)
+	if len(capacity) > 0 {
+		state.Capacity = capacity[0]
+	}
+	step.WithPinnedFooterFunc(func(s *wizard.DataDrivenStep, width int) string {
+		return renderResourceFooter(s, state, width)
 	})
 
 	return step, state
@@ -160,41 +165,47 @@ func resourceSummaryStyles() (value lipgloss.Style, sep string) {
 		lipgloss.NewStyle().Foreground(tui.ColorSubtle()).Render("  ·  ")
 }
 
-// renderResourceSummary returns the totals line for the resources step's
-// info card; the card itself supplies the title and border.
-func renderResourceSummary(step *wizard.DataDrivenStep, state *ResourcesStepState) string {
-	cpCount := 3
-	workerCount := 3
-	if state.Cfg != nil {
-		cpCount = state.Cfg.Topology.ControlPlane.Count
-		workerCount = state.Cfg.Topology.Workers.Count
+func renderResourceFooter(step *wizard.DataDrivenStep, state *ResourcesStepState, width int) string {
+	cfg := state.Cfg
+	if cfg == nil {
+		cfg = config.DefaultConfig()
 	}
-
-	cpCPU := step.ValueInt("cp_vcpus", 4)
-	cpMem := step.ValueInt("cp_memory", 12288)
-	cpDisk := step.ValueInt("cp_disk", 50)
-	workerCPU := step.ValueInt("worker_vcpus", 8)
-	workerMem := step.ValueInt("worker_memory", 20480)
-	workerDisk := step.ValueInt("worker_disk", 50)
-	workerDataDisk := step.ValueInt("worker_data_disk", 500)
-	cpDataDisk := step.ValueInt("cp_data_disk", 0)
-
-	totalCPU := (cpCPU * cpCount) + (workerCPU * workerCount)
-	totalMem := (cpMem * cpCount) + (workerMem * workerCount)
-	totalOSDisk := (cpDisk * cpCount) + (workerDisk * workerCount)
-	totalDataDisk := (workerDataDisk * workerCount) + (cpDataDisk * cpCount)
-
-	value, sep := resourceSummaryStyles()
-
-	var storageStr string
-	if totalDataDisk >= 1000 {
-		storageStr = fmt.Sprintf("%.1f tb storage", float64(totalDataDisk)/1000)
-	} else {
-		storageStr = fmt.Sprintf("%d gb storage", totalDataDisk)
+	keys := []string{"cp_vcpus", "cp_memory", "cp_disk", "worker_vcpus", "worker_memory", "worker_disk", "worker_data_disk", "cp_data_disk"}
+	values := make(map[string]int, len(keys))
+	for _, key := range keys {
+		value, err := strconv.Atoi(step.Value(key))
+		if err != nil {
+			return tui.Truncate("resource totals pending · enter valid values", width)
+		}
+		values[key] = value
 	}
-
-	return value.Render(fmt.Sprintf("%d vcpus", totalCPU)) + sep +
-		value.Render(fmt.Sprintf("%d gb ram", totalMem/1024)) + sep +
-		value.Render(fmt.Sprintf("%d gb os", totalOSDisk)) + sep +
-		value.Render(storageStr)
+	cpCount := cfg.Topology.ControlPlane.Count
+	workerCount := cfg.Topology.Workers.Count
+	bootstrap := cfg.Topology.Bootstrap
+	// The bootstrap VM runs alongside the control plane during installation.
+	if bootstrap.CPU == 0 && bootstrap.MemoryMB == 0 {
+		bootstrap.CPU = values["cp_vcpus"]
+		bootstrap.MemoryMB = values["cp_memory"]
+	}
+	bootstrap.DiskGB = values["cp_disk"]
+	totalCPU := values["cp_vcpus"]*cpCount + values["worker_vcpus"]*workerCount + bootstrap.CPU
+	totalMemoryMB := values["cp_memory"]*cpCount + values["worker_memory"]*workerCount + bootstrap.MemoryMB
+	totalDiskGB := values["cp_disk"]*cpCount + values["worker_disk"]*workerCount + bootstrap.DiskGB +
+		values["worker_data_disk"]*workerCount + values["cp_data_disk"]*cpCount
+	label := fmt.Sprintf("%d vcpu · %d gb ram · %d gb disk", totalCPU, totalMemoryMB/1024, totalDiskGB)
+	capacity := state.Capacity.OnlineTotals()
+	over := (capacity.CPUsKnown && totalCPU > capacity.CPUs) ||
+		(capacity.MemoryKnown && totalMemoryMB > capacity.MemoryGB*1024)
+	if over {
+		label += fmt.Sprintf(" · exceeds online capacity (%dc/%dg)", capacity.CPUs, capacity.MemoryGB)
+	}
+	label = tui.Truncate(label, width)
+	value, _ := resourceSummaryStyles()
+	if over {
+		return lipgloss.NewStyle().Foreground(tui.ColorWarning()).Bold(true).Render(label)
+	}
+	if state.Capacity != nil && state.Capacity.discovery != nil && (!capacity.CPUsKnown || !capacity.MemoryKnown) {
+		label = tui.Truncate(label+" · online capacity unknown", width)
+	}
+	return value.Render(strings.TrimSpace(label))
 }

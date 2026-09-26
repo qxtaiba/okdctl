@@ -28,6 +28,7 @@ const (
 	HubVerbDestroy
 	HubVerbGetStarted
 	HubVerbQuit
+	HubVerbResumeDraft
 )
 
 // SaveSlotState is how far the loaded configuration has got, as far as the hub
@@ -96,6 +97,8 @@ type WelcomeStep struct {
 	wizard.BaseStep
 	configExists bool
 	saveSlot     string
+	draftLabel   string
+	draftCursor  wizard.DraftResumeMsg
 	entries      []hubEntry
 	nav          *components.CompactSelector
 	flows        HubFlows
@@ -160,14 +163,18 @@ func (s *WelcomeStep) setEntries(entries []hubEntry) {
 // the five-verb and blank-slate menus.
 func (s *WelcomeStep) SetConfigExists(exists bool) {
 	s.configExists = exists
+	entries := hubFreshVerbs
 	if exists {
-		s.setEntries(hubVerbs)
-		return
+		entries = hubVerbs
+	} else {
+		// The blank slate has no slot to describe; a line left over from an
+		// earlier SetExistingConfig would name a configuration that is gone.
+		s.saveSlot = ""
 	}
-	// The blank slate has no slot to describe; a line left over from an
-	// earlier SetExistingConfig would name a configuration that is gone.
-	s.saveSlot = ""
-	s.setEntries(hubFreshVerbs)
+	if s.draftLabel != "" {
+		entries = append([]hubEntry{{verb: HubVerbResumeDraft, label: s.draftLabel}}, entries...)
+	}
+	s.setEntries(entries)
 }
 
 // SetExistingConfig switches the hub to its five-verb menu and derives the dim
@@ -180,6 +187,13 @@ func (s *WelcomeStep) SetExistingConfig(cfg *config.Config, state SaveSlotState)
 	nodes := cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count
 	s.saveSlot = fmt.Sprintf("%s · okd %s · %s · %s",
 		cfg.Cluster.Name, cfg.Distribution.Version, pluralNodes(nodes), state)
+}
+
+// SetDraftResume adds a hub entry that resumes the saved configure cursor.
+func (s *WelcomeStep) SetDraftResume(stepID wizard.StepID, fieldKey, label string) {
+	s.draftCursor = wizard.DraftResumeMsg{StepID: stepID, FieldKey: fieldKey}
+	s.draftLabel = label
+	s.SetConfigExists(s.configExists)
 }
 
 // SuppressesBadge hides the chrome's version badge on the blank-slate hub,
@@ -204,6 +218,31 @@ func (s *WelcomeStep) SelectedVerb() HubVerb {
 		return HubVerbQuit
 	}
 	return s.entries[i].verb
+}
+
+// PaletteTargets exposes hub actions without dispatching them.
+func (s *WelcomeStep) PaletteTargets() []wizard.PaletteTarget {
+	targets := make([]wizard.PaletteTarget, 0, len(s.entries))
+	for _, entry := range s.entries {
+		targets = append(targets, wizard.PaletteTarget{
+			ID:     strconv.Itoa(int(entry.verb)),
+			Kind:   "action",
+			Label:  entry.label,
+			Detail: "Select hub action",
+		})
+	}
+	return targets
+}
+
+// FocusPaletteTarget highlights a hub action without confirming it.
+func (s *WelcomeStep) FocusPaletteTarget(id string) tea.Cmd {
+	for i, entry := range s.entries {
+		if strconv.Itoa(int(entry.verb)) == id {
+			s.nav.Select(i)
+			break
+		}
+	}
+	return nil
 }
 
 // Init returns nil; the hub has no async startup work.
@@ -255,6 +294,10 @@ func (s *WelcomeStep) confirm() tea.Cmd {
 	}
 
 	verb := s.SelectedVerb()
+	if verb == HubVerbResumeDraft {
+		msg := s.draftCursor
+		return func() tea.Msg { return msg }
+	}
 	flow := s.flowFor(verb)
 	if flow == nil {
 		return func() tea.Msg { return wizard.StepCompleteMsg{StepID: wizard.StepIDWelcome} }
@@ -397,7 +440,7 @@ func (s *WelcomeStep) GetSelectedAction() wizard.Action {
 // configure flow, so confirming it leaves the wizard rather than advancing.
 func (s *WelcomeStep) ShouldExitEarly() bool {
 	switch s.SelectedVerb() {
-	case HubVerbEditConfig, HubVerbGetStarted:
+	case HubVerbEditConfig, HubVerbGetStarted, HubVerbResumeDraft:
 		return false
 	default:
 		return true

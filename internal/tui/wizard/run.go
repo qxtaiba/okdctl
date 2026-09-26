@@ -12,7 +12,13 @@ import (
 // RunFlow starts the bubbletea wizard with flow-specific chrome and blocks
 // until the user completes or cancels the flow.
 func RunFlow(ctx context.Context, steps []WizardStep, cfg *config.Config, chrome FlowChrome) (Result, error) {
+	return RunFlowWithDraft(ctx, steps, cfg, chrome, nil)
+}
+
+// RunFlowWithDraft runs a wizard and saves its cursor after each step transition.
+func RunFlowWithDraft(ctx context.Context, steps []WizardStep, cfg *config.Config, chrome FlowChrome, save func(*config.Config, StepID, string) error) (Result, error) {
 	model := NewFlowModel(steps, cfg, chrome)
+	model.draftSaver = save
 
 	p := tea.NewProgram(model,
 		tea.WithContext(ctx),

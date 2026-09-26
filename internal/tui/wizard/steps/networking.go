@@ -2,10 +2,16 @@ package steps
 
 import (
 	"errors"
+	"fmt"
+	"net"
+	"net/netip"
 	"strings"
+
+	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/netutil"
+	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
@@ -190,6 +196,155 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 }
 
 // NewNetworkingStep returns the networking wizard step.
-func NewNetworkingStep() *wizard.DataDrivenStep {
-	return wizard.NewDataDrivenStep(&NetworkingStepDefinition)
+func NewNetworkingStep(capacity ...*WizardCapacitySnapshot) *wizard.DataDrivenStep {
+	step := wizard.NewDataDrivenStep(&NetworkingStepDefinition)
+	if len(capacity) == 0 {
+		return step
+	}
+	snapshot := capacity[0]
+	step.WithExtraContentFunc("allocation preview", func(s *wizard.DataDrivenStep, _ int) string {
+		cpCount, workerCount, known := snapshot.counts()
+		if !known || snapshot.discovery == nil {
+			return ""
+		}
+		values := make(map[string]string, 8)
+		for _, key := range []string{"machine_cidr", fieldGateway, "start_ip", "bastion_ip", "vip"} {
+			values[key] = s.Value(key)
+		}
+		if snapshot.cfg != nil {
+			values["ignition_ip"] = snapshot.cfg.HTTPServer.IgnitionServerIP
+			if snapshot.cfg.Provider.Proxmox != nil {
+				values["proxmox_host"] = snapshot.cfg.Provider.Proxmox.Host
+			}
+		}
+		return renderNetworkAllocationPreview(values, cpCount, workerCount)
+	})
+	return step
+}
+
+func renderNetworkAllocationPreview(values map[string]string, controlPlaneCount, workerCount int) string {
+	warning := lipgloss.NewStyle().Foreground(tui.ColorWarning())
+	startText := values["start_ip"]
+	start, err := netip.ParseAddr(startText)
+	if err != nil || !start.Is4() {
+		return warning.Render("invalid start IP — allocation unavailable")
+	}
+	count := 1 + controlPlaneCount + workerCount
+	var rows []string
+	ips := make([]string, count)
+	for i := range count {
+		ip, calcErr := netutil.CalculateVMIP(startText, i)
+		if calcErr != nil {
+			return warning.Render("static IP allocation invalid — preview unavailable")
+		}
+		ips[i] = ip
+	}
+	rows = append(rows, "bootstrap "+ips[0])
+	if controlPlaneCount > 0 {
+		rows = append(rows, allocationGroup("masters", ips[1:1+controlPlaneCount]))
+	}
+	for i := 0; i < workerCount; i++ {
+		rows = append(rows, fmt.Sprintf("worker%d %s", i, ips[1+controlPlaneCount+i]))
+	}
+	cidr := values["machine_cidr"]
+	if config.ValidateCIDR(cidr) != nil {
+		rows = append(rows, warning.Render("invalid machine CIDR"))
+	} else {
+		if err := netutil.ValidateIPRangeInCIDR(startText, count, cidr); err != nil {
+			rows = append(rows, warning.Render("static IP range outside machine CIDR"))
+		}
+		if values[fieldGateway] != "" && config.ValidateGatewayInCIDR(values[fieldGateway], cidr) != nil {
+			rows = append(rows, warning.Render("gateway invalid for machine CIDR: "+values[fieldGateway]))
+		}
+	}
+	if explicit := values["vip"]; explicit != "" {
+		if _, err := netutil.ResolveVIP(explicit, startText); err != nil {
+			rows = append(rows, warning.Render("api vip invalid: "+explicit))
+		} else {
+			rows = append(rows, "api vip "+explicit)
+			if config.ValidateCIDR(cidr) == nil && !addressInCIDR(explicit, cidr) {
+				rows = append(rows, warning.Render("api vip outside machine CIDR: "+explicit))
+			}
+		}
+	} else if vip, err := netutil.ResolveVIP("", startText); err == nil {
+		rows = append(rows, "api vip "+vip+" (auto)")
+		if config.ValidateCIDR(cidr) == nil && !addressInCIDR(vip, cidr) {
+			rows = append(rows, warning.Render("api vip outside machine CIDR: "+vip))
+		}
+	}
+	if bastion := values["bastion_ip"]; bastion != "" {
+		if _, err := netip.ParseAddr(bastion); err != nil {
+			rows = append(rows, warning.Render("vm dns target invalid: "+bastion))
+		} else {
+			rows = append(rows, "vm dns → bastion "+bastion)
+			if config.ValidateCIDR(cidr) == nil && !addressInCIDR(bastion, cidr) {
+				rows = append(rows, warning.Render("bastion outside machine CIDR: "+bastion))
+			}
+		}
+	}
+	if gateway := values[fieldGateway]; gateway != "" {
+		if _, err := netip.ParseAddr(gateway); err != nil {
+			rows = append(rows, warning.Render("gateway invalid: "+gateway))
+		}
+	}
+	if collision := allocationCollision(ips, values[fieldGateway], values["bastion_ip"], allocationVIP(values, startText), values["ignition_ip"], proxmoxHostIP(values["proxmox_host"])); collision != "" {
+		rows = append(rows, warning.Render("collision at "+collision))
+	}
+	return strings.Join(rows, "\n")
+}
+
+func addressInCIDR(address, cidr string) bool {
+	addr, addrErr := netip.ParseAddr(address)
+	prefix, prefixErr := netip.ParsePrefix(cidr)
+	return addrErr == nil && prefixErr == nil && prefix.Contains(addr)
+}
+
+func proxmoxHostIP(host string) string {
+	host = strings.TrimPrefix(strings.TrimPrefix(host, "https://"), "http://")
+	if parsed, err := netip.ParseAddr(host); err == nil {
+		return parsed.String()
+	}
+	if name, _, err := net.SplitHostPort(host); err == nil {
+		if parsed, parseErr := netip.ParseAddr(name); parseErr == nil {
+			return parsed.String()
+		}
+	}
+	return ""
+}
+
+func allocationGroup(label string, ips []string) string {
+	if len(ips) == 1 {
+		return fmt.Sprintf("%s %s", strings.TrimSuffix(label, "s"), ips[0])
+	}
+	return fmt.Sprintf("%s %s–%s", label, ips[0], ips[len(ips)-1])
+}
+
+func allocationVIP(values map[string]string, start string) string {
+	vip, err := netutil.ResolveVIP(values["vip"], start)
+	if err != nil {
+		return ""
+	}
+	return vip
+}
+
+func allocationCollision(ips []string, reserved ...string) string {
+	used := make(map[netip.Addr]string, len(ips)+len(reserved))
+	for i, value := range ips {
+		addr, err := netip.ParseAddr(value)
+		if err != nil {
+			continue
+		}
+		used[addr] = fmt.Sprintf("vm %d", i)
+	}
+	for _, value := range reserved {
+		addr, err := netip.ParseAddr(value)
+		if err != nil || value == "" {
+			continue
+		}
+		if _, exists := used[addr]; exists {
+			return addr.String()
+		}
+		used[addr] = "reserved"
+	}
+	return ""
 }

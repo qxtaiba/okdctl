@@ -9,6 +9,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
+	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
@@ -60,7 +61,7 @@ func TestStatusStepProbesOnInitAndRendersTheBox(t *testing.T) {
 	}
 
 	body := s.View(70, 14)
-	for _, want := range []string{"CLUSTER STATUS", "Running", "homelab-master0", "workers"} {
+	for _, want := range []string{"CLUSTER STATUS", "Running", "homelab-master0", "worker"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("status body is missing %q:\n%s", want, body)
 		}
@@ -80,6 +81,27 @@ func TestStatusStepRefreshKeyReprobes(t *testing.T) {
 
 	if src.probes != 2 {
 		t.Errorf("source probed %d times after a refresh, want 2", src.probes)
+	}
+}
+
+func TestStatusStepRefreshFailureKeepsTheLastSnapshot(t *testing.T) {
+	src := &countingSource{status: statusFixture()}
+	s := NewStatusStep(src)
+	s.Update(s.Init()())
+	src.err = errors.New("probe timed out")
+
+	_, cmd := s.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
+	if cmd == nil {
+		t.Fatal("r must start another probe")
+	}
+	s.Update(cmd())
+
+	body := tuitest.StripANSI(s.View(80, 24))
+	tuitest.AssertFits(t, body, 80, 24)
+	for _, want := range []string{"refresh failed", "probe timed out", "homelab-master0"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("refresh failure view is missing %q:\n%s", want, body)
+		}
 	}
 }
 

@@ -264,6 +264,60 @@ func (f *MultiSectionForm) prevVisible(i int) int {
 	return -1
 }
 
+func (f *MultiSectionForm) FocusField(section, field int) tea.Cmd {
+	if section < 0 || section >= len(f.sections) || !f.sections[section].isVisible() {
+		return nil
+	}
+	group := f.sections[section].Group
+	if group == nil || group.Field(field) == nil {
+		return nil
+	}
+	f.currentSection = section
+	group.SetFocusIndex(field)
+	return group.Focus()
+}
+
+// PaletteTargets exposes visible field labels without their values.
+func (f *MultiSectionForm) PaletteTargets() []PaletteTarget {
+	var targets []PaletteTarget
+	for sectionIndex := range f.sections {
+		section := &f.sections[sectionIndex]
+		if !section.isVisible() || section.Group == nil {
+			continue
+		}
+		for fieldIndex, field := range section.Group.Fields() {
+			labeled, ok := field.(components.LabeledField)
+			if !ok {
+				continue
+			}
+			targets = append(targets, PaletteTarget{
+				ID:     fmt.Sprintf("%d.%d", sectionIndex, fieldIndex),
+				Kind:   "field",
+				Label:  labeled.FieldLabel(),
+				Detail: section.Title,
+			})
+		}
+	}
+	return targets
+}
+
+// FocusPaletteTarget moves focus to a visible field by its section and field indexes.
+func (f *MultiSectionForm) FocusPaletteTarget(id string) tea.Cmd {
+	sectionText, fieldText, ok := strings.Cut(id, ".")
+	if !ok {
+		return nil
+	}
+	section, err := strconv.Atoi(sectionText)
+	if err != nil {
+		return nil
+	}
+	field, err := strconv.Atoi(fieldText)
+	if err != nil {
+		return nil
+	}
+	return f.FocusField(section, field)
+}
+
 // Focus resets navigation to the first visible section and focuses it.
 func (f *MultiSectionForm) Focus() tea.Cmd {
 	f.currentSection = f.firstVisible()
@@ -520,8 +574,9 @@ type fieldLocation struct {
 type DataDrivenStep struct {
 	BaseStep
 
-	definition *StepDefinition
-	fieldKeys  map[string]fieldLocation
+	definition    *StepDefinition
+	draftFocusKey string
+	fieldKeys     map[string]fieldLocation
 
 	form *MultiSectionForm
 
@@ -529,6 +584,17 @@ type DataDrivenStep struct {
 	// via WithExtraContentFunc); customExtraContentTitle is its info card title.
 	customExtraContent      func(width int) string
 	customExtraContentTitle string
+	customPinnedFooter      func(width int) string
+}
+
+// PaletteTargets exposes the step's visible field labels without their values.
+func (s *DataDrivenStep) PaletteTargets() []PaletteTarget {
+	return s.form.PaletteTargets()
+}
+
+// FocusPaletteTarget moves focus to one of the step's visible fields.
+func (s *DataDrivenStep) FocusPaletteTarget(id string) tea.Cmd {
+	return s.form.FocusPaletteTarget(id)
 }
 
 // NewDataDrivenStep builds a DataDrivenStep from a StepDefinition.
@@ -723,9 +789,29 @@ func (s *DataDrivenStep) WithExtraContentFunc(title string, fn func(step *DataDr
 	return s
 }
 
+// WithPinnedFooterFunc renders step-specific live information in the help row.
+func (s *DataDrivenStep) WithPinnedFooterFunc(fn func(step *DataDrivenStep, width int) string) *DataDrivenStep {
+	s.customPinnedFooter = func(width int) string { return fn(s, width) }
+	return s
+}
+
+// PinnedFooter returns the configured footer row, or empty when unset.
+func (s *DataDrivenStep) PinnedFooter(width int) string {
+	if s.customPinnedFooter == nil {
+		return ""
+	}
+	return s.customPinnedFooter(width)
+}
+
 // Init focuses the first input group so the user can type immediately.
 func (s *DataDrivenStep) Init() tea.Cmd {
-	return s.form.Init()
+	if s.draftFocusKey == "" {
+		return s.form.Init()
+	}
+	loc := s.fieldKeys[s.draftFocusKey]
+	cmd := s.form.FocusField(loc.section, loc.field)
+	s.draftFocusKey = ""
+	return cmd
 }
 
 // SetFocused toggles step focus; when re-focused, focus returns to the
@@ -733,7 +819,7 @@ func (s *DataDrivenStep) Init() tea.Cmd {
 func (s *DataDrivenStep) SetFocused(focused bool) {
 	s.BaseStep.SetFocused(focused)
 	if focused {
-		_ = s.form.Focus() // Command executed during Init()
+		_ = s.form.Focus()
 		return
 	}
 	s.form.Blur()
@@ -819,6 +905,50 @@ func (s *DataDrivenStep) Apply(cfg *config.Config) error {
 		return s.definition.Apply(s, cfg)
 	}
 	return nil
+}
+
+// DraftFieldKey returns the focused field key when it does not identify a credential.
+func (s *DataDrivenStep) DraftFieldKey() string {
+	section := s.form.currentSection
+	group := s.form.currentGroup()
+	if group == nil {
+		return ""
+	}
+	index := group.FocusIndex()
+	for key, loc := range s.fieldKeys {
+		if loc.section == section && loc.field == index && s.draftSafeField(key) {
+			return key
+		}
+	}
+	return ""
+}
+
+// SetDraftFieldKey queues a safe field to focus when this step is resumed.
+func (s *DataDrivenStep) SetDraftFieldKey(fieldKey string) bool {
+	loc, ok := s.fieldKeys[fieldKey]
+	if !ok || !s.draftSafeField(fieldKey) || !s.form.sections[loc.section].isVisible() {
+		return false
+	}
+	s.draftFocusKey = fieldKey
+	return true
+}
+
+func (s *DataDrivenStep) draftSafeField(fieldKey string) bool {
+	lower := strings.ToLower(fieldKey)
+	for _, sensitive := range []string{"password", "secret", "token", "credential", "username"} {
+		if strings.Contains(lower, sensitive) {
+			return false
+		}
+	}
+	for sectionIdx := range s.definition.Sections {
+		for fieldIdx := range s.definition.Sections[sectionIdx].Fields {
+			field := &s.definition.Sections[sectionIdx].Fields[fieldIdx]
+			if field.Key == fieldKey {
+				return field.Type != FieldTypePassword
+			}
+		}
+	}
+	return false
 }
 
 // FocusedSpan reports the line range the focused field occupied in the last

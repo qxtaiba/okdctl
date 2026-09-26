@@ -20,6 +20,21 @@ func TestSelectField_ArrowsShownWhenBlurred(t *testing.T) {
 	}
 }
 
+func TestSelectField_DisplayOptionsKeepValues(t *testing.T) {
+	f := NewSelectField("node", []string{"pve1", "pve2"})
+	f.SetDisplayOptions([]string{"pve1 — 8c/32g", "pve2 — 16c/64g (offline)"})
+	f.SetDefault("pve1")
+	f.SetValue("pve2")
+	f.SetWidth(90)
+
+	if got := f.Value(); got != "pve2" {
+		t.Fatalf("Value() = %q, want saved value pve2", got)
+	}
+	if got := tuitest.StripANSI(f.View()); !strings.Contains(got, "pve2 — 16c/64g (offline)") {
+		t.Fatalf("View() = %q, want annotated display value", got)
+	}
+}
+
 func TestSelectField_BooleanRendersRadioPair(t *testing.T) {
 	f := NewSelectField("enable numa", []string{"yes", "no"})
 	f.SetWidth(90)

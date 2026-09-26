@@ -14,16 +14,23 @@ import (
 )
 
 type proxmoxNode struct {
-	Name   string
-	Status string // "online" or "offline"
-	CPUs   int
-	MemGB  int
+	Name         string
+	Status       string // "online" or "offline"
+	CPUs         int
+	CPUsKnown    bool
+	MemGB        int
+	MemKnown     bool
+	Storage      []proxmoxStorage
+	StorageKnown bool
+	Bridges      []proxmoxBridge
+	BridgesKnown bool
 }
 
 type proxmoxStorage struct {
-	Name    string
-	Content string // comma-separated: images, iso, backup, etc.
-	TotalGB int
+	Name       string
+	Content    string // comma-separated: images, iso, backup, etc.
+	TotalGB    int
+	TotalKnown bool
 }
 
 type proxmoxBridge struct {
@@ -79,10 +86,12 @@ func discoverProxmox(cfg *config.Config) (*proxmoxDiscovery, error) {
 	nodes := make([]proxmoxNode, 0, len(rawNodes))
 	for _, n := range rawNodes {
 		nodes = append(nodes, proxmoxNode{
-			Name:   n.Node,
-			Status: n.Status,
-			CPUs:   n.MaxCPU,
-			MemGB:  int(n.MaxMem / (1024 * 1024 * 1024)), //nolint:gosec // G115: uint64→int is safe for GB-scale memory
+			Name:      n.Node,
+			Status:    n.Status,
+			CPUs:      n.MaxCPU,
+			CPUsKnown: true,
+			MemGB:     int(n.MaxMem / (1024 * 1024 * 1024)), //nolint:gosec // G115: uint64→int is safe for GB-scale memory
+			MemKnown:  true,
 		})
 	}
 
@@ -96,7 +105,15 @@ func discoverProxmox(cfg *config.Config) (*proxmoxDiscovery, error) {
 		online = []string{nodes[0].Name}
 	}
 
-	storage, bridges, isos, heterogeneous := fetchClusterDetails(ctx, client, online)
+	storage, bridges, isos, heterogeneous, inventories := fetchClusterDetails(ctx, client, online)
+	for i := range nodes {
+		if inventory, ok := inventories[nodes[i].Name]; ok {
+			nodes[i].Storage = inventory.Storage
+			nodes[i].StorageKnown = inventory.StorageKnown
+			nodes[i].Bridges = inventory.Bridges
+			nodes[i].BridgesKnown = inventory.BridgesKnown
+		}
+	}
 
 	return &proxmoxDiscovery{
 		Nodes:         nodes,
@@ -113,22 +130,34 @@ func discoverProxmox(cfg *config.Config) (*proxmoxDiscovery, error) {
 // lands on; heterogeneous reports whether any two inventories differed. A
 // category whose fetch failed on a node (nil, best-effort) neither narrows
 // the result nor counts as a difference.
-func fetchClusterDetails(ctx context.Context, client *proxmox.Client, nodeNames []string) ([]proxmoxStorage, []proxmoxBridge, []string, bool) {
-	storage, bridges, isos := fetchNodeDetails(ctx, client, nodeNames[0])
+type proxmoxNodeInventory struct {
+	Storage      []proxmoxStorage
+	StorageKnown bool
+	Bridges      []proxmoxBridge
+	BridgesKnown bool
+	ISOs         []string
+}
+
+func fetchClusterDetails(ctx context.Context, client *proxmox.Client, nodeNames []string) ([]proxmoxStorage, []proxmoxBridge, []string, bool, map[string]proxmoxNodeInventory) {
+	inventories := make(map[string]proxmoxNodeInventory, len(nodeNames))
+	first := fetchNodeDetails(ctx, client, nodeNames[0])
+	inventories[nodeNames[0]] = first
+	storage, bridges, isos := first.Storage, first.Bridges, first.ISOs
 	heterogeneous := false
 
 	for _, nodeName := range nodeNames[1:] {
-		s, b, i := fetchNodeDetails(ctx, client, nodeName)
+		details := fetchNodeDetails(ctx, client, nodeName)
+		inventories[nodeName] = details
 		var differs bool
-		storage, differs = keepShared(storage, s, func(v proxmoxStorage) string { return v.Name })
+		storage, differs = keepShared(storage, details.Storage, func(v proxmoxStorage) string { return v.Name })
 		heterogeneous = heterogeneous || differs
-		bridges, differs = keepShared(bridges, b, func(v proxmoxBridge) string { return v.Name })
+		bridges, differs = keepShared(bridges, details.Bridges, func(v proxmoxBridge) string { return v.Name })
 		heterogeneous = heterogeneous || differs
-		isos, differs = keepShared(isos, i, func(v string) string { return v })
+		isos, differs = keepShared(isos, details.ISOs, func(v string) string { return v })
 		heterogeneous = heterogeneous || differs
 	}
 
-	return storage, bridges, isos, heterogeneous
+	return storage, bridges, isos, heterogeneous, inventories
 }
 
 // keepShared returns the elements of base whose key other also has, plus
@@ -157,24 +186,27 @@ func keepShared[T any](base, other []T, key func(T) string) ([]T, bool) {
 
 // fetchNodeDetails pulls storage/bridges/ISOs, best-effort — endpoint errors
 // are swallowed to nil slices rather than failing the whole discovery.
-func fetchNodeDetails(ctx context.Context, client *proxmox.Client, nodeName string) ([]proxmoxStorage, []proxmoxBridge, []string) {
+func fetchNodeDetails(ctx context.Context, client *proxmox.Client, nodeName string) proxmoxNodeInventory {
 	node, err := client.Node(ctx, nodeName)
 	if err != nil {
-		return nil, nil, nil
+		return proxmoxNodeInventory{}
 	}
 
 	var storage []proxmoxStorage
 	var isoStorageNames []string
+	storageKnown := false
 	if stores, err := node.Storages(ctx); err == nil {
+		storageKnown = true
 		storage = make([]proxmoxStorage, 0, len(stores))
 		for _, s := range stores {
 			if s.Enabled == 0 {
 				continue
 			}
 			storage = append(storage, proxmoxStorage{
-				Name:    s.Name,
-				Content: s.Content,
-				TotalGB: int(s.Total / (1024 * 1024 * 1024)), //nolint:gosec // G115: uint64→int is safe for GB-scale storage
+				Name:       s.Name,
+				Content:    s.Content,
+				TotalGB:    int(s.Total / (1024 * 1024 * 1024)), //nolint:gosec // G115: uint64→int is safe for GB-scale storage
+				TotalKnown: true,
 			})
 			if strings.Contains(s.Content, "iso") {
 				isoStorageNames = append(isoStorageNames, s.Name)
@@ -183,7 +215,9 @@ func fetchNodeDetails(ctx context.Context, client *proxmox.Client, nodeName stri
 	}
 
 	var bridges []proxmoxBridge
+	bridgesKnown := false
 	if nets, err := node.Networks(ctx, "bridge"); err == nil {
+		bridgesKnown = true
 		bridges = make([]proxmoxBridge, 0, len(nets))
 		for _, n := range nets {
 			bridges = append(bridges, proxmoxBridge{
@@ -210,7 +244,11 @@ func fetchNodeDetails(ctx context.Context, client *proxmox.Client, nodeName stri
 		}
 	}
 
-	return storage, bridges, isos
+	return proxmoxNodeInventory{
+		Storage: storage, StorageKnown: storageKnown,
+		Bridges: bridges, BridgesKnown: bridgesKnown,
+		ISOs: isos,
+	}
 }
 
 func classifyError(err error) error {

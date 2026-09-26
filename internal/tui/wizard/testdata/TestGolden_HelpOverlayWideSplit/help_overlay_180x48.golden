@@ -16,18 +16,18 @@
   │                                                                                                                                                                              │  
   │                                                                                                                                                                              │  
   │                                                                                                                                                                              │  
-  │                                                        ╭───────────────────────────────────────────────────────────╮                                                         │  
-  │                                                        │ key bindings                                              │                                                         │  
-  │                                                        │                                                           │                                                         │  
-  │                                                        │ screen                                                    │                                                         │  
-  │                                                        │   ↑↓ navigate                                             │                                                         │  
-  │                                                        │   enter confirm                                           │                                                         │  
-  │                                                        │                                                           │                                                         │  
-  │                                                        │ vim     j/k scroll • ctrl+d/u half page • gg/G top/bottom │                                                         │  
-  │                                                        │ global  esc back • ctrl+c quit • ? help                   │                                                         │  
-  │                                                        │                                                           │                                                         │  
-  │                                                        │ esc or ? closes                                           │                                                         │  
-  │                                                        ╰───────────────────────────────────────────────────────────╯                                                         │  
+  │                                            ╭───────────────────────────────────────────────────────────────────────────────────╮                                             │  
+  │                                            │ key bindings                                                                      │                                             │  
+  │                                            │                                                                                   │                                             │  
+  │                                            │ screen                                                                            │                                             │  
+  │                                            │   ↑↓ navigate                                                                     │                                             │  
+  │                                            │   enter confirm                                                                   │                                             │  
+  │                                            │                                                                                   │                                             │  
+  │                                            │ vim     j/k scroll • ctrl+d/u half page • gg/G top/bottom                         │                                             │  
+  │                                            │ global  esc back • ctrl+c quit • ? help • ctrl+k jump to a step, field, or action │                                             │  
+  │                                            │                                                                                   │                                             │  
+  │                                            │ esc or ? closes                                                                   │                                             │  
+  │                                            ╰───────────────────────────────────────────────────────────────────────────────────╯                                             │  
   │                                                                                                                                                                              │  
   │                                                                                                                                                                              │  
   │                                                                                                                                                                              │  

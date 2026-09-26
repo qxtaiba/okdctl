@@ -145,8 +145,9 @@ type Model struct {
 	// while set, next/previous route to review.
 	returnToReview bool
 
-	config *config.Config
-	chrome FlowChrome
+	config     *config.Config
+	chrome     FlowChrome
+	draftSaver func(*config.Config, StepID, string) error
 
 	// theme is the resolved Theme this frame renders with, injected at
 	// construction and re-resolved once when the terminal reports its
@@ -174,6 +175,11 @@ type Model struct {
 	// While true every key but ctrl+c (still the global quit guard), esc,
 	// and "?" itself (both close it) is inert — the overlay owns input.
 	helpOpen bool
+
+	paletteOpen     bool
+	paletteQuery    string
+	paletteSelected int
+	paletteMatches  []paletteMatch
 
 	// pendingG: a lone "g" is held one keystroke, completing the vim gg
 	// chord if the next key is "g" again and clearing otherwise.
@@ -464,6 +470,9 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case JumpToStepMsg:
 		return m.jumpToStep(msg.StepID)
 
+	case DraftResumeMsg:
+		return m.resumeDraft(msg)
+
 	case ErrorSetMsg:
 		m.err = msg.Error
 		return m, nil
@@ -527,6 +536,15 @@ func (m *Model) handleWizardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) 
 		if key.Matches(msg, m.keyMap.Help) || key.Matches(msg, m.keyMap.Back) {
 			m.helpOpen = false
 		}
+		return m, nil, true
+	}
+
+	if m.paletteOpen {
+		return m.handlePaletteKey(msg)
+	}
+
+	if msg.Code == 'k' && msg.Mod&tea.ModCtrl != 0 {
+		m.openPalette()
 		return m, nil, true
 	}
 

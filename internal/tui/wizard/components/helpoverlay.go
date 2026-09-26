@@ -18,6 +18,7 @@ import (
 var helpOverlayGlobalKeys = map[string]bool{
 	"esc":       true,
 	"ctrl+c":    true,
+	"ctrl+k":    true,
 	"pgup/pgdn": true,
 	"?":         true,
 }

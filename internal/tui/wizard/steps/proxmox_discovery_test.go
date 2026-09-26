@@ -89,6 +89,14 @@ func TestDiscoverProxmox_Success(t *testing.T) {
 	if got.Nodes[1].Name != "pve2" || got.Nodes[1].Status != "online" || got.Nodes[1].CPUs != 4 || got.Nodes[1].MemGB != 8 {
 		t.Errorf("Nodes[1] = %+v", got.Nodes[1])
 	}
+	if !got.Nodes[1].StorageKnown || len(got.Nodes[1].Storage) != 2 ||
+		got.Nodes[1].Storage[0].Name != "local" || got.Nodes[1].Storage[0].TotalGB != 100 {
+		t.Errorf("Nodes[1].Storage = %+v, known=%v", got.Nodes[1].Storage, got.Nodes[1].StorageKnown)
+	}
+	if !got.Nodes[1].BridgesKnown || len(got.Nodes[1].Bridges) != 1 ||
+		got.Nodes[1].Bridges[0].Name != "vmbr0" {
+		t.Errorf("Nodes[1].Bridges = %+v, known=%v", got.Nodes[1].Bridges, got.Nodes[1].BridgesKnown)
+	}
 
 	if len(got.Storage) != 2 {
 		t.Fatalf("len(Storage) = %d; want 2 (disabled storage excluded); got %+v", len(got.Storage), got.Storage)
@@ -267,16 +275,16 @@ func TestFetchNodeDetails_PartialFailure(t *testing.T) {
 	defer server.Close()
 
 	client := proxmox.NewClient(server.URL + "/api2/json")
-	storage, bridges, isos := fetchNodeDetails(context.Background(), client, "pve1")
+	details := fetchNodeDetails(context.Background(), client, "pve1")
 
-	if storage != nil {
-		t.Errorf("storage = %+v; want nil after storage endpoint 500", storage)
+	if details.StorageKnown || details.Storage != nil {
+		t.Errorf("storage = %+v known=%v; want unknown after storage endpoint 500", details.Storage, details.StorageKnown)
 	}
-	if len(bridges) != 1 || bridges[0].Name != "vmbr0" {
-		t.Errorf("bridges = %+v; want [{vmbr0 ...}] despite storage failure", bridges)
+	if !details.BridgesKnown || len(details.Bridges) != 1 || details.Bridges[0].Name != "vmbr0" {
+		t.Errorf("bridges = %+v known=%v; want [{vmbr0 ...}] despite storage failure", details.Bridges, details.BridgesKnown)
 	}
-	if isos != nil {
-		t.Errorf("isos = %+v; want nil (no iso-tagged storage)", isos)
+	if details.ISOs != nil {
+		t.Errorf("isos = %+v; want nil (no iso-tagged storage)", details.ISOs)
 	}
 }
 

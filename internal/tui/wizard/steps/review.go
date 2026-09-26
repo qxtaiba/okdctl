@@ -3,6 +3,7 @@ package steps
 import (
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/addon/catalog/flux"
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okdctl/internal/netutil"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
@@ -36,6 +38,11 @@ var reviewJumpOrder = []wizard.StepID{
 type ReviewStep struct {
 	wizard.BaseStep
 	cfg         *config.Config
+	saved       map[string]string
+	preflight   []reviewCheck
+	configPath  string
+	showPreview bool
+	capacity    *WizardCapacitySnapshot
 	actions     *components.CompactSelector
 	jumpTargets []wizard.JumpTarget
 }
@@ -64,9 +71,26 @@ func (s *ReviewStep) Init() tea.Cmd {
 // SetConfig stores the Config to be summarized on the review screen.
 func (s *ReviewStep) SetConfig(cfg *config.Config) {
 	s.cfg = cfg
+	s.preflight = reviewPreflight(cfg, s.capacity)
 }
 
-// Update handles digit-jump keys, action-selector navigation, and enter to confirm.
+// SetSavedConfig snapshots non-secret review values for the edit-config diff.
+func (s *ReviewStep) SetSavedConfig(cfg *config.Config) {
+	s.saved = reviewConfigSnapshot(cfg)
+}
+
+// SetConfigPath records the file the deploy action will read or write.
+func (s *ReviewStep) SetConfigPath(path string) {
+	s.configPath = path
+}
+
+// SetCapacity supplies the shared Proxmox inventory for the review preflight.
+func (s *ReviewStep) SetCapacity(capacity *WizardCapacitySnapshot) {
+	s.capacity = capacity
+	s.preflight = reviewPreflight(s.cfg, capacity)
+}
+
+// Update handles review shortcuts, action-selector navigation, and enter to confirm.
 func (s *ReviewStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	keyMsg, ok := msg.(tea.KeyPressMsg)
 	if !ok {
@@ -79,6 +103,10 @@ func (s *ReviewStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 			return s, func() tea.Msg { return wizard.JumpToStepMsg{StepID: id} }
 		}
 	}
+	if key.Matches(keyMsg, key.NewBinding(key.WithKeys("p"))) {
+		s.showPreview = !s.showPreview
+		return s, nil
+	}
 
 	if keyMsg.Code == tea.KeyEnter {
 		return s, func() tea.Msg { return wizard.StepCompleteMsg{StepID: wizard.StepIDReview} }
@@ -87,6 +115,15 @@ func (s *ReviewStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	var cmd tea.Cmd
 	s.actions, cmd = s.actions.Update(components.ArrowsAsVertical(keyMsg))
 	return s, cmd
+}
+
+// InterceptBack closes the install-config preview before navigating away.
+func (s *ReviewStep) InterceptBack() bool {
+	if !s.showPreview {
+		return false
+	}
+	s.showPreview = false
+	return true
 }
 
 // JumpOrder returns the steps a digit keypress may route to; see reviewJumpOrder.
@@ -175,10 +212,15 @@ func (s *ReviewStep) View(width, height int) string {
 	if s.cfg == nil {
 		return "no configuration to review"
 	}
+	if s.showPreview {
+		return s.renderInstallConfigPreview(width)
+	}
 
 	st := wizard.NewSectionStyles(width)
 	var content strings.Builder
 
+	content.WriteString(renderReviewPreflight(s.preflight, width))
+	content.WriteString(s.renderConfigChanges(width))
 	content.WriteString(s.renderClusterIdentity(&st))
 	content.WriteString(s.renderProxmox(&st))
 	content.WriteString(s.renderNodePlacement(&st))
@@ -189,6 +231,280 @@ func (s *ReviewStep) View(width, height int) string {
 	content.WriteString(s.renderAdvanced(&st))
 
 	return strings.TrimRight(content.String(), "\n")
+}
+
+// PaneContent summarizes preflight and deployment details beside the review.
+func (s *ReviewStep) PaneContent(width, height int) string {
+	if s.cfg == nil {
+		return ""
+	}
+	if s.showPreview {
+		return "Install-config preview\n\nSecrets are replaced with placeholders.\nUse ↑/↓ to inspect the full file.\nPress p or esc to return."
+	}
+	var lines []string
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText()).Render("PREFLIGHT"))
+	for _, check := range s.preflight {
+		line := tui.RenderFacts([]tui.FactRow{{Key: check.label, Value: check.status, Highlight: check.warning}}, &tui.FactLayout{
+			Leader: tui.FactLeaderPad, KeyWidth: 20, TotalWidth: max(width-2, 1), Styles: tui.DefaultFactStyles(),
+		})
+		for _, row := range line {
+			lines = append(lines, "  "+row)
+		}
+	}
+	lines = append(lines, "", lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText()).Render("DEPLOY PLAN"))
+	for _, row := range reviewPlanRows(s.cfg) {
+		lines = append(lines, tui.Truncate(row, width))
+	}
+	lines = append(lines, "", lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText()).Render("WRITES"))
+	path := s.configPath
+	if path == "" {
+		path = "okdctl.yaml"
+	}
+	lines = append(lines, tui.Truncate(path, width))
+	lines = append(lines, "", lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText()).Render("HEADLESS"))
+	command := reviewHeadlessCommand(path, s.cfg.Cluster.Name)
+	for _, row := range tui.WrapLines(command, width) {
+		lines = append(lines, row)
+	}
+	lines = append(lines, "", tui.DimStyle.Render("p preview install-config.yaml"))
+	if len(lines) > height {
+		lines = lines[:height]
+	}
+	return strings.Join(lines, "\n")
+}
+
+func reviewPlanRows(cfg *config.Config) []string {
+	cp := cfg.Topology.ControlPlane
+	workers := cfg.Topology.Workers
+	bootstrapCPU, bootstrapMemory := cp.CPU, cp.MemoryMB
+	if cfg.Topology.Bootstrap.CPU > 0 {
+		bootstrapCPU = cfg.Topology.Bootstrap.CPU
+	}
+	if cfg.Topology.Bootstrap.MemoryMB > 0 {
+		bootstrapMemory = cfg.Topology.Bootstrap.MemoryMB
+	}
+	bootstrapDisk := cp.DiskGB
+	if cfg.Topology.Bootstrap.DiskGB > 0 {
+		bootstrapDisk = cfg.Topology.Bootstrap.DiskGB
+	}
+	rows := [][]string{
+		{"bootstrap", "1", strconv.Itoa(bootstrapCPU), fmt.Sprintf("%d gb", bootstrapMemory/1024), fmt.Sprintf("%d gb", bootstrapDisk)},
+		{"masters", strconv.Itoa(cp.Count), strconv.Itoa(cp.CPU), fmt.Sprintf("%d gb", cp.MemoryMB/1024), fmt.Sprintf("%d gb", cp.DiskGB)},
+		{"workers", strconv.Itoa(workers.Count), strconv.Itoa(workers.CPU), fmt.Sprintf("%d gb", workers.MemoryMB/1024), fmt.Sprintf("%d gb", workers.DiskGB)},
+	}
+	columns := []tui.Column{
+		{Header: "role", MinWidth: 9, MaxWidth: 12},
+		{Header: "vms", Align: tui.AlignRight, MinWidth: 3},
+		{Header: "vcpu", Align: tui.AlignRight, MinWidth: 4},
+		{Header: "ram", Align: tui.AlignRight, MinWidth: 4},
+		{Header: "os disk", Align: tui.AlignRight, MinWidth: 7},
+	}
+	return tui.ColumnTable(columns, []tui.RowGroup{{Rows: rows}}, tui.TableOptions{Width: 58, Gap: 1})
+}
+
+func reviewHeadlessCommand(configPath, clusterName string) string {
+	return "okdctl deploy --config " + shellQuote(configPath) + " --yes --confirm-cluster " + shellQuote(clusterName)
+}
+
+func shellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
+}
+
+func (s *ReviewStep) renderInstallConfigPreview(width int) string {
+	hostPrefix := s.cfg.Networking.HostPrefix
+	if hostPrefix == 0 {
+		hostPrefix = 23
+	}
+	content, err := templates.RenderInstallConfig(&templates.InstallConfigData{
+		ClusterName: s.cfg.Cluster.Name, BaseDomain: s.cfg.Cluster.Domain,
+		MasterReplicas: s.cfg.Topology.ControlPlane.Count,
+		WorkerReplicas: s.cfg.Topology.Workers.Count,
+		ClusterCIDR:    s.cfg.Networking.PodCIDR, HostPrefix: hostPrefix,
+		MachineCIDR: s.cfg.Networking.MachineCIDR, ServiceCIDR: s.cfg.Networking.ServiceCIDR,
+		PullSecret: "[redacted]", SSHKey: "[redacted]", Architecture: runtime.GOARCH,
+	})
+	if err != nil {
+		return "install-config preview unavailable: " + err.Error()
+	}
+	lines := []string{"INSTALL-CONFIG PREVIEW · secrets redacted · p or esc to return"}
+	for _, source := range strings.Split(strings.TrimSuffix(content, "\n"), "\n") {
+		lines = append(lines, tui.WrapLines(source, width)...)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (s *ReviewStep) renderConfigChanges(width int) string {
+	if len(s.saved) == 0 {
+		return ""
+	}
+	current := reviewConfigSnapshot(s.cfg)
+	keys := make([]string, 0, len(s.saved)+len(current))
+	seen := make(map[string]struct{}, len(s.saved)+len(current))
+	for key := range s.saved {
+		seen[key] = struct{}{}
+	}
+	for key := range current {
+		seen[key] = struct{}{}
+	}
+	for key := range seen {
+		if s.saved[key] != current[key] {
+			keys = append(keys, key)
+		}
+	}
+	slices.Sort(keys)
+	if len(keys) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	header := lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText())
+	b.WriteString(header.Render(fmt.Sprintf("CONFIG CHANGES · %d", len(keys))))
+	b.WriteString("\n")
+	for _, key := range keys {
+		row := tui.RenderFacts([]tui.FactRow{{
+			Key:       reviewChangeLabel(key),
+			Value:     s.saved[key] + " → " + current[key],
+			Highlight: true,
+		}}, &tui.FactLayout{
+			Leader:     tui.FactLeaderPad,
+			KeyWidth:   min(24, max(width/3, 12)),
+			TotalWidth: max(width-2, 1),
+			Styles:     tui.DefaultFactStyles(),
+		})
+		for _, line := range row {
+			b.WriteString("  ")
+			b.WriteString(line)
+			b.WriteString("\n")
+		}
+	}
+	b.WriteString("\n")
+	return b.String()
+}
+
+func reviewConfigSnapshot(cfg *config.Config) map[string]string {
+	if cfg == nil {
+		return nil
+	}
+	values := map[string]string{
+		"provider.type":                      string(cfg.Provider.Type),
+		"cluster.domain":                     cfg.Cluster.Domain,
+		"cluster.name":                       cfg.Cluster.Name,
+		"distribution.type":                  string(cfg.Distribution.Type),
+		"distribution.version":               cfg.Distribution.Version,
+		"topology.vm_id_base":                strconv.Itoa(cfg.Topology.VMIDBase),
+		"topology.bootstrap.count":           strconv.Itoa(cfg.Topology.Bootstrap.Count),
+		"topology.bootstrap.vcpus":           strconv.Itoa(cfg.Topology.Bootstrap.CPU),
+		"topology.bootstrap.memory_mb":       strconv.Itoa(cfg.Topology.Bootstrap.MemoryMB),
+		"topology.bootstrap.disk_gb":         strconv.Itoa(cfg.Topology.Bootstrap.DiskGB),
+		"networking.machine_cidr":            cfg.Networking.MachineCIDR,
+		"networking.ntp_server":              cfg.Networking.NTPServer,
+		"networking.gateway":                 cfg.Networking.Gateway,
+		"networking.upstream_dns":            strings.Join(cfg.Networking.DNS, ", "),
+		"networking.pod_cidr":                cfg.Networking.PodCIDR,
+		"networking.service_cidr":            cfg.Networking.ServiceCIDR,
+		"networking.host_prefix":             strconv.Itoa(cfg.Networking.HostPrefix),
+		"networking.static_ip":               cfg.Networking.StaticIP.Start,
+		"networking.static_netmask":          cfg.Networking.StaticIP.Netmask,
+		"networking.static_interface":        cfg.Networking.StaticIP.Interface,
+		"networking.static_dns":              cfg.Networking.StaticIP.DNS,
+		"networking.bastion_ip":              cfg.Networking.Bastion.IP,
+		"networking.api_vip":                 cfg.Networking.Bastion.VIP,
+		"compute.control_plane.vcpus":        strconv.Itoa(cfg.Topology.ControlPlane.CPU),
+		"compute.control_plane.memory_mb":    strconv.Itoa(cfg.Topology.ControlPlane.MemoryMB),
+		"compute.control_plane.disk_gb":      strconv.Itoa(cfg.Topology.ControlPlane.DiskGB),
+		"compute.control_plane.count":        strconv.Itoa(cfg.Topology.ControlPlane.Count),
+		"compute.workers.vcpus":              strconv.Itoa(cfg.Topology.Workers.CPU),
+		"compute.workers.memory_mb":          strconv.Itoa(cfg.Topology.Workers.MemoryMB),
+		"compute.workers.disk_gb":            strconv.Itoa(cfg.Topology.Workers.DiskGB),
+		"compute.workers.count":              strconv.Itoa(cfg.Topology.Workers.Count),
+		"compute.worker_data_disk_gb":        strconv.Itoa(cfg.Disks.WorkerDataSizeGB),
+		"compute.control_plane_data_disk_gb": strconv.Itoa(cfg.Disks.ControlPlaneDataSizeGB),
+		"files.pull_secret_path":             cfg.Files.PullSecret,
+		"files.ssh_public_key_path":          cfg.Files.SSHPublicKey,
+		"files.web_root":                     cfg.HTTPServer.Root,
+		"files.ignition_server_ip":           cfg.HTTPServer.IgnitionServerIP,
+		"deployment.terraform_environment":   cfg.Deployment.TerraformEnv,
+		"deployment.auto_approve":            strconv.FormatBool(cfg.Deployment.AutoApprove),
+		"deployment.bootstrap_timeout":       strconv.Itoa(cfg.Deployment.BootstrapTimeout),
+		"deployment.install_timeout":         strconv.Itoa(cfg.Deployment.InstallTimeout),
+		"deployment.bin_dir":                 cfg.Deployment.BinDir,
+	}
+	if p := cfg.Provider.Proxmox; p != nil {
+		values["proxmox.host"] = p.Host
+		values["proxmox.bootstrap_node"] = p.Node
+		values["proxmox.storage"] = p.Storage
+		values["proxmox.data_storage"] = p.DataStorage
+		values["proxmox.iso_storage"] = p.ISOStorage
+		values["proxmox.fcos_iso"] = p.FCOSIso
+		values["proxmox.bridge"] = p.Bridge
+		values["proxmox.token_id"] = p.TokenID
+		values["proxmox.insecure"] = strconv.FormatBool(p.Insecure)
+		values["proxmox.insecure_http"] = strconv.FormatBool(p.InsecureHTTP)
+		values["proxmox.cpu_type"] = p.CPUType
+		values["proxmox.numa"] = strconv.FormatBool(p.NUMAEnabled)
+		values["proxmox.ha_anti_affinity"] = strconv.FormatBool(p.HAEnabled)
+		values["proxmox.control_plane_nodes"] = strings.Join(p.ControlPlaneNodes, ", ")
+		values["proxmox.worker_nodes"] = strings.Join(p.WorkerNodes, ", ")
+		values["proxmox.ssh_host_fingerprint"] = p.SSHHostFingerprint
+		values["proxmox.require_pinned_fingerprint"] = strconv.FormatBool(p.RequirePinnedFingerprint)
+		for i, network := range p.AdditionalNetworks {
+			key := fmt.Sprintf("proxmox.additional_networks.%d", i+1)
+			values[key] = fmt.Sprintf("%s / %s / vlan %d", network.Bridge, network.Model, network.VLANTag)
+		}
+	}
+	values["disks.control_plane_mon_size_gb"] = strconv.Itoa(cfg.Disks.ControlPlaneMonSizeGB)
+	for name, addon := range cfg.Addons {
+		values["addons."+name+".enabled"] = strconv.FormatBool(addon.Enabled)
+	}
+	return values
+}
+
+func reviewChangeLabel(key string) string {
+	labels := map[string]string{
+		"provider.type":  "provider",
+		"cluster.domain": "domain", "cluster.name": "cluster name",
+		"distribution.type": "distribution", "distribution.version": "version",
+		"topology.vm_id_base": "vm id base", "topology.bootstrap.count": "bootstrap count",
+		"topology.bootstrap.vcpus": "bootstrap vcpus", "topology.bootstrap.memory_mb": "bootstrap memory mb",
+		"topology.bootstrap.disk_gb": "bootstrap os disk gb",
+		"networking.machine_cidr":    "machine cidr", "networking.gateway": "gateway",
+		"networking.ntp_server":   "ntp server",
+		"networking.upstream_dns": "upstream dns", "networking.pod_cidr": "pod cidr",
+		"networking.service_cidr": "service cidr", "networking.host_prefix": "host prefix",
+		"networking.static_ip": "static ip start", "networking.static_netmask": "static ip netmask",
+		"networking.static_interface": "static ip interface", "networking.static_dns": "static ip dns",
+		"networking.bastion_ip": "bastion ip",
+		"networking.api_vip":    "api vip", "compute.control_plane.vcpus": "control plane vcpus",
+		"compute.control_plane.memory_mb": "control plane memory mb",
+		"compute.control_plane.disk_gb":   "control plane os disk gb",
+		"compute.control_plane.count":     "control plane count", "compute.workers.vcpus": "worker vcpus",
+		"compute.workers.memory_mb": "worker memory mb", "compute.workers.disk_gb": "worker os disk gb",
+		"compute.workers.count": "worker count", "compute.worker_data_disk_gb": "worker data disk gb",
+		"compute.control_plane_data_disk_gb": "control plane data disk gb",
+		"files.pull_secret_path":             "pull secret path", "files.ssh_public_key_path": "ssh key path",
+		"files.web_root": "web root", "files.ignition_server_ip": "ignition server ip",
+		"deployment.terraform_environment": "terraform environment", "deployment.auto_approve": "auto approve",
+		"deployment.bootstrap_timeout": "bootstrap timeout", "deployment.install_timeout": "install timeout",
+		"deployment.bin_dir": "binary directory",
+		"proxmox.host":       "proxmox host", "proxmox.bootstrap_node": "bootstrap node",
+		"proxmox.storage": "os storage", "proxmox.data_storage": "data storage",
+		"proxmox.iso_storage": "iso storage", "proxmox.fcos_iso": "fcos iso",
+		"proxmox.bridge": "network bridge", "proxmox.token_id": "token id",
+		"proxmox.insecure": "allow insecure tls", "proxmox.insecure_http": "allow insecure http",
+		"proxmox.cpu_type": "cpu type", "proxmox.numa": "numa",
+		"proxmox.ha_anti_affinity":    "ha anti-affinity",
+		"proxmox.control_plane_nodes": "control plane nodes", "proxmox.worker_nodes": "worker nodes",
+		"proxmox.ssh_host_fingerprint":       "ssh host fingerprint",
+		"proxmox.require_pinned_fingerprint": "require pinned fingerprint",
+		"disks.control_plane_mon_size_gb":    "control plane mon disk gb",
+	}
+	if strings.HasPrefix(key, "proxmox.additional_networks.") {
+		return strings.TrimPrefix(key, "proxmox.")
+	}
+	if strings.HasPrefix(key, "addons.") {
+		return strings.TrimSuffix(strings.TrimPrefix(key, "addons."), ".enabled") + " enabled"
+	}
+	return labels[key]
 }
 
 // PinnedFooter renders the deploy/save action selector inline on the help
@@ -576,7 +892,14 @@ func (s *ReviewStep) Apply(_ *config.Config) error {
 
 // ShortHelp returns the review step's help bar.
 func (s *ReviewStep) ShortHelp() []wizard.KeyBinding {
+	if s.showPreview {
+		return []wizard.KeyBinding{
+			{Key: "p/esc", Help: "close preview"},
+			{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
+		}
+	}
 	bindings := []wizard.KeyBinding{
+		{Key: "p", Help: "preview install config"},
 		{Key: wizard.HelpLeftRight, Help: wizard.HelpChoose},
 		{Key: wizard.HelpEnter, Help: wizard.HelpConfirm},
 		{Key: wizard.HelpEsc, Help: wizard.HelpBack},
@@ -587,10 +910,13 @@ func (s *ReviewStep) ShortHelp() []wizard.KeyBinding {
 	return append(bindings, wizard.KeyBinding{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit})
 }
 
-// SetFocused propagates focus to the action selector.
+// SetFocused refreshes local preflight checks when the review screen opens.
 func (s *ReviewStep) SetFocused(focused bool) {
 	s.BaseStep.SetFocused(focused)
 	s.actions.SetFocused(focused)
+	if focused {
+		s.preflight = reviewPreflight(s.cfg, s.capacity)
+	}
 }
 
 // GetSelectedAction returns the action the user chose on the review screen.
@@ -601,4 +927,23 @@ func (s *ReviewStep) GetSelectedAction() wizard.Action {
 	default:
 		return wizard.ActionExit
 	}
+}
+
+// PaletteTargets exposes review actions without dispatching them.
+func (s *ReviewStep) PaletteTargets() []wizard.PaletteTarget {
+	return []wizard.PaletteTarget{
+		{ID: "deploy", Kind: "action", Label: "deploy now", Detail: "Select review action"},
+		{ID: "save", Kind: "action", Label: "save and exit", Detail: "Select review action"},
+	}
+}
+
+// FocusPaletteTarget highlights a review action without confirming it.
+func (s *ReviewStep) FocusPaletteTarget(id string) tea.Cmd {
+	switch id {
+	case "deploy":
+		s.actions.Select(0)
+	case "save":
+		s.actions.Select(1)
+	}
+	return nil
 }

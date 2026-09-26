@@ -135,24 +135,33 @@ func configureScenarios() []configureScenario {
 }
 
 func newGoldenModel(t *testing.T) *wizard.Model {
+	m, _ := newGoldenModelWithCapacity(t)
+	return m
+}
+
+func newGoldenModelWithCapacity(t *testing.T) (*wizard.Model, *WizardCapacitySnapshot) {
 	t.Helper()
 	builder := wizard.NewStepBuilder()
 	RegisterAll(builder)
 	built := wizard.BuildSteps(wizard.DefaultConfig(), builder)
+	capacity, _ := built.States[wizard.StepTypeReview].(*WizardCapacitySnapshot)
 	cfg := config.DefaultConfig()
 	for _, step := range built.Steps {
 		if ds, ok := step.(*wizard.DataDrivenStep); ok {
 			ds.LoadFromConfig(cfg, false)
 		}
 	}
-	return wizard.NewFlowModel(built.Steps, cfg, Chrome())
+	capacity.cfg = cfg
+	return wizard.NewFlowModel(built.Steps, cfg, Chrome()), capacity
 }
 
 func demoDiscovery() *proxmoxDiscovery {
 	return &proxmoxDiscovery{
 		Nodes: []proxmoxNode{
-			{Name: "pve1", Status: "online", CPUs: 32, MemGB: 128},
-			{Name: "pve2", Status: "online", CPUs: 24, MemGB: 96},
+			{Name: "pve1", Status: "online", CPUs: 32, CPUsKnown: true, MemGB: 128, MemKnown: true,
+				Storage: demoNodeStorage(), StorageKnown: true, Bridges: demoNodeBridges(), BridgesKnown: true},
+			{Name: "pve2", Status: "online", CPUs: 24, CPUsKnown: true, MemGB: 96, MemKnown: true,
+				Storage: demoNodeStorage(), StorageKnown: true, Bridges: demoNodeBridges(), BridgesKnown: true},
 		},
 		Storage: []proxmoxStorage{
 			{Name: "local-lvm", Content: "images,rootdir", TotalGB: 1800},
@@ -175,9 +184,22 @@ func demoDiscovery() *proxmoxDiscovery {
 func demoDiscoverySingleNode() *proxmoxDiscovery {
 	disc := demoDiscovery()
 	disc.Nodes = []proxmoxNode{
-		{Name: "pve", Status: "online", CPUs: 32, MemGB: 128},
+		{Name: "pve", Status: "online", CPUs: 32, CPUsKnown: true, MemGB: 128, MemKnown: true,
+			Storage: demoNodeStorage(), StorageKnown: true, Bridges: demoNodeBridges(), BridgesKnown: true},
 	}
 	return disc
+}
+
+func demoNodeStorage() []proxmoxStorage {
+	return []proxmoxStorage{
+		{Name: "local-lvm", Content: "images,rootdir", TotalGB: 1800, TotalKnown: true},
+		{Name: "local", Content: "iso,backup,vztmpl", TotalGB: 200, TotalKnown: true},
+		{Name: "tank", Content: "images", TotalGB: 7200, TotalKnown: true},
+	}
+}
+
+func demoNodeBridges() []proxmoxBridge {
+	return []proxmoxBridge{{Name: "vmbr0", CIDR: "192.168.1.2/24"}, {Name: "vmbr1", CIDR: "10.10.0.1/24"}}
 }
 
 var goldenSizes = []struct {
@@ -230,6 +252,29 @@ func TestGolden_ConfigureSteps(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestCapacityWizardFramesFitAllTiers(t *testing.T) {
+	for _, size := range []struct{ width, height int }{{80, 24}, {100, 30}, {120, 40}, {150, 24}, {180, 48}} {
+		t.Run(fmt.Sprintf("%dx%d", size.width, size.height), func(t *testing.T) {
+			tui.SetTerminalWidth(size.width)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+			m, capacity := newGoldenModelWithCapacity(t)
+			capacity.discovery = demoDiscovery()
+			_ = tuitest.RenderAt(t, m, size.width, size.height)
+			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDNodePlacement})
+			m.Update(discoveryCompleteMsg{discovery: demoDiscovery()})
+			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDNetworking})
+			networkFrame := tuitest.RenderAt(t, m, size.width, size.height)
+			tuitest.AssertFits(t, networkFrame, size.width, size.height)
+			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDResources})
+			resourceFrame := tuitest.RenderAt(t, m, size.width, size.height)
+			tuitest.AssertFits(t, resourceFrame, size.width, size.height)
+			if !strings.Contains(tuitest.StripANSI(resourceFrame), "40 vcpu · 104 gb ram · 1850 gb disk") {
+				t.Fatalf("resource totals are not pinned in the %dx%d frame:\n%s", size.width, size.height, resourceFrame)
+			}
+		})
 	}
 }
 

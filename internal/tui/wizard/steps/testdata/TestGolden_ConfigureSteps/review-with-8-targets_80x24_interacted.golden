@@ -19,6 +19,6 @@
   │  terraform environment  production                                       │  
   │                                                                          │  
   │──────────── ↑ ↓  scroll up for more ──────────── ▸ okd 4.22.0-okd-scos.7 │  
-  │  ● deploy now   ○ save and exit     ←/→ choose … • ctrl+c quit • ? help  │  
+  │  ● deploy now   ○ save and exit                    ctrl+c quit • ? help  │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

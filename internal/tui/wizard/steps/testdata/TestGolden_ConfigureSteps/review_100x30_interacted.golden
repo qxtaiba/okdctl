@@ -3,6 +3,11 @@
   │ O K D C T L                                                                                  │  
   │ review your configuration                                connect · cluster · extras · review │  
   │──────────────────────────────────────────────────────────────────────────────────────────────│  
+  │  PREFLIGHT                                                                                   │  
+  │    pull secret         not configured                                                        │  
+  │    ssh public key      not configured                                                        │  
+  │    CIDR ranges         no overlap                                                            │  
+  │                                                                                              │  
   │  [1] cluster identity                                                                        │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
   │  name          mycluster                                                                     │  
@@ -18,13 +23,8 @@
   │  iso storage     local                                                                       │  
   │                                                                                              │  
   │  [3] networking                                                                              │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
-  │  machine cidr     192.168.1.0/24                                                             │  
-  │  gateway          192.168.1.1                                                                │  
-  │  upstream dns     192.168.1.1                                                                │  
-  │  bastion          192.168.1.20                                                               │  
   │                                                                                              │  
   │───────────────────── ↑ ↓  scroll down for more ───────────────────── ▸ okd 4.22.0-okd-scos.7 │  
-  │  ○ deploy now   ● save and exit         ←/→ choose • enter confirm … • ctrl+c quit • ? help  │  
+  │  ○ deploy now   ● save and exit           p preview install config … • ctrl+c quit • ? help  │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                     

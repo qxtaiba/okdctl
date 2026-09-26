@@ -13,10 +13,11 @@ import (
 // SelectField is a dropdown-style field that cycles options with left/right
 // keys, rendered in the shared field box.
 type SelectField struct {
-	Label   string
-	Help    string
-	Note    string
-	Options []string
+	Label          string
+	Help           string
+	Note           string
+	Options        []string
+	displayOptions []string
 
 	selected   int
 	injected   int // index of the option SetValue injected for an off-list value, or -1
@@ -42,6 +43,15 @@ func (f *SelectField) Value() string {
 		return f.Options[f.selected]
 	}
 	return ""
+}
+
+// SetDisplayOptions annotates choices in the view while preserving their values.
+func (f *SelectField) SetDisplayOptions(options []string) {
+	if len(options) != len(f.Options) {
+		f.displayOptions = nil
+		return
+	}
+	f.displayOptions = append(f.displayOptions[:0], options...)
 }
 
 // FieldLabel returns the field's label.
@@ -201,6 +211,9 @@ func (f *SelectField) nominalBoxWidth() int {
 	}
 	widest := 0
 	for i, opt := range f.Options {
+		if len(f.displayOptions) == len(f.Options) {
+			opt = f.displayOptions[i]
+		}
 		w := lipgloss.Width(opt)
 		if i == f.injected {
 			w += lipgloss.Width(" current")
@@ -231,6 +244,9 @@ func (f *SelectField) boxOuterWidth() int {
 // "current" tag so the operator can tell it apart from the offered list.
 func (f *SelectField) arrowContent() string {
 	value := f.Value()
+	if f.selected >= 0 && f.selected < len(f.displayOptions) && len(f.displayOptions) == len(f.Options) {
+		value = f.displayOptions[f.selected]
+	}
 	if f.selected == f.injected && f.injected >= 0 {
 		value += " " + tagStyle.Render("current")
 	}

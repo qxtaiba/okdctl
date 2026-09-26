@@ -6,6 +6,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
+	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/lifecycle"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/steps"
 )
@@ -35,6 +36,66 @@ func TestDemoClusterStatusCarriesNoCredentials(t *testing.T) {
 	}
 	if st.Nodes[0].Role != nodetypes.RoleMaster {
 		t.Errorf("first node role = %q, want master", st.Nodes[0].Role)
+	}
+}
+
+func TestReviewDiffBaselineRequiresAnExistingConfig(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		configExists bool
+		wantDiff     bool
+	}{
+		{name: "fresh defaults"},
+		{name: "saved config", configExists: true, wantDiff: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := config.DefaultConfig()
+			wizardCfg := wizard.DefaultConfig()
+			wizardCfg.InitialConfig = cfg
+			wizardCfg.ConfigExists = tc.configExists
+			built := buildWizardStepsWithState(wizardCfg)
+			var review *steps.ReviewStep
+			for _, step := range built.Steps {
+				if candidate, ok := step.(*steps.ReviewStep); ok {
+					review = candidate
+					break
+				}
+			}
+			if review == nil {
+				t.Fatal("buildWizardStepsWithState returned no review step")
+			}
+			cfg.Cluster.Domain = "changed.example"
+			got := strings.Contains(review.View(100, 100), "CONFIG CHANGES")
+			if got != tc.wantDiff {
+				t.Errorf("review diff = %v, want %v", got, tc.wantDiff)
+			}
+		})
+	}
+}
+
+func TestReviewDiffKeepsTheSavedBaselineWhenResumingDraft(t *testing.T) {
+	saved := config.DefaultConfig()
+	saved.Cluster.Domain = "original.example"
+	draft := config.DefaultConfig()
+	draft.Cluster.Domain = "draft.example"
+	wizardCfg := wizard.DefaultConfig()
+	wizardCfg.InitialConfig = draft
+	wizardCfg.ReviewBaseline = saved
+	wizardCfg.ConfigExists = true
+	built := buildWizardStepsWithState(wizardCfg)
+	var review *steps.ReviewStep
+	for _, step := range built.Steps {
+		if candidate, ok := step.(*steps.ReviewStep); ok {
+			review = candidate
+			break
+		}
+	}
+	if review == nil {
+		t.Fatal("buildWizardStepsWithState returned no review step")
+	}
+	out := strings.ReplaceAll(review.View(100, 100), "\r", "")
+	if !strings.Contains(out, "original.example → draft.example") {
+		t.Fatalf("review omitted the saved-to-draft change:\n%s", out)
 	}
 }
 
