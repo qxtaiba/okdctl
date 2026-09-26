@@ -584,6 +584,7 @@ type DataDrivenStep struct {
 	definition    *StepDefinition
 	draftFocusKey string
 	fieldKeys     map[string]fieldLocation
+	history       *components.FieldHistory
 
 	form *MultiSectionForm
 
@@ -606,11 +607,11 @@ func (s *DataDrivenStep) FocusPaletteTarget(id string) tea.Cmd {
 
 // NewDataDrivenStep builds a DataDrivenStep from a StepDefinition.
 func NewDataDrivenStep(def *StepDefinition) *DataDrivenStep {
-	history := components.NewFieldHistory(8)
 	step := &DataDrivenStep{
 		BaseStep:   NewBaseStepWithDisplayTitle(def.ID, def.Title, def.DisplayTitle, def.Description),
 		definition: def,
 		fieldKeys:  make(map[string]fieldLocation),
+		history:    components.NewFieldHistory(8),
 	}
 
 	sections := make([]FormSection, 0, len(def.Sections))
@@ -622,7 +623,7 @@ func NewDataDrivenStep(def *StepDefinition) *DataDrivenStep {
 			fieldDef := &sectionDef.Fields[fieldIdx]
 			field := buildFormField(fieldDef)
 			if input, ok := field.(*components.InputField); ok && safeFieldHistory(fieldDef) {
-				input.SetHistory(history, string(def.ID)+"."+fieldDef.Key)
+				input.SetHistory(step.history, string(def.ID)+"/"+fieldDef.Key)
 			}
 			fields = append(fields, field)
 			step.fieldKeys[fieldDef.Key] = fieldLocation{
@@ -654,8 +655,46 @@ func NewDataDrivenStep(def *StepDefinition) *DataDrivenStep {
 	return step
 }
 
+// SetFieldHistory restores safe prior values for configured form fields.
+func (s *DataDrivenStep) SetFieldHistory(values map[string][]string) {
+	known := make(map[string][]string)
+	for key := range s.fieldKeys {
+		_, ok := s.getField(key).(*components.InputField)
+		if !ok || !safeFieldHistory(fieldDefinition(s.definition, key)) {
+			continue
+		}
+		id := string(s.ID()) + "/" + key
+		if entries, exists := values[id]; exists {
+			known[id] = entries
+		}
+	}
+	s.history = components.NewFieldHistoryFrom(known)
+	for key := range s.fieldKeys {
+		fieldDef := fieldDefinition(s.definition, key)
+		if field, ok := s.getField(key).(*components.InputField); ok && safeFieldHistory(fieldDef) {
+			field.SetHistory(s.history, string(s.ID())+"/"+key)
+		}
+	}
+}
+
+// FieldHistory returns safe prior values keyed by stable field ID.
+func (s *DataDrivenStep) FieldHistory() map[string][]string {
+	return s.history.Snapshot()
+}
+
+func fieldDefinition(def *StepDefinition, key string) *FieldDefinition {
+	for section := range def.Sections {
+		for field := range def.Sections[section].Fields {
+			if def.Sections[section].Fields[field].Key == key {
+				return &def.Sections[section].Fields[field]
+			}
+		}
+	}
+	return nil
+}
+
 func safeFieldHistory(def *FieldDefinition) bool {
-	if def.Type == FieldTypePassword || logutil.KeyIsSecret(def.Key) {
+	if def == nil || def.Type == FieldTypePassword || logutil.KeyIsSecret(def.Key) {
 		return false
 	}
 	lower := strings.ToLower(def.Key)
@@ -888,6 +927,10 @@ func (s *DataDrivenStep) ConsumesTextInput() bool {
 func (s *DataDrivenStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 	cmd, enterPressed := s.form.Update(msg)
 	if !enterPressed {
+		switch msg.(type) {
+		case tea.KeyPressMsg, tea.PasteMsg:
+			return s, tea.Batch(cmd, func() tea.Msg { return ConfigSyncMsg{StepID: s.ID()} })
+		}
 		return s, cmd
 	}
 

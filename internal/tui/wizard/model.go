@@ -145,9 +145,10 @@ type Model struct {
 	// while set, next/previous route to review.
 	returnToReview bool
 
-	config     *config.Config
-	chrome     FlowChrome
-	draftSaver func(*config.Config, StepID, string) error
+	config          *config.Config
+	chrome          FlowChrome
+	draftSaver      func(*config.Config, StepID, string) error
+	draftStateSaver func(*config.Config, StepID, string, map[string][]string) error
 
 	// theme is the resolved Theme this frame renders with, injected at
 	// construction and re-resolved once when the terminal reports its
@@ -488,10 +489,21 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case ConfigSyncMsg:
-		if len(m.steps) > 0 && m.currentStep >= 0 && m.currentStep < len(m.steps) {
-			if a, ok := m.steps[m.currentStep].(ConfigApplier); ok {
-				_ = a.Apply(m.config)
+		if len(m.steps) == 0 || m.currentStep < 0 || m.currentStep >= len(m.steps) || msg.StepID != m.steps[m.currentStep].ID() {
+			return m, nil
+		}
+		if a, ok := m.steps[m.currentStep].(ConfigApplier); ok {
+			if err := a.Apply(m.config); err != nil {
+				m.err = err
+				return m, nil
 			}
+		}
+		if isConfigDraftStep(msg.StepID) {
+			fieldKey := ""
+			if cursor, ok := m.steps[m.currentStep].(interface{ DraftFieldKey() string }); ok {
+				fieldKey = cursor.DraftFieldKey()
+			}
+			m.saveDraft(msg.StepID, fieldKey)
 		}
 		return m, nil
 	}

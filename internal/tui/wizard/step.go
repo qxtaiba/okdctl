@@ -262,9 +262,7 @@ type BottomNotifiable interface {
 	NotifyViewportAtBottom()
 }
 
-// ConfigSyncMsg requests step.Apply(cfg) on the active step without
-// advancing, so a step can publish a tentative selection (e.g. a status
-// badge) while still focused.
+// ConfigSyncMsg applies the active step without advancing and persists its draft state.
 type ConfigSyncMsg struct {
 	StepID StepID
 }

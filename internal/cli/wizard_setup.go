@@ -67,6 +67,7 @@ func runWizardWithMode(cmd *cobra.Command, cfg *config.Config, configExists bool
 	built := buildWizardStepsWithState(wizardCfg)
 	if hasDraft {
 		configureDraftResume(built, draft, time.Now())
+		configureDraftHistory(built, draft.FieldHistory)
 	}
 
 	var hub *steps.WelcomeStep
@@ -84,8 +85,8 @@ func runWizardWithMode(cmd *cobra.Command, cfg *config.Config, configExists bool
 		}
 	}
 
-	result, err := runHubSessionWithDraft(cmd, built.Steps, cfg, func(cfg *config.Config, stepID wizard.StepID, fieldKey string) error {
-		return wizarddraft.New(configPath).Save(cfg, wizarddraft.Cursor{StepID: stepID, FieldKey: fieldKey}, time.Now())
+	result, err := runHubSessionWithDraftState(cmd, built.Steps, cfg, func(cfg *config.Config, stepID wizard.StepID, fieldKey string, history map[string][]string) error {
+		return wizarddraft.New(configPath).SaveWithHistory(cfg, wizarddraft.Cursor{StepID: stepID, FieldKey: fieldKey}, history, time.Now())
 	})
 
 	// take before anything else reads it: a quit can land while the manage
@@ -112,6 +113,14 @@ func runWizardWithMode(cmd *cobra.Command, cfg *config.Config, configExists bool
 	return outcome, err
 }
 
+func configureDraftHistory(built wizard.BuiltSteps, history map[string][]string) {
+	for _, step := range built.Steps {
+		if restorer, ok := step.(interface{ SetFieldHistory(map[string][]string) }); ok {
+			restorer.SetFieldHistory(history)
+		}
+	}
+}
+
 func runHubSessionWithDraft(cmd *cobra.Command, flowSteps []wizard.WizardStep, cfg *config.Config, save func(*config.Config, wizard.StepID, string) error) (wizard.Result, error) {
 	restoreLogs := logutil.Redirect(subprocSink())
 	defer restoreLogs()
@@ -121,6 +130,15 @@ func runHubSessionWithDraft(cmd *cobra.Command, flowSteps []wizard.WizardStep, c
 	defer logutil.SetProgressBarsEnabled(progressBars)
 
 	return wizard.RunFlowWithDraft(cmd.Context(), flowSteps, cfg, steps.Chrome(), save)
+}
+
+func runHubSessionWithDraftState(cmd *cobra.Command, flowSteps []wizard.WizardStep, cfg *config.Config, save func(*config.Config, wizard.StepID, string, map[string][]string) error) (wizard.Result, error) {
+	restoreLogs := logutil.Redirect(subprocSink())
+	defer restoreLogs()
+	progressBars := logutil.ProgressBarsEnabled()
+	logutil.SetProgressBarsEnabled(false)
+	defer logutil.SetProgressBarsEnabled(progressBars)
+	return wizard.RunFlowWithDraftState(cmd.Context(), flowSteps, cfg, steps.Chrome(), save)
 }
 
 // hubFlows builds the hub's in-process flow providers. Each is called at the

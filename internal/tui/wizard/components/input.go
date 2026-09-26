@@ -194,6 +194,11 @@ func (f *InputField) SetHistory(history *FieldHistory, id string) {
 	}
 }
 
+// SetFieldHistory binds a safe stable field ID to its recall history.
+func (f *InputField) SetFieldHistory(id string, history *FieldHistory) {
+	f.SetHistory(history, id)
+}
+
 // HistoryChooserOpen reports whether the inline value chooser is active.
 func (f *InputField) HistoryChooserOpen() bool { return f.historyOpen }
 
@@ -384,6 +389,9 @@ func (f *InputField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 
 	var cmd tea.Cmd
 	f.input, cmd = f.input.Update(msg)
+	if f.history != nil && !f.Password && f.focusValue != f.input.Value() {
+		f.history.add(f.historyID, f.focusValue)
+	}
 
 	return f, cmd
 }

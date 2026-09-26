@@ -382,14 +382,12 @@ func (m *Model) focusStep(idx int) (tea.Model, tea.Cmd) {
 		f.SetFocused(true)
 	}
 	initCmd := m.steps[idx].Init()
-	if m.draftSaver != nil && isConfigDraftStep(m.steps[idx].ID()) {
+	if (m.draftSaver != nil || m.draftStateSaver != nil) && isConfigDraftStep(m.steps[idx].ID()) {
 		fieldKey := ""
 		if cursor, ok := m.steps[idx].(interface{ DraftFieldKey() string }); ok {
 			fieldKey = cursor.DraftFieldKey()
 		}
-		if err := m.draftSaver(m.config, m.steps[idx].ID(), fieldKey); err != nil {
-			m.err = fmt.Errorf("save wizard draft: %w", err)
-		}
+		m.saveDraft(m.steps[idx].ID(), fieldKey)
 	}
 
 	m.syncJumpTargets()
@@ -402,6 +400,26 @@ func (m *Model) focusStep(idx int) (tea.Model, tea.Cmd) {
 	}
 
 	return m, initCmd
+}
+
+func (m *Model) saveDraft(stepID StepID, fieldKey string) {
+	var err error
+	if m.draftStateSaver != nil {
+		history := make(map[string][]string)
+		for _, step := range m.steps {
+			if provider, ok := step.(interface{ FieldHistory() map[string][]string }); ok {
+				for id, values := range provider.FieldHistory() {
+					history[id] = values
+				}
+			}
+		}
+		err = m.draftStateSaver(m.config, stepID, fieldKey, history)
+	} else if m.draftSaver != nil {
+		err = m.draftSaver(m.config, stepID, fieldKey)
+	}
+	if err != nil {
+		m.err = fmt.Errorf("save wizard draft: %w", err)
+	}
 }
 
 func isConfigDraftStep(id StepID) bool {

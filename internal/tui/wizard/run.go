@@ -17,8 +17,18 @@ func RunFlow(ctx context.Context, steps []WizardStep, cfg *config.Config, chrome
 
 // RunFlowWithDraft runs a wizard and saves its cursor after each step transition.
 func RunFlowWithDraft(ctx context.Context, steps []WizardStep, cfg *config.Config, chrome FlowChrome, save func(*config.Config, StepID, string) error) (Result, error) {
+	return runFlow(ctx, steps, cfg, chrome, save, nil)
+}
+
+// RunFlowWithDraftState runs a wizard and persists cursor and safe field history on edits.
+func RunFlowWithDraftState(ctx context.Context, steps []WizardStep, cfg *config.Config, chrome FlowChrome, save func(*config.Config, StepID, string, map[string][]string) error) (Result, error) {
+	return runFlow(ctx, steps, cfg, chrome, nil, save)
+}
+
+func runFlow(ctx context.Context, steps []WizardStep, cfg *config.Config, chrome FlowChrome, save func(*config.Config, StepID, string) error, saveState func(*config.Config, StepID, string, map[string][]string) error) (Result, error) {
 	model := NewFlowModel(steps, cfg, chrome)
 	model.draftSaver = save
+	model.draftStateSaver = saveState
 
 	p := tea.NewProgram(model,
 		tea.WithContext(ctx),
