@@ -10,7 +10,6 @@
   │                                                                                                                                                                              │  
   │                                                                                                                                                                              │  
   │                                                                                                                                                                              │  
-  │                                                                                                                                                                              │  
   │                                       ████████████    ████      ████  ████████████      ████████████  ████████████████  ████                                                 │  
   │                                       ████████████    ████      ████  ████████████      ████████████  ████████████████  ████                                                 │  
   │                                     ████        ████  ████    ████    ████      ████  ████                  ████        ████                                                 │  
@@ -25,12 +24,13 @@
   │                                                           prod-cluster · okd 4.20.1-okd-scos.7 · 6 nodes · deployed                                                          │  
   │                                                                                                                                                                              │  
   │                               ▸ [d] deploy            ╭─ LIVE OPERATIONS ────────────────────────────────────────────────────────────────────╮                               │  
-  │                                 [e] edit config       │API reachable                                                                         │                               │  
+  │                                 [e] edit config       │API reachable · 47ms                                                                  │                               │  
   │                                 [n] manage nodes      │Nodes 6/6 ready · 3 master · 3 worker                                                 │                               │  
   │                                 [s] cluster status    │Operators 0 degraded                                                                  │                               │  
-  │                                     destroy           │Updated 15:04:05 UTC                                                                  │                               │  
+  │                                     destroy           │Last recorded run prod-cluster · run-demo-123 · 2h ago                                │                               │  
+  │                                                       │Updated 15:04:05 UTC                                                                  │                               │  
+  │                                                       │s open full cluster status                                                            │                               │  
   │                                                       ╰──────────────────────────────────────────────────────────────────────────────────────╯                               │  
-  │                                                                                                                                                                              │  
   │                                                                                                                                                                              │  
   │                                                                                                                                                                              │  
   │                                                                                                                                                                              │  

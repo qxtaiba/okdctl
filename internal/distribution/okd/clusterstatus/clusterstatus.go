@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
+	"time"
 
 	"github.com/qxtaiba/okdctl/internal/addon"
 	"github.com/qxtaiba/okdctl/internal/cluster"
@@ -135,14 +137,17 @@ func ParseNode(data []byte) (okd.NodeStatus, error) {
 func Collect(ctx context.Context, cl Client, verifier AddonVerifier, src LifecycleSources) okd.ClusterStatus {
 	apiOK := false
 	apiAvailable := cl != nil
+	var apiLatency time.Duration
 	var nodes []okd.NodeStatus
 	nodesAvailable := false
 	degraded := 0
 	operatorsAvailable := false
 	if cl != nil {
+		started := time.Now()
 		if _, ocErr := cl.RawGet(ctx, "/healthz"); ocErr == nil {
 			apiOK = true
 		}
+		apiLatency = time.Since(started)
 		nodes, nodesAvailable = collectNodes(ctx, cl)
 		degraded, operatorsAvailable = countDegraded(ctx, cl)
 	}
@@ -157,16 +162,70 @@ func Collect(ctx context.Context, cl Client, verifier AddonVerifier, src Lifecyc
 		addonEntries = append(addonEntries, e)
 	}
 
-	return okd.ClusterStatus{
-		Phase:              derivePhase(ctx, apiOK, nodes, degraded, src),
-		APIReachable:       apiOK,
-		APIAvailable:       apiAvailable,
-		Nodes:              nodes,
-		DegradedOperators:  degraded,
-		Addons:             addonEntries,
-		NodesAvailable:     nodesAvailable,
-		OperatorsAvailable: operatorsAvailable,
+	status := okd.ClusterStatus{
+		Phase:               derivePhase(ctx, apiOK, nodes, degraded, src),
+		APIReachable:        apiOK,
+		APIAvailable:        apiAvailable,
+		APILatencyAvailable: apiAvailable,
+		APILatency:          apiLatency,
+		Nodes:               nodes,
+		DegradedOperators:   degraded,
+		Addons:              addonEntries,
+		NodesAvailable:      nodesAvailable,
+		OperatorsAvailable:  operatorsAvailable,
 	}
+	if client, ok := cl.(*cluster.Client); ok {
+		lastRun := readLastDeployRun(client.Kubeconfig, "")
+		status.LastDeployRunID, status.LastDeployCluster, status.LastDeployAt = lastRun.RunID, lastRun.ClusterName, lastRun.At
+	}
+	return status
+}
+
+const (
+	stepHistoryFileName = ".okdctl-step-history.json"
+	stepHistoryVersion  = "v1"
+)
+
+type lastDeployRun struct {
+	RunID       string
+	ClusterName string
+	At          time.Time
+}
+
+type deployHistoryHeader struct {
+	SchemaVersion string    `json:"schema_version"`
+	RunID         string    `json:"run_id"`
+	Timestamp     time.Time `json:"timestamp"`
+	ClusterName   string    `json:"cluster_name"`
+}
+
+func readLastDeployRun(kubeconfig, clusterName string) lastDeployRun {
+	const suffix = "cluster-config/auth/kubeconfig"
+	clean := filepath.Clean(kubeconfig)
+	if !strings.HasSuffix(filepath.ToSlash(clean), "/"+suffix) {
+		return lastDeployRun{}
+	}
+	workDir := filepath.Dir(filepath.Dir(filepath.Dir(clean)))
+	if filepath.Base(workDir) != workspace.WorkDirName {
+		return lastDeployRun{}
+	}
+	path := filepath.Join(workDir, stepHistoryFileName)
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
+		return lastDeployRun{}
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return lastDeployRun{}
+	}
+	var history deployHistoryHeader
+	if json.Unmarshal(data, &history) != nil || history.SchemaVersion != stepHistoryVersion || history.RunID == "" || history.Timestamp.IsZero() || history.ClusterName == "" {
+		return lastDeployRun{}
+	}
+	if clusterName != "" && history.ClusterName != clusterName {
+		return lastDeployRun{}
+	}
+	return lastDeployRun{RunID: history.RunID, ClusterName: history.ClusterName, At: history.Timestamp}
 }
 
 // derivePhase maps lifecycle signals to ClusterPhase, checking cheapest

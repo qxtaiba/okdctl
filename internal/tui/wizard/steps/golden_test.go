@@ -391,6 +391,11 @@ func TestGolden_HubOperationsDashboard(t *testing.T) {
 			msg := hub.probeOps(1)()
 			hub.Update(msg)
 			hub.opsStatus.updated = time.Date(2026, time.January, 2, 15, 4, 5, 0, time.UTC)
+			hub.opsStatus.status.APILatencyAvailable = true
+			hub.opsStatus.status.APILatency = 47 * time.Millisecond
+			hub.opsStatus.status.LastDeployRunID = "run-demo-123"
+			hub.opsStatus.status.LastDeployCluster = "prod-cluster"
+			hub.opsStatus.status.LastDeployAt = hub.opsStatus.updated.Add(-2 * time.Hour)
 
 			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
 			tuitest.Golden(t, fmt.Sprintf("hub-operations_%dx%d", sz.w, sz.h), frame)

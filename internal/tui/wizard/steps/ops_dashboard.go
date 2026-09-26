@@ -72,14 +72,7 @@ func renderOpsDashboard(status *opsSnapshot, loading bool, err error, width int)
 			rows = append(rows, "Refresh failed · showing last snapshot")
 		}
 		st := status.status
-		api := "unavailable"
-		if st.APIAvailable {
-			api = "unreachable"
-			if st.APIReachable {
-				api = "reachable"
-			}
-		}
-		rows = append(rows, "API "+api)
+		rows = append(rows, "API "+opsAPIStatus(st))
 		if st.NodesAvailable {
 			ready := 0
 			counts := nodeCounts(st.Nodes)
@@ -97,7 +90,12 @@ func renderOpsDashboard(status *opsSnapshot, loading bool, err error, width int)
 		} else {
 			rows = append(rows, "Operators unavailable")
 		}
-		rows = append(rows, "Updated "+status.updated.UTC().Format("15:04:05 UTC"))
+		if st.LastDeployRunID != "" && !st.LastDeployAt.IsZero() {
+			rows = append(rows, "Last recorded run "+st.LastDeployCluster+" · "+st.LastDeployRunID+" · "+formatOpsAge(status.updated, st.LastDeployAt))
+		} else {
+			rows = append(rows, "Last recorded run unavailable")
+		}
+		rows = append(rows, "Updated "+status.updated.UTC().Format("15:04:05 UTC"), "s open full cluster status")
 	}
 	return tui.Card("LIVE OPERATIONS", joinOpsRows(rows), width, tui.ColorPrimary())
 }
@@ -110,13 +108,7 @@ func renderOpsCompact(status *opsSnapshot, loading bool, err error) string {
 		return "OPS · snapshot unavailable"
 	}
 	st := status.status
-	api := "unavailable"
-	if st.APIAvailable {
-		api = "unreachable"
-		if st.APIReachable {
-			api = "reachable"
-		}
-	}
+	api := opsAPIStatus(st)
 	nodes := "Nodes unavailable"
 	if st.NodesAvailable {
 		ready := 0
@@ -132,10 +124,47 @@ func renderOpsCompact(status *opsSnapshot, loading bool, err error) string {
 	if st.OperatorsAvailable {
 		operators = "Operators " + strconv.Itoa(st.DegradedOperators) + " degraded"
 	}
-	if err != nil {
-		return "OPS · refresh failed\n" + nodes + "\n" + operators
+	lastRun := "Last recorded run unavailable"
+	if st.LastDeployRunID != "" && !st.LastDeployAt.IsZero() {
+		lastRun = "Last recorded run " + st.LastDeployCluster + " · " + st.LastDeployRunID + " · " + formatOpsAge(status.updated, st.LastDeployAt)
 	}
-	return "OPS · API " + api + "\n" + nodes + "\n" + operators
+	prefix := "OPS"
+	if err != nil {
+		prefix += " · refresh failed"
+	}
+	return prefix + " · API " + api + "\n" + nodes + "\n" + operators + "\n" + lastRun + "\ns open full cluster status"
+}
+
+func opsAPIStatus(st *okd.ClusterStatus) string {
+	if !st.APIAvailable {
+		return "unavailable"
+	}
+	switch {
+	case st.APIReachable && st.APILatencyAvailable:
+		return "reachable · " + st.APILatency.Round(time.Millisecond).String()
+	case st.APIReachable:
+		return "reachable"
+	case st.APILatencyAvailable:
+		return "unreachable · probe " + st.APILatency.Round(time.Millisecond).String()
+	default:
+		return "unreachable"
+	}
+}
+
+func formatOpsAge(now, at time.Time) string {
+	age := now.Sub(at)
+	switch {
+	case age < 0:
+		return "time unknown"
+	case age < time.Minute:
+		return "just now"
+	case age < time.Hour:
+		return strconv.Itoa(int(age/time.Minute)) + "m ago"
+	case age < 24*time.Hour:
+		return strconv.Itoa(int(age/time.Hour)) + "h ago"
+	default:
+		return strconv.Itoa(int(age/(24*time.Hour))) + "d ago"
+	}
 }
 
 func joinOpsRows(rows []string) string {

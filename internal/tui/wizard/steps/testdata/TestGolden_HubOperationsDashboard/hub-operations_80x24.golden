@@ -13,12 +13,12 @@
   │                             [n] manage nodes                             │  
   │                             [s] cluster status                           │  
   │                                 destroy                                  │  
-  │                           OPS · API reachable                            │  
+  │                        OPS · API reachable · 47ms                        │  
   │                             Nodes 6/6 ready                              │  
   │                           Operators 0 degraded                           │  
+  │          Last recorded run prod-cluster · run-demo-123 · 2h ago          │  
   │                                                                          │  
-  │                                                                          │  
-  │───────────────────────────────────────────────── ▸ okd 4.20.1-okd-scos.7 │  
-  │  ↑↓ choose • enter start • ctrl+c quit • ? help                          │  
+  │─────────── ↑ ↓  scroll down for more ─────────── ▸ okd 4.20.1-okd-scos.7 │  
+  │  ↑↓ choose • enter start • pgup/pgdn scroll • ctrl+c quit • ? help       │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

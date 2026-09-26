@@ -33,10 +33,12 @@ func (s blockingOpsSource) ClusterStatus(ctx context.Context) (*okd.ClusterStatu
 }
 
 func TestWelcomeOpsSnapshotUsesUpdateMessages(t *testing.T) {
+	lastRunAt := time.Date(2026, time.January, 2, 13, 4, 5, 0, time.UTC)
 	s := NewWelcomeStep()
 	s.SetOpsDashboard(StaticStatusSource{Status: &okd.ClusterStatus{
-		APIAvailable: true, APIReachable: true, NodesAvailable: true,
+		APIAvailable: true, APIReachable: true, APILatencyAvailable: true, NodesAvailable: true,
 		OperatorsAvailable: true,
+		APILatency:         42 * time.Millisecond, LastDeployRunID: "run-abc", LastDeployCluster: "prod-cluster", LastDeployAt: lastRunAt,
 		Nodes: []okd.NodeStatus{
 			{Name: "master0", Role: nodetypes.RoleMaster, Ready: true},
 			{Name: "worker0", Role: nodetypes.RoleWorker, Ready: false},
@@ -64,6 +66,15 @@ func TestWelcomeOpsSnapshotUsesUpdateMessages(t *testing.T) {
 	}
 	if s.opsStatus.updated.IsZero() {
 		t.Error("snapshot update time is zero")
+	}
+	view = renderOpsDashboard(&opsSnapshot{status: &okd.ClusterStatus{
+		APIAvailable: true, APIReachable: true, APILatencyAvailable: true, APILatency: 42 * time.Millisecond,
+		LastDeployRunID: "run-abc", LastDeployCluster: "prod-cluster", LastDeployAt: time.Now().Add(-2 * time.Hour),
+	}, updated: time.Now()}, false, nil, 76)
+	for _, want := range []string{"42ms", "Last recorded run prod-cluster · run-abc · 2h ago", "s open full cluster status"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("dashboard is missing truthful/actionable detail %q:\n%s", want, view)
+		}
 	}
 }
 

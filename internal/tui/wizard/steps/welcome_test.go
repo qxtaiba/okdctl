@@ -183,6 +183,44 @@ func TestHubGetStartedWalksTheConfigureFlow(t *testing.T) {
 	}
 }
 
+func TestHubDashboardShortcutOpensNativeClusterStatus(t *testing.T) {
+	s := NewWelcomeStep()
+	s.SetExistingConfig(hubConfig(), SaveSlotDeployed)
+	want := []wizard.WizardStep{NewStatusStep(StaticStatusSource{Status: statusFixture()})}
+	s.SetFlows(HubFlows{ClusterStatus: func() ([]wizard.WizardStep, wizard.FlowChrome, error) {
+		return want, StatusChrome(), nil
+	}})
+	_, cmd := s.Update(tea.KeyPressMsg{Code: 's', Text: "s"})
+	if cmd == nil {
+		t.Fatal("pressing the dashboard's s shortcut produced no status flow")
+	}
+	swap, ok := resolveCmd(t, cmd).(wizard.SwapFlowMsg)
+	if !ok || len(swap.Steps) != 1 || swap.Steps[0].ID() != StepIDClusterStatus {
+		t.Fatalf("dashboard shortcut opened %#v, want the native one-screen status flow", swap)
+	}
+}
+
+func TestHubDraftChipIsAnActionableResumeEntry(t *testing.T) {
+	s := NewWelcomeStep()
+	s.SetConfigExists(true)
+	s.SetDraftResume(wizard.StepIDNetworking, "machine_cidr", "resume draft · at networking · 5m ago")
+	if got := s.entries[0]; got.verb != HubVerbResumeDraft || !strings.Contains(got.label, "at networking") {
+		t.Fatalf("first entry = %+v, want the saved draft as the first action", got)
+	}
+	view := s.View(80, 24)
+	if !strings.Contains(view, "resume draft") || !strings.Contains(view, "5m ago") {
+		t.Errorf("draft chip is missing its resume target or age:\n%s", view)
+	}
+	_, cmd := s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("confirming the draft chip produced no resume command")
+	}
+	msg, ok := resolveCmd(t, cmd).(wizard.DraftResumeMsg)
+	if !ok || msg.StepID != wizard.StepIDNetworking || msg.FieldKey != "machine_cidr" {
+		t.Fatalf("draft command = %#v, want networking/machine_cidr resume", msg)
+	}
+}
+
 func TestHubConfigExistsFalseClearsSaveSlotFromView(t *testing.T) {
 	s := NewWelcomeStep()
 	s.SetExistingConfig(hubConfig(), SaveSlotDeployed)
