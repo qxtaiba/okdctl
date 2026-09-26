@@ -3,11 +3,11 @@
   │ O K D C T L                                                                                  │  
   │ review your configuration                                connect · cluster · extras · review │  
   │──────────────────────────────────────────────────────────────────────────────────────────────│  
-  │  PREFLIGHT                                                                                   │  
-  │    pull secret         not configured                                                        │  
-  │    ssh public key      not configured                                                        │  
-  │    CIDR ranges         no overlap                                                            │  
-  │                                                                                              │  
+  │  PREFLIGHT · 1 passed · 1 warnings · 2 not checked                                           │  
+  │  ○ pull secret · not configured                                                              │  
+  │  ○ ssh public key · not configured                                                           │  
+  │  ⚠ flux deploy key · unavailable · ~/.ssh/flux-deploy-key                                    │  
+  │  ✓ CIDR ranges · no overlap · 192.168.1.0/24 · 10.128.0.0/14 · 172.30.0.0/16                 │  
   │  [1] cluster identity                                                                        │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
   │  name          mycluster                                                                     │  

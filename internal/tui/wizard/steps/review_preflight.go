@@ -3,6 +3,7 @@ package steps
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"slices"
 	"strings"
 
@@ -16,6 +17,8 @@ import (
 type reviewCheck struct {
 	label   string
 	status  string
+	detail  string
+	passed  bool
 	warning bool
 }
 
@@ -24,11 +27,21 @@ func reviewPreflight(cfg *config.Config, capacity ...*WizardCapacitySnapshot) []
 		return nil
 	}
 	checks := []reviewCheck{
-		{label: "pull secret", status: readableFileStatus(cfg.Files.PullSecret)},
-		{label: "ssh public key", status: readableFileStatus(cfg.Files.SSHPublicKey)},
+		reviewFileCheck("pull secret", cfg.Files.PullSecret),
+		reviewFileCheck("ssh public key", cfg.Files.SSHPublicKey),
 	}
-	for i := range checks {
-		checks[i].warning = checks[i].status == statusUnavailable
+	if cfg.Addons["flux"].Enabled {
+		check := reviewFileCheck("flux deploy key", system.ExpandPath("~/.ssh/flux-deploy-key"))
+		check.detail = "~/.ssh/flux-deploy-key"
+		checks = append(checks, check)
+	}
+	if cfg.Addons["secretstore"].Enabled {
+		_, err := exec.LookPath("sops")
+		check := reviewCheck{label: "sops", status: "available", passed: err == nil}
+		if err != nil {
+			check.status, check.warning = "not found", true
+		}
+		checks = append(checks, check)
 	}
 
 	networks := []string{
@@ -68,11 +81,33 @@ func reviewPreflight(cfg *config.Config, capacity ...*WizardCapacitySnapshot) []
 			}
 		}
 	}
-	checks = append(checks, reviewCheck{label: "CIDR ranges", status: networkStatus, warning: networkWarning})
+	checks = append(checks, reviewCheck{
+		label: "CIDR ranges", status: networkStatus,
+		detail: strings.Join(configuredCIDRs(networks), " · "),
+		passed: networkStatus == "no overlap", warning: networkWarning,
+	})
 	if len(capacity) > 0 && capacity[0] != nil {
 		checks = append(checks, reviewCapacityCheck(cfg, capacity[0]))
 	}
 	return checks
+}
+
+func configuredCIDRs(networks []string) []string {
+	configured := make([]string, 0, len(networks))
+	for _, network := range networks {
+		if network != "" {
+			configured = append(configured, network)
+		}
+	}
+	return configured
+}
+
+func reviewFileCheck(label, path string) reviewCheck {
+	status := readableFileStatus(path)
+	return reviewCheck{
+		label: label, status: status, detail: path, passed: status == "readable",
+		warning: status == statusUnavailable,
+	}
 }
 
 func reviewCapacityCheck(cfg *config.Config, snapshot *WizardCapacitySnapshot) reviewCheck {
@@ -116,6 +151,7 @@ func reviewCapacityCheck(cfg *config.Config, snapshot *WizardCapacitySnapshot) r
 	}
 	rows := make([]string, 0, len(use))
 	warning := false
+	unknown := false
 	for nodeIndex := range nodes {
 		node := &nodes[nodeIndex]
 		demand, assigned := use[node.Name]
@@ -137,7 +173,7 @@ func reviewCapacityCheck(cfg *config.Config, snapshot *WizardCapacitySnapshot) r
 		case over:
 			state, warning = "over capacity", true
 		case !node.CPUsKnown || !node.MemoryKnown:
-			state = "capacity unknown"
+			state, unknown = "capacity unknown", true
 		}
 		rows = append(rows, fmt.Sprintf("%s %s · %dc/%d GB → %sc/%s", node.Name, state, demand.cpu, demand.memoryMB/1024, cpu, memory))
 	}
@@ -148,7 +184,10 @@ func reviewCapacityCheck(cfg *config.Config, snapshot *WizardCapacitySnapshot) r
 		}
 	}
 	slices.Sort(rows)
-	return reviewCheck{label: labelSelectedCapacity, status: strings.Join(rows, "; "), warning: warning}
+	return reviewCheck{
+		label: labelSelectedCapacity, status: strings.Join(rows, "; "),
+		passed: !warning && !unknown, warning: warning,
+	}
 }
 
 type capacityDemand struct {
@@ -181,25 +220,43 @@ func renderReviewPreflight(checks []reviewCheck, width int) string {
 	if len(checks) == 0 {
 		return ""
 	}
-	rows := make([]tui.FactRow, 0, len(checks))
+	passed, warnings, unchecked := 0, 0, 0
 	for _, check := range checks {
-		rows = append(rows, tui.FactRow{Key: check.label, Value: check.status, Highlight: check.warning})
+		switch {
+		case check.warning:
+			warnings++
+		case check.passed:
+			passed++
+		default:
+			unchecked++
+		}
 	}
-	styles := tui.DefaultFactStyles()
-	lines := tui.RenderFacts(rows, &tui.FactLayout{
-		Leader:     tui.FactLeaderPad,
-		KeyWidth:   20,
-		TotalWidth: max(width-2, 1),
-		Styles:     styles,
-	})
 	var b strings.Builder
-	b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText()).Render("PREFLIGHT"))
+	header := fmt.Sprintf("PREFLIGHT · %d passed · %d warnings · %d not checked", passed, warnings, unchecked)
+	b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText()).Render(tui.Truncate(header, width)))
 	b.WriteString("\n")
-	for _, line := range lines {
-		b.WriteString("  ")
-		b.WriteString(line)
-		b.WriteString("\n")
+	for _, check := range checks {
+		icon, color := tui.IconPending, tui.ColorTextFaint()
+		switch {
+		case check.warning:
+			icon, color = tui.IconWarning, tui.ColorWarning()
+		case check.passed:
+			icon, color = tui.IconSuccess, tui.ColorSuccess()
+		}
+		value := check.label + " · " + check.status
+		if check.detail != "" {
+			value += " · " + check.detail
+		}
+		for i, line := range tui.WrapLines(value, max(width-2, 1)) {
+			if i == 0 {
+				b.WriteString(lipgloss.NewStyle().Foreground(color).Render(icon))
+				b.WriteString(" ")
+			} else {
+				b.WriteString("  ")
+			}
+			b.WriteString(line)
+			b.WriteString("\n")
+		}
 	}
-	b.WriteString("\n")
 	return b.String()
 }

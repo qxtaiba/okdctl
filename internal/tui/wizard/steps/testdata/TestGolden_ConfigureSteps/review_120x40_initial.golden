@@ -3,11 +3,10 @@
   │ O K D C T L                                                                                                      │  
   │ review your configuration                                                    connect · cluster · extras · review │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
-  │  PREFLIGHT                                                                                                       │  
-  │    pull secret         not configured                                                                            │  
-  │    ssh public key      not configured                                                                            │  
-  │    CIDR ranges         no overlap                                                                                │  
-  │                                                                                                                  │  
+  │  PREFLIGHT · 1 passed · 0 warnings · 2 not checked                                                               │  
+  │  ○ pull secret · not configured                                                                                  │  
+  │  ○ ssh public key · not configured                                                                               │  
+  │  ✓ CIDR ranges · no overlap · 192.168.1.0/24 · 10.128.0.0/14 · 172.30.0.0/16                                     │  
   │  [1] cluster identity                                                                                            │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
   │  name          mycluster                                                                                         │  
@@ -33,6 +32,7 @@
   │  pod cidr         10.128.0.0/14                                                                                  │  
   │  service cidr     172.30.0.0/16                                                                                  │  
   │  static ip start  192.168.1.140                                                                                  │  
+  │  interface        ens18                                                                                          │  
   │                                                                                                                  │  
   │─────────────────────────────── ↑ ↓  scroll down for more ─────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
   │  ● deploy now   ○ save and exit  p preview install config • ←/→ choose • enter confirm … • ctrl+c quit • ? help  │  

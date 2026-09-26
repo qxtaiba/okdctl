@@ -68,7 +68,7 @@ func TestReviewStep_AddonRowsSortedWithoutSelfDuplication(t *testing.T) {
 		t.Fatalf("addon rows not sorted: flux at %d after secretstore at %d", fluxAt, storeAt)
 	}
 	for _, line := range strings.Split(out, "\n") {
-		if strings.Count(line, "flux") > 1 {
+		if strings.HasPrefix(strings.TrimSpace(line), "flux ") && strings.Count(line, "flux") > 1 {
 			t.Fatalf("flux row duplicates its own name: %q", line)
 		}
 	}
@@ -109,6 +109,25 @@ func TestReviewStep_ShowsChangesFromSavedConfig(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("View() missing config change %q:\n%s", want, out)
 		}
+	}
+	pane := tuitest.StripANSI(s.PaneContent(70, 30))
+	for _, want := range []string{"CHANGED SINCE LOAD · 4", "domain  k8s.local → prod.example", "control plane vcpus  4 → 8"} {
+		if !strings.Contains(pane, want) {
+			t.Errorf("PaneContent() missing loaded-config delta %q:\n%s", want, pane)
+		}
+	}
+}
+
+func TestReviewStepKeepsPreflightVisibleWhenWideTerminalIsTooShortToSplit(t *testing.T) {
+	cfg := reviewTestConfig()
+	cfg.Provider.Type = config.ProviderProxmox
+	cfg.Distribution.Type = config.DistributionOKD
+	s := NewReviewStep()
+	s.SetConfig(cfg)
+	s.SetTerminalSize(180, 20)
+
+	if out := tuitest.StripANSI(s.View(100, 20)); !strings.Contains(out, "PREFLIGHT") {
+		t.Fatalf("review omitted preflight when the terminal height disables the pane:\n%s", out)
 	}
 }
 
@@ -156,8 +175,8 @@ func TestReviewStep_PreflightChecksSelectedNodeCapacity(t *testing.T) {
 	s.SetConfig(cfg)
 	s.SetCapacity(snapshot)
 
-	frame := s.View(120, 100)
-	tuitest.AssertFits(t, frame, 120, 100)
+	frame := s.PaneContent(70, 30)
+	tuitest.AssertFits(t, frame, 70, 30)
 	out := tuitest.StripANSI(frame)
 	for _, want := range []string{"selected capacity", "pve1 over capacity", "pve2 fits", "missing unavailable"} {
 		if !strings.Contains(out, want) {
@@ -205,16 +224,37 @@ func TestReviewPlanIncludesHeadlessCommandAndConfigPath(t *testing.T) {
 	s.SetConfigPath("/tmp/qa cluster.yaml")
 	frame := tuitest.StripANSI(s.PaneContent(70, 30))
 	tuitest.AssertFits(t, frame, 70, 30)
-	if strings.Contains(frame, "PREFLIGHT") {
-		t.Fatalf("review pane repeats preflight content already shown in the main review:\n%s", frame)
+	for _, want := range []string{"PREFLIGHT", "pull secret", "CIDR ranges"} {
+		if !strings.Contains(frame, want) {
+			t.Fatalf("review pane omitted concrete preflight item %q:\n%s", want, frame)
+		}
 	}
 	for _, want := range []string{"DEPLOY PLAN", "WRITES", "/tmp/qa", "HEADLESS", `--config '/tmp/qa cluster.yaml'`, "--confirm-cluster"} {
 		if !strings.Contains(frame, want) {
 			t.Errorf("review pane omitted %q:\n%s", want, frame)
 		}
 	}
-	if view := tuitest.StripANSI(s.View(100, 100)); !strings.Contains(view, "PREFLIGHT") {
-		t.Errorf("main review omitted preflight checks:\n%s", view)
+}
+
+func TestReviewPaneShowsAddonPreflightAndLoadedDiff(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	cfg := reviewTestConfig()
+	cfg.Cluster.Domain = "k8s.local"
+	cfg.Addons["secretstore"] = config.AddonConfig{Enabled: true}
+	s := NewReviewStep()
+	s.SetConfig(cfg)
+	s.SetSavedConfig(cfg)
+	cfg.Cluster.Domain = "prod.example"
+	s.SetConfig(cfg)
+
+	pane := tuitest.StripANSI(s.PaneContent(70, 30))
+	for _, want := range []string{"flux deploy key", "~/.ssh/flux-deploy-key", "sops", "not found", "CHANGED SINCE LOAD · 1", "k8s.local → prod.example"} {
+		if !strings.Contains(pane, want) {
+			t.Errorf("review pane omitted %q:\n%s", want, pane)
+		}
+	}
+	if strings.Contains(pane, "api-secret") || strings.Contains(pane, "never-render") {
+		t.Fatalf("review pane exposed a credential:\n%s", pane)
 	}
 }
 

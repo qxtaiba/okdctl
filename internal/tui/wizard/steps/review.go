@@ -45,6 +45,8 @@ type ReviewStep struct {
 	capacity    *WizardCapacitySnapshot
 	actions     *components.CompactSelector
 	jumpTargets []wizard.JumpTarget
+	termWidth   int
+	termHeight  int
 }
 
 // NewReviewStep constructs the review wizard step.
@@ -66,6 +68,11 @@ func NewReviewStep() *ReviewStep {
 // Init returns nil; the step has no async startup work.
 func (s *ReviewStep) Init() tea.Cmd {
 	return nil
+}
+
+// SetTerminalSize records terminal geometry for the frame's split-layout gate.
+func (s *ReviewStep) SetTerminalSize(width, height int) {
+	s.termWidth, s.termHeight = width, height
 }
 
 // SetConfig stores the Config to be summarized on the review screen.
@@ -219,7 +226,9 @@ func (s *ReviewStep) View(width, height int) string {
 	st := wizard.NewSectionStyles(width)
 	var content strings.Builder
 
-	content.WriteString(renderReviewPreflight(s.preflight, width))
+	if !wizard.SplitsFrame(s.termWidth, s.termHeight, s.visibleWizardStepCount()) {
+		content.WriteString(renderReviewPreflight(s.preflight, width))
+	}
 	content.WriteString(s.renderConfigChanges(width))
 	content.WriteString(s.renderClusterIdentity(&st))
 	content.WriteString(s.renderProxmox(&st))
@@ -233,6 +242,17 @@ func (s *ReviewStep) View(width, height int) string {
 	return strings.TrimRight(content.String(), "\n")
 }
 
+func (s *ReviewStep) visibleWizardStepCount() int {
+	count := 11
+	if s.cfg.Provider.Type != config.ProviderProxmox {
+		count--
+	}
+	if s.cfg.Distribution.Type != config.DistributionOKD {
+		count--
+	}
+	return count
+}
+
 // PaneContent summarizes deployment details beside the review.
 func (s *ReviewStep) PaneContent(width, height int) string {
 	if s.cfg == nil {
@@ -241,7 +261,8 @@ func (s *ReviewStep) PaneContent(width, height int) string {
 	if s.showPreview {
 		return "Install-config preview\n\nSecrets are replaced with placeholders.\nUse ↑/↓ to inspect the full file.\nPress p or esc to return."
 	}
-	lines := []string{}
+	lines := strings.Split(strings.TrimRight(renderReviewPreflight(s.preflight, width), "\n"), "\n")
+	lines = append(lines, s.renderChangeSummary(width)...)
 	lines = append(lines, "", lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText()).Render("DEPLOY PLAN"))
 	for _, row := range reviewPlanRows(s.cfg) {
 		lines = append(lines, tui.Truncate(row, width))
@@ -322,27 +343,11 @@ func (s *ReviewStep) renderInstallConfigPreview(width int) string {
 }
 
 func (s *ReviewStep) renderConfigChanges(width int) string {
-	if len(s.saved) == 0 {
-		return ""
-	}
-	current := reviewConfigSnapshot(s.cfg)
-	keys := make([]string, 0, len(s.saved)+len(current))
-	seen := make(map[string]struct{}, len(s.saved)+len(current))
-	for key := range s.saved {
-		seen[key] = struct{}{}
-	}
-	for key := range current {
-		seen[key] = struct{}{}
-	}
-	for key := range seen {
-		if s.saved[key] != current[key] {
-			keys = append(keys, key)
-		}
-	}
-	slices.Sort(keys)
+	keys := s.changedConfigKeys()
 	if len(keys) == 0 {
 		return ""
 	}
+	current := reviewConfigSnapshot(s.cfg)
 
 	var b strings.Builder
 	header := lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText())
@@ -367,6 +372,52 @@ func (s *ReviewStep) renderConfigChanges(width int) string {
 	}
 	b.WriteString("\n")
 	return b.String()
+}
+
+func (s *ReviewStep) changedConfigKeys() []string {
+	if s.cfg == nil || len(s.saved) == 0 {
+		return nil
+	}
+	current := reviewConfigSnapshot(s.cfg)
+	keys := make([]string, 0, len(s.saved)+len(current))
+	seen := make(map[string]struct{}, len(s.saved)+len(current))
+	for key := range s.saved {
+		seen[key] = struct{}{}
+	}
+	for key := range current {
+		seen[key] = struct{}{}
+	}
+	for key := range seen {
+		if s.saved[key] != current[key] {
+			keys = append(keys, key)
+		}
+	}
+	slices.Sort(keys)
+	return keys
+}
+
+func (s *ReviewStep) renderChangeSummary(width int) []string {
+	header := lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText())
+	if len(s.saved) == 0 {
+		return []string{"", header.Render("CONFIG CHANGES"), tui.DimStyle.Render("new configuration")}
+	}
+	keys := s.changedConfigKeys()
+	if len(keys) == 0 {
+		return []string{"", header.Render("CHANGED SINCE LOAD · 0"), tui.DimStyle.Render("no edits since load")}
+	}
+	lines := []string{"", header.Render(fmt.Sprintf("CHANGED SINCE LOAD · %d", len(keys)))}
+	current := reviewConfigSnapshot(s.cfg)
+	const maxRows = 5
+	for _, key := range keys[:min(len(keys), maxRows)] {
+		oldValue := s.saved[key]
+		newValue := current[key]
+		value := reviewChangeLabel(key) + "  " + oldValue + " → " + newValue
+		lines = append(lines, "  "+tui.Truncate(value, width-2))
+	}
+	if remaining := len(keys) - maxRows; remaining > 0 {
+		lines = append(lines, tui.DimStyle.Render(fmt.Sprintf("  +%d more in review", remaining)))
+	}
+	return lines
 }
 
 func reviewConfigSnapshot(cfg *config.Config) map[string]string {

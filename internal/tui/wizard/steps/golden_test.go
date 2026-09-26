@@ -103,6 +103,11 @@ func configureScenarios() []configureScenario {
 			interact: downKey,
 		},
 		{
+			name: "review-edited",
+			id:   wizard.StepIDReview,
+			seed: seedReviewChanges,
+		},
+		{
 			// Populates node placement and enables an addon on top of the
 			// default config so every reviewJumpOrder section renders,
 			// pinning the full 1-8 contiguous jump legend.
@@ -134,6 +139,17 @@ func configureScenarios() []configureScenario {
 			interact: endKey,
 		},
 	}
+}
+
+func seedReviewChanges(m *wizard.Model) {
+	cfg := m.Config()
+	baseline := *cfg
+	step := m.CurrentStep().(*ReviewStep)
+	step.SetConfig(&baseline)
+	step.SetSavedConfig(&baseline)
+	cfg.Cluster.Domain = "prod.example"
+	cfg.Topology.ControlPlane.CPU++
+	step.SetConfig(cfg)
 }
 
 func newGoldenModel(t *testing.T) *wizard.Model {
@@ -466,7 +482,7 @@ func TestGolden_HubWideTerminals(t *testing.T) {
 // pins at 180x48: proxmox (a short form, so the split's idle vertical space
 // below the form is visible) and review (a long one, so the split survives
 // a scrolling body).
-var wideSplitScenarios = map[string]bool{"proxmox": true, "review": true}
+var wideSplitScenarios = map[string]bool{"proxmox": true, "review": true, "review-edited": true}
 
 // TestGolden_WideSplit pins the ≥150-col split layout — form column, rule,
 // context pane — at 180x48 for wideSplitScenarios; every other scenario

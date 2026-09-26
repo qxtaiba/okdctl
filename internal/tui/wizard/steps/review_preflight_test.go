@@ -22,9 +22,9 @@ func TestReviewPreflightChecksFilesAndCIDROverlap(t *testing.T) {
 
 	got := reviewPreflight(cfg)
 	want := []reviewCheck{
-		{label: "pull secret", status: "readable"},
-		{label: "ssh public key", status: "unavailable", warning: true},
-		{label: "CIDR ranges", status: "overlap detected", warning: true},
+		{label: "pull secret", status: "readable", detail: path, passed: true},
+		{label: "ssh public key", status: "unavailable", detail: cfg.Files.SSHPublicKey, warning: true},
+		{label: "CIDR ranges", status: "overlap detected", detail: "10.0.0.0/16 · 10.0.1.0/24 · 172.30.0.0/16", warning: true},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("reviewPreflight() returned %d checks, want %d: %#v", len(got), len(want), got)
@@ -32,6 +32,40 @@ func TestReviewPreflightChecksFilesAndCIDROverlap(t *testing.T) {
 	for i := range want {
 		if got[i] != want[i] {
 			t.Errorf("check %d = %#v, want %#v", i, got[i], want[i])
+		}
+	}
+}
+
+func TestReviewPreflightChecksEnabledAddonPrerequisites(t *testing.T) {
+	bin := t.TempDir()
+	t.Setenv("PATH", bin)
+
+	sopsPath := filepath.Join(bin, "sops")
+	if err := os.WriteFile(sopsPath, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := config.DefaultConfig()
+	cfg.Addons["flux"] = config.AddonConfig{Enabled: true}
+	cfg.Addons["secretstore"] = config.AddonConfig{Enabled: true}
+	checks := reviewPreflight(cfg)
+	byLabel := make(map[string]reviewCheck, len(checks))
+	for _, check := range checks {
+		byLabel[check.label] = check
+	}
+	if got := byLabel["flux deploy key"]; got.detail != "~/.ssh/flux-deploy-key" ||
+		(got.status != "readable" && got.status != statusUnavailable) || got.passed != (got.status == "readable") {
+		t.Errorf("flux key preflight = %+v, want an honest readable/unavailable result", got)
+	}
+	if got := byLabel["sops"]; got.status != "available" || !got.passed || got.warning {
+		t.Errorf("sops preflight = %+v, want available", got)
+	}
+
+	cfg.Addons["flux"] = config.AddonConfig{}
+	cfg.Addons["secretstore"] = config.AddonConfig{}
+	for _, check := range reviewPreflight(cfg) {
+		if check.label == "flux deploy key" || check.label == "sops" {
+			t.Errorf("disabled addon prerequisite included in preflight: %+v", check)
 		}
 	}
 }
