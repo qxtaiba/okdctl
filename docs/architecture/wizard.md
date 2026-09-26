@@ -122,9 +122,9 @@ definitions stay terse:
 
 The `Width` field on a `FieldDefinition` picks one of four `FieldWidth`
 classes, sizing that field's input box in columns independent of the
-section's available width: `FieldWidthAuto` (the zero value, 32 columns),
-`FieldWidthNumber` (12 columns, sized for counts and byte sizes),
-`FieldWidthPath` (56 columns, sized for filesystem paths), and
+section's available width: `FieldWidthAuto` (the zero value, 64 columns),
+`FieldWidthNumber` (16 columns, sized for counts and byte sizes),
+`FieldWidthPath` (80 columns, sized for filesystem paths), and
 `FieldWidthFull` (the whole inner width, used for a key-value table or a
 long free-text field). This keeps a short numeric field from stretching
 edge-to-edge just because the terminal is wide, and keeps a long path
