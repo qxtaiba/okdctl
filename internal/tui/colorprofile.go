@@ -54,6 +54,9 @@ func colorProfile() colorprofile.Profile {
 	return *outputProfile.Load()
 }
 
+// OutputColorProfile reports the profile used for CLI-rendered colors.
+func OutputColorProfile() colorprofile.Profile { return colorProfile() }
+
 // colorEnabled reports whether the active profile emits any color.
 func colorEnabled() bool {
 	return colorProfile() > colorprofile.Ascii

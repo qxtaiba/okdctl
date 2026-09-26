@@ -48,6 +48,7 @@ okdctl node snapshot rollback <node> <name> [flags]
       --log-format string   log output format: text (TTY default) | json (auto-selected when stderr is piped)
       --log-level string    log verbosity (debug, info, warn, error) (default "info")
       --no-color            disable colour and progress output (same as NO_COLOR=1)
+      --no-motion           disable TUI animation (same as OKDCTL_NO_MOTION=1; NO_COLOR alone reduces it)
   -q, --quiet               suppress info/warn logs (alias for --log-level=error)
   -v, --verbose             enable debug logging (alias for --log-level=debug)
 ```

@@ -1,29 +1,11 @@
-## okdctl releases show
+## okdctl theme
 
-Show release info for a single OKD version
-
-### Synopsis
-
-Print metadata for a single OKD release identified by its version string
-("4.21.3") or GitHub tag. The version list is resolved from the disk cache;
-use --channel=all with 'releases list' to discover pre-release tags.
-
-```
-okdctl releases show <version> [flags]
-```
-
-### Examples
-
-```
-  okdctl releases show 4.21.3
-  okdctl releases show 4.21.3 --output json
-```
+Inspect terminal theme styles
 
 ### Options
 
 ```
-  -h, --help            help for show
-  -o, --output string   output format: text|json (default "text")
+  -h, --help   help for theme
 ```
 
 ### Options inherited from parent commands
@@ -41,5 +23,6 @@ okdctl releases show <version> [flags]
 
 ### SEE ALSO
 
-* [okdctl releases](okdctl_releases.md)	 - Query available OKD versions
+* [okdctl](okdctl.md)	 - Provision OKD clusters on Proxmox VE
+* [okdctl theme preview](okdctl_theme_preview.md)	 - Preview the TUI color roles
 

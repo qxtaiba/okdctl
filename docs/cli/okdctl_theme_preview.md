@@ -1,29 +1,34 @@
-## okdctl releases show
+## okdctl theme preview
 
-Show release info for a single OKD version
+Preview the TUI color roles
 
 ### Synopsis
 
-Print metadata for a single OKD release identified by its version string
-("4.21.3") or GitHub tag. The version list is resolved from the disk cache;
-use --channel=all with 'releases list' to discover pre-release tags.
+Render okdctl's semantic TUI styles in dark, light, high-contrast, and
+terminal-inherit modes. The preview is read-only and uses the current terminal
+color profile; NO_COLOR and --no-color suppress ANSI styling.
+
+Terminal-inherit uses the active resolved theme polarity. Interactive screens
+can update that polarity from the terminal's background-color response; when
+no response is available, okdctl keeps its dark-background default.
 
 ```
-okdctl releases show <version> [flags]
+okdctl theme preview [flags]
 ```
 
 ### Examples
 
 ```
-  okdctl releases show 4.21.3
-  okdctl releases show 4.21.3 --output json
+  okdctl theme preview
+  okdctl theme preview --mode light
+  NO_COLOR=1 okdctl theme preview --mode inherit
 ```
 
 ### Options
 
 ```
-  -h, --help            help for show
-  -o, --output string   output format: text|json (default "text")
+  -h, --help          help for preview
+      --mode string   preview one mode: all|dark|light|high-contrast|inherit (default "all")
 ```
 
 ### Options inherited from parent commands
@@ -41,5 +46,5 @@ okdctl releases show <version> [flags]
 
 ### SEE ALSO
 
-* [okdctl releases](okdctl_releases.md)	 - Query available OKD versions
+* [okdctl theme](okdctl_theme.md)	 - Inspect terminal theme styles
 

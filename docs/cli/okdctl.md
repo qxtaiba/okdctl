@@ -30,6 +30,7 @@ per 24h, cached locally); set OKDCTL_NO_UPDATE_CHECK=1 to disable.
       --log-format string   log output format: text (TTY default) | json (auto-selected when stderr is piped)
       --log-level string    log verbosity (debug, info, warn, error) (default "info")
       --no-color            disable colour and progress output (same as NO_COLOR=1)
+      --no-motion           disable TUI animation (same as OKDCTL_NO_MOTION=1; NO_COLOR alone reduces it)
   -q, --quiet               suppress info/warn logs (alias for --log-level=error)
   -v, --verbose             enable debug logging (alias for --log-level=debug)
 ```
@@ -51,6 +52,7 @@ per 24h, cached locally); set OKDCTL_NO_UPDATE_CHECK=1 to disable.
 * [okdctl plan](okdctl_plan.md)	 - Preview infrastructure drift without applying changes
 * [okdctl releases](okdctl_releases.md)	 - Query available OKD versions
 * [okdctl status](okdctl_status.md)	 - Print a post-deploy cluster summary
+* [okdctl theme](okdctl_theme.md)	 - Inspect terminal theme styles
 * [okdctl update-ingress](okdctl_update-ingress.md)	 - Switch ingress DNS from HAProxy to LoadBalancer IPs
 * [okdctl version](okdctl_version.md)	 - Print version, git commit, build date
 
