@@ -268,13 +268,20 @@ func ringSlog(ring *logview.Ring) *slog.Logger {
 	return slog.New(logutil.NewRedactHandler(ring.Handler(next)))
 }
 
-// sendExecEvent delivers ev unless the op's context is gone — a chatty
-// unwind after a force-quit must never strand the runner goroutine (holding
-// the run lock and a terraform subprocess) on a feed nobody drains.
+// sendExecEvent delivers ev, abandoning it only once the op's context is
+// gone AND the feed cannot accept it — a chatty unwind after a force-quit
+// must never strand the runner goroutine (holding the run lock and a
+// terraform subprocess) on a feed nobody drains. Delivery is biased: the
+// graceful cancel cancels this very context, and a uniform select would
+// drop events the exec screen is still draining.
 func sendExecEvent(ctx context.Context, events chan<- lifecycle.ExecEvent, ev *lifecycle.ExecEvent) {
 	select {
-	case <-ctx.Done():
 	case events <- *ev:
+	default:
+		select {
+		case <-ctx.Done():
+		case events <- *ev:
+		}
 	}
 }
 

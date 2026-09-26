@@ -359,7 +359,7 @@ func TestDeployHistorySeedsAndRecordsAroundTheStream(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Cluster.Name = "homelab"
 
-	done := &deployexec.State{Cfg: cfg, RunID: "run-1", Steps: []distribution.StepResult{
+	done := &deployexec.State{Cfg: cfg, RunID: "run-1", Executed: true, Steps: []distribution.StepResult{
 		{StepID: setup.StepInstallPackages, Success: true, Duration: 40 * time.Second},
 	}}
 	recordDeployHistory(done, root)
@@ -372,11 +372,58 @@ func TestDeployHistorySeedsAndRecordsAroundTheStream(t *testing.T) {
 
 	// The demo feed must neither read nor write schedule data.
 	t.Setenv(wizardDemoEnv, "1")
-	demo := &deployexec.State{Cfg: cfg, RunID: "run-2", Steps: done.Steps}
+	demo := &deployexec.State{Cfg: cfg, RunID: "run-2", Executed: true, Steps: done.Steps}
 	recordDeployHistory(demo, root)
 	fresh := &deployexec.State{Cfg: cfg}
 	loadDeployHistory(fresh, root)
 	if fresh.History != nil {
 		t.Errorf("demo run must not touch the history store, got %v", fresh.History)
+	}
+}
+
+// TestRecordDeployHistorySkipsAnAbandonedRun pins the force-quit race: a
+// quit abandons the engine goroutine mid-write, so State.Steps may still be
+// mutating after RunFlow returns. Only a run whose final event was consumed
+// (Executed — the channel-synchronized handoff) may be read back into the
+// history store; under -race this test fails if the recorder touches the
+// slice a late writer still owns.
+func TestRecordDeployHistorySkipsAnAbandonedRun(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(workspace.WorkDir(root), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.DefaultConfig()
+	cfg.Cluster.Name = "homelab"
+
+	st := &deployexec.State{Cfg: cfg, RunID: "run-1", Started: true} // Executed false: abandoned
+	stop := make(chan struct{})
+	started := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; ; i++ {
+			select {
+			case <-stop:
+				return
+			default:
+				st.Steps = append(st.Steps, distribution.StepResult{
+					StepID: setup.StepInstallPackages, Success: true, Duration: time.Second,
+				})
+				if i == 0 {
+					close(started)
+				}
+			}
+		}
+	}()
+
+	<-started
+	for range 50 {
+		recordDeployHistory(st, root)
+	}
+	close(stop)
+	<-done
+
+	if got := deployexec.LoadStepHistory(workspace.WorkDir(root), "homelab"); got != nil {
+		t.Errorf("an abandoned run must not seed the history store, got %v", got)
 	}
 }

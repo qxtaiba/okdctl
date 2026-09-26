@@ -144,3 +144,21 @@ func TestAddOptsFromWizardMergesHostBudget(t *testing.T) {
 		t.Errorf("wizard-collected count lost in the merge: %+v", opts)
 	}
 }
+
+// TestSendExecEventDeliversAfterGracefulCancel pins biased delivery on the
+// runner's Reporter/OnStep seam: gate transitions racing the cancel must
+// keep landing while the exec screen is still draining the feed.
+func TestSendExecEventDeliversAfterGracefulCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	for range 200 {
+		events := make(chan lifecycle.ExecEvent, 1)
+		sendExecEvent(ctx, events, &lifecycle.ExecEvent{Desc: "drain node"})
+		select {
+		case <-events:
+		default:
+			t.Fatal("a graceful cancel dropped an exec event despite buffer space")
+		}
+	}
+}

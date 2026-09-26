@@ -143,9 +143,17 @@ func (r *recorder) StepFinished(res *distribution.StepResult) {
 // cannot mark the run's end — the Execute hook's return does.
 func (r *recorder) DeployFinished(time.Duration) {}
 
+// send delivers ev, abandoning it only once ctx is gone AND the feed cannot
+// accept it — biased, because the graceful cancel cancels this very ctx and
+// a uniform select would drop transitions the screen is still draining; a
+// quit with a dead receiver still exits promptly through the guard.
 func (r *recorder) send(ev Event) {
 	select {
-	case <-r.ctx.Done():
 	case r.events <- ev:
+	default:
+		select {
+		case <-r.ctx.Done():
+		case r.events <- ev:
+		}
 	}
 }

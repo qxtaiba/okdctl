@@ -238,13 +238,21 @@ func (s *StreamStep) buildRows() {
 	s.lastActivity = s.started
 }
 
-// sendFinal delivers the run's terminal event, abandoning it once the run's
-// context is gone: the engine goroutine must not outlive a force-quit waiting on
-// a feed nobody drains.
+// sendFinal delivers the run's terminal event, abandoning it only once the
+// run's context is gone AND the feed cannot accept it: the engine goroutine
+// must not outlive a force-quit waiting on a feed nobody drains. Delivery is
+// biased — a graceful cancel closes the same channel this select watches,
+// and a uniform two-way select would drop the final event about half the
+// time, stranding the screen on "cancel requested" forever.
 func (s *StreamStep) sendFinal(err error) {
+	ev := Event{Final: true, Err: err}
 	select {
-	case <-s.hooks.Done:
-	case s.events <- Event{Final: true, Err: err}:
+	case s.events <- ev:
+	default:
+		select {
+		case <-s.hooks.Done:
+		case s.events <- ev:
+		}
 	}
 }
 
@@ -276,8 +284,7 @@ func (s *StreamStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 				s.settling = true
 				s.animFrom = min(s.maxFrac, barCapFrac)
 				s.animStart = s.frame
-				bell := s.bellWhileBlurred()
-				return s, bell
+				return s, nil
 			}
 			complete := func() tea.Msg { return wizard.StepCompleteMsg{StepID: StepIDStream} }
 			if bell := s.bellWhileBlurred(); bell != nil {

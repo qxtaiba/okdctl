@@ -112,8 +112,12 @@ func loadDeployHistory(st *deployexec.State, projectRoot string) {
 // recordDeployHistory folds the run's measured step durations back into the
 // history store — failures included, since their finished steps carry real
 // measurements; a demo run must not write schedule data into the project.
+// Executed gates the read: it is set only after the final event was consumed
+// (a channel-synchronized handoff ordered after the engine's Steps write),
+// while a force-quit-abandoned engine goroutine may still be writing Steps
+// when RunFlow returns.
 func recordDeployHistory(st *deployexec.State, projectRoot string) {
-	if os.Getenv(wizardDemoEnv) != "" || len(st.Steps) == 0 {
+	if os.Getenv(wizardDemoEnv) != "" || !st.Executed || len(st.Steps) == 0 {
 		return
 	}
 	if err := deployexec.RecordStepHistory(workspace.WorkDir(projectRoot), st.RunID, st.Cfg.Cluster.Name, st.Steps); err != nil {

@@ -230,3 +230,26 @@ func TestDemoHooksCarryALogStream(t *testing.T) {
 		t.Error("the demo run must fill the log surface the way a real run does")
 	}
 }
+
+// TestExecFinalDeliveredAfterGracefulCancel pins biased delivery: the first
+// ctrl+c cancels the same context the final send selects on, and a uniform
+// select would drop the event about half the time — stranding the exec
+// screen on "cancel requested — finishing safely…". With buffer space free
+// the final event must arrive every single time.
+func TestExecFinalDeliveredAfterGracefulCancel(t *testing.T) {
+	gone := make(chan struct{})
+	close(gone)
+
+	for range 200 {
+		s := NewExecStep(threeMasterState(), Hooks{Done: gone})
+		s.sendFinal(nil)
+		select {
+		case ev := <-s.events:
+			if !ev.Final {
+				t.Fatalf("delivered event = %+v, want the final one", ev)
+			}
+		default:
+			t.Fatal("a graceful cancel dropped the final event despite buffer space")
+		}
+	}
+}

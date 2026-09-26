@@ -199,13 +199,22 @@ func (s *ExecStep) execRole() nodetypes.NodeRole {
 	return nodetypes.RoleWorker
 }
 
-// sendFinal delivers the run's terminal event, abandoning it once the op's
-// context is gone: the runner goroutine holds the run lock and must not
-// outlive a force-quit waiting on a feed nobody drains.
+// sendFinal delivers the run's terminal event, abandoning it only once the
+// op's context is gone AND the feed cannot accept it: the runner goroutine
+// holds the run lock and must not outlive a force-quit waiting on a feed
+// nobody drains. Delivery is biased — the graceful cancel cancels the same
+// context this select watches, and a uniform two-way select would drop the
+// final event about half the time, stranding the exec screen on "cancel
+// requested — finishing safely…" until a forced second ctrl+c.
 func (s *ExecStep) sendFinal(err error) {
+	ev := ExecEvent{Final: true, Err: err}
 	select {
-	case <-s.hooks.Done:
-	case s.events <- ExecEvent{Final: true, Err: err}:
+	case s.events <- ev:
+	default:
+		select {
+		case <-s.hooks.Done:
+		case s.events <- ev:
+		}
 	}
 }
 

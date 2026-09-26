@@ -1,6 +1,7 @@
 package deployexec
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -469,5 +470,47 @@ func TestStreamStylesFollowThemeFlip(t *testing.T) {
 	tui.SetDarkBackground(false)
 	if out := s.View(100, 40); !strings.Contains(out, "15;23;42") {
 		t.Errorf("post-flip headline misses the light Text tier (#0F172A):\n%q", out)
+	}
+}
+
+// TestStreamFinalDeliveredAfterGracefulCancel pins biased delivery: a
+// graceful cancel closes the same channel the final send selects on, and a
+// uniform select would drop the event about half the time — stranding the
+// screen on "cancel requested" until a forced second ctrl+c. With buffer
+// space free the final event must arrive every single time.
+func TestStreamFinalDeliveredAfterGracefulCancel(t *testing.T) {
+	gone := make(chan struct{})
+	close(gone)
+
+	for range 200 {
+		s := NewStreamStep(streamState(), Hooks{Done: gone})
+		s.sendFinal(nil)
+		select {
+		case ev := <-s.events:
+			if !ev.Final {
+				t.Fatalf("delivered event = %+v, want the final one", ev)
+			}
+		default:
+			t.Fatal("a graceful cancel dropped the final event despite buffer space")
+		}
+	}
+}
+
+// TestRecorderDeliversAfterGracefulCancel pins the same contract on the
+// engine's metrics seam: step transitions racing the cancel must keep
+// landing while the feed still has room.
+func TestRecorderDeliversAfterGracefulCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	for range 200 {
+		events := make(chan Event, 1)
+		rec := NewRecorder(ctx, events)
+		rec.StepStarted("step-a")
+		select {
+		case <-events:
+		default:
+			t.Fatal("a graceful cancel dropped a step event despite buffer space")
+		}
 	}
 }
