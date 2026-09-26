@@ -7,6 +7,9 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,6 +22,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/node"
+	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui/logview"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
@@ -33,16 +37,25 @@ const lifecycleInterruptedMsg = "execution was interrupted mid-operation; the op
 var nodeManageCmd = &cobra.Command{
 	Use:   "manage",
 	Short: "Interactively manage node lifecycle (resize / add / remove)",
-	Long: `Launch the Cluster Lifecycle wizard: pick an operation, pick a target from
+	Long: `Launch the Cluster Lifecycle flow: pick an operation, pick a target from
 the live node list, enter parameters, review a real dry-run plan of the
 exact blast radius, then execute with the same guards and health gates as
 the flag-driven node verbs.
 
+Use --accessible or OKDCTL_ACCESSIBLE=1 for sequential plain-text prompts.
+
 Requires a terminal and an existing configuration; use 'okdctl node
 resize/add/remove' for automation.`,
-	Example: `  okdctl node manage`,
-	Args:    cobra.NoArgs,
-	RunE:    runNodeManage,
+	Example: `  okdctl node manage
+  okdctl node manage --accessible`,
+	Args: cobra.NoArgs,
+	RunE: runNodeManage,
+}
+
+var nodeManageAccessible bool
+
+func init() {
+	nodeManageCmd.Flags().BoolVar(&nodeManageAccessible, "accessible", false, "use sequential plain-text prompts instead of the full-screen wizard")
 }
 
 func runNodeManage(cmd *cobra.Command, _ []string) error {
@@ -65,6 +78,9 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	defer sess.close()
+	if accessibleRequested(nodeManageAccessible, os.Getenv) {
+		return runAccessibleNodeManageWith(ctx, newTerminalAccessiblePrompt(cmd.InOrStdin(), cmd.OutOrStdout(), int(os.Stdin.Fd())), sess)
+	}
 
 	result, err := wizard.RunFlow(ctx, sess.steps, cfg, lifecycle.Chrome())
 	if err != nil {
@@ -77,6 +93,365 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 			WithHint("try again, or use 'okdctl node resize/add/remove' instead")
 	}
 	return reportLifecycleOutcome(cmd, result, sess.state)
+}
+
+func runAccessibleNodeManageWith(ctx context.Context, prompt accessiblePrompt, sess *lifecycleSession) error {
+	st := sess.state
+	if st == nil || st.Cfg == nil {
+		return errors.New("node manage: missing lifecycle state")
+	}
+	if err := accessibleNodeOperation(ctx, prompt, st); err != nil {
+		return accessibleNodeFinishBeforeRun(prompt, err)
+	}
+	if !st.Resume {
+		if st.Op != node.OpAdd {
+			if err := accessibleNodeTarget(ctx, prompt, st, sess.hooks); err != nil {
+				return accessibleNodeFinishBeforeRun(prompt, err)
+			}
+		}
+	}
+	if err := accessibleNodeParams(ctx, prompt, st); err != nil {
+		return accessibleNodeFinishBeforeRun(prompt, err)
+	}
+	if sess.hooks.DryRun == nil {
+		return errors.New("node manage: dry-run hook is unavailable")
+	}
+	plan, err := sess.hooks.DryRun(st)
+	if err != nil {
+		return err
+	}
+	if plan == nil {
+		return errors.New("node manage: dry-run returned no plan")
+	}
+	st.Plan = plan
+	fmt.Fprintln(prompt.writer(), "\nPlan review")
+	fmt.Fprintln(prompt.writer(), render.NodeOpConfirm(plan))
+	if plan.DestroysData() {
+		name, err := accessibleNodeLine(ctx, prompt, "type cluster name to confirm destruction", "")
+		if err != nil {
+			return accessibleNodeFinishBeforeRun(prompt, err)
+		}
+		if name != st.Cfg.Cluster.Name {
+			return &errtypes.UsageError{Msg: "cluster name did not match; operation was not executed"}
+		}
+	}
+	answer, err := accessibleNodeLine(ctx, prompt, "execute this plan? (y/N)", "no")
+	if err != nil {
+		return accessibleNodeFinishBeforeRun(prompt, err)
+	}
+	switch strings.ToLower(answer) {
+	case "y", accessibleYesToken:
+	case "", "n", "no":
+		fmt.Fprintln(prompt.writer(), "No changes made.")
+		return nil
+	default:
+		return &errtypes.UsageError{Msg: "answer yes or no; no changes were made"}
+	}
+	if sess.hooks.Execute == nil {
+		return errors.New("node manage: execute hook is unavailable")
+	}
+	st.Proceed = true
+	st.Started = true
+	fmt.Fprintln(prompt.writer(), "Executing the reviewed plan.")
+	events := make(chan lifecycle.ExecEvent, 64)
+	drained := make(chan struct{})
+	go func() {
+		defer close(drained)
+		for ev := range events {
+			if ev.Node != "" && ev.Step != "" {
+				fmt.Fprintf(prompt.writer(), "  %s: %s\n", ev.Node, ev.Step)
+			}
+		}
+	}()
+	started := time.Now()
+	err = sess.hooks.Execute(st, events)
+	close(events)
+	<-drained
+	st.Elapsed = time.Since(started)
+	st.Result = err
+	st.Executed = true
+	cmd := &cobra.Command{}
+	cmd.SetOut(prompt.writer())
+	return reportLifecycleOutcome(cmd, wizard.Result{Completed: true}, st)
+}
+
+func accessibleNodeOperation(ctx context.Context, prompt accessiblePrompt, st *lifecycle.State) error {
+	current := "cancel"
+	if st.Marker != nil {
+		current = "resume"
+		fmt.Fprintf(prompt.writer(), "Interrupted %s at %s for %s. Choosing another operation acknowledges that marker.\n",
+			st.Marker.Op, st.Marker.Step, st.Marker.Target)
+	}
+	value, err := accessibleNodeLine(ctx, prompt, "operation (resume/resize/add/remove; blank cancels)", current)
+	if err != nil {
+		return err
+	}
+	var op node.Op
+	resume := false
+	switch strings.ToLower(value) {
+	case "resume":
+		if st.Marker == nil {
+			return &errtypes.UsageError{Msg: "there is no interrupted node operation to resume"}
+		}
+		op, resume = st.Marker.Op, true
+	case "resize":
+		op = node.OpResize
+	case "add":
+		op = node.OpAdd
+	case "remove":
+		op = node.OpRemove
+	case "", "cancel":
+		return errAccessibleNodeCancelled
+	default:
+		return &errtypes.UsageError{Msg: "choose resume, resize, add, remove, or cancel"}
+	}
+	st.Op = op
+	st.Resume = resume
+	st.Ack = st.Marker != nil && !resume
+	st.Scope = node.ResizeScope{}
+	st.Target = ""
+	if resume {
+		switch op {
+		case node.OpResize:
+			st.Scope = node.ResizeScope{Node: st.Marker.Target}
+		case node.OpRemove:
+			st.Target = st.Marker.Target
+		}
+	}
+	return nil
+}
+
+func accessibleNodeTarget(ctx context.Context, prompt accessiblePrompt, st *lifecycle.State, hooks lifecycle.Hooks) error {
+	if hooks.ListNodes == nil {
+		return errors.New("node manage: node-list hook is unavailable")
+	}
+	nodes, err := hooks.ListNodes()
+	if err != nil {
+		return err
+	}
+	st.Nodes = nodes
+	if st.Op == node.OpRemove {
+		workers := make([]cluster.NodeDetail, 0, len(nodes))
+		for i := range nodes {
+			if nodes[i].Role == nodetypes.RoleWorker {
+				workers = append(workers, nodes[i])
+			}
+		}
+		sort.SliceStable(workers, func(i, j int) bool {
+			a, aok := cluster.NodeIndex(workers[i].Name)
+			b, bok := cluster.NodeIndex(workers[j].Name)
+			if !aok || !bok {
+				return aok
+			}
+			return a > b
+		})
+		if len(workers) == 0 {
+			return &errtypes.UsageError{Msg: "no eligible worker nodes found for removal"}
+		}
+		fmt.Fprintf(prompt.writer(), "Only the highest-numbered worker is eligible: %s\n", workers[0].Name)
+		value, err := accessibleNodeLine(ctx, prompt, "worker to remove (highest-numbered worker only)", workers[0].Name)
+		if err != nil {
+			return err
+		}
+		if value != workers[0].Name {
+			return &errtypes.UsageError{Msg: "choose the highest-numbered worker shown; no changes were made"}
+		}
+		st.Target = value
+		return nil
+	}
+	fmt.Fprintln(prompt.writer(), "Eligible targets:")
+	for i := range nodes {
+		fmt.Fprintf(prompt.writer(), "  %s (%s)\n", nodes[i].Name, nodes[i].Role)
+	}
+	value, err := accessibleNodeLine(ctx, prompt, "target (masters, workers, or node name)", "")
+	if err != nil {
+		return err
+	}
+	switch value {
+	case "masters":
+		st.Scope = node.ResizeScope{Role: nodetypes.RoleMaster}
+	case "workers":
+		st.Scope = node.ResizeScope{Role: nodetypes.RoleWorker}
+	default:
+		for i := range nodes {
+			if value == nodes[i].Name {
+				st.Scope = node.ResizeScope{Node: value}
+				return nil
+			}
+		}
+		return &errtypes.UsageError{Msg: "choose masters, workers, or a listed node name"}
+	}
+	return nil
+}
+
+const accessibleYesToken = "yes"
+
+func accessibleNodeParams(ctx context.Context, prompt accessiblePrompt, st *lifecycle.State) error {
+	switch st.Op {
+	case node.OpAdd:
+		return accessibleNodeAddParams(ctx, prompt, st)
+	case node.OpRemove:
+		return accessibleNodeRemoveParams(ctx, prompt, st)
+	case node.OpResize:
+		return accessibleNodeResizeParams(ctx, prompt, st)
+	default:
+		return &errtypes.UsageError{Msg: "unsupported lifecycle operation"}
+	}
+}
+
+func accessibleNodeAddParams(ctx context.Context, prompt accessiblePrompt, st *lifecycle.State) error {
+	value, err := accessibleNodeLine(ctx, prompt, "workers to add", "1")
+	if err != nil {
+		return err
+	}
+	st.Count, err = strconv.Atoi(value)
+	if err != nil || st.Count < 1 {
+		return &errtypes.UsageError{Msg: "workers to add must be a whole number >= 1"}
+	}
+	return nil
+}
+
+func accessibleNodeRemoveParams(ctx context.Context, prompt accessiblePrompt, st *lifecycle.State) error {
+	if err := accessibleNodeDrainParams(ctx, prompt, st); err != nil {
+		return err
+	}
+	value, err := accessibleNodeLine(ctx, prompt, "force removal with storage data loss? (y/N)", "no")
+	if err != nil {
+		return err
+	}
+	st.ForceStorage, err = parseAccessibleYesNo(value)
+	if err != nil {
+		return &errtypes.UsageError{Msg: "answer yes or no for the storage data-loss override"}
+	}
+	return nil
+}
+
+func accessibleNodeResizeParams(ctx context.Context, prompt accessiblePrompt, st *lifecycle.State) error {
+	role := st.Scope.Role
+	if role == "" {
+		for i := range st.Nodes {
+			if st.Nodes[i].Name == st.Scope.Node {
+				role = st.Nodes[i].Role
+			}
+		}
+		if role == "" && strings.Contains(st.Scope.Node, "master") {
+			role = nodetypes.RoleMaster
+		}
+	}
+	current := st.Cfg.Topology.Workers
+	if role == nodetypes.RoleMaster {
+		current = st.Cfg.Topology.ControlPlane
+	}
+	fields := []struct {
+		label string
+		value int
+		set   func(int)
+	}{
+		{"memory (mb; 0 keeps current)", current.MemoryMB, func(v int) { st.MemoryMB = v }},
+		{"vcpus (0 keeps current)", 0, func(v int) { st.CPU = v }},
+		{"os disk (gb; 0 keeps current, grow-only)", 0, func(v int) { st.OSDiskGB = v }},
+	}
+	for _, field := range fields {
+		value, err := accessibleNodeLine(ctx, prompt, field.label, strconv.Itoa(field.value))
+		if err != nil {
+			return err
+		}
+		n, err := strconv.Atoi(value)
+		if err != nil || n < 0 {
+			return &errtypes.UsageError{Msg: field.label + " must be a whole number >= 0"}
+		}
+		if strings.HasPrefix(field.label, "memory") && n > 0 && n < 8192 {
+			return &errtypes.UsageError{Msg: "memory must be at least 8192 MB, or 0 to keep current"}
+		}
+		field.set(n)
+	}
+	if st.MemoryMB == 0 && st.CPU == 0 && st.OSDiskGB == 0 {
+		return &errtypes.UsageError{Msg: "resize requires at least one of memory, vcpus, or os disk"}
+	}
+	if err := validateAccessibleDiskResize(st); err != nil {
+		return err
+	}
+	return accessibleNodeDrainParams(ctx, prompt, st)
+}
+
+func validateAccessibleDiskResize(st *lifecycle.State) error {
+	if st.OSDiskGB == 0 {
+		return nil
+	}
+	if st.Scope.Node != "" {
+		return &errtypes.UsageError{Msg: "os disk is role-scoped; choose masters or workers"}
+	}
+	current := st.Cfg.Topology.Workers.DiskGB
+	if st.Scope.Role == nodetypes.RoleMaster {
+		current = st.Cfg.Topology.ControlPlane.DiskGB
+	}
+	if st.OSDiskGB <= current {
+		return &errtypes.UsageError{Msg: fmt.Sprintf("os disk size must exceed the current %d GiB", current)}
+	}
+	return nil
+}
+
+func accessibleNodeDrainParams(ctx context.Context, prompt accessiblePrompt, st *lifecycle.State) error {
+	mode, err := accessibleNodeLine(ctx, prompt, "drain mode (drain/skip)", "drain")
+	if err != nil {
+		return err
+	}
+	switch strings.ToLower(mode) {
+	case "drain":
+		st.SkipDrain = false
+	case "skip":
+		st.SkipDrain = true
+	default:
+		return &errtypes.UsageError{Msg: "drain mode must be drain or skip"}
+	}
+	timeout, err := accessibleNodeLine(ctx, prompt, "drain timeout", "10m")
+	if err != nil {
+		return err
+	}
+	parsed, err := time.ParseDuration(timeout)
+	if err != nil || parsed <= 0 {
+		return &errtypes.UsageError{Msg: "drain timeout must be a positive duration like 10m or 1h"}
+	}
+	st.DrainTimeout = timeout
+	return nil
+}
+
+func accessibleNodeLine(ctx context.Context, prompt accessiblePrompt, label, current string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", errAccessibleNodeCancelled
+	}
+	value, err := prompt.line(label, current)
+	if errors.Is(err, io.EOF) || ctx.Err() != nil {
+		return "", errAccessibleNodeCancelled
+	}
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(value) == "" {
+		return strings.TrimSpace(current), nil
+	}
+	return strings.TrimSpace(value), nil
+}
+
+func accessibleNodeFinishBeforeRun(prompt accessiblePrompt, err error) error {
+	if errors.Is(err, errAccessibleNodeCancelled) {
+		fmt.Fprintln(prompt.writer(), "No changes made.")
+		return nil
+	}
+	return err
+}
+
+var errAccessibleNodeCancelled = errors.New("accessible node operation cancelled")
+
+func parseAccessibleYesNo(value string) (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "n", "no":
+		return false, nil
+	case "y", accessibleYesToken:
+		return true, nil
+	default:
+		return false, errors.New("expected yes or no")
+	}
 }
 
 // lifecycleConfig resolves the config the Cluster Lifecycle flow runs against:
@@ -94,6 +469,7 @@ func lifecycleConfig() (*config.Config, error) {
 type lifecycleSession struct {
 	steps []wizard.WizardStep
 	state *lifecycle.State
+	hooks lifecycle.Hooks
 	// close zeroizes credentials and cancels the op context; it must run only
 	// after the wizard exits, since the hooks the steps call hold both.
 	close func()
@@ -107,9 +483,11 @@ type lifecycleSession struct {
 func newLifecycleSession(cmd *cobra.Command, cfg *config.Config) (*lifecycleSession, error) {
 	if os.Getenv(wizardDemoEnv) != "" {
 		st := &lifecycle.State{Cfg: cfg}
+		hooks := lifecycle.DemoHooks(demoExecStepDelay)
 		return &lifecycleSession{
-			steps: lifecycle.NewSteps(st, lifecycle.DemoHooks(demoExecStepDelay)),
+			steps: lifecycle.NewSteps(st, hooks),
 			state: st,
+			hooks: hooks,
 			close: func() {},
 		}, nil
 	}
@@ -170,6 +548,7 @@ func newLifecycleSession(cmd *cobra.Command, cfg *config.Config) (*lifecycleSess
 	return &lifecycleSession{
 		steps: lifecycle.NewSteps(st, hooks),
 		state: st,
+		hooks: hooks,
 		close: func() {
 			cancelOp()
 			env.close()

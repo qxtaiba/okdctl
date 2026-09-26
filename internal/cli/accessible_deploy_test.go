@@ -110,3 +110,45 @@ func TestAccessibleDeployConfigureCancelsAndZeroizesSecret(t *testing.T) {
 		t.Fatal("cancelled secret remains in config")
 	}
 }
+
+func TestAccessibleRequestedHonorsFlagAndEnvironment(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		flag bool
+		env  string
+		want bool
+	}{
+		{name: "flag", flag: true, want: true},
+		{name: "environment", env: "1", want: true},
+		{name: "other environment values do not opt in", env: "true"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := accessibleRequested(tt.flag, func(string) string { return tt.env }); got != tt.want {
+				t.Fatalf("accessibleRequested() = %t, want %t", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAccessibleDeployExecutionOptsOutOfFullScreenStream(t *testing.T) {
+	old := deployNoTUI
+	deployNoTUI = false
+	t.Cleanup(func() { deployNoTUI = old })
+	called := false
+	err := runAccessibleDeployExecution(func() error {
+		called = true
+		if !deployStreamOptedOut() {
+			t.Fatal("accessible deploy still enables the full-screen stream")
+		}
+		return nil
+	})()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !called {
+		t.Fatal("deployment callback was not called")
+	}
+	if deployNoTUI {
+		t.Fatal("accessible execution leaked --no-tui state after returning")
+	}
+}

@@ -4,10 +4,12 @@ Interactively manage node lifecycle (resize / add / remove)
 
 ### Synopsis
 
-Launch the Cluster Lifecycle wizard: pick an operation, pick a target from
+Launch the Cluster Lifecycle flow: pick an operation, pick a target from
 the live node list, enter parameters, review a real dry-run plan of the
 exact blast radius, then execute with the same guards and health gates as
 the flag-driven node verbs.
+
+Use --accessible or OKDCTL_ACCESSIBLE=1 for sequential plain-text prompts.
 
 Requires a terminal and an existing configuration; use 'okdctl node
 resize/add/remove' for automation.
@@ -20,12 +22,14 @@ okdctl node manage [flags]
 
 ```
   okdctl node manage
+  okdctl node manage --accessible
 ```
 
 ### Options
 
 ```
-  -h, --help   help for manage
+      --accessible   use sequential plain-text prompts instead of the full-screen wizard
+  -h, --help         help for manage
 ```
 
 ### Options inherited from parent commands

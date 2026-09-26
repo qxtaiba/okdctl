@@ -4,16 +4,19 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/node"
+	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/lifecycle"
@@ -160,5 +163,138 @@ func TestSendExecEventDeliversAfterGracefulCancel(t *testing.T) {
 		default:
 			t.Fatal("a graceful cancel dropped an exec event despite buffer space")
 		}
+	}
+}
+
+func TestAccessibleNodeManageUsesDryRunAndDefaultsToNoExecute(t *testing.T) {
+	state := &lifecycle.State{Cfg: config.DefaultConfig()}
+	var dryRun, execute int
+	sess := &lifecycleSession{
+		state: state,
+		hooks: lifecycle.Hooks{
+			ListNodes: func() ([]cluster.NodeDetail, error) {
+				return []cluster.NodeDetail{
+					{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true},
+				}, nil
+			},
+			DryRun: func(st *lifecycle.State) (*node.OpPlan, error) {
+				dryRun++
+				return &node.OpPlan{Op: st.Op, Cluster: st.Cfg.Cluster.Name}, nil
+			},
+			Execute: func(*lifecycle.State, chan<- lifecycle.ExecEvent) error {
+				execute++
+				return nil
+			},
+		},
+	}
+	prompt := &scriptedAccessiblePrompt{values: map[string]string{
+		"operation (resume/resize/add/remove; blank cancels)": "add",
+		"workers to add": "2",
+	}}
+	if err := runAccessibleNodeManageWith(context.Background(), prompt, sess); err != nil {
+		t.Fatal(err)
+	}
+	if dryRun != 1 || execute != 0 {
+		t.Fatalf("dry-run calls = %d, execute calls = %d; want 1 and 0", dryRun, execute)
+	}
+	if state.Op != node.OpAdd || state.Count != 2 || state.Proceed {
+		t.Fatalf("state after review = %+v", state)
+	}
+	if !strings.Contains(prompt.output.String(), "Plan review") {
+		t.Fatalf("plan review missing: %q", prompt.output.String())
+	}
+	if !slices.Contains(prompt.linePrompts, "execute this plan? (y/N)") {
+		t.Fatalf("execute confirmation was not prompted: %v", prompt.linePrompts)
+	}
+}
+
+func TestAccessibleNodeManageRequiresTypedClusterNameForDataDestruction(t *testing.T) {
+	state := &lifecycle.State{Cfg: config.DefaultConfig()}
+	var execute int
+	sess := &lifecycleSession{
+		state: state,
+		hooks: lifecycle.Hooks{
+			ListNodes: func() ([]cluster.NodeDetail, error) {
+				return []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}}, nil
+			},
+			DryRun: func(st *lifecycle.State) (*node.OpPlan, error) {
+				return &node.OpPlan{
+					Op: st.Op, Cluster: st.Cfg.Cluster.Name,
+					Nodes: []node.PlanNode{{Name: "worker0", Action: terraform.PlanActionDelete}},
+				}, nil
+			},
+			Execute: func(*lifecycle.State, chan<- lifecycle.ExecEvent) error {
+				execute++
+				return nil
+			},
+		},
+	}
+	prompt := &scriptedAccessiblePrompt{values: map[string]string{
+		"operation (resume/resize/add/remove; blank cancels)": "remove",
+		"worker to remove (highest-numbered worker only)":     "worker0",
+		"drain mode (drain/skip)":                             "drain",
+		"drain timeout":                                       "10m",
+		"force removal with storage data loss? (y/N)":         "no",
+		"type cluster name to confirm destruction":            "wrong-name",
+	}}
+	if err := runAccessibleNodeManageWith(context.Background(), prompt, sess); err == nil {
+		t.Fatal("mismatched cluster name accepted")
+	}
+	if execute != 0 {
+		t.Fatalf("execute called %d times after a mismatched name", execute)
+	}
+}
+
+func TestAccessibleNodeManageExecutesOnlyAfterReviewedPlanConfirmation(t *testing.T) {
+	state := &lifecycle.State{Cfg: config.DefaultConfig()}
+	executed := false
+	sess := &lifecycleSession{
+		state: state,
+		hooks: lifecycle.Hooks{
+			ListNodes: func() ([]cluster.NodeDetail, error) {
+				return []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}}, nil
+			},
+			DryRun: func(st *lifecycle.State) (*node.OpPlan, error) {
+				return &node.OpPlan{
+					Op: st.Op, Cluster: st.Cfg.Cluster.Name,
+					Nodes: []node.PlanNode{{Name: "worker0", Role: nodetypes.RoleWorker, Action: terraform.PlanActionUpdate}},
+				}, nil
+			},
+			Execute: func(_ *lifecycle.State, events chan<- lifecycle.ExecEvent) error {
+				executed = true
+				events <- lifecycle.ExecEvent{Node: "worker0", Step: node.StepPowerCycle}
+				return nil
+			},
+		},
+	}
+	prompt := &scriptedAccessiblePrompt{values: map[string]string{
+		"operation (resume/resize/add/remove; blank cancels)": "resize",
+		"target (masters, workers, or node name)":             "workers",
+		"memory (mb; 0 keeps current)":                        "16384",
+		"vcpus (0 keeps current)":                             "0",
+		"os disk (gb; 0 keeps current, grow-only)":            "0",
+		"drain mode (drain/skip)":                             "drain",
+		"drain timeout":                                       "10m",
+		"execute this plan? (y/N)":                            "y",
+	}}
+	if err := runAccessibleNodeManageWith(context.Background(), prompt, sess); err != nil {
+		t.Fatal(err)
+	}
+	if !executed || !state.Started || !state.Executed || state.Result != nil {
+		t.Fatalf("execution state: executed=%t state=%+v", executed, state)
+	}
+	for _, want := range []string{"worker0: power-cycle", "resize complete"} {
+		if !strings.Contains(prompt.output.String(), want) {
+			t.Errorf("output missing %q: %q", want, prompt.output.String())
+		}
+	}
+}
+
+func TestNodeManageHelpNamesAccessibleMode(t *testing.T) {
+	if got := nodeManageCmd.Flags().Lookup("accessible"); got == nil {
+		t.Fatal("node manage is missing --accessible")
+	}
+	if !strings.Contains(nodeManageCmd.Long, "OKDCTL_ACCESSIBLE=1") {
+		t.Fatal("node manage help is missing the environment-variable equivalent")
 	}
 }
