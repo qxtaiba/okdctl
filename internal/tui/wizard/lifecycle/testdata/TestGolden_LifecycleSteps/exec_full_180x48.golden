@@ -43,6 +43,6 @@
   │                                                                                                                                                                              │  
   │                                                                                                                                                                              │  
   │─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
-  │  f back to checklist • l lock the log here • pgup/pgdn page the log • ctrl+c cancel (twice to force-quit) • ? help                                                           │  
+  │  f back to checklist • l lock the log here • pgup/pgdn page the log • / filter the log • n/N next/prev warn or error • ctrl+c cancel (twice to force-quit) • ? help          │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                                                                                                     

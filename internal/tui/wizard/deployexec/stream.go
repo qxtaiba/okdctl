@@ -489,8 +489,11 @@ func (s *StreamStep) ShouldShow(_ *config.Config) bool {
 
 // InterceptBack makes the deploy screen forward-only: esc must never orphan
 // the event pump mid-install (the engine goroutine would block on a full
-// channel) or re-arm a listener on a finished run.
+// channel) or re-arm a listener on a finished run. Closing an open filter
+// input is the one thing the key does here, and it has to happen on this
+// hook: the frame consumes esc before the step's own Update could see it.
 func (s *StreamStep) InterceptBack() bool {
+	s.log.CancelFilter()
 	return true
 }
 
@@ -747,21 +750,18 @@ func fmtDur(d time.Duration) string {
 
 // ShortHelp explains the log viewport's keys plus the constrained ones: no esc,
 // guarded ctrl+c. The ribbon reserves only ctrl+c and "?" and then drops the
-// rest front to back, so in full-screen mode f leads the list — it is the only
-// way back to the checklist, and losing it would strand the operator on the log.
+// rest front to back; wizard.LogHelp orders the surface's own keys.
 func (s *StreamStep) ShortHelp() []wizard.KeyBinding {
 	cancel := wizard.KeyBinding{Key: wizard.HelpCtrlC, Help: "cancel (twice to force-quit)"}
 	if s.hooks.Logs == nil {
 		return []wizard.KeyBinding{cancel}
 	}
-	lock := wizard.KeyBinding{Key: string(rune(logview.KeyLock)), Help: s.log.LockHelp()}
-	full := wizard.KeyBinding{Key: string(rune(logview.KeyFull)), Help: s.log.FullHelp()}
-	page := wizard.KeyBinding{Key: "pgup/pgdn", Help: "page the log"}
-	if s.log.Full() {
-		return []wizard.KeyBinding{full, lock, page, cancel}
-	}
-	if s.log.Locked() {
-		return []wizard.KeyBinding{lock, full, page, cancel}
-	}
-	return []wizard.KeyBinding{lock, full, cancel}
+	return wizard.LogHelp(&s.log, cancel)
+}
+
+// ConsumesTextInput reports the open filter input, so the frame hands the
+// step every printable key — its own vim scroll keys and the "?" overlay
+// toggle included — instead of acting on them itself.
+func (s *StreamStep) ConsumesTextInput() bool {
+	return s.log.Filtering()
 }

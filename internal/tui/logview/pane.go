@@ -32,32 +32,32 @@ const (
 )
 
 // view is a log viewport's own state: where the window ends while follow is
-// locked, and whether the log has taken the whole frame.
+// locked, whether the log has taken the whole frame, and the live filter.
 type view struct {
 	locked bool
 	// lockAt is the absolute stream index the locked window ends at (exclusive).
 	lockAt int64
 	full   bool
+	filter filter
 }
 
-// window picks the rows a viewport shows from a ring snapshot — the tail
-// while following, or the budget of lines ending at v.lockAt while locked,
-// clamped to whatever the ring still holds — and reports the absolute stream
-// index just past the window's last line.
-func window(lines []Line, first int64, v view, budget int) (w []Line, end int64) {
-	if budget <= 0 || len(lines) == 0 {
-		return nil, first + int64(len(lines))
+// windowIn picks the rows a viewport shows from one already-selected
+// sequence, reporting the window's end position in the sequence's own
+// coordinates alongside the absolute stream index just past its last line.
+func windowIn(st *stream, v view, budget int) (w []Line, pos int, end int64) {
+	if budget <= 0 || st.len() == 0 {
+		return nil, 0, 0
 	}
-	at := len(lines)
+	at := st.len()
 	if v.locked {
-		at = min(max(int(v.lockAt-first), 0), len(lines))
+		at = min(max(st.below(v.lockAt), 0), st.len())
 	}
-	// A lock older than everything the ring still holds shows the oldest rows it
-	// has rather than nothing at all.
+	// A lock older than everything the sequence still holds shows the oldest
+	// rows it has rather than nothing at all.
 	if at == 0 {
-		at = min(budget, len(lines))
+		at = min(budget, st.len())
 	}
-	return lines[max(at-budget, 0):at], first + int64(at)
+	return st.lines[max(at-budget, 0):at], at, st.at(at-1) + 1
 }
 
 // scroll moves v's window n lines through src's stream (negative is older),
@@ -70,18 +70,54 @@ func scroll(v *view, src Source, n, minLines int) {
 		return
 	}
 	lines, first := src.Snapshot()
-	total := first + int64(len(lines))
-	at := total
-	if v.locked {
-		at = min(v.lockAt, total)
+	st := v.filter.selectFrom(lines, first)
+	if st.len() == 0 {
+		return
 	}
-	at += int64(n)
-	at = max(at, min(first+int64(max(minLines, 1)), total))
-	if at >= total {
+	at := st.len()
+	if v.locked {
+		at = min(max(st.below(v.lockAt), 0), st.len())
+	}
+	at += n
+	at = max(at, min(max(minLines, 1), st.len()))
+	if at >= st.len() {
 		v.locked, v.lockAt = false, 0
 		return
 	}
-	v.locked, v.lockAt = true, at
+	v.locked, v.lockAt = true, st.at(at-1)+1
+}
+
+// jump moves the window's end to just past the next line of interest after
+// it (dir positive) or the last one before its final row (dir negative),
+// releasing the lock when the target is the sequence's own tail. Nothing
+// moves when there is no such line.
+func jump(v *view, src Source, dir int) {
+	if src == nil || dir == 0 {
+		return
+	}
+	lines, first := src.Snapshot()
+	if len(lines) == 0 {
+		return
+	}
+	end := first + int64(len(lines))
+	if v.locked {
+		end = min(max(v.lockAt, first), end)
+	}
+	from := int(end - first)
+	if dir < 0 {
+		from -= 2
+	}
+	for i := from; i >= 0 && i < len(lines); i += dir {
+		if !v.filter.interesting(&lines[i]) {
+			continue
+		}
+		if target := first + int64(i) + 1; target >= first+int64(len(lines)) {
+			v.locked, v.lockAt = false, 0
+		} else {
+			v.locked, v.lockAt = true, target
+		}
+		return
+	}
 }
 
 // visibleLines reports how many lines v's window is currently showing at
@@ -92,7 +128,8 @@ func visibleLines(src Source, v view, width, height int, wrap bool) int {
 	}
 	lines, first := src.Snapshot()
 	budget := max(height-1, 1)
-	w, _ := window(lines, first, v, budget)
+	st := v.filter.selectFrom(lines, first)
+	w, _, _ := windowIn(&st, v, budget)
 	if wrap {
 		w = fitWrapped(w, width, budget)
 	}
@@ -101,19 +138,20 @@ func visibleLines(src Source, v view, width, height int, wrap bool) int {
 
 // topLines reports how many of the stream's oldest lines fill one window at
 // width×height — the floor scroll stops paging up at.
-func topLines(src Source, width, height int, wrap bool) int {
+func topLines(src Source, v view, width, height int, wrap bool) int {
 	if src == nil {
 		return 1
 	}
-	lines, _ := src.Snapshot()
+	lines, first := src.Snapshot()
+	st := v.filter.selectFrom(lines, first)
 	budget := max(height-1, 1)
 	if !wrap {
-		return max(min(budget, len(lines)), 1)
+		return max(min(budget, st.len()), 1)
 	}
 	rows, n := 0, 0
 	tw := textWidth(width)
-	for i := range lines {
-		rows += len(tui.WrapLines(lineText(&lines[i]), tw))
+	for i := range st.lines {
+		rows += len(tui.WrapLines(lineText(&st.lines[i]), tw))
 		if rows > budget {
 			break
 		}
@@ -251,14 +289,18 @@ func renderPane(src Source, v view, width, height int, wrap bool) string {
 	}
 	budget := max(height-1, 1)
 	lines, first := src.Snapshot()
-	w, end := window(lines, first, v, budget)
+	st := v.filter.selectFrom(lines, first)
+	w, pos, end := windowIn(&st, v, budget)
 	if wrap {
 		w = fitWrapped(w, width, budget)
 	}
-	header := paneHeader(v, len(w), end, first+int64(len(lines)), width)
+	header := paneHeader(v, coords{
+		shown: len(w), end: end, total: first + int64(len(lines)),
+		pos: pos, matches: st.len(),
+	}, width)
 	rows := renderRows(w, width, budget, wrap)
 	if len(rows) == 0 {
-		rows = []string{lipgloss.NewStyle().Foreground(tui.ColorSubtle()).Render("waiting for the first log line…")}
+		rows = []string{lipgloss.NewStyle().Foreground(tui.ColorSubtle()).Render(emptyNote(v.filter))}
 	}
 	rows = withMinimap(rows, lines, width, int(end-first)-len(w), int(end-first))
 	return strings.Join(append([]string{header}, rows...), "\n")
@@ -266,10 +308,11 @@ func renderPane(src Source, v view, width, height int, wrap bool) string {
 
 // withMinimap pads each of rows out to the lane column and appends its own
 // cell. rows come back untouched on a window too narrow to spend a column
-// on, and on one already showing the whole stream — a lane over a stream
-// with nothing off screen would mark scroll targets that are already read.
+// on, on one already showing the whole stream — a lane over a stream with
+// nothing off screen would mark scroll targets that are already read — and on
+// one whose only row is a placeholder note, which sits in no position at all.
 func withMinimap(rows []string, lines []Line, width, winStart, winEnd int) []string {
-	if !drawsMinimap(width) || len(rows) == 0 || len(lines) == 0 {
+	if !drawsMinimap(width) || len(rows) == 0 || len(lines) == 0 || winEnd <= winStart {
 		return rows
 	}
 	if winStart <= 0 && winEnd >= len(lines) {
@@ -328,16 +371,57 @@ func worstLevel(bucket []Line) string {
 	return worst
 }
 
-// paneHeader renders the pane's dim section label; a locked window names
-// the shown lines' span out of the stream's total — "LOG · 212–260 of 412" —
-// so a stalled tail reads as the paused pager it is, and paging always says
-// where it stands.
-func paneHeader(v view, shown int, end, total int64, width int) string {
-	label := "LOG"
-	if v.locked && shown > 0 {
-		label = fmt.Sprintf("LOG · %d–%d of %d", end-int64(shown)+1, end, total)
+// coords is what the pane header counts with: the absolute stream span the
+// window ends at, and the window's own position among a filter's matches.
+type coords struct {
+	shown        int
+	end, total   int64
+	pos, matches int
+}
+
+// paneHeader renders the pane's dim section label, naming the space it counts
+// in. With no filter a locked window names the shown lines' absolute span out
+// of the stream's total — "LOG · 212–260 of 412" — so a stalled tail reads as
+// the paused pager it is. With a filter live the chip carries the pattern and
+// its match count, and a locked window's span is stated in matches instead,
+// since the absolute line numbers of a filtered window are not contiguous.
+func paneHeader(v view, c coords, width int) string {
+	parts := []string{"LOG"}
+	if chip := filterChip(v.filter, c.matches, int(c.total)); chip != "" {
+		parts = append(parts, chip)
 	}
-	return lipgloss.NewStyle().Foreground(tui.ColorTextFaint()).MaxWidth(width).Render(label)
+	switch {
+	case c.shown == 0 || !v.locked:
+	case v.filter.active():
+		parts = append(parts, fmt.Sprintf("match %d–%d of %d", c.pos-c.shown+1, c.pos, c.matches))
+	default:
+		parts = append(parts, fmt.Sprintf("%d–%d of %d", c.end-int64(c.shown)+1, c.end, c.total))
+	}
+	return lipgloss.NewStyle().Foreground(tui.ColorTextFaint()).MaxWidth(width).Render(strings.Join(parts, " · "))
+}
+
+// emptyNote is what a window with no rows says: an unfiltered one is still
+// waiting for output, a filtered one has excluded everything there is.
+func emptyNote(f filter) string {
+	if f.engaged() {
+		return "no log line matches this filter"
+	}
+	return "waiting for the first log line…"
+}
+
+// filterChip renders the persistent filter chip — the pattern as typed with
+// its match count out of the stream's total. While the pattern is still being
+// typed the chip leads with the "/" that opened it, so the input mode reads
+// without relying on colour.
+func filterChip(f filter, matches, total int) string {
+	if !f.active() && !f.typing {
+		return ""
+	}
+	label := "filter: " + f.text
+	if f.typing {
+		label = "/" + f.text
+	}
+	return fmt.Sprintf("%s %s (%d/%d)", tui.IconCaretRight, label, matches, total)
 }
 
 // renderTail renders the rows that ride under a step's own body when the
@@ -347,13 +431,23 @@ func renderTail(src Source, v view, width, budget int) []string {
 		return nil
 	}
 	lines, first := src.Snapshot()
-	w, end := window(lines, first, v, budget)
+	st := v.filter.selectFrom(lines, first)
+	w, pos, end := windowIn(&st, v, budget)
 	rows := renderRows(w, width, budget, false)
 	if len(rows) == 0 {
-		return nil
+		if !v.filter.engaged() {
+			return nil
+		}
+		// A filter matching nothing must not take the chip down with the rows
+		// — it is the only thing on screen explaining why they are gone.
+		rows = []string{lipgloss.NewStyle().Foreground(tui.ColorSubtle()).Render(emptyNote(v.filter))}
 	}
 	rows = withMinimap(rows, lines, width, int(end-first)-len(w), int(end-first))
-	return append([]string{paneHeader(v, len(w), end, first+int64(len(lines)), width)}, rows...)
+	header := paneHeader(v, coords{
+		shown: len(w), end: end, total: first + int64(len(lines)),
+		pos: pos, matches: st.len(),
+	}, width)
+	return append([]string{header}, rows...)
 }
 
 // renderFull renders the log across the whole body once `f` has swapped it

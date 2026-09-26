@@ -74,7 +74,8 @@ func TestLogWindowLockHoldsItsPointWhileTheTailMovesOn(t *testing.T) {
 	}
 
 	lines, first := r.Snapshot()
-	w, _ := window(lines, first, v, 4)
+	st := v.filter.selectFrom(lines, first)
+	w, _, _ := windowIn(&st, v, 4)
 	if len(w) != 4 {
 		t.Fatalf("locked window holds %d rows, want 4", len(w))
 	}
@@ -82,7 +83,8 @@ func TestLogWindowLockHoldsItsPointWhileTheTailMovesOn(t *testing.T) {
 		t.Errorf("locked window ends at %q, want the line the lock pinned", w[3].Text)
 	}
 
-	following, _ := window(lines, first, view{}, 4)
+	followSt := filter{}.selectFrom(lines, first)
+	following, _, _ := windowIn(&followSt, view{}, 4)
 	if !strings.Contains(following[3].Text, "step-39") {
 		t.Errorf("a released window ends at %q, want the newest line", following[3].Text)
 	}
@@ -97,7 +99,8 @@ func TestLogWindowLockOlderThanTheRingFallsBackToWhatIsLeft(t *testing.T) {
 	}
 	lines, first := r.Snapshot()
 
-	w, _ := window(lines, first, view{locked: true, lockAt: 1}, 3)
+	st := filter{}.selectFrom(lines, first)
+	w, _, _ := windowIn(&st, view{locked: true, lockAt: 1}, 3)
 	if len(w) == 0 {
 		t.Fatal("a lock the ring has outrun must still show what it holds")
 	}
@@ -191,7 +194,8 @@ func TestScrollLogWholeRingIsReachable(t *testing.T) {
 	seen := map[string]bool{}
 	record := func() {
 		lines, first := r.Snapshot()
-		w, _ := window(lines, first, v, budget)
+		st := v.filter.selectFrom(lines, first)
+		w, _, _ := windowIn(&st, v, budget)
 		for i := range w {
 			seen[w[i].Text] = true
 		}
@@ -219,7 +223,7 @@ func TestLogPaneHeaderNamesTheLockedWindowPosition(t *testing.T) {
 		t.Errorf("locked pane header must name its window position, got:\n%s", out)
 	}
 
-	if got := tuitest.StripANSI(paneHeader(view{}, 5, 40, 40, 60)); got != "LOG" {
+	if got := tuitest.StripANSI(paneHeader(view{}, coords{shown: 5, end: 40, total: 40, pos: 40, matches: 40}, 60)); got != "LOG" {
 		t.Errorf("a following pane keeps the bare label, got %q", got)
 	}
 }

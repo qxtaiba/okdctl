@@ -25,6 +25,6 @@
   │  · 09:02:41 terraform apply step=step-23 node=homelab-master0                         ▎      │  
   │                                                                                              │  
   │──────────────────────────── ↑ ↓  scroll down for more ──────────────────────────── ▸ homelab │  
-  │  l lock the log here • f full-screen log … • ctrl+c cancel (twice to force-quit) • ? help    │  
+  │  / filter the log • l lock the log here … • ctrl+c cancel (twice to force-quit) • ? help     │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                     

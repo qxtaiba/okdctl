@@ -412,8 +412,11 @@ func rowLabels(rows []execRow) []string {
 
 // InterceptBack makes the execution screen forward-only: esc must never
 // orphan the event pump mid-mutation (the runner goroutine would block on
-// a full channel) or re-arm a listener on a finished run.
+// a full channel) or re-arm a listener on a finished run. Closing an open
+// filter input is the one thing the key does here, and it has to happen on
+// this hook: the frame consumes esc before the step's own Update could see it.
 func (s *ExecStep) InterceptBack() bool {
+	s.log.CancelFilter()
 	return true
 }
 
@@ -632,21 +635,18 @@ func rowDur(r *execRow) string {
 // esc, guarded ctrl+c — the label matches the deploy stream screen's own
 // cancel hint verbatim (StreamStep.ShortHelp), so the two full-screen exec
 // surfaces read as one system rather than two different verbs for the same
-// gesture. In full-screen mode f leads the list — it is the only way back
-// to the checklist, and losing it would strand the operator on the log.
+// gesture. wizard.LogHelp orders the surface's own keys for both.
 func (s *ExecStep) ShortHelp() []wizard.KeyBinding {
 	cancel := wizard.KeyBinding{Key: wizard.HelpCtrlC, Help: "cancel (twice to force-quit)"}
 	if s.hooks.Logs == nil {
 		return []wizard.KeyBinding{cancel}
 	}
-	lock := wizard.KeyBinding{Key: string(rune(logview.KeyLock)), Help: s.log.LockHelp()}
-	full := wizard.KeyBinding{Key: string(rune(logview.KeyFull)), Help: s.log.FullHelp()}
-	page := wizard.KeyBinding{Key: "pgup/pgdn", Help: "page the log"}
-	if s.log.Full() {
-		return []wizard.KeyBinding{full, lock, page, cancel}
-	}
-	if s.log.Locked() {
-		return []wizard.KeyBinding{lock, full, page, cancel}
-	}
-	return []wizard.KeyBinding{lock, full, cancel}
+	return wizard.LogHelp(&s.log, cancel)
+}
+
+// ConsumesTextInput reports the open filter input, so the frame hands the
+// step every printable key — its own vim scroll keys and the "?" overlay
+// toggle included — instead of acting on them itself.
+func (s *ExecStep) ConsumesTextInput() bool {
+	return s.log.Filtering()
 }

@@ -25,6 +25,6 @@
   │  full log okd-install/okdctl.log                                                             │  
   │                                                                                              │  
   │─────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
-  │  l lock the log here • f full-screen log • ctrl+c cancel (twice to force-quit) • ? help      │  
+  │  / filter the log • l lock the log here … • ctrl+c cancel (twice to force-quit) • ? help     │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                     

@@ -9,11 +9,16 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-// KeyLock and KeyFull are the log surface's two keys: freeze the window
-// where it stands, and swap the log full-screen.
+// The log surface's keys: freeze the window where it stands, swap the log
+// full-screen, open the filter input, and step the window between lines of
+// interest — the next filter match while a filter is live, the next warning
+// or error otherwise.
 const (
-	KeyLock = 'l'
-	KeyFull = 'f'
+	KeyLock      = 'l'
+	KeyFull      = 'f'
+	KeyFilter    = '/'
+	KeyNextMatch = 'n'
+	KeyPrevMatch = 'N'
 )
 
 // NarrowTailRows is how many log lines ride under a step's own body when the
@@ -34,6 +39,9 @@ type Surface struct {
 	ViewCol int
 
 	v view
+	// committed is the filter that was live before the input opened, restored
+	// when the operator escapes out of it.
+	committed filter
 	// Recorded heights, one per window mode, stamped by the render methods.
 	fullH, tailH, paneW, paneH int
 }
@@ -66,24 +74,37 @@ func (s *Surface) HandleKey(msg tea.KeyPressMsg, paneCarries bool) (layoutToggle
 	if s.Src == nil {
 		return false
 	}
-	switch msg.Code {
-	case KeyLock:
+	if s.v.filter.typing {
+		s.editFilter(msg)
+		return false
+	}
+	switch {
+	case letterKey(msg, KeyLock):
 		s.v.locked = !s.v.locked
 		if s.v.locked {
 			s.v.lockAt = lockedAt(s.Src)
 		}
-	case KeyFull:
+	case letterKey(msg, KeyFull):
 		s.v.full = !s.v.full
 		return true
-	case tea.KeyPgUp:
+	case letterKey(msg, KeyFilter):
+		// The pattern starts empty on every open: filter-as-you-type counts
+		// its matches from the first keystroke, and re-opening to edit a long
+		// pattern is not the gesture — re-typing a short one is.
+		s.committed, s.v.filter = s.v.filter, filter{typing: true}
+	case letterKey(msg, KeyNextMatch):
+		jump(&s.v, s.Src, 1)
+	case letterKey(msg, KeyPrevMatch):
+		jump(&s.v, s.Src, -1)
+	case msg.Code == tea.KeyPgUp:
 		s.ScrollBy(-s.PageSize(paneCarries), paneCarries)
-	case tea.KeyPgDown:
+	case msg.Code == tea.KeyPgDown:
 		s.ScrollBy(s.PageSize(paneCarries), paneCarries)
-	case tea.KeyUp:
+	case msg.Code == tea.KeyUp:
 		if s.v.full {
 			s.ScrollBy(-1, paneCarries)
 		}
-	case tea.KeyDown:
+	case msg.Code == tea.KeyDown:
 		if s.v.full {
 			s.ScrollBy(1, paneCarries)
 		}
@@ -91,18 +112,70 @@ func (s *Surface) HandleKey(msg tea.KeyPressMsg, paneCarries bool) (layoutToggle
 	return false
 }
 
+// letterKey reports whether msg is the printable key r. Text is the field a
+// shifted letter arrives in, so it decides whenever the terminal filled it;
+// a terminal that reports only Code falls back to that.
+func letterKey(msg tea.KeyPressMsg, r rune) bool {
+	if msg.Text != "" {
+		return msg.Text == string(r)
+	}
+	return msg.Code == r
+}
+
+// editFilter applies one keystroke of filter input: enter commits the
+// pattern, esc restores whatever was live before the input opened, backspace
+// shortens, and any printable text extends. Nothing else moves the window —
+// while the input is open the surface owns every key it is handed.
+func (s *Surface) editFilter(msg tea.KeyPressMsg) {
+	switch msg.Code {
+	case tea.KeyEnter:
+		s.v.filter.typing = false
+	case tea.KeyEsc:
+		s.v.filter = s.committed
+	case tea.KeyBackspace:
+		s.v.filter = s.v.filter.edit("", true)
+	default:
+		if msg.Text != "" {
+			s.v.filter = s.v.filter.edit(msg.Text, false)
+		}
+	}
+}
+
+// Filtering reports whether the filter input is open and taking typed text,
+// which is what makes the frame hand the surface its scroll and help keys.
+func (s *Surface) Filtering() bool {
+	return s.Src != nil && s.v.filter.typing
+}
+
+// CancelFilter closes an open filter input, restoring the pattern that was
+// live before it opened, and reports whether there was one to close — the esc
+// a forward-only step would otherwise swallow.
+func (s *Surface) CancelFilter() bool {
+	if !s.Filtering() {
+		return false
+	}
+	s.v.filter = s.committed
+	return true
+}
+
+// Filtered reports whether a committed filter is selecting the window's rows.
+func (s *Surface) Filtered() bool {
+	return s.Src != nil && s.v.filter.active()
+}
+
 // ConsumesPaging reports whether pgup/pgdn page the log window itself — the
-// full-screen log always, a locked pane or tail too — so the frame leaves
-// the keys to the step instead of scrolling its own viewport.
+// full-screen log always, a locked pane or tail too, and an open filter input
+// where they must stand still — so the frame leaves the keys to the step
+// instead of scrolling its own viewport.
 func (s *Surface) ConsumesPaging() bool {
-	return s.Src != nil && (s.v.full || s.v.locked)
+	return s.Src != nil && (s.v.full || s.v.locked || s.v.filter.typing)
 }
 
 // ScrollBy moves the log window n lines through the ring at the geometry
 // last rendered, flooring at the stream's oldest full window.
 func (s *Surface) ScrollBy(n int, paneCarries bool) {
 	w, h, wrap := s.geometry(paneCarries)
-	scroll(&s.v, s.Src, n, topLines(s.Src, w, h, wrap))
+	scroll(&s.v, s.Src, n, topLines(s.Src, s.v, w, h, wrap))
 }
 
 // PageSize is how many lines one pgup/pgdn moves: exactly the lines the
@@ -169,6 +242,28 @@ func (s *Surface) LockHelp() string {
 		return "follow the log tail"
 	}
 	return "lock the log here"
+}
+
+// FilterHelp names what KeyFilter does next: commit the pattern being typed,
+// replace a committed one, or open the input on an unfiltered window.
+func (s *Surface) FilterHelp() string {
+	switch {
+	case s.v.filter.typing:
+		return "commit the filter"
+	case s.v.filter.active():
+		return "filter the log again"
+	default:
+		return "filter the log"
+	}
+}
+
+// JumpHelp names what KeyNextMatch and KeyPrevMatch stop on, which depends on
+// whether a filter is live: its matches, or the run's warnings and errors.
+func (s *Surface) JumpHelp() string {
+	if s.v.filter.active() {
+		return "next/prev match"
+	}
+	return "next/prev warn or error"
 }
 
 // FullHelp names what KeyFull does next; see LockHelp.

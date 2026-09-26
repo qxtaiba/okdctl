@@ -19,6 +19,6 @@
   │  LOG                                                                     │  
   │                                                                          │  
   │────────────────── ↑ ↓  scroll down for more ────────────────── ▸ homelab │  
-  │  l lock the log here … • ctrl+c cancel (twice to force-quit) • ? help    │  
+  │  / filter the log … • ctrl+c cancel (twice to force-quit) • ? help       │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

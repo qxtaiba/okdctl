@@ -4,6 +4,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/tui/logview"
 )
 
 // ExecStyles is an exec surface's themed style set — the deploy stream, the
@@ -50,6 +51,36 @@ func (c *ExecStyleCache) Styles() *ExecStyles {
 		c.gen = gen
 	}
 	return &c.cache
+}
+
+// LogHelp assembles the help ribbon for a step whose body carries a log
+// surface, followed by the step's own trailing bindings. The surface's keys
+// are ordered so the one that leaves the current mode leads the list: the
+// ribbon drops entries front to back, and losing the way out would strand the
+// operator on whichever window they opened.
+func LogHelp(s *logview.Surface, trailing ...KeyBinding) []KeyBinding {
+	lock := KeyBinding{Key: string(rune(logview.KeyLock)), Help: s.LockHelp()}
+	full := KeyBinding{Key: string(rune(logview.KeyFull)), Help: s.FullHelp()}
+	page := KeyBinding{Key: "pgup/pgdn", Help: "page the log"}
+	find := KeyBinding{Key: string(rune(logview.KeyFilter)), Help: s.FilterHelp()}
+	jump := KeyBinding{Key: "n/N", Help: s.JumpHelp()}
+
+	var keys []KeyBinding
+	switch {
+	case s.Filtering():
+		keys = []KeyBinding{{Key: HelpEnter, Help: s.FilterHelp()}, {Key: HelpEsc, Help: "cancel it"}}
+	case s.Full():
+		keys = []KeyBinding{full, lock, page, find, jump}
+	case s.Locked():
+		keys = []KeyBinding{lock, full, page, jump, find}
+	case s.Filtered():
+		keys = []KeyBinding{find, jump, lock, full}
+	default:
+		// No mode to leave here, so the ribbon leads with the key an operator
+		// is least likely to guess: the lock is what paging engages by itself.
+		keys = []KeyBinding{find, lock, full}
+	}
+	return append(keys, trailing...)
 }
 
 // FrameSize records the terminal an exec step is laid out against plus the

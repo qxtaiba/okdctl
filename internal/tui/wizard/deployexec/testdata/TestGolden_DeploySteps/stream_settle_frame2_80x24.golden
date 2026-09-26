@@ -19,6 +19,6 @@
   │  · 09:02:34 deploy step started step=step-22 phase=setup          ▎      │  
   │                                                                          │  
   │────────────────── ↑ ↓  scroll down for more ────────────────── ▸ homelab │  
-  │  l lock the log here … • ctrl+c cancel (twice to force-quit) • ? help    │  
+  │  / filter the log … • ctrl+c cancel (twice to force-quit) • ? help       │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

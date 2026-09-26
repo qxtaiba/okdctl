@@ -43,6 +43,34 @@ func wrappedRing() Hooks {
 	return h
 }
 
+// errorEarlyRing seeds goldenHooks' fixture with an ERROR early in the ring,
+// so the jump keys and the minimap lane both have an off-screen target.
+func errorEarlyRing() Hooks {
+	r := logview.NewRing(logview.DefaultCap)
+	for i := range 24 {
+		line := logview.Line{
+			At:    logBase.Add(time.Duration(i*7) * time.Second),
+			Level: "INFO",
+			Text:  fmt.Sprintf("deploy step started step=step-%02d phase=setup", i),
+		}
+		if i == 4 {
+			line.Level = "ERROR"
+			line.Text = "etcd member 0 refused the join request"
+		}
+		r.Append(line)
+	}
+	return Hooks{Logs: r, LogPath: "okd-install/okdctl.log"}
+}
+
+// typeFilter opens the filter input on the active step and types pattern into
+// it, one keystroke at a time, the way an operator would.
+func typeFilter(m *wizard.Model, pattern string) {
+	m.Update(tea.KeyPressMsg{Code: logview.KeyFilter, Text: "/"})
+	for _, r := range pattern {
+		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+}
+
 // seedMidRun drives the stream step to a fixed mid-install frame: prep
 // collapsed with its total, ignition expanded around a running row, infra and
 // later phases still pending.
@@ -227,6 +255,52 @@ func deployScenarios() []deployScenario {
 				m.Update(tea.KeyPressMsg{Code: logview.KeyFull, Text: "f"})
 				m.Update(wizard.LayoutChangedMsg{})
 				m.Update(tea.KeyPressMsg{Code: tea.KeyPgUp})
+			},
+		},
+		{
+			// The filter input mid-typing: the chip leads with the "/" that
+			// opened it and counts matches from the first keystroke.
+			name:  "stream_filtering",
+			id:    StepIDStream,
+			build: streamState,
+			seed: func(m *wizard.Model, st *State) {
+				seedMidRun(m, st)
+				typeFilter(m, "step-2")
+			},
+		},
+		{
+			// The committed filter: only matching rows, and the chip names
+			// the pattern it is selecting on.
+			name:  "stream_filtered",
+			id:    StepIDStream,
+			build: streamState,
+			seed: func(m *wizard.Model, st *State) {
+				seedMidRun(m, st)
+				typeFilter(m, "step-2")
+				m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+			},
+		},
+		{
+			// A pattern that matches nothing: the rows go, the chip stays,
+			// and the region says why it is empty.
+			name:  "stream_filter_empty",
+			id:    StepIDStream,
+			build: streamState,
+			seed: func(m *wizard.Model, st *State) {
+				seedMidRun(m, st)
+				typeFilter(m, "ceph")
+			},
+		},
+		{
+			// N walked the window back to the run's one error, which the
+			// minimap lane had been marking all along.
+			name:  "stream_jumped",
+			id:    StepIDStream,
+			build: streamState,
+			hooks: errorEarlyRing,
+			seed: func(m *wizard.Model, st *State) {
+				seedMidRun(m, st)
+				m.Update(tea.KeyPressMsg{Code: logview.KeyPrevMatch, Text: "N"})
 			},
 		},
 		{

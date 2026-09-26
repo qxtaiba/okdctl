@@ -35,6 +35,6 @@
   │  marker okd-install/.okdctl-node-op.json · full log okd-install/okdctl.log · ctrl+c cancels after the            │  
   │                                                                                                                  │  
   │────────────────────────────────────── ↑ ↓  scroll down for more ────────────────────────────────────── ▸ homelab │  
-  │  l lock the log here • f full-screen log • pgup/pgdn scroll • ctrl+c cancel (twice to force-quit) • ? help       │  
+  │  / filter the log • l lock the log here • f full-screen log … • ctrl+c cancel (twice to force-quit) • ? help     │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                                         

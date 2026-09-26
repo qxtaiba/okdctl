@@ -43,6 +43,6 @@
   │                                                                                                        │                                                                     │  
   │                                                                                                                                                                              │  
   │─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
-  │  l follow the log tail • f full-screen log • pgup/pgdn page the log • ctrl+c cancel (twice to force-quit) • ? help                                                           │  
+  │  l follow the log tail • f full-screen log • pgup/pgdn page the log • n/N next/prev warn or error • / filter the log • ctrl+c cancel (twice to force-quit) • ? help          │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                                                                                                     
