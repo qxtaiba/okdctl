@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -78,6 +79,9 @@ func runWizardWithMode(cmd *cobra.Command, cfg *config.Config, configExists bool
 	var slot lifecycleSlot
 	if hub != nil {
 		hub.SetFlows(hubFlows(cmd, cfg, &slot))
+		if configExists && saveSlotState(cfg) == steps.SaveSlotDeployed {
+			hub.SetOpsDashboard(newHubStatusSource(cfg))
+		}
 	}
 
 	result, err := runHubSessionWithDraft(cmd, built.Steps, cfg, func(cfg *config.Config, stepID wizard.StepID, fieldKey string) error {
@@ -149,7 +153,7 @@ func hubFlows(cmd *cobra.Command, cfg *config.Config, slot *lifecycleSlot) steps
 			return sess.steps, lifecycle.Chrome(), nil
 		},
 		ClusterStatus: func() ([]wizard.WizardStep, wizard.FlowChrome, error) {
-			flowSteps, chrome := steps.StatusFlow(newHubStatusSource(cmd, cfg))
+			flowSteps, chrome := steps.StatusFlow(newHubStatusSource(cfg))
 			return flowSteps, chrome, nil
 		},
 	}
@@ -158,11 +162,11 @@ func hubFlows(cmd *cobra.Command, cfg *config.Config, slot *lifecycleSlot) steps
 // newHubStatusSource returns the status seam the hub's cluster-status screen
 // reads: the same clusterstatus.Collect okdctl status runs, or a credential-free
 // fixture under OKDCTL_WIZARD_DEMO.
-func newHubStatusSource(cmd *cobra.Command, cfg *config.Config) steps.StatusSource {
+func newHubStatusSource(cfg *config.Config) steps.StatusSource {
 	if os.Getenv(wizardDemoEnv) != "" {
 		return steps.StaticStatusSource{Status: demoClusterStatus()}
 	}
-	return steps.StatusSource(&collectedStatusSource{cmd: cmd, cfg: cfg})
+	return steps.StatusSource(&collectedStatusSource{cfg: cfg})
 }
 
 // demoClusterStatus is the snapshot the hub's status screen renders under
@@ -182,10 +186,13 @@ func demoClusterStatus() *okd.ClusterStatus {
 		})
 	}
 	return &okd.ClusterStatus{
-		Phase:        okd.PhaseRunning,
-		APIReachable: true,
-		Nodes:        nodes,
-		Addons:       []okd.AddonStatus{{Name: "flux", Healthy: true}},
+		Phase:              okd.PhaseRunning,
+		APIReachable:       true,
+		APIAvailable:       true,
+		NodesAvailable:     true,
+		OperatorsAvailable: true,
+		Nodes:              nodes,
+		Addons:             []okd.AddonStatus{{Name: "flux", Healthy: true}},
 	}
 }
 
@@ -194,11 +201,10 @@ func demoClusterStatus() *okd.ClusterStatus {
 // refresh reflects whatever is on disk now. Credentials are zeroized before
 // each probe returns.
 type collectedStatusSource struct {
-	cmd *cobra.Command
 	cfg *config.Config
 }
 
-func (s *collectedStatusSource) ClusterStatus() (*okd.ClusterStatus, error) {
+func (s *collectedStatusSource) ClusterStatus(ctx context.Context) (*okd.ClusterStatus, error) {
 	projectRoot, err := resolveProjectRootOrDie()
 	if err != nil {
 		return nil, err
@@ -212,7 +218,7 @@ func (s *collectedStatusSource) ClusterStatus() (*okd.ClusterStatus, error) {
 	src, cleanup := statusLifecycleSources(s.cfg, projectRoot)
 	defer cleanup()
 
-	cs := clusterstatus.Collect(s.cmd.Context(), cl, newAddonManager(s.cfg, projectRoot), src)
+	cs := clusterstatus.Collect(ctx, cl, newAddonManager(s.cfg, projectRoot), src)
 	return &cs, nil
 }
 

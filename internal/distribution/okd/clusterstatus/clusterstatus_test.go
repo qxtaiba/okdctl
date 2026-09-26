@@ -20,11 +20,13 @@ const (
 )
 
 type fakeClient struct {
-	healthzErr    error
-	nodesJSON     string
-	nodesErr      error
-	operatorsJSON string
-	operatorsErr  error
+	healthzErr         error
+	nodesJSON          string
+	nodesErr           error
+	nodesTruncated     bool
+	operatorsJSON      string
+	operatorsErr       error
+	operatorsTruncated bool
 }
 
 func (f *fakeClient) RawGet(context.Context, string) (string, error) {
@@ -33,9 +35,9 @@ func (f *fakeClient) RawGet(context.Context, string) (string, error) {
 
 func (f *fakeClient) GetJSON(_ context.Context, args ...string) (out string, found bool, err error) {
 	if len(args) >= 2 && args[1] == "nodes" {
-		return f.nodesJSON, false, f.nodesErr
+		return f.nodesJSON, f.nodesTruncated, f.nodesErr
 	}
-	return f.operatorsJSON, false, f.operatorsErr
+	return f.operatorsJSON, f.operatorsTruncated, f.operatorsErr
 }
 
 type fakeVerifier struct {
@@ -95,6 +97,9 @@ func TestCollect_RunningCluster(t *testing.T) {
 	if !cs.APIReachable {
 		t.Error("APIReachable = false; want true")
 	}
+	if !cs.APIAvailable || !cs.NodesAvailable || !cs.OperatorsAvailable {
+		t.Errorf("availability flags = api:%v nodes:%v operators:%v; want all true", cs.APIAvailable, cs.NodesAvailable, cs.OperatorsAvailable)
+	}
 	if len(cs.Nodes) != 1 || cs.Nodes[0].Status != nodetypes.NodeStatusReady {
 		t.Errorf("Nodes = %+v; want one ready node", cs.Nodes)
 	}
@@ -149,8 +154,22 @@ func TestCollect_APIUnreachable(t *testing.T) {
 	if cs.APIReachable {
 		t.Error("APIReachable = true; want false")
 	}
+	if !cs.APIAvailable || cs.NodesAvailable || cs.OperatorsAvailable {
+		t.Errorf("availability flags = api:%v nodes:%v operators:%v; want queried api and unavailable sections", cs.APIAvailable, cs.NodesAvailable, cs.OperatorsAvailable)
+	}
 	if cs.Nodes != nil || cs.DegradedOperators != 0 {
 		t.Errorf("want empty sections; got nodes=%v degraded=%d", cs.Nodes, cs.DegradedOperators)
+	}
+}
+
+func TestCollect_TruncatedSectionsAreUnavailable(t *testing.T) {
+	cl := &fakeClient{
+		nodesJSON: `{"items":[]}`, nodesTruncated: true,
+		operatorsJSON: `{"items":[]}`, operatorsTruncated: true,
+	}
+	cs := Collect(context.Background(), cl, &fakeVerifier{}, LifecycleSources{})
+	if cs.NodesAvailable || cs.OperatorsAvailable {
+		t.Errorf("truncated sections marked available: nodes=%v operators=%v", cs.NodesAvailable, cs.OperatorsAvailable)
 	}
 }
 

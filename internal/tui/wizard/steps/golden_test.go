@@ -2,10 +2,12 @@ package steps
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -366,6 +368,42 @@ func TestGolden_HubReachesClusterStatus(t *testing.T) {
 			}
 			if strings.Contains(back, "opening") {
 				t.Errorf("the hub's opening notice must clear on return:\n%s", back)
+			}
+		})
+	}
+}
+
+func TestGolden_HubOperationsDashboard(t *testing.T) {
+	for _, sz := range []struct{ w, h int }{{80, 24}, {180, 48}} {
+		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
+			forceHeroColor(t)
+			tui.SetTerminalWidth(sz.w)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+			m := newGoldenModel(t)
+			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
+			seedHubSaveSlot(m)
+			hub := m.CurrentStep().(*WelcomeStep)
+			hub.SetOpsDashboard(StaticStatusSource{Status: statusFixture()})
+			hub.opsCtx, hub.opsCancel = context.WithCancel(context.Background())
+			t.Cleanup(hub.opsCancel)
+			hub.opsActive = true
+			hub.opsGeneration = 1
+			msg := hub.probeOps(1)()
+			hub.Update(msg)
+			hub.opsStatus.updated = time.Date(2026, time.January, 2, 15, 4, 5, 0, time.UTC)
+
+			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
+			tuitest.Golden(t, fmt.Sprintf("hub-operations_%dx%d", sz.w, sz.h), frame)
+			tuitest.AssertFits(t, frame, sz.w, sz.h)
+			plain := tuitest.StripANSI(frame)
+			wants := []string{"API reachable", "Nodes 6/6 ready", "Operators 0 degraded"}
+			if sz.w == 180 {
+				wants = append(wants, "LIVE OPERATIONS")
+			}
+			for _, want := range wants {
+				if !strings.Contains(plain, want) {
+					t.Errorf("operations dashboard is missing %q:\n%s", want, plain)
+				}
 			}
 		})
 	}

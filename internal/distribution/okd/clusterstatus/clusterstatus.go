@@ -134,14 +134,17 @@ func ParseNode(data []byte) (okd.NodeStatus, error) {
 // rather than aborting.
 func Collect(ctx context.Context, cl Client, verifier AddonVerifier, src LifecycleSources) okd.ClusterStatus {
 	apiOK := false
+	apiAvailable := cl != nil
 	var nodes []okd.NodeStatus
+	nodesAvailable := false
 	degraded := 0
+	operatorsAvailable := false
 	if cl != nil {
 		if _, ocErr := cl.RawGet(ctx, "/healthz"); ocErr == nil {
 			apiOK = true
 		}
-		nodes = collectNodes(ctx, cl)
-		degraded = countDegraded(ctx, cl)
+		nodes, nodesAvailable = collectNodes(ctx, cl)
+		degraded, operatorsAvailable = countDegraded(ctx, cl)
 	}
 
 	addonResults, _ := verifier.VerifyAll(ctx)
@@ -155,11 +158,14 @@ func Collect(ctx context.Context, cl Client, verifier AddonVerifier, src Lifecyc
 	}
 
 	return okd.ClusterStatus{
-		Phase:             derivePhase(ctx, apiOK, nodes, degraded, src),
-		APIReachable:      apiOK,
-		Nodes:             nodes,
-		DegradedOperators: degraded,
-		Addons:            addonEntries,
+		Phase:              derivePhase(ctx, apiOK, nodes, degraded, src),
+		APIReachable:       apiOK,
+		APIAvailable:       apiAvailable,
+		Nodes:              nodes,
+		DegradedOperators:  degraded,
+		Addons:             addonEntries,
+		NodesAvailable:     nodesAvailable,
+		OperatorsAvailable: operatorsAvailable,
 	}
 }
 
@@ -226,10 +232,10 @@ func TerraformStateHasResources(projectRoot, tfEnv string) bool {
 	return len(st.Resources) > 0
 }
 
-func collectNodes(ctx context.Context, cl Client) []okd.NodeStatus {
+func collectNodes(ctx context.Context, cl Client) ([]okd.NodeStatus, bool) {
 	nodesJSON, truncated, ocErr := cl.GetJSON(ctx, "get", "nodes", "-o", "json")
 	if ocErr != nil {
-		return nil
+		return nil, false
 	}
 	if truncated {
 		logutil.Warn("oc get nodes output truncated; node list may be incomplete")
@@ -237,7 +243,7 @@ func collectNodes(ctx context.Context, cl Client) []okd.NodeStatus {
 	var nl statusNodeList
 	if jsonErr := json.Unmarshal([]byte(nodesJSON), &nl); jsonErr != nil {
 		logutil.Warn("oc get nodes json parse failed", logutil.LF("err", jsonErr))
-		return nil
+		return nil, false
 	}
 	var nodes []okd.NodeStatus
 	for _, n := range nl.Items {
@@ -248,13 +254,13 @@ func collectNodes(ctx context.Context, cl Client) []okd.NodeStatus {
 			Status: n.statusPhase(),
 		})
 	}
-	return nodes
+	return nodes, !truncated
 }
 
-func countDegraded(ctx context.Context, cl Client) int {
+func countDegraded(ctx context.Context, cl Client) (int, bool) {
 	coJSON, truncated, ocErr := cl.GetJSON(ctx, "get", "clusteroperators", "-o", "json")
 	if ocErr != nil {
-		return 0
+		return 0, false
 	}
 	if truncated {
 		logutil.Warn("oc get clusteroperators output truncated; degraded count may be incomplete")
@@ -262,7 +268,7 @@ func countDegraded(ctx context.Context, cl Client) int {
 	var col statusClusterOperatorList
 	if jsonErr := json.Unmarshal([]byte(coJSON), &col); jsonErr != nil {
 		logutil.Warn("oc get clusteroperators json parse failed", logutil.LF("err", jsonErr))
-		return 0
+		return 0, false
 	}
 	degraded := 0
 	for _, co := range col.Items {
@@ -272,7 +278,7 @@ func countDegraded(ctx context.Context, cl Client) int {
 			degraded++
 		}
 	}
-	return degraded
+	return degraded, !truncated
 }
 
 // NewClient returns an oc-backed cluster client for the deployed cluster, or

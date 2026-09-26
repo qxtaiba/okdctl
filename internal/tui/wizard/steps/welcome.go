@@ -1,9 +1,11 @@
 package steps
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -95,13 +97,21 @@ type hubFlowFailedMsg struct {
 // block-letter wordmark with the verb menu every flow is reached from.
 type WelcomeStep struct {
 	wizard.BaseStep
-	configExists bool
-	saveSlot     string
-	draftLabel   string
-	draftCursor  wizard.DraftResumeMsg
-	entries      []hubEntry
-	nav          *components.CompactSelector
-	flows        HubFlows
+	configExists  bool
+	saveSlot      string
+	draftLabel    string
+	draftCursor   wizard.DraftResumeMsg
+	entries       []hubEntry
+	nav           *components.CompactSelector
+	flows         HubFlows
+	opsSource     StatusSource
+	opsStatus     *opsSnapshot
+	opsErr        error
+	opsLoading    bool
+	opsActive     bool
+	opsGeneration uint64
+	opsCtx        context.Context
+	opsCancel     context.CancelFunc
 
 	// opening names the flow being assembled off the update loop, so a verb
 	// whose hooks take a moment to build says so instead of looking wedged.
@@ -245,9 +255,24 @@ func (s *WelcomeStep) FocusPaletteTarget(id string) tea.Cmd {
 	return nil
 }
 
-// Init returns nil; the hub has no async startup work.
+// Init starts the live snapshot and its cancellable refresh timer when enabled.
 func (s *WelcomeStep) Init() tea.Cmd {
-	return nil
+	if s.opsSource == nil {
+		return nil
+	}
+	if s.opsCancel != nil {
+		s.opsCancel()
+	}
+	// The hub owns its polling context and cancels it when focus leaves the hub.
+	s.opsCtx, s.opsCancel = context.WithCancel(context.Background())
+	s.opsActive = true
+	s.opsGeneration++
+	return tea.Batch(s.probeOps(s.opsGeneration), s.scheduleOpsRefresh(s.opsGeneration))
+}
+
+// SetOpsDashboard enables the live snapshot for a locally established cluster.
+func (s *WelcomeStep) SetOpsDashboard(src StatusSource) {
+	s.opsSource = src
 }
 
 // SetFlows wires the in-process flows the manage-nodes and cluster-status verbs
@@ -260,6 +285,24 @@ func (s *WelcomeStep) SetFlows(flows HubFlows) {
 // selector's vertical bindings) and confirms on enter or space.
 func (s *WelcomeStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	switch msg := msg.(type) {
+	case opsSnapshotMsg:
+		if !s.opsActive || msg.generation != s.opsGeneration {
+			return s, nil
+		}
+		s.opsLoading = false
+		s.opsErr = msg.err
+		if msg.err == nil {
+			s.opsStatus = &opsSnapshot{status: msg.status, updated: time.Now()}
+		}
+		return s, nil
+	case opsRefreshMsg:
+		if !s.opsActive || msg.generation != s.opsGeneration {
+			return s, nil
+		}
+		if !s.opsLoading {
+			return s, tea.Batch(s.probeOps(msg.generation), s.scheduleOpsRefresh(msg.generation))
+		}
+		return s, s.scheduleOpsRefresh(msg.generation)
 	case hubFlowFailedMsg:
 		s.opening = ""
 		err := msg.err
@@ -366,6 +409,15 @@ func (s *WelcomeStep) SetFocused(focused bool) {
 	s.BaseStep.SetFocused(focused)
 	if focused {
 		s.opening = ""
+	} else if s.opsActive {
+		s.opsActive = false
+		s.opsGeneration++
+		s.opsLoading = false
+		if s.opsCancel != nil {
+			s.opsCancel()
+			s.opsCancel = nil
+			s.opsCtx = nil
+		}
 	}
 }
 
@@ -403,7 +455,20 @@ func (s *WelcomeStep) View(width, height int) string {
 	if s.saveSlot != "" {
 		parts = append(parts, tui.MutedStyle.Render(s.saveSlot), "")
 	}
-	parts = append(parts, s.nav.ViewPointer())
+	launcher := s.nav.ViewPointer()
+	if s.opsSource != nil && s.termWidth >= 140 && s.termHeight >= 28 {
+		card := renderOpsDashboard(s.opsStatus, s.opsLoading, s.opsErr, min(width, 88))
+		parts = append(parts, lipgloss.JoinHorizontal(lipgloss.Top, launcher, "    ", card))
+	} else {
+		parts = append(parts, launcher)
+		if s.opsSource != nil && s.termHeight >= 24 {
+			if s.termWidth < 100 {
+				parts = append(parts, renderOpsCompact(s.opsStatus, s.opsLoading, s.opsErr))
+			} else {
+				parts = append(parts, "", renderOpsDashboard(s.opsStatus, s.opsLoading, s.opsErr, min(width, 88)))
+			}
+		}
+	}
 	if s.opening != "" {
 		parts = append(parts, "", wizard.Spinner(s.frame)+" "+tui.MutedStyle.Render("opening "+s.opening+"…"))
 	}

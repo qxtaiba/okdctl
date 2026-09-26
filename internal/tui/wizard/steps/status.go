@@ -1,6 +1,7 @@
 package steps
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -28,7 +29,7 @@ var errNoStatusSource = errors.New("read cluster status: no source configured")
 // side owns its own context (the way lifecycle.Hooks do), so the screen never
 // fabricates one, and a test or the demo seeds a fixture through the same seam.
 type StatusSource interface {
-	ClusterStatus() (*okd.ClusterStatus, error)
+	ClusterStatus(context.Context) (*okd.ClusterStatus, error)
 }
 
 // StaticStatusSource serves one fixed snapshot, or one fixed failure, as a StatusSource.
@@ -38,7 +39,7 @@ type StaticStatusSource struct {
 }
 
 // ClusterStatus returns the fixture unchanged.
-func (s StaticStatusSource) ClusterStatus() (*okd.ClusterStatus, error) {
+func (s StaticStatusSource) ClusterStatus(context.Context) (*okd.ClusterStatus, error) {
 	return s.Status, s.Err
 }
 
@@ -56,6 +57,7 @@ type StatusStep struct {
 	status  *okd.ClusterStatus
 	err     error
 	loading bool
+	cancel  context.CancelFunc
 }
 
 // NewStatusStep constructs the read-only cluster-status screen over src.
@@ -89,13 +91,29 @@ func (s *StatusStep) Init() tea.Cmd {
 // probe reads the source off the update loop and reports the result back as a statusLoadedMsg.
 func (s *StatusStep) probe() tea.Cmd {
 	s.loading = true
+	if s.cancel != nil {
+		s.cancel()
+	}
+	// Bubble Tea commands have no context parameter; tie this probe to step focus.
+	ctx, cancel := context.WithCancel(context.Background())
+	s.cancel = cancel
 	src := s.src
 	return func() tea.Msg {
 		if src == nil {
 			return statusLoadedMsg{err: errNoStatusSource}
 		}
-		status, err := src.ClusterStatus()
+		status, err := src.ClusterStatus(ctx)
 		return statusLoadedMsg{status: status, err: err}
+	}
+}
+
+// SetFocused cancels an in-flight probe when the status screen loses focus.
+func (s *StatusStep) SetFocused(focused bool) {
+	s.BaseStep.SetFocused(focused)
+	if !focused && s.cancel != nil {
+		s.cancel()
+		s.cancel = nil
+		s.loading = false
 	}
 }
 
@@ -103,6 +121,10 @@ func (s *StatusStep) probe() tea.Cmd {
 func (s *StatusStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	switch msg := msg.(type) {
 	case statusLoadedMsg:
+		if s.cancel != nil {
+			s.cancel()
+			s.cancel = nil
+		}
 		s.loading = false
 		s.err = msg.err
 		if msg.err == nil {

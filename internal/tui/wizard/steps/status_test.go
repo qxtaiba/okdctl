@@ -1,6 +1,7 @@
 package steps
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -24,10 +25,13 @@ func statusFixture() *okd.ClusterStatus {
 		nodes = append(nodes, okd.NodeStatus{Name: "homelab-worker" + string(rune('0'+i)), Role: nodetypes.RoleWorker, Ready: true})
 	}
 	return &okd.ClusterStatus{
-		Phase:        okd.PhaseRunning,
-		APIReachable: true,
-		Nodes:        nodes,
-		Addons:       []okd.AddonStatus{{Name: "flux", Healthy: true}},
+		Phase:              okd.PhaseRunning,
+		APIReachable:       true,
+		APIAvailable:       true,
+		NodesAvailable:     true,
+		OperatorsAvailable: true,
+		Nodes:              nodes,
+		Addons:             []okd.AddonStatus{{Name: "flux", Healthy: true}},
 	}
 }
 
@@ -38,7 +42,7 @@ type countingSource struct {
 	probes int
 }
 
-func (c *countingSource) ClusterStatus() (*okd.ClusterStatus, error) {
+func (c *countingSource) ClusterStatus(context.Context) (*okd.ClusterStatus, error) {
 	c.probes++
 	return c.status, c.err
 }
