@@ -107,7 +107,7 @@ func TestDataDrivenStep_PaletteExposesVisibleLabelsAndFocusesField(t *testing.T)
 		t.Fatalf("PaletteTargets() = %+v, want only the three visible fields", targets)
 	}
 	for _, target := range targets {
-		if target.Label == "hidden secret" || strings.Contains(target.Label, "value") {
+		if target.Label == "hidden secret" || strings.Contains(target.Label, "cluster-secret-value") || strings.Contains(target.Detail, "cluster-secret-value") {
 			t.Fatalf("palette exposed a hidden field or field value: %+v", target)
 		}
 	}

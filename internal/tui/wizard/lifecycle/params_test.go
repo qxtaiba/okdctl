@@ -38,6 +38,21 @@ func TestParamsStepResizeApplyAndValidation(t *testing.T) {
 	}
 }
 
+func TestParamsStepExposesFieldsToCommandPalette(t *testing.T) {
+	st := &State{Cfg: config.DefaultConfig(), Op: node.OpResize, Scope: node.ResizeScope{Role: nodetypes.RoleMaster}}
+	s := NewParamsStep(st)
+	s.Init()
+	targets := s.PaletteTargets()
+	if len(targets) == 0 {
+		t.Fatal("PaletteTargets() returned no resize fields")
+	}
+	s.FocusPaletteTarget(targets[len(targets)-1].ID)
+	field, ok := s.inner.FocusedField().(interface{ FieldLabel() string })
+	if !ok || field.FieldLabel() != targets[len(targets)-1].Label {
+		t.Fatalf("focused field = %v, want palette target %q", s.inner.FocusedField(), targets[len(targets)-1].Label)
+	}
+}
+
 func TestParamsStepResizeDiskField(t *testing.T) {
 	cfg := config.DefaultConfig() // master DiskGB = 50
 	st := &State{Cfg: cfg, Op: node.OpResize, Scope: node.ResizeScope{Role: nodetypes.RoleMaster}}

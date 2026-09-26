@@ -2,6 +2,7 @@ package wizard
 
 import (
 	"slices"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -41,7 +42,7 @@ func (m *Model) refreshPaletteMatches() {
 			continue
 		}
 		stepID := step.ID()
-		stepTarget := PaletteTarget{ID: string(stepID), Kind: "step", Label: step.Title(), Detail: "Go to step"}
+		stepTarget := PaletteTarget{ID: string(stepID), Kind: PaletteTargetStep, Label: step.Title(), Detail: "Go to step"}
 		if score, ok := paletteScore(query, stepTarget.Label); ok {
 			m.paletteMatches = append(m.paletteMatches, paletteMatch{stepIndex: i, target: stepTarget, score: score})
 		}
@@ -50,7 +51,7 @@ func (m *Model) refreshPaletteMatches() {
 			continue
 		}
 		for _, target := range provider.PaletteTargets() {
-			text := target.Label + " " + target.Detail + " " + target.Kind
+			text := target.Label + " " + target.Detail + " " + string(target.Kind)
 			if score, ok := paletteScore(query, text); ok {
 				m.paletteMatches = append(m.paletteMatches, paletteMatch{stepIndex: i, target: target, score: score})
 			}
@@ -109,7 +110,7 @@ func (m *Model) handlePaletteKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool)
 		return m, nil, true
 	case tea.KeyEnter:
 		if len(m.paletteMatches) > 0 {
-			return m.activatePaletteMatch(m.paletteMatches[m.paletteSelected])
+			return m.activatePaletteMatch(&m.paletteMatches[m.paletteSelected])
 		}
 	case tea.KeyUp:
 		if m.paletteSelected > 0 {
@@ -122,7 +123,7 @@ func (m *Model) handlePaletteKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool)
 		}
 		return m, nil, true
 	case tea.KeyBackspace, tea.KeyDelete:
-		if len(m.paletteQuery) > 0 {
+		if m.paletteQuery != "" {
 			_, size := utf8.DecodeLastRuneInString(m.paletteQuery)
 			m.paletteQuery = m.paletteQuery[:len(m.paletteQuery)-size]
 			m.paletteSelected = 0
@@ -138,13 +139,13 @@ func (m *Model) handlePaletteKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool)
 	return m, nil, true
 }
 
-func (m *Model) activatePaletteMatch(match paletteMatch) (tea.Model, tea.Cmd, bool) {
+func (m *Model) activatePaletteMatch(match *paletteMatch) (tea.Model, tea.Cmd, bool) {
 	m.closePalette()
 	if match.stepIndex < 0 || match.stepIndex >= len(m.steps) {
 		return m, nil, true
 	}
 	step := m.steps[match.stepIndex]
-	if match.target.Kind == "step" {
+	if match.target.Kind == PaletteTargetStep {
 		returnToReview := m.CurrentStep().ID() == StepIDReview
 		model, cmd := m.jumpToStep(step.ID())
 		if !returnToReview {
@@ -186,13 +187,12 @@ func (m *Model) renderPalette() string {
 	detailStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim())
 	selectedStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true)
 	lines := []string{queryStyle.Render("Jump to"), "  " + m.paletteQuery + tui.IconTextCursor, ""}
-	visible := min(len(m.paletteMatches), paletteResultLimit)
-	for i := range visible {
+	start := max(0, min(m.paletteSelected-paletteResultLimit+1, len(m.paletteMatches)-paletteResultLimit))
+	end := min(start+paletteResultLimit, len(m.paletteMatches))
+	for i := start; i < end; i++ {
 		match := m.paletteMatches[i]
 		label := match.target.Label
-		if match.target.Kind == "step" {
-			label = match.target.Label
-		} else {
+		if match.target.Kind != PaletteTargetStep {
 			label = match.target.Label + "  ·  " + match.target.Detail
 		}
 		label = lipgloss.NewStyle().MaxWidth(inner - 4).Render(label)
@@ -205,7 +205,11 @@ func (m *Model) renderPalette() string {
 	if len(m.paletteMatches) == 0 {
 		lines = append(lines, detailStyle.Render("  No matching destinations"))
 	}
-	lines = append(lines, "", detailStyle.Render("↑↓ select  enter open  esc close"))
+	position := "No results"
+	if len(m.paletteMatches) > 0 {
+		position = strings.Join([]string{strconv.Itoa(start + 1), "–", strconv.Itoa(end), "of", strconv.Itoa(len(m.paletteMatches))}, " ")
+	}
+	lines = append(lines, "", detailStyle.Render(position+"  ·  ↑↓ select  enter open  esc close"))
 	body := strings.Join(lines, "\n")
 	panel := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).

@@ -932,8 +932,8 @@ func (s *ReviewStep) GetSelectedAction() wizard.Action {
 // PaletteTargets exposes review actions without dispatching them.
 func (s *ReviewStep) PaletteTargets() []wizard.PaletteTarget {
 	return []wizard.PaletteTarget{
-		{ID: "deploy", Kind: "action", Label: "deploy now", Detail: "Select review action"},
-		{ID: "save", Kind: "action", Label: "save and exit", Detail: "Select review action"},
+		{ID: "deploy", Kind: wizard.PaletteTargetAction, Label: "deploy now", Detail: "Select review action"},
+		{ID: "save", Kind: wizard.PaletteTargetAction, Label: "save and exit", Detail: "Select review action"},
 	}
 }
 

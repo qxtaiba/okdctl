@@ -78,7 +78,7 @@ type paletteFakeStep struct {
 }
 
 func (s *paletteFakeStep) PaletteTargets() []PaletteTarget {
-	return []PaletteTarget{{ID: "host", Kind: "field", Label: "Proxmox host", Detail: "Connection"}}
+	return []PaletteTarget{{ID: "host", Kind: PaletteTargetField, Label: "Proxmox host", Detail: "Connection"}}
 }
 
 func (s *paletteFakeStep) FocusPaletteTarget(id string) tea.Cmd {
@@ -146,7 +146,9 @@ func TestCommandPaletteSearchesAndJumpsToField(t *testing.T) {
 	if !m.paletteOpen {
 		t.Fatal("ctrl+k must open the command palette")
 	}
-	m = update(t, m, tea.KeyPressMsg{Code: 'h', Text: "host"})
+	for _, r := range "host" {
+		m = update(t, m, tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
 	if len(m.paletteMatches) != 1 || m.paletteMatches[0].target.ID != "host" || m.paletteMatches[0].stepIndex != 1 {
 		t.Fatalf("matches = %#v, want the Proxmox host field", m.paletteMatches)
 	}
@@ -162,6 +164,26 @@ func TestCommandPaletteFitsCommonTerminalSizes(t *testing.T) {
 		tuitest.RenderAt(t, m, size[0], size[1])
 		m.openPalette()
 		tuitest.AssertFits(t, m.renderPalette(), m.contentWidth(), m.viewport.Height())
+	}
+}
+
+func TestCommandPaletteKeepsSelectedResultVisiblePastFirstPage(t *testing.T) {
+	steps := make([]WizardStep, 12)
+	for i := range steps {
+		steps[i] = &fakeStep{id: StepID(fmt.Sprintf("step-%02d", i))}
+	}
+	m := NewModel(steps, config.DefaultConfig())
+	tuitest.RenderAt(t, m, 100, 30)
+	m.openPalette()
+	for range 9 {
+		m = update(t, m, tea.KeyPressMsg{Code: tea.KeyDown})
+	}
+	if m.paletteSelected != 9 {
+		t.Fatalf("selected = %d, want 9", m.paletteSelected)
+	}
+	view := tuitest.StripANSI(m.renderPalette())
+	if !strings.Contains(view, "step-09") {
+		t.Fatalf("selected result is not visible after scrolling: %s", view)
 	}
 }
 
@@ -590,7 +612,7 @@ func TestModelSavesDraftAfterStepTransition(t *testing.T) {
 		return nil
 	}
 
-	m = update(t, m, StepCompleteMsg{StepID: StepIDWelcome})
+	_ = update(t, m, StepCompleteMsg{StepID: StepIDWelcome})
 	if gotID != StepIDBasics || gotField != "cluster_name" {
 		t.Fatalf("saved cursor = %s/%s, want basics/cluster_name", gotID, gotField)
 	}

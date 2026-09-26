@@ -12,6 +12,7 @@ import (
 type StepID string
 
 // Built-in StepID values for each wizard step in DefaultConfig.
+// PaletteTargetStep, PaletteTargetField, and PaletteTargetAction are command-palette target kinds.
 const (
 	StepIDWelcome       StepID = "welcome"
 	StepIDDistribution  StepID = "distribution"
@@ -93,10 +94,20 @@ type TextInputConsumer interface {
 	ConsumesTextInput() bool
 }
 
+// PaletteTargetKind distinguishes wizard steps, fields, and actions.
+type PaletteTargetKind string
+
+// PaletteTargetStep, PaletteTargetField, and PaletteTargetAction are command-palette target kinds.
+const (
+	PaletteTargetStep   PaletteTargetKind = "step"
+	PaletteTargetField  PaletteTargetKind = "field"
+	PaletteTargetAction PaletteTargetKind = "action"
+)
+
 // PaletteTarget is a safe navigation destination exposed by a step.
 type PaletteTarget struct {
 	ID     string
-	Kind   string
+	Kind   PaletteTargetKind
 	Label  string
 	Detail string
 }

@@ -226,7 +226,7 @@ func (s *WelcomeStep) PaletteTargets() []wizard.PaletteTarget {
 	for _, entry := range s.entries {
 		targets = append(targets, wizard.PaletteTarget{
 			ID:     strconv.Itoa(int(entry.verb)),
-			Kind:   "action",
+			Kind:   wizard.PaletteTargetAction,
 			Label:  entry.label,
 			Detail: "Select hub action",
 		})

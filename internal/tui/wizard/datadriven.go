@@ -264,6 +264,7 @@ func (f *MultiSectionForm) prevVisible(i int) int {
 	return -1
 }
 
+// FocusField moves focus to a visible field by its section and field indexes.
 func (f *MultiSectionForm) FocusField(section, field int) tea.Cmd {
 	if section < 0 || section >= len(f.sections) || !f.sections[section].isVisible() {
 		return nil
@@ -292,7 +293,7 @@ func (f *MultiSectionForm) PaletteTargets() []PaletteTarget {
 			}
 			targets = append(targets, PaletteTarget{
 				ID:     fmt.Sprintf("%d.%d", sectionIndex, fieldIndex),
-				Kind:   "field",
+				Kind:   PaletteTargetField,
 				Label:  labeled.FieldLabel(),
 				Detail: section.Title,
 			})
