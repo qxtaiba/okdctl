@@ -32,7 +32,7 @@ func finishWordmark(col int, frame uint64) string {
 func finishGradient(frame uint64) []color.Color {
 	gradient := tui.SuccessGradient(len(finishWord))
 	if frame > 0 {
-		highlight := int((frame - 1) * uint64(len(gradient)-1) / uint64(finishAnimationFrames-1))
+		highlight := int((frame - 1) * uint64(len(gradient)-1) / uint64(finishAnimationFrames-1)) //nolint:gosec // the frame and gradient lengths are bounded by the finish animation.
 		gradient[highlight] = tui.Lighten(gradient[highlight], 0.65)
 	}
 	return gradient
@@ -106,13 +106,13 @@ func ocLoginCmd(st *State) string {
 // finishBindings omits actions without providers so the ribbon matches the screen.
 func finishBindings(hooks *Hooks) []wizard.KeyBinding {
 	var keys []wizard.KeyBinding
-	if hooks.ClusterStatus != nil {
+	if hooks.Finish != nil && hooks.Finish.ClusterStatus != nil {
 		keys = append(keys, wizard.KeyBinding{Key: string(rune(keyClusterStatus)), Help: "cluster status"})
 	}
-	if hooks.ManageNodes != nil {
+	if hooks.Finish != nil && hooks.Finish.ManageNodes != nil {
 		keys = append(keys, wizard.KeyBinding{Key: string(rune(keyManageNodes)), Help: "manage nodes"})
 	}
-	if hooks.OpenConsole != nil {
+	if hooks.Finish != nil && hooks.Finish.OpenConsole != nil {
 		keys = append(keys, wizard.KeyBinding{Key: string(rune(keyOpenConsole)), Help: "open console"})
 	}
 	return append(keys, wizard.KeyBinding{Key: string(rune(keyCopy)), Help: "copy the oc login command"})

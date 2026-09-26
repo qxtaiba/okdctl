@@ -97,8 +97,7 @@ func runAccessibleDeployConfigureWithDraft(ctx context.Context, prompt accessibl
 	built := buildWizardStepsWithState(wizardCfg)
 	for _, step := range built.Steps {
 		if err := ctx.Err(); err != nil {
-			clearConfigCredentials(cfg)
-			return hubOutcome{Result: wizard.Result{Cancelled: true}}, nil
+			return accessibleCancelled(cfg)
 		}
 		if conditional, ok := step.(wizard.ConditionalStep); ok && !conditional.ShouldShow(cfg) {
 			continue
@@ -162,16 +161,24 @@ func runAccessibleDeployConfigureWithDraft(ctx context.Context, prompt accessibl
 	if result := cfg.Validate(); !result.IsValid() {
 		return accessibleError(cfg, fmt.Errorf("configuration validation: %s", result.Error()))
 	}
-	fmt.Fprintf(prompt.writer(), "\nConfiguration validated for %s.\n", cfg.Cluster.Name)
-	fmt.Fprintf(prompt.writer(), "Domain: %s\n", cfg.Cluster.Domain)
-	fmt.Fprintf(prompt.writer(), "OKD version: %s\n", cfg.Distribution.Version)
+	writeAccessibleSummary(prompt.writer(), cfg)
+	return chooseAccessibleAction(ctx, prompt, cfg)
+}
+
+func writeAccessibleSummary(out io.Writer, cfg *config.Config) {
+	fmt.Fprintf(out, "\nConfiguration validated for %s.\n", cfg.Cluster.Name)
+	fmt.Fprintf(out, "Domain: %s\n", cfg.Cluster.Domain)
+	fmt.Fprintf(out, "OKD version: %s\n", cfg.Distribution.Version)
 	if cfg.Provider.Proxmox != nil {
-		fmt.Fprintf(prompt.writer(), "Proxmox host: %s\n", cfg.Provider.Proxmox.Host)
+		fmt.Fprintf(out, "Proxmox host: %s\n", cfg.Provider.Proxmox.Host)
 	}
-	fmt.Fprintf(prompt.writer(), "Control plane nodes: %d; workers: %d.\n",
+	fmt.Fprintf(out, "Control plane nodes: %d; workers: %d.\n",
 		cfg.Topology.ControlPlane.Count, cfg.Topology.Workers.Count)
-	fmt.Fprintln(prompt.writer(), "Credentials are omitted from this transcript.")
-	fmt.Fprintln(prompt.writer(), "Choose an action:")
+	fmt.Fprintln(out, "Credentials are omitted from this transcript.")
+	fmt.Fprintln(out, "Choose an action:")
+}
+
+func chooseAccessibleAction(ctx context.Context, prompt accessiblePrompt, cfg *config.Config) (hubOutcome, error) {
 	choice, err := prompt.line("1 save configuration, 2 deploy, 3 cancel", "1")
 	if err != nil {
 		return accessibleCancelledOrError(ctx, cfg, err)
@@ -182,11 +189,15 @@ func runAccessibleDeployConfigureWithDraft(ctx context.Context, prompt accessibl
 	case "2":
 		return hubOutcome{Result: wizard.Result{Completed: true, Config: cfg, Action: wizard.ActionDeploy}}, nil
 	case "3":
-		clearConfigCredentials(cfg)
-		return hubOutcome{Result: wizard.Result{Cancelled: true}}, nil
+		return accessibleCancelled(cfg)
 	default:
 		return accessibleError(cfg, &errtypes.UsageError{Msg: "choose 1, 2, or 3"})
 	}
+}
+
+func accessibleCancelled(cfg *config.Config) (hubOutcome, error) {
+	clearConfigCredentials(cfg)
+	return hubOutcome{Result: wizard.Result{Cancelled: true}}, nil
 }
 
 func saveAccessibleDraft(save func(*config.Config, wizard.StepID) error, cfg *config.Config, stepID wizard.StepID) error {
@@ -275,17 +286,21 @@ func promptDataDrivenStep(ctx context.Context, prompt accessiblePrompt, step *wi
 	definition := step.Definition()
 	fmt.Fprintf(prompt.writer(), "\n%s\n", definition.Title)
 	allValues := make(map[string]string)
-	for _, section := range definition.Sections {
-		for _, field := range section.Fields {
+	for sectionIndex := range definition.Sections {
+		section := &definition.Sections[sectionIndex]
+		for fieldIndex := range section.Fields {
+			field := &section.Fields[fieldIndex]
 			allValues[field.Key] = step.Value(field.Key)
 		}
 	}
-	for _, section := range definition.Sections {
+	for sectionIndex := range definition.Sections {
+		section := &definition.Sections[sectionIndex]
 		if section.Visible != nil && !section.Visible(allValues) {
 			continue
 		}
 		fmt.Fprintf(prompt.writer(), "%s\n", section.Title)
-		for _, field := range section.Fields {
+		for fieldIndex := range section.Fields {
+			field := &section.Fields[fieldIndex]
 			if err := ctx.Err(); err != nil {
 				return err
 			}
@@ -299,12 +314,13 @@ func promptDataDrivenStep(ctx context.Context, prompt accessiblePrompt, step *wi
 			current := step.Value(field.Key)
 			var value string
 			var err error
-			if accessibleSecretField(field) {
+			switch {
+			case accessibleSecretField(field):
 				value, err = prompt.secret(label)
-			} else if len(field.Options) > 0 {
+			case len(field.Options) > 0:
 				fmt.Fprintf(prompt.writer(), "  Options: %s\n", strings.Join(field.Options, ", "))
 				value, err = prompt.line(label, current)
-			} else {
+			default:
 				value, err = prompt.line(label, current)
 			}
 			if err != nil {
@@ -329,7 +345,7 @@ func promptDataDrivenStep(ctx context.Context, prompt accessiblePrompt, step *wi
 	return nil
 }
 
-func accessibleSecretField(field wizard.FieldDefinition) bool {
+func accessibleSecretField(field *wizard.FieldDefinition) bool {
 	if field.Type == wizard.FieldTypePassword {
 		return true
 	}
@@ -341,8 +357,7 @@ func accessibleSecretField(field wizard.FieldDefinition) bool {
 
 func accessibleCancelledOrError(ctx context.Context, cfg *config.Config, err error) (hubOutcome, error) {
 	if ctx.Err() != nil || errors.Is(err, io.EOF) {
-		clearConfigCredentials(cfg)
-		return hubOutcome{Result: wizard.Result{Cancelled: true}}, nil
+		return accessibleCancelled(cfg)
 	}
 	return accessibleError(cfg, err)
 }

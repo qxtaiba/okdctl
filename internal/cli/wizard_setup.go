@@ -112,15 +112,6 @@ func runWizardWithMode(cmd *cobra.Command, cfg *config.Config, configExists bool
 	return outcome, err
 }
 
-// runHubSession runs the wizard with the terminal to itself: the log facade
-// points at the run log and progress bars are off for the duration, since the
-// hub's verbs assemble their flows — loading credentials, probing hosts — while
-// the AltScreen is up, and a log line written behind it would draw over the
-// frame. Both are restored before the caller prints anything.
-func runHubSession(cmd *cobra.Command, flowSteps []wizard.WizardStep, cfg *config.Config) (wizard.Result, error) {
-	return runHubSessionWithDraft(cmd, flowSteps, cfg, nil)
-}
-
 func runHubSessionWithDraft(cmd *cobra.Command, flowSteps []wizard.WizardStep, cfg *config.Config, save func(*config.Config, wizard.StepID, string) error) (wizard.Result, error) {
 	restoreLogs := logutil.Redirect(subprocSink())
 	defer restoreLogs()
@@ -298,20 +289,22 @@ func configureDemoVersionFetcher(built wizard.BuiltSteps) {
 
 func configureReviewStep(built wizard.BuiltSteps, cfg *config.Config, configExists bool, baseline *config.Config) {
 	for _, step := range built.Steps {
-		if rs, ok := step.(*steps.ReviewStep); ok {
-			rs.SetConfig(cfg)
-			rs.SetConfigPath(deployOutputFile)
-			if capacity, ok := built.States[wizard.StepTypeReview].(*steps.WizardCapacitySnapshot); ok {
-				rs.SetCapacity(capacity)
-			}
-			if configExists {
-				if baseline == nil {
-					baseline = cfg
-				}
-				rs.SetSavedConfig(baseline)
-			}
-			break
+		rs, ok := step.(*steps.ReviewStep)
+		if !ok {
+			continue
 		}
+		rs.SetConfig(cfg)
+		rs.SetConfigPath(deployOutputFile)
+		if capacity, ok := built.States[wizard.StepTypeReview].(*steps.WizardCapacitySnapshot); ok {
+			rs.SetCapacity(capacity)
+		}
+		if configExists {
+			if baseline == nil {
+				baseline = cfg
+			}
+			rs.SetSavedConfig(baseline)
+		}
+		break
 	}
 }
 

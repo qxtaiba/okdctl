@@ -30,13 +30,15 @@ func goldenHooks() Hooks {
 	return Hooks{
 		Logs:    seededRing(24),
 		LogPath: "okd-install/okdctl.log",
-		ManageNodes: func() ([]wizard.WizardStep, wizard.FlowChrome, error) {
-			return []wizard.WizardStep{finishTestStep{}}, wizard.FlowChrome{}, nil
+		Finish: &FinishHooks{
+			ManageNodes: func() ([]wizard.WizardStep, wizard.FlowChrome, error) {
+				return []wizard.WizardStep{finishTestStep{}}, wizard.FlowChrome{}, nil
+			},
+			ClusterStatus: func() ([]wizard.WizardStep, wizard.FlowChrome, error) {
+				return []wizard.WizardStep{finishTestStep{}}, wizard.FlowChrome{}, nil
+			},
+			OpenConsole: func() tea.Cmd { return func() tea.Msg { return nil } },
 		},
-		ClusterStatus: func() ([]wizard.WizardStep, wizard.FlowChrome, error) {
-			return []wizard.WizardStep{finishTestStep{}}, wizard.FlowChrome{}, nil
-		},
-		OpenConsole: func() tea.Cmd { return func() tea.Msg { return nil } },
 	}
 }
 

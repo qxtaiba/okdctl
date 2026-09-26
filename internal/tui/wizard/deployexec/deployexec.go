@@ -78,6 +78,13 @@ type Event struct {
 // NextFlow builds the steps and chrome a finish-screen verb enters.
 type NextFlow func() ([]wizard.WizardStep, wizard.FlowChrome, error)
 
+// FinishHooks groups the optional actions available after deployment.
+type FinishHooks struct {
+	ManageNodes   NextFlow
+	ClusterStatus NextFlow
+	OpenConsole   func() tea.Cmd
+}
+
 // Hooks are the CLI-supplied closures the deploy steps call into, so this
 // package never imports the cli package's assembly code.
 type Hooks struct {
@@ -96,14 +103,8 @@ type Hooks struct {
 	// Done is closed once the run's context is cancelled. The step's own final
 	// send selects on it, so a force-quit never strands the engine goroutine on
 	// a feed nobody drains; a nil channel simply never fires.
-	Done <-chan struct{}
-	// ManageNodes and ClusterStatus are the flows the payoff screen's verbs
-	// chain into; a nil provider leaves its verb off the screen entirely
-	// rather than offering a key that does nothing.
-	ManageNodes   NextFlow
-	ClusterStatus NextFlow
-	// OpenConsole opens the cluster console from the finish screen.
-	OpenConsole func() tea.Cmd
+	Done   <-chan struct{}
+	Finish *FinishHooks
 }
 
 // flowStepCount is how many screens NewSteps assembles, the step count the

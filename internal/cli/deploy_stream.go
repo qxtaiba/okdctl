@@ -57,7 +57,7 @@ func deployStreamEnabled() bool {
 // checklist is seeded from the same plan the engine will execute, the engine's
 // metrics-recorder seam feeds the screen, and the human log stream goes to the
 // run log instead of the stderr the AltScreen owns.
-func runDeployStream(cmd *cobra.Command, ctx context.Context, cfg *config.Config, opts *deploy.Options, out io.Writer) error {
+func runDeployStream(ctx context.Context, cmd *cobra.Command, cfg *config.Config, opts *deploy.Options, out io.Writer) error {
 	// Resolved before the log redirect so a stale-marker warning still reaches
 	// the operator's scrollback rather than only the run log.
 	plan := deploy.PlannedSteps(cfg, opts.ProjectRoot, opts.FreshDeploy)
@@ -72,9 +72,7 @@ func runDeployStream(cmd *cobra.Command, ctx context.Context, cfg *config.Config
 	slot := &lifecycleSlot{}
 	hooks := deployStreamSession(streamCtx, cancelStream, cfg, opts)
 	followOn := deployFollowOnHooks(cmd, cfg, slot)
-	hooks.ManageNodes = followOn.ManageNodes
-	hooks.ClusterStatus = followOn.ClusterStatus
-	hooks.OpenConsole = followOn.OpenConsole
+	hooks.Finish = followOn.Finish
 	hooks.Logs = ring
 	// The resolved sink path, so the screen's "full log" pointers name the
 	// file this run actually writes — or nothing at all when no sink opened.
@@ -131,21 +129,23 @@ func deployConsoleURL(cfg *config.Config) string {
 func deployFollowOnHooks(cmd *cobra.Command, cfg *config.Config, slot *lifecycleSlot) deployexec.Hooks {
 	flows := hubFlows(cmd, cfg, slot)
 	hooks := deployexec.Hooks{
-		ManageNodes:   deployexec.NextFlow(flows.ManageNodes),
-		ClusterStatus: deployexec.NextFlow(flows.ClusterStatus),
+		Finish: &deployexec.FinishHooks{
+			ManageNodes:   deployexec.NextFlow(flows.ManageNodes),
+			ClusterStatus: deployexec.NextFlow(flows.ClusterStatus),
+		},
 	}
 	if url := deployConsoleURL(cfg); url != "" {
-		hooks.OpenConsole = func() tea.Cmd { return openConsole(url) }
+		hooks.Finish.OpenConsole = func() tea.Cmd { return openConsole(cmd.Context(), url) }
 	}
 	return hooks
 }
 
-func openConsole(url string) tea.Cmd {
+func openConsole(ctx context.Context, url string) tea.Cmd {
 	name, args, err := browserCommand(runtime.GOOS, url)
 	if err != nil {
 		return func() tea.Msg { return wizard.ErrorSetMsg{Error: err} }
 	}
-	return tea.ExecProcess(exec.Command(name, args...), func(err error) tea.Msg {
+	return tea.ExecProcess(exec.CommandContext(ctx, name, args...), func(err error) tea.Msg {
 		if err == nil {
 			return nil
 		}
@@ -153,7 +153,7 @@ func openConsole(url string) tea.Cmd {
 	})
 }
 
-func browserCommand(goos, url string) (string, []string, error) {
+func browserCommand(goos, url string) (name string, args []string, err error) {
 	switch goos {
 	case "darwin", "dragonfly", "freebsd", "netbsd", "openbsd":
 		return "open", []string{url}, nil

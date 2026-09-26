@@ -58,11 +58,9 @@ func TestDoneFinishVerbsReachTheirProviders(t *testing.T) {
 	}
 	open := false
 	s := NewDoneStep(doneState(), Hooks{
-		ClusterStatus: status,
-		ManageNodes:   manage,
-		OpenConsole: func() tea.Cmd {
+		Finish: &FinishHooks{ClusterStatus: status, ManageNodes: manage, OpenConsole: func() tea.Cmd {
 			return func() tea.Msg { open = true; return nil }
-		},
+		}},
 	})
 
 	for _, key := range []struct {
@@ -153,7 +151,8 @@ func TestFinishMotionIsOneShotAndFullMotionOnly(t *testing.T) {
 		if !s.Animating() {
 			t.Fatalf("animation stopped at frame %d", frame)
 		}
-		if equalColor(finishGradient(frame)[int((frame-1)*uint64(len(base)-1)/uint64(finishAnimationFrames-1))], base[int((frame-1)*uint64(len(base)-1)/uint64(finishAnimationFrames-1))]) {
+		highlight := int((frame - 1) * uint64(len(base)-1) / uint64(finishAnimationFrames-1)) //nolint:gosec // the test iterates only the fixed animation frame range.
+		if equalColor(finishGradient(frame)[highlight], base[highlight]) {
 			t.Fatalf("frame %d did not sweep the wordmark", frame)
 		}
 	}

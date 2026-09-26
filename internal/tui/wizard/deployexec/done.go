@@ -111,7 +111,8 @@ func (s *DoneStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		return s, nil
 	}
 	if s.st.Result == nil {
-		return s, s.finishKey(keyMsg)
+		cmd := s.finishKey(keyMsg)
+		return s, cmd
 	}
 	if keyMsg.Code == tea.KeyEnter && !s.log.Filtering() {
 		return s, func() tea.Msg { return wizard.StepCompleteMsg{StepID: StepIDDone} }
@@ -136,13 +137,19 @@ func (s *DoneStep) finishKey(msg tea.KeyPressMsg) tea.Cmd {
 	case msg.Text == string(rune(keyCopy)):
 		return s.copy(ocLoginCmd(s.st))
 	case msg.Text == string(rune(keyOpenConsole)):
-		if s.hooks.OpenConsole != nil {
-			return s.hooks.OpenConsole()
+		if s.hooks.Finish != nil && s.hooks.Finish.OpenConsole != nil {
+			return s.hooks.Finish.OpenConsole()
 		}
 	case msg.Text == string(rune(keyClusterStatus)):
-		return openFlow(s.hooks.ClusterStatus)
+		if s.hooks.Finish == nil {
+			return nil
+		}
+		return openFlow(s.hooks.Finish.ClusterStatus)
 	case msg.Text == string(rune(keyManageNodes)):
-		return openFlow(s.hooks.ManageNodes)
+		if s.hooks.Finish == nil {
+			return nil
+		}
+		return openFlow(s.hooks.Finish.ManageNodes)
 	}
 	return nil
 }

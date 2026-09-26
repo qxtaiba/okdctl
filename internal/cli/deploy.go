@@ -155,7 +155,7 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 		if err := confirmClusterMatches(true, deployConfirmCluster, cfg.Cluster.Name, "deploy"); err != nil {
 			return err
 		}
-		if err := runFullDeployment(cmd, ctx, cfg, out); err != nil {
+		if err := runFullDeployment(ctx, cmd, cfg, out); err != nil {
 			return err
 		}
 		return clearWizardDraftLocked(projectRoot, deployOutputFile)
@@ -184,7 +184,7 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	if handled, verbErr := runHubVerb(cmd, ctx, outcome.Verb, cfg, out); handled {
+	if handled, verbErr := runHubVerb(ctx, cmd, outcome.Verb, cfg, out); handled {
 		if outcome.Verb == steps.HubVerbDeploy && verbErr == nil {
 			return clearWizardDraftLocked(projectRoot, deployOutputFile)
 		}
@@ -206,7 +206,7 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 
 	switch outcome.Result.Action {
 	case wizard.ActionDeploy:
-		if err := runFullDeployment(cmd, ctx, cfg, out); err != nil {
+		if err := runFullDeployment(ctx, cmd, cfg, out); err != nil {
 			return err
 		}
 	case wizard.ActionExit:
@@ -227,10 +227,10 @@ const destroyHandoff = "run: okdctl destroy"
 // pipeline entirely. deploy runs the configuration already on disk untouched;
 // destroy prints its handoff and lets okdctl destroy's own confirm ladder be
 // the guard; the day-2 verbs ran in-process and have already reported.
-func runHubVerb(cmd *cobra.Command, ctx context.Context, verb steps.HubVerb, cfg *config.Config, out io.Writer) (handled bool, err error) {
+func runHubVerb(ctx context.Context, cmd *cobra.Command, verb steps.HubVerb, cfg *config.Config, out io.Writer) (handled bool, err error) {
 	switch verb {
 	case steps.HubVerbDeploy:
-		return true, runFullDeployment(cmd, ctx, cfg, out)
+		return true, runFullDeployment(ctx, cmd, cfg, out)
 	case steps.HubVerbDestroy:
 		fmt.Fprintln(out, destroyHandoff)
 		return true, nil
@@ -380,7 +380,7 @@ func saveConfig(cfg *config.Config, path string, w io.Writer) error {
 const deployGateScope = config.ScopeRequired | config.ScopeEnums | config.ScopeProvider |
 	config.ScopeAdvancedNetworking | config.ScopeNetworking | config.ScopeHTTPServer
 
-func runFullDeployment(cmd *cobra.Command, ctx context.Context, cfg *config.Config, w io.Writer) error {
+func runFullDeployment(ctx context.Context, cmd *cobra.Command, cfg *config.Config, w io.Writer) error {
 	if deployDryRun {
 		return runDeployDryRun(ctx, cfg, w)
 	}
@@ -427,7 +427,7 @@ func runFullDeployment(cmd *cobra.Command, ctx context.Context, cfg *config.Conf
 		Verbose:            logVerbose,
 	}
 	if deployStreamEnabled() {
-		return runDeployStream(cmd, ctx, cfg, &opts, w)
+		return runDeployStream(ctx, cmd, cfg, &opts, w)
 	}
 	_, execErr := deployExecuteFn(ctx, cfg, &opts, w)
 	return execErr

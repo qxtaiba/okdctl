@@ -302,7 +302,8 @@ func (s *WelcomeStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		if !s.opsLoading {
 			return s, tea.Batch(s.probeOps(msg.generation), s.scheduleOpsRefresh(msg.generation))
 		}
-		return s, s.scheduleOpsRefresh(msg.generation)
+		cmd := s.scheduleOpsRefresh(msg.generation)
+		return s, cmd
 	case hubFlowFailedMsg:
 		s.opening = ""
 		err := msg.err
