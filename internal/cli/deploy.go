@@ -47,10 +47,9 @@ var (
 var deployCmd = &cobra.Command{
 	Use:   cmdNameDeploy,
 	Short: "Deploy an OKD cluster",
-	Long: `Deploy an OKD cluster through an interactive wizard. Use --accessible or
-OKDCTL_ACCESSIBLE=1 for sequential plain-text prompts when a screen reader
-cannot follow the full-screen wizard. Secret values are entered without
-terminal echo.
+	Long: `Deploy an OKD cluster through an interactive wizard. Use --accessible for
+sequential plain-text prompts when a screen reader cannot follow the full-screen
+wizard. Secret values are entered without terminal echo.
 
 Use --yes with --confirm-cluster to skip the wizard and deploy
 non-interactively from an existing configuration file (and its okdctl.env
@@ -66,16 +65,8 @@ without deploying.`,
   okdctl deploy --write-config --output-file my-cluster.yaml  # writes config only; does not deploy
   okdctl deploy --dry-run
   okdctl deploy --keep-redhat-catalogs`,
-	Args:    cobra.NoArgs,
-	PreRunE: validateAccessibleDeployOptions,
-	RunE:    runDeploy,
-}
-
-func validateAccessibleDeployOptions(*cobra.Command, []string) error {
-	if accessibleRequested(deployAccessible, os.Getenv) && (deployYes || deployWriteConfig || deployDryRun) {
-		return &errtypes.UsageError{Msg: "accessible prompts cannot be combined with --yes, --write-config, or --dry-run"}
-	}
-	return nil
+	Args: cobra.NoArgs,
+	RunE: runDeploy,
 }
 
 func init() {
@@ -98,7 +89,6 @@ func init() {
 func runDeploy(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 	out := cmd.OutOrStdout()
-	accessible := accessibleRequested(deployAccessible, os.Getenv)
 
 	// Materializes the embedded Terraform sources write-once; a source checkout
 	// or hand-edited HCL is never overwritten (see
@@ -172,7 +162,7 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 	}
 
 	var outcome hubOutcome
-	if accessible {
+	if deployAccessible {
 		outcome, err = runAccessibleDeployConfigure(cmd, cfg, configExists)
 	} else {
 		outcome, err = runWizardFn(cmd, cfg, configExists)
@@ -216,11 +206,7 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 
 	switch outcome.Result.Action {
 	case wizard.ActionDeploy:
-		run := func() error { return runFullDeployment(ctx, cmd, cfg, out) }
-		if accessible {
-			run = runAccessibleDeployExecution(run)
-		}
-		if err := run(); err != nil {
+		if err := runFullDeployment(ctx, cmd, cfg, out); err != nil {
 			return err
 		}
 	case wizard.ActionExit:
@@ -229,15 +215,6 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 	}
 
 	return nil
-}
-
-func runAccessibleDeployExecution(run func() error) func() error {
-	return func() error {
-		previous := deployNoTUI
-		deployNoTUI = true
-		defer func() { deployNoTUI = previous }()
-		return run()
-	}
 }
 
 // destroyHandoff is the line the hub's destroy verb prints once the TUI has

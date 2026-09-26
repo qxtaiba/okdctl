@@ -4,10 +4,7 @@ Deploy an OKD cluster
 
 ### Synopsis
 
-Deploy an OKD cluster through an interactive wizard. Use --accessible or
-OKDCTL_ACCESSIBLE=1 for sequential plain-text prompts when a screen reader
-cannot follow the full-screen wizard. Secret values are entered without
-terminal echo.
+Deploy an OKD cluster through an interactive wizard.
 
 Use --yes with --confirm-cluster to skip the wizard and deploy
 non-interactively from an existing configuration file (and its okdctl.env
@@ -25,7 +22,6 @@ okdctl deploy [flags]
 
 ```
   okdctl deploy
-  okdctl deploy --accessible
   okdctl deploy --config my-cluster.yaml
   okdctl deploy --yes --confirm-cluster=prod         # scripted deploy from okdctl.yaml, no wizard
   okdctl deploy --write-config --output-file my-cluster.yaml  # writes config only; does not deploy
@@ -36,7 +32,6 @@ okdctl deploy [flags]
 ### Options
 
 ```
-      --accessible                   use sequential plain-text prompts instead of the full-screen configuration wizard
       --acknowledge-interrupted-op   deploy despite an in-flight node op marker (deploy would otherwise refuse: reconciling mid-op destroys the in-flight node)
       --confirm-cluster string       required with --yes; must equal the config cluster name
       --dry-run                      preview terraform plan and step listing without deploying

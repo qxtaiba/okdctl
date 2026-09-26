@@ -26,12 +26,6 @@ type accessiblePrompt interface {
 	writer() io.Writer
 }
 
-const accessibleEnv = "OKDCTL_ACCESSIBLE"
-
-func accessibleRequested(flag bool, getenv func(string) string) bool {
-	return flag || getenv(accessibleEnv) == "1"
-}
-
 type terminalAccessiblePrompt struct {
 	in  io.Reader
 	out io.Writer
