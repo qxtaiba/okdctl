@@ -711,6 +711,18 @@ func (s *DataDrivenStep) Value(fieldKey string) string {
 	return ""
 }
 
+// Definition returns the declarative fields and validation rules for s.
+func (s *DataDrivenStep) Definition() *StepDefinition { return s.definition }
+
+// SetValue updates a field without changing the step's focus or validation state.
+func (s *DataDrivenStep) SetValue(fieldKey, value string) bool {
+	if s.getField(fieldKey) == nil {
+		return false
+	}
+	s.setValue(fieldKey, value)
+	return true
+}
+
 // ValueInt returns the integer value of fieldKey or fallback when empty
 // or unparseable.
 func (s *DataDrivenStep) ValueInt(fieldKey string, fallback int) int {
