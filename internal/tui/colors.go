@@ -28,6 +28,23 @@ var LogoGradient = [6]color.Color{
 	lipgloss.Color("#22D3EE"),
 }
 
+// SuccessGradient returns n colors from the active success tier to the logo
+// gradient's cyan end.
+func SuccessGradient(n int) []color.Color {
+	if n < 1 {
+		return nil
+	}
+	from, to := ColorSuccess(), LogoGradient[len(LogoGradient)-1]
+	if n == 1 {
+		return []color.Color{from}
+	}
+	ramp := make([]color.Color, n)
+	for i := range ramp {
+		ramp[i] = BlendAt(from, to, float64(i)/float64(n-1))
+	}
+	return ramp
+}
+
 // BlendAt returns the color t of the way from a to b (t clamped to [0, 1]),
 // interpolating in RGB space; the install instrument paints its gradient
 // fill with it.

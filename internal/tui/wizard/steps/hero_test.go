@@ -6,36 +6,12 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
-func TestHeroGlyphsAre5RowsBy50Cols(t *testing.T) {
-	if len(heroGlyphs) != 6 {
-		t.Fatalf("len(heroGlyphs) = %d, want 6", len(heroGlyphs))
-	}
-	for l := range heroGlyphs {
-		if len(heroGlyphs[l]) != heroRows {
-			t.Fatalf("heroGlyphs[%d] has %d rows, want %d", l, len(heroGlyphs[l]), heroRows)
-		}
-	}
-	for r := range heroRows {
-		width := 0
-		for l := range heroGlyphs {
-			width += lipgloss.Width(heroGlyphs[l][r])
-		}
-		if width != 50 {
-			t.Errorf("hero row %d is %d cols wide, want 50", r, width)
-		}
-	}
-	for l := range heroGlyphs {
-		want := lipgloss.Width(heroGlyphs[l][0])
-		for r := 1; r < heroRows; r++ {
-			if got := lipgloss.Width(heroGlyphs[l][r]); got != want {
-				t.Errorf("heroGlyphs[%d] row %d is %d cols wide, want %d (row 0's width) — a per-letter width mismatch can hide behind a correct row sum", l, r, got, want)
-			}
-		}
-	}
-}
+// heroCols is the OKDCTL wordmark's own width at scale 1.
+var heroCols = tui.WordmarkWidth("OKDCTL", 1)
 
 func TestHeroFallsBackBelow60Cols(t *testing.T) {
 	want := wizard.LogoStyle.Render("O K D C T L")
@@ -65,9 +41,9 @@ func heroSize(t *testing.T, hero string) (rows, cols int) {
 
 func TestHeroDoublesAt120x34(t *testing.T) {
 	rows, cols := heroSize(t, renderHero(heroDoubleWidth, heroDoubleHeight, true))
-	if rows != heroRows*heroScale || cols != 50*heroScale {
+	if rows != tui.WordmarkRows*heroScale || cols != heroCols*heroScale {
 		t.Errorf("renderHero(%d, %d, true) = %dx%d, want %dx%d",
-			heroDoubleWidth, heroDoubleHeight, rows, cols, heroRows*heroScale, 50*heroScale)
+			heroDoubleWidth, heroDoubleHeight, rows, cols, tui.WordmarkRows*heroScale, heroCols*heroScale)
 	}
 }
 
@@ -79,8 +55,8 @@ func TestHeroStaysStandardBelowTheDoubleGate(t *testing.T) {
 	}
 	for _, c := range cases {
 		rows, cols := heroSize(t, renderHero(c.w, c.h, true))
-		if rows != heroRows || cols != 50 {
-			t.Errorf("renderHero(%d, %d, true) = %dx%d, want the standard %dx50", c.w, c.h, rows, cols, heroRows)
+		if rows != tui.WordmarkRows || cols != heroCols {
+			t.Errorf("renderHero(%d, %d, true) = %dx%d, want the standard %dx%d", c.w, c.h, rows, cols, tui.WordmarkRows, heroCols)
 		}
 	}
 }
@@ -94,8 +70,5 @@ func TestHeroDoubleScaleRepeatsEveryCell(t *testing.T) {
 				t.Fatalf("double-scale row %d differs from row %d; each glyph row must repeat %d times", i+j, i, heroScale)
 			}
 		}
-	}
-	if got := stretchCells("█ ", heroScale); got != "██  " {
-		t.Errorf("stretchCells(%q, %d) = %q, want %q", "█ ", heroScale, got, "██  ")
 	}
 }

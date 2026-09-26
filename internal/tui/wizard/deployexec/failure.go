@@ -129,7 +129,7 @@ func leadingClause(err error) string {
 func nextMoves(sty *wizard.ExecStyles, col int, copied bool) []string {
 	keys := tui.RenderFacts([]tui.FactRow{
 		{Key: string(rune(keyFullLog)), Value: "open the full log, filter it, jump between errors"},
-		{Key: string(rune(keyCopyRunID)), Value: "copy the run id to the clipboard"},
+		{Key: string(rune(keyCopy)), Value: "copy the run id to the clipboard"},
 	}, &tui.FactLayout{
 		Leader: tui.FactLeaderPad, KeyWidth: incidentKeyCol, TotalWidth: col,
 		Styles: tui.FactStyles{Key: sty.Active, Value: sty.Dim},

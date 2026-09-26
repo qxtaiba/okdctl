@@ -3,6 +3,7 @@ package deployexec
 import (
 	"context"
 	"errors"
+	"image/color"
 	"strings"
 	"testing"
 	"time"
@@ -29,14 +30,70 @@ func doneState() *State {
 	return st
 }
 
-func TestDoneViewRendersTheDeploySummaryBoxInFrame(t *testing.T) {
+func TestDoneViewRendersTheDeployFinishScreen(t *testing.T) {
 	s := NewDoneStep(doneState(), Hooks{})
 	out := tuitest.StripANSI(s.View(96, 40))
 
-	for _, want := range []string{"DEPLOYMENT COMPLETE", "cluster deployed", "console", "kubeadmin"} {
+	for _, want := range []string{"D E P L O Y E D", "homelab.lab.example.com", "console", "kubeadmin", "NEXT", "oc login"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("done view missing %q:\n%s", want, out)
 		}
+	}
+}
+
+type finishTestStep struct{}
+
+func (finishTestStep) ID() wizard.StepID                           { return "finish-test" }
+func (finishTestStep) Title() string                               { return "finish test" }
+func (finishTestStep) Init() tea.Cmd                               { return nil }
+func (finishTestStep) Update(tea.Msg) (wizard.WizardStep, tea.Cmd) { return finishTestStep{}, nil }
+func (finishTestStep) View(int, int) string                        { return "finish test" }
+
+func TestDoneFinishVerbsReachTheirProviders(t *testing.T) {
+	status := func() ([]wizard.WizardStep, wizard.FlowChrome, error) {
+		return []wizard.WizardStep{finishTestStep{}}, wizard.FlowChrome{Tagline: "status"}, nil
+	}
+	manage := func() ([]wizard.WizardStep, wizard.FlowChrome, error) {
+		return []wizard.WizardStep{finishTestStep{}}, wizard.FlowChrome{Tagline: "manage"}, nil
+	}
+	open := false
+	s := NewDoneStep(doneState(), Hooks{
+		ClusterStatus: status,
+		ManageNodes:   manage,
+		OpenConsole: func() tea.Cmd {
+			return func() tea.Msg { open = true; return nil }
+		},
+	})
+
+	for _, key := range []struct {
+		text string
+		want string
+	}{{"s", "cluster status"}, {"n", "manage nodes"}, {"o", "open console"}} {
+		if !strings.Contains(strings.ToLower(tuitest.StripANSI(s.View(120, 40))), key.want) {
+			t.Errorf("finish screen omits %q", key.want)
+		}
+	}
+
+	for _, key := range []struct {
+		text string
+		want string
+	}{{"s", "status"}, {"n", "manage"}} {
+		_, cmd := s.Update(tea.KeyPressMsg{Text: key.text})
+		if cmd == nil {
+			t.Fatalf("%q returned no flow command", key.text)
+		}
+		swap, ok := cmd().(wizard.SwapFlowMsg)
+		if !ok || swap.Chrome.Tagline != key.want || len(swap.Steps) != 1 {
+			t.Errorf("%q returned %#v, want the %q flow", key.text, swap, key.want)
+		}
+	}
+	_, cmd := s.Update(tea.KeyPressMsg{Text: "o"})
+	if cmd == nil {
+		t.Fatal("o returned no console command")
+	}
+	cmd()
+	if !open {
+		t.Error("o did not call the console opener")
 	}
 }
 
@@ -79,6 +136,60 @@ func TestDoneCompletesOnEnter(t *testing.T) {
 	if _, ok := cmd().(wizard.StepCompleteMsg); !ok {
 		t.Errorf("enter must emit StepCompleteMsg, got %T", cmd())
 	}
+}
+
+func TestFinishMotionIsOneShotAndFullMotionOnly(t *testing.T) {
+	prev := tui.Motion()
+	t.Cleanup(func() { tui.SetMotion(prev) })
+	tui.SetMotion(tui.MotionFull)
+	s := NewDoneStep(doneState(), Hooks{})
+	s.Init()
+	if !s.Animating() {
+		t.Fatal("successful finish must animate once under full motion")
+	}
+	base := finishGradient(0)
+	for frame := uint64(1); frame < finishAnimationFrames; frame++ {
+		_, _ = s.Update(wizard.FrameMsg{Frame: frame})
+		if !s.Animating() {
+			t.Fatalf("animation stopped at frame %d", frame)
+		}
+		if equalColor(finishGradient(frame)[int((frame-1)*uint64(len(base)-1)/uint64(finishAnimationFrames-1))], base[int((frame-1)*uint64(len(base)-1)/uint64(finishAnimationFrames-1))]) {
+			t.Fatalf("frame %d did not sweep the wordmark", frame)
+		}
+	}
+	_, _ = s.Update(wizard.FrameMsg{Frame: finishAnimationFrames})
+	if s.Animating() || s.frame != 0 || !equalGradient(finishGradient(0), finishGradient(s.frame)) {
+		t.Fatal("finish motion must stop on the original still frame")
+	}
+	s.Init()
+	if s.Animating() {
+		t.Fatal("returning from a chained flow must not replay the finish motion")
+	}
+
+	tui.SetMotion(tui.MotionReduced)
+	s = NewDoneStep(doneState(), Hooks{})
+	s.Init()
+	if s.Animating() {
+		t.Fatal("reduced motion must keep the finish screen still")
+	}
+}
+
+func equalGradient(a, b []color.Color) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if !equalColor(a[i], b[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func equalColor(a, b color.Color) bool {
+	ar, ag, ab, aa := a.RGBA()
+	br, bg, bb, ba := b.RGBA()
+	return ar == br && ag == bg && ab == bb && aa == ba
 }
 
 // TestDoneScreenPagesWithPgKeys pins the paging contract the footer

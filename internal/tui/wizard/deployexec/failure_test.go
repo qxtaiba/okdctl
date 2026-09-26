@@ -110,7 +110,7 @@ func TestIncidentReportCopiesTheRunID(t *testing.T) {
 		t.Fatalf("current step is %T, want the done screen", m.CurrentStep())
 	}
 
-	if _, cmd := s.Update(tea.KeyPressMsg{Code: keyCopyRunID, Text: "c"}); cmd != nil {
+	if _, cmd := s.Update(tea.KeyPressMsg{Code: keyCopy, Text: "c"}); cmd != nil {
 		t.Error("off-TTY the clipboard escape must degrade to nothing")
 	}
 
@@ -121,7 +121,7 @@ func TestIncidentReportCopiesTheRunID(t *testing.T) {
 		tui.SetColorProfileFor(io.Discard)
 	})
 
-	_, cmd := s.Update(tea.KeyPressMsg{Code: keyCopyRunID, Text: "c"})
+	_, cmd := s.Update(tea.KeyPressMsg{Code: keyCopy, Text: "c"})
 	if cmd == nil {
 		t.Fatal("c must emit a clipboard command")
 	}

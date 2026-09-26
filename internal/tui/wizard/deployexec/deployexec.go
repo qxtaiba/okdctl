@@ -7,6 +7,8 @@ import (
 	"context"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/postinstall"
@@ -69,6 +71,13 @@ type Event struct {
 	Final   bool
 }
 
+// NextFlow builds the flow one of the payoff screen's verbs chains into.
+// Building is deferred to the moment the verb is pressed: the manage-nodes
+// flow's hooks load credentials and probe the Proxmox host, work a deploy that
+// exits straight away must not pay for.
+// NextFlow builds the steps and chrome a finish-screen verb enters.
+type NextFlow func() ([]wizard.WizardStep, wizard.FlowChrome, error)
+
 // Hooks are the CLI-supplied closures the deploy steps call into, so this
 // package never imports the cli package's assembly code.
 type Hooks struct {
@@ -88,6 +97,13 @@ type Hooks struct {
 	// send selects on it, so a force-quit never strands the engine goroutine on
 	// a feed nobody drains; a nil channel simply never fires.
 	Done <-chan struct{}
+	// ManageNodes and ClusterStatus are the flows the payoff screen's verbs
+	// chain into; a nil provider leaves its verb off the screen entirely
+	// rather than offering a key that does nothing.
+	ManageNodes   NextFlow
+	ClusterStatus NextFlow
+	// OpenConsole opens the cluster console from the finish screen.
+	OpenConsole func() tea.Cmd
 }
 
 // flowStepCount is how many screens NewSteps assembles, the step count the

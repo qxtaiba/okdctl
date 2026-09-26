@@ -44,7 +44,7 @@ func TestRunFullDeployment_RejectsInvalidProvider(t *testing.T) {
 					},
 				},
 			}
-			err := runFullDeployment(context.Background(), cfg, io.Discard)
+			err := runFullDeployment(deployCmd, context.Background(), cfg, io.Discard)
 			var ce *errtypes.ConfigError
 			if !errors.As(err, &ce) {
 				t.Fatalf("want *errtypes.ConfigError, got %T: %v", err, err)

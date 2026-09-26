@@ -321,7 +321,7 @@ func TestGolden_HubReachesClusterStatus(t *testing.T) {
 }
 
 // heroBlockRows counts the frame rows carrying block-letter hero cells, which
-// is heroRows normally and heroRows*heroScale once the hero doubles.
+// is heroRows normally and tui.WordmarkRows*heroScale once the hero doubles.
 func heroBlockRows(frame string) int {
 	rows := 0
 	for _, line := range strings.Split(tuitest.StripANSI(frame), "\n") {
@@ -352,7 +352,7 @@ func TestGolden_HubWideTerminals(t *testing.T) {
 			tuitest.Golden(t, fmt.Sprintf("hub-wide_%dx%d", sz.w, sz.h), frame)
 			tuitest.AssertFits(t, frame, sz.w, sz.h)
 
-			if got, want := heroBlockRows(frame), heroRows*heroScale; got != want {
+			if got, want := heroBlockRows(frame), tui.WordmarkRows*heroScale; got != want {
 				t.Errorf("hero occupies %d rows at %dx%d, want the double-scale %d", got, sz.w, sz.h, want)
 			}
 			if strings.Contains(tuitest.StripANSI(frame), "STEPS") {

@@ -3,22 +3,22 @@
   │ O K D C T L                                                              │  
   │ done                                                      install · done │  
   │──────────────────────────────────────────────────────────────────────────│  
-  │  ╭─────────────────────── DEPLOYMENT COMPLETE ────────────────────────╮  │  
-  │  │                                                                    │  │  
-  │  │  ✓ cluster deployed                                                │  │  
-  │  │                                                                    │  │  
-  │  │    run_id ................................ run-01                  │  │  
-  │  │                                                                    │  │  
-  │  │  access                                                            │  │  
-  │  │    cluster ............................... homelab.lab.example.com │  │  
-  │  │    console ............. https://console-openshift-console.apps.ho │  │  
-  │  │                          melab.lab.example.com                     │  │  
-  │  │    api ................. https://api.homelab.lab.example.com:6443  │  │  
-  │  │                                                                    │  │  
-  │  │  dns records                                                       │  │  
-  │  │    api.homelab.lab.example.com ........... 192.0.2.10 (kube-vip)   │  │  
+  │  D E P L O Y E D                                                         │  
+  │                                                                          │  
+  │  homelab.lab.example.com                             run-01 · 42m0s      │  
+  │                                                                          │  
+  │  ACCESS                                                                  │  
+  │  cluster ....... homelab.lab.example.com                                 │  
+  │  console ....... https://console-openshift-console.apps.homelab.la       │  
+  │                  b.example.com                                           │  
+  │  api ........... https://api.homelab.lab.example.com:6443                │  
+  │                                                                          │  
+  │  DNS RECORDS                                                             │  
+  │  api.homelab.lab.example.com ... 192.0.2.10 (kube-vip)                   │  
+  │  *.apps.homelab.lab.example.com ... 192.168.1.20 (haproxy)               │  
+  │                                                                          │  
   │                                                                          │  
   │────────────────── ↑ ↓  scroll down for more ────────────────── ▸ homelab │  
-  │  enter exit • pgup/pgdn scroll • ? help                                  │  
+  │  s cluster status • n manage nodes • o open console … • ? help           │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

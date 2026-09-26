@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -35,6 +36,57 @@ func TestDeployNoTUIFlagIsLongFormOnly(t *testing.T) {
 	}
 	if strings.ContainsAny(f.Usage, "\n") {
 		t.Errorf("--%s usage must be one line: %q", flagNoTUI, f.Usage)
+	}
+}
+
+func TestDeployFollowOnHooksBuildTheHubFlows(t *testing.T) {
+	t.Setenv(wizardDemoEnv, "1")
+	cfg := demoConfig()
+	slot := &lifecycleSlot{}
+	hooks := deployFollowOnHooks(deployCmd, cfg, slot)
+	if hooks.ManageNodes == nil || hooks.ClusterStatus == nil || hooks.OpenConsole == nil {
+		t.Fatal("successful deploy must expose status, manage, and console actions")
+	}
+
+	manage, _, err := hooks.ManageNodes()
+	if err != nil || len(manage) == 0 {
+		t.Fatalf("manage flow = %d steps, %v", len(manage), err)
+	}
+	if sess := slot.take(); sess != nil {
+		sess.close()
+	}
+	status, _, err := hooks.ClusterStatus()
+	if err != nil || len(status) == 0 {
+		t.Fatalf("status flow = %d steps, %v", len(status), err)
+	}
+}
+
+func TestBrowserCommandUsesThePlatformOpener(t *testing.T) {
+	for _, tc := range []struct {
+		goos string
+		name string
+		args []string
+		fail bool
+	}{
+		{goos: "darwin", name: "open", args: []string{"https://example.test"}},
+		{goos: "dragonfly", name: "open", args: []string{"https://example.test"}},
+		{goos: "freebsd", name: "open", args: []string{"https://example.test"}},
+		{goos: "netbsd", name: "open", args: []string{"https://example.test"}},
+		{goos: "openbsd", name: "open", args: []string{"https://example.test"}},
+		{goos: "android", name: "xdg-open", args: []string{"https://example.test"}},
+		{goos: "illumos", name: "xdg-open", args: []string{"https://example.test"}},
+		{goos: "linux", name: "xdg-open", args: []string{"https://example.test"}},
+		{goos: "solaris", name: "xdg-open", args: []string{"https://example.test"}},
+		{goos: "windows", name: "rundll32", args: []string{"url.dll,FileProtocolHandler", "https://example.test"}},
+		{goos: "plan9", fail: true},
+	} {
+		name, args, err := browserCommand(tc.goos, "https://example.test")
+		if (err != nil) != tc.fail {
+			t.Fatalf("browserCommand(%q) error = %v, want failure %t", tc.goos, err, tc.fail)
+		}
+		if !tc.fail && (name != tc.name || !slices.Equal(args, tc.args)) {
+			t.Errorf("browserCommand(%q) = %q %q, want %q %q", tc.goos, name, args, tc.name, tc.args)
+		}
 	}
 }
 

@@ -27,7 +27,17 @@ type deployScenario struct {
 // a fixed log ring, and a fixed sink path so the pane, the narrow tail, and the
 // full-log pointers are deterministic.
 func goldenHooks() Hooks {
-	return Hooks{Logs: seededRing(24), LogPath: "okd-install/okdctl.log"}
+	return Hooks{
+		Logs:    seededRing(24),
+		LogPath: "okd-install/okdctl.log",
+		ManageNodes: func() ([]wizard.WizardStep, wizard.FlowChrome, error) {
+			return []wizard.WizardStep{finishTestStep{}}, wizard.FlowChrome{}, nil
+		},
+		ClusterStatus: func() ([]wizard.WizardStep, wizard.FlowChrome, error) {
+			return []wizard.WizardStep{finishTestStep{}}, wizard.FlowChrome{}, nil
+		},
+		OpenConsole: func() tea.Cmd { return func() tea.Msg { return nil } },
+	}
 }
 
 // wrappedRing seeds goldenHooks' ring plus one long error line, so the

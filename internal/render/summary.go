@@ -330,7 +330,7 @@ func PostDeploySummary(cfg *config.Config, result *postinstall.Result, steps []d
 // PostDeploySummaryWidth renders PostDeploySummary sized to fit inside a box
 // of the given width, for callers that must fit a narrower viewport.
 func PostDeploySummaryWidth(cfg *config.Config, result *postinstall.Result, steps []distribution.StepResult, runID string, width int) string {
-	clusterFQDN, consoleURL, apiURL := deployURLs(cfg)
+	facts := NewPostDeployFacts(cfg, result, steps)
 
 	sb := NewBuilderWidth(width)
 	sb.WriteString("\n")
@@ -340,62 +340,52 @@ func PostDeploySummaryWidth(cfg *config.Config, result *postinstall.Result, step
 	sb.Newline()
 
 	sb.Section("access")
-	sb.KV("cluster", clusterFQDN)
-	sb.KVLink("console", consoleURL)
-	sb.KVLink("api", apiURL)
+	for _, row := range facts.Access {
+		if row.Link != "" {
+			sb.KVLink(row.Key, row.Link)
+		} else {
+			sb.KV(row.Key, row.Value)
+		}
+	}
 	sb.Newline()
 
 	sb.Section("dns records")
-	apiDomain := fmt.Sprintf("api.%s", clusterFQDN)
-	appsDomain := fmt.Sprintf("*.apps.%s", clusterFQDN)
-	if result != nil && result.DNSDeployed && result.KubeVipIP != "" {
-		sb.KV(apiDomain, result.KubeVipIP+" (kube-vip)")
-	} else if cfg.Networking.Bastion.IP != "" {
-		sb.KV(apiDomain, cfg.Networking.Bastion.IP+" (haproxy)")
+	for _, row := range facts.DNS {
+		sb.KV(row.Key, row.Value)
 	}
-	bastionIP := cfg.Networking.Bastion.IP
-	if result != nil && result.BastionIP != "" {
-		bastionIP = result.BastionIP
-	}
-	sb.KV(appsDomain, bastionIP+" (haproxy)")
 	sb.Newline()
 
 	sb.Section("status")
-	if result != nil {
-		if result.BootstrapCleaned {
-			sb.KV("bootstrap", "cleaned up")
-		} else {
-			sb.KV("bootstrap", "still running")
-		}
-		if result.DNSDeployed && result.KubeVipIP != "" {
-			sb.KV("api routing", fmt.Sprintf("kube-vip (%s)", result.KubeVipIP))
-		} else {
-			sb.KV("api routing", "haproxy (bastion)")
-		}
-		sb.KV("ingress routing", "haproxy (bastion)")
+	for _, row := range facts.Status {
+		sb.KV(row.Key, row.Value)
 	}
 	sb.Newline()
 
-	if len(steps) > 0 {
+	if len(facts.Steps) > 0 {
 		sb.Section("steps")
-		var total time.Duration
-		for _, s := range steps {
-			total += s.Duration
-			d := s.Duration.Truncate(time.Millisecond).String()
-			sb.KV(string(s.StepID), fmt.Sprintf("%-*s  %s", stepStatusColWidth, displayStatus(&s), d))
+		for _, row := range facts.Steps {
+			sb.KV(row.Key, row.Value)
 		}
-		sb.KV("total", total.Truncate(time.Millisecond).String())
 		sb.Newline()
 	}
 
 	sb.Section("credentials")
-	sb.KVHighlight("username", "kubeadmin")
-	sb.KVWide("password", readKubeadminCmd)
+	for _, row := range facts.Credentials {
+		switch {
+		case row.Highlight:
+			sb.KVHighlight(row.Key, row.Value)
+		case row.Key == "password":
+			sb.KVWide(row.Key, row.Value)
+		default:
+			sb.KV(row.Key, row.Value)
+		}
+	}
 	sb.Newline()
 
 	sb.Section("quick start")
-	sb.WriteString("    " + tui.CodeInlineStyle.Render("export KUBECONFIG=~/.kube/config") + "\n")
-	sb.WriteString("    " + tui.CodeInlineStyle.Render("oc get nodes") + "\n")
+	for _, cmd := range facts.QuickStart {
+		sb.WriteString("    " + tui.CodeInlineStyle.Render(cmd) + "\n")
+	}
 	sb.Newline()
 
 	sb.Section("next steps")
@@ -406,6 +396,76 @@ func PostDeploySummaryWidth(cfg *config.Config, result *postinstall.Result, step
 	sb.Newline()
 
 	return "\n" + tui.BoxedSectionCompact(sb.String(), "deployment complete", width) + "\n"
+}
+
+// PostDeployFacts holds the sections rendered by the CLI and wizard summaries.
+type PostDeployFacts struct {
+	Access      []tui.FactRow
+	DNS         []tui.FactRow
+	Status      []tui.FactRow
+	Steps       []tui.FactRow
+	Credentials []tui.FactRow
+	QuickStart  []string
+}
+
+// NewPostDeployFacts derives the post-deploy summary from one run's outcome.
+// A nil result leaves status empty rather than inventing a postinstall result.
+func NewPostDeployFacts(cfg *config.Config, result *postinstall.Result, steps []distribution.StepResult) PostDeployFacts {
+	clusterFQDN, consoleURL, apiURL := deployURLs(cfg)
+	f := PostDeployFacts{
+		Access: []tui.FactRow{
+			{Key: "cluster", Value: clusterFQDN},
+			{Key: "console", Value: consoleURL, Link: consoleURL},
+			{Key: "api", Value: apiURL, Link: apiURL},
+		},
+		Credentials: []tui.FactRow{
+			{Key: "username", Value: "kubeadmin", Highlight: true},
+			{Key: "password", Value: readKubeadminCmd},
+		},
+		QuickStart: []string{"export KUBECONFIG=~/.kube/config", "oc get nodes"},
+	}
+
+	apiDomain := fmt.Sprintf("api.%s", clusterFQDN)
+	if result != nil && result.DNSDeployed && result.KubeVipIP != "" {
+		f.DNS = append(f.DNS, tui.FactRow{Key: apiDomain, Value: result.KubeVipIP + " (kube-vip)"})
+	} else if cfg.Networking.Bastion.IP != "" {
+		f.DNS = append(f.DNS, tui.FactRow{Key: apiDomain, Value: cfg.Networking.Bastion.IP + " (haproxy)"})
+	}
+	bastionIP := cfg.Networking.Bastion.IP
+	if result != nil && result.BastionIP != "" {
+		bastionIP = result.BastionIP
+	}
+	f.DNS = append(f.DNS, tui.FactRow{Key: fmt.Sprintf("*.apps.%s", clusterFQDN), Value: bastionIP + " (haproxy)"})
+
+	if result != nil {
+		bootstrap := "still running"
+		if result.BootstrapCleaned {
+			bootstrap = "cleaned up"
+		}
+		routing := "haproxy (bastion)"
+		if result.DNSDeployed && result.KubeVipIP != "" {
+			routing = fmt.Sprintf("kube-vip (%s)", result.KubeVipIP)
+		}
+		f.Status = []tui.FactRow{
+			{Key: "bootstrap", Value: bootstrap},
+			{Key: "api routing", Value: routing},
+			{Key: "ingress routing", Value: "haproxy (bastion)"},
+		}
+	}
+
+	var total time.Duration
+	for i := range steps {
+		s := &steps[i]
+		total += s.Duration
+		f.Steps = append(f.Steps, tui.FactRow{
+			Key:   string(s.StepID),
+			Value: fmt.Sprintf("%-*s  %s", stepStatusColWidth, displayStatus(s), s.Duration.Truncate(time.Millisecond)),
+		})
+	}
+	if len(f.Steps) > 0 {
+		f.Steps = append(f.Steps, tui.FactRow{Key: "total", Value: total.Truncate(time.Millisecond).String()})
+	}
+	return f
 }
 
 // PostDeployRecapLines renders the short plain-text recap printed to stdout

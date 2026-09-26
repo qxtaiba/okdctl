@@ -13,11 +13,15 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
-// The keys the failure report answers to: the surface's full-screen log, and
-// the one non-destructive action worth a keystroke.
+// The keys the terminal screen answers to: the surface's full-screen log on a
+// failure, the clipboard action both endings offer (the run id on a failure,
+// the login command on a success), and the flows a finished deploy chains into.
 const (
-	keyFullLog   = logview.KeyFull
-	keyCopyRunID = 'c'
+	keyFullLog       = logview.KeyFull
+	keyCopy          = 'c'
+	keyOpenConsole   = 'o'
+	keyClusterStatus = 's'
+	keyManageNodes   = 'n'
 )
 
 // DoneStep is the terminal screen: the wizard-native rendering of the CLI
@@ -28,9 +32,12 @@ type DoneStep struct {
 	wizard.BaseStep
 	wizard.FrameSize
 	wizard.ExecStyleCache
-	st    *State
-	hooks Hooks
-	log   logview.Surface
+	st            *State
+	hooks         Hooks
+	log           logview.Surface
+	frame         uint64
+	finishMotion  bool
+	finishStarted bool
 	// copied records that the run id was written to the clipboard, so the
 	// report can say the escape went out without claiming the terminal took it.
 	copied bool
@@ -69,9 +76,18 @@ func (s *DoneStep) InterceptBack() bool {
 	return true
 }
 
-// Init returns nil; the step only renders the recorded outcome.
+// Init arms one bounded sweep on a successful full-motion finish.
 func (s *DoneStep) Init() tea.Cmd {
+	if !s.finishStarted {
+		s.finishStarted = true
+		s.finishMotion = s.st.Result == nil && tui.Motion() == tui.MotionFull
+	}
 	return nil
+}
+
+// Animating reports whether the finish wordmark still needs frame ticks.
+func (s *DoneStep) Animating() bool {
+	return s.finishMotion
 }
 
 // Update completes the wizard on enter and, on a failure, hands every other
@@ -80,21 +96,28 @@ func (s *DoneStep) Init() tea.Cmd {
 // died. Enter belongs to an open filter input first — committing a pattern
 // must never quit the wizard instead.
 func (s *DoneStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
+	if frame, ok := msg.(wizard.FrameMsg); ok {
+		if s.finishMotion {
+			s.frame = frame.Frame
+			if s.frame >= finishAnimationFrames {
+				s.frame = 0
+				s.finishMotion = false
+			}
+		}
+		return s, nil
+	}
 	keyMsg, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return s, nil
 	}
 	if s.st.Result == nil {
-		if keyMsg.Code == tea.KeyEnter {
-			return s, func() tea.Msg { return wizard.StepCompleteMsg{StepID: StepIDDone} }
-		}
-		return s, nil
+		return s, s.finishKey(keyMsg)
 	}
 	if keyMsg.Code == tea.KeyEnter && !s.log.Filtering() {
 		return s, func() tea.Msg { return wizard.StepCompleteMsg{StepID: StepIDDone} }
 	}
-	if keyMsg.Text == string(rune(keyCopyRunID)) && !s.log.Filtering() {
-		cmd := s.copyRunID()
+	if keyMsg.Text == string(rune(keyCopy)) && !s.log.Filtering() {
+		cmd := s.copy(s.st.RunID)
 		return s, cmd
 	}
 	if s.log.HandleKey(keyMsg, s.SplitsFrame(flowStepCount)) {
@@ -103,15 +126,53 @@ func (s *DoneStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	return s, nil
 }
 
-// copyRunID writes the run id to the system clipboard over OSC 52, gated the
-// way every escape emission is: a pipe or NO_COLOR run emits nothing and the
-// report says nothing either.
-func (s *DoneStep) copyRunID() tea.Cmd {
-	if s.st.RunID == "" || !tui.ColorEnabled() {
+// finishKey dispatches the payoff screen's verbs: the flows this session can
+// still reach, the clipboard action, and enter. A verb with no flow provider
+// behind it does nothing at all, since the screen never offered it.
+func (s *DoneStep) finishKey(msg tea.KeyPressMsg) tea.Cmd {
+	switch {
+	case msg.Code == tea.KeyEnter:
+		return func() tea.Msg { return wizard.StepCompleteMsg{StepID: StepIDDone} }
+	case msg.Text == string(rune(keyCopy)):
+		return s.copy(ocLoginCmd(s.st))
+	case msg.Text == string(rune(keyOpenConsole)):
+		if s.hooks.OpenConsole != nil {
+			return s.hooks.OpenConsole()
+		}
+	case msg.Text == string(rune(keyClusterStatus)):
+		return openFlow(s.hooks.ClusterStatus)
+	case msg.Text == string(rune(keyManageNodes)):
+		return openFlow(s.hooks.ManageNodes)
+	}
+	return nil
+}
+
+// openFlow builds steps off the update loop; nil providers remain unavailable.
+func openFlow(flow NextFlow) tea.Cmd {
+	if flow == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		steps, chrome, err := flow()
+		if err != nil {
+			return wizard.ErrorSetMsg{Error: err}
+		}
+		if len(steps) == 0 {
+			return nil
+		}
+		return wizard.SwapFlowMsg{Steps: steps, Chrome: chrome}
+	}
+}
+
+// copy writes text to the system clipboard over OSC 52, gated the way every
+// escape emission is: a pipe or NO_COLOR run emits nothing and the screen says
+// nothing either.
+func (s *DoneStep) copy(text string) tea.Cmd {
+	if text == "" || !tui.ColorEnabled() {
 		return nil
 	}
 	s.copied = true
-	return tea.SetClipboard(s.st.RunID)
+	return tea.SetClipboard(text)
 }
 
 // ConsumesPaging hands pgup/pgdn to the failure screen's log region; a
@@ -134,9 +195,15 @@ func (s *DoneStep) ScrollsWithArrows() bool {
 	return !s.log.Full()
 }
 
-// SuppressesSplit hands the log the whole frame while the failure report has
-// it full-screen.
+// SuppressesSplit gives the payoff screen the whole frame: the summary is the
+// run's record, and a log pane beside it would squeeze the access URLs into a
+// half-width column they have to wrap in. A failure keeps the pane — its
+// evidence is what the operator reads next — unless the log has gone
+// full-screen, which takes the frame anyway.
 func (s *DoneStep) SuppressesSplit() bool {
+	if s.st.Result == nil {
+		return true
+	}
 	return s.log.Full() && s.hooks.Logs != nil
 }
 
@@ -156,7 +223,21 @@ func (s *DoneStep) View(width, _ int) string {
 	if s.st.Cfg == nil {
 		return tui.CompletionSuccess("deployment complete")
 	}
-	return strings.Trim(render.PostDeploySummaryWidth(s.st.Cfg, s.st.Summary, s.st.Steps, s.st.RunID, w), "\n")
+	return s.finishScreen(col)
+}
+
+// finishScreen composes the deploy's payoff: the green wordmark, the cluster
+// it built with the run's cost, the summary in as many columns as the body
+// affords, and the verbs the session can still reach. The screen this replaces
+// was the CLI's own 90-column box adrift in a wider frame.
+func (s *DoneStep) finishScreen(col int) string {
+	sty := s.Styles()
+	return section(
+		strings.Split(finishWordmark(col, s.frame), "\n"),
+		[]string{finishHeadline(s.st, sty, col)},
+		strings.Split(finishSummary(s.st, sty, col), "\n"),
+		finishVerbs(&s.hooks, sty, col, s.copied),
+	)
 }
 
 // incidentReport composes the failure screen from the parts the run already
@@ -225,10 +306,13 @@ func (s *DoneStep) failureKind() string {
 // action worth a keystroke.
 func (s *DoneStep) ShortHelp() []wizard.KeyBinding {
 	exit := wizard.KeyBinding{Key: wizard.HelpEnter, Help: "exit"}
-	if s.hooks.Logs == nil || s.st.Result == nil {
+	if s.st.Result == nil {
+		return append(finishBindings(&s.hooks), exit)
+	}
+	if s.hooks.Logs == nil {
 		return []wizard.KeyBinding{exit}
 	}
 	return wizard.LogHelp(&s.log,
-		wizard.KeyBinding{Key: string(rune(keyCopyRunID)), Help: "copy the run id"},
+		wizard.KeyBinding{Key: string(rune(keyCopy)), Help: "copy the run id"},
 		exit)
 }

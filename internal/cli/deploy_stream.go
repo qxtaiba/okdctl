@@ -7,9 +7,13 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"os/exec"
+	"runtime"
 	"sync"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -53,7 +57,7 @@ func deployStreamEnabled() bool {
 // checklist is seeded from the same plan the engine will execute, the engine's
 // metrics-recorder seam feeds the screen, and the human log stream goes to the
 // run log instead of the stderr the AltScreen owns.
-func runDeployStream(ctx context.Context, cfg *config.Config, opts *deploy.Options, out io.Writer) error {
+func runDeployStream(cmd *cobra.Command, ctx context.Context, cfg *config.Config, opts *deploy.Options, out io.Writer) error {
 	// Resolved before the log redirect so a stale-marker warning still reaches
 	// the operator's scrollback rather than only the run log.
 	plan := deploy.PlannedSteps(cfg, opts.ProjectRoot, opts.FreshDeploy)
@@ -65,7 +69,12 @@ func runDeployStream(ctx context.Context, cfg *config.Config, opts *deploy.Optio
 	streamCtx, cancelStream := context.WithCancel(ctx)
 	defer cancelStream()
 
+	slot := &lifecycleSlot{}
 	hooks := deployStreamSession(streamCtx, cancelStream, cfg, opts)
+	followOn := deployFollowOnHooks(cmd, cfg, slot)
+	hooks.ManageNodes = followOn.ManageNodes
+	hooks.ClusterStatus = followOn.ClusterStatus
+	hooks.OpenConsole = followOn.OpenConsole
 	hooks.Logs = ring
 	// The resolved sink path, so the screen's "full log" pointers name the
 	// file this run actually writes — or nothing at all when no sink opened.
@@ -84,9 +93,20 @@ func runDeployStream(ctx context.Context, cfg *config.Config, opts *deploy.Optio
 		ring.Handler(slog.NewTextHandler(subprocSink(), nil))))
 	defer restoreLogs()
 
-	_, err := wizard.RunFlow(ctx, deployexec.NewSteps(st, hooks), cfg, deployexec.Chrome())
+	result, err := wizard.RunFlow(ctx, deployexec.NewSteps(st, hooks), cfg, deployexec.Chrome())
+	sess := slot.take()
+	if sess != nil {
+		defer sess.close()
+	}
 	restoreLogs()
 	recordDeployHistory(st, opts.ProjectRoot)
+	if sess != nil && sess.state.Started {
+		printDeployRecap(out, st)
+		if err != nil {
+			return errors.Join(err, reportLifecycleOutcome(cmd, result, sess.state))
+		}
+		return reportLifecycleOutcome(cmd, result, sess.state)
+	}
 	if err != nil {
 		// A tea failure mid-install must still surface the resume marker, not
 		// read as a configuration problem.
@@ -97,6 +117,53 @@ func runDeployStream(ctx context.Context, cfg *config.Config, opts *deploy.Optio
 			WithHint("try again, or re-run with --no-tui for the plain checklist")
 	}
 	return reportDeployStreamOutcome(out, st)
+}
+
+func deployConsoleURL(cfg *config.Config) string {
+	for _, fact := range render.NewPostDeployFacts(cfg, nil, nil).Access {
+		if fact.Key == "console" {
+			return fact.Link
+		}
+	}
+	return ""
+}
+
+func deployFollowOnHooks(cmd *cobra.Command, cfg *config.Config, slot *lifecycleSlot) deployexec.Hooks {
+	flows := hubFlows(cmd, cfg, slot)
+	hooks := deployexec.Hooks{
+		ManageNodes:   deployexec.NextFlow(flows.ManageNodes),
+		ClusterStatus: deployexec.NextFlow(flows.ClusterStatus),
+	}
+	if url := deployConsoleURL(cfg); url != "" {
+		hooks.OpenConsole = func() tea.Cmd { return openConsole(url) }
+	}
+	return hooks
+}
+
+func openConsole(url string) tea.Cmd {
+	name, args, err := browserCommand(runtime.GOOS, url)
+	if err != nil {
+		return func() tea.Msg { return wizard.ErrorSetMsg{Error: err} }
+	}
+	return tea.ExecProcess(exec.Command(name, args...), func(err error) tea.Msg {
+		if err == nil {
+			return nil
+		}
+		return wizard.ErrorSetMsg{Error: fmt.Errorf("open console: %w", err)}
+	})
+}
+
+func browserCommand(goos, url string) (string, []string, error) {
+	switch goos {
+	case "darwin", "dragonfly", "freebsd", "netbsd", "openbsd":
+		return "open", []string{url}, nil
+	case "android", "illumos", "linux", "solaris":
+		return "xdg-open", []string{url}, nil
+	case "windows":
+		return "rundll32", []string{"url.dll,FileProtocolHandler", url}, nil
+	default:
+		return "", nil, fmt.Errorf("open console: unsupported on %s", goos)
+	}
 }
 
 // loadDeployHistory seeds the stream screen's weight model and ETA from
