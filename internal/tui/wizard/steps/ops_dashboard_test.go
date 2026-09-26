@@ -33,12 +33,10 @@ func (s blockingOpsSource) ClusterStatus(ctx context.Context) (*okd.ClusterStatu
 }
 
 func TestWelcomeOpsSnapshotUsesUpdateMessages(t *testing.T) {
-	lastRunAt := time.Date(2026, time.January, 2, 13, 4, 5, 0, time.UTC)
 	s := NewWelcomeStep()
 	s.SetOpsDashboard(StaticStatusSource{Status: &okd.ClusterStatus{
-		APIAvailable: true, APIReachable: true, APILatencyAvailable: true, NodesAvailable: true,
+		APIAvailable: true, APIReachable: true, NodesAvailable: true,
 		OperatorsAvailable: true,
-		APILatency:         42 * time.Millisecond, LastDeployRunID: "run-abc", LastDeployCluster: "prod-cluster", LastDeployAt: lastRunAt,
 		Nodes: []okd.NodeStatus{
 			{Name: "master0", Role: nodetypes.RoleMaster, Ready: true},
 			{Name: "worker0", Role: nodetypes.RoleWorker, Ready: false},
@@ -58,8 +56,8 @@ func TestWelcomeOpsSnapshotUsesUpdateMessages(t *testing.T) {
 	if s.opsStatus == nil || s.opsStatus.status.DegradedOperators != 1 {
 		t.Fatal("snapshot update did not store the returned cluster status")
 	}
-	view := renderOpsDashboard(s.opsStatus, false, nil, 76)
-	for _, want := range []string{"API reachable", "Nodes 1/2 ready", "Operators 1 degraded", "Updated"} {
+	view := renderOpsDashboard(s.opsStatus, false, nil, 76, 24)
+	for _, want := range []string{"CLUSTER OPERATIONS", "API reachable", "NODES 1/2 ready", "OPERATORS 1 degraded", "RTT"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("dashboard is missing %q:\n%s", want, view)
 		}
@@ -67,23 +65,101 @@ func TestWelcomeOpsSnapshotUsesUpdateMessages(t *testing.T) {
 	if s.opsStatus.updated.IsZero() {
 		t.Error("snapshot update time is zero")
 	}
-	view = renderOpsDashboard(&opsSnapshot{status: &okd.ClusterStatus{
-		APIAvailable: true, APIReachable: true, APILatencyAvailable: true, APILatency: 42 * time.Millisecond,
-		LastDeployRunID: "run-abc", LastDeployCluster: "prod-cluster", LastDeployAt: time.Now().Add(-2 * time.Hour),
-	}, updated: time.Now()}, false, nil, 76)
-	for _, want := range []string{"42ms", "Last recorded run prod-cluster · run-abc · 2h ago", "s open full cluster status"} {
-		if !strings.Contains(view, want) {
-			t.Errorf("dashboard is missing truthful/actionable detail %q:\n%s", want, view)
-		}
+	if len(s.opsLatency) != 1 || !s.opsLatency[0].available {
+		t.Errorf("successful reachable probe history = %#v, want one available sample", s.opsLatency)
+	}
+	status := &okd.ClusterStatus{
+		APIAvailable: true, APIReachable: true, LastDeployRunID: "run-abc",
+		LastDeployCluster: "prod-cluster", LastDeployAt: time.Now().Add(-2 * time.Hour),
+	}
+	view = renderOpsDashboard(&opsSnapshot{status: status, updated: time.Now()}, false, nil, 160, 48)
+	if !strings.Contains(view, "LAST RUN prod-cluster · run-abc · 2h ago") {
+		t.Errorf("dashboard is missing truthful last-run detail:\n%s", view)
 	}
 }
 
 func TestWelcomeOpsDashboardShowsUnavailableSections(t *testing.T) {
-	view := renderOpsDashboard(&opsSnapshot{status: &okd.ClusterStatus{}}, false, nil, 76)
-	for _, want := range []string{"API unavailable", "Nodes unavailable", "Operators unavailable"} {
+	view := renderOpsDashboard(&opsSnapshot{status: &okd.ClusterStatus{}}, false, nil, 76, 24)
+	for _, want := range []string{"API unavailable", "NODES unavailable", "OPERATORS unavailable"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("dashboard is missing honest unavailable state %q:\n%s", want, view)
 		}
+	}
+}
+
+func TestWelcomeOpsDashboardWideLayoutUsesStatusDetail(t *testing.T) {
+	status := &okd.ClusterStatus{
+		Phase: okd.PhaseRunning, APIAvailable: true, APIReachable: true,
+		NodesAvailable: true, OperatorsAvailable: true,
+		Nodes: []okd.NodeStatus{
+			{Name: "master-a", Role: nodetypes.RoleMaster, Ready: true},
+			{Name: "worker-a", Role: nodetypes.RoleWorker, Ready: false},
+		},
+		Addons: []okd.AddonStatus{{Name: "flux", Healthy: true}},
+	}
+	view := renderOpsDashboard(&opsSnapshot{status: status, updated: time.Date(2026, 1, 2, 15, 4, 5, 0, time.UTC)}, false, nil, 160, 40)
+	for _, want := range []string{
+		"CLUSTER OPERATIONS", "CLUSTER PHASE", "API", "NODES", "OPERATORS",
+		"NODE FLEET", "master-a", "worker-a", "not ready", "ADD-ONS & OPERATORS", "flux",
+	} {
+		if !strings.Contains(view, want) {
+			t.Errorf("wide dashboard is missing %q:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "LIVE OPERATIONS") {
+		t.Error("wide dashboard retained the undersized live-operations card")
+	}
+}
+
+func TestOpsLatencySparklineMarksUnavailableSamples(t *testing.T) {
+	snapshot := &opsSnapshot{
+		latency:          70 * time.Millisecond,
+		latencyAvailable: true,
+		latencyHistory: []opsLatencySample{
+			{duration: 30 * time.Millisecond, available: true},
+			{available: false},
+			{duration: 70 * time.Millisecond, available: true},
+		},
+	}
+	if got := renderOpsLatency(snapshot); !strings.Contains(got, "30") && !strings.Contains(got, "70ms") {
+		t.Errorf("latency readout missing latest value: %q", got)
+	}
+	if got := renderOpsLatency(snapshot); !strings.Contains(got, "·") {
+		t.Errorf("latency sparkline does not mark the unavailable sample: %q", got)
+	}
+	if got := renderOpsLatency(&opsSnapshot{}); got != "probe latency unavailable" {
+		t.Errorf("latency without samples = %q, want honest unavailable state", got)
+	}
+}
+
+func TestAppendOpsLatencyKeepsLatestTwelveSamples(t *testing.T) {
+	var history []opsLatencySample
+	for i := range opsLatencyHistoryLimit + 4 {
+		history = appendOpsLatency(history, opsLatencySample{duration: time.Duration(i) * time.Millisecond, available: true})
+	}
+	if len(history) != opsLatencyHistoryLimit {
+		t.Fatalf("latency history has %d samples, want %d", len(history), opsLatencyHistoryLimit)
+	}
+	if got := history[0].duration; got != 4*time.Millisecond {
+		t.Errorf("oldest retained sample = %s, want 4ms", got)
+	}
+}
+
+func TestOpsRefreshFailureAddsUnavailableLatencySample(t *testing.T) {
+	s := NewWelcomeStep()
+	s.opsActive = true
+	s.opsGeneration = 3
+	s.opsStatus = &opsSnapshot{
+		status:  &okd.ClusterStatus{APIAvailable: true, APIReachable: true},
+		latency: 60 * time.Millisecond, latencyAvailable: true,
+		latencyHistory: []opsLatencySample{{duration: 60 * time.Millisecond, available: true}},
+	}
+	s.Update(opsSnapshotMsg{generation: 3, err: context.DeadlineExceeded})
+	if s.opsStatus.latencyAvailable {
+		t.Fatal("failed refresh retained a current API latency")
+	}
+	if got := renderOpsLatency(s.opsStatus); !strings.Contains(got, "latest unavailable") || !strings.HasSuffix(got, "·") {
+		t.Errorf("failed refresh latency = %q, want an unavailable newest sample", got)
 	}
 }
 

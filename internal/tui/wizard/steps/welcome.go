@@ -93,8 +93,7 @@ type hubFlowFailedMsg struct {
 	err error
 }
 
-// WelcomeStep is the hero-hub: okdctl's single entry screen, pairing the
-// block-letter wordmark with the verb menu every flow is reached from.
+// WelcomeStep is okdctl's hub for cluster operations and configuration flows.
 type WelcomeStep struct {
 	wizard.BaseStep
 	configExists  bool
@@ -106,6 +105,7 @@ type WelcomeStep struct {
 	flows         HubFlows
 	opsSource     StatusSource
 	opsStatus     *opsSnapshot
+	opsLatency    []opsLatencySample
 	opsErr        error
 	opsLoading    bool
 	opsActive     bool
@@ -291,8 +291,21 @@ func (s *WelcomeStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		}
 		s.opsLoading = false
 		s.opsErr = msg.err
+		s.opsLatency = appendOpsLatency(s.opsLatency, opsLatencySample{
+			duration:  msg.latency,
+			available: msg.latencyAvailable,
+		})
 		if msg.err == nil {
-			s.opsStatus = &opsSnapshot{status: msg.status, updated: time.Now()}
+			s.opsStatus = &opsSnapshot{
+				status:           msg.status,
+				updated:          time.Now(),
+				latency:          msg.latency,
+				latencyAvailable: msg.latencyAvailable,
+				latencyHistory:   append([]opsLatencySample(nil), s.opsLatency...),
+			}
+		} else if s.opsStatus != nil {
+			s.opsStatus.latencyAvailable = false
+			s.opsStatus.latencyHistory = append([]opsLatencySample(nil), s.opsLatency...)
 		}
 		return s, nil
 	case opsRefreshMsg:
@@ -422,21 +435,18 @@ func (s *WelcomeStep) SetFocused(focused bool) {
 	}
 }
 
-// IsCentered returns true so the launcher sits in the middle of the frame.
+// IsCentered keeps the launcher centered and gives a live dashboard the full viewport.
 func (s *WelcomeStep) IsCentered() bool {
-	return true
+	return s.opsSource == nil
 }
 
-// RendersHero returns true so the frame drops its own header: the block-letter
-// wordmark below is the screen's identity, and the configure flow's phase trail
-// would describe a walkthrough four of the five verbs never enter.
+// RendersHero returns true so the hub owns its screen identity and the frame
+// gives the launcher or operations dashboard the reclaimed header rows.
 func (s *WelcomeStep) RendersHero() bool {
 	return true
 }
 
-// SuppressesSplit returns true so a wide terminal never puts a context pane
-// beside the hub: a centered launcher owns its whole width, and the pane is a
-// work-screen device with no work to describe here.
+// SuppressesSplit gives the hub's launcher or dashboard the frame's full width.
 func (s *WelcomeStep) SuppressesSplit() bool {
 	return true
 }
@@ -447,29 +457,42 @@ func (s *WelcomeStep) SetTerminalSize(width, height int) {
 	s.termWidth, s.termHeight = width, height
 }
 
-// View renders the hero, the dim save-slot line when a configuration exists,
-// and the verb menu — no tagline, no checklist columns, no per-verb copy.
+// View renders the blank-slate launcher or the existing-configuration hub.
 func (s *WelcomeStep) View(width, height int) string {
 	s.SetSize(width, height)
+	if s.opsSource != nil {
+		compact := width < 112 || s.termHeight < 30
+		parts := []string{}
+		if compact {
+			if s.saveSlot != "" {
+				parts = append(parts, tui.MutedStyle.Render(s.saveSlot))
+			}
+			parts = append(parts,
+				renderOpsDashboard(s.opsStatus, s.opsLoading, s.opsErr, width, s.termHeight),
+				"ACTIONS · ↑↓ choose · enter open",
+				s.nav.ViewPointer(),
+			)
+		} else {
+			if s.saveSlot != "" {
+				parts = append(parts, tui.MutedStyle.Render(s.saveSlot), "")
+			}
+			parts = append(parts,
+				renderOpsDashboard(s.opsStatus, s.opsLoading, s.opsErr, width, s.termHeight),
+				"",
+				tui.Card("HUB ACTIONS", renderOpsActionRows(s, width, s.termHeight)+"\n↑↓ choose · enter open", width, tui.ColorPrimary()),
+			)
+		}
+		if s.opening != "" {
+			parts = append(parts, "", wizard.Spinner(s.frame)+" "+tui.MutedStyle.Render("opening "+s.opening+"…"))
+		}
+		return lipgloss.JoinVertical(lipgloss.Left, parts...)
+	}
 
 	parts := []string{renderHero(s.termWidth, s.termHeight, tui.ColorEnabled()), ""}
 	if s.saveSlot != "" {
 		parts = append(parts, tui.MutedStyle.Render(s.saveSlot), "")
 	}
-	launcher := s.nav.ViewPointer()
-	if s.opsSource != nil && s.termWidth >= 140 && s.termHeight >= 28 {
-		card := renderOpsDashboard(s.opsStatus, s.opsLoading, s.opsErr, min(width, 88))
-		parts = append(parts, lipgloss.JoinHorizontal(lipgloss.Top, launcher, "    ", card))
-	} else {
-		parts = append(parts, launcher)
-		if s.opsSource != nil && s.termHeight >= 24 {
-			if s.termWidth < 100 {
-				parts = append(parts, renderOpsCompact(s.opsStatus, s.opsLoading, s.opsErr))
-			} else {
-				parts = append(parts, "", renderOpsDashboard(s.opsStatus, s.opsLoading, s.opsErr, min(width, 88)))
-			}
-		}
-	}
+	parts = append(parts, s.nav.ViewPointer())
 	if s.opening != "" {
 		parts = append(parts, "", wizard.Spinner(s.frame)+" "+tui.MutedStyle.Render("opening "+s.opening+"…"))
 	}

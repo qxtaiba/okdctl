@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -145,6 +146,34 @@ func TestHubFreshSlateHasNoSaveSlotLine(t *testing.T) {
 	s := NewWelcomeStep()
 	if s.saveSlot != "" {
 		t.Errorf("saveSlot = %q on a blank slate, want empty", s.saveSlot)
+	}
+	if !s.IsCentered() {
+		t.Error("blank-slate hub should retain its centered launcher")
+	}
+	if view := s.View(70, 14); strings.Contains(view, "CLUSTER OPERATIONS") {
+		t.Errorf("blank-slate hub should not show an operations dashboard:\n%s", view)
+	}
+}
+
+func TestHubDeployedViewUsesDashboardAndKeepsActionsVisible(t *testing.T) {
+	s := NewWelcomeStep()
+	s.SetExistingConfig(hubConfig(), SaveSlotDeployed)
+	s.SetOpsDashboard(StaticStatusSource{Status: statusFixture()})
+	s.opsStatus = &opsSnapshot{status: statusFixture(), updated: time.Date(2026, 1, 2, 15, 4, 5, 0, time.UTC)}
+	s.SetTerminalSize(180, 48)
+
+	if s.IsCentered() {
+		t.Fatal("deployed dashboard should use the available viewport")
+	}
+	view := tuitest.StripANSI(s.View(172, 41))
+	for _, want := range []string{
+		"CLUSTER OPERATIONS", "CLUSTER PHASE", "NODE FLEET", "homelab-master0",
+		"ADD-ONS & OPERATORS", "HUB ACTIONS", "deploy", "edit config",
+		"manage nodes", "cluster status", "destroy",
+	} {
+		if !strings.Contains(view, want) {
+			t.Errorf("deployed dashboard is missing %q:\n%s", want, view)
+		}
 	}
 }
 

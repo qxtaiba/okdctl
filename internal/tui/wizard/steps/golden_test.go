@@ -160,14 +160,10 @@ func newGoldenModelWithCapacity(t *testing.T) (*wizard.Model, *WizardCapacitySna
 func demoDiscovery() *proxmoxDiscovery {
 	return &proxmoxDiscovery{
 		Nodes: []proxmoxNode{
-			{
-				Name: "pve1", Status: "online", CPUs: 32, CPUsKnown: true, MemGB: 128, MemKnown: true,
-				Storage: demoNodeStorage(), StorageKnown: true, Bridges: demoNodeBridges(), BridgesKnown: true,
-			},
-			{
-				Name: "pve2", Status: "online", CPUs: 24, CPUsKnown: true, MemGB: 96, MemKnown: true,
-				Storage: demoNodeStorage(), StorageKnown: true, Bridges: demoNodeBridges(), BridgesKnown: true,
-			},
+			{Name: "pve1", Status: "online", CPUs: 32, CPUsKnown: true, MemGB: 128, MemKnown: true,
+				Storage: demoNodeStorage(), StorageKnown: true, Bridges: demoNodeBridges(), BridgesKnown: true},
+			{Name: "pve2", Status: "online", CPUs: 24, CPUsKnown: true, MemGB: 96, MemKnown: true,
+				Storage: demoNodeStorage(), StorageKnown: true, Bridges: demoNodeBridges(), BridgesKnown: true},
 		},
 		Storage: []proxmoxStorage{
 			{Name: "local-lvm", Content: "images,rootdir", TotalGB: 1800},
@@ -190,10 +186,8 @@ func demoDiscovery() *proxmoxDiscovery {
 func demoDiscoverySingleNode() *proxmoxDiscovery {
 	disc := demoDiscovery()
 	disc.Nodes = []proxmoxNode{
-		{
-			Name: "pve", Status: "online", CPUs: 32, CPUsKnown: true, MemGB: 128, MemKnown: true,
-			Storage: demoNodeStorage(), StorageKnown: true, Bridges: demoNodeBridges(), BridgesKnown: true,
-		},
+		{Name: "pve", Status: "online", CPUs: 32, CPUsKnown: true, MemGB: 128, MemKnown: true,
+			Storage: demoNodeStorage(), StorageKnown: true, Bridges: demoNodeBridges(), BridgesKnown: true},
 	}
 	return disc
 }
@@ -374,7 +368,7 @@ func TestGolden_HubReachesClusterStatus(t *testing.T) {
 }
 
 func TestGolden_HubOperationsDashboard(t *testing.T) {
-	for _, sz := range []struct{ w, h int }{{80, 24}, {180, 48}} {
+	for _, sz := range []struct{ w, h int }{{80, 24}, {140, 40}, {180, 48}} {
 		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
 			forceHeroColor(t)
 			tui.SetTerminalWidth(sz.w)
@@ -391,8 +385,15 @@ func TestGolden_HubOperationsDashboard(t *testing.T) {
 			msg := hub.probeOps(1)()
 			hub.Update(msg)
 			hub.opsStatus.updated = time.Date(2026, time.January, 2, 15, 4, 5, 0, time.UTC)
-			hub.opsStatus.status.APILatencyAvailable = true
-			hub.opsStatus.status.APILatency = 47 * time.Millisecond
+			hub.opsStatus.latency = 82 * time.Millisecond
+			hub.opsStatus.latencyAvailable = true
+			hub.opsStatus.latencyHistory = []opsLatencySample{
+				{duration: 54 * time.Millisecond, available: true},
+				{duration: 68 * time.Millisecond, available: true},
+				{duration: 82 * time.Millisecond, available: true},
+				{available: false},
+				{duration: 73 * time.Millisecond, available: true},
+			}
 			hub.opsStatus.status.LastDeployRunID = "run-demo-123"
 			hub.opsStatus.status.LastDeployCluster = "prod-cluster"
 			hub.opsStatus.status.LastDeployAt = hub.opsStatus.updated.Add(-2 * time.Hour)
@@ -400,10 +401,15 @@ func TestGolden_HubOperationsDashboard(t *testing.T) {
 			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
 			tuitest.Golden(t, fmt.Sprintf("hub-operations_%dx%d", sz.w, sz.h), frame)
 			tuitest.AssertFits(t, frame, sz.w, sz.h)
+			assertNoScrollIndicator(t, frame)
 			plain := tuitest.StripANSI(frame)
-			wants := []string{"API reachable", "Nodes 6/6 ready", "Operators 0 degraded"}
+			wants := []string{"6/6 ready", "0 degraded", "homelab-master0", "homelab-worker2", "destroy"}
 			if sz.w == 180 {
-				wants = append(wants, "LIVE OPERATIONS")
+				wants = append(wants, "CLUSTER OPERATIONS", "CLUSTER PHASE", "API probe · 82ms", "NODE FLEET", "ADD-ONS & OPERATORS", "HUB ACTIONS", "apply the saved cluster configuration")
+			} else if sz.w == 80 {
+				wants = append(wants, "API reachable", "RTT 82ms", "ACTIONS · ↑↓ choose · enter open")
+			} else {
+				wants = append(wants, "CLUSTER OPERATIONS", "NODE FLEET", "HUB ACTIONS")
 			}
 			for _, want := range wants {
 				if !strings.Contains(plain, want) {
