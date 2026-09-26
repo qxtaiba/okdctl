@@ -205,10 +205,16 @@ func TestReviewPlanIncludesHeadlessCommandAndConfigPath(t *testing.T) {
 	s.SetConfigPath("/tmp/qa cluster.yaml")
 	frame := tuitest.StripANSI(s.PaneContent(70, 30))
 	tuitest.AssertFits(t, frame, 70, 30)
+	if strings.Contains(frame, "PREFLIGHT") {
+		t.Fatalf("review pane repeats preflight content already shown in the main review:\n%s", frame)
+	}
 	for _, want := range []string{"DEPLOY PLAN", "WRITES", "/tmp/qa", "HEADLESS", `--config '/tmp/qa cluster.yaml'`, "--confirm-cluster"} {
 		if !strings.Contains(frame, want) {
 			t.Errorf("review pane omitted %q:\n%s", want, frame)
 		}
+	}
+	if view := tuitest.StripANSI(s.View(100, 100)); !strings.Contains(view, "PREFLIGHT") {
+		t.Errorf("main review omitted preflight checks:\n%s", view)
 	}
 }
 

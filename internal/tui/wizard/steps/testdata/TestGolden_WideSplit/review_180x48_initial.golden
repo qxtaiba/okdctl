@@ -3,25 +3,25 @@
   │ O K D C T L                                                                                                                                                                  │  
   │ review your configuration                                                                                                                connect · cluster · extras · review │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
-  │  PREFLIGHT                                                                                             │  PREFLIGHT                                                          │  
-  │    pull secret         not configured                                                                  │    pull secret         not configured                               │  
-  │    ssh public key      not configured                                                                  │    ssh public key      not configured                               │  
-  │    CIDR ranges         no overlap                                                                      │    CIDR ranges         no overlap                                   │  
-  │                                                                                                        │                                                                     │  
-  │  [1] cluster identity                                                                                  │  DEPLOY PLAN                                                        │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  role      vms vcpu   ram os disk                                   │  
-  │  name          mycluster                                                                               │  bootstrap   1    4  8 gb   50 gb                                   │  
-  │  domain        k8s.local                                                                               │  masters     3    4 12 gb   50 gb                                   │  
-  │  distribution  OKD 4.22.0-okd-scos.7                                                                   │  workers     3    8 20 gb   50 gb                                   │  
-  │                                                                                                        │                                                                     │  
-  │  [2] proxmox                                                                                           │  WRITES                                                             │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  okdctl.yaml                                                        │  
+  │  PREFLIGHT                                                                                             │                                                                     │  
+  │    pull secret         not configured                                                                  │  DEPLOY PLAN                                                        │  
+  │    ssh public key      not configured                                                                  │  role      vms vcpu   ram os disk                                   │  
+  │    CIDR ranges         no overlap                                                                      │  bootstrap   1    4  8 gb   50 gb                                   │  
+  │                                                                                                        │  masters     3    4 12 gb   50 gb                                   │  
+  │  [1] cluster identity                                                                                  │  workers     3    8 20 gb   50 gb                                   │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │                                                                     │  
+  │  name          mycluster                                                                               │  WRITES                                                             │  
+  │  domain        k8s.local                                                                               │  okdctl.yaml                                                        │  
+  │  distribution  OKD 4.22.0-okd-scos.7                                                                   │                                                                     │  
+  │                                                                                                        │  HEADLESS                                                           │  
+  │  [2] proxmox                                                                                           │  okdctl deploy --config 'okdctl.yaml' --yes --confirm-cluster       │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  'mycluster'                                                        │  
   │  host            192.168.1.100:8006                                                                    │                                                                     │  
-  │  bootstrap node  pve                                                                                   │  HEADLESS                                                           │  
-  │  bridge          vmbr0                                                                                 │  okdctl deploy --config 'okdctl.yaml' --yes --confirm-cluster       │  
-  │  storage         local-lvm                                                                             │  'mycluster'                                                        │  
+  │  bootstrap node  pve                                                                                   │  p preview install-config.yaml                                      │  
+  │  bridge          vmbr0                                                                                 │                                                                     │  
+  │  storage         local-lvm                                                                             │                                                                     │  
   │  iso storage     local                                                                                 │                                                                     │  
-  │                                                                                                        │  p preview install-config.yaml                                      │  
+  │                                                                                                        │                                                                     │  
   │  [3] networking                                                                                        │                                                                     │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │                                                                     │  
   │  machine cidr     192.168.1.0/24                                                                       │                                                                     │  

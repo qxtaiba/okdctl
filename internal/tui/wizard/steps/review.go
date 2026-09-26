@@ -233,7 +233,7 @@ func (s *ReviewStep) View(width, height int) string {
 	return strings.TrimRight(content.String(), "\n")
 }
 
-// PaneContent summarizes preflight and deployment details beside the review.
+// PaneContent summarizes deployment details beside the review.
 func (s *ReviewStep) PaneContent(width, height int) string {
 	if s.cfg == nil {
 		return ""
@@ -241,16 +241,7 @@ func (s *ReviewStep) PaneContent(width, height int) string {
 	if s.showPreview {
 		return "Install-config preview\n\nSecrets are replaced with placeholders.\nUse ↑/↓ to inspect the full file.\nPress p or esc to return."
 	}
-	var lines []string
-	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText()).Render("PREFLIGHT"))
-	for _, check := range s.preflight {
-		line := tui.RenderFacts([]tui.FactRow{{Key: check.label, Value: check.status, Highlight: check.warning}}, &tui.FactLayout{
-			Leader: tui.FactLeaderPad, KeyWidth: 20, TotalWidth: max(width-2, 1), Styles: tui.DefaultFactStyles(),
-		})
-		for _, row := range line {
-			lines = append(lines, "  "+row)
-		}
-	}
+	lines := []string{}
 	lines = append(lines, "", lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText()).Render("DEPLOY PLAN"))
 	for _, row := range reviewPlanRows(s.cfg) {
 		lines = append(lines, tui.Truncate(row, width))
