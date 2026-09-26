@@ -43,15 +43,14 @@ type ConfigSetter func(cfg *config.Config, value string) error
 // ConfigGetter reads a field's value from a Config.
 type ConfigGetter func(cfg *config.Config) string
 
-// FieldWidth classifies how wide a field's input box renders, in columns,
-// independent of the section's full available width.
+// FieldWidth sets an input box's preferred width, clamped to its section.
 type FieldWidth int
 
 // Field width classes for data-driven step definitions.
 const (
-	FieldWidthAuto   FieldWidth = 0 // zero value — 40 columns
+	FieldWidthAuto   FieldWidth = 0 // zero value — 48 columns
 	FieldWidthNumber FieldWidth = 16
-	FieldWidthPath   FieldWidth = 64
+	FieldWidthPath   FieldWidth = 80
 	FieldWidthFull   FieldWidth = -1 // the whole inner width
 )
 
@@ -62,7 +61,7 @@ func (w FieldWidth) Cols(avail int) int {
 		return avail
 	}
 	if w == FieldWidthAuto {
-		return min(40, avail)
+		return min(48, avail)
 	}
 	return min(int(w), avail)
 }

@@ -703,11 +703,13 @@ func TestFieldWidth_Cols(t *testing.T) {
 		avail int
 		want  int
 	}{
-		{FieldWidthAuto, 90, 40},
+		{FieldWidthAuto, 90, 48},
 		{FieldWidthNumber, 90, 16},
-		{FieldWidthPath, 90, 64},
+		{FieldWidthPath, 90, 80},
 		{FieldWidthFull, 90, 90},
 		{FieldWidthPath, 50, 50},
+		{FieldWidthAuto, 32, 32},
+		{FieldWidthPath, 74, 74},
 	}
 	for _, c := range cases {
 		if got := c.w.Cols(c.avail); got != c.want {
