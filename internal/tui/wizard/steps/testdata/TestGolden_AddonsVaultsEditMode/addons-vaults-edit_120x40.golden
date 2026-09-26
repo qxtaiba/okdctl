@@ -16,9 +16,9 @@
   │    ╰─────────────────╯                                                                                           │  
   │                                                                                                                  │  
   │    secrets directory                                                                                             │  
-  │    ╭──────────────────────────────────────────────╮                                                              │  
-  │    │ automation/config/secrets                    │                                                              │  
-  │    ╰──────────────────────────────────────────────╯                                                              │  
+  │    ╭──────────────────────────────────────────────────────────────╮                                              │  
+  │    │ automation/config/secrets                                    │                                              │  
+  │    ╰──────────────────────────────────────────────────────────────╯                                              │  
   │                                                                                                                  │  
   │    ● secret store (onepassword)                                                                                  │  
   │      requires: sops-encrypted 1password-credentials.json and 1password-token.txt + age key on bastion            │  
