@@ -34,7 +34,6 @@ var (
 	deployKeepRedHatCatalogs     bool
 	deployAcknowledgeInterrupted bool
 	deployNoTUI                  bool
-	deployAccessible             bool
 )
 
 // Seams for TTY-free tests; production never reassigns them.
@@ -47,9 +46,7 @@ var (
 var deployCmd = &cobra.Command{
 	Use:   cmdNameDeploy,
 	Short: "Deploy an OKD cluster",
-	Long: `Deploy an OKD cluster through an interactive wizard. Use --accessible for
-sequential plain-text prompts when a screen reader cannot follow the full-screen
-wizard. Secret values are entered without terminal echo.
+	Long: `Deploy an OKD cluster through an interactive wizard.
 
 Use --yes with --confirm-cluster to skip the wizard and deploy
 non-interactively from an existing configuration file (and its okdctl.env
@@ -59,7 +56,6 @@ name, the same guard every other scripted lifecycle command carries.
 Use --write-config to write the configuration file non-interactively
 without deploying.`,
 	Example: `  okdctl deploy
-  okdctl deploy --accessible
   okdctl deploy --config my-cluster.yaml
   okdctl deploy --yes --confirm-cluster=prod         # scripted deploy from okdctl.yaml, no wizard
   okdctl deploy --write-config --output-file my-cluster.yaml  # writes config only; does not deploy
@@ -82,8 +78,6 @@ func init() {
 	deployCmd.Flags().BoolVar(&deployKeepRedHatCatalogs, "keep-redhat-catalogs", false, "keep the Red Hat OperatorHub catalogsources and the InsightsDisabled alert")
 	deployCmd.Flags().BoolVar(&deployAcknowledgeInterrupted, "acknowledge-interrupted-op", false, "deploy despite an in-flight node op marker (deploy would otherwise refuse: reconciling mid-op destroys the in-flight node)")
 	deployCmd.Flags().BoolVar(&deployNoTUI, flagNoTUI, false, "stream the install as a plain stderr checklist instead of the full-screen wizard")
-	deployCmd.Flags().BoolVar(&deployAccessible, "accessible", false, "use sequential plain-text prompts instead of the full-screen configuration wizard")
-	deployCmd.MarkFlagsMutuallyExclusive("accessible", "yes", "write-config", flagDryRun)
 }
 
 func runDeploy(cmd *cobra.Command, _ []string) error {
@@ -161,12 +155,7 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 		return clearWizardDraftLocked(projectRoot, deployOutputFile)
 	}
 
-	var outcome hubOutcome
-	if deployAccessible {
-		outcome, err = runAccessibleDeployConfigure(cmd, cfg, configExists)
-	} else {
-		outcome, err = runWizardFn(cmd, cfg, configExists)
-	}
+	outcome, err := runWizardFn(cmd, cfg, configExists)
 	if err != nil {
 		return (&errtypes.ConfigError{Msg: "wizard failed", Err: err}).
 			WithHint("try again, or use --yes with a saved config for a non-interactive deploy")

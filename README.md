@@ -222,7 +222,7 @@ operator needs a `console.redhat.com` token no OKD install has (see
 
 The full-screen wizard is an enhancement, not a requirement: the config
 file plus command-line flags reach every operation the wizard reaches.
-That flags-and-config path is the accessible route of first resort,
+That flags-and-config path is the non-interactive route of first resort,
 including for a screen reader, since a screen reader cannot track an
 AltScreen TUI's cursor-addressed redraws.
 
