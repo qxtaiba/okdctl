@@ -3,6 +3,7 @@ package steps
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
+	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
@@ -64,7 +66,7 @@ func TestStatusStepSelectsNodesAndTogglesInlineDetails(t *testing.T) {
 		t.Fatalf("selection after down = %q", s.selectedNode)
 	}
 	s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	body := tuitest.StripANSI(s.View(100, 30))
+	body := tuitest.StripANSI(s.View(96, 30))
 	for _, want := range []string{">   homelab-master1", "Selected node", "homelab-master1", "Ready condition"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("inline node detail is missing %q:\n%s", want, body)
@@ -73,6 +75,39 @@ func TestStatusStepSelectsNodesAndTogglesInlineDetails(t *testing.T) {
 	s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if s.detailOpen {
 		t.Error("second enter left inline details open")
+	}
+}
+
+func TestStatusStepWidePaneTracksSelectionAndDetails(t *testing.T) {
+	s := NewStatusStep(&countingSource{status: statusFixture()})
+	s.Update(s.Init()())
+
+	body := tuitest.StripANSI(s.PaneContent(64, 24))
+	for _, want := range []string{"homelab-master0", "CLUSTER FACTS", "42ms", "6/6 ready", "0 degraded"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("wide pane is missing %q:\n%s", want, body)
+		}
+	}
+	lines := strings.Split(body, "\n")
+	clusterLine, addonLine := strings.Index(body, "CLUSTER FACTS"), strings.Index(body, "ADD-ONS")
+	if clusterLine < 0 || addonLine < 0 || addonLine < clusterLine {
+		t.Fatalf("health sections are missing or out of order:\n%s", body)
+	}
+	addonRow := strings.Count(body[:addonLine], "\n")
+	if addonRow < len(lines)*2/3 {
+		t.Errorf("add-on health should use the lower context pane, got row %d of %d:\n%s", addonRow, len(lines), body)
+	}
+
+	s.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	body = tuitest.StripANSI(s.PaneContent(64, 24))
+	for _, want := range []string{"homelab-master1", "Selected node", "Ready condition"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("expanded wide pane is missing %q:\n%s", want, body)
+		}
+	}
+	if strings.Contains(s.View(100, 30), "Ready condition") {
+		t.Errorf("wide detail should stay in the pane, not duplicate under the table:\n%s", s.View(100, 30))
 	}
 }
 
@@ -115,7 +150,7 @@ func TestStatusStepNarrowTableFits(t *testing.T) {
 	st := statusFixture()
 	st.Nodes = append(st.Nodes, okd.NodeStatus{Name: strings.Repeat("worker-name-", 8), Role: nodetypes.RoleWorker, Ready: true})
 	for _, width := range []int{40, 80} {
-		body := tuitest.StripANSI(fitStatusLines(statusBoardLines(st, false, nil, "", false, width), width, 24))
+		body := tuitest.StripANSI(fitStatusLines(statusBoardLines(st, false, nil, "", false, width, false), width, 24))
 		tuitest.AssertFits(t, body, width, 24)
 	}
 }
@@ -126,7 +161,7 @@ func TestStatusStepDoesNotInventUnavailableReadiness(t *testing.T) {
 	st.APIReachable = false
 	st.NodesAvailable = false
 	st.OperatorsAvailable = false
-	body := tuitest.StripANSI(fitStatusLines(statusBoardLines(st, false, nil, "", false, 100), 100, 30))
+	body := tuitest.StripANSI(fitStatusLines(statusBoardLines(st, false, nil, "", false, 100, false), 100, 30))
 	for _, want := range []string{"API", "unavailable", "NODES unavailable", "OPERATORS unavailable", "node inventory unavailable"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("status board is missing %q:\n%s", want, body)
@@ -134,6 +169,15 @@ func TestStatusStepDoesNotInventUnavailableReadiness(t *testing.T) {
 	}
 	if strings.Contains(body, "6/6 ready") || strings.Contains(body, "0 degraded") {
 		t.Errorf("status board invented readiness for unavailable data:\n%s", body)
+	}
+	pane := tuitest.StripANSI(strings.Join(statusPaneLines(st, "", false, 64, 24), "\n"))
+	for _, want := range []string{"API: unavailable", "Nodes: unavailable", "Operators: unavailable"} {
+		if !strings.Contains(pane, want) {
+			t.Errorf("cluster pane is missing %q:\n%s", want, pane)
+		}
+	}
+	if strings.Contains(pane, "6/6 ready") || strings.Contains(pane, "0 degraded") {
+		t.Errorf("cluster pane invented readiness for unavailable data:\n%s", pane)
 	}
 }
 
@@ -252,9 +296,53 @@ func TestStatusStepWithoutASourceReportsIt(t *testing.T) {
 	}
 }
 
-func TestStatusStepSuppressesTheWideSplit(t *testing.T) {
-	if !NewStatusStep(nil).SuppressesSplit() {
-		t.Error("SuppressesSplit() = false; a full-width status box has no room for a context pane")
+func TestStatusStepUsesTheWideSplit(t *testing.T) {
+	if NewStatusStep(nil).SuppressesSplit() {
+		t.Error("SuppressesSplit() = true; the status board has selected-node context to show")
+	}
+}
+
+func TestGolden_StatusBoardResponsive(t *testing.T) {
+	for _, size := range []struct{ width, height int }{{80, 24}, {100, 30}, {120, 40}, {140, 40}, {180, 48}} {
+		t.Run(fmt.Sprintf("%dx%d", size.width, size.height), func(t *testing.T) {
+			forceHeroColor(t)
+			tui.SetTerminalWidth(size.width)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+			m := newGoldenModel(t)
+			_ = tuitest.RenderAt(t, m, size.width, size.height)
+			seedHubSaveSlot(m)
+			m.CurrentStep().(*WelcomeStep).SetFlows(HubFlows{ClusterStatus: func() ([]wizard.WizardStep, wizard.FlowChrome, error) {
+				flow, chrome := StatusFlow(StaticStatusSource{Status: statusFixture()})
+				return flow, chrome, nil
+			}})
+			for range 3 {
+				m.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+			}
+			_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+			_, initCmd := m.Update(resolveCmd(t, cmd))
+			m.Update(resolveCmd(t, initCmd))
+
+			frame := tuitest.RenderAt(t, m, size.width, size.height)
+			tuitest.Golden(t, fmt.Sprintf("status_%dx%d", size.width, size.height), frame)
+			tuitest.AssertFits(t, frame, size.width, size.height)
+			if size.width == 80 {
+				assertNoScrollIndicator(t, frame)
+			}
+			if size.width >= 150 && !strings.Contains(tuitest.StripANSI(frame), "CLUSTER FACTS") {
+				t.Fatal("wide status frame omitted its context pane")
+			}
+			if size.width < 150 && strings.Contains(tuitest.StripANSI(frame), "CLUSTER FACTS") {
+				t.Fatal("single-column status frame unexpectedly rendered a context pane")
+			}
+
+			if size.width == 180 {
+				m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+				detail := tuitest.RenderAt(t, m, size.width, size.height)
+				tuitest.Golden(t, "status-details_180x48", detail)
+				tuitest.AssertFits(t, detail, size.width, size.height)
+			}
+		})
 	}
 }
 

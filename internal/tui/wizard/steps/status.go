@@ -26,6 +26,9 @@ const statusRefreshKey = "r"
 
 const statusRefreshInterval = 30 * time.Second
 
+// The split form's 104-cell width loses four cells to the viewport inset.
+const statusSplitBodyWidth = 100
+
 // errNoStatusSource reports a status screen assembled with no source behind it.
 var errNoStatusSource = errors.New("read cluster status: no source configured")
 
@@ -214,10 +217,9 @@ func (s *StatusStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	return s, nil
 }
 
-// SuppressesSplit returns true: the status box already owns the frame's width,
-// and a context pane listing this flow's one step describes nothing.
+// SuppressesSplit returns false so the selected node can use the wide context pane.
 func (s *StatusStep) SuppressesSplit() bool {
-	return true
+	return false
 }
 
 // View renders the probe's box, its in-flight notice, or its failure.
@@ -229,7 +231,18 @@ func (s *StatusStep) View(width, height int) string {
 	if s.status == nil {
 		return fitStatusLines(statusEmptyLines(s.loading, s.err), width, height)
 	}
-	return fitStatusLines(statusBoardLines(s.status, s.loading, s.err, s.selectedNode, s.detailOpen, width), width, height)
+	return fitStatusLines(statusBoardLines(s.status, s.loading, s.err, s.selectedNode, s.detailOpen, width, width >= statusSplitBodyWidth), width, height)
+}
+
+// PaneContent renders selected-node and cluster facts beside the grouped node table.
+func (s *StatusStep) PaneContent(width, height int) string {
+	if width < 1 || height < 1 {
+		return ""
+	}
+	if s.status == nil {
+		return fitStatusLines(statusEmptyLines(s.loading, s.err), width, height)
+	}
+	return fitStatusLines(statusPaneLines(s.status, s.selectedNode, s.detailOpen, width, height), width, height)
 }
 
 func statusEmptyLines(loading bool, err error) []string {
@@ -251,7 +264,8 @@ func statusEmptyLines(loading bool, err error) []string {
 	return lines
 }
 
-func statusBoardLines(st *okd.ClusterStatus, loading bool, err error, selected string, detail bool, width int) []string {
+func statusBoardLines(st *okd.ClusterStatus, loading bool, err error, selected string, detail bool, width int, split bool) []string {
+	compact := width < 80
 	phase := statusPhaseStyle(st.Phase).Render(string(st.Phase))
 	api := lipgloss.NewStyle().Foreground(tui.ColorError()).Render(tui.IconError + " unavailable")
 	if st.APIReachable {
@@ -281,12 +295,18 @@ func statusBoardLines(st *okd.ClusterStatus, loading bool, err error, selected s
 	if st.OperatorsAvailable {
 		operatorReadiness = fmt.Sprintf("OPERATORS %d degraded", st.DegradedOperators)
 	}
+	summary := "API " + api + "   " + nodeReadiness + "   " + operatorReadiness
+	if compact {
+		summary = "API " + api + "   " + operatorReadiness
+	}
 	lines := []string{
 		lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true).Render("CLUSTER STATUS") + " · " + phase,
-		"API " + api + "   " + nodeReadiness + "   " + operatorReadiness,
-		"",
-		fmt.Sprintf("NODES · %d (%d master · %d worker)", nodes.total, nodes.masters, nodes.workers),
+		summary,
 	}
+	if !compact {
+		lines = append(lines, "")
+	}
+	lines = append(lines, fmt.Sprintf("NODES · %d (%d master · %d worker)", nodes.total, nodes.masters, nodes.workers))
 	switch {
 	case !st.NodesAvailable:
 		lines = append(lines, lipgloss.NewStyle().Foreground(tui.ColorTextFaint()).Render("node inventory unavailable"))
@@ -303,7 +323,7 @@ func statusBoardLines(st *okd.ClusterStatus, loading bool, err error, selected s
 	default:
 		ordered := sortedStatusNodes(st.Nodes)
 		selectedIndex := slices.IndexFunc(ordered, func(node okd.NodeStatus) bool { return node.Name == selected })
-		lines = append(lines, tui.ColumnTable(
+		table := tui.ColumnTable(
 			[]tui.Column{{Header: "", MinWidth: 2, MaxWidth: 2}, {Header: "NODE", Weight: 1}, {Header: "READINESS", MinWidth: 9}},
 			statusNodeGroups(st.Nodes, selected), tui.TableOptions{Width: width, Gap: 2, MaxColWidth: max(width-16, 8), RowStyle: func(row int) (lipgloss.Style, bool) {
 				if row == selectedIndex {
@@ -311,8 +331,12 @@ func statusBoardLines(st *okd.ClusterStatus, loading bool, err error, selected s
 				}
 				return lipgloss.NewStyle(), false
 			}},
-		)...)
-		if detail {
+		)
+		if compact && len(table) > 0 {
+			table = table[1:]
+		}
+		lines = append(lines, table...)
+		if detail && !split {
 			for _, node := range st.Nodes {
 				if node.Name == selected {
 					lines = append(lines, statusNodeDetail(node, width)...)
@@ -321,13 +345,19 @@ func statusBoardLines(st *okd.ClusterStatus, loading bool, err error, selected s
 		}
 	}
 	if len(st.Addons) > 0 {
-		lines = append(lines, "", "ADD-ONS")
-		for _, addon := range st.Addons {
+		if !compact {
+			lines = append(lines, "", "ADD-ONS")
+		}
+		for i, addon := range st.Addons {
 			mark, style := tui.IconError, tui.ColorError()
 			if addon.Healthy {
 				mark, style = tui.IconSuccess, tui.ColorSuccess()
 			}
-			lines = append(lines, lipgloss.NewStyle().Foreground(style).Render(mark)+" "+addon.Name+" · "+addon.Label())
+			prefix := ""
+			if compact && i == 0 {
+				prefix = "ADD-ONS · "
+			}
+			lines = append(lines, prefix+lipgloss.NewStyle().Foreground(style).Render(mark)+" "+addon.Name+" · "+addon.Label())
 		}
 	}
 	if loading {
@@ -339,7 +369,152 @@ func statusBoardLines(st *okd.ClusterStatus, loading bool, err error, selected s
 			lipgloss.NewStyle().Foreground(tui.ColorTextFaint()).Render(err.Error()),
 		}, lines...)
 	}
-	lines = append(lines, "", "↑/↓ select node · enter details · r refresh")
+	if !compact {
+		lines = append(lines, "", "↑/↓ select node · enter details · r refresh")
+	}
+	return lines
+}
+
+func statusPaneLines(st *okd.ClusterStatus, selected string, detail bool, width, height int) []string {
+	var node *okd.NodeStatus
+	for i := range st.Nodes {
+		if st.Nodes[i].Name == selected {
+			node = &st.Nodes[i]
+			break
+		}
+	}
+	cluster := []string{lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true).Render("CLUSTER FACTS")}
+	cluster = append(cluster, statusClusterFactLines(st, width)...)
+	addons := statusAddonLines(st)
+	if node == nil {
+		return distributeStatusSections([][]string{cluster, addons}, height)
+	}
+
+	lines := []string{lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true).Render("SELECTED NODE")}
+	if detail {
+		lines = append(lines, statusNodeDetail(*node, width)...)
+	} else {
+		lines = append(lines, lipgloss.NewStyle().Bold(true).Render(node.Name),
+			"  "+statusNodeRole(*node)+" · "+statusReadiness(*node))
+	}
+	return distributeStatusSections([][]string{lines, cluster, addons}, height)
+}
+
+func distributeStatusSections(sections [][]string, height int) []string {
+	nonempty := sections[:0]
+	for _, section := range sections {
+		if len(section) > 0 {
+			nonempty = append(nonempty, section)
+		}
+	}
+	sections = nonempty
+	total := 0
+	for _, section := range sections {
+		total += len(section)
+	}
+	separators := min(max(len(sections)-1, 0), max(height-total, 0))
+	extra := max(height-total-separators, 0)
+	var lines []string
+	for i, section := range sections {
+		lines = append(lines, section...)
+		if i == len(sections)-1 || separators == 0 {
+			continue
+		}
+		gap := 1
+		switch len(sections) {
+		case 2:
+			gap += extra
+		case 3:
+			if i == 0 {
+				gap += extra / 3
+			} else {
+				gap += extra - extra/3
+			}
+		}
+		lines = append(lines, make([]string, gap)...)
+	}
+	return lines
+}
+
+func statusAddonLines(st *okd.ClusterStatus) []string {
+	if len(st.Addons) == 0 && st.LastDeployAt.IsZero() {
+		return nil
+	}
+	var lines []string
+	if len(st.Addons) > 0 {
+		lines = append(lines, lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true).Render("ADD-ONS"))
+	}
+	for _, addon := range st.Addons {
+		mark, color := tui.IconError, tui.ColorError()
+		if addon.Healthy {
+			mark, color = tui.IconSuccess, tui.ColorSuccess()
+		}
+		lines = append(lines, lipgloss.NewStyle().Foreground(color).Render(mark)+" "+addon.Name+" · "+addon.Label())
+	}
+	if !st.LastDeployAt.IsZero() {
+		lines = append(lines, "", "Last deploy: "+st.LastDeployAt.Format("2006-01-02 15:04"))
+	}
+	return lines
+}
+
+func statusClusterFactLines(st *okd.ClusterStatus, width int) []string {
+	api := "unavailable"
+	if st.APIAvailable {
+		api = "unreachable"
+		if st.APIReachable {
+			api = "healthy"
+		}
+	}
+	if st.APILatencyAvailable {
+		api += " · " + st.APILatency.Round(time.Millisecond).String()
+	}
+	nodes := "unavailable"
+	var masters, workers int
+	var readyMasters, readyWorkers int
+	if st.NodesAvailable {
+		ready := 0
+		for _, node := range st.Nodes {
+			if node.Ready {
+				ready++
+			}
+			switch node.Role {
+			case nodetypes.RoleMaster:
+				masters++
+				if node.Ready {
+					readyMasters++
+				}
+			case nodetypes.RoleWorker:
+				workers++
+				if node.Ready {
+					readyWorkers++
+				}
+			}
+		}
+		nodes = fmt.Sprintf("%d/%d ready", ready, len(st.Nodes))
+	}
+	operators := "unavailable"
+	if st.OperatorsAvailable {
+		operators = fmt.Sprintf("%d degraded", st.DegradedOperators)
+	}
+	rows := []tui.FactRow{
+		{Key: "Phase", Value: string(st.Phase)},
+		{Key: "API", Value: api},
+		{Key: "Nodes", Value: nodes},
+		{Key: "Operators", Value: operators},
+	}
+	if st.NodesAvailable {
+		if masters > 0 {
+			rows = append(rows, tui.FactRow{Key: "Masters", Value: fmt.Sprintf("%d/%d ready", readyMasters, masters)})
+		}
+		if workers > 0 {
+			rows = append(rows, tui.FactRow{Key: "Workers", Value: fmt.Sprintf("%d/%d ready", readyWorkers, workers)})
+		}
+	}
+	lines := tui.RenderFacts(rows, &tui.FactLayout{
+		Leader:     tui.FactLeaderColon,
+		TotalWidth: width,
+		Styles:     tui.DefaultFactStyles(),
+	})
 	return lines
 }
 
