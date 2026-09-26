@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -25,13 +26,114 @@ func statusFixture() *okd.ClusterStatus {
 		nodes = append(nodes, okd.NodeStatus{Name: "homelab-worker" + string(rune('0'+i)), Role: nodetypes.RoleWorker, Ready: true})
 	}
 	return &okd.ClusterStatus{
-		Phase:              okd.PhaseRunning,
-		APIReachable:       true,
-		APIAvailable:       true,
-		NodesAvailable:     true,
-		OperatorsAvailable: true,
-		Nodes:              nodes,
-		Addons:             []okd.AddonStatus{{Name: "flux", Healthy: true}},
+		Phase:               okd.PhaseRunning,
+		APIReachable:        true,
+		APIAvailable:        true,
+		APILatencyAvailable: true,
+		APILatency:          42 * time.Millisecond,
+		NodesAvailable:      true,
+		OperatorsAvailable:  true,
+		Nodes:               nodes,
+		Addons:              []okd.AddonStatus{{Name: "flux", Healthy: true}},
+	}
+}
+
+func TestStatusStepShowsLatencyAndRoleGroupedSelectableTable(t *testing.T) {
+	s := NewStatusStep(&countingSource{status: statusFixture()})
+	s.Update(s.Init()())
+	body := tuitest.StripANSI(s.View(100, 30))
+	for _, want := range []string{"42ms", "NODES 6/6 ready", "master", "worker", "NODE", "READINESS"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("status board is missing %q:\n%s", want, body)
+		}
+	}
+	tuitest.AssertFits(t, body, 100, 30)
+	if strings.Index(body, "homelab-master0") > strings.Index(body, "homelab-worker0") {
+		t.Errorf("node groups are not ordered master before worker:\n%s", body)
+	}
+}
+
+func TestStatusStepSelectsNodesAndTogglesInlineDetails(t *testing.T) {
+	s := NewStatusStep(&countingSource{status: statusFixture()})
+	s.Update(s.Init()())
+	if s.selectedNode != "homelab-master0" {
+		t.Fatalf("initial selection = %q", s.selectedNode)
+	}
+	s.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	if s.selectedNode != "homelab-master1" {
+		t.Fatalf("selection after down = %q", s.selectedNode)
+	}
+	s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	body := tuitest.StripANSI(s.View(100, 30))
+	for _, want := range []string{">   homelab-master1", "Selected node", "homelab-master1", "Ready condition"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("inline node detail is missing %q:\n%s", want, body)
+		}
+	}
+	s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if s.detailOpen {
+		t.Error("second enter left inline details open")
+	}
+}
+
+func TestStatusStepIgnoresStaleProbeAndCancelsPeriodicRefresh(t *testing.T) {
+	s := NewStatusStep(&countingSource{status: statusFixture()})
+	first := s.probe()()
+	second := s.probe()()
+	s.Update(second)
+	s.Update(statusLoadedMsg{generation: s.generation - 1, err: errors.New("stale")})
+	if s.err != nil || s.status == nil {
+		t.Fatalf("stale probe replaced current snapshot: err=%v status=%v", s.err, s.status)
+	}
+	refresh := s.scheduleRefresh()
+	s.SetFocused(false)
+	if msg := refresh(); msg != nil {
+		t.Errorf("cancelled refresh returned %T, want nil", msg)
+	}
+	s.Update(first)
+	if s.generation == 0 {
+		t.Fatal("focus loss did not invalidate pending messages")
+	}
+}
+
+func TestStatusStepRefreshKeepsSelectionByNodeName(t *testing.T) {
+	status := statusFixture()
+	s := NewStatusStep(&countingSource{status: status})
+	s.Update(s.Init()())
+	s.selectedNode = "homelab-worker1"
+	s.status = &okd.ClusterStatus{Nodes: []okd.NodeStatus{
+		{Name: "homelab-worker1", Role: nodetypes.RoleWorker, Ready: false},
+		{Name: "homelab-master0", Role: nodetypes.RoleMaster, Ready: true},
+	}}
+	s.reconcileSelection()
+	if s.selectedNode != "homelab-worker1" {
+		t.Errorf("selection after refresh = %q, want same node", s.selectedNode)
+	}
+}
+
+func TestStatusStepNarrowTableFits(t *testing.T) {
+	st := statusFixture()
+	st.Nodes = append(st.Nodes, okd.NodeStatus{Name: strings.Repeat("worker-name-", 8), Role: nodetypes.RoleWorker, Ready: true})
+	for _, width := range []int{40, 80} {
+		body := tuitest.StripANSI(fitStatusLines(statusBoardLines(st, false, nil, "", false, width), width, 24))
+		tuitest.AssertFits(t, body, width, 24)
+	}
+}
+
+func TestStatusStepDoesNotInventUnavailableReadiness(t *testing.T) {
+	st := statusFixture()
+	st.APIAvailable = false
+	st.APIReachable = false
+	st.NodesAvailable = false
+	st.OperatorsAvailable = false
+	body := tuitest.StripANSI(fitStatusLines(statusBoardLines(st, false, nil, "", false, 100), 100, 30))
+	for _, want := range []string{"API", "unavailable", "NODES unavailable", "OPERATORS unavailable", "node inventory unavailable"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("status board is missing %q:\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, "6/6 ready") || strings.Contains(body, "0 degraded") {
+		t.Errorf("status board invented readiness for unavailable data:\n%s", body)
 	}
 }
 
@@ -85,6 +187,26 @@ func TestStatusStepRefreshKeyReprobes(t *testing.T) {
 
 	if src.probes != 2 {
 		t.Errorf("source probed %d times after a refresh, want 2", src.probes)
+	}
+}
+
+func TestStatusStepPeriodicRefreshReprobesOnlyForCurrentGeneration(t *testing.T) {
+	src := &countingSource{status: statusFixture()}
+	s := NewStatusStep(src)
+	s.SetFocused(true)
+	s.Update(s.Init()())
+
+	_, cmd := s.Update(statusRefreshMsg{generation: s.generation})
+	if cmd == nil {
+		t.Fatal("current periodic refresh did not start a probe")
+	}
+	s.Update(cmd())
+	if src.probes != 2 {
+		t.Errorf("source probed %d times, want initial and periodic probes", src.probes)
+	}
+	_, cmd = s.Update(statusRefreshMsg{generation: s.generation - 1})
+	if cmd != nil {
+		t.Error("stale periodic refresh started a probe")
 	}
 }
 

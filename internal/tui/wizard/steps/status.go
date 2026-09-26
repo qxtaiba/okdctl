@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -21,6 +23,8 @@ const StepIDClusterStatus wizard.StepID = "cluster-status"
 
 // statusRefreshKey re-probes the cluster from the status screen.
 const statusRefreshKey = "r"
+
+const statusRefreshInterval = 30 * time.Second
 
 // errNoStatusSource reports a status screen assembled with no source behind it.
 var errNoStatusSource = errors.New("read cluster status: no source configured")
@@ -45,19 +49,28 @@ func (s StaticStatusSource) ClusterStatus(context.Context) (*okd.ClusterStatus, 
 
 // statusLoadedMsg carries a finished StatusSource probe back to the step.
 type statusLoadedMsg struct {
-	status *okd.ClusterStatus
-	err    error
+	generation uint64
+	status     *okd.ClusterStatus
+	err        error
 }
+
+type statusRefreshMsg struct{ generation uint64 }
 
 // StatusStep renders okdctl status's own box read-only inside the wizard
 // viewport; "r" re-probes the cluster and esc returns to the hub.
 type StatusStep struct {
 	wizard.BaseStep
-	src     StatusSource
-	status  *okd.ClusterStatus
-	err     error
-	loading bool
-	cancel  context.CancelFunc
+	src             StatusSource
+	status          *okd.ClusterStatus
+	err             error
+	loading         bool
+	generation      uint64
+	selectedNode    string
+	detailOpen      bool
+	lifecycleCtx    context.Context
+	cancelLifecycle context.CancelFunc
+	cancelProbe     context.CancelFunc
+	cancelRefresh   context.CancelFunc
 }
 
 // NewStatusStep constructs the read-only cluster-status screen over src.
@@ -85,34 +98,73 @@ func StatusChrome() wizard.FlowChrome {
 
 // Init starts the first probe.
 func (s *StatusStep) Init() tea.Cmd {
+	s.start()
 	return s.probe()
 }
 
-// probe reads the source off the update loop and reports the result back as a statusLoadedMsg.
-func (s *StatusStep) probe() tea.Cmd {
-	s.loading = true
-	if s.cancel != nil {
-		s.cancel()
+func (s *StatusStep) start() {
+	if s.lifecycleCtx != nil {
+		return
 	}
-	// Bubble Tea commands have no context parameter; tie this probe to step focus.
-	ctx, cancel := context.WithCancel(context.Background())
-	s.cancel = cancel
+	// The step owns polling and cancels it when focus leaves.
+	s.lifecycleCtx, s.cancelLifecycle = context.WithCancel(context.Background())
+}
+
+func (s *StatusStep) probe() tea.Cmd {
+	s.start()
+	s.loading = true
+	s.generation++
+	generation := s.generation
+	if s.cancelProbe != nil {
+		s.cancelProbe()
+	}
+	ctx, cancel := context.WithCancel(s.lifecycleCtx)
+	s.cancelProbe = cancel
 	src := s.src
 	return func() tea.Msg {
 		if src == nil {
-			return statusLoadedMsg{err: errNoStatusSource}
+			return statusLoadedMsg{generation: generation, err: errNoStatusSource}
 		}
 		status, err := src.ClusterStatus(ctx)
-		return statusLoadedMsg{status: status, err: err}
+		return statusLoadedMsg{generation: generation, status: status, err: err}
+	}
+}
+
+func (s *StatusStep) scheduleRefresh() tea.Cmd {
+	if s.cancelRefresh != nil {
+		s.cancelRefresh()
+	}
+	ctx, cancel := context.WithCancel(s.lifecycleCtx)
+	s.cancelRefresh = cancel
+	generation := s.generation
+	return func() tea.Msg {
+		timer := time.NewTimer(statusRefreshInterval)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-timer.C:
+			return statusRefreshMsg{generation: generation}
+		}
 	}
 }
 
 // SetFocused cancels an in-flight probe when the status screen loses focus.
 func (s *StatusStep) SetFocused(focused bool) {
 	s.BaseStep.SetFocused(focused)
-	if !focused && s.cancel != nil {
-		s.cancel()
-		s.cancel = nil
+	if !focused && s.lifecycleCtx != nil {
+		s.cancelLifecycle()
+		s.lifecycleCtx = nil
+		s.cancelLifecycle = nil
+		if s.cancelProbe != nil {
+			s.cancelProbe()
+			s.cancelProbe = nil
+		}
+		if s.cancelRefresh != nil {
+			s.cancelRefresh()
+			s.cancelRefresh = nil
+		}
+		s.generation++
 		s.loading = false
 	}
 }
@@ -121,20 +173,42 @@ func (s *StatusStep) SetFocused(focused bool) {
 func (s *StatusStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	switch msg := msg.(type) {
 	case statusLoadedMsg:
-		if s.cancel != nil {
-			s.cancel()
-			s.cancel = nil
+		if msg.generation != s.generation {
+			return s, nil
+		}
+		if s.cancelProbe != nil {
+			s.cancelProbe()
+			s.cancelProbe = nil
 		}
 		s.loading = false
 		s.err = msg.err
 		if msg.err == nil {
 			s.status = msg.status
+			s.reconcileSelection()
 		}
-		return s, nil
+		cmd := s.scheduleRefresh()
+		return s, cmd
+	case statusRefreshMsg:
+		if msg.generation != s.generation || !s.IsFocused() {
+			return s, nil
+		}
+		cmd := s.probe()
+		return s, cmd
 	case tea.KeyPressMsg:
-		if msg.String() == statusRefreshKey {
-			cmd := s.probe()
-			return s, cmd
+		switch msg.Code {
+		case tea.KeyUp:
+			s.moveSelection(-1)
+		case tea.KeyDown:
+			s.moveSelection(1)
+		case tea.KeyEnter:
+			if s.selectedNode != "" {
+				s.detailOpen = !s.detailOpen
+			}
+		default:
+			if msg.String() == statusRefreshKey {
+				cmd := s.probe()
+				return s, cmd
+			}
 		}
 	}
 	return s, nil
@@ -155,7 +229,7 @@ func (s *StatusStep) View(width, height int) string {
 	if s.status == nil {
 		return fitStatusLines(statusEmptyLines(s.loading, s.err), width, height)
 	}
-	return fitStatusLines(statusBoardLines(s.status, s.loading, s.err), width, height)
+	return fitStatusLines(statusBoardLines(s.status, s.loading, s.err, s.selectedNode, s.detailOpen, width), width, height)
 }
 
 func statusEmptyLines(loading bool, err error) []string {
@@ -177,33 +251,73 @@ func statusEmptyLines(loading bool, err error) []string {
 	return lines
 }
 
-func statusBoardLines(st *okd.ClusterStatus, loading bool, err error) []string {
+func statusBoardLines(st *okd.ClusterStatus, loading bool, err error, selected string, detail bool, width int) []string {
 	phase := statusPhaseStyle(st.Phase).Render(string(st.Phase))
-	api := lipgloss.NewStyle().Foreground(tui.ColorError()).Render(tui.IconError + " unreachable")
+	api := lipgloss.NewStyle().Foreground(tui.ColorError()).Render(tui.IconError + " unavailable")
 	if st.APIReachable {
-		api = lipgloss.NewStyle().Foreground(tui.ColorSuccess()).Render(tui.IconSuccess + " reachable")
+		latency := ""
+		if st.APILatencyAvailable {
+			latency = " · " + st.APILatency.Round(time.Millisecond).String()
+		}
+		api = lipgloss.NewStyle().Foreground(tui.ColorSuccess()).Render(tui.IconSuccess + " healthy" + latency)
+	} else if st.APIAvailable {
+		api = lipgloss.NewStyle().Foreground(tui.ColorError()).Render(tui.IconError + " unreachable")
+		if st.APILatencyAvailable {
+			api += " · " + st.APILatency.Round(time.Millisecond).String()
+		}
 	}
 	nodes := nodeCounts(st.Nodes)
+	ready := 0
+	for _, node := range st.Nodes {
+		if node.Ready {
+			ready++
+		}
+	}
+	nodeReadiness := "NODES unavailable"
+	if st.NodesAvailable {
+		nodeReadiness = fmt.Sprintf("NODES %d/%d ready", ready, nodes.total)
+	}
+	operatorReadiness := "OPERATORS unavailable"
+	if st.OperatorsAvailable {
+		operatorReadiness = fmt.Sprintf("OPERATORS %d degraded", st.DegradedOperators)
+	}
 	lines := []string{
 		lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true).Render("CLUSTER STATUS") + " · " + phase,
-		"API " + api + "  ·  Operators " + fmt.Sprintf("%d degraded", st.DegradedOperators),
+		"API " + api + "   " + nodeReadiness + "   " + operatorReadiness,
 		"",
 		fmt.Sprintf("NODES · %d (%d master · %d worker)", nodes.total, nodes.masters, nodes.workers),
 	}
-	if len(st.Nodes) == 0 {
+	switch {
+	case !st.NodesAvailable:
+		lines = append(lines, lipgloss.NewStyle().Foreground(tui.ColorTextFaint()).Render("node inventory unavailable"))
+	case len(st.Nodes) == 0:
 		lines = append(lines, lipgloss.NewStyle().Foreground(tui.ColorTextFaint()).Render("no nodes reported"))
-	} else {
-		for _, node := range st.Nodes {
-			mark, style, readiness := tui.IconError, tui.ColorError(), "not ready"
+	case width < 48:
+		for _, node := range sortedStatusNodes(st.Nodes) {
+			mark := tui.IconError
 			if node.Ready {
-				mark, style, readiness = tui.IconSuccess, tui.ColorSuccess(), "ready"
+				mark = tui.IconSuccess
 			}
-			role := string(node.Role)
-			if role == "" || node.Role == nodetypes.RoleUnknown {
-				role = "node"
+			lines = append(lines, mark+" "+node.Name+" · "+statusNodeRole(node)+" · "+statusReadiness(node))
+		}
+	default:
+		ordered := sortedStatusNodes(st.Nodes)
+		selectedIndex := slices.IndexFunc(ordered, func(node okd.NodeStatus) bool { return node.Name == selected })
+		lines = append(lines, tui.ColumnTable(
+			[]tui.Column{{Header: "", MinWidth: 2, MaxWidth: 2}, {Header: "NODE", Weight: 1}, {Header: "READINESS", MinWidth: 9}},
+			statusNodeGroups(st.Nodes, selected), tui.TableOptions{Width: width, Gap: 2, MaxColWidth: max(width-16, 8), RowStyle: func(row int) (lipgloss.Style, bool) {
+				if row == selectedIndex {
+					return lipgloss.NewStyle().Foreground(tui.ColorAccent()).Bold(true), true
+				}
+				return lipgloss.NewStyle(), false
+			}},
+		)...)
+		if detail {
+			for _, node := range st.Nodes {
+				if node.Name == selected {
+					lines = append(lines, statusNodeDetail(node, width)...)
+				}
 			}
-			lines = append(lines, lipgloss.NewStyle().Foreground(style).Render(mark)+" "+
-				lipgloss.NewStyle().Foreground(tui.ColorText()).Render(node.Name)+" · "+role+" · "+readiness)
 		}
 	}
 	if len(st.Addons) > 0 {
@@ -225,7 +339,104 @@ func statusBoardLines(st *okd.ClusterStatus, loading bool, err error) []string {
 			lipgloss.NewStyle().Foreground(tui.ColorTextFaint()).Render(err.Error()),
 		}, lines...)
 	}
+	lines = append(lines, "", "↑/↓ select node · enter details · r refresh")
 	return lines
+}
+
+func statusNodeGroups(nodes []okd.NodeStatus, selected string) []tui.RowGroup {
+	groups := []tui.RowGroup{{Title: "master"}, {Title: "worker"}, {Title: "other"}}
+	for _, node := range sortedStatusNodes(nodes) {
+		role := statusNodeRole(node)
+		group := 2
+		switch role {
+		case "master":
+			group = 0
+		case "worker":
+			group = 1
+		}
+		marker := " "
+		if node.Name == selected {
+			marker = ">"
+		}
+		groups[group].Rows = append(groups[group].Rows, []string{marker, node.Name, statusReadiness(node)})
+	}
+	visible := groups[:0]
+	for _, group := range groups {
+		if len(group.Rows) > 0 {
+			visible = append(visible, group)
+		}
+	}
+	return visible
+}
+
+func sortedStatusNodes(nodes []okd.NodeStatus) []okd.NodeStatus {
+	ordered := slices.Clone(nodes)
+	slices.SortFunc(ordered, func(a, b okd.NodeStatus) int {
+		if statusRoleOrder(a) != statusRoleOrder(b) {
+			return statusRoleOrder(a) - statusRoleOrder(b)
+		}
+		return strings.Compare(a.Name, b.Name)
+	})
+	return ordered
+}
+
+func statusRoleOrder(node okd.NodeStatus) int {
+	switch node.Role {
+	case nodetypes.RoleMaster:
+		return 0
+	case nodetypes.RoleWorker:
+		return 1
+	default:
+		return 2
+	}
+}
+
+func statusNodeRole(node okd.NodeStatus) string {
+	if node.Role == "" || node.Role == nodetypes.RoleUnknown {
+		return "other"
+	}
+	return string(node.Role)
+}
+
+func statusReadiness(node okd.NodeStatus) string {
+	if node.Ready {
+		return "ready"
+	}
+	return "not ready"
+}
+
+func statusNodeDetail(node okd.NodeStatus, width int) []string {
+	status := string(node.Status)
+	if status == "" {
+		status = statusReadiness(node)
+	}
+	return tui.RenderFacts([]tui.FactRow{{Key: "Selected node", Value: node.Name}, {Key: "Role", Value: statusNodeRole(node)}, {Key: "Readiness", Value: status}, {Key: "Ready condition", Value: statusReadiness(node)}}, &tui.FactLayout{Leader: tui.FactLeaderPad, KeyWidth: 18, TotalWidth: width, Styles: tui.DefaultFactStyles()})
+}
+
+func (s *StatusStep) reconcileSelection() {
+	if s.status == nil || len(s.status.Nodes) == 0 {
+		s.selectedNode = ""
+		s.detailOpen = false
+		return
+	}
+	for _, node := range s.status.Nodes {
+		if node.Name == s.selectedNode {
+			return
+		}
+	}
+	s.selectedNode = sortedStatusNodes(s.status.Nodes)[0].Name
+	s.detailOpen = false
+}
+
+func (s *StatusStep) moveSelection(delta int) {
+	if s.status == nil || len(s.status.Nodes) == 0 {
+		return
+	}
+	nodes := sortedStatusNodes(s.status.Nodes)
+	index := slices.IndexFunc(nodes, func(node okd.NodeStatus) bool { return node.Name == s.selectedNode })
+	index = (index + delta + len(nodes)) % len(nodes)
+	s.selectedNode = nodes[index].Name
+	s.detailOpen = false
 }
 
 type statusNodeCounts struct {
@@ -276,8 +487,10 @@ func fitStatusLines(lines []string, width, height int) string {
 // ShortHelp returns the status screen's help bar.
 func (s *StatusStep) ShortHelp() []wizard.KeyBinding {
 	return []wizard.KeyBinding{
-		{Key: statusRefreshKey, Help: "refresh"},
 		{Key: wizard.HelpEsc, Help: "hub"},
+		{Key: statusRefreshKey, Help: "refresh"},
+		{Key: "↑↓", Help: "nodes"},
+		{Key: wizard.HelpEnter, Help: "details"},
 		{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
 	}
 }

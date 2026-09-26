@@ -4,21 +4,21 @@
   │ cluster status                                                           │  
   │──────────────────────────────────────────────────────────────────────────│  
   │  CLUSTER STATUS · Running                                                │  
-  │  API ✓ reachable  ·  Operators 0 degraded                                │  
+  │  API ✓ healthy · 42ms   NODES 6/6 ready   OPERATORS 0 degraded           │  
   │                                                                          │  
   │  NODES · 6 (3 master · 3 worker)                                         │  
-  │  ✓ homelab-master0 · master · ready                                      │  
-  │  ✓ homelab-master1 · master · ready                                      │  
-  │  ✓ homelab-master2 · master · ready                                      │  
-  │  ✓ homelab-worker0 · worker · ready                                      │  
-  │  ✓ homelab-worker1 · worker · ready                                      │  
-  │  ✓ homelab-worker2 · worker · ready                                      │  
+  │      NODE                                                     READINESS  │  
+  │  master                                                                  │  
+  │  >   homelab-master0                                          ready      │  
+  │      homelab-master1                                          ready      │  
+  │      homelab-master2                                          ready      │  
+  │  worker                                                                  │  
+  │      homelab-worker0                                          ready      │  
+  │      homelab-worker1                                          ready      │  
+  │      homelab-worker2                                          ready      │  
   │                                                                          │  
-  │  ADD-ONS                                                                 │  
-  │  ✓ flux · healthy                                                        │  
   │                                                                          │  
-  │                                                                          │  
-  │────────────────────────────────────────────────────────── ▸ prod-cluster │  
-  │  r refresh • esc hub • ctrl+c quit • ? help                              │  
+  │─────────────── ↑ ↓  scroll down for more ──────────────── ▸ prod-cluster │  
+  │  esc hub • r refresh • ↑↓ nodes … • ctrl+c quit • ? help                 │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 
