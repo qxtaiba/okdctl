@@ -618,6 +618,21 @@ func TestModelSavesDraftAfterStepTransition(t *testing.T) {
 	}
 }
 
+func TestModelSkipsDraftSaveForSwappedUtilityFlow(t *testing.T) {
+	status := &fakeStep{id: StepID("cluster-status")}
+	m := NewModel([]WizardStep{&fakeStep{id: StepIDWelcome}, status}, config.DefaultConfig())
+	saves := 0
+	m.draftSaver = func(*config.Config, StepID, string) error {
+		saves++
+		return nil
+	}
+
+	_ = update(t, m, StepCompleteMsg{StepID: StepIDWelcome})
+	if saves != 0 {
+		t.Fatalf("draft saves = %d after entering cluster status, want none", saves)
+	}
+}
+
 func TestModelResumesDraftAtStepAndField(t *testing.T) {
 	target := &draftCursorStep{fakeStep: fakeStep{id: StepIDNetworking}}
 	m := NewModel([]WizardStep{&fakeStep{id: StepIDWelcome}, target}, config.DefaultConfig())

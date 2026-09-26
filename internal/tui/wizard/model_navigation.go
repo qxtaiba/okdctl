@@ -382,7 +382,7 @@ func (m *Model) focusStep(idx int) (tea.Model, tea.Cmd) {
 		f.SetFocused(true)
 	}
 	initCmd := m.steps[idx].Init()
-	if m.draftSaver != nil && m.steps[idx].ID() != StepIDWelcome {
+	if m.draftSaver != nil && isConfigDraftStep(m.steps[idx].ID()) {
 		fieldKey := ""
 		if cursor, ok := m.steps[idx].(interface{ DraftFieldKey() string }); ok {
 			fieldKey = cursor.DraftFieldKey()
@@ -402,6 +402,17 @@ func (m *Model) focusStep(idx int) (tea.Model, tea.Cmd) {
 	}
 
 	return m, initCmd
+}
+
+func isConfigDraftStep(id StepID) bool {
+	switch id {
+	case StepIDDistribution, StepIDBasics, StepIDProxmox, StepIDNodePlacement,
+		StepIDNetworking, StepIDResources, StepIDAddons, StepIDFiles,
+		StepIDAdvanced, StepIDReview:
+		return true
+	default:
+		return false
+	}
 }
 
 // syncJumpTargets refreshes the review step's digit-jump table, compacting out

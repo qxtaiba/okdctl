@@ -23,13 +23,18 @@ Screenshot out/@NAME@-hub-dashboard.png
 Sleep 300ms
 Type "s"
 Wait+Screen@10s /CLUSTER STATUS · Running/
-Wait+Screen@10s /save draft: unsupported step/
-Screenshot out/@NAME@-cluster-status-draft-error.png
-Sleep 300ms
-Down
-Up
 Wait+Screen@2s /NODES · 6/
 Screenshot out/@NAME@-cluster-status.png
+Sleep 300ms
+Enter
+Wait+Screen@2s /Selected node/
+Screenshot out/@NAME@-cluster-status-details.png
+Sleep 300ms
+Escape
+Wait+Screen@10s /\[d\] deploy/
+Type "n"
+Wait+Screen@10s /choose an operation/
+Screenshot out/@NAME@-hub-manage.png
 Sleep 300ms
 Escape
 Wait+Screen@10s /\[d\] deploy/
