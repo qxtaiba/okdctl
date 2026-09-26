@@ -22,6 +22,8 @@ const (
 // house's text separator — so spell it from here by discipline.
 const IconLevelInfo = "·"
 
+const IconLatencySparkline = "▁▂▃▄▅▆▇█"
+
 // Progress-bar glyphs: the filled cell, the empty track, the phase-boundary
 // separator, the last-run tick, and the eighth-block ramp that renders a
 // fractional final cell. The log minimap reuses IconBarTick as its window

@@ -19,7 +19,7 @@ import (
 const opsRefreshInterval = 30 * time.Second
 const opsLatencyHistoryLimit = 12
 
-var opsLatencyGlyphs = []rune("▁▂▃▄▅▆▇█")
+var opsLatencyGlyphs = []rune(tui.IconLatencySparkline)
 
 type opsLatencySample struct {
 	duration  time.Duration

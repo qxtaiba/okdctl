@@ -4,10 +4,8 @@
   │ cluster status                                                           │  
   │──────────────────────────────────────────────────────────────────────────│  
   │  CLUSTER STATUS · Running                                                │  
-  │  API ✓ healthy · 42ms   NODES 6/6 ready   OPERATORS 0 degraded           │  
-  │                                                                          │  
+  │  API ✓ healthy · 42ms   OPERATORS 0 degraded                             │  
   │  NODES · 6 (3 master · 3 worker)                                         │  
-  │      NODE                                                     READINESS  │  
   │  master                                                                  │  
   │  >   homelab-master0                                          ready      │  
   │      homelab-master1                                          ready      │  
@@ -16,9 +14,11 @@
   │      homelab-worker0                                          ready      │  
   │      homelab-worker1                                          ready      │  
   │      homelab-worker2                                          ready      │  
+  │  ADD-ONS · ✓ flux · healthy                                              │  
   │                                                                          │  
   │                                                                          │  
-  │─────────────── ↑ ↓  scroll down for more ──────────────── ▸ prod-cluster │  
-  │  esc hub • r refresh • ↑↓ nodes … • ctrl+c quit • ? help                 │  
+  │                                                                          │  
+  │────────────────────────────────────────────────────────── ▸ prod-cluster │  
+  │  esc hub • r refresh • ↑↓ nodes • enter details • ctrl+c quit • ? help   │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 
