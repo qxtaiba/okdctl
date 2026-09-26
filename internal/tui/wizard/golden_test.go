@@ -1,13 +1,18 @@
 package wizard
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/colorprofile"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 )
 
@@ -58,4 +63,48 @@ func TestGolden_HelpOverlayWideSplit(t *testing.T) {
 	frame := mm.(*Model).View().Content
 	tuitest.Golden(t, "help_overlay_180x48", frame)
 	tuitest.AssertFits(t, frame, 180, 48)
+}
+
+func TestGolden_ChromeThemeVariants(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
+	t.Cleanup(func() {
+		tui.SetColorProfileFor(&bytes.Buffer{})
+		resetPackageColorState()
+	})
+	for _, tc := range []struct {
+		name string
+		dark bool
+		ansi string
+	}{
+		{name: "dark", dark: true, ansi: "38;2;107;33;168"},
+		{name: "light", ansi: "38;2;192;132;252"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tui.UseTheme(tui.ResolveTheme(colorprofile.TrueColor, tc.dark, tui.ThemeDefault))
+			rebuildWizardStyles()
+			cfg := config.DefaultConfig()
+			cfg.Cluster.Name = "homelab"
+			m := NewFlowModel([]WizardStep{newNopStep()}, cfg, DefaultChrome())
+			frame := tuitest.RenderAt(t, m, 100, 30)
+			if !strings.Contains(frame, tc.ansi) {
+				t.Errorf("wizard frame = %q, want PrimaryDim %s", frame, tc.ansi)
+			}
+			tuitest.Golden(t, "chrome_"+tc.name+"_100x30", frame)
+		})
+	}
+
+	t.Run("no_color", func(t *testing.T) {
+		t.Setenv("NO_COLOR", "1")
+		tui.SetColorProfileFor(io.Discard)
+		rebuildWizardStyles()
+		cfg := config.DefaultConfig()
+		cfg.Cluster.Name = "homelab"
+		m := NewFlowModel([]WizardStep{newNopStep()}, cfg, DefaultChrome())
+		frame := tuitest.RenderAt(t, m, 100, 30)
+		frame = tui.Downsample(frame)
+		if strings.Contains(frame, "\x1b[") {
+			t.Fatalf("wizard frame emitted ANSI with NO_COLOR: %q", frame)
+		}
+		tuitest.Golden(t, "chrome_no_color_100x30", frame)
+	})
 }

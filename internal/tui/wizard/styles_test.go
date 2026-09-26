@@ -1,10 +1,13 @@
 package wizard
 
 import (
+	"bytes"
+	"io"
 	"strings"
 	"testing"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
 
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
@@ -194,5 +197,47 @@ func TestRebuildWizardStylesRebindsInitCapturedStyles(t *testing.T) {
 	}
 	if sep := stageSeparatorStyle.Render(" · "); !strings.Contains(sep, "148;163;184") {
 		t.Errorf("stage separator = %q, want the light Subtle tier (#94A3B8)", sep)
+	}
+}
+
+func TestWizardChromeBrandRampFollowsThemePolarity(t *testing.T) {
+	t.Cleanup(resetPackageColorState)
+	for _, tc := range []struct {
+		name string
+		dark bool
+		ansi string
+	}{
+		{name: "dark", dark: true, ansi: "38;2;107;33;168"},
+		{name: "light", ansi: "38;2;192;132;252"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tui.UseTheme(tui.ResolveTheme(colorprofile.TrueColor, tc.dark, tui.ThemeDefault))
+			rebuildWizardStyles()
+			frame := WizardBorderStyle.Width(12).Render("frame")
+			header := HeaderStyle.Width(12).Render("header")
+			if !strings.Contains(frame, tc.ansi) {
+				t.Errorf("frame border = %q, want PrimaryDim %s", frame, tc.ansi)
+			}
+			if !strings.Contains(header, tc.ansi) {
+				t.Errorf("header rule = %q, want PrimaryDim %s", header, tc.ansi)
+			}
+		})
+	}
+}
+
+func TestWizardChromeHonorsNoColor(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
+	t.Cleanup(func() {
+		tui.SetColorProfileFor(&bytes.Buffer{})
+		resetPackageColorState()
+	})
+	t.Setenv("NO_COLOR", "1")
+	tui.SetColorProfileFor(io.Discard)
+	rebuildWizardStyles()
+
+	frame := WizardBorderStyle.Width(12).Render("frame") + HeaderStyle.Width(12).Render("header")
+	frame = tui.Downsample(frame)
+	if strings.Contains(frame, "\x1b[") {
+		t.Fatalf("wizard chrome emitted ANSI with NO_COLOR: %q", frame)
 	}
 }

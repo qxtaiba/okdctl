@@ -42,13 +42,13 @@ var (
 func rebuildWizardStyles() {
 	WizardBorderStyle = lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(tui.ColorSubtle())
+		BorderForeground(tui.ColorPrimaryDim())
 
 	HeaderStyle = lipgloss.NewStyle().
 		Padding(0, 1).
 		BorderBottom(true).
 		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(tui.ColorRule())
+		BorderForeground(tui.ColorPrimaryDim())
 
 	FooterStyle = lipgloss.NewStyle().
 		Padding(0, 2).

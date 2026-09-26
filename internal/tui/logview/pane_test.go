@@ -1,13 +1,17 @@
 package logview
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
 	"time"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
 
+	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 )
 
@@ -150,6 +154,47 @@ func TestLogRowsStyleWarnAndErrorApart(t *testing.T) {
 			t.Errorf("row %d lost its text: %q", i, tuitest.StripANSI(row))
 		}
 	}
+}
+
+func TestGolden_LogSurfaceTheme(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
+	t.Cleanup(func() {
+		tui.SetColorProfileFor(&bytes.Buffer{})
+		tui.SetDarkBackground(true)
+	})
+	for _, tc := range []struct {
+		name string
+		dark bool
+		ansi string
+	}{
+		{name: "dark", dark: true, ansi: "38;2;6;182;212"},
+		{name: "light", ansi: "38;2;14;116;144"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tui.UseTheme(tui.ResolveTheme(colorprofile.TrueColor, tc.dark, tui.ThemeDefault))
+			frame := renderPane(seededRing(8), view{}, 60, 5, false)
+			if !strings.Contains(frame, tc.ansi) {
+				t.Errorf("log header = %q, want Accent %s", frame, tc.ansi)
+			}
+			tuitest.Golden(t, "log_"+tc.name, frame)
+		})
+	}
+}
+
+func TestLogSurfaceHonorsNoColor(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
+	t.Cleanup(func() {
+		tui.SetColorProfileFor(&bytes.Buffer{})
+		tui.SetDarkBackground(true)
+	})
+	t.Setenv("NO_COLOR", "1")
+	tui.SetColorProfileFor(io.Discard)
+	frame := renderPane(seededRing(8), view{}, 60, 5, false)
+	frame = tui.Downsample(frame)
+	if strings.Contains(frame, "\x1b[") {
+		t.Fatalf("log surface emitted ANSI with NO_COLOR: %q", frame)
+	}
+	tuitest.Golden(t, "log_no_color", frame)
 }
 
 // TestScrollLogFollowsThePagerContract pins the pager contract on the view

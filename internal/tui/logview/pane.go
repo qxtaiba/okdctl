@@ -185,7 +185,7 @@ func renderRows(lines []Line, width, budget int, wrap bool) []string {
 	if width <= 0 || budget <= 0 {
 		return nil
 	}
-	stampStyle := lipgloss.NewStyle().Foreground(tui.ColorSubtle())
+	stampStyle := lipgloss.NewStyle().Foreground(tui.ColorTextFaint())
 	indent := gutterWidth + lipgloss.Width(stampFormat) + 1
 	tw := textWidth(width)
 
@@ -397,7 +397,7 @@ func paneHeader(v view, c coords, width int) string {
 	default:
 		parts = append(parts, fmt.Sprintf("%d–%d of %d", c.end-int64(c.shown)+1, c.end, c.total))
 	}
-	return lipgloss.NewStyle().Foreground(tui.ColorTextFaint()).MaxWidth(width).Render(strings.Join(parts, " · "))
+	return lipgloss.NewStyle().Foreground(tui.ColorAccent()).Bold(true).MaxWidth(width).Render(strings.Join(parts, " · "))
 }
 
 // emptyNote is what a window with no rows says: an unfiltered one is still
