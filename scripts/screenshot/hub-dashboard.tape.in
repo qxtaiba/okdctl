@@ -1,0 +1,37 @@
+# Template for the deployed-state hub and its cluster-status round-trip.
+# @W@/@H@/@NAME@ are substituted by scripts/screenshot/run.sh.
+Output out/@NAME@-hub-dashboard.txt
+Set Shell zsh
+Set FontSize 14
+Set Padding 0
+Set LineHeight 1.0
+Set LetterSpacing 1.0
+Set Width @W@
+Set Height @H@
+
+Hide
+Type `export PATH="$(dirname "$OKDCTL_DEMO_BIN"):$PATH" HOME="$OKDCTL_DEMO_HOME" OKDCTL_WIZARD_DEMO=1; cd "$OKDCTL_DEMO_CWD"; clear`
+Enter
+Show
+
+Type "okdctl deploy"
+Sleep 450ms
+Enter
+Wait+Screen@10s /cluster status/
+Sleep 500ms
+Screenshot out/@NAME@-hub-dashboard.png
+Sleep 300ms
+Type "s"
+Wait+Screen@10s /CLUSTER STATUS · Running/
+Wait+Screen@10s /save draft: unsupported step/
+Screenshot out/@NAME@-cluster-status-draft-error.png
+Sleep 300ms
+Down
+Up
+Wait+Screen@2s /NODES · 6/
+Screenshot out/@NAME@-cluster-status.png
+Sleep 300ms
+Escape
+Wait+Screen@10s /\[d\] deploy/
+Ctrl+C
+Sleep 500ms

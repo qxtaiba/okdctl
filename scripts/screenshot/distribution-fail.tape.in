@@ -29,8 +29,9 @@ Sleep 450ms
 Enter
 Sleep 450ms
 
-Wait+Screen@10s /connect ●●○ · cluster · extras · review/
+Wait+Screen@10s /connect ✓●○ · cluster · extras · review/
 Sleep 450ms
 Screenshot out/@NAME@-distribution-fail.png
+Sleep 300ms
 Ctrl+C
 Sleep 500ms

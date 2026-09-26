@@ -27,6 +27,7 @@ Enter
 # ==================== SCREEN 1: op ====================
 Wait+Screen@10s /choose an operation/
 Screenshot out/@NAME@-lifecycle-op.png
+Sleep 300ms
 Down
 Sleep 350ms
 Down
@@ -37,18 +38,21 @@ Sleep 450ms
 # ==================== SCREEN 2: target ====================
 Wait+Screen@10s /worker to remove/
 Screenshot out/@NAME@-lifecycle-target.png
+Sleep 300ms
 Enter
 Sleep 450ms
 
 # ==================== SCREEN 3: params ====================
 Wait+Screen@10s /operation parameters/
 Screenshot out/@NAME@-lifecycle-params.png
+Sleep 300ms
 Enter
 Sleep 450ms
 
 # ==================== SCREEN 4: preview ====================
 Wait+Screen@10s /review the plan/
 Screenshot out/@NAME@-lifecycle-preview.png
+Sleep 300ms
 # The fold-guard (safety finding S4) leaves the execute action disarmed
 # until the plan-gate line has been scrolled into view at least once; a few
 # PageDowns reach the bottom regardless of preset height, then confirm.
@@ -64,6 +68,7 @@ Sleep 450ms
 # ==================== SCREEN 5: confirm ====================
 Wait+Screen@10s /confirm irreversible removal/
 Screenshot out/@NAME@-lifecycle-confirm.png
+Sleep 300ms
 Type "homelab"
 Sleep 350ms
 Enter
@@ -74,9 +79,11 @@ Enter
 Wait+Screen@10s /removing worker/
 Sleep 1200ms
 Screenshot out/@NAME@-lifecycle-exec.png
+Sleep 300ms
 
 # ==================== SCREEN 7: done ====================
 Wait+Screen@10s /worker removed/
 Screenshot out/@NAME@-lifecycle-done.png
+Sleep 300ms
 Enter
 Sleep 450ms

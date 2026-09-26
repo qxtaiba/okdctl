@@ -12,16 +12,11 @@ ROOT="$(git rev-parse --show-toplevel)"
 SCREENSHOT_DIR="$ROOT/scripts/screenshot"
 OUT_DIR="$SCREENSHOT_DIR/out"
 WORK="$(mktemp -d -t okdctl-screenshot)"
-# Guards the kill: unset PVE_PID must not abort before rm cleans $WORK under
-# errexit; || true keeps the handler's exit clean. Safe to register before
-# the port check below — it no-ops until PVE_PID is actually set, so an
-# early abort (e.g. port already busy) can never kill a foreign process.
+# The trap no-ops until PVE_PID is set, so early failures cannot kill a
+# process this runner did not start.
 trap '[ -n "${PVE_PID:-}" ] && kill "$PVE_PID" 2>/dev/null || true; rm -rf "$WORK"' EXIT
 
-if lsof -i :8006 >/dev/null 2>&1; then
-  echo "port 8006 is already in use — stop whatever's listening and retry" >&2
-  exit 1
-fi
+PVE_PORT="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')"
 
 mkdir -p "$OUT_DIR"
 
@@ -54,23 +49,34 @@ fi
 # seed_cwd creates a render cwd holding the demo configuration.
 seed_cwd() {
   mkdir -p "$1"
-  cp "$DEMO_CONFIG" "$1/okdctl.yaml"
+  sed "s/127.0.0.1:8006/127.0.0.1:$PVE_PORT/" "$DEMO_CONFIG" > "$1/okdctl.yaml"
+  mkdir -p "$1/d"
+  cp "$OKDCTL_DEMO_HOME/pull-secret.json" "$1/d/p"
+  cp "$OKDCTL_DEMO_HOME/.ssh/id_ed25519.pub" "$1/d/k"
+}
+
+seed_dashboard_cwd() {
+  seed_cwd "$1"
+  local state="$1/infrastructure/terraform/environments/production/terraform.tfstate"
+  mkdir -p "$(dirname "$state")"
+  cat > "$state" <<'EOF'
+{"version":4,"resources":[{"mode":"managed","type":"proxmox_virtual_environment_vm","name":"demo","instances":[{}]}]}
+EOF
 }
 
 echo "starting fake proxmox api..."
-# Built to a binary (not `go run`) so $! below is the actual server's PID,
-# not a `go run` wrapper's — `go run` doesn't forward signals to the child
-# it spawns, which would otherwise leave fakepve running after the trap's
-# kill "$PVE_PID".
-go build -o "$WORK/fakepve" "$ROOT/scripts/demo/fakepve.go"
-"$WORK/fakepve" &
+# The repository fixture binds :8006; compile a temporary port-substituted
+# copy so screenshots never contact or stop a user's local Proxmox service.
+sed "s/127.0.0.1:8006/127.0.0.1:$PVE_PORT/g" "$ROOT/scripts/demo/fakepve.go" > "$WORK/fakepve.go"
+go build -o "$WORK/fakepve" "$WORK/fakepve.go"
+"$WORK/fakepve" > "$WORK/fakepve.log" 2>&1 &
 PVE_PID=$!
 for _ in $(seq 1 20); do
-  curl -sk https://127.0.0.1:8006/api2/json/version >/dev/null 2>&1 && break
+  curl -sk "https://127.0.0.1:$PVE_PORT/api2/json/version" >/dev/null 2>&1 && break
   sleep 0.5
 done
-curl -sk https://127.0.0.1:8006/api2/json/version >/dev/null 2>&1 ||
-  { echo "fakepve did not become ready after 10s" >&2; exit 1; }
+curl -sk "https://127.0.0.1:$PVE_PORT/api2/json/version" >/dev/null 2>&1 ||
+  { cat "$WORK/fakepve.log" >&2; echo "fakepve did not become ready on 127.0.0.1:$PVE_PORT after 10s" >&2; exit 1; }
 
 # name:cols:rows:width:height. Width/height are pre-calibrated on this
 # machine (vhs 0.11.0, FontSize 14) starting from W=cols*8.4, H=rows*17 and
@@ -83,8 +89,16 @@ PRESETS=(
   "120x40:120:40:1108:652"
   "180x48:180:48:1650:784"
 )
+if [ -n "${SCREENSHOT_ONLY:-}" ]; then
+  filtered=()
+  for preset in "${PRESETS[@]}"; do
+    [[ "$preset" == "$SCREENSHOT_ONLY:"* ]] && filtered+=("$preset")
+  done
+  [ "${#filtered[@]}" -gt 0 ] || { echo "unknown SCREENSHOT_ONLY preset: $SCREENSHOT_ONLY" >&2; exit 2; }
+  PRESETS=("${filtered[@]}")
+fi
 
-# Steps in wizard order (wizard.DefaultConfig); must match the Screenshot
+# Screens in wizard order; must match the Screenshot
 # filenames baked into wizard.tape.in.
 STEP_NAMES=(welcome distribution proxmox basics node-placement networking resources addons files advanced review)
 
@@ -94,8 +108,7 @@ LIFECYCLE_STEP_NAMES=(op target params preview confirm exec "done")
 
 render_tape() {
   local template="$1" name="$2" w="$3" h="$4" dest="$5"
-  # @HOME@ uses a `|` delimiter since $OKDCTL_DEMO_HOME itself contains `/`.
-  sed -e "s/@W@/$w/g; s/@H@/$h/g; s/@NAME@/$name/g" -e "s|@HOME@|$OKDCTL_DEMO_HOME|g" "$template" > "$dest"
+  sed -e "s/@W@/$w/g; s/@H@/$h/g; s/@NAME@/$name/g; s/@PVEPORT@/$PVE_PORT/g" -e "s|@HOME@|$OKDCTL_DEMO_HOME|g" "$template" > "$dest"
 }
 
 calibrate() {
@@ -121,6 +134,10 @@ calibrate() {
 render_wizard() {
   local name="$1" w="$2" h="$3"
   local attempt
+  for step in "${STEP_NAMES[@]}"; do
+    rm -f "$OUT_DIR/$name-$step.png"
+  done
+  rm -f "$OUT_DIR/$name-distribution-expanded.png"
   for attempt in 1 2 3; do
     local cwd="$WORK/cwd-$name-$attempt"
     seed_cwd "$cwd"
@@ -128,7 +145,8 @@ render_wizard() {
     render_tape "$SCREENSHOT_DIR/wizard.tape.in" "$name" "$w" "$h" "$tape"
 
     echo "rendering $name (attempt $attempt)..."
-    (cd "$SCREENSHOT_DIR" && OKDCTL_DEMO_CWD="$cwd" vhs "$tape" >/dev/null 2>&1) || true
+    local log="$WORK/vhs-$name-wizard.log"
+    (cd "$SCREENSHOT_DIR" && OKDCTL_DEMO_CWD="$cwd" vhs "$tape" >"$log" 2>&1) || true
 
     local missing=()
     local step
@@ -138,10 +156,11 @@ render_wizard() {
     done
 
     if [ "${#missing[@]}" -eq 0 ]; then
-      echo "rendered $name: 11/11 screenshots"
+      echo "rendered $name: ${#STEP_NAMES[@]}/${#STEP_NAMES[@]} screenshots"
       return 0
     fi
     echo "  missing after attempt $attempt: ${missing[*]}"
+    cat "$log" >&2
   done
 
   echo "failed to render all screenshots for $name after 3 attempts; missing: ${missing[*]}" >&2
@@ -154,6 +173,9 @@ render_wizard() {
 render_lifecycle() {
   local name="$1" w="$2" h="$3"
   local attempt
+  for step in "${LIFECYCLE_STEP_NAMES[@]}"; do
+    rm -f "$OUT_DIR/$name-lifecycle-$step.png"
+  done
   for attempt in 1 2 3; do
     local cwd="$WORK/cwd-lifecycle-$name-$attempt"
     mkdir -p "$cwd"
@@ -161,7 +183,8 @@ render_lifecycle() {
     render_tape "$SCREENSHOT_DIR/lifecycle.tape.in" "$name" "$w" "$h" "$tape"
 
     echo "rendering $name lifecycle (attempt $attempt)..."
-    (cd "$SCREENSHOT_DIR" && OKDCTL_DEMO_CWD="$cwd" vhs "$tape" >/dev/null 2>&1) || true
+    local log="$WORK/vhs-$name-lifecycle.log"
+    (cd "$SCREENSHOT_DIR" && OKDCTL_DEMO_CWD="$cwd" vhs "$tape" >"$log" 2>&1) || true
 
     local missing=()
     local step
@@ -175,6 +198,7 @@ render_lifecycle() {
       return 0
     fi
     echo "  missing after attempt $attempt: ${missing[*]}"
+    cat "$log" >&2
   done
 
   echo "failed to render all lifecycle screenshots for $name after 3 attempts; missing: ${missing[*]}" >&2
@@ -187,6 +211,7 @@ render_lifecycle() {
 render_distribution_fail() {
   local name="$1" w="$2" h="$3"
   local attempt
+  rm -f "$OUT_DIR/$name-distribution-fail.png"
   for attempt in 1 2 3; do
     local cwd="$WORK/cwd-fail-$name-$attempt"
     seed_cwd "$cwd"
@@ -194,7 +219,8 @@ render_distribution_fail() {
     render_tape "$SCREENSHOT_DIR/distribution-fail.tape.in" "$name" "$w" "$h" "$tape"
 
     echo "rendering $name distribution-fail (attempt $attempt)..."
-    (cd "$SCREENSHOT_DIR" && OKDCTL_DEMO_CWD="$cwd" vhs "$tape" >/dev/null 2>&1) || true
+    local log="$WORK/vhs-$name-distribution-fail.log"
+    (cd "$SCREENSHOT_DIR" && OKDCTL_DEMO_CWD="$cwd" vhs "$tape" >"$log" 2>&1) || true
 
     local png="$OUT_DIR/$name-distribution-fail.png"
     if [ -s "$png" ]; then
@@ -202,9 +228,40 @@ render_distribution_fail() {
       return 0
     fi
     echo "  missing after attempt $attempt: distribution-fail"
+    cat "$log" >&2
   done
 
   echo "failed to render the distribution-fail screenshot for $name after 3 attempts" >&2
+  return 1
+}
+
+render_hub_dashboard() {
+  local name="$1" w="$2" h="$3"
+  local attempt
+  rm -f "$OUT_DIR/$name-hub-dashboard.png" "$OUT_DIR/$name-cluster-status-draft-error.png" "$OUT_DIR/$name-cluster-status.png"
+  for attempt in 1 2 3; do
+    local cwd="$WORK/cwd-dashboard-$name-$attempt"
+    seed_dashboard_cwd "$cwd"
+    local tape="$WORK/hub-dashboard-$name.tape"
+    render_tape "$SCREENSHOT_DIR/hub-dashboard.tape.in" "$name" "$w" "$h" "$tape"
+
+    echo "rendering $name hub dashboard (attempt $attempt)..."
+    local log="$WORK/vhs-$name-hub-dashboard.log"
+    (cd "$SCREENSHOT_DIR" && OKDCTL_DEMO_CWD="$cwd" vhs "$tape" >"$log" 2>&1) || true
+
+    local missing=()
+    for screen in hub-dashboard cluster-status-draft-error cluster-status; do
+      [ -s "$OUT_DIR/$name-$screen.png" ] || missing+=("$screen")
+    done
+    if [ "${#missing[@]}" -eq 0 ]; then
+      echo "rendered $name hub dashboard and cluster status"
+      return 0
+    fi
+    echo "  missing after attempt $attempt: ${missing[*]}"
+    cat "$log" >&2
+  done
+
+  echo "failed to render the hub dashboard for $name after 3 attempts; missing: ${missing[*]}" >&2
   return 1
 }
 
@@ -212,6 +269,7 @@ for preset in "${PRESETS[@]}"; do
   IFS=':' read -r name cols rows w h <<< "$preset"
   calibrate "$name" "$cols" "$rows" "$w" "$h"
   render_wizard "$name" "$w" "$h"
+  render_hub_dashboard "$name" "$w" "$h"
   render_distribution_fail "$name" "$w" "$h"
   render_lifecycle "$name" "$w" "$h"
 done

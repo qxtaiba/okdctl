@@ -45,6 +45,7 @@ Wait+Screen@10s /cluster status/
 # one needs to settle.
 Sleep 500ms
 Screenshot out/@NAME@-welcome.png
+Sleep 300ms
 # deploy is the first verb and deploys the saved configuration outright; the
 # walkthrough wants the configure flow, which is the second verb.
 Down
@@ -53,8 +54,9 @@ Enter
 Sleep 450ms
 
 # ==================== STEP 2: okd version (distribution) ====================
-Wait+Screen@10s /connect ●●○ · cluster · extras · review/
+Wait+Screen@10s /connect ✓●○ · cluster · extras · review/
 Screenshot out/@NAME@-distribution.png
+Sleep 300ms
 Enter
 Sleep 650ms
 Down
@@ -68,13 +70,18 @@ Sleep 650ms
 # Cursor freedom: up from the first patch (4.20.1) flows past the dropdown
 # boundary back onto the parent minor row (4.20) instead of trapping there.
 Screenshot out/@NAME@-distribution-expanded.png
+Sleep 300ms
 Enter
 Sleep 450ms
 
 # ==================== STEP 3: proxmox connection ====================
-Wait+Screen@10s /connect ●●● · cluster · extras · review/
+Wait+Screen@10s /connect ✓✓● · cluster · extras · review/
 Screenshot out/@NAME@-proxmox.png
-Type "127.0.0.1:8006"
+Sleep 300ms
+Shift+Tab
+Shift+Tab
+Type "127.0.0.1:@PVEPORT@"
+Wait+Screen@2s /127.0.0.1:@PVEPORT@/
 Sleep 450ms
 Tab
 Type "root@pam"
@@ -94,6 +101,7 @@ Sleep 450ms
 # ==================== STEP 4: basics ====================
 Wait+Screen@10s /connect · cluster ●○○○ · extras · review/
 Screenshot out/@NAME@-basics.png
+Sleep 300ms
 Type "homelab"
 Sleep 450ms
 Tab
@@ -109,9 +117,10 @@ Enter
 Sleep 450ms
 
 # ==================== STEP 5: node placement ====================
-Wait+Screen@10s /connect · cluster ●●○○ · extras · review/
+Wait+Screen@10s /connect · cluster ✓●○○ · extras · review/
 Sleep 2s
 Screenshot out/@NAME@-node-placement.png
+Sleep 300ms
 Tab
 Sleep 450ms
 Tab
@@ -140,8 +149,9 @@ Enter
 Sleep 450ms
 
 # ==================== STEP 6: networking ====================
-Wait+Screen@10s /connect · cluster ●●●○ · extras · review/
+Wait+Screen@10s /connect · cluster ✓✓●○ · extras · review/
 Screenshot out/@NAME@-networking.png
+Sleep 300ms
 Type "192.168.1.0/24"
 Sleep 450ms
 Tab
@@ -173,8 +183,9 @@ Enter
 Sleep 450ms
 
 # ==================== STEP 7: resources ====================
-Wait+Screen@10s /connect · cluster ●●●● · extras · review/
+Wait+Screen@10s /connect · cluster ✓✓✓● · extras · review/
 Screenshot out/@NAME@-resources.png
+Sleep 300ms
 Type "4"
 Sleep 350ms
 Tab
@@ -204,6 +215,7 @@ Sleep 450ms
 # ==================== STEP 8: addons ====================
 Wait+Screen@10s /connect · cluster · extras ●○○ · review/
 Screenshot out/@NAME@-addons.png
+Sleep 300ms
 Down
 Sleep 450ms
 Down
@@ -216,16 +228,15 @@ Enter
 Sleep 450ms
 
 # ==================== STEP 9: files ====================
-# ValidateFilePath expands a leading "~/" via the real OS user's home
-# (system.InvokingUserHomeDir, not $HOME — see internal/system/elevation.go),
-# so a literal "~/pull-secret.json" validates against the operator's real
-# home, not $OKDCTL_DEMO_HOME. Type the demo home's absolute path instead.
-Wait+Screen@10s /connect · cluster · extras ●●○ · review/
+# The relative fixture paths resolve from the seeded demo working directory,
+# keeping the review screen compact at the smallest terminal size.
+Wait+Screen@10s /connect · cluster · extras ✓●○ · review/
 Screenshot out/@NAME@-files.png
-Type "@HOME@/pull-secret.json"
+Sleep 300ms
+Type "d/p"
 Sleep 450ms
 Tab
-Type "@HOME@/.ssh/id_ed25519.pub"
+Type "d/k"
 Sleep 450ms
 Tab
 Type "/var/www/html"
@@ -234,8 +245,9 @@ Enter
 Sleep 450ms
 
 # ==================== STEP 10: advanced ====================
-Wait+Screen@10s /connect · cluster · extras ●●● · review/
+Wait+Screen@10s /connect · cluster · extras ✓✓● · review/
 Screenshot out/@NAME@-advanced.png
+Sleep 300ms
 Type "6000"
 Sleep 450ms
 Tab
@@ -265,6 +277,7 @@ Sleep 450ms
 # ==================== STEP 11: review ====================
 Wait+Screen@10s /connect · cluster · extras · review/
 Screenshot out/@NAME@-review.png
+Sleep 300ms
 Down
 Sleep 350ms
 Down
