@@ -93,6 +93,37 @@ func TestDataDrivenStep_AnsweredNilWhenDefinitionLeavesItUnset(t *testing.T) {
 	}
 }
 
+func TestDataDrivenStep_FieldHistoryUsesStableIDsAndExcludesCredentials(t *testing.T) {
+	def := &StepDefinition{
+		ID:    StepIDProxmox,
+		Title: "history test",
+		Sections: []SectionDefinition{{
+			Title: "connection",
+			Fields: []FieldDefinition{
+				{Key: "host", Label: "host", Default: "pve-old"},
+				{Key: "password", Label: "password", Type: FieldTypePassword},
+			},
+		}},
+	}
+	step := NewDataDrivenStep(def)
+	step.View(60, 20)
+	step.form.Focus()
+	step.SetValue("host", "pve-current")
+	step.form.Blur()
+	step.form.Focus()
+
+	step.Update(tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl})
+	field := step.getField("host").(*components.InputField)
+	if !field.HistoryChooserOpen() || !strings.Contains(tuitest.StripANSI(field.View()), "pve-old") {
+		t.Fatalf("field history was not reachable through the form: %s", tuitest.StripANSI(field.View()))
+	}
+	if safeFieldHistory(&FieldDefinition{Key: "password", Type: FieldTypePassword}) ||
+		safeFieldHistory(&FieldDefinition{Key: "secretstore_vault_token"}) ||
+		safeFieldHistory(&FieldDefinition{Key: "token_id"}) {
+		t.Fatal("credential fields must not be eligible for history")
+	}
+}
+
 func TestDataDrivenStep_PaletteExposesVisibleLabelsAndFocusesField(t *testing.T) {
 	def := testStepDefinition()
 	def.Sections = append(def.Sections, SectionDefinition{
@@ -727,7 +758,7 @@ func TestFieldWidth_Cols(t *testing.T) {
 		avail int
 		want  int
 	}{
-		{FieldWidthAuto, 90, 48},
+		{FieldWidthAuto, 90, 64},
 		{FieldWidthNumber, 90, 16},
 		{FieldWidthPath, 90, 80},
 		{FieldWidthFull, 90, 90},

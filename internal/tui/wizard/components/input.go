@@ -44,6 +44,12 @@ type EnterConsumer interface {
 	ConsumesEnter() bool
 }
 
+// HistoryChooser identifies fields that route navigation keys to an open history list.
+type HistoryChooser interface {
+	// HistoryChooserOpen reports whether the inline value chooser is active.
+	HistoryChooserOpen() bool
+}
+
 // LabeledField is implemented by every concrete FormField, letting a caller
 // describe the currently focused field without a type switch over each
 // field kind — the wide-terminal context pane's focused-field echo uses it.
@@ -71,15 +77,21 @@ type InputField struct {
 	// that disabled it changes back.
 	Disabled bool
 
-	input      textinput.Model
-	focused    bool
-	width      int
-	boxWidth   int
-	isDefault  bool
-	hasDefault bool // set by SetDefault, never cleared — see boxOuterWidth
-	touched    bool
-	savedPos   int
-	err        error
+	input        textinput.Model
+	focused      bool
+	width        int
+	boxWidth     int
+	isDefault    bool
+	hasDefault   bool // set by SetDefault, never cleared — see boxOuterWidth
+	touched      bool
+	savedPos     int
+	err          error
+	history      *FieldHistory
+	historyID    string
+	historyAt    int
+	historyOpen  bool
+	focusValue   string
+	focusDefault bool
 }
 
 // NewInputField builds a plain-text InputField from label and placeholder.
@@ -174,6 +186,17 @@ func (f *InputField) SetValue(value string) {
 	f.isDefault = false
 }
 
+// SetHistory assigns this non-password field a stable key in the session history.
+func (f *InputField) SetHistory(history *FieldHistory, id string) {
+	if !f.Password {
+		f.history = history
+		f.historyID = id
+	}
+}
+
+// HistoryChooserOpen reports whether the inline value chooser is active.
+func (f *InputField) HistoryChooserOpen() bool { return f.historyOpen }
+
 // SetDefault sets the field's value to v and marks it as an unmodified
 // default, which View renders dim with a "default" tag until the value
 // changes. hasDefault latches permanently — unlike isDefault, it never
@@ -196,6 +219,8 @@ func (f *InputField) IsDefault() bool {
 func (f *InputField) Focus() tea.Cmd {
 	f.focused = true
 	f.touched = true
+	f.focusValue = f.input.Value()
+	f.focusDefault = f.isDefault
 	f.input.SetCursor(f.savedPos)
 	return f.input.Focus()
 }
@@ -211,8 +236,12 @@ func (f *InputField) Focus() tea.Cmd {
 func (f *InputField) Blur() {
 	if f.focused {
 		f.savedPos = f.input.Position()
+		if f.history != nil && !f.Password && f.focusValue != f.input.Value() {
+			f.history.add(f.historyID, f.focusValue)
+		}
 	}
 	f.focused = false
+	f.historyOpen = false
 	f.input.SetCursor(0)
 	f.input.Blur()
 	if f.touched {
@@ -324,6 +353,22 @@ func (f *InputField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 
 	switch k := msg.(type) {
 	case tea.KeyPressMsg:
+		if f.historyOpen {
+			return f.updateHistoryChooser(k)
+		}
+		if key.Matches(k, key.NewBinding(key.WithKeys("ctrl+r"))) {
+			if values := f.historyValues(); len(values) > 0 {
+				f.historyOpen = true
+				f.historyAt = 0
+			}
+			return f, nil
+		}
+		if key.Matches(k, key.NewBinding(key.WithKeys("ctrl+z"))) {
+			f.input.SetValue(f.focusValue)
+			f.isDefault = f.focusDefault
+			f.err = nil
+			return f, nil
+		}
 		f.err = nil
 		if f.isDefault && (k.Text != "" || k.Code == tea.KeyBackspace || k.Code == tea.KeyDelete) {
 			f.isDefault = false
@@ -371,16 +416,75 @@ func (f *InputField) View() string {
 	}
 
 	out := label + "\n" + box
+	if f.historyOpen {
+		out += "\n" + f.historyView()
+	}
 	switch {
 	case f.err != nil:
 		out += "\n" + errStyle.Width(f.width).Render(tui.IconError+" "+f.scrubbed(f.err.Error()))
 	case f.focused && f.Help != "":
-		out += "\n" + helpStyle.Width(f.width).Render(f.Help)
+		help := f.Help
+		if len(f.historyValues()) > 0 && !f.historyOpen {
+			help += " · ctrl+r history · ctrl+z undo"
+		}
+		out += "\n" + helpStyle.Width(f.width).Render(help)
+	case f.focused && len(f.historyValues()) > 0 && !f.historyOpen:
+		out += "\n" + helpStyle.Width(f.width).Render("ctrl+r history · ctrl+z undo")
 	}
 	if f.Note != "" {
 		out += "\n" + f.Note
 	}
 	return out
+}
+
+func (f *InputField) historyValues() []string {
+	if f.Password || f.history == nil {
+		return nil
+	}
+	return f.history.get(f.historyID)
+}
+
+func (f *InputField) updateHistoryChooser(msg tea.KeyPressMsg) (FormField, tea.Cmd) {
+	values := f.historyValues()
+	switch {
+	case key.Matches(msg, key.NewBinding(key.WithKeys("up", "left"))):
+		f.historyAt = (f.historyAt + len(values) - 1) % len(values)
+	case key.Matches(msg, key.NewBinding(key.WithKeys("down", "right"))):
+		f.historyAt = (f.historyAt + 1) % len(values)
+	case key.Matches(msg, key.NewBinding(key.WithKeys("ctrl+r", "esc"))):
+		f.historyOpen = false
+	case key.Matches(msg, key.NewBinding(key.WithKeys("enter"))):
+		if len(values) > 0 {
+			current := f.input.Value()
+			selected := values[f.historyAt]
+			if current != selected {
+				f.history.add(f.historyID, current)
+				f.input.SetValue(selected)
+				f.isDefault = false
+			}
+			f.focusValue = current
+		}
+		f.historyOpen = false
+	}
+	return f, nil
+}
+
+func (f *InputField) historyView() string {
+	values := f.historyValues()
+	if len(values) == 0 {
+		return ""
+	}
+	var rows []string
+	for i, value := range values {
+		marker := "  "
+		if i == f.historyAt {
+			marker = tui.IconCaretRight + " "
+		}
+		value = tui.Truncate(value, max(f.width-lipgloss.Width(marker)-2, 1))
+		rows = append(rows, helpStyle.Width(f.width).Render(marker+value))
+	}
+	rows = append(rows, helpStyle.Width(f.width).Render("↑/↓ choose · enter apply · esc close"))
+	return strings.Join(rows, "\n")
 }
 
 // blurredValueView renders a blurred non-empty value directly in the field's
@@ -543,7 +647,11 @@ func (g *InputGroup) Update(msg tea.Msg) (*InputGroup, tea.Cmd) {
 		return g, nil
 	}
 
-	if msg, ok := msg.(tea.KeyPressMsg); ok {
+	chooserOpen := false
+	if chooser, ok := g.fields[g.focusIndex].(HistoryChooser); ok {
+		chooserOpen = chooser.HistoryChooserOpen()
+	}
+	if msg, ok := msg.(tea.KeyPressMsg); ok && !chooserOpen {
 		switch {
 		case key.Matches(msg, key.NewBinding(key.WithKeys("tab", "down"))):
 			cmd := g.Next()

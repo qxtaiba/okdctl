@@ -15,6 +15,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
@@ -48,7 +49,7 @@ type FieldWidth int
 
 // Field width classes for data-driven step definitions.
 const (
-	FieldWidthAuto   FieldWidth = 0 // zero value — 48 columns
+	FieldWidthAuto   FieldWidth = 0 // zero value — 64 columns
 	FieldWidthNumber FieldWidth = 16
 	FieldWidthPath   FieldWidth = 80
 	FieldWidthFull   FieldWidth = -1 // the whole inner width
@@ -61,7 +62,7 @@ func (w FieldWidth) Cols(avail int) int {
 		return avail
 	}
 	if w == FieldWidthAuto {
-		return min(48, avail)
+		return min(64, avail)
 	}
 	return min(int(w), avail)
 }
@@ -347,6 +348,11 @@ func (f *MultiSectionForm) Update(msg tea.Msg) (cmd tea.Cmd, enterPressed bool) 
 	if group == nil {
 		return nil, false
 	}
+	if chooser, ok := f.FocusedField().(components.HistoryChooser); ok && chooser.HistoryChooserOpen() {
+		var groupCmd tea.Cmd
+		f.sections[f.currentSection].Group, groupCmd = group.Update(msg)
+		return groupCmd, false
+	}
 
 	if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
 		switch {
@@ -600,6 +606,7 @@ func (s *DataDrivenStep) FocusPaletteTarget(id string) tea.Cmd {
 
 // NewDataDrivenStep builds a DataDrivenStep from a StepDefinition.
 func NewDataDrivenStep(def *StepDefinition) *DataDrivenStep {
+	history := components.NewFieldHistory(8)
 	step := &DataDrivenStep{
 		BaseStep:   NewBaseStepWithDisplayTitle(def.ID, def.Title, def.DisplayTitle, def.Description),
 		definition: def,
@@ -613,7 +620,11 @@ func NewDataDrivenStep(def *StepDefinition) *DataDrivenStep {
 
 		for fieldIdx := range sectionDef.Fields {
 			fieldDef := &sectionDef.Fields[fieldIdx]
-			fields = append(fields, buildFormField(fieldDef))
+			field := buildFormField(fieldDef)
+			if input, ok := field.(*components.InputField); ok && safeFieldHistory(fieldDef) {
+				input.SetHistory(history, string(def.ID)+"."+fieldDef.Key)
+			}
+			fields = append(fields, field)
 			step.fieldKeys[fieldDef.Key] = fieldLocation{
 				section: sectionIdx,
 				field:   fieldIdx,
@@ -641,6 +652,15 @@ func NewDataDrivenStep(def *StepDefinition) *DataDrivenStep {
 
 	step.form = NewMultiSectionForm(sections)
 	return step
+}
+
+func safeFieldHistory(def *FieldDefinition) bool {
+	if def.Type == FieldTypePassword || logutil.KeyIsSecret(def.Key) {
+		return false
+	}
+	lower := strings.ToLower(def.Key)
+	return !strings.Contains(lower, "username") && !strings.Contains(lower, "private_key") &&
+		!strings.Contains(lower, "privatekey")
 }
 
 func buildFormField(def *FieldDefinition) components.FormField {
