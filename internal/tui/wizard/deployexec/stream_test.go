@@ -451,7 +451,7 @@ func TestStreamWindowTitleCarriesProgress(t *testing.T) {
 	m.Update(wizard.JumpToStepMsg{StepID: StepIDStream})
 	seedMidRun(m, st)
 
-	if got, want := m.View().WindowTitle, "okdctl · deploying 28% · ignition"; got != want {
+	if got, want := m.View().WindowTitle, "okdctl · deploying 28%"; got != want {
 		t.Fatalf("WindowTitle = %q, want %q", got, want)
 	}
 }

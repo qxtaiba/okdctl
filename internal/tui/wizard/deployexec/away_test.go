@@ -2,6 +2,7 @@ package deployexec
 
 import (
 	"io"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 // arms a frame-driven catch-up sweep from that point to the current target.
 func TestBlurSuspendsThePulseAndFocusSweeps(t *testing.T) {
 	st := streamState()
+	st.History = seededHistory()
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	cur := base
 	s := newSeededStreamStep(st, &cur)
@@ -163,5 +165,85 @@ func TestTerminalProgressFollowsTheProposal(t *testing.T) {
 	s.st.Result = nil
 	if state, value := s.TerminalProgress(); state != tea.ProgressBarDefault || value != 100 {
 		t.Errorf("finished run progress = (%v, %d), want (default, 100)", state, value)
+	}
+}
+
+func TestWindowTitleIncludesOnlyAnHonestETA(t *testing.T) {
+	st := streamState()
+	st.History = seededHistory()
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	cur := base
+	s := newSeededStreamStep(st, &cur)
+
+	if got := s.WindowTitle(); got != "deploying 0%" {
+		t.Fatalf("title before schedule is honest = %q", got)
+	}
+	for _, meta := range st.Plan[:4] {
+		s.applyEvent(&Event{StepID: meta.ID, Done: true, Took: st.History[meta.ID]})
+	}
+	if got := s.WindowTitle(); !strings.Contains(got, "~") || strings.Contains(got, "homelab") {
+		t.Errorf("title after first phase = %q, want ETA and no config values", got)
+	}
+	s.applyEvent(&Event{StepID: install.StepWaitBootstrap})
+	if got := s.WindowTitle(); strings.Contains(got, "~") {
+		t.Errorf("unbounded bootstrap wait must suppress ETA, got %q", got)
+	}
+}
+
+func TestBlurredPhaseCompletionNotifiesAndFocusCancelsPendingNotice(t *testing.T) {
+	t.Setenv("CLICOLOR_FORCE", "1")
+	tui.SetColorProfileFor(io.Discard)
+	t.Cleanup(func() {
+		t.Setenv("CLICOLOR_FORCE", "")
+		tui.SetColorProfileFor(io.Discard)
+	})
+	st := streamState()
+	st.History = seededHistory()
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	cur := base
+	s := newSeededStreamStep(st, &cur)
+	s.Update(tea.BlurMsg{})
+	notice := s.notifyWhileBlurred("Deploy phase complete")
+	_, cmd := s.Update(streamEventMsg{ev: Event{StepID: s.st.Plan[3].ID, Done: true}})
+	if !s.phases[0].notified || cmd == nil {
+		t.Fatal("last explicit step completion while blurred must queue one notification")
+	}
+	if text := s.phaseNotificationText(); !strings.Contains(text, "~") {
+		t.Errorf("phase notification with a history-backed schedule = %q, want ETA", text)
+	}
+	cancel := s.awayCancel
+	s.Update(tea.FocusMsg{})
+	select {
+	case <-cancel:
+	default:
+		t.Fatal("focus must cancel queued notifications")
+	}
+	if msg := notice(); msg != nil {
+		t.Fatalf("canceled notification returned %T, want nil", msg)
+	}
+	if !phaseComplete(&s.phases[0]) {
+		t.Fatal("phase completion must come from settled step events")
+	}
+}
+
+func TestAwayNotificationUsesFixedTextAndRequiresTerminal(t *testing.T) {
+	s := NewStreamStep(streamState(), Hooks{})
+	s.blurred = true
+	s.awayCancel = make(chan struct{})
+	if s.notifyWhileBlurred("Deploy complete") != nil {
+		t.Fatal("notifications must be gated off without a terminal color profile")
+	}
+	t.Setenv("CLICOLOR_FORCE", "1")
+	tui.SetColorProfileFor(io.Discard)
+	t.Cleanup(func() {
+		t.Setenv("CLICOLOR_FORCE", "")
+		tui.SetColorProfileFor(io.Discard)
+	})
+	if s.notifyWhileBlurred("Deploy complete") == nil {
+		t.Fatal("blurred terminal should receive a notification command")
+	}
+	s.InterceptQuit()
+	if s.notifyWhileBlurred("Deploy complete") != nil {
+		t.Fatal("cancel must retire the away notification lifecycle")
 	}
 }

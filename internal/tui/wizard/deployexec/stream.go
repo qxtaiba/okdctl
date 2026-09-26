@@ -46,6 +46,7 @@ type phaseProgress struct {
 	// disagreeing degrades visibly instead of silently.
 	extra      []string
 	start, end time.Time
+	notified   bool
 }
 
 type streamEventMsg struct {
@@ -83,6 +84,7 @@ type StreamStep struct {
 	settling    bool
 	sweeping    bool
 	blurred     bool
+	awayCancel  chan struct{}
 	animFrom    float64
 	animStart   uint64
 	etaShown    time.Duration
@@ -146,7 +148,11 @@ func (s *StreamStep) WindowTitle() string {
 	if s.finished || len(s.phases) == 0 {
 		return ""
 	}
-	return fmt.Sprintf("deploying %d%% · %s", s.percent(), s.phases[s.currentPhase].name)
+	title := fmt.Sprintf("deploying %d%%", s.percent())
+	if eta, ok := s.etaLeft(); ok {
+		title += " · ~" + fmtETA(eta) + " left"
+	}
+	return title
 }
 
 // Init groups the plan into phases, starts the engine goroutine exactly once,
@@ -251,6 +257,9 @@ func (s *StreamStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 				return s, nil
 			}
 			complete := func() tea.Msg { return wizard.StepCompleteMsg{StepID: StepIDStream} }
+			if notify := s.notifyWhileBlurred(deployFinishedText(msg.ev.Err)); notify != nil {
+				return s, tea.Batch(s.bellWhileBlurred(), notify, complete)
+			}
 			if bell := s.bellWhileBlurred(); bell != nil {
 				return s, tea.Batch(bell, complete)
 			}
@@ -258,7 +267,19 @@ func (s *StreamStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		}
 		s.sampleActivity()
 		s.applyEvent(&msg.ev)
-		return s, tea.Batch(s.listen(), func() tea.Msg { return wizard.FocusChangedMsg{} })
+		cmds := []tea.Cmd{s.listen(), func() tea.Msg { return wizard.FocusChangedMsg{} }}
+		if msg.ev.Done && msg.ev.Err == nil {
+			for i := range s.phases {
+				ph := &s.phases[i]
+				if !ph.notified && phaseComplete(ph) {
+					ph.notified = true
+					if notify := s.notifyWhileBlurred(s.phaseNotificationText()); notify != nil {
+						cmds = append(cmds, notify)
+					}
+				}
+			}
+		}
+		return s, tea.Batch(cmds...)
 
 	case wizard.FrameMsg:
 		s.frame = msg.Frame
@@ -278,10 +299,14 @@ func (s *StreamStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		// sweep the difference; the cosmetic animators check the flag.
 		s.blurred = true
 		s.lastSeenFrac = s.barFillFrac()
+		if s.awayCancel == nil {
+			s.awayCancel = make(chan struct{})
+		}
 
 	case tea.FocusMsg:
 		wasBlurred := s.blurred
 		s.blurred = false
+		s.cancelAwayNotifications()
 		if wasBlurred && tui.Motion() == tui.MotionFull && !s.finished && s.lastSeenFrac < s.barTarget() {
 			// The catch-up sweep: one eased pass from the last-seen fill to
 			// the current percent — an instant visual diff of the time away.
@@ -295,6 +320,18 @@ func (s *StreamStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		return s, cmd
 	}
 	return s, nil
+}
+
+func phaseComplete(ph *phaseProgress) bool {
+	if len(ph.rows) == 0 {
+		return false
+	}
+	for i := range ph.rows {
+		if ph.rows[i].status != rowDone && ph.rows[i].status != rowSkipped {
+			return false
+		}
+	}
+	return true
 }
 
 // handleLogKey routes the log viewport's keys through the shared surface;
@@ -505,6 +542,7 @@ func (s *StreamStep) InterceptQuit() bool {
 		return false
 	}
 	s.cancelRequested = true
+	s.cancelAwayNotifications()
 	if s.hooks.CancelDeploy != nil {
 		s.hooks.CancelDeploy()
 	}

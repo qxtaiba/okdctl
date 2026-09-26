@@ -164,6 +164,9 @@ func (s *StreamStep) etaLeft() (time.Duration, bool) {
 	if !s.hasHistory || s.finished || len(s.phases) == 0 || !s.firstPhaseSettled() {
 		return 0, false
 	}
+	if id, ok := s.runningStepID(); ok && id == install.StepWaitBootstrap {
+		return 0, false
+	}
 	now := s.now()
 	rem := 0.0
 	for i := range s.phases {
@@ -336,6 +339,44 @@ func (s *StreamStep) bellWhileBlurred() tea.Cmd {
 		return nil
 	}
 	return s.bell()
+}
+
+func (s *StreamStep) notifyWhileBlurred(message string) tea.Cmd {
+	if !s.blurred || s.awayCancel == nil || !tui.ColorEnabled() {
+		return nil
+	}
+	cancel := s.awayCancel
+	return func() tea.Msg {
+		select {
+		case <-cancel:
+			return nil
+		default:
+		}
+		_, _ = os.Stdout.WriteString("\x1b]9;" + message + "\x1b\\")
+		return nil
+	}
+}
+
+func deployFinishedText(err error) string {
+	if err != nil {
+		return "Deploy needs attention"
+	}
+	return "Deploy complete"
+}
+
+func (s *StreamStep) phaseNotificationText() string {
+	text := "Deploy phase complete"
+	if eta, ok := s.etaLeft(); ok {
+		text += " · ~" + fmtETA(eta) + " left"
+	}
+	return text
+}
+
+func (s *StreamStep) cancelAwayNotifications() {
+	if s.awayCancel != nil {
+		close(s.awayCancel)
+		s.awayCancel = nil
+	}
 }
 
 // stallBell rings once per stall while blurred: the first frame past the
