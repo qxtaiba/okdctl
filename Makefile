@@ -65,7 +65,7 @@ coverage-floors: ## Rewrite .github/coverage-floors.conf from coverage.out (use 
 	@.github/scripts/coverage-rebaseline.sh coverage.out
 
 # renovate: datasource=go depName=github.com/golangci/golangci-lint/v2
-GOLANGCI_LINT_VERSION=v2.13.2
+GOLANGCI_LINT_VERSION=v2.14.0
 
 lint: ## Run linter
 	@which golangci-lint > /dev/null || (echo "Installing golangci-lint..." && go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION))
