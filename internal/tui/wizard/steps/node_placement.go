@@ -701,6 +701,13 @@ func parseAdditionalNetworks(v string, existing []config.AdditionalNetwork) []co
 	return nets
 }
 
+// filterStorageByContent returns the raw, unsanitized pool names: unlike
+// bridgeNames, every caller pairs this list with a SetDisplayOptions(
+// storageDisplayOptions(...)) override of the same length immediately after
+// building the field (see buildInnerStep), so the raw name here is never
+// what reaches the screen — only storageDisplayOptions's sanitized copy is.
+// Sanitizing it here too would corrupt the real pool name Apply writes to
+// cfg for no added safety.
 func filterStorageByContent(storage []proxmoxStorage, content string) []string {
 	var names []string
 	for _, st := range storage {
