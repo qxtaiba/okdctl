@@ -106,6 +106,9 @@ func TestStatusStepWidePaneTracksSelectionAndDetails(t *testing.T) {
 			t.Errorf("expanded wide pane is missing %q:\n%s", want, body)
 		}
 	}
+	// A terminal this size actually splits (wizard.SplitsFrame), so View's
+	// own body content must defer the detail to the pane.
+	s.SetTerminalSize(180, 48)
 	if strings.Contains(s.View(100, 30), "Ready condition") {
 		t.Errorf("wide detail should stay in the pane, not duplicate under the table:\n%s", s.View(100, 30))
 	}
@@ -336,11 +339,17 @@ func TestGolden_StatusBoardResponsive(t *testing.T) {
 				t.Fatal("single-column status frame unexpectedly rendered a context pane")
 			}
 
-			if size.width == 180 {
-				m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-				detail := tuitest.RenderAt(t, m, size.width, size.height)
-				tuitest.Golden(t, "status-details_180x48", detail)
-				tuitest.AssertFits(t, detail, size.width, size.height)
+			// Selecting a node must surface its detail somewhere on screen
+			// — inline in the body below splitMinHeight's/wideSplitWidth's
+			// threshold, in the context pane at and above it — never
+			// neither, which a content-width threshold that disagreed
+			// with the frame's own split gate used to do at 120x40.
+			m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+			detail := tuitest.RenderAt(t, m, size.width, size.height)
+			tuitest.Golden(t, fmt.Sprintf("status-details_%dx%d", size.width, size.height), detail)
+			tuitest.AssertFits(t, detail, size.width, size.height)
+			if !strings.Contains(tuitest.StripANSI(detail), "Selected node") {
+				t.Fatalf("selecting a node produced no visible detail at %dx%d:\n%s", size.width, size.height, detail)
 			}
 		})
 	}
