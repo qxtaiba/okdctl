@@ -194,11 +194,6 @@ func (f *InputField) SetHistory(history *FieldHistory, id string) {
 	}
 }
 
-// SetFieldHistory binds a safe stable field ID to its recall history.
-func (f *InputField) SetFieldHistory(id string, history *FieldHistory) {
-	f.SetHistory(history, id)
-}
-
 // HistoryChooserOpen reports whether the inline value chooser is active.
 func (f *InputField) HistoryChooserOpen() bool { return f.historyOpen }
 
@@ -466,11 +461,14 @@ func (f *InputField) updateHistoryChooser(msg tea.KeyPressMsg) (FormField, tea.C
 			current := f.input.Value()
 			selected := values[f.historyAt]
 			if current != selected {
+				// focusValue — the true value when this field was focused,
+				// and ctrl+z's undo target — must survive the recall; only
+				// the pre-recall in-progress edit goes to history, so it
+				// stays reachable too (via ctrl+r) without clobbering undo.
 				f.history.add(f.historyID, current)
 				f.input.SetValue(selected)
 				f.isDefault = false
 			}
-			f.focusValue = current
 		}
 		f.historyOpen = false
 	}
