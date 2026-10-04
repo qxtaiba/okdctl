@@ -113,6 +113,7 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 					Default:   DefaultStartIP,
 					Help:      "ip address where the bootstrap node boots, e.g. 192.168.1.140 — other nodes follow sequentially and the api vip derives from it",
 					Required:  true,
+					PairKey:   "static_ip",
 					Validate:  config.ValidateIP,
 					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.StaticIP.Start = v }),
 					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.StaticIP.Start }),
@@ -123,6 +124,7 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 					Default:   "ens18",
 					Help:      "network interface inside vms — ens18 is the proxmox/virtio default; use ip link in a vm to verify",
 					Required:  true,
+					PairKey:   "static_ip",
 					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.StaticIP.Interface = v }),
 					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.StaticIP.Interface }),
 				},
@@ -137,6 +139,7 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 					Default:   "192.168.1.20",
 					Help:      "ip of this machine (runs haproxy + dnsmasq — vms use this for dns resolution)",
 					Required:  true,
+					PairKey:   "load_balancing",
 					Validate:  config.ValidateIP,
 					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.Bastion.IP = v }),
 					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.Bastion.IP }),
@@ -146,6 +149,7 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 					Label:       labelAPIVIP,
 					Default:     "",
 					Placeholder: "auto",
+					PairKey:     "load_balancing",
 					Help:        "virtual ip for kubernetes api — leave blank to auto-derive from static ip start",
 					Validate: func(value string) error {
 						if value == "" {
@@ -165,13 +169,22 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 		serviceCIDR := values["service_cidr"]
 
 		if overlap, ok := cidrsOverlapIfValid(machineCIDR, podCIDR); ok && overlap {
-			return errors.New("machine cidr and pod cidr must not overlap — widen or move one of the ranges")
+			return wizard.NewCrossFieldError(
+				errors.New("machine cidr and pod cidr must not overlap — widen or move one of the ranges"),
+				"machine_cidr", "pod_cidr",
+			)
 		}
 		if overlap, ok := cidrsOverlapIfValid(machineCIDR, serviceCIDR); ok && overlap {
-			return errors.New("machine cidr and service cidr must not overlap — widen or move one of the ranges")
+			return wizard.NewCrossFieldError(
+				errors.New("machine cidr and service cidr must not overlap — widen or move one of the ranges"),
+				"machine_cidr", "service_cidr",
+			)
 		}
 		if overlap, ok := cidrsOverlapIfValid(podCIDR, serviceCIDR); ok && overlap {
-			return errors.New("pod cidr and service cidr must not overlap — widen or move one of the ranges")
+			return wizard.NewCrossFieldError(
+				errors.New("pod cidr and service cidr must not overlap — widen or move one of the ranges"),
+				"pod_cidr", "service_cidr",
+			)
 		}
 		if err := config.ValidateGatewayInCIDR(values[fieldGateway], machineCIDR); err != nil {
 			return err

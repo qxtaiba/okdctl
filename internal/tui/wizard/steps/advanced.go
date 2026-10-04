@@ -114,7 +114,6 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 		},
 		{
 			Title: "installation timeouts",
-			//nolint:dupl // two int fields share the FieldDefinition shape with resources.go's data-storage section; data, not logic
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "bootstrap_timeout",

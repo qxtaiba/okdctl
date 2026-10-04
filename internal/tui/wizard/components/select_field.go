@@ -100,6 +100,13 @@ func (f *SelectField) SetDefault(value string) {
 	}
 }
 
+// HasDefaultTag reports whether the field has ever carried a default value
+// — pairing uses this to decide whether a column pair needs a symmetric
+// "default" tag reserve, matching boxOuterWidth's own hasDefault check.
+func (f *SelectField) HasDefaultTag() bool {
+	return f.hasDefault
+}
+
 // IsBoolean reports whether Options is exactly {"yes", "no"} in either order.
 func (f *SelectField) IsBoolean() bool {
 	if len(f.Options) != 2 {

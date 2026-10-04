@@ -12,6 +12,8 @@
   │    ╰────────────────╯                                                                                            │  
   │    enable gitops deployment                                                                                      │  
   │                                                                                                                  │  
+  │      repository settings appear when enabled.                                                                    │  
+  │                                                                                                                  │  
   │    ✓ secret store (common)                                                                                       │  
   │      supports onepassword, vault, and bitwarden via external-secrets-operator                                    │  
   │                                                                                                                  │  
@@ -20,9 +22,7 @@
   │    │ ● no  ○ yes    │                                                                                            │  
   │    ╰────────────────╯                                                                                            │  
   │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
+  │      secret store settings appear when enabled.                                                                  │  
   │                                                                                                                  │  
   │                                                                                                                  │  
   │                                                                                                                  │  

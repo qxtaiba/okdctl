@@ -1,24 +1,24 @@
                                                                                 
   ╭──────────────────────────────────────────────────────────────────────────╮  
   │ O K D C T L                                                              │  
-  │ configure proxmox ve connection  connect ✓✓● · cluster · extras · review │  
+  │ configure cluster addons         connect · cluster · extras ●○○ · review │  
   │──────────────────────────────────────────────────────────────────────────│  
-  │                                                                          │  
-  │    ✓ connection                                                          │  
-  │                                                                          │  
-  │    host                                                                  │  
+  │    connect host                                                          │  
   │    ╭────────────────────────────────────────────────────────╮            │  
-  │    │ 192.168.1.100:8006                                     │            │  
+  │    │ http://onepassword-connect:8080                        │ default    │  
   │    ╰────────────────────────────────────────────────────────╯            │  
   │                                                                          │  
-  │    ● credentials                                                         │  
+  │    ╭─ vaults ───────────────────────────────────────────────────────╮    │  
+  │    │ homelab                         1                              │    │  
+  │    │ + add                                                          │    │  
+  │    ╰────────────────────────────────────────────────────────────────╯    │  
   │                                                                          │  
-  │    username                           password                           │  
-  │    ╭─────────────────────╮            ╭─────────────────────╮            │  
-  │    │ root@pam            │ default    │ ·                   │            │  
-  │    ╰─────────────────────╯            ╰─────────────────────╯            │  
+  │      vault settings appear when selected.                                │  
   │                                                                          │  
-  │─────────── ↑ ↓  scroll down for more ─────────── ▸ okd 4.22.0-okd-scos.7 │  
+  │      bitwarden settings appear when selected.                            │  
+  │                                                                          │  
+  │                                                                          │  
+  │──────────── ↑ ↓  scroll up for more ──────────── ▸ okd 4.22.0-okd-scos.7 │  
   │  ↑↓/tab navigate • enter continue • esc back … • ctrl+c quit • ? help    │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

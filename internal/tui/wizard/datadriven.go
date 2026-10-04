@@ -110,6 +110,13 @@ type FieldDefinition struct {
 	Required    bool
 	Validate    func(string) error
 
+	// PairKey groups this field with the other fields in the same section
+	// sharing a non-empty, identical PairKey into one visual row when the
+	// available width comfortably fits the group (see pairMinInnerWidth);
+	// declared per field, not automatic. Fields sharing a PairKey must be
+	// adjacent in Fields.
+	PairKey string
+
 	ConfigSet ConfigSetter
 	ConfigGet ConfigGetter
 }
@@ -121,6 +128,23 @@ type SectionDefinition struct {
 	Fields  []FieldDefinition
 	Warning func(values map[string]string) string // non-empty return renders a warning block under the section's fields
 	Visible func(values map[string]string) bool   // nil means always visible; false hides the section from render, navigation, and validation
+
+	// Collapsible marks a section whose rendering may fold to one summary
+	// line, orthogonal to Visible: Validate, TouchAll, and
+	// FocusFirstInvalid never skip a Collapsible section — only View's
+	// chrome changes — so a fold may never hide a required field or one
+	// carrying an error from validation or focus.
+	Collapsible bool
+	// FoldSummary, when Collapsible is true, supplies the facts the
+	// section's one-line collapsed summary echoes; nil renders the label
+	// alone. Never return a fact whose Value is credential material.
+	FoldSummary func(values map[string]string) []tui.FactRow
+
+	// AbsenceNote, when the section is hidden (Visible returns false),
+	// supplies one line of explanation rendered in its place; nil or an
+	// empty return renders nothing, preserving the section's prior silent
+	// skip.
+	AbsenceNote func(values map[string]string) string
 }
 
 // StepDefinition is the declarative description of a data-driven wizard step.
@@ -151,6 +175,29 @@ type FormSection struct {
 	Group   *components.InputGroup
 	Warning func() string // non-empty return renders a warning block under the section's fields
 	Visible func() bool   // nil means always visible
+
+	// Collapsible mirrors SectionDefinition.Collapsible; when true,
+	// Group.Fields()[0] must be a components.Foldable (NewDataDrivenStep
+	// guarantees this by prepending a components.FoldToggleField).
+	Collapsible bool
+
+	// absenceNote mirrors SectionDefinition.AbsenceNote, resolved against
+	// live values the same way Warning is.
+	absenceNote func() string
+
+	// pairKeys[j] is Fields[j].PairKey, aligned to Group.Fields() order —
+	// View's pairing pass reads this instead of walking back to the
+	// declarative FieldDefinition.
+	pairKeys []string
+}
+
+// absenceText returns the section's AbsenceNote text, or "" when it has
+// none — mirroring warningText's nil-safe pattern.
+func (s *FormSection) absenceText() string {
+	if s.absenceNote == nil {
+		return ""
+	}
+	return s.absenceNote()
 }
 
 func (s *FormSection) warningText() string {
@@ -557,6 +604,160 @@ func (f *MultiSectionForm) sectionHead(i, innerWidth int) string {
 	return head
 }
 
+// foldState returns section i's fold toggle and whether the section is
+// displaying in full this render — forced by the sticky expand latch, a
+// focused field somewhere inside the section, or a validation error
+// somewhere inside it (section.isComplete(), which never skips a field
+// because it hasn't been visited the way Check vs. Validate already
+// distinguishes elsewhere) — sets the toggle's display chrome to match,
+// and reports ok=false when section isn't Collapsible or its first field
+// isn't a components.Foldable, in which case open is unconditionally true:
+// a construction bug must never read as "hide this section's fields".
+func (f *MultiSectionForm) foldState(i int) (fold components.Foldable, open, ok bool) {
+	section := &f.sections[i]
+	if !section.Collapsible || section.Group == nil || len(section.Group.Fields()) == 0 {
+		return nil, true, false
+	}
+	fold, ok = section.Group.Fields()[0].(components.Foldable)
+	if !ok {
+		return nil, true, false
+	}
+	open = i == f.currentSection || !section.isComplete() || fold.Expanded()
+	fold.SetDisplayExpanded(open)
+	return fold, open, true
+}
+
+// pairGap is the blank columns lipgloss.JoinHorizontal inserts between a
+// declared field pair's rendered columns.
+const pairGap = 4
+
+// pairGapStr is pairGap rendered as blank columns.
+var pairGapStr = strings.Repeat(" ", pairGap)
+
+// pairMinWidth is the floor View's own width parameter needs before a
+// declared pair renders side by side — exactly the width the 80-column
+// "ordinary" floor hands View after the wizard's own chrome and viewport
+// insets, once (the form section's own 4-column padding is still to come;
+// comparing against View's width rather than the further-reduced innerWidth
+// keeps this one constant stable across that one extra layer of
+// subtraction). See formPaneWidths before changing this: past 150 columns
+// the split layout's form column is fixed at formMaxWidth, so a wider
+// terminal does not widen a pair's columns further. Below it (the 60-79
+// "compact" tier) every declared pair falls back to single column.
+const pairMinWidth = 70
+
+// pairDefaultTagged is implemented by a paired field that may carry a
+// "default" tag.
+type pairDefaultTagged interface {
+	HasDefaultTag() bool
+}
+
+// pairBoxWidthSetter is implemented by a paired field whose preferred box
+// width can be capped independently of SetWidth's total column budget.
+type pairBoxWidthSetter interface {
+	SetBoxWidth(outer int)
+}
+
+// pairRuns partitions n field indexes into contiguous runs sharing one
+// non-empty PairKey, with every unpaired field its own run of one;
+// pairKeys shorter than n treats the missing tail as unpaired.
+func pairRuns(pairKeys []string, n int) [][]int {
+	var runs [][]int
+	for i := 0; i < n; {
+		pairKey := ""
+		if i < len(pairKeys) {
+			pairKey = pairKeys[i]
+		}
+		j := i + 1
+		if pairKey != "" {
+			for j < n && j < len(pairKeys) && pairKeys[j] == pairKey {
+				j++
+			}
+		}
+		run := make([]int, j-i)
+		for x := range run {
+			run[x] = i + x
+		}
+		runs = append(runs, run)
+		i = j
+	}
+	return runs
+}
+
+// mixedDefaultTags reports whether run contains at least one field that
+// carries a "default" tag and at least one that doesn't — exactly the case
+// where the tag would otherwise make one column's box narrower than its
+// sibling's, since a field only reserves the tag's own room internally
+// when it individually has one.
+func mixedDefaultTags(fields []components.FormField, run []int) bool {
+	has, hasNot := false, false
+	for _, idx := range run {
+		if tagged, ok := fields[idx].(pairDefaultTagged); ok && tagged.HasDefaultTag() {
+			has = true
+		} else {
+			hasNot = true
+		}
+	}
+	return has && hasNot
+}
+
+// applyPairWidths narrows each run of 2+ fields sharing a PairKey to an
+// even share of innerWidth (minus pairGap between columns), overriding the
+// blanket SetWidth every field in the section already received. A run
+// mixing a default-tagged field with an untagged one reserves
+// components.DefaultTagReserve in every member's box cap so the tag never
+// makes one column's box wider than its sibling's (see mixedDefaultTags).
+// Below pairMinWidth (checked against View's own width, not the
+// further-reduced innerWidth — see pairMinWidth's doc), every run renders
+// single column at full innerWidth instead.
+func applyPairWidths(fields []components.FormField, pairKeys []string, width, innerWidth int) {
+	if width < pairMinWidth {
+		return
+	}
+	for _, run := range pairRuns(pairKeys, len(fields)) {
+		if len(run) < 2 {
+			continue
+		}
+		colWidth := max((innerWidth-pairGap*(len(run)-1))/len(run), 1)
+		if mixedDefaultTags(fields, run) {
+			boxCap := max(colWidth-components.DefaultTagReserve, 1)
+			for _, idx := range run {
+				if bw, ok := fields[idx].(pairBoxWidthSetter); ok {
+					bw.SetBoxWidth(boxCap)
+				}
+			}
+		}
+		for _, idx := range run {
+			fields[idx].SetWidth(colWidth)
+		}
+	}
+}
+
+// joinPairedViews joins views sharing a pairRuns run into one block per
+// run, horizontally, so a declared 2- or 3-up pair renders as a single
+// row; covered[i] lists the original field indexes block i represents, so
+// the caller can record one combined LineSpan for the whole run. Below
+// pairMinWidth every run is already length 1 (applyPairWidths declined to
+// pair it), so this just emits each view on its own line.
+func joinPairedViews(views, pairKeys []string, width int) (blocks []string, covered [][]int) {
+	if width < pairMinWidth {
+		for i := range views {
+			blocks = append(blocks, views[i])
+			covered = append(covered, []int{i})
+		}
+		return blocks, covered
+	}
+	for _, run := range pairRuns(pairKeys, len(views)) {
+		block := views[run[0]]
+		for _, idx := range run[1:] {
+			block = lipgloss.JoinHorizontal(lipgloss.Top, block, pairGapStr, views[idx])
+		}
+		blocks = append(blocks, block)
+		covered = append(covered, run)
+	}
+	return blocks, covered
+}
+
 // View renders each visible section as a head block followed by one block
 // per field, one blank row apart, recording the line span every field
 // occupies so the wizard can scroll the focused one into view. A hidden
@@ -584,6 +785,9 @@ func (f *MultiSectionForm) View(width int) string {
 
 	for i := range f.sections {
 		if !f.sections[i].isVisible() {
+			if note := f.sections[i].absenceText(); note != "" {
+				_ = emit(formViewStyles.note.Width(innerWidth).Render(note))
+			}
 			continue
 		}
 		group := f.sections[i].Group
@@ -591,13 +795,30 @@ func (f *MultiSectionForm) View(width int) string {
 			continue
 		}
 		group.SetWidth(innerWidth)
+		applyPairWidths(group.Fields(), f.sections[i].pairKeys, width, innerWidth)
 
-		_ = emit(f.sectionHead(i, innerWidth))
+		_, open, isFold := f.foldState(i)
+		if !isFold {
+			_ = emit(f.sectionHead(i, innerWidth))
+		}
 
 		views := group.FieldViews()
 		f.spans[i] = make([]LineSpan, len(views))
-		for j, view := range views {
-			f.spans[i][j] = emit(view)
+		if isFold && !open {
+			// Collapsed: the fold's own row is the section's entire
+			// rendering — the HARD CONSTRAINT holds structurally, since
+			// Validate/TouchAll/FocusFirstInvalid below never consult
+			// Collapsible and so never skip the fields this hides.
+			f.spans[i][0] = emit(views[0])
+			continue
+		}
+
+		blocks, covered := joinPairedViews(views, f.sections[i].pairKeys, width)
+		for bi, block := range blocks {
+			span := emit(block)
+			for _, idx := range covered[bi] {
+				f.spans[i][idx] = span
+			}
 		}
 
 		if w := f.sections[i].warningText(); w != "" {
@@ -656,7 +877,18 @@ func NewDataDrivenStep(def *StepDefinition) *DataDrivenStep {
 	sections := make([]FormSection, 0, len(def.Sections))
 	for sectionIdx := range def.Sections {
 		sectionDef := &def.Sections[sectionIdx]
-		fields := make([]components.FormField, 0, len(sectionDef.Fields))
+		fields := make([]components.FormField, 0, len(sectionDef.Fields)+1)
+		pairKeys := make([]string, 0, len(sectionDef.Fields)+1)
+
+		// fieldOffset accounts for the synthetic fold toggle a Collapsible
+		// section prepends: every declared FieldDefinition's real index in
+		// Group.Fields() shifts by one past it.
+		fieldOffset := 0
+		if sectionDef.Collapsible {
+			fieldOffset = 1
+			fields = append(fields, components.NewFoldToggleField(sectionDef.Title, foldSummaryFunc(sectionDef, step)))
+			pairKeys = append(pairKeys, "")
+		}
 
 		for fieldIdx := range sectionDef.Fields {
 			fieldDef := &sectionDef.Fields[fieldIdx]
@@ -665,9 +897,10 @@ func NewDataDrivenStep(def *StepDefinition) *DataDrivenStep {
 				input.SetHistory(step.history, string(def.ID)+"/"+fieldDef.Key)
 			}
 			fields = append(fields, field)
+			pairKeys = append(pairKeys, fieldDef.PairKey)
 			step.fieldKeys[fieldDef.Key] = fieldLocation{
 				section: sectionIdx,
-				field:   fieldIdx,
+				field:   fieldIdx + fieldOffset,
 			}
 		}
 
@@ -681,17 +914,35 @@ func NewDataDrivenStep(def *StepDefinition) *DataDrivenStep {
 			visible = func() bool { return sectionDef.Visible(step.rawValues()) }
 		}
 
+		var absenceNote func() string
+		if sectionDef.AbsenceNote != nil {
+			absenceNote = func() string { return sectionDef.AbsenceNote(step.rawValues()) }
+		}
+
 		sections = append(sections, FormSection{
-			Title:   sectionDef.Title,
-			Note:    sectionDef.Note,
-			Group:   components.NewInputGroup(fields...),
-			Warning: warning,
-			Visible: visible,
+			Title:       sectionDef.Title,
+			Note:        sectionDef.Note,
+			Group:       components.NewInputGroup(fields...),
+			Warning:     warning,
+			Visible:     visible,
+			Collapsible: sectionDef.Collapsible,
+			absenceNote: absenceNote,
+			pairKeys:    pairKeys,
 		})
 	}
 
 	step.form = NewMultiSectionForm(sections)
 	return step
+}
+
+// foldSummaryFunc adapts sectionDef.FoldSummary into the closure
+// components.FoldToggleField calls each render, or nil when the section
+// declares none.
+func foldSummaryFunc(sectionDef *SectionDefinition, step *DataDrivenStep) func() []tui.FactRow {
+	if sectionDef.FoldSummary == nil {
+		return nil
+	}
+	return func() []tui.FactRow { return sectionDef.FoldSummary(step.rawValues()) }
 }
 
 // SetFieldHistory restores safe prior values for configured form fields.

@@ -12,6 +12,8 @@
   │    ╰────────────────╯                                                                        │  
   │    enable gitops deployment                                                                  │  
   │                                                                                              │  
+  │      repository settings appear when enabled.                                                │  
+  │                                                                                              │  
   │    ✓ secret store (common)                                                                   │  
   │      supports onepassword, vault, and bitwarden via external-secrets-operator                │  
   │                                                                                              │  
@@ -20,11 +22,9 @@
   │    │ ● no  ○ yes    │                                                                        │  
   │    ╰────────────────╯                                                                        │  
   │                                                                                              │  
+  │      secret store settings appear when enabled.                                              │  
   │                                                                                              │  
-  │                                                                                              │  
-  │                                                                                              │  
-  │                                                                                              │  
-  │───────────────────────────────────────────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
-  │  ↑↓/tab navigate • enter continue • esc back • ctrl+c quit • ? help                          │  
+  │───────────────────── ↑ ↓  scroll down for more ───────────────────── ▸ okd 4.22.0-okd-scos.7 │  
+  │  ↑↓/tab navigate • enter continue • esc back • pgup/pgdn scroll • ctrl+c quit • ? help       │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                     

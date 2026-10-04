@@ -11,6 +11,8 @@
   │    │ ● no  ○ yes    │                                                                                            │  
   │    ╰────────────────╯                                                                                            │  
   │                                                                                                                  │  
+  │      repository settings appear when enabled.                                                                    │  
+  │                                                                                                                  │  
   │    ● secret store (common)                                                                                       │  
   │      supports onepassword, vault, and bitwarden via external-secrets-operator                                    │  
   │                                                                                                                  │  
@@ -20,9 +22,7 @@
   │    ╰────────────────╯                                                                                            │  
   │    bootstrap eso provider credentials and secretstore crd                                                        │  
   │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
-  │                                                                                                                  │  
+  │      secret store settings appear when enabled.                                                                  │  
   │                                                                                                                  │  
   │                                                                                                                  │  
   │                                                                                                                  │  

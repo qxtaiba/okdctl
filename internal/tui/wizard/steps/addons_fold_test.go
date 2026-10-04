@@ -8,6 +8,18 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 )
 
+// hasExactLine reports whether any line of view, trimmed, equals want
+// exactly — used to tell a field's own bare label row apart from prose
+// (e.g. an AbsenceNote) that merely contains the same word.
+func hasExactLine(view, want string) bool {
+	for _, line := range strings.Split(view, "\n") {
+		if strings.TrimSpace(line) == want {
+			return true
+		}
+	}
+	return false
+}
+
 // TestAddonsFieldsFoldBehindEnableToggles pins the folded default: a
 // disabled addon shows only its enable toggle, and enabling one unfolds its
 // own settings without unfolding the other's.
@@ -15,8 +27,8 @@ func TestAddonsFieldsFoldBehindEnableToggles(t *testing.T) {
 	s := NewAddonsStep()
 	folded := tuitest.StripANSI(s.View(100, 80))
 	for _, hidden := range []string{"repository", "provider", "secrets directory", "connect host"} {
-		if strings.Contains(folded, hidden) {
-			t.Errorf("folded addons view leaks %q:\n%s", hidden, folded)
+		if hasExactLine(folded, hidden) {
+			t.Errorf("folded addons view leaks field label %q:\n%s", hidden, folded)
 		}
 	}
 	for _, shown := range []string{"gitops (flux)", "secret store", "enabled"} {

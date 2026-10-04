@@ -13,10 +13,10 @@
   │                                                                                                        │  ○ node resources                     │  
   │    ● credentials                                                                                       │  ○ cluster addons                     │  
   │                                                                                                        │  ○ files & ignition                   │  
-  │    username                                                                                            │  ○ advanced settings                  │  
-  │    ╭──────────────────────────────────────────────────────────────────────────────────────╮            │  ○ review & deploy                    │  
-  │    │ root@pam                                                                             │ default    │                                       │  
-  │    ╰──────────────────────────────────────────────────────────────────────────────────────╯            │                                       │  
+  │    username                                          password                                          │  ○ advanced settings                  │  
+  │    ╭────────────────────────────────────╮            ╭────────────────────────────────────╮            │  ○ review & deploy                    │  
+  │    │ root@pam                           │ default    │ ·                                  │            │                                       │  
+  │    ╰────────────────────────────────────╯            ╰────────────────────────────────────╯            │                                       │  
   │                                                                                                                                                │  
   │────────────────────────────────────────────── ↑ ↓  scroll down for more ────────────────────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
   │  ↑↓/tab navigate • enter continue • esc back • pgup/pgdn scroll • ctrl+c quit • ? help                                                         │  

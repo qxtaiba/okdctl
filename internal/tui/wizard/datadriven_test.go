@@ -1189,3 +1189,304 @@ func TestDataDrivenDraftCursorRestoresSafeFieldAndOmitsCredentialField(t *testin
 		t.Fatal("SetDraftFieldKey(api_token) = true, want credential fields rejected")
 	}
 }
+
+// pairedTestDefinition declares two short text fields sharing a PairKey, in
+// a section of their own so the surrounding section head never interferes
+// with the row-join assertions below.
+func pairedTestDefinition() *StepDefinition {
+	return &StepDefinition{
+		ID:    StepIDBasics,
+		Title: "paired test step",
+		Sections: []SectionDefinition{
+			{
+				Title: "pair section",
+				Fields: []FieldDefinition{
+					{Key: "field_a", Label: "field a", PairKey: "p"},
+					{Key: "field_b", Label: "field b", PairKey: "p"},
+				},
+			},
+		},
+	}
+}
+
+// TestDataDrivenStep_PairedFieldsRenderOnOneRow pins mechanism 2: two
+// fields sharing a PairKey join into a single visual row once the form
+// column is wide enough, with one combined LineSpan covering both.
+func TestDataDrivenStep_PairedFieldsRenderOnOneRow(t *testing.T) {
+	step := NewDataDrivenStep(pairedTestDefinition())
+	step.SetFocused(true)
+
+	view := tuitest.StripANSI(step.View(100, 24))
+	found := false
+	for _, line := range strings.Split(view, "\n") {
+		if strings.Contains(line, "field a") && strings.Contains(line, "field b") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("View(100) = %q, want a row containing both paired labels", view)
+	}
+
+	if cmd := step.form.FocusField(0, 0); cmd != nil {
+		cmd()
+	}
+	spanA, okA := step.FocusedSpan()
+	if cmd := step.form.FocusField(0, 1); cmd != nil {
+		cmd()
+	}
+	spanB, okB := step.FocusedSpan()
+	if !okA || !okB || spanA != spanB {
+		t.Fatalf("FocusedSpan() for paired fields = %v (ok=%v), %v (ok=%v), want identical spans", spanA, okA, spanB, okB)
+	}
+}
+
+// TestDataDrivenStep_PairedFieldsFallBackBelowCompactFloor pins the
+// pairMinInnerWidth floor: below the 80-column "ordinary" tier, a declared
+// pair renders single column instead of joining a row.
+func TestDataDrivenStep_PairedFieldsFallBackBelowCompactFloor(t *testing.T) {
+	step := NewDataDrivenStep(pairedTestDefinition())
+	step.SetFocused(true)
+
+	view := tuitest.StripANSI(step.View(60, 24))
+	for _, line := range strings.Split(view, "\n") {
+		if strings.Contains(line, "field a") && strings.Contains(line, "field b") {
+			t.Fatalf("View(60) = %q, want field a and field b on separate rows below the pairing floor", view)
+		}
+	}
+}
+
+// TestDataDrivenStep_PairedFieldsReserveDefaultTagSymmetrically pins the
+// controller ruling that a pair mixing a default-tagged field with an
+// untagged one reserves the tag's room in both halves, so the two boxes
+// stay the same width rather than the tagged one rendering visibly
+// narrower than its sibling.
+func TestDataDrivenStep_PairedFieldsReserveDefaultTagSymmetrically(t *testing.T) {
+	def := &StepDefinition{
+		ID:    StepIDBasics,
+		Title: "mixed default pair test",
+		Sections: []SectionDefinition{
+			{
+				Title: "pair section",
+				Fields: []FieldDefinition{
+					{Key: "has_default", Label: "has default", Default: "x", PairKey: "p"},
+					{Key: "no_default", Label: "no default", PairKey: "p"},
+				},
+			},
+		},
+	}
+	step := NewDataDrivenStep(def)
+	step.SetFocused(true)
+
+	view := tuitest.StripANSI(step.View(100, 24))
+	lines := strings.Split(view, "\n")
+	var boxTop string
+	for _, line := range lines {
+		if strings.Contains(line, "╭") {
+			boxTop = line
+			break
+		}
+	}
+	if boxTop == "" {
+		t.Fatalf("View(100) = %q, want a box border row", view)
+	}
+	openA := strings.Index(boxTop, "╭")
+	closeA := strings.Index(boxTop[openA:], "╮") + openA
+	openB := strings.Index(boxTop[closeA:], "╭") + closeA
+	closeB := strings.Index(boxTop[openB:], "╮") + openB
+	if openA < 0 || closeA < openA || openB < closeA || closeB < openB {
+		t.Fatalf("box border row = %q, want two boxes", boxTop)
+	}
+	leftWidth := closeA - openA + 1
+	rightWidth := closeB - openB + 1
+	if leftWidth != rightWidth {
+		t.Errorf("paired box widths = %d (default-tagged) vs %d (untagged), want equal", leftWidth, rightWidth)
+	}
+}
+
+// absenceNoteTestDefinition declares a toggle field and a section hidden
+// until the toggle flips to "yes", carrying an AbsenceNote.
+func absenceNoteTestDefinition() *StepDefinition {
+	return &StepDefinition{
+		ID:    StepIDBasics,
+		Title: "absence note test step",
+		Sections: []SectionDefinition{
+			{
+				Title: "toggle",
+				Fields: []FieldDefinition{
+					{Key: "enabled", Label: "enabled", Default: "no"},
+				},
+			},
+			{
+				Title: "conditional",
+				Visible: func(values map[string]string) bool {
+					return values["enabled"] == testValYes
+				},
+				AbsenceNote: func(values map[string]string) string {
+					if values["enabled"] == testValYes {
+						return ""
+					}
+					return "conditional settings appear when enabled."
+				},
+				Fields: []FieldDefinition{
+					{Key: "detail", Label: "detail"},
+				},
+			},
+		},
+	}
+}
+
+// TestDataDrivenStep_AbsenceNoteRendersWhenSectionHidden pins mechanism 4:
+// a hidden conditional section renders its AbsenceNote line instead of
+// vanishing with zero output.
+func TestDataDrivenStep_AbsenceNoteRendersWhenSectionHidden(t *testing.T) {
+	step := NewDataDrivenStep(absenceNoteTestDefinition())
+	step.SetFocused(true)
+
+	view := tuitest.StripANSI(step.View(100, 24))
+	if !strings.Contains(view, "conditional settings appear when enabled.") {
+		t.Fatalf("View() = %q, want the hidden section's AbsenceNote visible", view)
+	}
+	if strings.Contains(view, "detail") {
+		t.Fatalf("View() = %q, want the hidden section's own field to stay hidden", view)
+	}
+}
+
+// TestDataDrivenStep_AbsenceNoteClearsWhenSectionBecomesVisible pins the
+// other half: once the section is visible, its real content renders and
+// the absence note disappears.
+func TestDataDrivenStep_AbsenceNoteClearsWhenSectionBecomesVisible(t *testing.T) {
+	step := NewDataDrivenStep(absenceNoteTestDefinition())
+	step.setValue("enabled", testValYes)
+	step.SetFocused(true)
+
+	view := tuitest.StripANSI(step.View(100, 24))
+	if strings.Contains(view, "appear when enabled") {
+		t.Fatalf("View() = %q, want no AbsenceNote once the section is visible", view)
+	}
+	if !strings.Contains(view, "detail") {
+		t.Fatalf("View() = %q, want the now-visible section's field rendered", view)
+	}
+}
+
+// collapsibleTestDefinition declares a primary section plus a Collapsible
+// "advanced" section with one Required field — the shape the HARD
+// CONSTRAINT exists to protect (a fold must never hide required work).
+func collapsibleTestDefinition() *StepDefinition {
+	return &StepDefinition{
+		ID:    StepIDBasics,
+		Title: "collapsible test step",
+		Sections: []SectionDefinition{
+			{
+				Title: "primary",
+				Fields: []FieldDefinition{
+					{Key: "name", Label: "name"},
+				},
+			},
+			{
+				Title:       "advanced",
+				Collapsible: true,
+				FoldSummary: func(map[string]string) []tui.FactRow {
+					return []tui.FactRow{{Key: "status", Value: "ok"}}
+				},
+				Fields: []FieldDefinition{
+					{Key: "hidden_required", Label: "hidden required", Required: true},
+				},
+			},
+		},
+	}
+}
+
+// TestDataDrivenStep_CollapsibleSectionCollapsesWhenCompleteAndUnfocused
+// pins the fold's quiet state: complete, unfocused, it renders one summary
+// line instead of its field.
+func TestDataDrivenStep_CollapsibleSectionCollapsesWhenCompleteAndUnfocused(t *testing.T) {
+	step := NewDataDrivenStep(collapsibleTestDefinition())
+	step.setValue("hidden_required", "x")
+	step.SetFocused(true)
+
+	view := tuitest.StripANSI(step.View(100, 24))
+	if strings.Contains(view, "hidden required") {
+		t.Fatalf("View() = %q, want the collapsed fold to hide its field", view)
+	}
+	if !strings.Contains(view, "advanced") || !strings.Contains(view, "status") {
+		t.Fatalf("View() = %q, want the fold's label and FoldSummary fact visible", view)
+	}
+}
+
+// TestDataDrivenStep_CollapsibleSectionExpandsWhenFocusIsInside pins the
+// focus-forced expansion: tabbing into the section renders it in full even
+// though the user never pressed enter on the toggle.
+func TestDataDrivenStep_CollapsibleSectionExpandsWhenFocusIsInside(t *testing.T) {
+	step := NewDataDrivenStep(collapsibleTestDefinition())
+	step.setValue("hidden_required", "x")
+	step.SetFocused(true)
+
+	if cmd := step.form.FocusField(1, 0); cmd != nil {
+		cmd()
+	}
+	view := tuitest.StripANSI(step.View(100, 24))
+	if !strings.Contains(view, "hidden required") {
+		t.Fatalf("View() = %q, want the fold's field visible once focus is inside its section", view)
+	}
+}
+
+// TestDataDrivenStep_CollapsibleSectionAutoExpandsWhenRequiredFieldInvalid
+// pins the HARD CONSTRAINT itself: a collapsed fold containing a
+// required-and-empty field must auto-expand even while focus sits
+// elsewhere, so the error is never silently hidden.
+func TestDataDrivenStep_CollapsibleSectionAutoExpandsWhenRequiredFieldInvalid(t *testing.T) {
+	step := NewDataDrivenStep(collapsibleTestDefinition())
+	step.SetFocused(true) // focuses "name"; hidden_required stays empty
+
+	step.form.TouchAll()
+
+	view := tuitest.StripANSI(step.View(100, 24))
+	if !strings.Contains(view, "hidden required") {
+		t.Fatalf("View() = %q, want a required-and-invalid field to force its collapsed fold open", view)
+	}
+}
+
+// TestDataDrivenStep_CollapsibleSectionValidateReachesHiddenField pins that
+// Validate/TouchAll/FocusFirstInvalid treat a Collapsible section exactly
+// like a visible one: enter's forced submission attempt focuses the hidden
+// required field rather than silently failing.
+func TestDataDrivenStep_CollapsibleSectionValidateReachesHiddenField(t *testing.T) {
+	step := NewDataDrivenStep(collapsibleTestDefinition())
+	step.SetFocused(true)
+
+	_, cmd := step.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Update(enter) on an invalid collapsed fold: want a cmd, got nil")
+	}
+	if !containsFocusChanged(cmd) {
+		t.Fatal("Update(enter) on an invalid collapsed fold did not emit FocusChangedMsg")
+	}
+	if got := step.form.FocusedField(); got != step.getField("hidden_required") {
+		t.Fatalf("FocusedField() after enter = %v, want the hidden required field", got)
+	}
+}
+
+// TestDataDrivenStep_CollapsibleSectionEnterStickyExpand pins mechanism 3's
+// enter binding: toggling the fold open via enter keeps it open even after
+// focus moves elsewhere, since the latch is sticky rather than
+// focus-derived.
+func TestDataDrivenStep_CollapsibleSectionEnterStickyExpand(t *testing.T) {
+	step := NewDataDrivenStep(collapsibleTestDefinition())
+	step.setValue("hidden_required", "x")
+	step.SetFocused(true)
+
+	if cmd := step.form.FocusField(1, 0); cmd != nil {
+		cmd()
+	}
+	if _, cmd := step.Update(tea.KeyPressMsg{Code: tea.KeyEnter}); cmd != nil {
+		cmd()
+	}
+	if cmd := step.form.FocusField(0, 0); cmd != nil {
+		cmd()
+	}
+
+	view := tuitest.StripANSI(step.View(100, 24))
+	if !strings.Contains(view, "hidden required") {
+		t.Fatalf("View() = %q, want the fold to stay expanded via its sticky latch after focus left", view)
+	}
+}

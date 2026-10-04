@@ -885,6 +885,50 @@ func TestGolden_AddonsFluxWarning(t *testing.T) {
 	}
 }
 
+// TestGolden_AddonsProviderAbsenceNotes pins mechanism 4's other half: once
+// secret store is enabled with onepassword selected, the inactive vault and
+// bitwarden provider sections each show their own "<provider> settings
+// appear when selected." line rather than vanishing silently — distinct
+// from the "secret store settings appear when enabled." line those same
+// sections show while secret store itself is off (TestGolden_ConfigureSteps
+// already pins that case). Scrolls to the bottom (G) since the two notes
+// sit below onepassword's own unfolded fields, with nothing focusable to
+// tab the viewport toward.
+func TestGolden_AddonsProviderAbsenceNotes(t *testing.T) {
+	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
+	rightKey := tea.KeyPressMsg{Code: tea.KeyRight}
+	bottomKey := tea.KeyPressMsg{Code: 'G', Text: "G"}
+
+	for _, sz := range []struct{ w, h int }{{80, 24}, {120, 40}} {
+		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
+			tui.SetTerminalWidth(sz.w)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+			m := newGoldenModel(t)
+			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
+			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDAddons})
+
+			// flux_enabled -> secretstore_enabled (toggle on with right).
+			m.Update(tabKey)
+			m.Update(wizard.FocusChangedMsg{})
+			m.Update(rightKey)
+			m.Update(bottomKey)
+
+			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
+			tuitest.Golden(t, fmt.Sprintf("addons-provider-absence-notes_%dx%d", sz.w, sz.h), frame)
+			tuitest.AssertFits(t, frame, sz.w, sz.h)
+
+			plain := tuitest.StripANSI(frame)
+			if !strings.Contains(plain, "vault settings appear when selected.") {
+				t.Errorf("frame is missing the vault absence note:\n%s", plain)
+			}
+			if !strings.Contains(plain, "bitwarden settings appear when selected.") {
+				t.Errorf("frame is missing the bitwarden absence note:\n%s", plain)
+			}
+		})
+	}
+}
+
 // newGoldenModelFreshDefaults mirrors newGoldenModel but skips
 // LoadFromConfig (matching OKDCTL_WIZARD_DEMO=1's real code path in
 // internal/cli/wizard_setup.go), so fields still carry their raw
@@ -972,6 +1016,160 @@ func TestGolden_NetworkingMalformedCIDRShowsOneCleanError(t *testing.T) {
 	}
 	if strings.Contains(plain, "netip.ParsePrefix") || strings.Contains(plain, "ParseAddr") {
 		t.Errorf("malformed CIDR view leaked a raw netip error:\n%s", plain)
+	}
+}
+
+// TestGolden_NetworkingPairedFieldsVisible pins mechanism 2's two declared
+// networking pairs (start_ip+interface, bastion_ip+vip) once tabbed into
+// view — both sections are below the fold in the step's default-focus
+// goldens, so this is the only pinned coverage proving they actually render
+// as one joined row rather than two.
+func TestGolden_NetworkingPairedFieldsVisible(t *testing.T) {
+	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
+
+	for _, sz := range []struct{ w, h int }{{80, 24}, {120, 40}} {
+		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
+			tui.SetTerminalWidth(sz.w)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+			m := newGoldenModel(t)
+			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
+			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDNetworking})
+
+			// machine_cidr -> gateway -> dns_servers -> pod_cidr ->
+			// service_cidr -> host_prefix -> start_ip (6 tabs).
+			for range 6 {
+				m.Update(tabKey)
+			}
+			m.Update(wizard.FocusChangedMsg{})
+			staticIPFrame := tuitest.RenderAt(t, m, sz.w, sz.h)
+			tuitest.Golden(t, fmt.Sprintf("networking-paired-static-ip_%dx%d", sz.w, sz.h), staticIPFrame)
+			tuitest.AssertFits(t, staticIPFrame, sz.w, sz.h)
+			plain := tuitest.StripANSI(staticIPFrame)
+			startIdx := strings.Index(plain, "start ip")
+			ifaceIdx := strings.Index(plain, "interface")
+			if startIdx < 0 || ifaceIdx < 0 {
+				t.Fatalf("frame is missing start ip or interface:\n%s", plain)
+			}
+			if startLine, ifaceLine := lineOf(plain, startIdx), lineOf(plain, ifaceIdx); startLine != ifaceLine {
+				t.Errorf("start ip and interface labels are on different rows, want them paired on one row:\n%s", plain)
+			}
+
+			// interface -> bastion_ip (2 more tabs).
+			for range 2 {
+				m.Update(tabKey)
+			}
+			m.Update(wizard.FocusChangedMsg{})
+			loadBalancingFrame := tuitest.RenderAt(t, m, sz.w, sz.h)
+			tuitest.Golden(t, fmt.Sprintf("networking-paired-load-balancing_%dx%d", sz.w, sz.h), loadBalancingFrame)
+			tuitest.AssertFits(t, loadBalancingFrame, sz.w, sz.h)
+			plain = tuitest.StripANSI(loadBalancingFrame)
+			bastionIdx := strings.Index(plain, "bastion ip")
+			vipIdx := strings.Index(plain, "api vip")
+			if bastionIdx < 0 || vipIdx < 0 {
+				t.Fatalf("frame is missing bastion ip or api vip:\n%s", plain)
+			}
+			if bastionLine, vipLine := lineOf(plain, bastionIdx), lineOf(plain, vipIdx); bastionLine != vipLine {
+				t.Errorf("bastion ip and api vip labels are on different rows, want them paired on one row:\n%s", plain)
+			}
+		})
+	}
+}
+
+// lineOf returns the 0-based line number byteIdx falls on within s.
+func lineOf(s string, byteIdx int) int {
+	return strings.Count(s[:byteIdx], "\n")
+}
+
+// TestGolden_ProxmoxAdvancedFoldExpandedStaysOpenAfterFocusLeaves pins the
+// fold's sticky expand latch at the real step/golden level (beyond
+// TestDataDrivenStep_CollapsibleSectionEnterStickyExpand's synthetic
+// definition): tab to the toggle, enter to expand it, then tab away to
+// username — the HARD CONSTRAINT's focus-forced-open case (i ==
+// currentSection) no longer applies once focus leaves, so this is the
+// sticky latch specifically, not just a focused section rendering in full.
+func TestGolden_ProxmoxAdvancedFoldExpandedStaysOpenAfterFocusLeaves(t *testing.T) {
+	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
+	shiftTabKey := tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift}
+	enterKey := tea.KeyPressMsg{Code: tea.KeyEnter}
+	pageDown := tea.KeyPressMsg{Code: tea.KeyPgDown}
+
+	for _, sz := range []struct{ w, h int }{{80, 24}, {120, 40}} {
+		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
+			tui.SetTerminalWidth(sz.w)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+			m := newGoldenModel(t)
+			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
+			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDProxmox})
+
+			// host -> username -> password -> the fold toggle (3 tabs).
+			for range 3 {
+				m.Update(tabKey)
+				m.Update(wizard.FocusChangedMsg{})
+			}
+			m.Update(enterKey)
+			// Tab away: shift+tab back onto password, so currentSection
+			// returns to "credentials" and the fold is no longer focused —
+			// then page down, since the now-expanded fields sit below
+			// password's own scroll position at the cramped 80x24 tier.
+			m.Update(shiftTabKey)
+			m.Update(wizard.FocusChangedMsg{})
+			m.Update(pageDown)
+
+			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
+			tuitest.Golden(t, fmt.Sprintf("proxmox-advanced-fold-expanded_%dx%d", sz.w, sz.h), frame)
+			tuitest.AssertFits(t, frame, sz.w, sz.h)
+
+			plain := tuitest.StripANSI(frame)
+			if !strings.Contains(plain, labelTokenID) {
+				t.Errorf("frame is missing the expanded fold's token id field, want it to stay open after focus left:\n%s", plain)
+			}
+			if !strings.Contains(plain, "skip tls verify") {
+				t.Errorf("frame is missing the expanded fold's skip tls verify field:\n%s", plain)
+			}
+			if strings.Contains(plain, "verification:") {
+				t.Errorf("frame still shows the collapsed summary's \"verification:\" fact, want the fold expanded:\n%s", plain)
+			}
+		})
+	}
+}
+
+// TestGolden_ProxmoxAdvancedFoldCollapsedAt80x24 pins mechanism 3's
+// collapsed state at the 80x24 "compact" tier: proxmox_80x24_initial
+// (TestGolden_ConfigureSteps) never scrolls far enough to show the fold
+// line itself (host plus the paired username/password row alone exceed
+// the 15-row viewport), so this scrolls to the bottom (G, independent of
+// field focus) to pin that the collapsed summary row still renders
+// correctly at the narrowest supported tier, not just at 100x30/120x40.
+func TestGolden_ProxmoxAdvancedFoldCollapsedAt80x24(t *testing.T) {
+	// pgdn, not the vim "G", since G/gg fall through to a focused text
+	// input (typed as literal text) while pgdn scrolls regardless of
+	// focus — host stays focused throughout, matching the step's real
+	// initial-focus state the way TestGolden_ConfigureSteps's own
+	// proxmox_80x24_initial does.
+	pageDown := tea.KeyPressMsg{Code: tea.KeyPgDown}
+
+	tui.SetTerminalWidth(80)
+	t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+	m := newGoldenModel(t)
+	_ = tuitest.RenderAt(t, m, 80, 24)
+	m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDProxmox})
+	for range 3 {
+		m.Update(pageDown)
+	}
+
+	frame := tuitest.RenderAt(t, m, 80, 24)
+	tuitest.Golden(t, "proxmox-advanced-fold-collapsed_80x24", frame)
+	tuitest.AssertFits(t, frame, 80, 24)
+
+	plain := tuitest.StripANSI(frame)
+	if !strings.Contains(plain, "advanced") || !strings.Contains(plain, "verification: enabled") {
+		t.Errorf("frame is missing the collapsed fold's summary row:\n%s", plain)
+	}
+	if hasExactLine(plain, labelTokenID) {
+		t.Errorf("collapsed fold leaks the token id field's own label row:\n%s", plain)
 	}
 }
 
