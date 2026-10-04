@@ -8,11 +8,11 @@
   │                                                                                                        │  ○ parameters                         │  
   │                                                                                                        │  ○ plan preview                       │  
   │                                                                                                        │                                       │  
-  │                                                                                                        │                                       │  
-  │                                                                                                        │                                       │  
-  │                         cluster lifecycle                                                              │                                       │  
-  │                         manage nodes on cluster "homelab"                                              │                                       │  
-  │                                                                                                        │                                       │  
+  │                                                                                                        │  CONFIGURED                           │  
+  │                                                                                                        │  interrupted: resize                  │  
+  │                         cluster lifecycle                                                              │  target: homelab-master0              │  
+  │                         manage nodes on cluster "homelab"                                              │  stopped at: power-cycle              │  
+  │                                                                                                        │  recorded: 2h ago                     │  
   │                         ⚠ interrupted resize of homelab-master0 — step: power-                         │                                       │  
   │                         cycle, recorded 2h ago                                                         │                                       │  
   │                                                                                                        │                                       │  

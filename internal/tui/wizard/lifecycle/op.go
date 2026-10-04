@@ -9,6 +9,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/node"
+	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
@@ -160,6 +161,21 @@ func (s *OpStep) Apply(_ *config.Config) error {
 		}
 	}
 	return nil
+}
+
+// Answered surfaces the interrupted-op marker as facts for the split
+// layout's context pane, the one thing worth restating before any operation
+// is chosen; empty with no marker, since nothing is decided yet.
+func (s *OpStep) Answered() []render.Fact {
+	if s.st.Marker == nil {
+		return nil
+	}
+	return []render.Fact{
+		{Key: "interrupted", Value: string(s.st.Marker.Op)},
+		{Key: "target", Value: s.st.Marker.Target},
+		{Key: "stopped at", Value: string(s.st.Marker.Step)},
+		{Key: "recorded", Value: humanAge(s.now().Sub(s.st.Marker.Timestamp)) + " ago"},
+	}
 }
 
 // humanAge renders duration at minute precision, unlike time.Duration.String ("2h", not "2h0m0s").

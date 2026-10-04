@@ -24,6 +24,11 @@ const (
 	StepIDDone    wizard.StepID = "lifecycle-done"
 )
 
+// factKeyOperation is the fact key every screen that names the chosen
+// operation (preview's own entry, and the params/confirm/incident context
+// panes) shares, so the word never drifts into a second spelling.
+const factKeyOperation = "operation"
+
 // State is shared by pointer across all lifecycle steps — the role
 // *config.Config plays for the configure wizard. Steps write into it from
 // Apply; ShouldShow reads it (ignoring the cfg argument).

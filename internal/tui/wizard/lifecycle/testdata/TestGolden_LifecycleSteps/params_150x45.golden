@@ -9,8 +9,8 @@
   │    memory (mb)                                                                                         │  ● parameters                         │  
   │    ╭──────────────────────────────────────╮                                                            │  ○ plan preview                       │  
   │    │ 20480                                │                                                            │                                       │  
-  │    ╰──────────────────────────────────────╯                                                            │                                       │  
-  │    per-node memory — okd minimum: 8192 mb, current: 20480                                              │                                       │  
+  │    ╰──────────────────────────────────────╯                                                            │  CONFIGURED                           │  
+  │    per-node memory — okd minimum: 8192 mb, current: 20480                                              │  operation: resize workers            │  
   │    0 keeps current                                                                                     │                                       │  
   │                                                                                                        │                                       │  
   │    vcpus                                                                                               │                                       │  

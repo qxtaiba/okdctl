@@ -169,6 +169,21 @@ func (s *PreviewStep) GetSelectedAction() wizard.Action {
 	return wizard.ActionExit
 }
 
+// Answered recaps the informed plan for the split layout's context pane —
+// the operation and how many nodes it touches — once the dry-run has one;
+// the body already carries the full node table and gate grid, so this is a
+// recap, not a duplicate of either.
+func (s *PreviewStep) Answered() []render.Fact {
+	if s.st.Plan == nil {
+		return nil
+	}
+	facts := []render.Fact{{Key: factKeyOperation, Value: s.operationLabel()}}
+	if n := len(s.st.Plan.Nodes); n > 0 {
+		facts = append(facts, render.Fact{Key: "nodes", Value: fmt.Sprintf("%d", n)})
+	}
+	return facts
+}
+
 // View renders the spinner, the dry-run failure, or the informed plan.
 func (s *PreviewStep) View(width, height int) string {
 	s.SetSize(width, height)
@@ -191,7 +206,7 @@ func (s *PreviewStep) View(width, height int) string {
 	st := wizard.NewSectionStyles(width)
 	var b strings.Builder
 
-	b.WriteString(wizard.RenderSection(&st, "operation", s.operationEntries()))
+	b.WriteString(wizard.RenderSection(&st, factKeyOperation, s.operationEntries()))
 	b.WriteString(s.renderNodes(&st, width))
 	b.WriteString(s.renderGates(&st, width))
 
@@ -206,7 +221,7 @@ func (s *PreviewStep) operationEntries() []wizard.KVEntry {
 	plan := s.st.Plan
 	entries := []wizard.KVEntry{
 		{Label: "cluster", Value: plan.Cluster},
-		{Label: "operation", Value: s.operationLabel()},
+		{Label: factKeyOperation, Value: s.operationLabel()},
 	}
 	if s.st.Op == node.OpResize {
 		current := s.currentRoleMemoryMB()
@@ -408,22 +423,30 @@ func (s *PreviewStep) renderIrreversibleBlock(width int) string {
 }
 
 func (s *PreviewStep) operationLabel() string {
-	switch s.st.Op {
+	return operationLabel(s.st)
+}
+
+// operationLabel names the chosen operation and its target in one human
+// phrase ("resize homelab-master1", "add 2 worker(s)", "remove worker-2"),
+// shared by the preview screen's own operation entry and the params screen's
+// context-pane recap so the two never drift on wording.
+func operationLabel(st *State) string {
+	switch st.Op {
 	case node.OpResize:
 		switch {
-		case s.st.Scope.Node != "":
-			return "resize " + s.st.Scope.Node
-		case s.st.Scope.Role == nodetypes.RoleMaster:
+		case st.Scope.Node != "":
+			return "resize " + st.Scope.Node
+		case st.Scope.Role == nodetypes.RoleMaster:
 			return "resize masters"
 		default:
 			return "resize workers"
 		}
 	case node.OpAdd:
-		return fmt.Sprintf("add %d worker(s)", max(s.st.Count, 1))
+		return fmt.Sprintf("add %d worker(s)", max(st.Count, 1))
 	case node.OpRemove:
-		return "remove " + s.st.Target
+		return "remove " + st.Target
 	default:
-		return string(s.st.Op)
+		return string(st.Op)
 	}
 }
 

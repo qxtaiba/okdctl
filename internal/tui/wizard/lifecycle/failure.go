@@ -70,7 +70,7 @@ func settledRow(sty *wizard.ExecStyles, r *execRow, col int) string {
 // going, and the failure's own leading clause.
 func incidentFacts(st *State, col int) []string {
 	gate, node := failurePoint(st)
-	rows := []tui.FactRow{{Key: "operation", Value: string(st.Op)}}
+	rows := []tui.FactRow{{Key: factKeyOperation, Value: string(st.Op)}}
 	if gate != "" {
 		rows = append(rows, tui.FactRow{Key: "failed gate", Value: gate, Highlight: true})
 	}

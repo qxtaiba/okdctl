@@ -8,11 +8,11 @@
   │                                                                                                        │  ○ parameters                                                       │  
   │                                                                                                        │  ○ plan preview                                                     │  
   │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                         cluster lifecycle                                                              │                                                                     │  
-  │                         manage nodes on cluster "homelab"                                              │                                                                     │  
+  │                                                                                                        │  CONFIGURED                                                         │  
+  │                                                                                                        │  interrupted: resize                                                │  
+  │                                                                                                        │  target: homelab-master0                                            │  
+  │                         cluster lifecycle                                                              │  stopped at: power-cycle                                            │  
+  │                         manage nodes on cluster "homelab"                                              │  recorded: 2h ago                                                   │  
   │                                                                                                        │                                                                     │  
   │                         ⚠ interrupted resize of homelab-master0 — step: power-                         │                                                                     │  
   │                         cycle, recorded 2h ago                                                         │                                                                     │  
