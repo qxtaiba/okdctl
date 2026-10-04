@@ -82,22 +82,103 @@ func discoverProxmox(parent context.Context, cfg *config.Config) (*proxmoxDiscov
 		})
 	}
 
-	targetNode := nodes[0].Name
+	var onlineNames []string
 	for _, n := range nodes {
 		if n.Status == "online" {
-			targetNode = n.Name
-			break
+			onlineNames = append(onlineNames, n.Name)
+		}
+	}
+	if len(onlineNames) == 0 {
+		onlineNames = []string{nodes[0].Name}
+	}
+
+	// Every online node is a placement candidate (node_placement.go offers
+	// all of them for per-VM assignment), so storage/bridges/isos must be
+	// fetched from ALL of them, not sampled from one — otherwise the wizard
+	// can offer a pool/bridge that only exists on the node it happened to
+	// sample, which a role assigned to a different node can't reach.
+	var failures []error
+	storageSets := make([][]proxmoxStorage, 0, len(onlineNames))
+	bridgeSets := make([][]proxmoxBridge, 0, len(onlineNames))
+	isoSets := make([][]string, 0, len(onlineNames))
+	inventory := make(map[string]config.ProxmoxNodeInventory, len(onlineNames))
+	for _, name := range onlineNames {
+		storage, bridges, isos, detailErr := fetchNodeDetails(ctx, client, name)
+		if detailErr != nil {
+			failures = append(failures, detailErr)
+		}
+		storageSets = append(storageSets, storage)
+		bridgeSets = append(bridgeSets, bridges)
+		isoSets = append(isoSets, isos)
+		inventory[name] = config.ProxmoxNodeInventory{
+			Storage: storageNames(storage),
+			Bridges: bridgeNames(bridges),
 		}
 	}
 
-	storage, bridges, isos, detailErr := fetchNodeDetails(ctx, client, targetNode)
+	commonStorage, storageDiffers := intersectByKey(storageSets, func(s proxmoxStorage) string { return s.Name })
+	commonBridges, bridgesDiffer := intersectByKey(bridgeSets, func(b proxmoxBridge) string { return b.Name })
+	commonISOs, isosDiffer := intersectByKey(isoSets, func(v string) string { return v })
+	if storageDiffers || bridgesDiffer || isosDiffer {
+		failures = append(failures, fmt.Errorf("proxmox nodes report different storage pools, bridges, or isos — offering only what all %d online node(s) share", len(onlineNames)))
+	}
+
+	if result := config.ValidatePlacementAgainstInventory(cfg, inventory); !result.IsValid() {
+		failures = append(failures, errors.New(result.Error()))
+	}
 
 	return &proxmoxDiscovery{
 		Nodes:   nodes,
-		Storage: storage,
-		Bridges: bridges,
-		ISOs:    isos,
-	}, detailErr
+		Storage: commonStorage,
+		Bridges: commonBridges,
+		ISOs:    commonISOs,
+	}, errors.Join(failures...)
+}
+
+// intersectByKey returns, in sets[0]'s order, the deduplicated elements
+// whose key appears in every set, plus whether any set's keys weren't
+// shared by all the others.
+func intersectByKey[T any](sets [][]T, key func(T) string) ([]T, bool) {
+	if len(sets) == 0 {
+		return nil, false
+	}
+	counts := make(map[string]int)
+	for _, set := range sets {
+		seen := make(map[string]bool, len(set))
+		for _, v := range set {
+			k := key(v)
+			if seen[k] {
+				continue
+			}
+			seen[k] = true
+			counts[k]++
+		}
+	}
+	var common []T
+	seen := make(map[string]bool, len(sets[0]))
+	for _, v := range sets[0] {
+		k := key(v)
+		if counts[k] == len(sets) && !seen[k] {
+			seen[k] = true
+			common = append(common, v)
+		}
+	}
+	differ := false
+	for _, c := range counts {
+		if c != len(sets) {
+			differ = true
+			break
+		}
+	}
+	return common, differ
+}
+
+func storageNames(storage []proxmoxStorage) []string {
+	names := make([]string, len(storage))
+	for i, s := range storage {
+		names[i] = s.Name
+	}
+	return names
 }
 
 // fetchNodeDetails retains successful observations alongside endpoint failures.

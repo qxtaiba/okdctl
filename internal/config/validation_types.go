@@ -97,6 +97,10 @@ type ValidationOptions struct {
 	// ProjectRoot anchors filesystem checks (terraform environments dir);
 	// empty resolves against cwd.
 	ProjectRoot string
+	// ProxmoxInventory, when set, enables validatePlacementInventory: it
+	// checks the configured storage pools and bridge exist on every node a
+	// role can land on. Empty skips the check (nothing discovered to check against).
+	ProxmoxInventory map[string]ProxmoxNodeInventory
 }
 
 type validatorEntry struct {
@@ -141,6 +145,10 @@ func ValidateWithOptions(cfg *Config, opts ValidationOptions) *ValidationResult 
 
 	if opts.Scope.HasScope(ScopeEnums) {
 		validateTerraformEnvDir(cfg, opts.ProjectRoot, result)
+	}
+
+	if opts.Scope.HasScope(ScopeProvider) {
+		validatePlacementInventory(cfg, opts.ProxmoxInventory, result)
 	}
 
 	return result
