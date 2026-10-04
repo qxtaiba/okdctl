@@ -17,7 +17,7 @@ import (
 func TestResourceSummaryRebindsOnPolarityFlip(t *testing.T) {
 	t.Cleanup(func() { tui.SetDarkBackground(true) })
 
-	step, state := NewResourcesStep()
+	step, state := NewResourcesStep(nil)
 	tui.SetDarkBackground(false)
 
 	out := renderResourceFooter(step, state, 120)
@@ -57,7 +57,7 @@ func TestResourcePinnedFooterIncludesBootstrapAndOnlineCapacity(t *testing.T) {
 
 func TestResourcePinnedFooterTracksKeyInput(t *testing.T) {
 	cfg := config.DefaultConfig()
-	step, state := NewResourcesStep()
+	step, state := NewResourcesStep(nil)
 	state.Cfg = cfg
 	step.LoadFromConfig(cfg, true)
 	step.Init()

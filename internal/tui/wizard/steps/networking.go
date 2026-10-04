@@ -195,26 +195,26 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 	},
 }
 
-// NewNetworkingStep returns the networking wizard step.
-func NewNetworkingStep(capacity ...*WizardCapacitySnapshot) *wizard.DataDrivenStep {
+// NewNetworkingStep returns the networking wizard step, with an allocation
+// preview once capacity is non-nil.
+func NewNetworkingStep(capacity *WizardCapacitySnapshot) *wizard.DataDrivenStep {
 	step := wizard.NewDataDrivenStep(&NetworkingStepDefinition)
-	if len(capacity) == 0 {
+	if capacity == nil {
 		return step
 	}
-	snapshot := capacity[0]
 	step.WithExtraContentFunc("allocation preview", func(s *wizard.DataDrivenStep, _ int) string {
-		cpCount, workerCount, known := snapshot.counts()
-		if !known || snapshot.discovery == nil {
+		cpCount, workerCount, known := capacity.counts()
+		if !known || capacity.discovery == nil {
 			return ""
 		}
 		values := make(map[string]string, 8)
 		for _, key := range []string{"machine_cidr", fieldGateway, "start_ip", "bastion_ip", "vip"} {
 			values[key] = s.Value(key)
 		}
-		if snapshot.cfg != nil {
-			values["ignition_ip"] = snapshot.cfg.HTTPServer.IgnitionServerIP
-			if snapshot.cfg.Provider.Proxmox != nil {
-				values["proxmox_host"] = snapshot.cfg.Provider.Proxmox.Host
+		if capacity.cfg != nil {
+			values["ignition_ip"] = capacity.cfg.HTTPServer.IgnitionServerIP
+			if capacity.cfg.Provider.Proxmox != nil {
+				values["proxmox_host"] = capacity.cfg.Provider.Proxmox.Host
 			}
 		}
 		return renderNetworkAllocationPreview(values, cpCount, workerCount)

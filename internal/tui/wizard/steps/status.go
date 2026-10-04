@@ -32,9 +32,10 @@ const statusSplitBodyWidth = 100
 // errNoStatusSource reports a status screen assembled with no source behind it.
 var errNoStatusSource = errors.New("read cluster status: no source configured")
 
-// StatusSource supplies the snapshot the status screen renders. The collecting
-// side owns its own context (the way lifecycle.Hooks do), so the screen never
-// fabricates one, and a test or the demo seeds a fixture through the same seam.
+// StatusSource supplies the snapshot the status screen renders, with the
+// collecting side owning its own context (as lifecycle.Hooks do) so the
+// screen never fabricates one and a test or the demo seeds a fixture
+// through the same seam.
 type StatusSource interface {
 	ClusterStatus(context.Context) (*okd.ClusterStatus, error)
 }

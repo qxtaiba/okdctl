@@ -55,7 +55,7 @@ func TestNetworkingAllocationPreviewTracksTypedStartIP(t *testing.T) {
 }
 
 func TestNetworkingWithoutDiscoveryOmitsAllocationPreview(t *testing.T) {
-	step := NewNetworkingStep()
+	step := NewNetworkingStep(nil)
 	if got := step.View(100, 30); strings.Contains(got, "allocation preview") {
 		t.Fatalf("view without discovery shows a fabricated preview:\n%s", got)
 	}

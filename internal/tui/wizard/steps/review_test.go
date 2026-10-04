@@ -411,6 +411,15 @@ func TestReviewStep_LongLabelNotClipped(t *testing.T) {
 	}
 }
 
+// TestReviewChangeLabel_UnmappedFieldFallsBackToPathNotBlank pins the fix:
+// a field path with no entry in reviewChangeLabel's table must fall back to
+// the path itself, never the empty string a map miss used to produce.
+func TestReviewChangeLabel_UnmappedFieldFallsBackToPathNotBlank(t *testing.T) {
+	if got := reviewChangeLabel("some.unmapped.field"); got != "some.unmapped.field" {
+		t.Errorf("reviewChangeLabel(unmapped) = %q, want the raw path, not blank", got)
+	}
+}
+
 func TestReviewStep_BodyHasNoActionRadio(t *testing.T) {
 	s := NewReviewStep()
 	s.SetConfig(reviewTestConfig())
