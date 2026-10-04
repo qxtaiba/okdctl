@@ -424,6 +424,69 @@ func TestInputField_PasteClearsStaleError(t *testing.T) {
 	}
 }
 
+// TestInputField_PasteRejectsEmbeddedNewline pins the reconciliation-audit
+// defect where a pasted multi-line secret (e.g. an SSH key) was forwarded
+// straight to bubbles' textinput, which silently collapses embedded
+// newlines into spaces and accepts the mangled result with no error.
+func TestInputField_PasteRejectsEmbeddedNewline(t *testing.T) {
+	f := NewInputField("ssh key", "")
+	f.SetValue("original-value")
+	_ = f.Focus()
+
+	const secret = "-----BEGIN KEY-----\nMIIFAKEKEYDATA\n-----END KEY-----"
+	f.Update(tea.PasteMsg{Content: secret})
+
+	if got := f.Value(); got != "original-value" {
+		t.Fatalf("Value() after a rejected multi-line paste = %q, want the original value preserved", got)
+	}
+	if f.err == nil {
+		t.Fatal("err after a rejected multi-line paste = nil, want a rejection error")
+	}
+	for _, fragment := range []string{"BEGIN KEY", "MIIFAKEKEYDATA", "END KEY"} {
+		if strings.Contains(f.err.Error(), fragment) {
+			t.Fatalf("err = %q, must not echo any fragment of the rejected paste", f.err.Error())
+		}
+	}
+}
+
+// TestInputField_PasteRejectsControlByte covers a pasted path carrying a
+// stray control byte, the other half of the audit's reproduction.
+func TestInputField_PasteRejectsControlByte(t *testing.T) {
+	f := NewInputField("path", "")
+	f.SetValue("original-value")
+	_ = f.Focus()
+
+	f.Update(tea.PasteMsg{Content: "/etc/pass\x00wd"})
+
+	if got := f.Value(); got != "original-value" {
+		t.Fatalf("Value() after a rejected control-byte paste = %q, want the original value preserved", got)
+	}
+	if f.err == nil {
+		t.Fatal("err after a rejected control-byte paste = nil, want a rejection error")
+	}
+}
+
+// TestInputField_PasteRejectionClearsOnNextValidPaste proves a rejection is
+// not sticky: a following well-formed paste is accepted and clears the
+// rejection error, matching the field's existing error-clear-on-edit rule.
+func TestInputField_PasteRejectionClearsOnNextValidPaste(t *testing.T) {
+	f := NewInputField("ssh key", "")
+	_ = f.Focus()
+
+	f.Update(tea.PasteMsg{Content: "line one\nline two"})
+	if f.err == nil {
+		t.Fatal("err after the rejected multi-line paste = nil, want a rejection error")
+	}
+
+	f.Update(tea.PasteMsg{Content: "ssh-ed25519 AAAA"})
+	if f.err != nil {
+		t.Fatalf("err after a valid paste following a rejection = %v, want cleared", f.err)
+	}
+	if got := f.Value(); got != "ssh-ed25519 AAAA" {
+		t.Fatalf("Value() after a valid paste following a rejection = %q, want it accepted", got)
+	}
+}
+
 func TestInputField_DefaultArrowKeepsText(t *testing.T) {
 	f := NewInputField("cluster name", "")
 	f.SetDefault("mycluster")
