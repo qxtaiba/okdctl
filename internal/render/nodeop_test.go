@@ -154,3 +154,23 @@ func TestNodeOpBoxes(t *testing.T) {
 		})
 	}
 }
+
+func TestResizePreviewAndCompletionDisruption(t *testing.T) {
+	for _, tc := range []struct {
+		mode node.ResizeMode
+		want string
+	}{
+		{node.ResizeLiveDisk, "live resize"},
+		{node.ResizeUndrainedRestart, "without drain"},
+		{node.ResizeDrainedRestart, "each node is drained"},
+	} {
+		plan := &node.OpPlan{Op: node.OpResize, OSDiskGB: 100, ResizeMode: tc.mode}
+		out := NodeOpDryRun(plan)
+		if !strings.Contains(out, tc.want) || !strings.Contains(out, "100 GiB") {
+			t.Fatalf("misleading preview: %s", out)
+		}
+		if tc.mode == node.ResizeLiveDisk && strings.Contains(NodeOpComplete(plan, time.Second), "was power-cycled") {
+			t.Fatal("live completion claims restart")
+		}
+	}
+}

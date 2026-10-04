@@ -48,7 +48,8 @@ func validateWorkerRemovable(nodes []cluster.NodeDetail, target string, workerCo
 		return &errtypes.ConfigError{Msg: fmt.Sprintf("cannot derive a terraform index from node name %q; okdctl removes the highest-numbered worker (e.g. worker%d)", target, workerCount-1)}
 	}
 	maxIdx := -1
-	for _, w := range workers {
+	for i := range workers {
+		w := &workers[i]
 		if i, ok := cluster.NodeIndex(w.Name); ok {
 			maxIdx = max(maxIdx, i)
 		}
@@ -150,14 +151,15 @@ func validateDatastoreBudget(availGB, deltaGB int) error {
 		return nil
 	}
 	if deltaGB > availGB {
-		return fmt.Errorf("datastore budget: growing os disks by %d GiB total exceeds the %d GiB available on the os datastore; free space or grow the pool first", deltaGB, availGB)
+		return fmt.Errorf("datastore budget: allocating %d GiB of disks exceeds the %d GiB available on the datastore; free space or grow the pool first", deltaGB, availGB)
 	}
 	return nil
 }
 
 func workerNameSet(nodes []cluster.NodeDetail) map[string]bool {
 	set := make(map[string]bool)
-	for _, n := range nodes {
+	for i := range nodes {
+		n := &nodes[i]
 		if n.Role == nodetypes.RoleWorker {
 			set[n.Name] = true
 		}

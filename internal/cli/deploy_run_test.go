@@ -84,7 +84,7 @@ func forbidWizard(t *testing.T) {
 	t.Helper()
 	runWizardFn = func(context.Context, *config.Config, bool) (wizard.Result, steps.WelcomeMode, error) {
 		t.Error("wizard must not be constructed on this path")
-		return wizard.Result{Cancelled: true}, steps.WelcomeModeEdit, nil
+		return wizard.Result{Outcome: wizard.OutcomeCancelled}, steps.WelcomeModeEdit, nil
 	}
 }
 
@@ -192,7 +192,7 @@ func TestRunDeploy_WizardCancelMakesNoChanges(t *testing.T) {
 	resetDeployState(t)
 	t.Chdir(t.TempDir())
 	forbidExecute(t)
-	stubWizard(t, wizard.Result{Cancelled: true}, steps.WelcomeModeFresh, nil)
+	stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCancelled}, steps.WelcomeModeFresh, nil)
 
 	if err := runDeploy(deployCmd, nil); err != nil {
 		t.Fatalf("cancelled wizard must exit 0: %v", err)
@@ -207,7 +207,7 @@ func TestRunDeploy_ExistingConfigSeedsWizard(t *testing.T) {
 	t.Chdir(t.TempDir())
 	seedDeployConfig(t)
 	forbidExecute(t)
-	rec := stubWizard(t, wizard.Result{Cancelled: true}, steps.WelcomeModeEdit, nil)
+	rec := stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCancelled}, steps.WelcomeModeEdit, nil)
 
 	if err := runDeploy(deployCmd, nil); err != nil {
 		t.Fatalf("runDeploy: %v", err)
@@ -227,7 +227,7 @@ func TestRunDeploy_CorruptConfigFallsBackToDefaultsInteractively(t *testing.T) {
 		t.Fatal(err)
 	}
 	forbidExecute(t)
-	rec := stubWizard(t, wizard.Result{Cancelled: true}, steps.WelcomeModeFresh, nil)
+	rec := stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCancelled}, steps.WelcomeModeFresh, nil)
 
 	if err := runDeploy(deployCmd, nil); err != nil {
 		t.Fatalf("interactive run must fall back to defaults, got: %v", err)
@@ -264,7 +264,7 @@ func TestRunDeploy_MinimalSeedsMinimalDefaults(t *testing.T) {
 	resetDeployState(t)
 	t.Chdir(t.TempDir())
 	forbidExecute(t)
-	rec := stubWizard(t, wizard.Result{Cancelled: true}, steps.WelcomeModeFresh, nil)
+	rec := stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCancelled}, steps.WelcomeModeFresh, nil)
 	deployMinimal = true
 
 	if err := runDeploy(deployCmd, nil); err != nil {
@@ -303,7 +303,7 @@ func TestRunDeploy_WizardSaveExitPersistsConfigAndSidecar(t *testing.T) {
 	wizardCfg.Cluster.Name = "wizarded"
 	wizardCfg.Provider.Proxmox.Username = "root@pam"
 	wizardCfg.Provider.Proxmox.Password.Set(fixturePassword)
-	stubWizard(t, wizard.Result{Completed: true, Config: wizardCfg, Action: wizard.ActionExit}, steps.WelcomeModeFresh, nil)
+	stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCompleted, Config: wizardCfg, Action: wizard.ActionExit}, steps.WelcomeModeFresh, nil)
 
 	if err := runDeploy(deployCmd, nil); err != nil {
 		t.Fatalf("runDeploy: %v", err)
@@ -340,7 +340,7 @@ func TestRunDeploy_WizardDeployActionExecutes(t *testing.T) {
 
 	wizardCfg := config.DefaultConfig()
 	wizardCfg.Cluster.Name = "deployme"
-	stubWizard(t, wizard.Result{Completed: true, Config: wizardCfg, Action: wizard.ActionDeploy}, steps.WelcomeModeFresh, nil)
+	stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCompleted, Config: wizardCfg, Action: wizard.ActionDeploy}, steps.WelcomeModeFresh, nil)
 
 	if err := runDeploy(deployCmd, nil); err != nil {
 		t.Fatalf("runDeploy: %v", err)
@@ -368,7 +368,7 @@ func TestRunDeploy_WelcomeModeDeploySkipsSave(t *testing.T) {
 	t.Chdir(t.TempDir())
 	seedDeployConfig(t)
 	exec := stubExecute(t)
-	stubWizard(t, wizard.Result{Completed: true}, steps.WelcomeModeDeploy, nil)
+	stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCompleted}, steps.WelcomeModeDeploy, nil)
 
 	if err := runDeploy(deployCmd, nil); err != nil {
 		t.Fatalf("runDeploy: %v", err)

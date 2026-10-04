@@ -106,7 +106,7 @@ func (s *WelcomeStep) View(width, height int) string {
 		Bold(true)
 
 	subtitleStyle := lipgloss.NewStyle().
-		Foreground(tui.ColorSlate400).
+		Foreground(tui.ColorTextDim).
 		Italic(true)
 
 	var content string
@@ -137,11 +137,11 @@ func (s *WelcomeStep) renderOption(title, description string, selected bool) str
 		bullet = lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true).Render(tui.IconActive)
 		titleStyled = lipgloss.NewStyle().Foreground(tui.ColorText).Bold(true).Render(title)
 	} else {
-		bullet = lipgloss.NewStyle().Foreground(tui.ColorSlate600).Render(tui.IconPending)
-		titleStyled = lipgloss.NewStyle().Foreground(tui.ColorSlate300).Render(title)
+		bullet = lipgloss.NewStyle().Foreground(tui.ColorBorder).Render(tui.IconPending)
+		titleStyled = lipgloss.NewStyle().Foreground(tui.ColorText).Render(title)
 	}
 
-	descStyled := lipgloss.NewStyle().Foreground(tui.ColorSlate500).Render(description)
+	descStyled := lipgloss.NewStyle().Foreground(tui.ColorTextDim).Render(description)
 
 	return bullet + " " + titleStyled + "\n  " + descStyled
 }

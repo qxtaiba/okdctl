@@ -16,22 +16,20 @@ import (
 
 var errKVEmptyKey = errors.New("key cannot be empty")
 
-// KeyValueField renders an editable key=value table (j/k row, h/l col, a
-// add, d delete, ctrl+e edit). enter/tab/shift+tab are reserved by the host
-// DataDrivenStep and can't be edit-commit keys — same constraint as
-// MultiSelectField/SelectField.
+// KeyValueField edits a key/value table with explicit cell edit and navigation modes.
 type KeyValueField struct {
 	Label     string
 	Help      string
 	Validator func(string) error
 
-	rows     []kvRow
-	cursor   int
-	col      int
-	editMode bool
-	focused  bool
-	err      error
-	width    int
+	rows         []kvRow
+	cursor       int
+	col          int
+	editMode     bool
+	editOriginal string
+	focused      bool
+	err          error
+	width        int
 }
 
 type kvRow struct {
@@ -139,6 +137,18 @@ func (f *KeyValueField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 		return f, nil
 	}
 	if keyMsg, isKey := msg.(tea.KeyPressMsg); isKey {
+		if f.OwnsKey(keyMsg) {
+			if keyMsg.Code == tea.KeyEscape && len(f.rows) > 0 {
+				if f.col == 0 {
+					f.rows[f.cursor].keyInput.SetValue(f.editOriginal)
+				} else {
+					f.rows[f.cursor].valInput.SetValue(f.editOriginal)
+				}
+			}
+			f.editMode = false
+			f.blurAllInputs()
+			return f, nil
+		}
 		if key.Matches(keyMsg, key.NewBinding(key.WithKeys("ctrl+e"))) {
 			cmd := f.toggleEditMode()
 			return f, cmd
@@ -163,6 +173,11 @@ func (f *KeyValueField) toggleEditMode() tea.Cmd {
 		f.rows = []kvRow{newKVRow("", "")}
 	}
 	f.editMode = true
+	if f.col == 0 {
+		f.editOriginal = f.rows[f.cursor].keyInput.Value()
+	} else {
+		f.editOriginal = f.rows[f.cursor].valInput.Value()
+	}
 	return f.syncInputFocus()
 }
 
@@ -208,6 +223,7 @@ func (f *KeyValueField) addRow() tea.Cmd {
 	f.cursor = len(f.rows) - 1
 	f.col = 0
 	f.editMode = true
+	f.editOriginal = ""
 	cmd := f.syncInputFocus()
 	if f.width > 0 {
 		f.SetWidth(f.width)
@@ -246,8 +262,8 @@ func (f *KeyValueField) blurAllInputs() {
 // View renders the label, column header, all data rows, and any validation
 // error. The active row shows live textinputs when in edit mode.
 func (f *KeyValueField) View() string {
-	labelStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate300)
-	hintStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
+	labelStyle := lipgloss.NewStyle().Foreground(tui.ColorText)
+	hintStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim)
 
 	labelLine := labelStyle.Render(strings.ToLower(f.Label))
 	if f.Help != "" {
@@ -276,19 +292,19 @@ func (f *KeyValueField) cellWidth() int {
 }
 
 func (f *KeyValueField) viewHeader(colW int) string {
-	hdrStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
+	hdrStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim)
 	return hdrStyle.Render(fmt.Sprintf("  %-*s  %-*s", colW, "key", colW, "value"))
 }
 
 func (f *KeyValueField) viewRow(i, colW int) string {
 	cursorStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true)
-	activeStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate300)
-	dimStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
+	activeStyle := lipgloss.NewStyle().Foreground(tui.ColorText)
+	dimStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim)
 	boxFocus := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).BorderForeground(tui.ColorPrimary).
 		Padding(0, 1).Width(colW)
 	boxIdle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).BorderForeground(tui.ColorSlate600).
+		Border(lipgloss.RoundedBorder()).BorderForeground(tui.ColorBorder).
 		Padding(0, 1).Width(colW)
 
 	r := &f.rows[i]
@@ -338,3 +354,11 @@ func parseKVString(value string) []kvRow {
 	}
 	return rows
 }
+
+// OwnsKey reserves cell commit and cancel while an editor is active.
+func (f *KeyValueField) OwnsKey(msg tea.KeyPressMsg) bool {
+	return f.editMode && (msg.Code == tea.KeyEnter || msg.Code == tea.KeyEscape)
+}
+
+// Editing reports whether typing currently changes a table cell.
+func (f *KeyValueField) Editing() bool { return f.editMode }

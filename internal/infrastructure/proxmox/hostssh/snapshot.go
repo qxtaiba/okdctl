@@ -174,10 +174,7 @@ func pveshWaitTask(ctx context.Context, p *RemoteISOParams, upid string, timeout
 	}
 
 	if err := system.WaitForWithTimeout(ctx, "pvesh task", upid, check, timeout, p.Log); err != nil {
-		return err
-	}
-	if parseErr != nil {
-		return fmt.Errorf("pvesh task %s status: %w", upid, parseErr)
+		return fmt.Errorf("pvesh task %s status: %w", upid, errors.Join(err, parseErr))
 	}
 	if status.ExitStatus != "OK" {
 		return fmt.Errorf("pvesh task %s finished with exitstatus %q", upid, status.ExitStatus)
@@ -333,4 +330,37 @@ func agentFlagEnabled(raw string) bool {
 		return v == "1"
 	}
 	return first == "1"
+}
+
+// VMOwner resolves snapshot routing from the cluster inventory after HA migration.
+func VMOwner(ctx context.Context, p *RemoteISOParams, vmid int) (string, error) {
+	output, err := pveshRunChecked(ctx, p, "get", "/cluster/resources", "--type", "vm")
+	if err != nil {
+		return "", err
+	}
+	var resources []struct {
+		VMID int    `json:"vmid"`
+		Node string `json:"node"`
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal([]byte(output), &resources); err != nil {
+		return "", fmt.Errorf("decode vm ownership: %w", err)
+	}
+	owner := ""
+	for _, resource := range resources {
+		if resource.VMID != vmid || resource.Type != "qemu" {
+			continue
+		}
+		if owner != "" || resource.Node == "" {
+			return "", fmt.Errorf("vm %d ownership is ambiguous", vmid)
+		}
+		if err := validateProxmoxName(resource.Node); err != nil {
+			return "", err
+		}
+		owner = resource.Node
+	}
+	if owner == "" {
+		return "", fmt.Errorf("vm %d ownership is unknown", vmid)
+	}
+	return owner, nil
 }

@@ -21,7 +21,7 @@ okdctl cleanup [flags]
 
 ```
   okdctl cleanup
-  okdctl cleanup --yes
+  okdctl cleanup --yes --confirm-cluster=homelab
   okdctl cleanup --kind work-only
   okdctl cleanup --dry-run
 ```

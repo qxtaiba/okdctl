@@ -90,7 +90,10 @@ func nodeOpDetails(sb *Builder, plan *node.OpPlan) {
 		if plan.CPU > 0 {
 			sb.KV("target cpu", fmt.Sprintf("%d vCPU", plan.CPU))
 		}
-		sb.KV("disruption", "each node is drained, then hard power-cycled (stop→start) to realize the change")
+		if plan.OSDiskGB > 0 {
+			sb.KV("target os disk", fmt.Sprintf("%d GiB", plan.OSDiskGB))
+		}
+		sb.KV("disruption", ResizeDisruption(plan.ResizeMode))
 	}
 	if plan.GrowMasterMemoryMB > 0 {
 		sb.KV("grow masters to", fmt.Sprintf("%d MiB", plan.GrowMasterMemoryMB))
@@ -138,6 +141,9 @@ func NodeOpNextSteps(plan *node.OpPlan) []string {
 			"verify the cluster with 'okdctl status'",
 		}
 	case node.OpResize:
+		if plan.ResizeMode == node.ResizeLiveDisk {
+			return []string{"OS disks grew without a power-cycle; verify filesystem capacity on each node"}
+		}
 		return []string{
 			"each resized node was power-cycled to realize the change; verify with",
 			"  'okdctl node list' or 'oc debug node/<name> -- free -m'",
@@ -239,5 +245,17 @@ func opComplete(op node.Op) string {
 		return "cluster started"
 	default:
 		return "node operation complete"
+	}
+}
+
+// ResizeDisruption describes the approved resize behavior for CLI and wizard previews.
+func ResizeDisruption(mode node.ResizeMode) string {
+	switch mode {
+	case node.ResizeLiveDisk:
+		return "live resize — no drain, no power-cycle"
+	case node.ResizeUndrainedRestart:
+		return "power-cycle without drain (pods restart in place)"
+	default:
+		return "each node is drained, then hard power-cycled (stop→start) to realize the change"
 	}
 }

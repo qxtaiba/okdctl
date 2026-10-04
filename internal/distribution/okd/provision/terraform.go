@@ -56,32 +56,16 @@ type diskSizes struct {
 }
 
 func getDiskSizes(cfg *config.Config) diskSizes {
-	d := diskSizes{
-		cpOS:       cfg.Topology.ControlPlane.DiskGB,
-		workerData: cfg.Disks.WorkerDataSizeGB,
-		cpData:     cfg.Disks.ControlPlaneDataSizeGB,
-		cpMon:      cfg.Disks.ControlPlaneMonSizeGB,
+	effective := config.Effective(cfg)
+	return diskSizes{
+		cpOS: effective.Topology.ControlPlane.DiskGB, workerOS: effective.Topology.Workers.DiskGB,
+		workerData: effective.Disks.WorkerDataSizeGB, cpData: effective.Disks.ControlPlaneDataSizeGB, cpMon: effective.Disks.ControlPlaneMonSizeGB,
 	}
-	if d.cpOS == 0 {
-		d.cpOS = config.DefaultOSDiskGB
-	}
-	d.workerOS = cfg.Topology.Workers.DiskGB
-	if d.workerOS == 0 {
-		d.workerOS = d.cpOS
-	}
-	return d
 }
 
 func getBootstrapResources(cfg *config.Config) (cpu, mem int) {
-	cpu = cfg.Topology.Bootstrap.CPU
-	mem = cfg.Topology.Bootstrap.MemoryMB
-	if cpu == 0 {
-		cpu = cfg.Topology.ControlPlane.CPU
-	}
-	if mem == 0 {
-		mem = cfg.Topology.ControlPlane.MemoryMB
-	}
-	return cpu, mem
+	effective := config.Effective(cfg)
+	return effective.Topology.Bootstrap.CPU, effective.Topology.Bootstrap.MemoryMB
 }
 
 func buildTerraformVarsData(cfg *config.Config) templates.TerraformVarsData {

@@ -26,6 +26,7 @@ const testProxmoxNode = "pve"
 // read-only guard queries, so a resumed op can be proven to have skipped
 // guards/validation rather than merely having them no-op.
 type fakeCluster struct {
+	cordonState    map[string]bool
 	nodes          []cluster.NodeDetail
 	osdPods        []cluster.PodPlacement
 	routerPods     []cluster.PodPlacement
@@ -116,6 +117,10 @@ func (f *fakeCluster) ListNodes(context.Context) ([]cluster.NodeDetail, error) {
 
 func (f *fakeCluster) Cordon(_ context.Context, node string) error {
 	f.cordon++
+	if f.cordonState == nil {
+		f.cordonState = make(map[string]bool)
+	}
+	f.cordonState[node] = true
 	f.cordonedNodes = append(f.cordonedNodes, node)
 	f.record("cordon")
 	return nil
@@ -123,6 +128,9 @@ func (f *fakeCluster) Cordon(_ context.Context, node string) error {
 
 func (f *fakeCluster) Uncordon(_ context.Context, node string) error {
 	f.uncordon++
+	if f.uncordonErr == nil {
+		delete(f.cordonState, node)
+	}
 	f.uncordonedNodes = append(f.uncordonedNodes, node)
 	f.record("uncordon")
 	return f.uncordonErr
@@ -143,9 +151,10 @@ func (f *fakeCluster) Drain(_ context.Context, node string, _ cluster.DrainOptio
 func (f *fakeCluster) DeleteNode(_ context.Context, name string) error {
 	f.deleteNode++
 	kept := f.nodes[:0]
-	for _, n := range f.nodes {
+	for i := range f.nodes {
+		n := &f.nodes[i]
 		if n.Name != name {
-			kept = append(kept, n)
+			kept = append(kept, *n)
 		}
 	}
 	f.nodes = kept
@@ -191,7 +200,7 @@ func (f *fakeCluster) PodsForSelector(_ context.Context, namespace, selector str
 }
 func (f *fakeCluster) Apply(context.Context, []byte) error { f.applied++; return nil }
 
-func (f *fakeCluster) ApprovePendingCSRs(context.Context) (int, error) {
+func (f *fakeCluster) ApprovePendingCSRs(context.Context, ...cluster.CSRIdentity) (int, error) {
 	f.approveCalls++
 	if f.events != nil {
 		*f.events = append(*f.events, "join")

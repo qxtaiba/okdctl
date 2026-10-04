@@ -2,6 +2,7 @@ package wizard
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -279,5 +280,56 @@ func TestSetIntSetBool(t *testing.T) {
 		if cfg.Deployment.AutoApprove {
 			t.Errorf("SetBool(%q) did not set false", falsy)
 		}
+	}
+}
+
+func TestHiddenFieldsRetainValuesWithoutValidationOrApply(t *testing.T) {
+	probes, writes := 0, 0
+	step := NewDataDrivenStep(&StepDefinition{ID: StepIDAddons, Sections: []SectionDefinition{{Title: "optional", Fields: []FieldDefinition{
+		{Key: "enabled", Type: FieldTypeSelect, Options: []string{"no", "yes"}},
+		{Key: "setting", Visible: func(values map[string]string) bool { return values["enabled"] == "yes" }, Validate: func(string) error { probes++; return errors.New("invalid setting") }, ConfigSet: func(*config.Config, string) error { writes++; return nil }},
+	}}}})
+	step.setValue("setting", "retained")
+	step.Init()
+	if err := step.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if err := step.Apply(&config.Config{}); err != nil {
+		t.Fatal(err)
+	}
+	if probes != 0 || writes != 0 || strings.Contains(step.View(70, 20), "retained") {
+		t.Fatal("hidden field was active")
+	}
+	step.setValue("enabled", "yes")
+	if err := step.Validate(); err == nil {
+		t.Fatal("applicable field bypassed validation")
+	}
+	if step.Value("setting") != "retained" {
+		t.Fatal("hidden value lost")
+	}
+}
+
+func TestTableCellCommitDoesNotCompleteStep(t *testing.T) {
+	step := NewDataDrivenStep(&StepDefinition{ID: StepIDAdvanced, Sections: []SectionDefinition{{Title: "labels", Fields: []FieldDefinition{{Key: "labels", Label: "labels", Type: FieldTypeKeyValue}}}}})
+	step.SetFocused(true)
+	step.Init()
+	step.Update(tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl})
+	if !step.OwnsKey(tea.KeyPressMsg{Code: tea.KeyEnter}) {
+		t.Fatal("editor does not own enter")
+	}
+	step.Update(tea.KeyPressMsg{Code: 'x', Text: "x"})
+	step.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if step.Value("labels") != "" {
+		t.Fatal("cancel retained edited cell")
+	}
+	step.Update(tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl})
+	_, cmd := step.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd != nil {
+		if _, complete := cmd().(StepCompleteMsg); complete {
+			t.Fatal("cell commit advanced step")
+		}
+	}
+	if step.OwnsKey(tea.KeyPressMsg{Code: tea.KeyEnter}) {
+		t.Fatal("cell remained in edit mode")
 	}
 }

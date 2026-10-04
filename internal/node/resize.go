@@ -88,55 +88,42 @@ func (r *Runner) Resize(ctx context.Context, scope ResizeScope, opts ResizeOptio
 		return &errtypes.ClusterError{Msg: msgListNodes, Err: err}
 	}
 
-	// A dry-run previews a fresh plan and mutates nothing, so resume is
-	// irrelevant: skip beginOp entirely so a stranded foreign marker previews
-	// rather than refusing.
+	targets, role, err := resolveResizeTargets(nodes, scope)
+	if err != nil {
+		return &errtypes.ConfigError{Msg: err.Error(), Err: err}
+	}
+	names := make([]string, len(targets))
+	for i := range targets {
+		names[i] = targets[i].name
+	}
+	hosts, err := r.targetHosts(ctx, role, names, true)
+	if err != nil {
+		return err
+	}
 	var marker *OpMarker
-	if !r.DryRun {
-		marker, err = r.beginOp(OpResize, resizeScopeMatch(scope, nodes), opts.Acknowledge)
+	if !r.DryRun || r.ResumePreview {
+		marker, err = r.beginIntent(OpResize, resizeScopeMatch(scope, nodes), opts.Acknowledge, r.resizeIntent(scope, role, opts))
 		if err != nil {
 			return err
 		}
 	}
 	resuming := marker != nil
 
-	targets, role, err := resolveResizeTargets(nodes, scope)
-	if err != nil {
-		return &errtypes.ConfigError{Msg: err.Error(), Err: err}
-	}
-
-	if opts.OSDiskGB > 0 {
-		if cur := r.roleDiskGB(role); opts.OSDiskGB <= cur {
-			return &errtypes.ConfigError{Msg: fmt.Sprintf(
-				"resize: --os-disk-gb is grow-only: requested %d GiB but %s already have %d GiB", opts.OSDiskGB, role, cur)}
-		}
+	if err := r.validateDiskGrowth(role, opts.OSDiskGB, resuming); err != nil {
+		return err
 	}
 
 	current := r.roleMemoryMB(role)
 	if opts.MemoryMB <= 0 {
 		opts.MemoryMB = current // omitted --memory-mb keeps memory unchanged
 	}
-	// The budget guard runs only on a fresh roll: on a resume the live
-	// HostAllocatedMiB probe already counts every target that grew before the
-	// crash, so projecting delta*len(targets) on top of it double-counts the
-	// finished nodes and can refuse a legitimate resume on a tight host.
-	delta := opts.MemoryMB - current
 	if !resuming {
-		if opts.HostTotalMiB > 0 {
-			if err := validateMemoryBudget(opts.HostTotalMiB, opts.HostAllocatedMiB, delta*len(targets)); err != nil {
-				return &errtypes.ConfigError{Msg: err.Error(), Err: err}
-			}
-		} else if delta > 0 {
-			r.Log.Warn("node: could not verify host memory budget (no proxmox probe); ensure the host has headroom before growing nodes",
-				"delta_mib_per_node", delta, "nodes", len(targets))
-		}
-
-		if err := r.checkDatastoreBudget(role, len(targets), opts); err != nil {
+		if err := r.checkResizeCapacity(ctx, hosts, role, len(targets), opts); err != nil {
 			return err
 		}
 	}
 
-	plan := resizePlan(role, targets, r.Cfg.Cluster.Name, opts)
+	plan := resizePlan(role, targets, r.Cfg.Cluster.Name, opts, diskOnly)
 
 	// Persist only outside dry-run: a dry-run must write nothing to disk. The
 	// truthful plan preview instead comes from sizingVars passed as -var
@@ -184,7 +171,7 @@ func (r *Runner) Resize(ctx context.Context, scope ResizeScope, opts ResizeOptio
 
 // resizePlan builds the informed-confirmation summary for a resize: one
 // in-place update per target node, carrying the resolved memory/cpu targets.
-func resizePlan(role nodetypes.NodeRole, targets []resizeTarget, clusterName string, opts ResizeOptions) OpPlan {
+func resizePlan(role nodetypes.NodeRole, targets []resizeTarget, clusterName string, opts ResizeOptions, diskOnly bool) OpPlan {
 	nodes := make([]PlanNode, len(targets))
 	for i, t := range targets {
 		addr := workerAddress(t.index)
@@ -198,13 +185,20 @@ func resizePlan(role nodetypes.NodeRole, targets []resizeTarget, clusterName str
 			Action:    terraform.PlanActionUpdate,
 		}
 	}
+	mode := ResizeDrainedRestart
+	if diskOnly {
+		mode = ResizeLiveDisk
+	} else if opts.SkipDrain {
+		mode = ResizeUndrainedRestart
+	}
 	return OpPlan{
-		Op:       OpResize,
-		Cluster:  clusterName,
-		Nodes:    nodes,
-		MemoryMB: opts.MemoryMB,
-		CPU:      opts.CPU,
-		OSDiskGB: opts.OSDiskGB,
+		ResizeMode: mode,
+		Op:         OpResize,
+		Cluster:    clusterName,
+		Nodes:      nodes,
+		MemoryMB:   opts.MemoryMB,
+		CPU:        opts.CPU,
+		OSDiskGB:   opts.OSDiskGB,
 	}
 }
 
@@ -236,7 +230,8 @@ type resizeTarget struct {
 
 func resolveResizeTargets(nodes []cluster.NodeDetail, scope ResizeScope) ([]resizeTarget, nodetypes.NodeRole, error) {
 	if scope.Node != "" {
-		for _, n := range nodes {
+		for i := range nodes {
+			n := &nodes[i]
 			if n.Name == scope.Node {
 				idx, ok := cluster.NodeIndex(n.Name)
 				if !ok {
@@ -249,7 +244,8 @@ func resolveResizeTargets(nodes []cluster.NodeDetail, scope ResizeScope) ([]resi
 	}
 
 	var targets []resizeTarget
-	for _, n := range nodes {
+	for i := range nodes {
+		n := &nodes[i]
 		if n.Role != scope.Role {
 			continue
 		}
@@ -528,4 +524,33 @@ func (r *Runner) growNodeDisk(ctx context.Context, t resizeTarget, opts ResizeOp
 		}
 		return nil
 	})
+}
+
+func (r *Runner) validateDiskGrowth(role nodetypes.NodeRole, requested int, resuming bool) error {
+	if requested <= 0 {
+		return nil
+	}
+	current := r.roleDiskGB(role)
+	if requested < current || (requested == current && !resuming) {
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("resize: --os-disk-gb is grow-only: requested %d GiB but %s already have %d GiB", requested, role, current)}
+	}
+	return nil
+}
+
+func (r *Runner) checkResizeCapacity(ctx context.Context, hosts map[string]int, role nodetypes.NodeRole, count int, opts ResizeOptions) error {
+	delta := opts.MemoryMB - r.roleMemoryMB(role)
+	if err := r.checkPlacementCapacity(ctx, hosts, delta, max(0, opts.OSDiskGB-r.roleDiskGB(role))); err != nil {
+		return err
+	}
+	if r.Capacity != nil {
+		return nil
+	}
+	if opts.HostTotalMiB > 0 {
+		if err := validateMemoryBudget(opts.HostTotalMiB, opts.HostAllocatedMiB, delta*count); err != nil {
+			return err
+		}
+	} else if delta > 0 {
+		r.Log.Warn("node: host memory budget unavailable", "delta_mib_per_node", delta, "nodes", count)
+	}
+	return r.checkDatastoreBudget(role, count, opts)
 }

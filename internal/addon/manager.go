@@ -98,7 +98,7 @@ func (m *Manager) InstallAll(ctx context.Context) error {
 		// Bare ctx.Err so cli/root.go::signalExitCode resolves SIGINT→130
 		// without a typed wrap.
 		if err := ctx.Err(); err != nil {
-			return err
+			return errors.Join(append(errs, err)...)
 		}
 
 		if dep := m.firstFailedDep(info.Dependencies, failed); dep != "" {
@@ -107,19 +107,11 @@ func (m *Manager) InstallAll(ctx context.Context) error {
 			continue
 		}
 
-		env, err := m.installAndVerify(ctx, a)
+		attempt, err := m.installAndVerify(ctx, a)
 		if err != nil {
 			failed[info.Name] = true
 			m.logger.Warn("addons: install and verify failed", "addon", info.Name, "err", err)
-			errs = append(errs, err)
-
-			m.logger.Info("addons: rolling back", "addon", info.Name)
-			rbCtx, cancel := rollbackCtx(ctx)
-			if unErr := a.Uninstall(rbCtx, env); unErr != nil {
-				m.logger.Warn("addons: rollback failed", "addon", info.Name, "err", unErr)
-				errs = append(errs, fmt.Errorf("addon %s rollback: %w", info.Name, unErr))
-			}
-			cancel()
+			errs = append(errs, err, m.compensate(ctx, []installAttempt{attempt}))
 			continue
 		}
 	}
@@ -130,27 +122,62 @@ func (m *Manager) InstallAll(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-// installAndVerify runs Install + Verify for one addon; a Verify failure
-// fails the install (caller rolls back).
-func (m *Manager) installAndVerify(ctx context.Context, a Addon) (*Environment, error) {
+type installAttempt struct {
+	name     string
+	mutated  bool
+	rollback func(context.Context) error
+}
+
+func (m *Manager) installAndVerify(ctx context.Context, a Addon) (installAttempt, error) {
 	info := a.Info()
-	m.logger.Info("addons: installing addon", "addon", info.Name)
+	attempt := installAttempt{name: info.Name}
 	env := m.buildEnv(a)
-	if c, ok := a.(ConfigurableAddon); ok {
-		if verrs := c.ValidateSettings(env.AddonConfig.Settings); len(verrs) > 0 {
-			return env, &errtypes.ConfigError{
-				Msg: fmt.Sprintf("addon %s has invalid settings: %s", info.Name, strings.Join(verrs, "; ")),
-			}
+	if configurable, ok := a.(ConfigurableAddon); ok {
+		if failures := configurable.ValidateSettings(env.AddonConfig.Settings); len(failures) > 0 {
+			return attempt, &errtypes.ConfigError{Msg: fmt.Sprintf("addon %s has invalid settings: %s", info.Name, strings.Join(failures, "; "))}
 		}
 	}
-	if err := a.Install(ctx, env); err != nil {
-		return env, &errtypes.ClusterError{Msg: fmt.Sprintf("addon %s install failed", info.Name), Err: err}
+	if owner, ok := a.(InstallCompensator); ok {
+		rollback, err := owner.PrepareRollback(ctx, env)
+		if err != nil {
+			return attempt, fmt.Errorf("inspect addon %s ownership: %w", info.Name, err)
+		}
+		attempt.rollback = rollback
 	}
-	if vErr := a.Verify(ctx, env); vErr != nil {
-		return env, &errtypes.ClusterError{Msg: fmt.Sprintf("addon %s installed but verify failed", info.Name), Err: vErr}
+	if err := ctx.Err(); err != nil {
+		return attempt, err
+	}
+	attempt.mutated = true
+	if err := a.Install(ctx, env); err != nil {
+		return attempt, &errtypes.ClusterError{Msg: fmt.Sprintf("install addon %s", info.Name), Err: err}
+	}
+	if err := ctx.Err(); err != nil {
+		return attempt, err
+	}
+	if err := a.Verify(ctx, env); err != nil {
+		return attempt, &errtypes.ClusterError{Msg: fmt.Sprintf("verify addon %s", info.Name), Err: err}
 	}
 	m.logger.Info("addons: installed and verified", "addon", info.Name)
-	return env, nil
+	return attempt, nil
+}
+
+func (m *Manager) compensate(ctx context.Context, attempts []installAttempt) error {
+	cleanup, cancel := rollbackCtx(ctx)
+	defer cancel()
+	var errs []error
+	for _, attempt := range slices.Backward(attempts) {
+		if !attempt.mutated {
+			continue
+		}
+		if attempt.rollback == nil {
+			m.logger.Warn("addons: preserving resources without request ownership", "addon", attempt.name)
+			continue
+		}
+		if err := attempt.rollback(cleanup); err != nil {
+			errs = append(errs, fmt.Errorf("rollback addon %s: %w", attempt.name, err))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func (m *Manager) firstFailedDep(deps []string, failed map[string]bool) string {
@@ -185,32 +212,16 @@ func (m *Manager) InstallOne(ctx context.Context, name string) error {
 		return &errtypes.ConfigError{Msg: "addon dependency resolution failed", Err: err}
 	}
 
-	type installedAddon struct {
-		a   Addon
-		env *Environment
-	}
-	var installed []installedAddon
-
+	var attempted []installAttempt
 	for _, addon := range ordered {
 		if err := ctx.Err(); err != nil {
-			return err
+			return errors.Join(err, m.compensate(ctx, attempted))
 		}
-
-		env, err := m.installAndVerify(ctx, addon)
+		attempt, err := m.installAndVerify(ctx, addon)
+		attempted = append(attempted, attempt)
 		if err != nil {
-			// All-or-nothing: roll back previously-installed addons in reverse order.
-			for _, inst := range slices.Backward(installed) {
-				m.logger.Info("addons: rolling back", "addon", inst.a.Info().Name)
-				rbCtx, cancel := rollbackCtx(ctx)
-				if unErr := inst.a.Uninstall(rbCtx, inst.env); unErr != nil {
-					m.logger.Warn("addons: rollback failed", "addon", inst.a.Info().Name, "err", unErr)
-					err = errors.Join(err, fmt.Errorf("addon %s rollback: %w", inst.a.Info().Name, unErr))
-				}
-				cancel()
-			}
-			return err
+			return errors.Join(err, m.compensate(ctx, attempted))
 		}
-		installed = append(installed, installedAddon{a: addon, env: env})
 	}
 
 	return nil

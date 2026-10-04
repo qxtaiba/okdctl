@@ -10,6 +10,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
+	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
@@ -75,11 +76,12 @@ func (s *PreviewStep) Init() tea.Cmd {
 	s.st.Proceed = false
 	s.st.Plan = nil
 	s.st.DryRunErr = nil
+	ctx, state := s.Context(), *s.st
 	run := func() tea.Msg {
 		if s.hooks.DryRun == nil {
 			return dryRunDoneMsg{}
 		}
-		plan, err := s.hooks.DryRun(s.st)
+		plan, err := s.hooks.DryRun(ctx, &state)
 		return dryRunDoneMsg{plan: plan, err: err}
 	}
 	return tea.Batch(s.loadingSpinner.Tick, run)
@@ -159,7 +161,7 @@ func (s *PreviewStep) View(width, height int) string {
 	}
 	if s.st.DryRunErr != nil {
 		errStyle := lipgloss.NewStyle().Foreground(tui.ColorError).Bold(true)
-		hintStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500).Italic(true)
+		hintStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim).Italic(true)
 		return errStyle.Render("dry-run failed") + "\n\n" +
 			lipgloss.NewStyle().Foreground(tui.ColorText).Render(s.st.DryRunErr.Error()) + "\n\n" +
 			hintStyle.Render("esc to go back and adjust")
@@ -212,14 +214,7 @@ func (s *PreviewStep) operationEntries() []wizard.KVEntry {
 				Value: fmt.Sprintf("%d → %d GiB per node", s.currentRoleDiskGB(), plan.OSDiskGB),
 			})
 		}
-		disruption := "each node is drained, then power-cycled (stop→start)"
-		if s.st.SkipDrain {
-			disruption = "power-cycle without drain (pods restart in place)"
-		}
-		if s.st.DiskOnly() {
-			disruption = "live resize — no drain, no power-cycle"
-		}
-		entries = append(entries, wizard.KVEntry{Label: sectionDisruption, Value: disruption})
+		entries = append(entries, wizard.KVEntry{Label: sectionDisruption, Value: render.ResizeDisruption(plan.ResizeMode)})
 	}
 	if s.st.DrainTimeout != "" && !s.st.SkipDrain && s.st.Op != node.OpAdd {
 		entries = append(entries, wizard.KVEntry{Label: "drain timeout", Value: s.st.DrainTimeout})
@@ -347,4 +342,13 @@ func (s *PreviewStep) ShortHelp() []wizard.KeyBinding {
 		{Key: wizard.HelpEsc, Help: wizard.HelpBack},
 		{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
 	}
+}
+
+// FocusBounds keeps the operation decision visible below the plan.
+func (s *PreviewStep) FocusBounds(width, height int) (top, bottom int, ok bool) {
+	if s.phase != previewDone || s.actions == nil || s.st.Plan == nil || s.st.DryRunErr != nil {
+		return 0, 0, false
+	}
+	bottom = lipgloss.Height(lipgloss.NewStyle().Width(width).Render(s.View(width, height)))
+	return bottom - lipgloss.Height(s.actions.View()), bottom, true
 }

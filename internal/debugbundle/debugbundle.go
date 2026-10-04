@@ -252,7 +252,7 @@ func bundleTerraformState(ctx context.Context, addFile func(string, []byte) erro
 		return manifestEntry{Name: categoryTerraformState, Status: bundleStatusSkipped, Message: "no terraform.tfstate in " + tfDir}
 	}
 	tfExec := executor.New(executor.WithWorkDir(tfDir))
-	result, runErr := tfExec.Run(ctx, "terraform", "state", "list")
+	result, runErr := tfExec.RunOutput(ctx, 0, "terraform", "state", "list")
 	if runErr != nil {
 		return manifestEntry{Name: categoryTerraformState, Status: bundleStatusFailed, Message: "terraform state list: " + safeMessage(runErr)}
 	}
@@ -262,6 +262,9 @@ func bundleTerraformState(ctx context.Context, addFile func(string, []byte) erro
 			msg = fmt.Sprintf("terraform state list exited %d", result.ExitCode)
 		}
 		return manifestEntry{Name: categoryTerraformState, Status: bundleStatusFailed, Message: msg}
+	}
+	if result.Truncated {
+		return manifestEntry{Name: categoryTerraformState, Status: bundleStatusFailed, Message: "terraform state list exceeded capture limit"}
 	}
 	if err := addFile("terraform-state-list.txt", []byte(result.Stdout)); err != nil {
 		return manifestEntry{Name: categoryTerraformState, Status: bundleStatusFailed, Message: safeMessage(err)}

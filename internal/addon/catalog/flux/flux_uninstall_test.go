@@ -69,9 +69,9 @@ func TestUninstall_HappyPath(t *testing.T) {
 	}
 
 	want := []string{
-		"helm:uninstall flux-instance --namespace flux-system",
-		"helm:uninstall flux-operator --namespace flux-system",
-		"oc:delete ns flux-system",
+		"helm:uninstall flux-instance --namespace flux-system --ignore-not-found",
+		"helm:uninstall flux-operator --namespace flux-system --ignore-not-found",
+		"oc:delete ns flux-system --ignore-not-found",
 	}
 	for i, w := range want {
 		if lines[i] != w {
@@ -97,29 +97,20 @@ func TestUninstall_FailuresDoNotAbort(t *testing.T) {
 		Logger:      slog.New(h),
 	}
 
-	f := &fluxAddon{}
-	if err := f.Uninstall(context.Background(), env); err != nil {
-		t.Fatalf("Uninstall must return nil even when all commands fail; got: %v", err)
-	}
-
-	if got := h.CountLevel(slog.LevelWarn); got != 3 {
-		t.Errorf("warnCount = %d; want 3 (one per failing command)", got)
+	err := (&fluxAddon{}).Uninstall(t.Context(), env)
+	if err == nil || !strings.Contains(err.Error(), "flux-instance") || !strings.Contains(err.Error(), "flux-operator") || !strings.Contains(err.Error(), "namespace") {
+		t.Fatalf("lost cleanup failures: %v", err)
 	}
 }
 
-// TestUninstall_NonZeroExitWarns locks that Uninstall inspects Result.ExitCode,
-// since Run returns nil on a non-zero exit.
-func TestUninstall_NonZeroExitWarns(t *testing.T) {
+func TestUninstall_NonZeroExitContinues(t *testing.T) {
 	argvLog := filepath.Join(t.TempDir(), "argv.log")
 	installFakeTools(t)
-	h := &testutil.CaptureHandler{}
-	env := makeEnv(t, argvLog, "1", slog.New(h))
-
-	f := &fluxAddon{}
-	if err := f.Uninstall(context.Background(), env); err != nil {
-		t.Fatalf("Uninstall must return nil on non-zero tool exits; got %v", err)
+	env := makeEnv(t, argvLog, "1", slog.New(&testutil.CaptureHandler{}))
+	if err := (&fluxAddon{}).Uninstall(t.Context(), env); err == nil {
+		t.Fatal("cleanup failure lost")
 	}
-	if got := h.CountLevel(slog.LevelWarn); got != 3 {
-		t.Errorf("warnCount = %d; want 3 (every delete exits non-zero)", got)
+	if lines := readArgvLog(t, argvLog); len(lines) != 3 {
+		t.Fatalf("cleanup stopped early: %v", lines)
 	}
 }

@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 
+	corev1 "k8s.io/api/core/v1"
+
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
@@ -104,9 +106,10 @@ func parseMastersSchedulable(data []byte) (bool, error) {
 // NodeDetail is a cluster node's projected identity — name, role, readiness —
 // used by lifecycle guards.
 type NodeDetail struct {
-	Name  string
-	Role  nodetypes.NodeRole
-	Ready bool
+	Name           string
+	Role           nodetypes.NodeRole
+	Ready          bool
+	ReadyCondition corev1.NodeCondition
 }
 
 // ListNodes returns every node's projected identity from `oc get nodes -o json`.
@@ -118,40 +121,53 @@ func (c *Client) ListNodes(ctx context.Context) ([]NodeDetail, error) {
 	return parseNodeList(data)
 }
 
-func parseNodeList(data []byte) ([]NodeDetail, error) {
-	var nl struct {
-		Items []struct {
-			Metadata struct {
-				Name   string            `json:"name"`
-				Labels map[string]string `json:"labels"`
-			} `json:"metadata"`
-			Status struct {
-				Conditions []struct {
-					Type   nodetypes.ConditionType   `json:"type"`
-					Status nodetypes.ConditionStatus `json:"status"`
-				} `json:"conditions"`
-			} `json:"status"`
-		} `json:"items"`
+// GetNode observes one node and rejects incomplete command output.
+func (c *Client) GetNode(ctx context.Context, name string) (NodeDetail, error) {
+	data, err := c.getJSONChecked(ctx, "get node", "get", "node", name, "-o", "json")
+	if err != nil {
+		return NodeDetail{}, err
 	}
-	if err := json.Unmarshal(data, &nl); err != nil {
+	return ParseNode(data)
+}
+
+// ParseNode preserves the full Ready condition, defaulting absent readiness to Unknown.
+func ParseNode(data []byte) (NodeDetail, error) {
+	var n corev1.Node
+	if err := json.Unmarshal(data, &n); err != nil {
+		return NodeDetail{}, fmt.Errorf("parse node json: %w", err)
+	}
+	return observeNode(&n), nil
+}
+
+func parseNodeList(data []byte) ([]NodeDetail, error) {
+	var list corev1.NodeList
+	if err := json.Unmarshal(data, &list); err != nil {
 		return nil, fmt.Errorf("parse node list json: %w", err)
 	}
-	out := make([]NodeDetail, 0, len(nl.Items))
-	for _, item := range nl.Items {
-		d := NodeDetail{Name: item.Metadata.Name, Role: nodetypes.RoleUnknown}
-		if _, ok := item.Metadata.Labels["node-role.kubernetes.io/master"]; ok {
-			d.Role = nodetypes.RoleMaster
-		} else if _, ok := item.Metadata.Labels["node-role.kubernetes.io/worker"]; ok {
-			d.Role = nodetypes.RoleWorker
-		}
-		for _, cond := range item.Status.Conditions {
-			if cond.Type == nodetypes.ConditionTypeReady && cond.Status == nodetypes.ConditionStatusTrue {
-				d.Ready = true
-			}
-		}
-		out = append(out, d)
+	out := make([]NodeDetail, 0, len(list.Items))
+	for i := range list.Items {
+		out = append(out, observeNode(&list.Items[i]))
 	}
 	return out, nil
+}
+
+func observeNode(n *corev1.Node) NodeDetail {
+	d := NodeDetail{Name: n.Name, Role: nodetypes.RoleUnknown, ReadyCondition: corev1.NodeCondition{Type: corev1.NodeReady, Status: corev1.ConditionUnknown}}
+	_, master := n.Labels["node-role.kubernetes.io/master"]
+	_, controlPlane := n.Labels["node-role.kubernetes.io/control-plane"]
+	if master || controlPlane {
+		d.Role = nodetypes.RoleMaster
+	} else if _, worker := n.Labels["node-role.kubernetes.io/worker"]; worker {
+		d.Role = nodetypes.RoleWorker
+	}
+	for _, condition := range n.Status.Conditions {
+		if condition.Type == corev1.NodeReady {
+			d.ReadyCondition = condition
+			break
+		}
+	}
+	d.Ready = d.ReadyCondition.Status == corev1.ConditionTrue
+	return d
 }
 
 // PodPlacement is a pod's identity and scheduled node, used by storage/

@@ -117,6 +117,12 @@ func (s *ReviewStep) View(width, height int) string {
 		return "no configuration to review"
 	}
 
+	resolved := *s
+	resolved.cfg = config.Effective(s.cfg)
+	return resolved.renderSummary(width)
+}
+
+func (s *ReviewStep) renderSummary(width int) string {
 	st := wizard.NewSectionStyles(width)
 	var content strings.Builder
 
@@ -460,4 +466,13 @@ func (s *ReviewStep) GetSelectedAction() wizard.Action {
 	default:
 		return wizard.ActionExit
 	}
+}
+
+// FocusBounds keeps review actions visible beneath the configuration summary.
+func (s *ReviewStep) FocusBounds(width, height int) (top, bottom int, ok bool) {
+	if s.cfg == nil {
+		return 0, 0, false
+	}
+	bottom = lipgloss.Height(lipgloss.NewStyle().Width(width).Render(s.View(width, height)))
+	return bottom - lipgloss.Height(s.action.View()), bottom, true
 }

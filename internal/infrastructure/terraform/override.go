@@ -1,6 +1,7 @@
 package terraform
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -17,8 +18,8 @@ import (
 // *_override.tf suffix is required for Terraform to merge it into the module.
 const DestroyOverrideFileName = "prevent_destroy_override.tf"
 
-const destroyOverrideHCL = `# Written by okdctl destroy after full confirmation; deleted when the
-# destroy finishes. If you are reading this outside a running destroy it is
+const destroyOverrideHCL = `# Written by okdctl destroy during a plan or confirmed execution; deleted
+# when that operation finishes. If you are reading this outside a running destroy it is
 # stale — delete it. okdctl refuses to plan or apply while it exists.
 resource "proxmox_virtual_environment_vm" "master" {
   lifecycle {
@@ -99,4 +100,20 @@ func WithPreventDestroyHint(err error, moduleDir string) error {
 		return errors.Join(&errtypes.ClusterError{Msg: hint}, err)
 	}
 	return appender.WithHint(hint)
+}
+
+// PreviewDestroy temporarily disables the master guard for a destroy-only plan.
+// The caller must hold the workspace run lock; existing overrides are refused.
+func (t *Executor) PreviewDestroy(ctx context.Context, moduleDir string, targets []string) (err error) {
+	path := DestroyOverridePath(moduleDir)
+	if _, statErr := os.Lstat(path); statErr == nil {
+		return &errtypes.ConfigError{Msg: "destroy preview refuses existing override: " + path}
+	} else if !errors.Is(statErr, os.ErrNotExist) {
+		return fmt.Errorf("inspect destroy override: %w", statErr)
+	}
+	if _, err = WriteDestroyOverride(moduleDir); err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, RemoveDestroyOverride(moduleDir)) }()
+	return t.PlanStreamed(ctx, PlanOptions{Destroy: true, Targets: targets})
 }

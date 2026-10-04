@@ -195,11 +195,8 @@ func ignitionCertsCleanupStep(opts *Options, t *cleanupTracker, logger *slog.Log
 		ID: StepCleanupIgnitionCerts, Name: "cleanup ignition certs",
 		NonFatal:  true,
 		ReRunSafe: distribution.ReRunSafeYes,
-		AlreadyDone: func(_ context.Context) (bool, error) {
-			return !system.DirExists(filepath.Join(opts.ProjectRoot, "certs", "ignition")), nil
-		},
-		Exec:    func(ctx context.Context) error { return IgnitionCerts(ctx, opts.ProjectRoot, logger) },
-		OnError: t.onError("ignition-certs"),
+		Exec:      func(ctx context.Context) error { return IgnitionCerts(ctx, opts.ProjectRoot, logger) },
+		OnError:   t.onError("ignition-certs"),
 	}
 }
 

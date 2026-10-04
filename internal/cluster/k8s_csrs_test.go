@@ -2,11 +2,14 @@ package cluster
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	certificatesv1 "k8s.io/api/certificates/v1"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
@@ -28,7 +31,8 @@ case "$1" in
     fi
     exit "${OC_GET_EXIT:-0}"
     ;;
-  adm)
+  replace)
+    cat >> "${OC_ARGV_FILE:-/dev/null}.body"
     if [ -n "${OC_ARGV_FILE:-}" ]; then
       echo "$@" >> "${OC_ARGV_FILE}"
     fi
@@ -58,7 +62,7 @@ func TestApprovePendingCSRs_EmptyList(t *testing.T) {
 	t.Setenv("OC_CSR_JSON", `{"items":[]}`)
 
 	c := newTestClient(t)
-	n, err := c.ApprovePendingCSRs(context.Background())
+	n, err := c.ApprovePendingCSRs(context.Background(), testCSRIdentity())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -70,18 +74,25 @@ func TestApprovePendingCSRs_EmptyList(t *testing.T) {
 	}
 }
 
-func TestApprovePendingCSRs_BatchedSingleCall(t *testing.T) {
+func TestApprovePendingCSRs_VersionGuardedRequests(t *testing.T) {
 	installFakeOCForCSRs(t)
 	dir := t.TempDir()
 	argvFile := filepath.Join(dir, "argv")
 	t.Setenv("OC_ARGV_FILE", argvFile)
-	t.Setenv("OC_CSR_JSON", `{"items":[`+
-		`{"metadata":{"name":"csr-1"},"status":{"conditions":[]}},`+
-		`{"metadata":{"name":"csr-2"},"status":{"conditions":[]}},`+
-		`{"metadata":{"name":"csr-3"},"status":{"conditions":[]}}]}`)
+	items := []certificatesv1.CertificateSigningRequest{}
+	for _, name := range []string{"csr-1", "csr-2", "csr-3"} {
+		csr := testCSR(t)
+		csr.Name = name
+		items = append(items, csr)
+	}
+	body, marshalErr := json.Marshal(certificatesv1.CertificateSigningRequestList{Items: items})
+	if marshalErr != nil {
+		t.Fatal(marshalErr)
+	}
+	t.Setenv("OC_CSR_JSON", string(body))
 
 	c := newTestClient(t)
-	n, err := c.ApprovePendingCSRs(context.Background())
+	n, err := c.ApprovePendingCSRs(context.Background(), testCSRIdentity())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -93,11 +104,11 @@ func TestApprovePendingCSRs_BatchedSingleCall(t *testing.T) {
 		t.Fatalf("argv file not written: %v", readErr)
 	}
 	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
-	if len(lines) != 1 {
-		t.Errorf("approve called %d times; want exactly 1 (batched)", len(lines))
+	if len(lines) != 3 {
+		t.Errorf("approve called %d times; want 3 version-guarded requests", len(lines))
 	}
 	for _, name := range []string{"csr-1", "csr-2", "csr-3"} {
-		if !strings.Contains(lines[0], name) {
+		if !strings.Contains(string(data), name) {
 			t.Errorf("argv line %q missing CSR name %q", lines[0], name)
 		}
 	}
@@ -108,7 +119,7 @@ func TestApprovePendingCSRs_PendingCSRsError(t *testing.T) {
 	t.Setenv("OC_GET_EXIT", "1")
 
 	c := newTestClient(t)
-	n, err := c.ApprovePendingCSRs(context.Background())
+	n, err := c.ApprovePendingCSRs(context.Background(), testCSRIdentity())
 	if err == nil {
 		t.Fatal("expected error when get csr exits non-zero")
 	}
@@ -123,11 +134,15 @@ func TestApprovePendingCSRs_PendingCSRsError(t *testing.T) {
 
 func TestApprovePendingCSRs_ApproveFailureWrapped(t *testing.T) {
 	installFakeOCForCSRs(t)
-	t.Setenv("OC_CSR_JSON", `{"items":[{"metadata":{"name":"csr-1"},"status":{"conditions":[]}}]}`)
+	body, marshalErr := json.Marshal(certificatesv1.CertificateSigningRequestList{Items: []certificatesv1.CertificateSigningRequest{testCSR(t)}})
+	if marshalErr != nil {
+		t.Fatal(marshalErr)
+	}
+	t.Setenv("OC_CSR_JSON", string(body))
 	t.Setenv("OC_APPROVE_EXIT", "1")
 
 	c := newTestClient(t)
-	n, err := c.ApprovePendingCSRs(context.Background())
+	n, err := c.ApprovePendingCSRs(context.Background(), testCSRIdentity())
 	if err == nil {
 		t.Fatal("expected error when approve exits non-zero")
 	}

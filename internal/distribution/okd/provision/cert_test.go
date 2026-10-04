@@ -157,3 +157,25 @@ func TestGenerateSelfSignedCert_X509RoundTrip(t *testing.T) {
 		t.Error("cert.IsCA = false; want true")
 	}
 }
+
+func TestLoadExistingCertRejectsMismatchedKey(t *testing.T) {
+	certPath, keyPath := IgnitionCertPaths(t.TempDir())
+	otherCert, otherKey := IgnitionCertPaths(t.TempDir())
+	if _, _, err := generateSelfSignedCert(certPath, keyPath, "192.0.2.1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := generateSelfSignedCert(otherCert, otherKey, "192.0.2.1"); err != nil {
+		t.Fatal(err)
+	}
+	key, err := os.ReadFile(otherKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(key)
+	if err := os.WriteFile(keyPath, key, 0o600); err != nil { //nolint:gosec // G703: keyPath is confined to t.TempDir().
+		t.Fatal(err)
+	}
+	if _, _, ok := loadExistingCert(certPath, keyPath, "192.0.2.1"); ok {
+		t.Fatal("accepted unrelated private key")
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 func (m *Model) handleResize(msg tea.WindowSizeMsg) {
@@ -27,6 +28,7 @@ func (m *Model) handleResize(msg tea.WindowSizeMsg) {
 		}
 	}
 	m.syncViewportContent()
+	m.autoScrollToField(0, 0)
 }
 
 func (m *Model) handleScrollKey(msg tea.KeyPressMsg) bool {
@@ -48,30 +50,27 @@ func (m *Model) handleScrollKey(msg tea.KeyPressMsg) bool {
 	return true
 }
 
-// autoScrollToField scrolls by field-progress percentage to keep the focused field visible.
-func (m *Model) autoScrollToField(fieldIndex, totalFields int) {
-	if totalFields == 0 {
+func (m *Model) autoScrollToField(_, _ int) {
+	step := m.CurrentStep()
+	bounded, ok := step.(FocusedBounds)
+	if !ok {
 		return
 	}
-
-	totalContent := m.viewport.TotalLineCount()
-	viewportHeight := m.viewport.Height()
-
-	if totalContent <= viewportHeight {
+	top, bottom, ok := bounded.FocusBounds(max(40, m.contentWidth()-4), 1000)
+	if !ok {
 		return
 	}
-
-	var progress float64
-	if totalFields <= 1 {
-		progress = 0
-	} else {
-		progress = float64(fieldIndex) / float64(totalFields-1)
+	if titled, ok := step.(displayTitler); ok && titled.DisplayTitle() != "" {
+		offset := lipgloss.Height(m.renderStepTitle(titled.DisplayTitle())) + 1
+		top += offset
+		bottom += offset
 	}
-
-	maxOffset := totalContent - viewportHeight
-	targetOffset := min(max(int(progress*float64(maxOffset)), 0), maxOffset)
-
-	m.viewport.SetYOffset(targetOffset)
+	offset := m.viewport.YOffset()
+	if top < offset || bottom-top > m.viewport.Height() {
+		m.viewport.SetYOffset(top)
+	} else if bottom > offset+m.viewport.Height() {
+		m.viewport.SetYOffset(bottom - m.viewport.Height())
+	}
 }
 
 func (m *Model) goToNextStep() (tea.Model, tea.Cmd) {
@@ -90,9 +89,9 @@ func (m *Model) goToNextStep() (tea.Model, tea.Cmd) {
 					action = ag.GetSelectedAction()
 				}
 				m.result = Result{
-					Completed: true,
-					Config:    m.config,
-					Action:    action,
+					Outcome: OutcomeCompleted,
+					Config:  m.config,
+					Action:  action,
 				}
 				return m, tea.Quit
 			}
@@ -124,9 +123,9 @@ func (m *Model) goToNextStep() (tea.Model, tea.Cmd) {
 			}
 		}
 		m.result = Result{
-			Completed: true,
-			Config:    m.config,
-			Action:    action,
+			Outcome: OutcomeCompleted,
+			Config:  m.config,
+			Action:  action,
 		}
 		return m, tea.Quit
 	}
@@ -216,6 +215,7 @@ func (m *Model) indexOfStepByID(id StepID) int {
 // jump targets, resync viewport.
 func (m *Model) focusStep(idx int) (tea.Model, tea.Cmd) {
 	m.currentStep = idx
+	m.beginVisit()
 
 	contentWidth, contentHeight := m.contentDimensions()
 	if r, ok := m.steps[idx].(ResizableStep); ok {
@@ -225,6 +225,7 @@ func (m *Model) focusStep(idx int) (tea.Model, tea.Cmd) {
 		f.SetFocused(true)
 	}
 
+	cmd := m.ownCommand(m.steps[idx].Init())
 	m.syncJumpTargets()
 
 	if m.ready {
@@ -232,7 +233,8 @@ func (m *Model) focusStep(idx int) (tea.Model, tea.Cmd) {
 		m.syncViewportContent()
 	}
 
-	return m, m.steps[idx].Init()
+	m.autoScrollToField(0, 0)
+	return m, cmd
 }
 
 // syncJumpTargets refreshes the review step's digit-jump table, compacting out

@@ -37,7 +37,7 @@ func TestRunLifecycleOpRejectsUnknownOp(t *testing.T) {
 func TestReportLifecycleOutcomeInterruptedIsNotSilent(t *testing.T) {
 	cmd, out := outcomeCmd()
 	st := &lifecycle.State{Cfg: config.DefaultConfig(), Proceed: true, Started: true}
-	err := reportLifecycleOutcome(cmd, wizard.Result{Cancelled: true}, st)
+	err := reportLifecycleOutcome(cmd, wizard.Result{Outcome: wizard.OutcomeCancelled}, st)
 	if err == nil {
 		t.Fatal("an interrupted execution must exit non-zero, never 'no changes made'")
 	}
@@ -58,7 +58,7 @@ func TestReportLifecycleOutcomeExecutedPaths(t *testing.T) {
 
 	cmd, out := outcomeCmd()
 	st := &lifecycle.State{Proceed: true, Started: true, Executed: true, Plan: plan}
-	if err := reportLifecycleOutcome(cmd, wizard.Result{Completed: true}, st); err != nil {
+	if err := reportLifecycleOutcome(cmd, wizard.Result{Outcome: wizard.OutcomeCompleted}, st); err != nil {
 		t.Fatalf("successful run: %v", err)
 	}
 	if !strings.Contains(out.String(), "resize") {
@@ -68,7 +68,7 @@ func TestReportLifecycleOutcomeExecutedPaths(t *testing.T) {
 	boom := errors.New("etcd gate failed")
 	cmd, _ = outcomeCmd()
 	st = &lifecycle.State{Proceed: true, Started: true, Executed: true, Plan: plan, Result: boom}
-	if err := reportLifecycleOutcome(cmd, wizard.Result{Completed: true}, st); !errors.Is(err, boom) {
+	if err := reportLifecycleOutcome(cmd, wizard.Result{Outcome: wizard.OutcomeCompleted}, st); !errors.Is(err, boom) {
 		t.Errorf("failed run must propagate the backend error, got %v", err)
 	}
 }
@@ -76,7 +76,7 @@ func TestReportLifecycleOutcomeExecutedPaths(t *testing.T) {
 func TestReportLifecycleOutcomeNoConsentMeansNoChanges(t *testing.T) {
 	cmd, out := outcomeCmd()
 	st := &lifecycle.State{Proceed: false}
-	if err := reportLifecycleOutcome(cmd, wizard.Result{Cancelled: true}, st); err != nil {
+	if err := reportLifecycleOutcome(cmd, wizard.Result{Outcome: wizard.OutcomeCancelled}, st); err != nil {
 		t.Fatalf("backing out pre-consent must exit clean: %v", err)
 	}
 	if out.Len() != 0 {

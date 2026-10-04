@@ -10,6 +10,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/node"
+	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
@@ -35,7 +36,7 @@ type OpStep struct {
 // first when st.Marker names an interrupted op.
 func NewOpStep(st *State) *OpStep {
 	var ops []opChoice
-	if st.Marker != nil {
+	if st.Marker != nil && st.Marker.Intent != nil {
 		ops = append(ops, opChoice{
 			op:     st.Marker.Op,
 			resume: true,
@@ -94,7 +95,7 @@ func (s *OpStep) View(width, height int) string {
 	s.SetSize(width, height)
 
 	titleStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true)
-	subtitleStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate400).Italic(true)
+	subtitleStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim).Italic(true)
 
 	content := titleStyle.Render("cluster lifecycle") + "\n\n"
 	content += subtitleStyle.Render(fmt.Sprintf("manage nodes on cluster %q", s.st.Cfg.Cluster.Name)) + "\n\n"
@@ -106,6 +107,9 @@ func (s *OpStep) View(width, height int) string {
 			humanAge(time.Since(s.st.Marker.Timestamp)))) + "\n\n"
 	}
 
+	if s.st.Marker != nil && s.st.Marker.Intent == nil {
+		content += subtitleStyle.Render("saved request unavailable; choose a fresh operation") + "\n\n"
+	}
 	for i, o := range s.ops {
 		content += s.renderOption(&o, i == s.nav.SelectedIndex())
 		if i < len(s.ops)-1 {
@@ -121,10 +125,10 @@ func (s *OpStep) renderOption(o *opChoice, selected bool) string {
 		bullet = lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true).Render(tui.IconActive)
 		title = lipgloss.NewStyle().Foreground(tui.ColorText).Bold(true).Render(o.title)
 	} else {
-		bullet = lipgloss.NewStyle().Foreground(tui.ColorSlate600).Render(tui.IconPending)
-		title = lipgloss.NewStyle().Foreground(tui.ColorSlate300).Render(o.title)
+		bullet = lipgloss.NewStyle().Foreground(tui.ColorBorder).Render(tui.IconPending)
+		title = lipgloss.NewStyle().Foreground(tui.ColorText).Render(o.title)
 	}
-	descStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
+	descStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim)
 	out := bullet + " " + title
 	for line := range strings.SplitSeq(o.desc, "\n") {
 		out += "\n  " + descStyle.Render(line)
@@ -142,15 +146,28 @@ func (s *OpStep) Apply(_ *config.Config) error {
 	s.st.Ack = s.st.Marker != nil && !c.resume
 	s.st.Scope = node.ResizeScope{}
 	s.st.Target = ""
+
 	if c.resume {
-		switch c.op {
-		case node.OpResize:
-			s.st.Scope = node.ResizeScope{Node: s.st.Marker.Target}
-		case node.OpRemove:
-			s.st.Target = s.st.Marker.Target
-		}
+		s.restoreIntent()
 	}
+
 	return nil
+}
+
+func (s *OpStep) restoreIntent() {
+	intent := s.st.Marker.Intent
+	s.st.MemoryMB, s.st.CPU, s.st.OSDiskGB = 0, 0, 0
+	s.st.SkipDrain, s.st.ForceStorage, s.st.DrainTimeout = intent.SkipDrain, intent.ForceStorage, intent.DrainTimeout
+	switch s.st.Op {
+	case node.OpResize:
+		role, target, _ := strings.Cut(intent.Scope, "/")
+		s.st.Scope = node.ResizeScope{Role: nodetypes.NodeRole(role), Node: target}
+		s.st.MemoryMB, s.st.CPU, s.st.OSDiskGB = intent.RequestedMemoryMB, intent.RequestedCPU, intent.RequestedOSDiskGB
+	case node.OpRemove:
+		s.st.Target = intent.Scope
+	case node.OpAdd:
+		s.st.Count = intent.AddCount
+	}
 }
 
 // humanAge renders duration at minute precision, unlike time.Duration.String ("2h", not "2h0m0s").

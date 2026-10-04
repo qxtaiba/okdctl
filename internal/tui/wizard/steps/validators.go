@@ -10,14 +10,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// Re-exports of config-package validators used by wizard step definitions.
-var (
-	ValidateNodeCount   = config.ValidateNodeCount
-	ValidateClusterName = config.ValidateClusterName
-	ValidateDomain      = config.ValidateDomain
-	ValidateProxmoxHost = config.ValidateProxmoxHost
-)
-
 // ValidateFilePath requires a non-empty path that exists on disk.
 func ValidateFilePath(value string) error {
 	if value == "" {

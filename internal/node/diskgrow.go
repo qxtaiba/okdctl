@@ -46,7 +46,7 @@ func (g *DebugNodeGrower) GrowOSDisk(ctx context.Context, node string) error {
 		if detail == "" {
 			detail = strings.TrimSpace(result.Stdout)
 		}
-		return fmt.Errorf("in-guest disk grow on %s exited %d: %s", node, result.ExitCode, detail)
+		return fmt.Errorf("in-guest disk grow on %s: %w", node, executor.NewExitError(ctx, "oc debug", result.ExitCode, detail))
 	}
 	return nil
 }

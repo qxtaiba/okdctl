@@ -581,3 +581,37 @@ func TestCreateSnapshot_acknowledgeConsumesForeignMarker(t *testing.T) {
 		t.Fatalf("follow-up op must not re-refuse a consumed marker: %v", err)
 	}
 }
+
+type observedSnapshot struct {
+	*fakeSnapshotClient
+	host     string
+	ownerErr error
+}
+
+func (f *observedSnapshot) VMOwner(context.Context, *hostssh.RemoteISOParams, int) (string, error) {
+	return f.host, f.ownerErr
+}
+
+func TestSnapshotOwnershipPrecedesDrain(t *testing.T) {
+	var events []string
+	fsc := &fakeSnapshotClient{log: &events}
+	r, fc := seedWorkerSnapshotRunner(t, fsc)
+	fc.log = &events
+	r.DryRun = false
+	observed := &observedSnapshot{fakeSnapshotClient: fsc, ownerErr: errors.New("ownership unavailable")}
+	r.Snapshot = observed
+	if _, err := r.CreateSnapshot(t.Context(), "worker0", SnapshotCreateOptions{Name: testSnapshotName}); err == nil {
+		t.Fatal("unknown ownership accepted")
+	}
+	if len(events) > 0 {
+		t.Fatalf("mutation or agent probe before ownership: %v", events)
+	}
+	observed.ownerErr = nil
+	observed.host = "migrated-host"
+	if _, err := r.CreateSnapshot(t.Context(), "worker0", SnapshotCreateOptions{Name: testSnapshotName}); err != nil {
+		t.Fatal(err)
+	}
+	if r.Proxmox.Node != "migrated-host" || fsc.createCalls != 1 {
+		t.Fatal("snapshot did not use observed owner")
+	}
+}

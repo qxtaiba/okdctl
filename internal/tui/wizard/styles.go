@@ -15,17 +15,17 @@ var (
 
 	WizardBorderStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
-				BorderForeground(tui.ColorSlate600)
+				BorderForeground(tui.ColorBorder)
 
 	HeaderStyle = lipgloss.NewStyle().
 			Padding(0, 1).
 			BorderBottom(true).
 			BorderStyle(lipgloss.NormalBorder()).
-			BorderForeground(tui.ColorSlate700)
+			BorderForeground(tui.ColorBorder)
 
 	FooterStyle = lipgloss.NewStyle().
 			Padding(0, 2).
-			Foreground(tui.ColorSlate500)
+			Foreground(tui.ColorTextDim)
 )
 
 // Header element styles (logo, tagline, step indicator).
@@ -35,11 +35,11 @@ var (
 			Bold(true)
 
 	TaglineStyle = lipgloss.NewStyle().
-			Foreground(tui.ColorSlate400).
+			Foreground(tui.ColorTextDim).
 			Italic(true)
 
 	StepIndicatorStyle = lipgloss.NewStyle().
-				Foreground(tui.ColorSlate500)
+				Foreground(tui.ColorTextDim)
 
 	StepIndicatorCurrentStyle = lipgloss.NewStyle().
 					Foreground(tui.ColorPrimary).
@@ -49,16 +49,16 @@ var (
 // Help-bar styles for footer key/text/separator rendering.
 var (
 	HelpKeyStyle = lipgloss.NewStyle().
-			Foreground(tui.ColorSlate900).
-			Background(tui.ColorSlate300).
+			Foreground(tui.ColorSurface).
+			Background(tui.ColorText).
 			Padding(0, 1).
 			Bold(true)
 
 	HelpTextStyle = lipgloss.NewStyle().
-			Foreground(tui.ColorSlate500)
+			Foreground(tui.ColorTextDim)
 
 	HelpSeparatorStyle = lipgloss.NewStyle().
-				Foreground(tui.ColorSlate700)
+				Foreground(tui.ColorBorder)
 )
 
 // Step progress-dot styles (completed / current / pending).
@@ -70,7 +70,7 @@ var (
 				Foreground(tui.ColorPrimary)
 
 	StepDotPendingStyle = lipgloss.NewStyle().
-				Foreground(tui.ColorSlate600)
+				Foreground(tui.ColorBorder)
 )
 
 // RenderStepProgress renders the step dots: 1..current-1 completed, current active, rest pending.

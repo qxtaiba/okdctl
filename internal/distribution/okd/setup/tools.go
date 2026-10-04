@@ -3,6 +3,7 @@ package setup
 import (
 	"context"
 	_ "embed"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -297,21 +298,8 @@ func installHashiCorpDebianRepo(ctx context.Context, codename string) error {
 	}
 	defer func() { _ = os.Remove(gpgTmp) }()
 
-	if err := verifyHashiCorpGPGFingerprint(ctx, gpgTmp); err != nil {
+	if err := installHashiCorpKey(ctx, gpgTmp, gpgPath); err != nil {
 		return err
-	}
-
-	// Refuses to overwrite a keyring from a different key; show-only accepts
-	// armored or binary, so the same helper checks the on-disk form too.
-	if _, statErr := os.Stat(gpgPath); statErr == nil {
-		if err := verifyHashiCorpGPGFingerprint(ctx, gpgPath); err != nil {
-			return &errtypes.ConfigError{
-				Msg: fmt.Sprintf("existing keyring %s has an unexpected fingerprint; remove it manually to proceed", gpgPath),
-				Err: err,
-			}
-		}
-	} else if err := executor.RunCaptured(ctx, "gpg", "--dearmor", "-o", gpgPath, gpgTmp); err != nil {
-		return fmt.Errorf("dearmor HashiCorp GPG key: %w", err)
 	}
 
 	if codename == "" {
@@ -362,4 +350,27 @@ func verifyHashiCorpGPGFingerprint(ctx context.Context, armoredKeyPath string) e
 		}
 	}
 	return &errtypes.ConfigError{Msg: "hashicorp gpg key fingerprint not found in gpg output"}
+}
+
+func installHashiCorpKey(ctx context.Context, gpgTmp, gpgPath string) error {
+	if err := verifyHashiCorpGPGFingerprint(ctx, gpgTmp); err != nil {
+		return err
+	}
+
+	// Refuses to overwrite a keyring from a different key; show-only accepts
+	// armored or binary, so the same helper checks the on-disk form too.
+	if _, statErr := os.Stat(gpgPath); statErr == nil {
+		if err := verifyHashiCorpGPGFingerprint(ctx, gpgPath); err != nil {
+			return &errtypes.ConfigError{
+				Msg: fmt.Sprintf("existing keyring %s has an unexpected fingerprint; remove it manually to proceed", gpgPath),
+				Err: err,
+			}
+		}
+	} else if !errors.Is(statErr, os.ErrNotExist) {
+		return fmt.Errorf("inspect HashiCorp keyring: %w", statErr)
+	} else if err := executor.RunCaptured(ctx, "gpg", "--dearmor", "-o", gpgPath, gpgTmp); err != nil {
+		return fmt.Errorf("dearmor HashiCorp GPG key: %w", err)
+	}
+
+	return nil
 }

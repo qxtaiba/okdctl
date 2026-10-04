@@ -4,6 +4,7 @@ package steps
 
 import (
 	"os/exec"
+	"slices"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -17,8 +18,9 @@ import (
 )
 
 const (
-	valYes = "yes"
-	valNo  = "no"
+	valYes                   = "yes"
+	valNo                    = "no"
+	addonProviderOnepassword = "onepassword"
 )
 
 func addonEnabled(name string) wizard.ConfigGetter {
@@ -128,10 +130,10 @@ var AddonsStepDefinition = wizard.StepDefinition{
 				{
 					Key:       "secretstore_provider",
 					Label:     "provider",
-					Default:   "onepassword",
+					Default:   addonProviderOnepassword,
 					Help:      "ESO backend: onepassword, vault, bitwarden",
 					Type:      wizard.FieldTypeSelect,
-					Options:   []string{"onepassword", "vault", "bitwarden"},
+					Options:   []string{addonProviderOnepassword, "vault", "bitwarden"},
 					ConfigSet: setAddonSetting("secretstore", secretstore.SettingProvider),
 					ConfigGet: addonSetting("secretstore", secretstore.SettingProvider),
 				},
@@ -249,10 +251,41 @@ var AddonsStepDefinition = wizard.StepDefinition{
 
 // NewAddonsStep returns the addons wizard step.
 func NewAddonsStep() *wizard.DataDrivenStep {
-	step := wizard.NewDataDrivenStep(&AddonsStepDefinition)
-	step.WithExtraContentFunc(func(s *wizard.DataDrivenStep, _ int) string {
-		return renderAddonWarnings(s)
+	definition := AddonsStepDefinition
+	definition.Sections = slices.Clone(definition.Sections)
+	for i := range definition.Sections {
+		section := &definition.Sections[i]
+		if section.Title == "gitops (flux)" || section.Title == "secret store (common)" {
+			section.Note = ""
+		}
+		section.Fields = slices.Clone(section.Fields)
+		for j := range section.Fields {
+			field := &section.Fields[j]
+			switch {
+			case strings.HasPrefix(field.Key, "flux_") && field.Key != "flux_enabled":
+				field.Visible = func(values map[string]string) bool { return values["flux_enabled"] == valYes }
+			case strings.HasPrefix(field.Key, "secretstore_") && field.Key != "secretstore_enabled":
+				field.Visible = func(values map[string]string) bool { return values["secretstore_enabled"] == valYes }
+			}
+		}
+		for _, provider := range []string{addonProviderOnepassword, "vault", "bitwarden"} {
+			if section.Title == "secret store ("+provider+")" {
+				section.Visible = func(values map[string]string) bool {
+					return values["secretstore_enabled"] == valYes && values["secretstore_provider"] == provider
+				}
+			}
+		}
+	}
+	step := wizard.NewDataDrivenStep(&definition)
+	cached, inputs := "", ""
+	step.WithRefreshFunc(func(s *wizard.DataDrivenStep) {
+		key := s.Value("flux_enabled") + "/" + s.Value("secretstore_enabled")
+		if key != inputs {
+			inputs = key
+			cached = renderAddonWarnings(s)
+		}
 	})
+	step.WithExtraContentFunc(func(_ *wizard.DataDrivenStep, _ int) string { return cached })
 	return step
 }
 

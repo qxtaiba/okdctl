@@ -49,7 +49,8 @@ func clusterHealth(ctx context.Context, probe ClusterProbe) Result {
 		}
 	}
 	var notReady []string
-	for _, n := range nodes {
+	for i := range nodes {
+		n := &nodes[i]
 		if !n.Ready {
 			notReady = append(notReady, n.Name)
 		}

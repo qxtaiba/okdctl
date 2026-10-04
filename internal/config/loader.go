@@ -42,12 +42,11 @@ func (l *Loader) LoadFile(path string) (*Config, error) {
 		return nil, err
 	}
 
-	cfg := DefaultConfig()
+	cfg := fileDefaults()
 	if err := yaml.UnmarshalStrict(data, cfg); err != nil {
 		return nil, &errtypes.ConfigError{Msg: "parse config", Err: err}
 	}
-	deriveStaticNetmask(cfg)
-	return cfg, nil
+	return Effective(cfg), nil
 }
 
 // checkSchemaVersion runs before the strict unmarshal so a bad schema fails

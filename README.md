@@ -38,6 +38,9 @@ it. Set `OKDCTL_NO_UPDATE_CHECK=1` to turn it off.
 
 `okdctl doctor` checks all of this before you commit to a deploy.
 
+See [operation recovery, multi-host placement and terminal settings](docs/architecture/operation-recovery.md)
+for resume behavior, shared ISO requirements and palette controls.
+
 ## Install
 
 **curl | bash** (cosign signature + SHA256):

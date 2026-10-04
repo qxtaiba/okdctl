@@ -101,3 +101,19 @@ func TestReviewStep_ShortHelp_AdvertisesJumpOnlyWhenTargetsExist(t *testing.T) {
 		t.Error("ShortHelp() does not advertise jump once targets are set")
 	}
 }
+
+func TestReviewActionsVisibleAfterSummaryWraps(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Provider.Proxmox.Host = "https://long-hostname.cluster.example.com:8006"
+	step := NewReviewStep()
+	step.SetConfig(cfg)
+	m := wizard.NewModel([]wizard.WizardStep{step}, cfg)
+	m.Init()
+	for _, size := range [][2]int{{120, 40}, {80, 24}} {
+		m.Update(tea.WindowSizeMsg{Width: size[0], Height: size[1]})
+		out := m.View().Content
+		if !strings.Contains(out, "deploy now") || !strings.Contains(out, "save and exit") {
+			t.Fatalf("review actions hidden at %v: %s", size, out)
+		}
+	}
+}

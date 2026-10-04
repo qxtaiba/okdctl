@@ -142,13 +142,22 @@ func (p *Provisioner) UploadCustomISOsToProxmox(ctx context.Context, cfg *config
 	}
 
 	host := hostssh.ProxmoxBareHost(cfg.Provider.Proxmox.Host)
-	remotePath := hostssh.DefaultProxmoxISODir
 
 	knownHostsPath, err := sshpin.Verify(ctx, host, cfg.Provider.Proxmox.SSHHostFingerprint, cfg.Provider.Proxmox.RequirePinnedFingerprint, p.Log)
 	if err != nil {
-		return &errtypes.NetworkError{Msg: "proxmox host key verification failed", Err: err}
+		return fmt.Errorf("verify proxmox host key: %w", err)
 	}
 
+	if knownHostsPath != "" {
+		defer os.Remove(knownHostsPath)
+	}
+	if err := p.ValidateISOPlacement(ctx, cfg); err != nil {
+		return err
+	}
+	remotePath, err := p.isoStoragePath(ctx, cfg, host, knownHostsPath)
+	if err != nil {
+		return err
+	}
 	var toUpload []string
 	for _, f := range isoFiles {
 		if isoUploadNeeded(ctx, p.Exec, host, knownHostsPath, remotePath, f) {
@@ -160,7 +169,7 @@ func (p *Provisioner) UploadCustomISOsToProxmox(ctx context.Context, cfg *config
 
 	if len(toUpload) == 0 {
 		p.Log.Info("iso: all isos already up to date on proxmox storage")
-		return nil
+		return p.verifySharedISOs(ctx, cfg, host, knownHostsPath, isoFiles)
 	}
 
 	totalSizeMB := float64(calculateTotalSize(toUpload)) / 1024 / 1024
@@ -172,7 +181,7 @@ func (p *Provisioner) UploadCustomISOsToProxmox(ctx context.Context, cfg *config
 	}
 
 	p.Log.Info("iso: uploaded files to proxmox storage", "count", len(toUpload))
-	return nil
+	return p.verifySharedISOs(ctx, cfg, host, knownHostsPath, isoFiles)
 }
 
 // ISOUploadAlreadyDone returns true when every local ISO has an identical
@@ -189,11 +198,17 @@ func (p *Provisioner) ISOUploadAlreadyDone(ctx context.Context, cfg *config.Conf
 	}
 	isoFiles, err := collectISOFiles(isoDir)
 	if err != nil || len(isoFiles) == 0 {
-		return false, nil //nolint:nilerr // intentional: caller treats false as "Exec must run"
+		return false, nil
 	}
 	host := hostssh.ProxmoxBareHost(cfg.Provider.Proxmox.Host)
-	remotePath := hostssh.DefaultProxmoxISODir
 	knownHostsPath, err := sshpin.Verify(ctx, host, cfg.Provider.Proxmox.SSHHostFingerprint, cfg.Provider.Proxmox.RequirePinnedFingerprint, p.Log)
+	if err != nil {
+		return false, err
+	}
+	if knownHostsPath != "" {
+		defer os.Remove(knownHostsPath)
+	}
+	remotePath, err := p.isoStoragePath(ctx, cfg, host, knownHostsPath)
 	if err != nil {
 		return false, err
 	}
@@ -201,6 +216,12 @@ func (p *Provisioner) ISOUploadAlreadyDone(ctx context.Context, cfg *config.Conf
 		return isoUploadNeeded(ctx, p.Exec, host, knownHostsPath, remotePath, f)
 	}) {
 		return false, nil
+	}
+	if err := p.ValidateISOPlacement(ctx, cfg); err != nil {
+		return false, err
+	}
+	if err := p.verifySharedISOs(ctx, cfg, host, knownHostsPath, isoFiles); err != nil {
+		return false, err
 	}
 	return true, nil
 }

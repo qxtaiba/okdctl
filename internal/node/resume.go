@@ -71,7 +71,7 @@ func (r *Runner) beginOp(op Op, match opMatch, ack bool) (*OpMarker, error) {
 	if r.sweepCompletedAddMarker(marker) {
 		return nil, nil
 	}
-	if marker.Op == op && match(marker) {
+	if marker.Op == op && match(marker) && intentsMatch(marker.Intent, r.intent) {
 		r.Log.Info("node: resuming interrupted op",
 			"op", string(marker.Op), "node", marker.Target, "step", string(marker.Step))
 		return marker, nil
@@ -106,6 +106,9 @@ func strandedMarkerMsg(m *OpMarker) string {
 	if m.Op == OpStart {
 		// start's marker is cluster-scoped: Target records the cluster name, not a node.
 		scope = fmt.Sprintf("an interrupted cluster start op for cluster %q", m.Target)
+	}
+	if m.Intent == nil {
+		scope += " without recorded request parameters"
 	}
 	msg := fmt.Sprintf("%s is recorded (stopped before step %q); re-run with --acknowledge-interrupted-op to override it, or finish it first",
 		scope, m.Step)
@@ -155,11 +158,34 @@ func resizeScopeMatch(scope ResizeScope, nodes []cluster.NodeDetail) opMatch {
 		if scope.Node != "" {
 			return m.Target == scope.Node
 		}
-		for _, n := range nodes {
+		for i := range nodes {
+			n := &nodes[i]
 			if n.Name == m.Target {
 				return n.Role == scope.Role
 			}
 		}
 		return false
 	}
+}
+
+func intentsMatch(saved, requested *OpIntent) bool {
+	if saved == nil || requested == nil {
+		return saved == nil && requested == nil
+	}
+	return *saved == *requested
+}
+
+func (r *Runner) beginIntent(op Op, match opMatch, ack bool, intent *OpIntent) (*OpMarker, error) {
+	r.intent = intent
+	if r.DryRun {
+		marker, err := ReadOpMarker(r.workDir, r.Cfg.Cluster.Name)
+		if err != nil {
+			return nil, err
+		}
+		if marker == nil || marker.Op != op || !match(marker) || !intentsMatch(marker.Intent, intent) {
+			return nil, &errtypes.ConfigError{Msg: "resume preview does not match the recorded operation intent"}
+		}
+		return marker, nil
+	}
+	return r.beginOp(op, match, ack)
 }

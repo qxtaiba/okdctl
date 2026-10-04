@@ -107,11 +107,11 @@ func (f *MultiSelectField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 
 // View renders the label and checkbox list with the cursor highlighted.
 func (f *MultiSelectField) View() string {
-	labelStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate300)
-	hintStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
+	labelStyle := lipgloss.NewStyle().Foreground(tui.ColorText)
+	hintStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim)
 	cursorStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true)
 	checkedStyle := lipgloss.NewStyle().Foreground(tui.ColorSuccess)
-	uncheckedStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
+	uncheckedStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim)
 
 	labelText := strings.ToLower(f.Label)
 	labelLine := labelStyle.Render(labelText)

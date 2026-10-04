@@ -24,7 +24,8 @@ import (
 // Client is the slice of cluster.Client that status collection drives.
 type Client interface {
 	RawGet(ctx context.Context, path string) (string, error)
-	GetJSON(ctx context.Context, args ...string) (stdout string, truncated bool, err error)
+	ListNodes(ctx context.Context) ([]cluster.NodeDetail, error)
+	ClusterOperatorHealth(ctx context.Context) (cluster.OperatorHealth, error)
 }
 
 // PowerProber reports Proxmox VM power state keyed by vmid.
@@ -50,81 +51,15 @@ type AddonVerifier interface {
 	VerifyAll(ctx context.Context) ([]addon.VerifyResult, error)
 }
 
-// statusNodeList is a minimal view of `oc get nodes -o json`, decoupled
-// from corev1 schema evolution.
-type statusNodeList struct {
-	Items []statusNode `json:"items"`
-}
-
-type statusCondition struct {
-	Type   nodetypes.ConditionType   `json:"type"`
-	Status nodetypes.ConditionStatus `json:"status"`
-}
-
-type statusNode struct {
-	Metadata struct {
-		Name   string            `json:"name"`
-		Labels map[string]string `json:"labels"`
-	} `json:"metadata"`
-	Status struct {
-		Conditions []statusCondition `json:"conditions"`
-	} `json:"status"`
-}
-
-// statusClusterOperatorList is a minimal view of `oc get clusteroperators -o json`
-// for degraded-condition parsing.
-type statusClusterOperatorList struct {
-	Items []statusClusterOperator `json:"items"`
-}
-
-type statusClusterOperator struct {
-	Status struct {
-		Conditions []statusCondition `json:"conditions"`
-	} `json:"status"`
-}
-
-func (n *statusNode) readyCondition() nodetypes.ConditionStatus {
-	for _, c := range n.Status.Conditions {
-		if c.Type == nodetypes.ConditionTypeReady {
-			return c.Status
-		}
-	}
-	return nodetypes.ConditionStatusUnknown
-}
-
-func (n *statusNode) isReady() bool {
-	return n.readyCondition() == nodetypes.ConditionStatusTrue
-}
-
-func (n *statusNode) statusPhase() nodetypes.NodeStatusPhase {
-	switch n.readyCondition() {
+func projectNode(n *cluster.NodeDetail) okd.NodeStatus {
+	status := nodetypes.NodeStatusUnknown
+	switch nodetypes.ConditionStatus(n.ReadyCondition.Status) {
 	case nodetypes.ConditionStatusTrue:
-		return nodetypes.NodeStatusReady
+		status = nodetypes.NodeStatusReady
 	case nodetypes.ConditionStatusFalse:
-		return nodetypes.NodeStatusNotReady
-	default:
-		return nodetypes.NodeStatusUnknown
+		status = nodetypes.NodeStatusNotReady
 	}
-}
-
-func (n *statusNode) role() nodetypes.NodeRole {
-	if _, ok := n.Metadata.Labels["node-role.kubernetes.io/master"]; ok {
-		return nodetypes.RoleMaster
-	}
-	if _, ok := n.Metadata.Labels["node-role.kubernetes.io/worker"]; ok {
-		return nodetypes.RoleWorker
-	}
-	return nodetypes.RoleUnknown
-}
-
-// ParseNode parses a single `oc get node <name> -o json` document into the
-// node's projected identity and readiness.
-func ParseNode(data []byte) (okd.NodeStatus, error) {
-	var n statusNode
-	if err := json.Unmarshal(data, &n); err != nil {
-		return okd.NodeStatus{}, fmt.Errorf("parse node json: %w", err)
-	}
-	return okd.NodeStatus{Name: n.Metadata.Name, Role: n.role(), Ready: n.isReady()}, nil
+	return okd.NodeStatus{Name: n.Name, Role: n.Role, Ready: n.Ready, Status: status}
 }
 
 // Collect queries the cluster for reachability, node readiness, operator
@@ -227,52 +162,25 @@ func TerraformStateHasResources(projectRoot, tfEnv string) bool {
 }
 
 func collectNodes(ctx context.Context, cl Client) []okd.NodeStatus {
-	nodesJSON, truncated, ocErr := cl.GetJSON(ctx, "get", "nodes", "-o", "json")
-	if ocErr != nil {
-		return nil
-	}
-	if truncated {
-		logutil.Warn("oc get nodes output truncated; node list may be incomplete")
-	}
-	var nl statusNodeList
-	if jsonErr := json.Unmarshal([]byte(nodesJSON), &nl); jsonErr != nil {
-		logutil.Warn("oc get nodes json parse failed", logutil.LF("err", jsonErr))
+	observations, err := cl.ListNodes(ctx)
+	if err != nil {
+		logutil.Warn("observe cluster nodes", logutil.LF("err", err))
 		return nil
 	}
 	var nodes []okd.NodeStatus
-	for _, n := range nl.Items {
-		nodes = append(nodes, okd.NodeStatus{
-			Name:   n.Metadata.Name,
-			Role:   n.role(),
-			Ready:  n.isReady(),
-			Status: n.statusPhase(),
-		})
+	for i := range observations {
+		nodes = append(nodes, projectNode(&observations[i]))
 	}
 	return nodes
 }
 
 func countDegraded(ctx context.Context, cl Client) int {
-	coJSON, truncated, ocErr := cl.GetJSON(ctx, "get", "clusteroperators", "-o", "json")
-	if ocErr != nil {
+	health, err := cl.ClusterOperatorHealth(ctx)
+	if err != nil {
+		logutil.Warn("observe cluster operators", logutil.LF("err", err))
 		return 0
 	}
-	if truncated {
-		logutil.Warn("oc get clusteroperators output truncated; degraded count may be incomplete")
-	}
-	var col statusClusterOperatorList
-	if jsonErr := json.Unmarshal([]byte(coJSON), &col); jsonErr != nil {
-		logutil.Warn("oc get clusteroperators json parse failed", logutil.LF("err", jsonErr))
-		return 0
-	}
-	degraded := 0
-	for _, co := range col.Items {
-		if slices.ContainsFunc(co.Status.Conditions, func(c statusCondition) bool {
-			return c.Type == nodetypes.ConditionTypeDegraded && c.Status == nodetypes.ConditionStatusTrue
-		}) {
-			degraded++
-		}
-	}
-	return degraded
+	return len(health.Degraded)
 }
 
 // NewClient returns an oc-backed cluster client for the deployed cluster, or

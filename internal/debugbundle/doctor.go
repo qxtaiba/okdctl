@@ -3,6 +3,7 @@ package debugbundle
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,7 +12,7 @@ import (
 )
 
 // collectDoctorOutput re-execs the binary as `doctor`, separating stdout
-// (json) from stderr; non-zero exit is not an error.
+// (json) from stderr; doctor health-result exits remain usable output.
 func collectDoctorOutput(ctx context.Context) (stdout, stderr []byte, err error) {
 	self, err := os.Executable()
 	if err != nil {
@@ -24,6 +25,16 @@ func collectDoctorOutput(ctx context.Context) (stdout, stderr []byte, err error)
 	cmd.Env = executor.FilterParentEnv(executor.DefaultEnvAllowlist)
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf
-	_ = cmd.Run()
+	runErr := cmd.Run()
+	if ctx.Err() != nil {
+		return outBuf.Bytes(), errBuf.Bytes(), fmt.Errorf("run doctor: %w", ctx.Err())
+	}
+	var exitErr *exec.ExitError
+	if errors.As(runErr, &exitErr) && (exitErr.ExitCode() == 2 || exitErr.ExitCode() == 6) {
+		runErr = nil
+	}
+	if runErr != nil {
+		return outBuf.Bytes(), errBuf.Bytes(), fmt.Errorf("run doctor: %w", runErr)
+	}
 	return outBuf.Bytes(), errBuf.Bytes(), nil
 }

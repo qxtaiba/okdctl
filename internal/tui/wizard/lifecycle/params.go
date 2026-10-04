@@ -61,11 +61,9 @@ func NewParamsStep(st *State) *ParamsStep {
 	}
 }
 
-// ShouldShow always shows the step: an interrupted op's parameters are not
-// persisted, so resume must re-collect them (resize refuses zero sizing,
-// remove would drain unbounded).
+// ShouldShow omits editing when resume restores the approved request.
 func (s *ParamsStep) ShouldShow(_ *config.Config) bool {
-	return true
+	return !s.st.Resume || s.st.Marker == nil || s.st.Marker.Intent == nil
 }
 
 // Init builds the per-op form on first focus — rebuilding whenever the
@@ -149,7 +147,8 @@ func (s *ParamsStep) resizeRole() nodetypes.NodeRole {
 	if s.st.Scope.Role != "" {
 		return s.st.Scope.Role
 	}
-	for _, n := range s.st.Nodes {
+	for i := range s.st.Nodes {
+		n := &s.st.Nodes[i]
 		if n.Name == s.st.Scope.Node {
 			return n.Role
 		}
@@ -233,7 +232,9 @@ func (s *ParamsStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 // View renders the form plus the amber skip-drain note when selected.
 func (s *ParamsStep) View(width, height int) string {
 	s.SetSize(width, height)
-	s.ensureForm()
+	if s.inner == nil {
+		return "loading parameters..."
+	}
 	out := s.inner.View(width)
 	if s.drainModeField != nil && s.drainModeField.Value() == drainModeSkip {
 		warn := lipgloss.NewStyle().Foreground(tui.ColorWarning).PaddingLeft(2)
@@ -335,4 +336,20 @@ func validateDuration(v string) error {
 		return errors.New("must be a duration like 10m or 1h")
 	}
 	return nil
+}
+
+// SetSize propagates viewport width to every parameter control.
+func (s *ParamsStep) SetSize(width, height int) {
+	s.BaseStep.SetSize(width, height)
+	if s.inner != nil {
+		s.inner.SetWidth(width)
+	}
+}
+
+// FocusBounds keeps the active parameter visible through resizing.
+func (s *ParamsStep) FocusBounds(_, _ int) (top, bottom int, ok bool) {
+	if s.inner == nil {
+		return 0, 0, false
+	}
+	return s.inner.FocusBounds()
 }

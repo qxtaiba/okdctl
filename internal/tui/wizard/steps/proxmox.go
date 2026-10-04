@@ -40,7 +40,7 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 					Default:   "192.168.1.100:8006",
 					Help:      "proxmox host ip:port (e.g., 192.168.1.100:8006)",
 					Required:  true,
-					Validate:  ValidateProxmoxHost,
+					Validate:  config.ValidateProxmoxHost,
 					ConfigSet: proxmoxSet(func(p *config.ProxmoxConfig, v string) { p.Host = v }),
 					ConfigGet: proxmoxGet(func(p *config.ProxmoxConfig) string { return p.Host }),
 				},

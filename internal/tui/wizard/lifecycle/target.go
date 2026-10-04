@@ -1,8 +1,9 @@
 package lifecycle
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/spinner"
@@ -88,11 +89,12 @@ func (s *TargetStep) ShouldShow(_ *config.Config) bool {
 func (s *TargetStep) Init() tea.Cmd {
 	s.phase = targetLoading
 	s.loadErr = nil
+	ctx := s.Context()
 	fetch := func() tea.Msg {
 		if s.hooks.ListNodes == nil {
 			return nodesLoadedMsg{}
 		}
-		nodes, err := s.hooks.ListNodes()
+		nodes, err := s.hooks.ListNodes(ctx)
 		return nodesLoadedMsg{nodes: nodes, err: err}
 	}
 	return tea.Batch(s.loadingSpinner.Tick, fetch)
@@ -119,6 +121,10 @@ func (s *TargetStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		}
 
 	case tea.KeyPressMsg:
+		if msg.String() == "r" && s.phase != targetLoading {
+			cmd := s.Init()
+			return s, cmd
+		}
 		if s.phase != targetPicking || s.loadErr != nil || s.selector == nil || len(s.choices) == 0 {
 			return s, nil
 		}
@@ -148,10 +154,11 @@ func (s *TargetStep) buildChoices(nodes []cluster.NodeDetail) {
 			s.choices = append(s.choices, targetChoice{node: top.Name})
 			opts = append(opts, components.Option{
 				ID:    top.Name,
-				Title: nodeLine(top),
+				Title: nodeLine(&top),
 			})
 			after := []string{top.Name}
-			for _, w := range workers[1:] {
+			for i := 1; i < len(workers); i++ {
+				w := &workers[i]
 				s.blocked = append(s.blocked,
 					fmt.Sprintf("%s %s      removable only after %s (top-down)", tui.IconPending, w.Name, strings.Join(after, ", ")))
 				after = append(after, w.Name)
@@ -174,7 +181,9 @@ func (s *TargetStep) buildChoices(nodes []cluster.NodeDetail) {
 				Description: "rolled one at a time; no etcd gate",
 			})
 		}
-		for _, n := range append(masters, workers...) {
+		allNodes := slices.Concat(masters, workers)
+		for i := range allNodes {
+			n := &allNodes[i]
 			s.choices = append(s.choices, targetChoice{node: n.Name})
 			opts = append(opts, components.Option{
 				ID:         n.Name,
@@ -187,7 +196,7 @@ func (s *TargetStep) buildChoices(nodes []cluster.NodeDetail) {
 	s.selector = components.NewSelector(opts)
 }
 
-func nodeLine(n cluster.NodeDetail) string {
+func nodeLine(n *cluster.NodeDetail) string {
 	ready := "ready"
 	if !n.Ready {
 		ready = "notready"
@@ -197,9 +206,9 @@ func nodeLine(n cluster.NodeDetail) string {
 
 func filterRole(nodes []cluster.NodeDetail, role nodetypes.NodeRole) []cluster.NodeDetail {
 	var out []cluster.NodeDetail
-	for _, n := range nodes {
-		if n.Role == role {
-			out = append(out, n)
+	for i := range nodes {
+		if nodes[i].Role == role {
+			out = append(out, nodes[i])
 		}
 	}
 	return out
@@ -208,16 +217,22 @@ func filterRole(nodes []cluster.NodeDetail, role nodetypes.NodeRole) []cluster.N
 // sortByIndex orders by terraform index (desc for remove's top-down list);
 // unindexed nodes sort last.
 func sortByIndex(nodes []cluster.NodeDetail, descending bool) {
-	sort.SliceStable(nodes, func(i, j int) bool {
-		a, aok := cluster.NodeIndex(nodes[i].Name)
-		b, bok := cluster.NodeIndex(nodes[j].Name)
-		if !aok || !bok {
-			return bok
+	slices.SortStableFunc(nodes, func(left, right cluster.NodeDetail) int {
+		a, aok := cluster.NodeIndex(left.Name)
+		b, bok := cluster.NodeIndex(right.Name)
+		if aok != bok {
+			if aok {
+				return -1
+			}
+			return 1
+		}
+		if !aok {
+			return 0
 		}
 		if descending {
-			return a > b
+			return cmp.Compare(b, a)
 		}
-		return a < b
+		return cmp.Compare(a, b)
 	})
 }
 
@@ -231,17 +246,17 @@ func (s *TargetStep) View(width, height int) string {
 	}
 	if s.loadErr != nil {
 		warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
-		hintStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500).Italic(true)
+		hintStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim).Italic(true)
 		return warnStyle.Render("list nodes: "+s.loadErr.Error()) + "\n\n" +
-			hintStyle.Render("esc to go back")
+			hintStyle.Render("r to retry · esc to go back")
 	}
 	if s.selector == nil || len(s.choices) == 0 {
-		return lipgloss.NewStyle().Foreground(tui.ColorWarning).Render("no eligible nodes found")
+		return lipgloss.NewStyle().Foreground(tui.ColorWarning).Render("no eligible nodes found · r to retry")
 	}
 
 	out := s.selector.View()
 	if len(s.blocked) > 0 {
-		dim := lipgloss.NewStyle().Foreground(tui.ColorSlate600)
+		dim := lipgloss.NewStyle().Foreground(tui.ColorBorder)
 		for _, line := range s.blocked {
 			out += "\n" + dim.Render(line)
 		}
@@ -287,4 +302,12 @@ func (s *TargetStep) ShortHelp() []wizard.KeyBinding {
 		{Key: wizard.HelpEsc, Help: wizard.HelpBack},
 		{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
 	}
+}
+
+// FocusBounds keeps the selected node or role visible.
+func (s *TargetStep) FocusBounds(width, _ int) (top, bottom int, ok bool) {
+	if s.phase != targetPicking || s.loadErr != nil || s.selector == nil {
+		return 0, 0, false
+	}
+	return s.selector.FocusBounds(width)
 }

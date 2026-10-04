@@ -236,6 +236,7 @@ func printUpdateNotice(ch <-chan version.CheckResult) {
 // first would bypass it).
 func announceFailure(err error) {
 	if logutil.ProgressBarsEnabled() && !render.IsPresented(err) {
+		fileOnlySlog().Error("command failed", "err", err, "exit_code", exitCodeFor(err))
 		fmt.Fprint(os.Stderr, render.ErrorSummary(err, exitCodeFor(err), logutil.RunID()))
 		return
 	}

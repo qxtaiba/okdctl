@@ -163,7 +163,7 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 		return &errtypes.ConfigError{Msg: "wizard failed", Err: err}
 	}
 
-	if result.Cancelled {
+	if result.Outcome == wizard.OutcomeCancelled {
 		logutil.Info("wizard cancelled, no changes made")
 		return nil
 	}
@@ -331,6 +331,7 @@ func writeCredentialsEnv(cfg *config.Config, configPath string) error {
 
 	// Resolve the normalized endpoint so the .env file is self-contained.
 	resolved := credentials.GetProxmoxCredentials(cfg)
+	defer resolved.Zeroize()
 
 	creds := &credentials.ProxmoxCredentials{
 		Endpoint: resolved.Endpoint,

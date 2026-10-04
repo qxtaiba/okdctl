@@ -17,12 +17,15 @@ type versionsLoadedMsg struct {
 	err    error
 }
 
-func (s *DistributionStep) fetchVersions() tea.Msg {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+func (s *DistributionStep) fetchVersions() tea.Cmd {
+	parent, fetcher := s.Context(), s.versionFetcher
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(parent, 30*time.Second)
+		defer cancel()
 
-	series, err := s.versionFetcher.FetchVersions(ctx)
-	return versionsLoadedMsg{series: series, err: err}
+		series, err := fetcher.FetchVersions(ctx)
+		return versionsLoadedMsg{series: series, err: err}
+	}
 }
 
 func (s *DistributionStep) updateVersionSelector() {

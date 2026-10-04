@@ -150,9 +150,9 @@ var resourceSummaryStyles = struct {
 	sep     string
 }{
 	wrapper: lipgloss.NewStyle().Padding(1, 2),
-	title:   lipgloss.NewStyle().Foreground(tui.ColorSlate400).Bold(true),
+	title:   lipgloss.NewStyle().Foreground(tui.ColorTextDim).Bold(true),
 	value:   lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true),
-	sep:     lipgloss.NewStyle().Foreground(tui.ColorSlate600).Render("  ·  "),
+	sep:     lipgloss.NewStyle().Foreground(tui.ColorBorder).Render("  ·  "),
 }
 
 func renderResourceSummary(step *wizard.DataDrivenStep, state *ResourcesStepState, width int) string {
@@ -181,7 +181,7 @@ func renderResourceSummary(step *wizard.DataDrivenStep, state *ResourcesStepStat
 
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(tui.ColorSlate600).
+		BorderForeground(tui.ColorBorder).
 		Padding(0, 1).
 		Width(boxContentWidth)
 

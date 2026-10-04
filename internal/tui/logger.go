@@ -74,6 +74,24 @@ const (
 // package-level stderr logger. Not safe for concurrent calls — call once
 // in cobra PersistentPreRunE before any subcommand runs.
 func ConfigureLoggers(level, format string, stderrW io.Writer, progressBars bool) error {
+	el := stderrLogger.Load()
+	if err := configureLogger(el, level, format, stderrW); err != nil {
+		return err
+	}
+	logutil.SetProgressBarsEnabled(progressBars)
+	return nil
+}
+
+// NewLogHandler builds a redacting sink with the same format and level policy as the console.
+func NewLogHandler(level, format string, w io.Writer) (slog.Handler, error) {
+	l := buildLogger(w)
+	if err := configureLogger(l, level, format, w); err != nil {
+		return nil, err
+	}
+	return logutil.NewRedactHandler(l.With("run_id", logutil.RunID())), nil
+}
+
+func configureLogger(el *charmlog.Logger, level, format string, w io.Writer) error {
 	lvl, err := charmlog.ParseLevel(level)
 	if err != nil {
 		return fmt.Errorf("unknown log level %q: %w", level, err)
@@ -89,12 +107,9 @@ func ConfigureLoggers(level, format string, stderrW io.Writer, progressBars bool
 		return fmt.Errorf("unknown log format %q: must be text or json", format)
 	}
 
-	el := stderrLogger.Load()
 	el.SetLevel(lvl)
 	el.SetFormatter(formatter)
-	el.SetOutput(stderrW)
-
-	logutil.SetProgressBarsEnabled(progressBars)
+	el.SetOutput(w)
 	return nil
 }
 

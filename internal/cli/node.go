@@ -69,8 +69,8 @@ run on workers with a non-schedulable control plane (ingress outage).
 
 An interrupted removal records an op marker and resumes automatically on the
 next 'okdctl node remove' of the same worker, skipping already-completed
-steps. --acknowledge-interrupted-op overrides a marker left by a different op
-or node instead of refusing.`,
+steps. Resume requires the same scope and options. Changed intent or a legacy
+marker requires --acknowledge-interrupted-op to proceed fresh.`,
 	Example: `  okdctl node remove worker2 --yes --confirm-cluster grappleberry
   okdctl node remove worker2 --dry-run`,
 	Args: cobra.ExactArgs(1),
@@ -114,8 +114,9 @@ on a disk-only resize, which never power-cycles.
 
 An interrupted role roll records an op marker and resumes automatically on the
 next 'okdctl node resize' of the same role or node, skipping already-completed
-nodes and steps. --acknowledge-interrupted-op overrides a marker left by a
-different op or node instead of refusing.`,
+nodes and steps. Resume requires the same scope, sizing and disruption options.
+Changed intent or a legacy marker requires --acknowledge-interrupted-op to
+proceed fresh.`,
 	Example: `  okdctl node resize masters --memory-mb 24576 --yes --confirm-cluster grappleberry
   okdctl node resize workers --memory-mb 16384 --dry-run
   okdctl node resize grappleberry-master0 --memory-mb 30720 --skip-drain --yes --confirm-cluster grappleberry
@@ -137,9 +138,9 @@ after the persisted worker count. The ignition server is revived once for the
 whole batch and torn down when the batch finishes, fails, or times out.
 
 An interrupted add records an op marker and resumes automatically on the
-next 'okdctl node add', skipping already-joined nodes and completed steps.
---acknowledge-interrupted-op overrides a marker left by a different op or
-node instead of refusing. While the marker is in flight, 'okdctl deploy'
+next 'okdctl node add' with the same batch size and sizing, skipping already-joined
+nodes and completed steps. Changed intent or a legacy marker requires
+--acknowledge-interrupted-op to proceed fresh. While the marker is in flight, 'okdctl deploy'
 refuses to run (a partial batch's config/tfvars undercount the workers
 terraform already created) unless it too is passed
 --acknowledge-interrupted-op.`,
@@ -158,7 +159,7 @@ func init() {
 	nodeRemoveCmd.Flags().BoolVar(&nodeForceStorage, "force-storage", false, "allow removal even when the worker holds rook-ceph OSDs (destroys their data disk)")
 	nodeRemoveCmd.Flags().BoolVar(&nodeSkipDrain, "skip-drain", false, "skip cordon/drain (assumes the node is already evacuated)")
 	nodeRemoveCmd.Flags().StringVar(&nodeDrainTimeout, "drain-timeout", "10m", "per-node drain timeout")
-	nodeRemoveCmd.Flags().BoolVar(&nodeAcknowledgeInterrupted, "acknowledge-interrupted-op", false, "override a stranded marker left by a different op or node and proceed fresh")
+	nodeRemoveCmd.Flags().BoolVar(&nodeAcknowledgeInterrupted, "acknowledge-interrupted-op", false, "override a stranded marker or changed operation intent and proceed fresh")
 
 	nodeResizeCmd.Flags().BoolVarP(&nodeYes, "yes", "y", false, "skip confirmation prompt")
 	nodeResizeCmd.Flags().StringVar(&nodeConfirmCluster, "confirm-cluster", "", "required with --yes; must equal the config cluster name")
@@ -167,13 +168,13 @@ func init() {
 	nodeResizeCmd.Flags().IntVar(&nodeResizeCPU, "cpu", 0, "new per-node cpu cores (0 keeps current)")
 	nodeResizeCmd.Flags().IntVar(&nodeResizeOSDiskGB, "os-disk-gb", 0, "grow the role's OS disk to this size in GiB (grow-only, role-scoped only — 'masters'/'workers', not a single node; disk-only resizes are live, no power-cycle)")
 	nodeResizeCmd.Flags().BoolVar(&nodeSkipDrain, "skip-drain", false, "power-cycle without cordon/drain so pods restart in place (use when a drain can't reschedule under memory pressure); etcd/Ceph gates still run")
-	nodeResizeCmd.Flags().BoolVar(&nodeAcknowledgeInterrupted, "acknowledge-interrupted-op", false, "override a stranded marker left by a different op or node and proceed fresh")
+	nodeResizeCmd.Flags().BoolVar(&nodeAcknowledgeInterrupted, "acknowledge-interrupted-op", false, "override a stranded marker or changed operation intent and proceed fresh")
 
 	nodeAddCmd.Flags().BoolVarP(&nodeYes, "yes", "y", false, "skip confirmation prompt")
 	nodeAddCmd.Flags().StringVar(&nodeConfirmCluster, "confirm-cluster", "", "required with --yes; must equal the config cluster name")
 	nodeAddCmd.Flags().BoolVar(&nodeDryRun, flagDryRun, false, "run guards and the plan gate without mutating anything")
 	nodeAddCmd.Flags().IntVar(&nodeAddCount, "count", 1, "number of nodes to add in this batch")
-	nodeAddCmd.Flags().BoolVar(&nodeAcknowledgeInterrupted, "acknowledge-interrupted-op", false, "override a stranded marker left by a different op or node and proceed fresh")
+	nodeAddCmd.Flags().BoolVar(&nodeAcknowledgeInterrupted, "acknowledge-interrupted-op", false, "override a stranded marker or changed operation intent and proceed fresh")
 
 	nodeCmd.AddCommand(nodeRemoveCmd)
 	nodeCmd.AddCommand(nodeResizeCmd)
@@ -329,6 +330,20 @@ func (e *nodeOpsEnv) newRunner(cmd *cobra.Command, cfg *config.Config, verb stri
 		node.WithTerraformEnv(e.tfEnv),
 		node.WithRunID(logutil.RunID()),
 		node.WithLogger(log))
+	if creds.IsValid() {
+		runner.Capacity = func(probeCtx context.Context, host, storage string) (node.HostCapacity, error) {
+			probe, err := proxmox.ProbeHost(probeCtx, &proxmox.ProbeOptions{Endpoint: creds.Endpoint, Username: creds.Username, Password: creds.Password, APIToken: creds.APIToken, Insecure: creds.Insecure, Node: host, Datastores: []string{storage}})
+			if err != nil {
+				return node.HostCapacity{}, err
+			}
+			for _, store := range probe.Datastores {
+				if store.Name == storage {
+					return node.HostCapacity{TotalMiB: probe.HostMemTotalMiB(), AllocatedMiB: probe.GuestAllocatedMiB(), AvailableDiskGB: store.AvailGiB(), Shared: store.Shared}, nil
+				}
+			}
+			return node.HostCapacity{}, fmt.Errorf("datastore %s on %s was not observed", storage, host)
+		}
+	}
 	runner.DryRun = consent.dryRun
 	runner.Reporter = func(desc string) func() { return tui.StartSpinner(ctx, desc) }
 	runner.Disk = &node.DebugNodeGrower{Runner: cl}

@@ -93,15 +93,16 @@ func (s *ExecStep) Init() tea.Cmd {
 	s.started = time.Now()
 	s.buildRows()
 
-	go func() {
+	state, execute := *s.st, s.hooks.Execute
+	run := func() tea.Msg {
+		defer close(s.events)
 		var err error
-		if s.hooks.Execute != nil {
-			err = s.hooks.Execute(s.st, s.events)
+		if execute != nil {
+			err = execute(&state, s.events)
 		}
-		s.events <- ExecEvent{Final: true, Err: err}
-	}()
-
-	return tea.Batch(s.loadingSpinner.Tick, s.listen())
+		return execEventMsg{ev: ExecEvent{Final: true, Err: err}}
+	}
+	return tea.Batch(s.loadingSpinner.Tick, s.listen(), run)
 }
 
 func (s *ExecStep) buildRows() {
@@ -131,7 +132,18 @@ func (s *ExecStep) execRole() nodetypes.NodeRole {
 }
 
 func (s *ExecStep) listen() tea.Cmd {
-	return func() tea.Msg { return execEventMsg{ev: <-s.events} }
+	ctx := s.Context()
+	return func() tea.Msg {
+		select {
+		case event, open := <-s.events:
+			if !open {
+				return nil
+			}
+			return execEventMsg{ev: event}
+		case <-ctx.Done():
+			return nil
+		}
+	}
 }
 
 // Update consumes execution events and spinner ticks; every non-final
@@ -265,8 +277,8 @@ func (s *ExecStep) View(width, height int) string {
 	titleStyle := lipgloss.NewStyle().Foreground(tui.ColorText).Bold(true)
 	doneStyle := lipgloss.NewStyle().Foreground(tui.ColorSuccess)
 	failStyle := lipgloss.NewStyle().Foreground(tui.ColorError)
-	pendStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate600)
-	dimStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
+	pendStyle := lipgloss.NewStyle().Foreground(tui.ColorBorder)
+	dimStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim)
 	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
 
 	var b strings.Builder
@@ -352,5 +364,12 @@ func opProgressLabel(op node.Op) string {
 func (s *ExecStep) ShortHelp() []wizard.KeyBinding {
 	return []wizard.KeyBinding{
 		{Key: wizard.HelpCtrlC, Help: "request graceful cancel (twice to force-quit)"},
+	}
+}
+
+// Stop cancels backend work before the flow waits for command cleanup.
+func (s *ExecStep) Stop() {
+	if s.hooks.CancelOp != nil {
+		s.hooks.CancelOp()
 	}
 }

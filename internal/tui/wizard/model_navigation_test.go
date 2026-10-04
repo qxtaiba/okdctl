@@ -73,7 +73,7 @@ func advanceToReview(t *testing.T, m *Model) *Model {
 		if m.CurrentStep().ID() == StepIDReview {
 			return m
 		}
-		m = update(t, m, StepCompleteMsg{})
+		m = update(t, m, StepCompleteMsg{StepID: m.CurrentStep().ID()})
 	}
 	t.Fatalf("setup: CurrentStep() = %v, want review", m.CurrentStep().ID())
 	return m
@@ -167,5 +167,15 @@ func TestModel_DigitKeyOutsideReviewUnaffected(t *testing.T) {
 	m = update(t, m, tea.KeyPressMsg{Code: '2', Text: "2"})
 	if got := m.CurrentStep().ID(); got != StepIDBasics {
 		t.Fatalf("digit key on non-review step: CurrentStep() = %v, want basics (unaffected)", got)
+	}
+}
+
+func TestModelRejectsObsoleteStepMessages(t *testing.T) {
+	steps, _ := newNavTestSteps(nil)
+	m := NewModel(steps, &config.Config{})
+	m.Update(StepCompleteMsg{StepID: StepIDProxmox})
+	m.Update(ConfigSyncMsg{StepID: StepIDProxmox})
+	if m.CurrentStep().ID() != StepIDBasics || steps[0].(*fakeStep).applyCalls != 0 {
+		t.Fatal("obsolete message changed current step")
 	}
 }

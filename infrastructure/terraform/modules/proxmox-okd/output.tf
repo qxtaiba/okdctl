@@ -136,6 +136,7 @@ output "cluster_resources" {
       (var.worker_data_disk_size_gb * var.worker_count) +
       (local.master_os_disk * length(local.masters)) +
       (var.master_data_disk_size_gb * length(local.masters)) +
+      (var.master_mon_disk_size_gb * length(local.masters)) +
       (var.bootstrap_enabled ? var.os_disk_size_gb : 0)
     )
   }

@@ -2,7 +2,6 @@ package postinstall
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -47,28 +46,20 @@ func (p *Phase) CleanupBootstrap(ctx context.Context, cfg *config.Config, opts *
 		return tf.WithLockHint(&errtypes.ClusterError{Msg: "bootstrap: terraform plan failed", Err: err})
 	}
 
-	snapPath, snapErr := tf.SnapshotState(ctx)
-	if snapErr != nil {
-		return &errtypes.ClusterError{Msg: "bootstrap: state snapshot failed", Err: snapErr}
-	}
-
-	// Written before apply so a crash never leaves tfvars claiming the VM
-	// should exist while state says otherwise (which would trigger re-creation).
-	statePath := filepath.Join(terraformDir, workspace.BootstrapStateSentinelFile)
-	if err := system.AtomicWriteString(statePath, `{"bootstrap_enabled": false}`, 0o600); err != nil {
-		// ClusterError not ConfigError: file is okdctl-managed, not user-authored.
-		return &errtypes.ClusterError{Msg: "bootstrap: write state override", Err: err}
-	}
-
-	p.Log.Info("bootstrap: applying — destroying bootstrap vm")
-	if err := tf.Apply(ctx, terraform.ApplyOptions{
-		PlanFile: planPath,
-	}); err != nil {
-		msg := "bootstrap: terraform apply failed"
-		if snapPath != "" {
-			msg = fmt.Sprintf("bootstrap: terraform apply failed (state backup: %s)", snapPath)
+	err := terraform.WithStateRecovery(ctx, tf, "bootstrap: terraform apply", func() error {
+		// Written before apply so a crash never leaves tfvars claiming the VM
+		// should exist while state says otherwise (which would trigger re-creation).
+		statePath := filepath.Join(terraformDir, workspace.BootstrapStateSentinelFile)
+		if err := system.AtomicWriteString(statePath, `{"bootstrap_enabled": false}`, 0o600); err != nil {
+			// ClusterError not ConfigError: file is okdctl-managed, not user-authored.
+			return &errtypes.ClusterError{Msg: "bootstrap: write state override", Err: err}
 		}
-		return tf.WithLockHint(&errtypes.ClusterError{Msg: msg, Err: err})
+
+		p.Log.Info("bootstrap: applying — destroying bootstrap vm")
+		return tf.Apply(ctx, terraform.ApplyOptions{PlanFile: planPath})
+	})
+	if err != nil {
+		return err
 	}
 
 	p.Log.Info("bootstrap: vm destroyed", "cluster", cfg.Cluster.Name)

@@ -42,7 +42,7 @@ type fakeApprover struct {
 	calls    atomic.Int32
 }
 
-func (f *fakeApprover) ApprovePendingCSRs(_ context.Context) (int, error) {
+func (f *fakeApprover) ApprovePendingCSRs(_ context.Context, _ ...cluster.CSRIdentity) (int, error) {
 	f.calls.Add(1)
 	return f.approveN, nil
 }

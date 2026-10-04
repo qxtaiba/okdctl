@@ -112,28 +112,31 @@ func (f *SelectField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 // View renders the field with its label and a bordered box showing the
 // current option, optionally flanked by cycle indicators when focused.
 func (f *SelectField) View() string {
-	labelStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate300)
-	hintStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
+	labelStyle := lipgloss.NewStyle().Foreground(tui.ColorText)
+	hintStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim)
 
 	labelText := strings.ToLower(f.Label)
 	labelLine := labelStyle.Render(labelText)
-	if f.Help != "" {
+	if f.focused && f.Help != "" {
 		labelLine += " " + hintStyle.Render("("+strings.ToLower(f.Help)+")")
 	}
 	if f.isDefault && f.Value() != "" {
 		defaultIndicator := lipgloss.NewStyle().
-			Foreground(tui.ColorSlate500).
+			Foreground(tui.ColorTextDim).
 			Italic(true).
 			Render(" (default)")
 		labelLine += defaultIndicator
 	}
 
+	if !f.focused {
+		return labelLine + ": " + f.Value()
+	}
 	contentWidth := f.width - 4
 	if contentWidth < 20 {
 		contentWidth = 40
 	}
 
-	borderColor := tui.ColorSlate600
+	borderColor := tui.ColorBorder
 	if f.focused {
 		borderColor = tui.ColorPrimary
 	}

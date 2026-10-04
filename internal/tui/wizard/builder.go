@@ -1,6 +1,8 @@
 package wizard
 
 import (
+	"fmt"
+
 	"github.com/qxtaiba/okdctl/internal/config"
 )
 
@@ -50,7 +52,7 @@ type BuiltSteps struct {
 
 // BuildSteps builds the ordered step list and per-type state map from
 // wizardCfg.Steps using builder's factories.
-func BuildSteps(wizardCfg Config, builder *StepBuilder) BuiltSteps {
+func BuildSteps(wizardCfg Config, builder *StepBuilder) (BuiltSteps, error) {
 	result := BuiltSteps{
 		Steps:  make([]WizardStep, 0, len(wizardCfg.Steps)),
 		States: make(map[StepType]StepState),
@@ -58,13 +60,15 @@ func BuildSteps(wizardCfg Config, builder *StepBuilder) BuiltSteps {
 
 	for _, stepCfg := range wizardCfg.Steps {
 		step, state := builder.Build(stepCfg.Type)
-		if step != nil {
-			result.Steps = append(result.Steps, step)
-			if state != nil {
-				result.States[stepCfg.Type] = state
-			}
+		if step == nil {
+			return BuiltSteps{}, fmt.Errorf("build wizard step %q: factory missing or returned nil", stepCfg.Type)
 		}
+		if _, duplicate := result.States[stepCfg.Type]; duplicate {
+			return BuiltSteps{}, fmt.Errorf("build wizard step %q: duplicate type", stepCfg.Type)
+		}
+		result.Steps = append(result.Steps, step)
+		result.States[stepCfg.Type] = state
 	}
 
-	return result
+	return result, nil
 }

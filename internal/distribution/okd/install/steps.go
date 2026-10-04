@@ -3,6 +3,8 @@ package install
 import (
 	"context"
 
+	"github.com/qxtaiba/okdctl/internal/cluster"
+
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
@@ -87,7 +89,11 @@ func (p *Phase) installSteps(cfg *config.Config, opts *Options) []distribution.S
 				p.Log.Info("install: this process typically takes 30-60 minutes")
 			},
 			Exec: func(ctx context.Context) error {
-				return p.MonitorInstallation(ctx, clusterDir, opts, nil)
+				identities, err := cluster.ExpectedCSRIdentities(cfg, "")
+				if err != nil {
+					return err
+				}
+				return p.MonitorInstallation(ctx, clusterDir, opts, nil, identities...)
 			},
 		},
 		{

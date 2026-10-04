@@ -43,9 +43,9 @@ func TestShouldRunStepResumesAtAndAfter(t *testing.T) {
 }
 
 // seedMarker writes an op marker under r.workDir so beginOp reads it.
-func seedMarker(t *testing.T, r *Runner, op Op, target string, step Step) {
+func seedMarker(t *testing.T, r *Runner, op Op, target string, step Step, intent ...*OpIntent) {
 	t.Helper()
-	if err := markStep(r.marker(), op, target, step, r.RunID, r.Cfg.Cluster.Name); err != nil {
+	if err := markStep(r.marker(), op, target, step, r.RunID, r.Cfg.Cluster.Name, intent...); err != nil {
 		t.Fatalf("seed marker: %v", err)
 	}
 }

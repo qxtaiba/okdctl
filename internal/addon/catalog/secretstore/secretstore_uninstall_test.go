@@ -66,9 +66,9 @@ func TestUninstall_HappyPath(t *testing.T) {
 
 	lines := readArgvLog(t, argvLog)
 	want := []string{
-		"oc:delete secret onepassword-connect-credentials -n external-secrets",
-		"oc:delete secret onepassword-connect-token -n external-secrets",
-		"oc:delete secretstore okdctl-secretstore -n external-secrets",
+		"oc:delete secret onepassword-connect-credentials -n external-secrets --ignore-not-found",
+		"oc:delete secret onepassword-connect-token -n external-secrets --ignore-not-found",
+		"oc:delete secretstore okdctl-secretstore -n external-secrets --ignore-not-found",
 	}
 	if len(lines) != len(want) {
 		t.Fatalf("expected %d argv records, got %d: %v", len(want), len(lines), lines)
@@ -91,16 +91,12 @@ func TestUninstall_PartialSecretFailureContinues(t *testing.T) {
 	env := makeUninstallEnv(argvLog, opCredentialsSecretName, slog.New(h))
 
 	s := &secretStore{}
-	if err := s.Uninstall(context.Background(), env); err != nil {
-		t.Fatalf("Uninstall must return nil even when a secret delete fails; got: %v", err)
+	if err := s.Uninstall(context.Background(), env); err == nil {
+		t.Fatal("cleanup failure lost")
 	}
 
 	lines := readArgvLog(t, argvLog)
 	if len(lines) != 3 {
 		t.Fatalf("expected 3 argv records (loop must continue past the failed delete), got %d: %v", len(lines), lines)
-	}
-
-	if got := h.CountLevel(slog.LevelWarn); got != 1 {
-		t.Errorf("warnCount = %d; want 1 (one failing secret delete)", got)
 	}
 }
