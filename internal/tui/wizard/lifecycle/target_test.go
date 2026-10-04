@@ -391,3 +391,71 @@ func TestTargetStep_RefreshKeyRefetchesNodes(t *testing.T) {
 		t.Fatal("'r' must bump the generation")
 	}
 }
+
+// TestTargetStep_OverlayHelp pins which phase feeds the "?" overlay's
+// footer-silent "r" entry: nil while loading (the key does nothing yet),
+// and {r refresh} once picking — success or a load error alike, since
+// Update's targetPicking branch lets 'r' re-fetch either way.
+func TestTargetStep_OverlayHelp(t *testing.T) {
+	st := &State{Cfg: config.DefaultConfig(), Op: node.OpResize}
+	fresh := NewTargetStep(st, Hooks{})
+	if got := fresh.OverlayHelp(); got != nil {
+		t.Fatalf("OverlayHelp() while loading = %+v, want nil", got)
+	}
+
+	nodes := []cluster.NodeDetail{{Name: "homelab-master0", Role: nodetypes.RoleMaster, Ready: true}}
+	s := loadedTarget(t, st, nodes)
+	want := wizard.KeyBinding{Key: "r", Help: "refresh"}
+	if got := s.OverlayHelp(); len(got) != 1 || got[0] != want {
+		t.Fatalf("OverlayHelp() once picking (success) = %+v, want [%+v]", got, want)
+	}
+
+	errSt := &State{Cfg: config.DefaultConfig(), Op: node.OpResize}
+	errored := NewTargetStep(errSt, Hooks{ListNodes: func() ([]cluster.NodeDetail, error) {
+		return nil, errors.New("cluster unreachable")
+	}})
+	errored.Init()
+	step, _ := errored.Update(nodesLoadedMsg{generation: errored.generation, err: errors.New("cluster unreachable")})
+	errored = step.(*TargetStep)
+	if got := errored.OverlayHelp(); len(got) != 1 || got[0] != want {
+		t.Fatalf("OverlayHelp() once picking (load error) = %+v, want [%+v]", got, want)
+	}
+}
+
+// TestTargetStep_HelpOverlay_RefreshDiscoverable renders the "?" overlay
+// through the full wizard.Model pipeline to prove the picking phase's
+// "r refresh" binding — real but footer-silent — is actually discoverable
+// there.
+func TestTargetStep_HelpOverlay_RefreshDiscoverable(t *testing.T) {
+	st := &State{Cfg: config.DefaultConfig(), Op: node.OpResize}
+	nodes := []cluster.NodeDetail{{Name: "homelab-master0", Role: nodetypes.RoleMaster, Ready: true}}
+	s := loadedTarget(t, st, nodes)
+
+	m := wizard.NewModel([]wizard.WizardStep{s}, st.Cfg)
+	tuitest.RenderAt(t, m, 100, 30)
+	mm, _ := m.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
+	m = mm.(*wizard.Model)
+
+	frame := tuitest.StripANSI(m.View().Content)
+	if !strings.Contains(frame, "r refresh") {
+		t.Fatalf("picking-phase overlay missing %q:\n%s", "r refresh", frame)
+	}
+}
+
+// TestTargetStep_HelpOverlay_LoadingPhaseListsNoRefresh is the negative
+// case: while the node list is still loading, 'r' does nothing, and the
+// overlay must not claim otherwise.
+func TestTargetStep_HelpOverlay_LoadingPhaseListsNoRefresh(t *testing.T) {
+	st := &State{Cfg: config.DefaultConfig(), Op: node.OpResize}
+	s := NewTargetStep(st, Hooks{})
+
+	m := wizard.NewModel([]wizard.WizardStep{s}, st.Cfg)
+	tuitest.RenderAt(t, m, 100, 30)
+	mm, _ := m.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
+	m = mm.(*wizard.Model)
+
+	frame := tuitest.StripANSI(m.View().Content)
+	if strings.Contains(frame, "refresh") {
+		t.Fatalf("loading-phase overlay must not advertise \"refresh\":\n%s", frame)
+	}
+}

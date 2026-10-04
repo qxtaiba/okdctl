@@ -705,7 +705,7 @@ func fitStatusLines(lines []string, width, height int) string {
 func (s *StatusStep) ShortHelp() []wizard.KeyBinding {
 	return []wizard.KeyBinding{
 		{Key: wizard.HelpEsc, Help: "hub"},
-		{Key: statusRefreshKey, Help: "refresh"},
+		{Key: statusRefreshKey, Help: helpRefresh},
 		{Key: "↑↓", Help: "nodes"},
 		{Key: wizard.HelpEnter, Help: "details"},
 		{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},

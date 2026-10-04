@@ -518,9 +518,11 @@ func (m *Model) windowTitle() string {
 	return m.headerTitle()
 }
 
-// renderHelpOverlay renders the full, untruncated key-binding list (the
-// same bindings footerBindings feeds the ribbon) over the body region,
-// sized to exactly replace it — the full content width on a split tier.
+// renderHelpOverlay renders the full, untruncated key-binding list — the
+// same bindings footerBindings feeds the ribbon, plus the active step's own
+// footer-silent extras (OverlayHelpProvider) and the wizard's footer-silent
+// vim/jump vocabulary — over the body region, sized to exactly replace it —
+// the full content width on a split tier.
 func (m *Model) renderHelpOverlay() string {
 	width, height := m.viewportDimensions()
 	if m.splitLayout() {
@@ -528,9 +530,18 @@ func (m *Model) renderHelpOverlay() string {
 	}
 
 	bindings := m.footerBindings()
-	hints := make([]components.KeyHint, len(bindings), len(bindings)+4)
+	hints := make([]components.KeyHint, len(bindings), len(bindings)+8)
 	for i, b := range bindings {
 		hints[i] = components.KeyHint{Key: b.Key, Help: b.Help}
+	}
+	// A step's own footer-silent bindings (OverlayHelpProvider) surface only
+	// here, alongside its ShortHelp entries in the same screen section.
+	if len(m.steps) > 0 && m.currentStep >= 0 && m.currentStep < len(m.steps) {
+		if h, ok := m.steps[m.currentStep].(OverlayHelpProvider); ok {
+			for _, b := range h.OverlayHelp() {
+				hints = append(hints, components.KeyHint{Key: b.Key, Help: b.Help})
+			}
+		}
 	}
 	// The footer-silent vim vocabulary surfaces only here, under its own
 	// overlay group.

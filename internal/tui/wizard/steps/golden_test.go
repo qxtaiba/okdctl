@@ -734,6 +734,35 @@ func TestGolden_HelpOverlay(t *testing.T) {
 	}
 }
 
+// TestGolden_DistributionHelpOverlay pins the "?" overlay for the
+// distribution step's select phase, at the narrowest single-column tier and
+// the widest split tier: its new footer-silent "r refresh" entry (the
+// loaded phase's reuse of the key the error phase already binds as "r
+// retry", see handleKeyMsg) now appears in the overlay's screen section at
+// both extremes.
+func TestGolden_DistributionHelpOverlay(t *testing.T) {
+	questionMark := tea.KeyPressMsg{Code: '?', Text: "?"}
+
+	for _, sz := range []struct{ w, h int }{{80, 24}, {180, 48}} {
+		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
+			tui.SetTerminalWidth(sz.w)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+			m := newGoldenModel(t)
+			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
+			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDDistribution})
+			gen := m.CurrentStep().(*DistributionStep).generation
+			m.Update(versionsLoadedMsg{generation: gen, series: DemoReleaseSeries()})
+
+			m.Update(questionMark)
+
+			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
+			tuitest.Golden(t, fmt.Sprintf("distribution-help-overlay_%dx%d", sz.w, sz.h), frame)
+			tuitest.AssertFits(t, frame, sz.w, sz.h)
+		})
+	}
+}
+
 // TestGolden_NodePlacementSingleNode pins the single-Proxmox-host case:
 // the bootstrap field's per-node select has exactly one option and must
 // render the bare value with no cycle arrows. Tabs past the infrastructure

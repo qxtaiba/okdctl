@@ -641,6 +641,16 @@ func (s *NodePlacementStep) ShortHelp() []wizard.KeyBinding {
 	return help
 }
 
+// OverlayHelp lists the footer-silent "r" refresh for the "?" overlay, once
+// discovery has settled into a built form — success or error alike, since
+// 'r' re-issues discovery either way (Update's phasePlacing branch).
+func (s *NodePlacementStep) OverlayHelp() []wizard.KeyBinding {
+	if s.phase != phasePlacing || s.inner == nil {
+		return nil
+	}
+	return []wizard.KeyBinding{{Key: "r", Help: helpRefresh}}
+}
+
 // bridgeNames returns bridges' names sanitized for display: unlike the node
 // and storage pick lists, a bridge's dropdown option is also its selected
 // value (no SetDisplayOptions overlay exists here, and components.

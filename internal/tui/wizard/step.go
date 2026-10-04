@@ -78,6 +78,13 @@ type HelpProvider interface {
 	ShortHelp() []KeyBinding
 }
 
+// OverlayHelpProvider is implemented by steps with a binding that works but
+// is deliberately left out of the footer ribbon, listed instead under the
+// "?" overlay's own screen section alongside ShortHelp's bindings.
+type OverlayHelpProvider interface {
+	OverlayHelp() []KeyBinding
+}
+
 // QuitGuard is implemented by steps that must intercept ctrl+c (e.g. graceful
 // cancel on first press); returning true consumes the keypress, false quits normally.
 type QuitGuard interface {

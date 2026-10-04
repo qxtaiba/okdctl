@@ -42,6 +42,11 @@ func (f StaticVersionFetcher) FetchVersions(_ context.Context) ([]releases.OKDRe
 	return series, nil
 }
 
+// helpRefresh is the house-voice help text for a binding that re-issues an
+// already-loaded fetch, shared across every step that advertises one so
+// the wording never drifts between them.
+const helpRefresh = "refresh"
+
 type selectionPhase int
 
 const (
@@ -466,6 +471,16 @@ func (s *DistributionStep) ShortHelp() []wizard.KeyBinding {
 		help = append(help, wizard.KeyBinding{Key: "r", Help: "retry"})
 	}
 	return help
+}
+
+// OverlayHelp lists the select phase's footer-silent "r" refresh for the
+// "?" overlay; the error phase already advertises "r retry" via ShortHelp,
+// so it contributes nothing here to avoid listing the same key twice.
+func (s *DistributionStep) OverlayHelp() []wizard.KeyBinding {
+	if s.phase != phaseVersionSelect {
+		return nil
+	}
+	return []wizard.KeyBinding{{Key: "r", Help: helpRefresh}}
 }
 
 // SetFocused toggles focus; the version selector is only focused once the

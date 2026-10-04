@@ -651,6 +651,83 @@ func TestNodePlacementStep_RefreshKeyRefetchesDiscovery(t *testing.T) {
 	}
 }
 
+// TestNodePlacementStep_OverlayHelp pins which states feed the "?" overlay's
+// footer-silent "r" entry: nil while discovering (the key does nothing
+// yet), nil when placing with no built form (the nil-provider error, which
+// never calls buildInnerStep so 'r' has nothing to re-fetch into), and
+// {r refresh} once placing has a built form — success or a network error
+// with its fallback form alike, since Update's phasePlacing branch lets 'r'
+// re-fetch either way.
+func TestNodePlacementStep_OverlayHelp(t *testing.T) {
+	s := NewNodePlacementStep()
+	if got := s.OverlayHelp(); got != nil {
+		t.Fatalf("OverlayHelp() while discovering = %+v, want nil", got)
+	}
+
+	nilProvider := NewNodePlacementStep()
+	nilProvider.cfg = &config.Config{}
+	nilProvider.Init()
+	if got := nilProvider.OverlayHelp(); got != nil {
+		t.Fatalf("OverlayHelp() with no built form = %+v, want nil", got)
+	}
+
+	s = NewNodePlacementStep()
+	s.cfg = newProxmoxTestConfig()
+	step, _ := s.Update(discoveryCompleteMsg{discovery: demoDiscovery()})
+	s = step.(*NodePlacementStep)
+	want := wizard.KeyBinding{Key: "r", Help: "refresh"}
+	if got := s.OverlayHelp(); len(got) != 1 || got[0] != want {
+		t.Fatalf("OverlayHelp() once placing (success) = %+v, want [%+v]", got, want)
+	}
+
+	errored := NewNodePlacementStep()
+	errored.cfg = newProxmoxTestConfig()
+	step, _ = errored.Update(discoveryCompleteMsg{err: errors.New("connection refused")})
+	errored = step.(*NodePlacementStep)
+	if got := errored.OverlayHelp(); len(got) != 1 || got[0] != want {
+		t.Fatalf("OverlayHelp() once placing (network error, fallback form) = %+v, want [%+v]", got, want)
+	}
+}
+
+// TestNodePlacementStep_HelpOverlay_RefreshDiscoverable renders the "?"
+// overlay through the full wizard.Model pipeline to prove the placing
+// phase's "r refresh" binding — real but footer-silent — is actually
+// discoverable there.
+func TestNodePlacementStep_HelpOverlay_RefreshDiscoverable(t *testing.T) {
+	s := NewNodePlacementStep()
+	s.cfg = newProxmoxTestConfig()
+	step, _ := s.Update(discoveryCompleteMsg{discovery: demoDiscovery()})
+	s = step.(*NodePlacementStep)
+
+	m := wizard.NewModel([]wizard.WizardStep{s}, s.cfg)
+	tuitest.RenderAt(t, m, 100, 30)
+	mm, _ := m.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
+	m = mm.(*wizard.Model)
+
+	frame := tuitest.StripANSI(m.View().Content)
+	if !strings.Contains(frame, "r refresh") {
+		t.Fatalf("placing-phase overlay missing %q:\n%s", "r refresh", frame)
+	}
+}
+
+// TestNodePlacementStep_HelpOverlay_DiscoveringPhaseListsNoRefresh is the
+// negative case: while discovery is still in flight, 'r' does nothing, and
+// the overlay must not claim otherwise.
+func TestNodePlacementStep_HelpOverlay_DiscoveringPhaseListsNoRefresh(t *testing.T) {
+	s := NewNodePlacementStep()
+	s.cfg = newProxmoxTestConfig()
+
+	m := wizard.NewModel([]wizard.WizardStep{s}, s.cfg)
+	tuitest.RenderAt(t, m, 100, 30)
+	mm, _ := m.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
+	m = mm.(*wizard.Model)
+
+	frame := tuitest.StripANSI(m.View().Content)
+	if strings.Contains(frame, "refresh") {
+		t.Fatalf("discovering-phase overlay must not advertise \"refresh\":\n%s", frame)
+	}
+}
+
 // TestNodePlacementStep_SanitizesHostileProxmoxText drives a tampered
 // Proxmox discovery response — a node, storage pool, and bridge name each
 // carrying a CSI sequence that would otherwise clear the screen and move the

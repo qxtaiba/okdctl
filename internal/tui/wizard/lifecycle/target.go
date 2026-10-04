@@ -406,3 +406,13 @@ func (s *TargetStep) ShortHelp() []wizard.KeyBinding {
 		{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
 	}
 }
+
+// OverlayHelp lists the footer-silent "r" refresh for the "?" overlay, once
+// the node list has settled — success or error alike, since 'r' re-issues
+// the fetch either way (Update's targetPicking branch).
+func (s *TargetStep) OverlayHelp() []wizard.KeyBinding {
+	if s.phase != targetPicking {
+		return nil
+	}
+	return []wizard.KeyBinding{{Key: "r", Help: "refresh"}}
+}

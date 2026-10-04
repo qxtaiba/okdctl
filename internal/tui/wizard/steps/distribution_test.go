@@ -552,3 +552,95 @@ func TestDistributionStep_ReentryAfterErrorRefetches(t *testing.T) {
 		t.Fatalf("phase after re-entry's retry succeeded = %v, want phaseVersionSelect", s.phase)
 	}
 }
+
+// TestDistributionStep_OverlayHelp pins which phase feeds the "?" overlay's
+// footer-silent "r" entry: nil while loading (the key does nothing yet),
+// {r refresh} in the select phase (the new footer-silent binding), and nil
+// in the error phase too — ShortHelp already advertises "r retry" there, so
+// OverlayHelp must contribute nothing or the overlay would list "r" twice.
+func TestDistributionStep_OverlayHelp(t *testing.T) {
+	s := NewDistributionStep()
+	if got := s.OverlayHelp(); got != nil {
+		t.Fatalf("OverlayHelp() while loading = %+v, want nil", got)
+	}
+
+	s.SetVersionFetcher(StaticVersionFetcher{Series: DemoReleaseSeries()})
+	cmd := s.Init()
+	step, _ := s.Update(cmd())
+	s = step.(*DistributionStep)
+	want := wizard.KeyBinding{Key: "r", Help: "refresh"}
+	if got := s.OverlayHelp(); len(got) != 1 || got[0] != want {
+		t.Fatalf("OverlayHelp() in select phase = %+v, want [%+v]", got, want)
+	}
+
+	s = NewDistributionStep()
+	s.SetVersionFetcher(StaticVersionFetcher{Err: errors.New("dial tcp: connection refused")})
+	cmd = s.Init()
+	step, _ = s.Update(cmd())
+	s = step.(*DistributionStep)
+	if got := s.OverlayHelp(); got != nil {
+		t.Fatalf("OverlayHelp() in error phase = %+v, want nil (ShortHelp already advertises \"r retry\")", got)
+	}
+}
+
+// TestDistributionStep_HelpOverlay_RefreshDiscoverable renders the "?"
+// overlay through the full wizard.Model pipeline to prove the select
+// phase's "r refresh" binding — real but footer-silent — is actually
+// discoverable there.
+func TestDistributionStep_HelpOverlay_RefreshDiscoverable(t *testing.T) {
+	s := NewDistributionStep()
+	s.SetVersionFetcher(StaticVersionFetcher{Series: DemoReleaseSeries()})
+	cmd := s.Init()
+	step, _ := s.Update(cmd())
+	s = step.(*DistributionStep)
+
+	m := wizard.NewModel([]wizard.WizardStep{s}, config.DefaultConfig())
+	tuitest.RenderAt(t, m, 100, 30)
+	mm, _ := m.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
+	m = mm.(*wizard.Model)
+
+	frame := tuitest.StripANSI(m.View().Content)
+	if !strings.Contains(overlayScreenSection(t, frame), "r refresh") {
+		t.Fatalf("select-phase overlay missing %q:\n%s", "r refresh", frame)
+	}
+}
+
+// overlayScreenSection returns the open overlay's "screen" group alone,
+// excluding the footer ribbon beneath the panel (which echoes the step's
+// own ShortHelp bindings and would otherwise double-count anything they
+// share with the overlay).
+func overlayScreenSection(t *testing.T, frame string) string {
+	t.Helper()
+	start := strings.Index(frame, "screen")
+	end := strings.Index(frame, "vim")
+	if start < 0 || end < 0 || end < start {
+		t.Fatalf("could not locate the overlay's screen section:\n%s", frame)
+	}
+	return frame[start:end]
+}
+
+// TestDistributionStep_HelpOverlay_ErrorPhaseListsRetryOnce guards the reuse
+// decision's other half: the error phase's pre-existing, footer-visible "r
+// retry" must still appear exactly once in the overlay, never doubled by
+// the new overlay-only entry (which must stay silent in this phase).
+func TestDistributionStep_HelpOverlay_ErrorPhaseListsRetryOnce(t *testing.T) {
+	s := NewDistributionStep()
+	s.SetVersionFetcher(StaticVersionFetcher{Err: errors.New("dial tcp: connection refused")})
+	cmd := s.Init()
+	step, _ := s.Update(cmd())
+	s = step.(*DistributionStep)
+
+	m := wizard.NewModel([]wizard.WizardStep{s}, config.DefaultConfig())
+	tuitest.RenderAt(t, m, 100, 30)
+	mm, _ := m.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
+	m = mm.(*wizard.Model)
+
+	frame := tuitest.StripANSI(m.View().Content)
+	screen := overlayScreenSection(t, frame)
+	if n := strings.Count(screen, "r retry"); n != 1 {
+		t.Fatalf("error-phase overlay shows %q %d times, want exactly 1:\n%s", "r retry", n, frame)
+	}
+	if strings.Contains(screen, "refresh") {
+		t.Fatalf("error-phase overlay must not also advertise \"refresh\":\n%s", frame)
+	}
+}

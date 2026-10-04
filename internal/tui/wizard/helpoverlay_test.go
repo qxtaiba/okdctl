@@ -337,3 +337,47 @@ func TestHelpOverlay_ListsVimGroup(t *testing.T) {
 		}
 	}
 }
+
+// overlayOnlyStep is an OverlayHelpProvider double: it advertises "x extra"
+// only to the "?" overlay, never via ShortHelp, mirroring how a step reuses
+// a keystroke across phases without repeating it in the footer ribbon.
+type overlayOnlyStep struct{ nopStep }
+
+func (s *overlayOnlyStep) OverlayHelp() []KeyBinding {
+	return []KeyBinding{{Key: "x", Help: "extra"}}
+}
+
+// TestHelpOverlay_ListsStepOverlayHelpFooterSilently pins the overlay's
+// aggregation of a step's own OverlayHelpProvider bindings: absent from the
+// footer ribbon (ShortHelp never saw them), present in the overlay's screen
+// section alongside the step's regular bindings.
+func TestHelpOverlay_ListsStepOverlayHelpFooterSilently(t *testing.T) {
+	s := &overlayOnlyStep{nopStep: *newNopStep()}
+	m := NewModel([]WizardStep{s}, config.DefaultConfig())
+	tuitest.RenderAt(t, m, 100, 30)
+
+	if ribbon := tuitest.StripANSI(m.renderHelpRow()); strings.Contains(ribbon, "extra") {
+		t.Fatalf("footer ribbon advertises the overlay-only binding: %q", ribbon)
+	}
+
+	m = update(t, m, questionMark())
+	frame := tuitest.StripANSI(m.View().Content)
+	if !strings.Contains(frame, "extra") {
+		t.Errorf("overlay missing the step's OverlayHelp binding:\n%s", frame)
+	}
+}
+
+// TestHelpOverlay_StepWithoutOverlayHelpListsNothingExtra is the negative
+// case: a step that implements neither ShortHelp's "x" entry nor
+// OverlayHelpProvider must not have "x" appear in the overlay at all — the
+// aggregation must not invent bindings a step never declared.
+func TestHelpOverlay_StepWithoutOverlayHelpListsNothingExtra(t *testing.T) {
+	m := NewModel([]WizardStep{newNopStep()}, config.DefaultConfig())
+	tuitest.RenderAt(t, m, 100, 30)
+
+	m = update(t, m, questionMark())
+	frame := tuitest.StripANSI(m.View().Content)
+	if strings.Contains(frame, "extra") {
+		t.Fatalf("overlay lists a binding the current step never declared:\n%s", frame)
+	}
+}
