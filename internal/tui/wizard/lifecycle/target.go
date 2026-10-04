@@ -24,8 +24,9 @@ const (
 )
 
 type nodesLoadedMsg struct {
-	nodes []cluster.NodeDetail
-	err   error
+	generation uint64
+	nodes      []cluster.NodeDetail
+	err        error
 }
 
 // targetChoice is one selectable option: a whole role or a single node.
@@ -46,6 +47,12 @@ type TargetStep struct {
 	phase   targetPhase
 	frame   uint64
 	loadErr error
+
+	// generation increments on every node-list fetch this step issues; a
+	// nodesLoadedMsg carrying a stale generation is a superseded fetch's
+	// reply and Update discards it unapplied, so a slow first fetch can
+	// never clobber a newer one's result.
+	generation uint64
 
 	selector *components.Selector
 	choices  []targetChoice
@@ -101,19 +108,33 @@ func (s *TargetStep) ShouldShow(_ *config.Config) bool {
 	return (s.st.Op == node.OpResize || s.st.Op == node.OpRemove) && !s.st.Resume
 }
 
-// Init kicks off the live node fetch; the shared frame clock animates the
+// Init kicks off the live node fetch, reusing an already-loaded list on
+// re-entry instead of re-issuing the request; a failed attempt is never
+// cached and retries automatically. The shared frame clock animates the
 // loading indicator while Animating reports true.
 func (s *TargetStep) Init() tea.Cmd {
+	if s.phase == targetPicking && s.loadErr == nil {
+		return nil
+	}
+	return s.startFetch()
+}
+
+// startFetch resets the step into the loading phase and issues a
+// generation-tagged node-list fetch over a snapshotted hook, so the
+// returned tea.Cmd never touches s once it is handed to bubbletea.
+func (s *TargetStep) startFetch() tea.Cmd {
 	s.phase = targetLoading
 	s.loadErr = nil
-	fetch := func() tea.Msg {
-		if s.hooks.ListNodes == nil {
-			return nodesLoadedMsg{}
+	s.generation++
+	generation := s.generation
+	listNodes := s.hooks.ListNodes
+	return func() tea.Msg {
+		if listNodes == nil {
+			return nodesLoadedMsg{generation: generation}
 		}
-		nodes, err := s.hooks.ListNodes()
-		return nodesLoadedMsg{nodes: nodes, err: err}
+		nodes, err := listNodes()
+		return nodesLoadedMsg{generation: generation, nodes: nodes, err: err}
 	}
-	return fetch
 }
 
 // Update handles node-list arrival, shared-clock frames, selector
@@ -121,6 +142,9 @@ func (s *TargetStep) Init() tea.Cmd {
 func (s *TargetStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	switch msg := msg.(type) {
 	case nodesLoadedMsg:
+		if msg.generation != s.generation {
+			return s, nil
+		}
 		s.phase = targetPicking
 		s.loadErr = msg.err
 		if msg.err == nil {
@@ -133,7 +157,18 @@ func (s *TargetStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		s.frame = msg.Frame
 
 	case tea.KeyPressMsg:
-		if s.phase != targetPicking || s.loadErr != nil || s.selector == nil || len(s.choices) == 0 {
+		if s.phase != targetPicking {
+			return s, nil
+		}
+		// 'r' forces a refresh of the loaded node list; footer-silent like
+		// the vim scroll vocabulary (model_navigation.go's
+		// handleVimScrollKey) — Init() otherwise reuses a prior successful
+		// fetch on re-entry.
+		if msg.String() == "r" {
+			cmd := s.startFetch()
+			return s, cmd
+		}
+		if s.loadErr != nil || s.selector == nil || len(s.choices) == 0 {
 			return s, nil
 		}
 		if msg.Code == tea.KeyEnter {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -34,8 +35,9 @@ const (
 )
 
 type discoveryCompleteMsg struct {
-	discovery *proxmoxDiscovery
-	err       error
+	generation uint64
+	discovery  *proxmoxDiscovery
+	err        error
 }
 
 // NodePlacementStep discovers Proxmox infrastructure and presents
@@ -50,6 +52,12 @@ type NodePlacementStep struct {
 	discovery    *proxmoxDiscovery
 	discoveryErr error
 	capacity     *WizardCapacitySnapshot
+
+	// generation increments on every discovery fetch this step issues; a
+	// discoveryCompleteMsg carrying a stale generation is a superseded
+	// fetch's reply and Update discards it unapplied, so a slow first
+	// fetch can never clobber a newer one's result.
+	generation uint64
 
 	// header caches the last View's rendered discoveryHeader, so headerOffset
 	// doesn't need the render width again.
@@ -105,22 +113,21 @@ func (s *NodePlacementStep) ShouldShow(cfg *config.Config) bool {
 	return true
 }
 
-// Init starts discovery, or — with no Proxmox provider configured — settles
-// immediately into an explanatory error instead of spinning forever on a
-// fetch that was never issued.
+// Init starts discovery, reusing an already-discovered inventory on
+// re-entry instead of re-hitting the Proxmox API; a failed attempt is never
+// cached and retries automatically. With no Proxmox provider configured it
+// settles immediately into an explanatory error instead of spinning forever
+// on a fetch that was never issued.
 func (s *NodePlacementStep) Init() tea.Cmd {
+	if s.phase == phasePlacing && s.discoveryErr == nil {
+		return nil
+	}
 	if s.cfg == nil || s.cfg.Provider.Proxmox == nil {
 		s.phase = phasePlacing
 		s.discoveryErr = errors.New("no proxmox provider configured — complete the proxmox step first")
 		return nil
 	}
-	s.phase = phaseDiscovering
-	return s.fetchDiscovery
-}
-
-func (s *NodePlacementStep) fetchDiscovery() tea.Msg {
-	disc, err := discoverProxmox(s.cfg)
-	return discoveryCompleteMsg{discovery: disc, err: err}
+	return s.startDiscovery()
 }
 
 // buildInnerStep builds the form's dropdowns, retaining typed field pointers so
@@ -255,6 +262,9 @@ func selectFieldGroup(fields []*components.SelectField) *components.InputGroup {
 func (s *NodePlacementStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	switch msg := msg.(type) {
 	case discoveryCompleteMsg:
+		if msg.generation != s.generation {
+			return s, nil
+		}
 		s.discovery = msg.discovery
 		s.discoveryErr = msg.err
 		s.phase = phasePlacing
@@ -284,6 +294,15 @@ func (s *NodePlacementStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	}
 
 	if s.phase == phasePlacing && s.inner != nil {
+		// 'r' forces a refresh of the discovered inventory; footer-silent
+		// like the vim scroll vocabulary (model_navigation.go's
+		// handleVimScrollKey) — Init() otherwise reuses a prior successful
+		// discovery on re-entry instead of re-hitting the Proxmox API.
+		if keyMsg, ok := msg.(tea.KeyPressMsg); ok && key.Matches(keyMsg, key.NewBinding(key.WithKeys("r"))) {
+			cmd := s.startDiscovery()
+			return s, cmd
+		}
+
 		cmd, enterPressed := s.inner.Update(msg)
 		if !enterPressed {
 			return s, cmd

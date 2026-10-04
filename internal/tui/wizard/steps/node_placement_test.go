@@ -492,7 +492,8 @@ func TestGolden_NodePlacementUnknownCapacity(t *testing.T) {
 			px := m.Config().Provider.Proxmox
 			px.DataStorage = "orphan-pool"
 			px.Node = ""
-			m.Update(discoveryCompleteMsg{discovery: demoDiscoveryUnknownCapacity()})
+			gen := m.CurrentStep().(*NodePlacementStep).generation
+			m.Update(discoveryCompleteMsg{generation: gen, discovery: demoDiscoveryUnknownCapacity()})
 
 			// Tabs past bridge, additional networks, os storage, and data
 			// storage to focus bootstrap, scrolling both capacity-unknown
@@ -514,5 +515,138 @@ func TestGolden_NodePlacementUnknownCapacity(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestNodePlacementStep_StaleDiscoverySuccessCannotOverwriteNewer pins the
+// request-identity contract: fake request A is issued, a newer request B is
+// issued before A replies (the back-then-re-enter case), B's reply lands
+// first, and A's now-stale successful reply must not overwrite it.
+func TestNodePlacementStep_StaleDiscoverySuccessCannotOverwriteNewer(t *testing.T) {
+	s := NewNodePlacementStep()
+	s.cfg = newProxmoxTestConfig()
+
+	s.Init()
+	genA := s.generation
+
+	s.Init() // re-entry while A is still in flight
+	genB := s.generation
+	if genB == genA {
+		t.Fatal("re-entry must issue a new generation")
+	}
+
+	discA := &proxmoxDiscovery{Nodes: []proxmoxNode{{Name: "stale-node"}}}
+	discB := demoDiscovery()
+
+	step, _ := s.Update(discoveryCompleteMsg{generation: genB, discovery: discB})
+	s = step.(*NodePlacementStep)
+	step, _ = s.Update(discoveryCompleteMsg{generation: genA, discovery: discA})
+	s = step.(*NodePlacementStep)
+
+	if s.discovery != discB {
+		t.Fatalf("stale reply A overwrote newer reply B: discovery = %+v", s.discovery)
+	}
+}
+
+// TestNodePlacementStep_StaleDiscoveryErrorCannotOverwriteNewer repeats the
+// above with A returning an error instead of a success: the stale failure
+// must not replace B's good, newer result.
+func TestNodePlacementStep_StaleDiscoveryErrorCannotOverwriteNewer(t *testing.T) {
+	s := NewNodePlacementStep()
+	s.cfg = newProxmoxTestConfig()
+
+	s.Init()
+	genA := s.generation
+
+	s.Init() // re-entry while A is still in flight
+	genB := s.generation
+
+	discB := demoDiscovery()
+	step, _ := s.Update(discoveryCompleteMsg{generation: genB, discovery: discB})
+	s = step.(*NodePlacementStep)
+	step, _ = s.Update(discoveryCompleteMsg{generation: genA, err: errors.New("connection refused")})
+	s = step.(*NodePlacementStep)
+
+	if s.discoveryErr != nil {
+		t.Fatalf("stale error reply set discoveryErr = %v, want nil", s.discoveryErr)
+	}
+	if s.discovery != discB {
+		t.Fatalf("stale error reply altered discovery: %+v", s.discovery)
+	}
+}
+
+// TestNodePlacementStep_ReentryAfterSuccessReusesCachedDiscovery pins the
+// reuse-on-re-entry decision: once discovery has succeeded, going back and
+// re-entering the step must not re-hit the Proxmox API.
+func TestNodePlacementStep_ReentryAfterSuccessReusesCachedDiscovery(t *testing.T) {
+	s := NewNodePlacementStep()
+	s.cfg = newProxmoxTestConfig()
+
+	cmd := s.Init()
+	if cmd == nil {
+		t.Fatal("first Init() must fetch")
+	}
+	step, _ := s.Update(discoveryCompleteMsg{generation: s.generation, discovery: demoDiscovery()})
+	s = step.(*NodePlacementStep)
+	if s.phase != phasePlacing || s.discoveryErr != nil {
+		t.Fatalf("phase=%v discoveryErr=%v after first load, want phasePlacing with no error", s.phase, s.discoveryErr)
+	}
+
+	if cmd := s.Init(); cmd != nil {
+		t.Fatal("re-entry after a successful discovery re-issued the fetch, want cached reuse")
+	}
+	if s.phase != phasePlacing {
+		t.Fatalf("re-entry after success flipped phase to %v, want it to stay phasePlacing", s.phase)
+	}
+}
+
+// TestNodePlacementStep_ReentryAfterErrorRefetches pins the other half of
+// the reuse decision: a failed attempt is never cached, so re-entering
+// after an error automatically retries instead of leaving the step stuck.
+func TestNodePlacementStep_ReentryAfterErrorRefetches(t *testing.T) {
+	s := NewNodePlacementStep()
+	s.cfg = newProxmoxTestConfig()
+
+	s.Init()
+	genA := s.generation
+	step, _ := s.Update(discoveryCompleteMsg{generation: genA, err: errors.New("connection refused")})
+	s = step.(*NodePlacementStep)
+	if s.discoveryErr == nil {
+		t.Fatal("expected a load error")
+	}
+
+	cmd := s.Init() // re-entry
+	if cmd == nil {
+		t.Fatal("re-entry after an error must retry, not get stuck")
+	}
+	genB := s.generation
+	if genB == genA {
+		t.Fatal("retry on re-entry must issue a new generation")
+	}
+	step, _ = s.Update(discoveryCompleteMsg{generation: genB, discovery: demoDiscovery()})
+	s = step.(*NodePlacementStep)
+	if s.discoveryErr != nil {
+		t.Fatalf("discoveryErr = %v after re-entry's retry succeeded, want nil", s.discoveryErr)
+	}
+}
+
+// TestNodePlacementStep_RefreshKeyRefetchesDiscovery pins the explicit
+// escape hatch the reuse decision requires: 'r' while placing re-issues
+// discovery even though a successful result is cached.
+func TestNodePlacementStep_RefreshKeyRefetchesDiscovery(t *testing.T) {
+	s := NewNodePlacementStep()
+	s.cfg = newProxmoxTestConfig()
+
+	s.Init()
+	step, _ := s.Update(discoveryCompleteMsg{generation: s.generation, discovery: demoDiscovery()})
+	s = step.(*NodePlacementStep)
+	genBefore := s.generation
+
+	_, cmd := s.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
+	if cmd == nil {
+		t.Fatal("'r' while placing must re-issue discovery")
+	}
+	if s.generation == genBefore {
+		t.Fatal("'r' must bump the generation")
 	}
 }

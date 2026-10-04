@@ -389,6 +389,12 @@ func (m *Model) focusStep(idx int) (tea.Model, tea.Cmd) {
 	if f, ok := m.steps[idx].(FocusableStep); ok {
 		f.SetFocused(true)
 	}
+	// Init() is called unconditionally on every entry, including
+	// re-entry while a step's own prior fetch is still in flight: a step
+	// with an async fetch owns its own request identity (a generation
+	// counter bumped per issue) and its own reuse-vs-refetch call, so a
+	// superseded reply is simply discarded rather than clobbering newer
+	// state, and re-entry never needs to be gated here.
 	initCmd := m.steps[idx].Init()
 	if (m.draftSaver != nil || m.draftStateSaver != nil) && isConfigDraftStep(m.steps[idx].ID()) {
 		fieldKey := ""

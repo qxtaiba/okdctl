@@ -8,6 +8,8 @@ import (
 
 	"github.com/luthermonson/go-proxmox"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/httputil"
 	infraproxmox "github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
@@ -125,6 +127,21 @@ func discoverProxmox(cfg *config.Config) (*proxmoxDiscovery, error) {
 		ISOs:          isos,
 		Heterogeneous: heterogeneous,
 	}, nil
+}
+
+// startDiscovery resets the step into the discovering phase and issues a
+// generation-tagged discovery fetch over a snapshotted cfg, so the returned
+// tea.Cmd never touches s once it is handed to bubbletea.
+func (s *NodePlacementStep) startDiscovery() tea.Cmd {
+	s.phase = phaseDiscovering
+	s.discoveryErr = nil
+	s.generation++
+	generation := s.generation
+	cfg := s.cfg
+	return func() tea.Msg {
+		disc, err := discoverProxmox(cfg)
+		return discoveryCompleteMsg{generation: generation, discovery: disc, err: err}
+	}
 }
 
 // fetchClusterDetails pulls storage/bridges/ISOs from every online node and
