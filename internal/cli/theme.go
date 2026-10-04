@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	themeModeAll          = channelAll
+	themeModeAll          = "all"
 	themeModeDark         = "dark"
 	themeModeLight        = "light"
 	themeModeHighContrast = "high-contrast"

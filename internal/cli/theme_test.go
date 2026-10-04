@@ -64,3 +64,13 @@ func TestThemePreviewRejectsUnknownMode(t *testing.T) {
 		t.Fatal("runThemePreview() accepted an unknown mode")
 	}
 }
+
+func TestThemePreviewModeFlagIsLongFormOnly(t *testing.T) {
+	f := themePreviewCmd.Flags().Lookup("mode")
+	if f == nil {
+		t.Fatal("--mode flag not registered on theme preview")
+	}
+	if f.Shorthand != "" {
+		t.Fatalf("--mode has shorthand %q, want none (shorthand allowlist is closed)", f.Shorthand)
+	}
+}
