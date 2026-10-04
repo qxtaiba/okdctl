@@ -366,10 +366,18 @@ func (r *Runner) planTargeted(ctx context.Context, address string, want terrafor
 
 // targetedApply plans, gates to (address, want), snapshots state, and applies;
 // a gate failure aborts before any mutation, and planVars keep dry-run previews
-// truthful without writing tfvars.
+// truthful without writing tfvars. The backup precedes planTargeted's Init and
+// Plan too — either can rewrite state (schema migration, refresh), not only
+// apply — except on a dry run, which never reaches an apply and so never needs one.
 func (r *Runner) targetedApply(ctx context.Context, address string, want terraform.PlanAction, planVars map[string]string, resuming bool) error {
 	stop := r.startProgress(fmt.Sprintf("applying terraform change to %s", address))
 	defer stop()
+
+	if !r.DryRun {
+		if err := r.snapshotBeforePlan(ctx); err != nil {
+			return err
+		}
+	}
 
 	planPath, alreadyAtTarget, cleanup, err := r.planTargeted(ctx, address, want, planVars, resuming)
 	if err != nil {
@@ -397,6 +405,15 @@ func (r *Runner) targetedApply(ctx context.Context, address string, want terrafo
 	return terraform.WithStateRecovery(ctx, r.TF, "terraform apply", func() error {
 		return r.TF.Apply(ctx, terraform.ApplyOptions{PlanFile: planPath})
 	})
+}
+
+// snapshotBeforePlan backs up state ahead of planTargeted's Init/Plan so
+// neither ever runs unprotected merely because no apply has been decided on yet.
+func (r *Runner) snapshotBeforePlan(ctx context.Context) error {
+	if _, err := r.TF.SnapshotState(ctx); err != nil {
+		return &errtypes.ClusterError{Msg: "terraform apply: snapshot state", Err: err}
+	}
+	return ctx.Err()
 }
 
 // waitEtcdHealthy blocks until the etcd quorum is healthy or the gate times

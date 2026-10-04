@@ -8,9 +8,60 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
+
+// backupOrderTF records the exact sequence of terraform operations so a
+// "backup before mutation" regression shows up as an ordering failure against
+// SnapshotState, not merely a does-a-backup-exist check.
+type backupOrderTF struct {
+	fakeTF
+	order *[]string
+}
+
+func (f *backupOrderTF) Init(ctx context.Context) error {
+	*f.order = append(*f.order, "init")
+	return f.fakeTF.Init(ctx)
+}
+
+func (f *backupOrderTF) Plan(ctx context.Context, opts terraform.PlanOptions) error {
+	*f.order = append(*f.order, "plan")
+	return f.fakeTF.Plan(ctx, opts)
+}
+
+func (f *backupOrderTF) SnapshotState(ctx context.Context) (string, error) {
+	*f.order = append(*f.order, "snapshot")
+	return f.fakeTF.SnapshotState(ctx)
+}
+
+func (f *backupOrderTF) Apply(ctx context.Context, opts terraform.ApplyOptions) error {
+	*f.order = append(*f.order, "apply")
+	return f.fakeTF.Apply(ctx, opts)
+}
+
+func TestTargetedApply_BackupPrecedesFirstTerraformInvocation(t *testing.T) {
+	var order []string
+	ftf := &backupOrderTF{fakeTF: fakeTF{action: terraform.PlanActionUpdate}, order: &order}
+	r := &Runner{
+		TF:     ftf,
+		Log:    logutil.NopLogger,
+		envDir: t.TempDir(),
+	}
+
+	address := workerAddress(0)
+	if err := r.targetedApply(context.Background(), address, terraform.PlanActionUpdate, nil, false); err != nil {
+		t.Fatalf("targetedApply() = %v; want nil", err)
+	}
+	if len(order) == 0 {
+		t.Fatal("no terraform operations recorded")
+	}
+	if order[0] != "snapshot" {
+		t.Errorf("first terraform operation = %q; want %q — the state backup must precede every terraform invocation (init/plan included), not just apply", order[0], "snapshot")
+	}
+}
 
 func TestResolveVMID(t *testing.T) {
 	fc := &fakeCluster{

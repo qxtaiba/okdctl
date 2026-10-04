@@ -27,6 +27,24 @@ exit 0
 	t.Setenv("TF_TEST_SNAPSHOT_LOG", snapshotLog)
 }
 
+// installFakeTerraformBackupOrder records, for every terraform invocation
+// (not just apply), whether a state backup already exists — so a test can
+// assert the backup precedes the FIRST invocation, not merely the apply.
+func installFakeTerraformBackupOrder(t *testing.T, argvLog, backupLog string) {
+	t.Helper()
+	testutil.InstallFakeBin(t, "terraform", `#!/bin/sh
+printf '%s\n' "$*" >> "$TF_TEST_ARGV_LOG"
+if ls terraform.tfstate.*.bak >/dev/null 2>&1; then
+  printf 'present\n' >> "$TF_TEST_BACKUP_LOG"
+else
+  printf 'absent\n' >> "$TF_TEST_BACKUP_LOG"
+fi
+exit 0
+`)
+	t.Setenv("TF_TEST_ARGV_LOG", argvLog)
+	t.Setenv("TF_TEST_BACKUP_LOG", backupLog)
+}
+
 func installFakeTerraformApplyFails(t *testing.T) {
 	t.Helper()
 	testutil.InstallFakeBin(t, "terraform", `#!/bin/sh
@@ -48,6 +66,21 @@ if [ -n "$OC_FAKE_NODES" ]; then
 fi
 exit 0
 `)
+}
+
+// seedWorkerTerraformStateOnly seeds a state file but no .terraform/lock
+// scaffolding, so Init actually shells out to terraform (unlike
+// seedWorkerTerraformEnvDir, whose scaffolding makes Init's already-initialized
+// shortcut skip the subprocess entirely).
+func seedWorkerTerraformStateOnly(t *testing.T, projectRoot, env string) {
+	t.Helper()
+	envDir := filepath.Join(projectRoot, "infrastructure", "terraform", "environments", env)
+	if err := os.MkdirAll(envDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(envDir, "terraform.tfstate"), []byte(`{"version":4,"resources":[{"type":"x"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func seedWorkerTerraformEnvDir(t *testing.T, projectRoot, env string) {
@@ -107,6 +140,35 @@ func TestStartWorkerVMs_TargetsScopedAndSnapshotsBeforeApply(t *testing.T) {
 
 	if _, err := os.Stat(snapshotLog); err != nil {
 		t.Errorf("snapshot log missing; state snapshot was not present when apply ran: %v", err)
+	}
+}
+
+func TestStartWorkerVMs_BackupPrecedesFirstTerraformInvocation(t *testing.T) {
+	projectRoot := t.TempDir()
+	seedWorkerTerraformStateOnly(t, projectRoot, "production")
+
+	argvLog := filepath.Join(t.TempDir(), "argv.log")
+	backupLog := filepath.Join(t.TempDir(), "backup.log")
+	installFakeTerraformBackupOrder(t, argvLog, backupLog)
+
+	p := newInstallPhase(t)
+	cfg := &config.Config{Topology: config.TopologyConfig{Workers: config.NodeConfig{Count: 1}}}
+	opts := &Options{BaseOptions: phase.BaseOptions{ProjectRoot: projectRoot, TerraformEnv: "production"}}
+
+	if err := p.StartWorkerVMs(context.Background(), cfg, opts); err != nil {
+		t.Fatalf("StartWorkerVMs() = %v; want nil", err)
+	}
+
+	data, err := os.ReadFile(backupLog)
+	if err != nil {
+		t.Fatalf("backup log missing: %v", err)
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	if len(lines) == 0 {
+		t.Fatal("no terraform invocations recorded")
+	}
+	if lines[0] != "present" {
+		t.Errorf("backup status at first terraform invocation = %q; want %q — the state backup must precede init, not just apply", lines[0], "present")
 	}
 }
 
