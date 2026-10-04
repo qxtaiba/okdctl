@@ -23,11 +23,11 @@ Screenshot out/@NAME@-hub-dashboard.png
 Sleep 300ms
 Type "s"
 Wait+Screen@10s /CLUSTER STATUS · Running/
-Wait+Screen@2s /NODES · 6/
+Wait+Screen@10s /NODES · 6/
 Screenshot out/@NAME@-cluster-status.png
 Sleep 300ms
 Enter
-Wait+Screen@2s /Selected node/
+Wait+Screen@10s /Selected node/
 Screenshot out/@NAME@-cluster-status-details.png
 Sleep 300ms
 Escape
