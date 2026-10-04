@@ -34,6 +34,15 @@ func (m *Model) closePalette() {
 	m.paletteSelected = 0
 }
 
+// closeNavigationModals closes the palette and help overlay ahead of a step
+// transition — see focusStep.
+func (m *Model) closeNavigationModals() {
+	if m.paletteOpen {
+		m.closePalette()
+	}
+	m.helpOpen = false
+}
+
 func (m *Model) refreshPaletteMatches() {
 	m.paletteMatches = nil
 	query := strings.TrimSpace(m.paletteQuery)
