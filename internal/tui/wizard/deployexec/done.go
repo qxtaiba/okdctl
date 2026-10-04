@@ -256,7 +256,7 @@ func (s *DoneStep) finishScreen(col int) string {
 // led up to it. The card carries no hint of its own — the next-moves block is
 // the fix, stated once.
 func (s *DoneStep) incidentReport(boxWidth, col int) string {
-	card := strings.Trim(render.ErrorCard(s.failureKind(), s.st.Result.Error(), "", boxWidth), "\n")
+	card := strings.Trim(render.ErrorCard(s.failureKind(), s.failureMessage(), "", boxWidth), "\n")
 	return section(
 		frozenChecklist(s.st, s.Styles(), col),
 		strings.Split(card, "\n"),
@@ -305,10 +305,29 @@ func (s *DoneStep) sinkLine(col int) []string {
 // failureKind names the outcome the error card leads with: a cancelled run was
 // interrupted on purpose, anything else failed.
 func (s *DoneStep) failureKind() string {
-	if errors.Is(s.st.Result, context.Canceled) {
+	if wasCancelled(s.st.Result) {
 		return "deploy interrupted"
 	}
 	return "deploy failed"
+}
+
+// failureMessage is the error card's body: a cancelled run gets an honest
+// sentence acknowledging the operator asked for it, in place of the raw
+// context.Canceled text a literal Result.Error() would otherwise surface —
+// a real failure still prints its engine error verbatim.
+func (s *DoneStep) failureMessage() string {
+	if wasCancelled(s.st.Result) {
+		return "the operator cancelled this run; nothing beyond the step already in flight was attempted."
+	}
+	return s.st.Result.Error()
+}
+
+// wasCancelled reports whether err is (or wraps) context.Canceled — the
+// graceful-cancel path a ctrl+c on the stream screen takes — which must
+// read as interrupted rather than failed everywhere the incident report
+// names the outcome.
+func wasCancelled(err error) bool {
+	return errors.Is(err, context.Canceled)
 }
 
 // ShortHelp returns the completion help bar: a success exits, and a failure

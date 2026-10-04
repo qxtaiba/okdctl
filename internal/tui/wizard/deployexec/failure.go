@@ -9,6 +9,15 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
+// stoppedLabel and cancelledCause are the fact key and cause value a
+// cancelled run's incident report uses in place of failureLabel and the
+// literal error text a real failure shows — see incidentFacts.
+const (
+	failureLabel   = "failed step"
+	stoppedLabel   = "stopped at"
+	cancelledCause = "operator cancelled (ctrl+c)"
+)
+
 // Handoff lines the failure report prints for the operator to run themselves.
 // A destructive move is never an in-TUI key: the screen that just failed is
 // the wrong place to arm a teardown, and a command the operator types is one
@@ -28,9 +37,12 @@ const (
 
 // frozenChecklist renders the phase checklist as the run left it: passed
 // phases collapsed with their totals, the phase that was in flight expanded
-// around the row that failed, and the phases the run never reached pending.
-// Empty before the stream screen has handed anything over.
+// around the row that stopped, and the phases the run never reached pending.
+// A graceful cancel marks that phase and row interrupted (amber) rather than
+// failed (red) — nothing about them broke. Empty before the stream screen
+// has handed anything over.
 func frozenChecklist(st *State, sty *wizard.ExecStyles, col int) []string {
+	cancelled := wasCancelled(st.Result)
 	var lines []string
 	for i := range st.frozen {
 		ph := &st.frozen[i]
@@ -42,9 +54,9 @@ func frozenChecklist(st *State, sty *wizard.ExecStyles, col int) []string {
 				col,
 			))
 		case i == st.frozenAt:
-			lines = append(lines, sty.Fail.Render(tui.IconError+" "+string(ph.name)))
+			lines = append(lines, stoppedPhaseLine(sty, string(ph.name), cancelled))
 			for j := range ph.rows {
-				lines = append(lines, "    "+settledRow(sty, &ph.rows[j], col-4))
+				lines = append(lines, "    "+settledRow(sty, &ph.rows[j], col-4, cancelled))
 			}
 		default:
 			lines = append(lines, sty.Pend.Render(tui.IconPending+" "+string(ph.name)))
@@ -53,37 +65,62 @@ func frozenChecklist(st *State, sty *wizard.ExecStyles, col int) []string {
 	return lines
 }
 
+// stoppedPhaseLine renders the phase the run stopped in: failed (IconError,
+// red) normally, or merely interrupted (IconWarning, amber) by a graceful
+// cancel.
+func stoppedPhaseLine(sty *wizard.ExecStyles, name string, cancelled bool) string {
+	if cancelled {
+		return sty.Warn.Render(tui.IconWarning + " " + name)
+	}
+	return sty.Fail.Render(tui.IconError + " " + name)
+}
+
 // settledRow renders one checklist row of a finished run. A failure's finish
-// pass converts whatever was running into a failed row, so no row here is ever
-// still in flight and none needs a spinner.
-func settledRow(sty *wizard.ExecStyles, r *stepRow, col int) string {
+// pass converts whatever was running into a failed row — cancelled renders
+// that row interrupted instead, since no row here is ever still in flight
+// and none needs a spinner either way.
+func settledRow(sty *wizard.ExecStyles, r *stepRow, col int, cancelled bool) string {
 	switch r.status {
 	case rowDone:
 		return justify(sty.Done.Render(tui.IconSuccess+" "+r.label), sty.Dim.Render(rowDur(r)), col)
 	case rowSkipped:
 		return justify(sty.Dim.Render(tui.IconSkip+" "+r.label), sty.Dim.Render("skipped"), col)
 	case rowFailed:
+		if cancelled {
+			return justify(sty.Warn.Render(tui.IconWarning+" "+r.label), sty.Dim.Render("interrupted"), col)
+		}
 		return justify(sty.Fail.Render(tui.IconError+" "+r.label), sty.Dim.Render(rowDur(r)), col)
 	default:
 		return sty.Pend.Render(tui.IconPending + " " + r.label)
 	}
 }
 
-// incidentFacts renders the failure's identity through the shared facts
-// renderer: the run it belongs to, the step and phase it died in, how long it
-// had been going, and the failure's own leading clause.
+// incidentFacts renders the outcome's identity through the shared facts
+// renderer: the run it belongs to, the step and phase it stopped in, how
+// long it had been going, and — a real failure only — its leading clause; a
+// graceful cancel names its cause in plain words instead of surfacing the
+// raw context.Canceled error text.
 func incidentFacts(st *State, col int) []string {
+	cancelled := wasCancelled(st.Result)
 	step, phase := failurePoint(st)
 	rows := []tui.FactRow{{Key: "run_id", Value: st.RunID}}
 	if step != "" {
-		rows = append(rows, tui.FactRow{Key: "failed step", Value: step, Highlight: true})
+		key := failureLabel
+		if cancelled {
+			key = stoppedLabel
+		}
+		rows = append(rows, tui.FactRow{Key: key, Value: step, Highlight: true})
 	}
 	if phase != "" {
 		rows = append(rows, tui.FactRow{Key: "phase", Value: phase})
 	}
+	cause := cancelledCause
+	if !cancelled {
+		cause = leadingClause(st.Result)
+	}
 	rows = append(rows,
 		tui.FactRow{Key: "elapsed", Value: fmtDur(st.Elapsed)},
-		tui.FactRow{Key: "cause", Value: leadingClause(st.Result)},
+		tui.FactRow{Key: "cause", Value: cause},
 	)
 	return tui.RenderFacts(rows, &tui.FactLayout{
 		Leader: tui.FactLeaderDots, KeyWidth: factKeyCol, TotalWidth: col, Styles: tui.DefaultFactStyles(),
