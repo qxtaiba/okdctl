@@ -1,9 +1,13 @@
 package steps
 
 import (
+	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
@@ -279,6 +283,36 @@ func TestNetworkingStepDefinition_Validate(t *testing.T) {
 	}
 	if err := NetworkingStepDefinition.Validate(badGateway); err == nil {
 		t.Fatal("Validate(gateway outside machine CIDR) = nil, want error")
+	}
+}
+
+// TestNetworkingStep_CIDROverlapFocusesAndMarksImplicatedFields pins the
+// real wiring of wizard.NewCrossFieldError in the networking step: an
+// overlap on enter must focus the first implicated field and mark every
+// implicated field's box invalid inline, not just post a status banner.
+func TestNetworkingStep_CIDROverlapFocusesAndMarksImplicatedFields(t *testing.T) {
+	step := wizard.NewDataDrivenStep(&NetworkingStepDefinition)
+	step.SetFocused(true)
+	_ = step.Init()
+
+	// Every other required field keeps its valid construction-time
+	// default; only machine_cidr and pod_cidr are set to overlap.
+	step.SetValue("machine_cidr", "192.168.1.0/24")
+	step.SetValue("pod_cidr", "192.168.1.0/24")
+
+	_, cmd := step.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Update(enter) with overlapping CIDRs: want a cmd, got nil")
+	}
+	_ = cmd()
+
+	if got := step.DraftFieldKey(); got != "machine_cidr" {
+		t.Fatalf("focused field after the overlap error = %q, want machine_cidr (the first implicated field)", got)
+	}
+
+	view := tuitest.StripANSI(step.View(120, 40))
+	if n := strings.Count(view, "must not overlap"); n != 2 {
+		t.Fatalf("View() shows the overlap error %d times, want 2 (once at each implicated field):\n%s", n, view)
 	}
 }
 

@@ -169,13 +169,22 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 		serviceCIDR := values["service_cidr"]
 
 		if overlap, ok := cidrsOverlapIfValid(machineCIDR, podCIDR); ok && overlap {
-			return errors.New("machine cidr and pod cidr must not overlap — widen or move one of the ranges")
+			return wizard.NewCrossFieldError(
+				errors.New("machine cidr and pod cidr must not overlap — widen or move one of the ranges"),
+				"machine_cidr", "pod_cidr",
+			)
 		}
 		if overlap, ok := cidrsOverlapIfValid(machineCIDR, serviceCIDR); ok && overlap {
-			return errors.New("machine cidr and service cidr must not overlap — widen or move one of the ranges")
+			return wizard.NewCrossFieldError(
+				errors.New("machine cidr and service cidr must not overlap — widen or move one of the ranges"),
+				"machine_cidr", "service_cidr",
+			)
 		}
 		if overlap, ok := cidrsOverlapIfValid(podCIDR, serviceCIDR); ok && overlap {
-			return errors.New("pod cidr and service cidr must not overlap — widen or move one of the ranges")
+			return wizard.NewCrossFieldError(
+				errors.New("pod cidr and service cidr must not overlap — widen or move one of the ranges"),
+				"pod_cidr", "service_cidr",
+			)
 		}
 		if err := config.ValidateGatewayInCIDR(values[fieldGateway], machineCIDR); err != nil {
 			return err
