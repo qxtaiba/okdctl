@@ -2,11 +2,15 @@ package steps
 
 import (
 	"context"
+	"crypto/x509"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/luthermonson/go-proxmox"
+
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/httputil"
@@ -125,6 +129,21 @@ func discoverProxmox(cfg *config.Config) (*proxmoxDiscovery, error) {
 		ISOs:          isos,
 		Heterogeneous: heterogeneous,
 	}, nil
+}
+
+// startDiscovery resets the step into the discovering phase and issues a
+// generation-tagged discovery fetch over a snapshotted cfg, so the returned
+// tea.Cmd never touches s once it is handed to bubbletea.
+func (s *NodePlacementStep) startDiscovery() tea.Cmd {
+	s.phase = phaseDiscovering
+	s.discoveryErr = nil
+	s.generation++
+	generation := s.generation
+	cfg := s.cfg
+	return func() tea.Msg {
+		disc, err := discoverProxmox(cfg)
+		return discoveryCompleteMsg{generation: generation, discovery: disc, err: err}
+	}
 }
 
 // fetchClusterDetails pulls storage/bridges/ISOs from every online node and
@@ -253,11 +272,36 @@ func fetchNodeDetails(ctx context.Context, client *proxmox.Client, nodeName stri
 	}
 }
 
+// classifyError turns a raw discovery failure into an actionable message.
+// A TLS trust failure gets its own safe remedy per real cause — install the
+// CA, connect using a name the certificate covers, or renew it — rather
+// than one bucket that nudges the operator toward disabling verification;
+// a TLS failure typed checks can't attribute to a specific cause (or any
+// other untyped x509/tls error) gets an honest generic message instead of a
+// guessed one.
 func classifyError(err error) error {
+	var unknownAuthority x509.UnknownAuthorityError
+	if errors.As(err, &unknownAuthority) {
+		return fmt.Errorf("tls certificate not trusted — install the proxmox host's ca certificate in your system trust store: %w", err)
+	}
+
+	var hostnameErr x509.HostnameError
+	if errors.As(err, &hostnameErr) {
+		return fmt.Errorf("tls certificate name mismatch — connect using a name on the certificate, or reissue the certificate for %q: %w", hostnameErr.Host, err)
+	}
+
+	var certInvalid x509.CertificateInvalidError
+	if errors.As(err, &certInvalid) {
+		if certInvalid.Reason == x509.Expired {
+			return fmt.Errorf("tls certificate expired — renew the proxmox host's certificate: %w", err)
+		}
+		return fmt.Errorf("tls certificate invalid — check the proxmox host's certificate: %w", err)
+	}
+
 	msg := err.Error()
 	switch {
 	case strings.Contains(msg, "x509:") || strings.Contains(msg, "tls:"):
-		return fmt.Errorf("tls certificate verification failed — go back and set \"skip tls verify\" to yes")
+		return fmt.Errorf("tls handshake failed — check the proxmox host's certificate and tls configuration: %w", err)
 	case strings.Contains(msg, "connection refused"):
 		return fmt.Errorf("connection refused — check that the proxmox host and port are correct")
 	case strings.Contains(msg, "no such host"):

@@ -440,3 +440,115 @@ func TestDistributionStep_CatalogPresentVersionInjectsNothing(t *testing.T) {
 		t.Fatalf("an in-catalog version must not inject a synthetic row:\n%s", view)
 	}
 }
+
+// TestDistributionStep_StaleSuccessCannotOverwriteNewer pins the request-
+// identity contract: fake request A is issued, a newer request B is issued
+// before A replies (the back-then-re-enter case), B's reply lands first,
+// and A's now-stale successful reply must not overwrite it.
+func TestDistributionStep_StaleSuccessCannotOverwriteNewer(t *testing.T) {
+	s := NewDistributionStep()
+
+	s.Init()
+	genA := s.generation
+
+	s.Init() // re-entry while A is still in flight
+	genB := s.generation
+	if genB == genA {
+		t.Fatal("re-entry must issue a new generation")
+	}
+
+	seriesA := []releases.OKDReleaseSeries{{Major: 4, Minor: 10, Latest: releases.OKDVersion{Version: "4.10.0"}}}
+	seriesB := DemoReleaseSeries()
+
+	step, _ := s.Update(versionsLoadedMsg{generation: genB, series: seriesB})
+	s = step.(*DistributionStep)
+	step, _ = s.Update(versionsLoadedMsg{generation: genA, series: seriesA})
+	s = step.(*DistributionStep)
+
+	if len(s.okdSeries) != len(seriesB) || s.okdSeries[0].Minor != seriesB[0].Minor {
+		t.Fatalf("stale reply A overwrote newer reply B: okdSeries = %+v", s.okdSeries)
+	}
+	if s.phase != phaseVersionSelect {
+		t.Fatalf("phase = %v, want phaseVersionSelect (B's success)", s.phase)
+	}
+}
+
+// TestDistributionStep_StaleErrorCannotOverwriteNewer repeats the above with
+// A returning an error instead of a success: the stale failure must not
+// replace B's good, newer result.
+func TestDistributionStep_StaleErrorCannotOverwriteNewer(t *testing.T) {
+	s := NewDistributionStep()
+
+	s.Init()
+	genA := s.generation
+
+	s.Init() // re-entry while A is still in flight
+	genB := s.generation
+
+	seriesB := DemoReleaseSeries()
+	step, _ := s.Update(versionsLoadedMsg{generation: genB, series: seriesB})
+	s = step.(*DistributionStep)
+	step, _ = s.Update(versionsLoadedMsg{generation: genA, err: errors.New("dial tcp: connection refused")})
+	s = step.(*DistributionStep)
+
+	if s.phase != phaseVersionSelect {
+		t.Fatalf("stale error flipped phase to %v, want phaseVersionSelect (B's success) to survive", s.phase)
+	}
+	if s.loadError != nil {
+		t.Fatalf("stale error reply set loadError = %v, want nil", s.loadError)
+	}
+	if len(s.okdSeries) != len(seriesB) {
+		t.Fatalf("stale error reply altered okdSeries: %+v", s.okdSeries)
+	}
+}
+
+// TestDistributionStep_ReentryAfterSuccessReusesCachedCatalog pins the
+// reuse-on-re-entry decision: once the catalog has loaded, going back and
+// re-entering the step must not re-issue the release fetch.
+func TestDistributionStep_ReentryAfterSuccessReusesCachedCatalog(t *testing.T) {
+	s := NewDistributionStep()
+	s.SetVersionFetcher(StaticVersionFetcher{Series: DemoReleaseSeries()})
+
+	cmd := s.Init()
+	if cmd == nil {
+		t.Fatal("first Init() must fetch")
+	}
+	step, _ := s.Update(cmd())
+	s = step.(*DistributionStep)
+	if s.phase != phaseVersionSelect {
+		t.Fatalf("phase after first load = %v, want phaseVersionSelect", s.phase)
+	}
+
+	if cmd := s.Init(); cmd != nil {
+		t.Fatal("re-entry after a successful load re-issued the fetch, want cached reuse")
+	}
+	if s.phase != phaseVersionSelect {
+		t.Fatalf("re-entry after success flipped phase to %v, want it to stay phaseVersionSelect", s.phase)
+	}
+}
+
+// TestDistributionStep_ReentryAfterErrorRefetches pins the other half of the
+// reuse decision: a failed attempt is never cached, so re-entering after an
+// error automatically retries instead of leaving the step stuck.
+func TestDistributionStep_ReentryAfterErrorRefetches(t *testing.T) {
+	s := NewDistributionStep()
+	s.SetVersionFetcher(StaticVersionFetcher{Err: errors.New("dial tcp: connection refused")})
+
+	cmd := s.Init()
+	step, _ := s.Update(cmd())
+	s = step.(*DistributionStep)
+	if s.phase != phaseVersionError {
+		t.Fatalf("phase after failed load = %v, want phaseVersionError", s.phase)
+	}
+
+	s.SetVersionFetcher(StaticVersionFetcher{Series: DemoReleaseSeries()})
+	cmd = s.Init() // re-entry
+	if cmd == nil {
+		t.Fatal("re-entry after an error must retry, not get stuck")
+	}
+	step, _ = s.Update(cmd())
+	s = step.(*DistributionStep)
+	if s.phase != phaseVersionSelect {
+		t.Fatalf("phase after re-entry's retry succeeded = %v, want phaseVersionSelect", s.phase)
+	}
+}

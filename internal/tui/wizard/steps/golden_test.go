@@ -75,7 +75,8 @@ func configureScenarios() []configureScenario {
 			name: "distribution",
 			id:   wizard.StepIDDistribution,
 			seed: func(m *wizard.Model) {
-				m.Update(versionsLoadedMsg{series: DemoReleaseSeries()})
+				gen := m.CurrentStep().(*DistributionStep).generation
+				m.Update(versionsLoadedMsg{generation: gen, series: DemoReleaseSeries()})
 			},
 			interact: tabKey,
 		},
@@ -85,7 +86,8 @@ func configureScenarios() []configureScenario {
 			name: "node-placement",
 			id:   wizard.StepIDNodePlacement,
 			seed: func(m *wizard.Model) {
-				m.Update(discoveryCompleteMsg{discovery: demoDiscovery()})
+				gen := m.CurrentStep().(*NodePlacementStep).generation
+				m.Update(discoveryCompleteMsg{generation: gen, discovery: demoDiscovery()})
 			},
 			interact: tabKey,
 		},
@@ -301,7 +303,8 @@ func TestCapacityWizardFramesFitAllTiers(t *testing.T) {
 			capacity.discovery = demoDiscovery()
 			_ = tuitest.RenderAt(t, m, size.width, size.height)
 			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDNodePlacement})
-			m.Update(discoveryCompleteMsg{discovery: demoDiscovery()})
+			gen := m.CurrentStep().(*NodePlacementStep).generation
+			m.Update(discoveryCompleteMsg{generation: gen, discovery: demoDiscovery()})
 			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDNetworking})
 			networkFrame := tuitest.RenderAt(t, m, size.width, size.height)
 			tuitest.AssertFits(t, networkFrame, size.width, size.height)
@@ -743,7 +746,8 @@ func TestGolden_NodePlacementSingleNode(t *testing.T) {
 	m := newGoldenModel(t)
 	_ = tuitest.RenderAt(t, m, 100, 30)
 	m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDNodePlacement})
-	m.Update(discoveryCompleteMsg{discovery: demoDiscoverySingleNode()})
+	gen := m.CurrentStep().(*NodePlacementStep).generation
+	m.Update(discoveryCompleteMsg{generation: gen, discovery: demoDiscoverySingleNode()})
 
 	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
 	for range 6 {
@@ -791,7 +795,8 @@ func TestGolden_DistributionErrorState(t *testing.T) {
 			m := newGoldenModel(t)
 			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
 			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDDistribution})
-			m.Update(versionsLoadedMsg{err: errors.New("dial tcp: connection refused")})
+			gen := m.CurrentStep().(*DistributionStep).generation
+			m.Update(versionsLoadedMsg{generation: gen, err: errors.New("dial tcp: connection refused")})
 
 			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
 			tuitest.Golden(t, fmt.Sprintf("distribution-error_%dx%d", sz.w, sz.h), frame)

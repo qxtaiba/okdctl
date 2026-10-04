@@ -65,6 +65,12 @@ type DistributionStep struct {
 	frame          uint64
 	loadError      error
 
+	// generation increments on every release fetch this step issues; a
+	// versionsLoadedMsg carrying a stale generation is a superseded fetch's
+	// reply and Update discards it unapplied, so a slow first fetch can
+	// never clobber a newer one's result.
+	generation uint64
+
 	// contentHeight: the step's real inner height from the last genuine
 	// SetSize call, kept apart from BaseStep's own field since View() is
 	// re-run with an unbounded placeholder height on every viewport sync.
@@ -97,10 +103,15 @@ func NewDistributionStep() *DistributionStep {
 	}
 }
 
-// Init starts the release fetch; the shared frame clock animates the
+// Init starts the release fetch, reusing an already-loaded catalog on
+// re-entry instead of re-issuing the request; a failed attempt is never
+// cached and retries automatically. The shared frame clock animates the
 // loading indicator while Animating reports true.
 func (s *DistributionStep) Init() tea.Cmd {
-	return s.fetchVersions
+	if s.phase == phaseVersionSelect {
+		return nil
+	}
+	return s.startFetch()
 }
 
 // Animating reports whether the loading indicator needs frame ticks.
@@ -112,6 +123,9 @@ func (s *DistributionStep) Animating() bool {
 func (s *DistributionStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	switch msg := msg.(type) {
 	case versionsLoadedMsg:
+		if msg.generation != s.generation {
+			return s, nil
+		}
 		s.okdSeries = msg.series
 		s.loadError = msg.err
 		if msg.err != nil {
@@ -145,6 +159,13 @@ func (s *DistributionStep) handleKeyMsg(msg tea.KeyPressMsg) (wizard.WizardStep,
 		return s.handleEnterKey()
 	case key.Matches(msg, key.NewBinding(key.WithKeys("tab"))):
 		return s.handleTabKey()
+	// 'r' forces a refresh of an already-loaded catalog; footer-silent like
+	// the vim scroll vocabulary (model_navigation.go's handleVimScrollKey),
+	// since the error phase's ShortHelp already owns "r retry" and this is
+	// the same key reused for the loaded phase, not a second binding.
+	case key.Matches(msg, key.NewBinding(key.WithKeys("r"))):
+		cmd := s.startFetch()
+		return s, cmd
 	case key.Matches(msg, key.NewBinding(key.WithKeys("up", "k", "down", "j"))):
 		return s.handleNavigationKey(msg)
 	}
@@ -162,9 +183,8 @@ func (s *DistributionStep) handleErrorKeyMsg(msg tea.KeyPressMsg) (wizard.Wizard
 
 // retry resets the step to the loading phase and re-issues the release fetch.
 func (s *DistributionStep) retry() (wizard.WizardStep, tea.Cmd) {
-	s.phase = phaseVersionLoading
-	s.loadError = nil
-	return s, s.fetchVersions
+	cmd := s.startFetch()
+	return s, cmd
 }
 
 // handleEnterKey confirms the highlighted release, honouring the footer's
