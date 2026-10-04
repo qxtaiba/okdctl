@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"unsafe"
 
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
@@ -109,13 +108,10 @@ func (s *NodePlacementStep) fetchDiscovery() tea.Cmd {
 	cfg := *s.cfg
 	px := *cfg.Provider.Proxmox
 	px.Password = config.SecretBytes{}
-	orig := cfg.Provider.Proxmox.Password.Bytes()
-	// unsafe.String views orig's own backing array with no allocation, so
-	// Set's []byte(v) copy is the only plaintext copy made; a plain
-	// string(orig) conversion would additionally leave an immutable,
-	// unzeroizable copy of the password on the heap for the process
-	// lifetime.
-	px.Password.Set(unsafe.String(unsafe.SliceData(orig), len(orig)))
+	// SetBytes copies the bytes directly; a string hop would leave an
+	// immutable, unzeroizable copy of the password on the heap for the
+	// process lifetime.
+	px.Password.SetBytes(cfg.Provider.Proxmox.Password.Bytes())
 	cfg.Provider.Proxmox = &px
 	s.ownedPasswords = append(s.ownedPasswords, &px.Password)
 	return func() tea.Msg {
