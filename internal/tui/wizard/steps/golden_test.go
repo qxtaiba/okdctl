@@ -71,7 +71,10 @@ func newGoldenModel(t *testing.T) *wizard.Model {
 	t.Helper()
 	builder := wizard.NewStepBuilder()
 	RegisterAll(builder)
-	built := wizard.BuildSteps(wizard.DefaultConfig(), builder)
+	built, err := wizard.BuildSteps(wizard.DefaultConfig(), builder)
+	if err != nil {
+		t.Fatal(err)
+	}
 	cfg := config.DefaultConfig()
 	for _, step := range built.Steps {
 		if ds, ok := step.(*wizard.DataDrivenStep); ok {
@@ -104,11 +107,7 @@ var goldenSizes = []struct {
 	w, h int
 	fits bool
 }{
-	// fits=false: the frame now draws at exactly 80 cols (Task 3), but several
-	// steps' scroll indicator (badge width) and review/confirm's help bar
-	// still overflow onto a second row — the footer's width budget doesn't
-	// yet clamp/truncate (Task 6 rewrites it).
-	{80, 24, false},
+	{80, 24, true},
 	{100, 30, true},
 	{120, 40, true},
 }

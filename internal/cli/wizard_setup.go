@@ -12,8 +12,10 @@ import (
 
 // wizardDemoEnv enables README-demo recording mode: blank fields, no sudo
 // re-exec (see scripts/demo/record.sh).
-const wizardDemoEnv = "OKDCTL_WIZARD_DEMO"
-const wizardDemoReleasesEnv = "OKDCTL_DEMO_RELEASES"
+const (
+	wizardDemoEnv         = "OKDCTL_WIZARD_DEMO"
+	wizardDemoReleasesEnv = "OKDCTL_DEMO_RELEASES"
+)
 
 func runWizardWithMode(ctx context.Context, cfg *config.Config, configExists bool) (wizard.Result, steps.WelcomeMode, error) {
 	wizardCfg := wizard.DefaultConfig()

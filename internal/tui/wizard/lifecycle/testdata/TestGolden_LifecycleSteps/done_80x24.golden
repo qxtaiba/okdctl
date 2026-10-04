@@ -17,8 +17,8 @@
   │                    each resized node was power-cycled to realize the     │  
   │  change; verify with                                                     │  
   │                      'okdctl node list' or 'oc debug node/<name> --      │  
-  │                                                                          │  
-  │─────────────────────── ↑ ↓  scroll down for more ─────────── ▸ mycluster │  
+  │  free -m'                                                                │  
+  │───────────────── ↑ ↓  scroll down for more ───────────────── ▸ mycluster │  
   │   enter  exit                                                            │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

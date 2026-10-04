@@ -44,7 +44,7 @@ func TestDistributionStep_SetVersionFetcher_UsesFixture(t *testing.T) {
 	// fetchVersions runs synchronously for the fixture — no network round
 	// trip — so calling it directly, bypassing Init's spinner-tick batch,
 	// is sufficient to exercise the seam.
-	msg := s.fetchVersions()
+	msg := s.fetchVersions()()
 	loaded, ok := msg.(versionsLoadedMsg)
 	if !ok || loaded.err != nil || len(loaded.series) != len(DemoReleaseSeries()) {
 		t.Fatalf("fetchVersions = %#v", msg)
@@ -55,7 +55,7 @@ func TestDistributionStep_SetVersionFetcher_UsesFixtureError(t *testing.T) {
 	s := NewDistributionStep()
 	wantErr := errors.New("demo: releases unavailable")
 	s.SetVersionFetcher(StaticVersionFetcher{Err: wantErr})
-	msg := s.fetchVersions()
+	msg := s.fetchVersions()()
 	loaded, ok := msg.(versionsLoadedMsg)
 	if !ok || !errors.Is(loaded.err, wantErr) || loaded.series != nil {
 		t.Fatalf("fetchVersions = %#v", msg)

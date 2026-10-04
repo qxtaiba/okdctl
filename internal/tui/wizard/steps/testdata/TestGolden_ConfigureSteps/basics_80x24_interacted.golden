@@ -5,21 +5,20 @@
   │──────────────────────────────────────────────────────────────────────────│  
   │  configure your cluster basics                                           │  
   │                                                                          │  
-  │                                                                          │  
   │    ● cluster identity                                                    │  
   │                                                                          │  
-  │    cluster name (lowercase letters, numbers, and hyphens only)           │  
-  │    ╭────────────────────────────────────────────────────────────╮        │  
-  │    │ > mycluster                                                │        │  
-  │    ╰────────────────────────────────────────────────────────────╯        │  
+  │    cluster name: mycluster                                               │  
   │                                                                          │  
-  │    domain (base domain for cluster services)                             │  
+  │    > domain (base domain for cluster services)                           │  
   │    ╭────────────────────────────────────────────────────────────╮        │  
   │    │ > k8s.local                                                │        │  
   │    ╰────────────────────────────────────────────────────────────╯        │  
   │                                                                          │  
-  │─────────────────────── ↑ ↓  scroll down for more ─── ▸ okd 4.22.0-okd-   │  
-  │scos.7                                                                    │  
+  │    ✓ node topology                                                       │  
+  │                                                                          │  
+  │    control plane: 3                                                      │  
+  │                                                                          │  
+  │─────────── ↑ ↓  scroll down for more ──────────── ▸ okd 4.22.0-okd-scos.7│  
   │   ↑↓/tab  navigate    enter  continue    esc  back                       │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

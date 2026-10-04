@@ -17,8 +17,8 @@
   │                                                                          │  
   │           ○ remove worker                                                │  
   │             cordon, drain, destroy the vm, delete the node               │  
-  │                                                                          │  
-  │─────────────────────── ↑ ↓  scroll down for more ─────────── ▸ mycluster │  
+  │             (highest-numbered worker only)                               │  
+  │───────────────────────────────────────────────────────────── ▸ mycluster │  
   │   ↑↓  select    enter  confirm    ctrl+c  quit                           │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

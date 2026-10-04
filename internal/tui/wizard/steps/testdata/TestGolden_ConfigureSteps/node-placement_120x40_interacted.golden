@@ -7,34 +7,34 @@
   │                                                                                                                  │  
   │    discovered 2 node(s), 3 storage pool(s), 2 bridge(s)                                                          │  
   │                                                                                                                  │  
-  │                                                                                                                  │  
   │    ● infrastructure                                                                                              │  
   │                                                                                                                  │  
-  │    bridge (network bridge for vms)                                                                               │  
-  │    ╭────────────────────────────────────────────────────────────────────────────────────────────────────╮        │  
-  │    │ > vmbr0                                                                                            │        │  
-  │    ╰────────────────────────────────────────────────────────────────────────────────────────────────────╯        │  
+  │    bridge: vmbr0                                                                                                 │  
   │                                                                                                                  │  
-  │    additional networks (extra bridges to attach to all vms — leave empty for none) (j/k navigate, space toggle)  │  
+  │    additional networks (extra bridges to attach to all vms — leave empty for none) (j/k navigate, space toggl    │  
   │    > [ ] vmbr0                                                                                                   │  
   │      [ ] vmbr1                                                                                                   │  
   │                                                                                                                  │  
-  │    os storage (storage pool for vm boot disks)                                                                   │  
-  │    ╭────────────────────────────────────────────────────────────────────────────────────────────────────╮        │  
-  │    │ > local-lvm                                                                                        │        │  
-  │    ╰────────────────────────────────────────────────────────────────────────────────────────────────────╯        │  
+  │    os storage: local-lvm                                                                                         │  
   │                                                                                                                  │  
-  │    data storage (storage pool for data/ceph disks)                                                               │  
-  │    ╭────────────────────────────────────────────────────────────────────────────────────────────────────╮        │  
-  │    │ > local-lvm                                                                                        │        │  
-  │    ╰────────────────────────────────────────────────────────────────────────────────────────────────────╯        │  
+  │    data storage: local-lvm                                                                                       │  
   │                                                                                                                  │  
-  │    iso storage (storage for iso files)                                                                           │  
-  │    ╭────────────────────────────────────────────────────────────────────────────────────────────────────╮        │  
-  │    │ > local                                                                                            │        │  
-  │    ╰────────────────────────────────────────────────────────────────────────────────────────────────────╯        │  
+  │    iso storage: local                                                                                            │  
   │                                                                                                                  │  
-  │─────────────────────────────────────────── ↑ ↓  scroll down for more ─────────────────── ▸ okd 4.22.0-okd-scos.7 │  
+  │    fcos iso:                                                                                                     │  
+  │                                                                                                                  │  
+  │    ✓ bootstrap                                                                                                   │  
+  │                                                                                                                  │  
+  │    mycluster-bootstrap (default): pve1                                                                           │  
+  │                                                                                                                  │  
+  │    ✓ control plane                                                                                               │  
+  │                                                                                                                  │  
+  │    mycluster-master0 (default): pve1                                                                             │  
+  │                                                                                                                  │  
+  │    mycluster-master1 (default): pve1                                                                             │  
+  │                                                                                                                  │  
+  │    mycluster-master2 (default): pve1                                                                             │  
+  │─────────────────────────────── ↑ ↓  scroll down for more ─────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
   │   ↑↓  navigate    ← →  change value    enter  confirm    esc  back                                               │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                                         
