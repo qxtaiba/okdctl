@@ -22,9 +22,11 @@ func RenderThemePreview(theme *Theme, profile colorprofile.Profile) string {
 		{"rule", lipgloss.NewStyle().Foreground(theme.Rule).Render("------------------------------")},
 		{"code", lipgloss.NewStyle().Foreground(theme.Code).Render("oc get nodes")},
 		{"success", lipgloss.NewStyle().Bold(true).Foreground(theme.Success).Render(IconSuccess + " healthy")},
-		{"warning", lipgloss.NewStyle().Bold(true).Foreground(theme.Warning).Render("! attention")},
-		{"error", lipgloss.NewStyle().Bold(true).Foreground(theme.Error).Render("× unavailable")},
-		{"info", lipgloss.NewStyle().Bold(true).Foreground(theme.Info).Render("i update available")},
+		{"warning", lipgloss.NewStyle().Bold(true).Foreground(theme.Warning).Render(IconWarning + " attention")},
+		{"error", lipgloss.NewStyle().Bold(true).Foreground(theme.Error).Render(IconError + " unavailable")},
+		// info pairs with no glyph anywhere in the app (logger.go renders a
+		// "[INFO]" text badge instead), so the preview matches that: color only.
+		{"info", lipgloss.NewStyle().Bold(true).Foreground(theme.Info).Render("update available")},
 		{"accent", lipgloss.NewStyle().Bold(true).Foreground(theme.Accent).Render(IconActive + " active section")},
 	}
 	var b bytes.Buffer

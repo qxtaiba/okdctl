@@ -71,11 +71,9 @@ type Event struct {
 	Final   bool
 }
 
-// NextFlow builds the flow one of the payoff screen's verbs chains into.
-// Building is deferred to the moment the verb is pressed: the manage-nodes
-// flow's hooks load credentials and probe the Proxmox host, work a deploy that
-// exits straight away must not pay for.
-// NextFlow builds the steps and chrome a finish-screen verb enters.
+// NextFlow builds the steps and chrome a finish-screen verb enters, deferred
+// until the verb is pressed so a deploy that exits straight away never pays
+// for the manage-nodes flow's credential load and Proxmox probe.
 type NextFlow func() ([]wizard.WizardStep, wizard.FlowChrome, error)
 
 // FinishHooks groups the optional actions available after deployment.
