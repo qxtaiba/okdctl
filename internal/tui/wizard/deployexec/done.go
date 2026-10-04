@@ -121,8 +121,11 @@ func (s *DoneStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		cmd := s.copy(s.st.RunID)
 		return s, cmd
 	}
-	if s.log.HandleKey(keyMsg, s.SplitsFrame(flowStepCount)) {
+	switch relayout, moved := s.log.HandleKey(keyMsg, s.SplitsFrame(flowStepCount)); {
+	case relayout:
 		return s, func() tea.Msg { return wizard.LayoutChangedMsg{} }
+	case moved:
+		return s, func() tea.Msg { return wizard.FocusChangedMsg{} }
 	}
 	return s, nil
 }

@@ -259,6 +259,7 @@ func deployScenarios() []deployScenario {
 			seed: func(m *wizard.Model, st *State) {
 				seedMidRun(m, st)
 				m.Update(tea.KeyPressMsg{Code: logview.KeyLock, Text: "l"})
+				m.Update(wizard.FocusChangedMsg{})
 			},
 		},
 		{
@@ -343,6 +344,7 @@ func deployScenarios() []deployScenario {
 			seed: func(m *wizard.Model, st *State) {
 				seedMidRun(m, st)
 				m.Update(tea.KeyPressMsg{Code: logview.KeyPrevMatch, Text: "N"})
+				m.Update(wizard.FocusChangedMsg{})
 			},
 		},
 		{
@@ -369,6 +371,16 @@ func deployScenarios() []deployScenario {
 			id:    StepIDStream,
 			build: streamState,
 			seed:  seedFailedRun,
+		},
+		{
+			// A single ctrl+c during the stream: the same report, but every
+			// place it names the outcome reads interrupted, not failed — no
+			// red ✗ on the step the operator stopped, no raw context.Canceled
+			// text standing in for an explanation.
+			name:  "done_incident_cancelled",
+			id:    StepIDStream,
+			build: streamState,
+			seed:  seedCancelledRun,
 		},
 	}
 }

@@ -1,0 +1,45 @@
+                                                                                                                                                      
+  ╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L                                                                                                                                    │  
+  │ resizing masters                                                                                      op · target · params · plan · run · done │  
+  │────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
+  │  resizing masters  2 / 3                                                            elapsed 1m15s      │  LOG · ▸ /step-2 (4/24)               │  
+  │  ✓ homelab-master0                                                                           1m0s      │  · 09:02:20 terraform apply step=st…│ │  
+  │  ● homelab-master1                                                                                     │  · 09:02:27 terraform apply step=st…│ │  
+  │      ✓ etcd health gate (pre)                                                                   —      │  · 09:02:34 terraform apply step=st…│ │  
+  │      ✓ cordon + drain                                                                           —      │  · 09:02:41 terraform apply step=st…▎ │  
+  │      ⣾ terraform apply (in-place update)                                                      15s      │                                       │  
+  │      ○ power-cycle vm                                                                                  │                                       │  
+  │      ○ wait for node ready                                                                             │                                       │  
+  │      ○ etcd health gate (post)                                                                         │                                       │  
+  │      ○ uncordon + ceph health gate                                                                     │                                       │  
+  │  ○ homelab-master2                                                                                     │                                       │  
+  │                                                                                                        │                                       │  
+  │  marker okd-install/.okdctl-node-op.json · full log okd-install/okdctl.log · ctrl+c cancels after      │                                       │  
+  │  the current gate                                                                                      │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                                                                │  
+  │───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
+  │  enter commit the filter • esc cancel it • ctrl+c cancel (twice to force-quit) • ? help                                                        │  
+  ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
+                                                                                                                                                      

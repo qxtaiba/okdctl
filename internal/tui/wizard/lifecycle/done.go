@@ -101,8 +101,11 @@ func (s *DoneStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	if keyMsg.Code == tea.KeyEnter && !s.log.Filtering() {
 		return s, func() tea.Msg { return wizard.StepCompleteMsg{StepID: StepIDDone} }
 	}
-	if s.log.HandleKey(keyMsg, s.SplitsFrame(flowStepCount)) {
+	switch relayout, moved := s.log.HandleKey(keyMsg, s.SplitsFrame(flowStepCount)); {
+	case relayout:
 		return s, func() tea.Msg { return wizard.LayoutChangedMsg{} }
+	case moved:
+		return s, func() tea.Msg { return wizard.FocusChangedMsg{} }
 	}
 	return s, nil
 }

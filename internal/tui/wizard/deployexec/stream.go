@@ -334,14 +334,20 @@ func phaseComplete(ph *phaseProgress) bool {
 	return true
 }
 
-// handleLogKey routes the log viewport's keys through the shared surface;
-// only `f` needs a command back — swapping the log full-screen changes the
-// frame's own layout gate and so asks for a re-measure. With no Logs hook
-// (documented-supported) every key is inert — an empty full-screen log
-// would blank the whole body.
+// handleLogKey routes the log viewport's keys through the shared surface and
+// reports the one command back the wizard needs to hear about: `f` changes
+// the frame's own layout gate and so asks for a re-measure; `l` and a jump
+// (n/N) move the window without any layout change, but on the narrow tail it
+// rides below the step's own body, so the wizard must still nudge its
+// viewport toward it or the newly-locked or -jumped-to line can sit off
+// screen below the fold. With no Logs hook (documented-supported) every key
+// is inert — an empty full-screen log would blank the whole body.
 func (s *StreamStep) handleLogKey(msg tea.KeyPressMsg) tea.Cmd {
-	if s.log.HandleKey(msg, s.paneCarriesLog()) {
+	switch relayout, moved := s.log.HandleKey(msg, s.paneCarriesLog()); {
+	case relayout:
 		return func() tea.Msg { return wizard.LayoutChangedMsg{} }
+	case moved:
+		return func() tea.Msg { return wizard.FocusChangedMsg{} }
 	}
 	return nil
 }

@@ -1,22 +1,22 @@
                                                                                 
   ╭──────────────────────────────────────────────────────────────────────────╮  
-  │ O K D C T L  installing okd over proxmox                                 │  
-  │ deploying homelab                                         install · done │  
+  │ O K D C T L                                                              │  
+  │ resizing masters                op · target · params · plan · run · done │  
   │──────────────────────────────────────────────────────────────────────────│  
-  │  ○ infra                                                                 │  
-  │  ○ install                                                               │  
-  │  ○ verify                                                                │  
+  │      ○ wait for node ready                                               │  
+  │      ○ etcd health gate (post)                                           │  
+  │      ○ uncordon + ceph health gate                                       │  
+  │  ○ homelab-master2                                                       │  
   │                                                                          │  
-  │  LOG · 19–24 of 24                                                       │  
-  │  · 09:02:06 deploy step started step=step-18 phase=setup          │      │  
-  │  · 09:02:13 deploy step started step=step-19 phase=setup          │      │  
-  │  · 09:02:20 deploy step started step=step-20 phase=setup          │      │  
-  │  · 09:02:27 deploy step started step=step-21 phase=setup          │      │  
-  │  · 09:02:34 deploy step started step=step-22 phase=setup          ▎      │  
-  │  · 09:02:41 deploy step started step=step-23 phase=setup          ▎      │  
+  │  LOG · 1–5 of 24                                                         │  
+  │  · 09:00:00 terraform apply step=step-00 node=homelab-master0     ▎      │  
+  │  · 09:00:07 terraform apply step=step-01 node=homelab-master0     ┃      │  
+  │  · 09:00:14 terraform apply step=step-02 node=homelab-master0     │      │  
+  │  · 09:00:21 terraform apply step=step-03 node=homelab-master0     │      │  
+  │  E 09:00:28 ERROR etcd member 0 refused the join request          │      │  
   │                                                                          │  
-  │  full log okd-install/okdctl.log · ctrl+c cancels after the current      │  
-  │  step                                                                    │  
+  │  marker okd-install/.okdctl-node-op.json · full log okd-                 │  
+  │  install/okdctl.log · ctrl+c cancels after the current gate              │  
   │                                                                          │  
   │─────────────────── ↑ ↓  scroll up for more ─────────────────── ▸ homelab │  
   │  l follow the log tail … • ctrl+c cancel (twice to force-quit) • ? help  │  
