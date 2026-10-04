@@ -1,5 +1,7 @@
 package config
 
+import "bytes"
+
 // SecretBytes wraps a credential as []byte, not string, so Zeroize can
 // overwrite it before GC. The wizard fills it on capture; deploy/destroy
 // wipes it via defer.
@@ -13,6 +15,12 @@ type SecretBytes struct {
 func (s *SecretBytes) Set(v string) {
 	clear(s.b)
 	s.b = []byte(v)
+}
+
+// SetBytes copies b into an owned slice, zeroizing any prior backing array first so a re-SetBytes call can't leak the old secret, and never retains b itself.
+func (s *SecretBytes) SetBytes(b []byte) {
+	clear(s.b)
+	s.b = bytes.Clone(b)
 }
 
 // Zeroize overwrites the backing array with zeros and nils the slice.
