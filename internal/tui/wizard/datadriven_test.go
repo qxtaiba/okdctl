@@ -1302,3 +1302,126 @@ func TestDataDrivenStep_PairedFieldsReserveDefaultTagSymmetrically(t *testing.T)
 		t.Errorf("paired box widths = %d (default-tagged) vs %d (untagged), want equal", leftWidth, rightWidth)
 	}
 }
+
+// collapsibleTestDefinition declares a primary section plus a Collapsible
+// "advanced" section with one Required field — the shape the HARD
+// CONSTRAINT exists to protect (a fold must never hide required work).
+func collapsibleTestDefinition() *StepDefinition {
+	return &StepDefinition{
+		ID:    StepIDBasics,
+		Title: "collapsible test step",
+		Sections: []SectionDefinition{
+			{
+				Title: "primary",
+				Fields: []FieldDefinition{
+					{Key: "name", Label: "name"},
+				},
+			},
+			{
+				Title:       "advanced",
+				Collapsible: true,
+				FoldSummary: func(map[string]string) []tui.FactRow {
+					return []tui.FactRow{{Key: "status", Value: "ok"}}
+				},
+				Fields: []FieldDefinition{
+					{Key: "hidden_required", Label: "hidden required", Required: true},
+				},
+			},
+		},
+	}
+}
+
+// TestDataDrivenStep_CollapsibleSectionCollapsesWhenCompleteAndUnfocused
+// pins the fold's quiet state: complete, unfocused, it renders one summary
+// line instead of its field.
+func TestDataDrivenStep_CollapsibleSectionCollapsesWhenCompleteAndUnfocused(t *testing.T) {
+	step := NewDataDrivenStep(collapsibleTestDefinition())
+	step.setValue("hidden_required", "x")
+	step.SetFocused(true)
+
+	view := tuitest.StripANSI(step.View(100, 24))
+	if strings.Contains(view, "hidden required") {
+		t.Fatalf("View() = %q, want the collapsed fold to hide its field", view)
+	}
+	if !strings.Contains(view, "advanced") || !strings.Contains(view, "status") {
+		t.Fatalf("View() = %q, want the fold's label and FoldSummary fact visible", view)
+	}
+}
+
+// TestDataDrivenStep_CollapsibleSectionExpandsWhenFocusIsInside pins the
+// focus-forced expansion: tabbing into the section renders it in full even
+// though the user never pressed enter on the toggle.
+func TestDataDrivenStep_CollapsibleSectionExpandsWhenFocusIsInside(t *testing.T) {
+	step := NewDataDrivenStep(collapsibleTestDefinition())
+	step.setValue("hidden_required", "x")
+	step.SetFocused(true)
+
+	if cmd := step.form.FocusField(1, 0); cmd != nil {
+		cmd()
+	}
+	view := tuitest.StripANSI(step.View(100, 24))
+	if !strings.Contains(view, "hidden required") {
+		t.Fatalf("View() = %q, want the fold's field visible once focus is inside its section", view)
+	}
+}
+
+// TestDataDrivenStep_CollapsibleSectionAutoExpandsWhenRequiredFieldInvalid
+// pins the HARD CONSTRAINT itself: a collapsed fold containing a
+// required-and-empty field must auto-expand even while focus sits
+// elsewhere, so the error is never silently hidden.
+func TestDataDrivenStep_CollapsibleSectionAutoExpandsWhenRequiredFieldInvalid(t *testing.T) {
+	step := NewDataDrivenStep(collapsibleTestDefinition())
+	step.SetFocused(true) // focuses "name"; hidden_required stays empty
+
+	step.form.TouchAll()
+
+	view := tuitest.StripANSI(step.View(100, 24))
+	if !strings.Contains(view, "hidden required") {
+		t.Fatalf("View() = %q, want a required-and-invalid field to force its collapsed fold open", view)
+	}
+}
+
+// TestDataDrivenStep_CollapsibleSectionValidateReachesHiddenField pins that
+// Validate/TouchAll/FocusFirstInvalid treat a Collapsible section exactly
+// like a visible one: enter's forced submission attempt focuses the hidden
+// required field rather than silently failing.
+func TestDataDrivenStep_CollapsibleSectionValidateReachesHiddenField(t *testing.T) {
+	step := NewDataDrivenStep(collapsibleTestDefinition())
+	step.SetFocused(true)
+
+	_, cmd := step.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Update(enter) on an invalid collapsed fold: want a cmd, got nil")
+	}
+	if !containsFocusChanged(cmd) {
+		t.Fatal("Update(enter) on an invalid collapsed fold did not emit FocusChangedMsg")
+	}
+	if got := step.form.FocusedField(); got != step.getField("hidden_required") {
+		t.Fatalf("FocusedField() after enter = %v, want the hidden required field", got)
+	}
+}
+
+// TestDataDrivenStep_CollapsibleSectionEnterStickyExpand pins mechanism 3's
+// enter binding: toggling the fold open via enter keeps it open even after
+// focus moves elsewhere, since the latch is sticky rather than
+// focus-derived.
+func TestDataDrivenStep_CollapsibleSectionEnterStickyExpand(t *testing.T) {
+	step := NewDataDrivenStep(collapsibleTestDefinition())
+	step.setValue("hidden_required", "x")
+	step.SetFocused(true)
+
+	if cmd := step.form.FocusField(1, 0); cmd != nil {
+		cmd()
+	}
+	if _, cmd := step.Update(tea.KeyPressMsg{Code: tea.KeyEnter}); cmd != nil {
+		cmd()
+	}
+	if cmd := step.form.FocusField(0, 0); cmd != nil {
+		cmd()
+	}
+
+	view := tuitest.StripANSI(step.View(100, 24))
+	if !strings.Contains(view, "hidden required") {
+		t.Fatalf("View() = %q, want the fold to stay expanded via its sticky latch after focus left", view)
+	}
+}

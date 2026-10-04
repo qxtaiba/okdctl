@@ -128,6 +128,17 @@ type SectionDefinition struct {
 	Fields  []FieldDefinition
 	Warning func(values map[string]string) string // non-empty return renders a warning block under the section's fields
 	Visible func(values map[string]string) bool   // nil means always visible; false hides the section from render, navigation, and validation
+
+	// Collapsible marks a section whose rendering may fold to one summary
+	// line, orthogonal to Visible: Validate, TouchAll, and
+	// FocusFirstInvalid never skip a Collapsible section — only View's
+	// chrome changes — so a fold may never hide a required field or one
+	// carrying an error from validation or focus.
+	Collapsible bool
+	// FoldSummary, when Collapsible is true, supplies the facts the
+	// section's one-line collapsed summary echoes; nil renders the label
+	// alone. Never return a fact whose Value is credential material.
+	FoldSummary func(values map[string]string) []tui.FactRow
 }
 
 // StepDefinition is the declarative description of a data-driven wizard step.
@@ -158,6 +169,11 @@ type FormSection struct {
 	Group   *components.InputGroup
 	Warning func() string // non-empty return renders a warning block under the section's fields
 	Visible func() bool   // nil means always visible
+
+	// Collapsible mirrors SectionDefinition.Collapsible; when true,
+	// Group.Fields()[0] must be a components.Foldable (NewDataDrivenStep
+	// guarantees this by prepending a components.FoldToggleField).
+	Collapsible bool
 
 	// pairKeys[j] is Fields[j].PairKey, aligned to Group.Fields() order —
 	// View's pairing pass reads this instead of walking back to the
@@ -569,6 +585,29 @@ func (f *MultiSectionForm) sectionHead(i, innerWidth int) string {
 	return head
 }
 
+// foldState returns section i's fold toggle and whether the section is
+// displaying in full this render — forced by the sticky expand latch, a
+// focused field somewhere inside the section, or a validation error
+// somewhere inside it (section.isComplete(), which never skips a field
+// because it hasn't been visited the way Check vs. Validate already
+// distinguishes elsewhere) — sets the toggle's display chrome to match,
+// and reports ok=false when section isn't Collapsible or its first field
+// isn't a components.Foldable, in which case open is unconditionally true:
+// a construction bug must never read as "hide this section's fields".
+func (f *MultiSectionForm) foldState(i int) (fold components.Foldable, open, ok bool) {
+	section := &f.sections[i]
+	if !section.Collapsible || section.Group == nil || len(section.Group.Fields()) == 0 {
+		return nil, true, false
+	}
+	fold, ok = section.Group.Fields()[0].(components.Foldable)
+	if !ok {
+		return nil, true, false
+	}
+	open = i == f.currentSection || !section.isComplete() || fold.Expanded()
+	fold.SetDisplayExpanded(open)
+	return fold, open, true
+}
+
 // pairGap is the blank columns lipgloss.JoinHorizontal inserts between a
 // declared field pair's rendered columns.
 const pairGap = 4
@@ -736,10 +775,22 @@ func (f *MultiSectionForm) View(width int) string {
 		group.SetWidth(innerWidth)
 		applyPairWidths(group.Fields(), f.sections[i].pairKeys, width, innerWidth)
 
-		_ = emit(f.sectionHead(i, innerWidth))
+		_, open, isFold := f.foldState(i)
+		if !isFold {
+			_ = emit(f.sectionHead(i, innerWidth))
+		}
 
 		views := group.FieldViews()
 		f.spans[i] = make([]LineSpan, len(views))
+		if isFold && !open {
+			// Collapsed: the fold's own row is the section's entire
+			// rendering — the HARD CONSTRAINT holds structurally, since
+			// Validate/TouchAll/FocusFirstInvalid below never consult
+			// Collapsible and so never skip the fields this hides.
+			f.spans[i][0] = emit(views[0])
+			continue
+		}
+
 		blocks, covered := joinPairedViews(views, f.sections[i].pairKeys, width)
 		for bi, block := range blocks {
 			span := emit(block)
@@ -804,8 +855,18 @@ func NewDataDrivenStep(def *StepDefinition) *DataDrivenStep {
 	sections := make([]FormSection, 0, len(def.Sections))
 	for sectionIdx := range def.Sections {
 		sectionDef := &def.Sections[sectionIdx]
-		fields := make([]components.FormField, 0, len(sectionDef.Fields))
-		pairKeys := make([]string, 0, len(sectionDef.Fields))
+		fields := make([]components.FormField, 0, len(sectionDef.Fields)+1)
+		pairKeys := make([]string, 0, len(sectionDef.Fields)+1)
+
+		// fieldOffset accounts for the synthetic fold toggle a Collapsible
+		// section prepends: every declared FieldDefinition's real index in
+		// Group.Fields() shifts by one past it.
+		fieldOffset := 0
+		if sectionDef.Collapsible {
+			fieldOffset = 1
+			fields = append(fields, components.NewFoldToggleField(sectionDef.Title, foldSummaryFunc(sectionDef, step)))
+			pairKeys = append(pairKeys, "")
+		}
 
 		for fieldIdx := range sectionDef.Fields {
 			fieldDef := &sectionDef.Fields[fieldIdx]
@@ -817,7 +878,7 @@ func NewDataDrivenStep(def *StepDefinition) *DataDrivenStep {
 			pairKeys = append(pairKeys, fieldDef.PairKey)
 			step.fieldKeys[fieldDef.Key] = fieldLocation{
 				section: sectionIdx,
-				field:   fieldIdx,
+				field:   fieldIdx + fieldOffset,
 			}
 		}
 
@@ -832,17 +893,28 @@ func NewDataDrivenStep(def *StepDefinition) *DataDrivenStep {
 		}
 
 		sections = append(sections, FormSection{
-			Title:    sectionDef.Title,
-			Note:     sectionDef.Note,
-			Group:    components.NewInputGroup(fields...),
-			Warning:  warning,
-			Visible:  visible,
-			pairKeys: pairKeys,
+			Title:       sectionDef.Title,
+			Note:        sectionDef.Note,
+			Group:       components.NewInputGroup(fields...),
+			Warning:     warning,
+			Visible:     visible,
+			Collapsible: sectionDef.Collapsible,
+			pairKeys:    pairKeys,
 		})
 	}
 
 	step.form = NewMultiSectionForm(sections)
 	return step
+}
+
+// foldSummaryFunc adapts sectionDef.FoldSummary into the closure
+// components.FoldToggleField calls each render, or nil when the section
+// declares none.
+func foldSummaryFunc(sectionDef *SectionDefinition, step *DataDrivenStep) func() []tui.FactRow {
+	if sectionDef.FoldSummary == nil {
+		return nil
+	}
+	return func() []tui.FactRow { return sectionDef.FoldSummary(step.rawValues()) }
 }
 
 // SetFieldHistory restores safe prior values for configured form fields.

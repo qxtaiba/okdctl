@@ -3,6 +3,7 @@ package steps
 import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/render"
+	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
@@ -77,6 +78,31 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 					ConfigSet: proxmoxSet(func(p *config.ProxmoxConfig, v string) { p.Password.Set(v) }),
 					// Don't load password from config
 				},
+			},
+		},
+		{
+			Title:       "advanced",
+			Collapsible: true,
+			// Neither field here is Required nor can ever fail Check (a
+			// select with a default can't error), so the fold's collapse
+			// is accidentally safe today — isComplete() still forces it
+			// open the moment either changes, which is the structural
+			// guarantee the HARD CONSTRAINT needs regardless.
+			FoldSummary: func(values map[string]string) []tui.FactRow {
+				tokenStatus := "not set"
+				if values["token_id"] != "" {
+					tokenStatus = "set"
+				}
+				verification := "enabled"
+				if values["skip_tls_verify"] == valYes {
+					verification = "disabled"
+				}
+				return []tui.FactRow{
+					{Key: labelTokenID, Value: tokenStatus},
+					{Key: "verification", Value: verification},
+				}
+			},
+			Fields: []wizard.FieldDefinition{
 				{
 					Key:         "token_id",
 					Label:       labelTokenID,
