@@ -182,7 +182,9 @@ func (s *secretStore) Verify(ctx context.Context, env *addon.Environment) error 
 	return nil
 }
 
-// Uninstall attempts all provider resource deletions and joins failures.
+// Uninstall attempts all provider resource deletions and joins failures. It
+// also reclaims the namespace Install created via EnsureNamespace, checking
+// OwnershipLabel first so a namespace okdctl did not create is never deleted.
 func (s *secretStore) Uninstall(ctx context.Context, env *addon.Environment) error {
 	provider, _ := resolveProvider(env.AddonConfig.Settings)
 	var failures []error
@@ -195,6 +197,14 @@ func (s *secretStore) Uninstall(ctx context.Context, env *addon.Environment) err
 	}
 	if _, err := env.Exec.RunChecked(ctx, "oc", "delete", "secretstore", esoSecretStoreName, "-n", defaultNamespace, "--ignore-not-found"); err != nil {
 		failures = append(failures, fmt.Errorf("delete secretstore: %w", err))
+	}
+	owned, err := addon.NamespaceOwnedByOkdctl(ctx, env, defaultNamespace)
+	if err != nil {
+		failures = append(failures, fmt.Errorf("check %s namespace ownership: %w", defaultNamespace, err))
+	} else if owned {
+		if _, err := env.Exec.RunChecked(ctx, "oc", "delete", "namespace", defaultNamespace, "--ignore-not-found"); err != nil {
+			failures = append(failures, fmt.Errorf("delete namespace %s: %w", defaultNamespace, err))
+		}
 	}
 	return errors.Join(failures...)
 }
@@ -313,5 +323,5 @@ func secretManifestFromFile(ctx context.Context, env *addon.Environment, filePat
 }
 
 func (s *secretStore) PrepareRollback(ctx context.Context, env *addon.Environment) (func(context.Context) error, error) {
-	return addon.RollbackForNewNamespace(ctx, env, "external-secrets", func(cleanup context.Context) error { return s.Uninstall(cleanup, env) })
+	return addon.RollbackForNewNamespace(ctx, env, defaultNamespace, func(cleanup context.Context) error { return s.Uninstall(cleanup, env) })
 }
