@@ -3,9 +3,9 @@
   │ O K D C T L                                                                                                                                                                  │  
   │ review your configuration                                                                                                                connect · cluster · extras · review │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
-  │  CONFIG CHANGES · 2                                                                                    │  PREFLIGHT · 1 passed · 0 warnings · 2 not checked                  │  
-  │    domain                  k8s.local → prod.example                                                    │  ○ pull secret · not configured                                     │  
-  │    control plane vcpus     4 → 5                                                                       │  ○ ssh public key · not configured                                  │  
+  │  CONFIG CHANGES · 2                                                                                    │  PREFLIGHT · 1 passed · 0 warnings · 2 failed · 0 not checked       │  
+  │    domain                  k8s.local → prod.example                                                    │  ✗ pull secret · not configured                                     │  
+  │    control plane vcpus     4 → 5                                                                       │  ✗ ssh public key · not configured                                  │  
   │                                                                                                        │  ✓ CIDR ranges · no overlap · 192.168.1.0/24 · 10.128.0.0/14 ·      │  
   │  [1] cluster identity                                                                                  │    172.30.0.0/16                                                    │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │                                                                     │  

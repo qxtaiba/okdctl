@@ -3,9 +3,9 @@
   │ O K D C T L                                                                                                                                                                  │  
   │ review your configuration                                                                                                                connect · cluster · extras · review │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
-  │  [1] cluster identity                                                                                  │  PREFLIGHT · 1 passed · 0 warnings · 2 not checked                  │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  ○ pull secret · not configured                                     │  
-  │  name          mycluster                                                                               │  ○ ssh public key · not configured                                  │  
+  │  [1] cluster identity                                                                                  │  PREFLIGHT · 1 passed · 0 warnings · 2 failed · 0 not checked       │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  ✗ pull secret · not configured                                     │  
+  │  name          mycluster                                                                               │  ✗ ssh public key · not configured                                  │  
   │  domain        k8s.local                                                                               │  ✓ CIDR ranges · no overlap · 192.168.1.0/24 · 10.128.0.0/14 ·      │  
   │  distribution  OKD 4.22.0-okd-scos.7                                                                   │    172.30.0.0/16                                                    │  
   │                                                                                                        │                                                                     │  

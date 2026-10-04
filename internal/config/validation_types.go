@@ -30,10 +30,16 @@ const DefaultVMIDBase = 6000
 // disk_gb is 0; terraform rendering and the bootstrap disk validator both derive from it.
 const DefaultOSDiskGB = 50
 
+// ValidationErrorCodeCIDROverlap marks a ValidationError raised by a
+// network range overlapping another, so a caller can branch on the
+// condition without matching the free-text Message.
+const ValidationErrorCodeCIDROverlap = "cidr_overlap"
+
 // ValidationError describes a single config validation failure.
 type ValidationError struct {
 	Field   string
 	Message string
+	Code    string
 }
 
 func (e ValidationError) Error() string {
@@ -53,6 +59,12 @@ func (r *ValidationResult) IsValid() bool {
 // AddError appends a ValidationError built from field/message.
 func (r *ValidationResult) AddError(field, message string) {
 	r.Errors = append(r.Errors, ValidationError{Field: field, Message: message})
+}
+
+// AddErrorCode appends a ValidationError carrying a stable Code, for a
+// condition a caller must detect without matching the free-text Message.
+func (r *ValidationResult) AddErrorCode(field, message, code string) {
+	r.Errors = append(r.Errors, ValidationError{Field: field, Message: message, Code: code})
 }
 
 func (r *ValidationResult) Error() string {

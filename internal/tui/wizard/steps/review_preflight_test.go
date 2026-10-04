@@ -3,9 +3,11 @@ package steps
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 func TestReviewPreflightChecksFilesAndCIDROverlap(t *testing.T) {
@@ -23,7 +25,7 @@ func TestReviewPreflightChecksFilesAndCIDROverlap(t *testing.T) {
 	got := reviewPreflight(cfg)
 	want := []reviewCheck{
 		{label: "pull secret", status: "readable", detail: path, passed: true},
-		{label: "ssh public key", status: "unavailable", detail: cfg.Files.SSHPublicKey, warning: true},
+		{label: "ssh public key", status: "unavailable", detail: cfg.Files.SSHPublicKey, failed: true},
 		{label: "CIDR ranges", status: "overlap detected", detail: "10.0.0.0/16 · 10.0.1.0/24 · 172.30.0.0/16", warning: true},
 	}
 	if len(got) != len(want) {
@@ -78,6 +80,73 @@ func TestReviewPreflightLeavesAbsentChecksUnconfirmed(t *testing.T) {
 	got := reviewPreflight(cfg)
 	if got[0].status != "not configured" || got[1].status != "not configured" || got[2].status != "not checked" {
 		t.Fatalf("reviewPreflight() = %#v, want absent inputs called out without false passes", got)
+	}
+}
+
+// TestReviewPreflightMissingRequiredFileIsBlockingNotUnchecked pins the
+// honest-state fix: a required input that is missing or unreadable must
+// read as a blocking failure with the error glyph and its own "failed"
+// count, never the same pending state as a check that simply hasn't run.
+func TestReviewPreflightMissingRequiredFileIsBlockingNotUnchecked(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Networking.MachineCIDR = ""
+	cfg.Networking.PodCIDR = ""
+	cfg.Networking.ServiceCIDR = ""
+	checks := reviewPreflight(cfg)
+
+	for _, label := range []string{"pull secret", "ssh public key"} {
+		var found bool
+		for _, check := range checks {
+			if check.label != label {
+				continue
+			}
+			found = true
+			if !check.failed || check.passed || check.warning {
+				t.Errorf("%s = %+v, want a blocking failure, not an unchecked/warning state", label, check)
+			}
+		}
+		if !found {
+			t.Fatalf("no %q check in %#v", label, checks)
+		}
+	}
+
+	rendered := renderReviewPreflight(checks, 80)
+	if !strings.Contains(rendered, tui.IconError) {
+		t.Errorf("rendered preflight has no error glyph for the missing required files:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, "2 failed") {
+		t.Errorf("rendered preflight header omits its own failed count:\n%s", rendered)
+	}
+}
+
+// TestReviewPreflightNonProxmoxCapacityIsNotApplicableNotUnchecked pins the
+// other honest-state fix: a capacity check that doesn't apply to a
+// non-Proxmox provider must never inflate the "not checked" count, which
+// otherwise could never reach zero on such a config.
+func TestReviewPreflightNonProxmoxCapacityIsNotApplicableNotUnchecked(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Files.PullSecret = "/nonexistent/pull-secret.json"
+	cfg.Files.SSHPublicKey = "/nonexistent/id_ed25519.pub"
+	cfg.Provider.Type = "aws"
+	cfg.Provider.Proxmox = nil
+	cfg.Networking.MachineCIDR = "10.0.0.0/16"
+	cfg.Networking.PodCIDR = "10.0.1.0/24"
+	cfg.Networking.ServiceCIDR = "172.30.0.0/16"
+	checks := reviewPreflight(cfg, &WizardCapacitySnapshot{})
+
+	var capacity reviewCheck
+	for _, check := range checks {
+		if check.label == labelSelectedCapacity {
+			capacity = check
+		}
+	}
+	if !capacity.notApplicable {
+		t.Fatalf("selected capacity check = %+v, want notApplicable", capacity)
+	}
+
+	rendered := renderReviewPreflight(checks, 80)
+	if !strings.Contains(rendered, "0 not checked") {
+		t.Errorf("not-applicable check inflated the not-checked count above zero:\n%s", rendered)
 	}
 }
 
