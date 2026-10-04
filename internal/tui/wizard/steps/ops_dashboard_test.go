@@ -11,6 +11,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
+	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 type blockingOpsSource struct {
@@ -179,6 +180,26 @@ func TestWelcomeOpsDashboardWideTilesNeverOverflowEmptyState(t *testing.T) {
 				t.Fatalf("width %d: empty-state line is %d columns wide, overflowing the terminal: %q", width, got, line)
 			}
 		}
+	}
+}
+
+// TestFitOpsLineElidesVisiblyRatherThanDroppingTrailingStatus pins the
+// width idiom: a line whose trailing "ready"/"not ready" status falls past
+// the fit point must either still render (room permitting) or be visibly
+// elided with "…" — never silently gone, which the forbidden
+// Width(w).MaxHeight(1) word-wrap-then-clip idiom used to do.
+func TestFitOpsLineElidesVisiblyRatherThanDroppingTrailingStatus(t *testing.T) {
+	line := tui.IconError + " homelab-worker-with-an-extremely-long-hostname-that-keeps-going · worker · not ready"
+	got := fitOpsLine(80, line)
+
+	if lipgloss.Width(got) > 80 {
+		t.Fatalf("fitted line is %d columns wide, want <= 80: %q", lipgloss.Width(got), got)
+	}
+	if !strings.Contains(got, "not ready") && !strings.Contains(got, "…") {
+		t.Fatalf("status was dropped with no visible elision marker: %q", got)
+	}
+	if strings.Contains(got, "\n") {
+		t.Fatalf("fitted line must stay a single row, got multiple:\n%s", got)
 	}
 }
 

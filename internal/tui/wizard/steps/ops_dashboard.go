@@ -385,8 +385,11 @@ func opsLatencyGlyph(duration time.Duration, samples []opsLatencySample) rune {
 	return opsLatencyGlyphs[max(0, min(level, len(opsLatencyGlyphs)-1))]
 }
 
+// fitOpsLine rune-safely truncates line to width columns with a visible
+// "…" so a status word past the fit point is elided, never silently
+// wrapped away.
 func fitOpsLine(width int, line string) string {
-	return lipgloss.NewStyle().Width(width).MaxHeight(1).Render(line)
+	return tui.Truncate(line, width)
 }
 
 func opsValues(snapshot *opsSnapshot) (phase, api, nodes, operators, addons string) {

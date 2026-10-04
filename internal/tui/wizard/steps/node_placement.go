@@ -467,8 +467,8 @@ func (s *NodePlacementStep) assignmentDemand(width int) string {
 	if len(rows) == 0 {
 		return ""
 	}
-	return lipgloss.NewStyle().Width(max(1, width)).PaddingLeft(2).
-		Render("assigned demand · " + strings.Join(rows, " · "))
+	text := tui.Truncate("assigned demand · "+strings.Join(rows, " · "), max(1, width-2))
+	return lipgloss.NewStyle().PaddingLeft(2).Render(text)
 }
 
 // headerOffset is how many lines View prepends before the inner form's own

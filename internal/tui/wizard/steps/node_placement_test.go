@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
@@ -141,6 +142,56 @@ func TestNodePlacementCapacityLabelsAndDemandFollowSelection(t *testing.T) {
 	}
 	if got := s.bootstrapField.Value(); got != "pve2" {
 		t.Fatalf("selected node value = %q, want saved value pve2", got)
+	}
+}
+
+// TestNodePlacementAssignmentDemandElidesVisiblyAtNarrowWidth pins the width
+// idiom on the per-node demand row: several long node names must overflow a
+// narrow row into a single, visibly elided ("…") line rather than silently
+// wrapping and dropping a trailing node's demand, which the forbidden bare
+// Width-based render used to do.
+func TestNodePlacementAssignmentDemandElidesVisiblyAtNarrowWidth(t *testing.T) {
+	cfg := newProxmoxTestConfig()
+	cfg.Topology.ControlPlane = config.NodeConfig{Count: 3, CPU: 4, MemoryMB: 8192, DiskGB: 50}
+	cfg.Topology.Workers = config.NodeConfig{Count: 1, CPU: 2, MemoryMB: 4096, DiskGB: 20}
+	cfg.Provider.Proxmox.ControlPlaneNodes = []string{
+		"homelab-rack-a-master-node-001",
+		"homelab-rack-b-master-node-002",
+		"homelab-rack-c-master-node-003",
+	}
+	cfg.Provider.Proxmox.WorkerNodes = []string{"homelab-rack-a-worker-node-001"}
+
+	s := NewNodePlacementStep()
+	s.cfg = cfg
+	disc := &proxmoxDiscovery{Nodes: []proxmoxNode{
+		{Name: "homelab-rack-a-master-node-001", Status: "online", CPUs: 2, CPUsKnown: true, MemGB: 4, MemKnown: true},
+		{Name: "homelab-rack-b-master-node-002", Status: "online", CPUs: 8, CPUsKnown: true, MemGB: 16, MemKnown: true},
+		{Name: "homelab-rack-c-master-node-003", Status: "online", CPUs: 8, CPUsKnown: true, MemGB: 16, MemKnown: true},
+		{Name: "homelab-rack-a-worker-node-001", Status: "online", CPUs: 8, CPUsKnown: true, MemGB: 16, MemKnown: true},
+	}}
+	step, _ := s.Update(discoveryCompleteMsg{discovery: disc})
+	s = step.(*NodePlacementStep)
+
+	demand := s.assignmentDemand(78)
+	if got := lipgloss.Width(demand); got > 78 {
+		t.Fatalf("demand row is %d columns wide, want <= 78: %q", got, tuitest.StripANSI(demand))
+	}
+	if strings.Contains(demand, "\n") {
+		t.Fatalf("demand row wrapped onto multiple lines instead of eliding:\n%s", tuitest.StripANSI(demand))
+	}
+	plain := tuitest.StripANSI(demand)
+	if !strings.Contains(plain, "assigned demand") {
+		t.Fatalf("demand row lost its own label: %q", plain)
+	}
+	if !strings.HasSuffix(strings.TrimRight(plain, " "), "…") {
+		t.Fatalf("overflowing demand row has no visible elision marker: %q", plain)
+	}
+
+	view := tuitest.StripANSI(s.View(80, 40))
+	for _, line := range strings.Split(view, "\n") {
+		if got := lipgloss.Width(line); got > 80 {
+			t.Fatalf("view line is %d columns wide, want <= 80: %q", got, line)
+		}
 	}
 }
 
