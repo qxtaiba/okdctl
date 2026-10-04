@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 
@@ -42,6 +43,7 @@ func (c *Client) ApprovePendingCSRs(ctx context.Context, identities ...CSRIdenti
 		return 0, err
 	}
 	approved := 0
+	var errs []error
 	for i := range csrs {
 		request := &csrs[i].Request
 		if err := validateCSR(request, identities); err != nil {
@@ -49,11 +51,12 @@ func (c *Client) ApprovePendingCSRs(ctx context.Context, identities ...CSRIdenti
 			continue
 		}
 		if err := c.approveCSR(ctx, request); err != nil {
-			return approved, err
+			errs = append(errs, err)
+			continue
 		}
 		approved++
 	}
-	return approved, nil
+	return approved, errors.Join(errs...)
 }
 
 func (c *Client) approveCSR(ctx context.Context, request *certificatesv1.CertificateSigningRequest) error {

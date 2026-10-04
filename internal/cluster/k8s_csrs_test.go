@@ -17,7 +17,9 @@ import (
 )
 
 // installFakeOCForCSRs installs a PATH-shadow "oc" keyed off $OC_CSR_JSON,
-// $OC_GET_EXIT, $OC_ARGV_FILE, $OC_APPROVE_EXIT.
+// $OC_GET_EXIT, $OC_ARGV_FILE, $OC_APPROVE_EXIT, $OC_APPROVE_FAIL_NAME.
+// $OC_APPROVE_FAIL_NAME, when set, confines the $OC_APPROVE_EXIT failure to
+// the approval request naming that CSR; every other request exits 0.
 func installFakeOCForCSRs(t *testing.T) {
 	t.Helper()
 	script := `#!/bin/sh
@@ -32,9 +34,16 @@ case "$1" in
     exit "${OC_GET_EXIT:-0}"
     ;;
   replace)
-    cat >> "${OC_ARGV_FILE:-/dev/null}.body"
+    body="$(cat)"
+    printf '%s' "$body" >> "${OC_ARGV_FILE:-/dev/null}.body"
     if [ -n "${OC_ARGV_FILE:-}" ]; then
       echo "$@" >> "${OC_ARGV_FILE}"
+    fi
+    if [ -n "${OC_APPROVE_FAIL_NAME:-}" ]; then
+      case "$body" in
+        *"\"name\":\"${OC_APPROVE_FAIL_NAME}\""*) exit "${OC_APPROVE_EXIT:-1}" ;;
+        *) exit 0 ;;
+      esac
     fi
     exit "${OC_APPROVE_EXIT:-0}"
     ;;
@@ -155,5 +164,47 @@ func TestApprovePendingCSRs_ApproveFailureWrapped(t *testing.T) {
 	}
 	if !strings.HasPrefix(ce.Msg, "approve CSRs") {
 		t.Errorf("ClusterError.Msg = %q; want prefix %q", ce.Msg, "approve CSRs")
+	}
+}
+
+func TestApprovePendingCSRs_MixedBatchContinuesPastFailure(t *testing.T) {
+	installFakeOCForCSRs(t)
+	dir := t.TempDir()
+	argvFile := filepath.Join(dir, "argv")
+	t.Setenv("OC_ARGV_FILE", argvFile)
+	items := []certificatesv1.CertificateSigningRequest{}
+	for _, name := range []string{"csr-1", "csr-2", "csr-3"} {
+		csr := testCSR(t)
+		csr.Name = name
+		items = append(items, csr)
+	}
+	body, marshalErr := json.Marshal(certificatesv1.CertificateSigningRequestList{Items: items})
+	if marshalErr != nil {
+		t.Fatal(marshalErr)
+	}
+	t.Setenv("OC_CSR_JSON", string(body))
+	t.Setenv("OC_APPROVE_FAIL_NAME", "csr-2")
+	t.Setenv("OC_APPROVE_EXIT", "1")
+
+	c := newTestClient(t)
+	n, err := c.ApprovePendingCSRs(context.Background(), testCSRIdentity())
+	if err == nil {
+		t.Fatal("expected error reporting the csr-2 failure")
+	}
+	if n != 2 {
+		t.Errorf("approved count = %d; want 2 (csr-1 and csr-3 despite csr-2 failing)", n)
+	}
+	var ce *errtypes.ClusterError
+	if !errors.As(err, &ce) {
+		t.Fatalf("err is %T; want *errtypes.ClusterError in the joined error", err)
+	}
+	data, readErr := os.ReadFile(argvFile)
+	if readErr != nil {
+		t.Fatalf("argv file not written: %v", readErr)
+	}
+	for _, name := range []string{"csr-1", "csr-2", "csr-3"} {
+		if !strings.Contains(string(data), name) {
+			t.Errorf("csr %q was never attempted; batch stopped at the first failure", name)
+		}
 	}
 }
