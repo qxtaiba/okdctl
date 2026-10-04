@@ -20,6 +20,59 @@ type ResourcesStepState struct {
 // IsWizardStepState marks ResourcesStepState as a valid wizard.StepState.
 func (s *ResourcesStepState) IsWizardStepState() {}
 
+// nodeResourceRole bundles what differs between the control-plane and
+// workers field blocks below (key prefix, defaults/help text, and which
+// NodeConfig a field writes/reads); node must return a pointer into cfg's
+// Topology so ConfigSet mutates the caller's Config in place.
+type nodeResourceRole struct {
+	prefix                string
+	vcpuDefault, vcpuHelp string
+	memDefault, memHelp   string
+	diskHelp              string
+	node                  func(cfg *config.Config) *config.NodeConfig
+}
+
+// nodeResourceFields declares the vcpus/memory/os-disk fields for one
+// topology role. Bootstrap disk is intentionally not seeded by the disk
+// field here: it always mirrors control-plane disk, resolved once at point
+// of use by config.Effective/NormalizeTopology — writing it here too would
+// materialize a value that later desyncs when control-plane disk changes
+// outside the wizard (e.g. 'okdctl node resize') without this field running again.
+func nodeResourceFields(role *nodeResourceRole) []wizard.FieldDefinition {
+	return []wizard.FieldDefinition{
+		{
+			Key:       role.prefix + "_vcpus",
+			Label:     "vcpus",
+			Default:   role.vcpuDefault,
+			Help:      role.vcpuHelp,
+			Required:  true,
+			Validate:  config.ValidateCPU,
+			ConfigSet: wizard.SetInt(func(c *config.Config, v int) { role.node(c).CPU = v }),
+			ConfigGet: wizard.GetInt(func(c *config.Config) int { return role.node(c).CPU }),
+		},
+		{
+			Key:       role.prefix + "_memory",
+			Label:     "memory (mb)",
+			Default:   role.memDefault,
+			Help:      role.memHelp,
+			Required:  true,
+			Validate:  config.ValidateMemory,
+			ConfigSet: wizard.SetInt(func(c *config.Config, v int) { role.node(c).MemoryMB = v }),
+			ConfigGet: wizard.GetInt(func(c *config.Config) int { return role.node(c).MemoryMB }),
+		},
+		{
+			Key:       role.prefix + "_disk",
+			Label:     "os disk (gb)",
+			Default:   "50",
+			Help:      role.diskHelp,
+			Required:  true,
+			Validate:  config.ValidateOSDisk,
+			ConfigSet: wizard.SetInt(func(c *config.Config, v int) { role.node(c).DiskGB = v }),
+			ConfigGet: wizard.GetInt(func(c *config.Config) int { return role.node(c).DiskGB }),
+		},
+	}
+}
+
 // ResourcesStepDefinition declares the node-resources step fields.
 var ResourcesStepDefinition = wizard.StepDefinition{
 	ID:           wizard.StepIDResources,
@@ -29,76 +82,23 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 	Sections: []wizard.SectionDefinition{
 		{
 			Title: roleLabelControlPlane,
-			Fields: []wizard.FieldDefinition{
-				{
-					Key:       "cp_vcpus",
-					Label:     "vcpus",
-					Default:   "4",
-					Help:      "okd minimum: 4 vcpus",
-					Required:  true,
-					Validate:  config.ValidateCPU,
-					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.ControlPlane.CPU = v }),
-					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.ControlPlane.CPU }),
-				},
-				{
-					Key:       "cp_memory",
-					Label:     "memory (mb)",
-					Default:   "12288",
-					Help:      "okd minimum: 8192 mb (8 gb)",
-					Required:  true,
-					Validate:  config.ValidateMemory,
-					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.ControlPlane.MemoryMB = v }),
-					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.ControlPlane.MemoryMB }),
-				},
-				{
-					Key:      "cp_disk",
-					Label:    "os disk (gb)",
-					Default:  "50",
-					Help:     "boot disk for control plane nodes (okd minimum: 50 gb)",
-					Required: true,
-					Validate: config.ValidateOSDisk,
-					ConfigSet: wizard.SetInt(func(c *config.Config, v int) {
-						c.Topology.ControlPlane.DiskGB = v
-						c.Topology.Bootstrap.DiskGB = v
-					}),
-					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.ControlPlane.DiskGB }),
-				},
-			},
+			Fields: nodeResourceFields(&nodeResourceRole{
+				prefix:      "cp",
+				vcpuDefault: "4", vcpuHelp: "okd minimum: 4 vcpus",
+				memDefault: "12288", memHelp: "okd minimum: 8192 mb (8 gb)",
+				diskHelp: "boot disk for control plane nodes (okd minimum: 50 gb)",
+				node:     func(cfg *config.Config) *config.NodeConfig { return &cfg.Topology.ControlPlane },
+			}),
 		},
 		{
 			Title: roleLabelWorkers,
-			Fields: []wizard.FieldDefinition{
-				{
-					Key:       "worker_vcpus",
-					Label:     "vcpus",
-					Default:   "8",
-					Help:      "recommended: 4-16 vcpus",
-					Required:  true,
-					Validate:  config.ValidateCPU,
-					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.Workers.CPU = v }),
-					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.Workers.CPU }),
-				},
-				{
-					Key:       "worker_memory",
-					Label:     "memory (mb)",
-					Default:   "20480",
-					Help:      "recommended: 8192-65536 mb",
-					Required:  true,
-					Validate:  config.ValidateMemory,
-					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.Workers.MemoryMB = v }),
-					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.Workers.MemoryMB }),
-				},
-				{
-					Key:       "worker_disk",
-					Label:     "os disk (gb)",
-					Default:   "50",
-					Help:      "boot disk for worker nodes (okd minimum: 50 gb)",
-					Required:  true,
-					Validate:  config.ValidateOSDisk,
-					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.Workers.DiskGB = v }),
-					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.Workers.DiskGB }),
-				},
-			},
+			Fields: nodeResourceFields(&nodeResourceRole{
+				prefix:      "worker",
+				vcpuDefault: "8", vcpuHelp: "recommended: 4-16 vcpus",
+				memDefault: "20480", memHelp: "recommended: 8192-65536 mb",
+				diskHelp: "boot disk for worker nodes (okd minimum: 50 gb)",
+				node:     func(cfg *config.Config) *config.NodeConfig { return &cfg.Topology.Workers },
+			}),
 		},
 		{
 			Title: fieldDataStorage,
