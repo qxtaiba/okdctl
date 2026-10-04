@@ -26,13 +26,13 @@ type Foldable interface {
 }
 
 // FoldToggleField is the one-line, always-present control a Collapsible
-// section's View renders in place of its own section head: a summary row
-// when collapsed, naming the fold and (via Summary) echoing non-sensitive
-// facts about the fields it hides, or a bare heading row when the section
-// is rendering in full. Enter (via EnterConsumer) flips its sticky expand
-// latch; the form drives the per-render display state separately via
-// SetDisplayExpanded, so a focus- or error-forced expansion never mutates
-// the latch itself.
+// section's View renders in place of its own section head — a summary row
+// naming the fold and (via Summary) echoing non-sensitive facts about the
+// fields it hides while collapsed, a bare heading row while the section
+// renders in full — with enter (via EnterConsumer) flipping its sticky
+// expand latch independently of the form's own per-render display state
+// (SetDisplayExpanded), so a focus- or error-forced expansion never
+// mutates the latch itself.
 type FoldToggleField struct {
 	Label string
 	// Summary, when set, supplies the facts a collapsed row echoes beside
