@@ -278,6 +278,66 @@ func TestProvider_PlanPreview(t *testing.T) {
 	})
 }
 
+// installFakeTerraformBackupOrder records, for every terraform invocation
+// (not just apply), whether a state backup already exists — so a test can
+// assert the backup precedes the FIRST invocation, not merely the apply.
+func installFakeTerraformBackupOrder(t *testing.T, argvLog, backupLog string) {
+	t.Helper()
+	testutil.InstallFakeBin(t, "terraform", `#!/bin/sh
+printf '%s\n' "$*" >> "$TF_TEST_ARGV_LOG"
+if ls terraform.tfstate.*.bak >/dev/null 2>&1; then
+  printf 'present\n' >> "$TF_TEST_BACKUP_LOG"
+else
+  printf 'absent\n' >> "$TF_TEST_BACKUP_LOG"
+fi
+exit 0
+`)
+	t.Setenv("TF_TEST_ARGV_LOG", argvLog)
+	t.Setenv("TF_TEST_BACKUP_LOG", backupLog)
+}
+
+func TestProvider_Provision_BackupPrecedesFirstTerraformInvocation(t *testing.T) {
+	root := t.TempDir()
+	tfDir := filepath.Join(root, "infrastructure", "terraform", "environments", "production")
+	if err := os.MkdirAll(tfDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tfDir, "terraform.tfstate"), []byte(`{"version":4,"resources":[{"type":"x"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	argvLog := filepath.Join(t.TempDir(), "argv.log")
+	backupLog := filepath.Join(t.TempDir(), "backup.log")
+	installFakeTerraformBackupOrder(t, argvLog, backupLog)
+
+	p := New()
+	p.connected = true
+	cfg := &config.Config{
+		Topology: config.TopologyConfig{
+			ControlPlane: config.NodeConfig{Count: 1},
+		},
+		Networking: config.NetworkingConfig{
+			StaticIP: config.StaticIPConfig{Start: "192.168.1.20"},
+		},
+	}
+
+	if err := p.Provision(context.Background(), cfg, ProvisionOptions{ProjectRoot: root, TerraformEnv: "production", AutoApprove: true}); err != nil {
+		t.Fatalf("Provision() = %v; want nil", err)
+	}
+
+	data, err := os.ReadFile(backupLog)
+	if err != nil {
+		t.Fatalf("backup log missing: %v", err)
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	if len(lines) == 0 {
+		t.Fatal("no terraform invocations recorded")
+	}
+	if lines[0] != "present" {
+		t.Errorf("backup status at first terraform invocation = %q; want %q — the state backup must precede init, not just apply", lines[0], "present")
+	}
+}
+
 // installFakeTerraformDispatch fakes terraform: init exits 0, plan exits
 // planExit (-detailed-exitcode semantics), show echoes showStdout.
 func installFakeTerraformDispatch(t *testing.T, planExit int, showStdout string) {
