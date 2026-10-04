@@ -1,15 +1,34 @@
 package cli
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
+	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/lifecycle"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/steps"
 )
+
+func TestWizardDraftSaveFnTakesTheProjectLock(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	configPath := filepath.Join(root, "okdctl.yaml")
+
+	lock, err := runlock.Acquire(root, "deploy")
+	if err != nil {
+		t.Fatalf("acquire project lock: %v", err)
+	}
+	defer lock.Release()
+
+	save := wizardDraftSaveFn(configPath)
+	if err := save(config.DefaultConfig(), wizard.StepIDBasics, "", nil); err == nil {
+		t.Fatal("draft save succeeded while another session held the project lock; it must serialize like saveConfig and persistWizardConfig")
+	}
+}
 
 func TestDemoClusterStatusCarriesNoCredentials(t *testing.T) {
 	st := demoClusterStatus()

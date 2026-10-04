@@ -85,9 +85,7 @@ func runWizardWithMode(cmd *cobra.Command, cfg *config.Config, configExists bool
 		}
 	}
 
-	result, err := runHubSessionWithDraftState(cmd, built.Steps, cfg, func(cfg *config.Config, stepID wizard.StepID, fieldKey string, history map[string][]string) error {
-		return wizarddraft.New(configPath).SaveWithHistory(cfg, wizarddraft.Cursor{StepID: stepID, FieldKey: fieldKey}, history, time.Now())
-	})
+	result, err := runHubSessionWithDraftState(cmd, built.Steps, cfg, wizardDraftSaveFn(configPath))
 
 	// take before anything else reads it: a quit can land while the manage
 	// verb's session is still being assembled on a command goroutine, and take
@@ -118,6 +116,22 @@ func configureDraftHistory(built wizard.BuiltSteps, history map[string][]string)
 		if restorer, ok := step.(interface{ SetFieldHistory(map[string][]string) }); ok {
 			restorer.SetFieldHistory(history)
 		}
+	}
+}
+
+// wizardDraftSaveFn returns the interactive wizard's per-step draft saver,
+// wrapped in the project lock so a concurrent `okdctl deploy` in the same
+// project can't clobber an in-progress draft — the same serialization
+// saveConfig and persistWizardConfig already give the final config write.
+func wizardDraftSaveFn(configPath string) func(*config.Config, wizard.StepID, string, map[string][]string) error {
+	return func(cfg *config.Config, stepID wizard.StepID, fieldKey string, history map[string][]string) error {
+		projectRoot, err := resolveWorkspaceRoot()
+		if err != nil {
+			return err
+		}
+		return withProjectLock(projectRoot, "save wizard draft", func() error {
+			return wizarddraft.New(configPath).SaveWithHistory(cfg, wizarddraft.Cursor{StepID: stepID, FieldKey: fieldKey}, history, time.Now())
+		})
 	}
 }
 
