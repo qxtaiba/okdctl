@@ -5,12 +5,32 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
+
+// TestDemoWaitDelayHonorsEnvOverride pins OKDCTL_DEMO_STEP_DELAY: unset or
+// invalid, the caller's own pace wins; a valid duration overrides it.
+func TestDemoWaitDelayHonorsEnvOverride(t *testing.T) {
+	t.Setenv(demoStepDelayEnv, "")
+	if got := demoWaitDelay(350 * time.Millisecond); got != 350*time.Millisecond {
+		t.Errorf("no override = %v, want the caller's 350ms", got)
+	}
+
+	t.Setenv(demoStepDelayEnv, "not-a-duration")
+	if got := demoWaitDelay(350 * time.Millisecond); got != 350*time.Millisecond {
+		t.Errorf("invalid override = %v, want the caller's 350ms unchanged", got)
+	}
+
+	t.Setenv(demoStepDelayEnv, "2s")
+	if got := demoWaitDelay(350 * time.Millisecond); got != 2*time.Second {
+		t.Errorf("valid override = %v, want 2s", got)
+	}
+}
 
 func TestDemoHooksListNodes(t *testing.T) {
 	hooks := DemoHooks(0)
