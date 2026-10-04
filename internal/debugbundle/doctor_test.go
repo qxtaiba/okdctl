@@ -2,6 +2,7 @@ package debugbundle
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -9,7 +10,7 @@ import (
 )
 
 // TestMain re-execs as a fake `doctor` command (argv[1] == "doctor"): writes
-// markers to stdout/stderr plus a canary env var, exits 1.
+// markers to stdout/stderr plus a canary env var, exits 2.
 func TestMain(m *testing.M) {
 	if len(os.Args) > 1 && os.Args[1] == "doctor" {
 		fmt.Print("fake-doctor-stdout")
@@ -17,7 +18,7 @@ func TestMain(m *testing.M) {
 			fmt.Print(v)
 		}
 		fmt.Fprint(os.Stderr, "fake-doctor-stderr")
-		os.Exit(1)
+		os.Exit(2)
 	}
 	os.Exit(m.Run())
 }
@@ -47,5 +48,14 @@ func TestCollectDoctorOutputFiltersParentEnv(t *testing.T) {
 	}
 	if string(stdout) != "fake-doctor-stdout" {
 		t.Errorf("non-allowlisted env var reached the re-exec: stdout = %q", stdout)
+	}
+}
+
+func TestCollectDoctorOutputPreservesCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, _, err := collectDoctorOutput(ctx)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v", err)
 	}
 }

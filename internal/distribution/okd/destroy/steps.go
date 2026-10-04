@@ -14,7 +14,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox/hostssh"
 	"github.com/qxtaiba/okdctl/internal/sshpin"
-	"github.com/qxtaiba/okdctl/internal/system"
 )
 
 // Step IDs for the destroy phase, ordered as they execute.
@@ -225,9 +224,6 @@ func cleanupFilesSkipReason(opts *Options) string {
 	}
 	if opts.CleanupKind == "" {
 		return "no cleanup type specified"
-	}
-	if !system.DirExists(opts.WorkDir) {
-		return "work directory absent"
 	}
 	return ""
 }

@@ -258,3 +258,13 @@ variable "worker_target_nodes" {
   type        = list(string)
   default     = []
 }
+
+variable "minimum_os_disk_size_gb" {
+  description = "plan-time floor for OS disk sizes (0 disables the guard)"
+  type        = number
+  default     = 0
+  validation {
+    condition     = var.minimum_os_disk_size_gb >= 0
+    error_message = "minimum_os_disk_size_gb must be >= 0."
+  }
+}

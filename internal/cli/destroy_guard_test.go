@@ -237,6 +237,9 @@ func TestRunDestroy_DryRunPreviewsWithoutConfirmation(t *testing.T) {
 	if err := os.MkdirAll(tfDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(workspace.TerraformModuleDir(root), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	argvLog := filepath.Join(t.TempDir(), "tf-argv.log")
 	t.Setenv("TF_ARGV_LOG", argvLog)
 	testutil.InstallFakeBin(t, "terraform",

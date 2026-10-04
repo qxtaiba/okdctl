@@ -19,6 +19,8 @@ func Run(ctx context.Context, steps []WizardStep, cfg *config.Config) (Result, e
 // until the user completes or cancels the flow.
 func RunFlow(ctx context.Context, steps []WizardStep, cfg *config.Config, chrome FlowChrome) (Result, error) {
 	model := NewFlowModel(steps, cfg, chrome)
+	model.flowContext = ctx
+	defer model.shutdown()
 
 	p := tea.NewProgram(model,
 		tea.WithContext(ctx),
@@ -34,7 +36,7 @@ func RunFlow(ctx context.Context, steps []WizardStep, cfg *config.Config, chrome
 	}
 
 	result := m.Result()
-	if result.Completed {
+	if result.Outcome == OutcomeCompleted {
 		result.Config = m.Config()
 	}
 

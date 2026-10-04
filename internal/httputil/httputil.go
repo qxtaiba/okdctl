@@ -71,12 +71,23 @@ func NewWithCA(pool *x509.CertPool, timeout time.Duration) *http.Client {
 	}
 }
 
+// NewWithCAServerName verifies the CA and DNS identity while dialing another address.
+func NewWithCAServerName(pool *x509.CertPool, serverName string, timeout time.Duration) *http.Client {
+	client := NewWithCA(pool, timeout)
+	transport := client.Transport.(*http.Transport)
+	transport.TLSClientConfig.ServerName = serverName
+	return client
+}
+
 // ErrTooManyRedirects is returned by capRedirects after 5 consecutive hops.
 var ErrTooManyRedirects = errors.New("httputil: stopped after 5 redirects")
 
 // ErrCrossHostAuthHeader is returned when a redirect would carry an
 // Authorization header to a different host.
 var ErrCrossHostAuthHeader = errors.New("httputil: refusing cross-host redirect with Authorization header")
+
+// ErrInsecureRedirect identifies a redirect that would downgrade HTTPS to HTTP.
+var ErrInsecureRedirect = errors.New("httputil: refusing HTTPS downgrade redirect")
 
 // capRedirects caps redirects at 5 and blocks cross-host redirects carrying
 // an Authorization header, since Go's stdlib only strips headers it manages
@@ -85,6 +96,12 @@ var ErrCrossHostAuthHeader = errors.New("httputil: refusing cross-host redirect 
 func capRedirects(req *http.Request, via []*http.Request) error {
 	if len(via) >= 5 {
 		return ErrTooManyRedirects
+	}
+	if len(via) == 0 {
+		return nil
+	}
+	if via[len(via)-1].URL.Scheme == "https" && req.URL.Scheme != "https" {
+		return ErrInsecureRedirect
 	}
 	if req.URL.Host != via[0].URL.Host && req.Header.Get("Authorization") != "" {
 		return ErrCrossHostAuthHeader

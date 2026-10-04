@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
+	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/provision"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
@@ -56,7 +57,8 @@ func (r *Runner) preflightIgnitionArtifacts() error {
 // actual worker count or new indices could collide with an unknown node.
 func validateWorkerCountMatchesCluster(nodes []cluster.NodeDetail, want int) error {
 	got := 0
-	for _, n := range nodes {
+	for i := range nodes {
+		n := &nodes[i]
 		if n.Role == nodetypes.RoleWorker {
 			got++
 		}
@@ -99,15 +101,18 @@ func (r *Runner) AddWorkers(ctx context.Context, opts AddOptions) error {
 		return &errtypes.ConfigError{Msg: "add: proxmox provider configuration required"}
 	}
 
-	startIdx := r.Cfg.Topology.Workers.Count
+	startIdx, err := r.addIntentStart(opts.Count)
+	if err != nil {
+		return err
+	}
 	endIdx := startIdx + opts.Count - 1
 	batchLabel := r.workerName(startIdx)
 
 	// Dry-run mutates nothing, so skip beginOp: a stranded marker previews rather than refuses.
 	var marker *OpMarker
-	if !r.DryRun {
+	if !r.DryRun || r.ResumePreview {
 		var err error
-		marker, err = r.beginOp(OpAdd, addBatchMatch(startIdx, endIdx), opts.Acknowledge)
+		marker, err = r.beginIntent(OpAdd, addBatchMatch(startIdx, endIdx), opts.Acknowledge, r.addIntent(startIdx, opts.Count))
 		if err != nil {
 			return err
 		}
@@ -115,28 +120,19 @@ func (r *Runner) AddWorkers(ctx context.Context, opts AddOptions) error {
 	resuming := marker != nil
 
 	plan := addPlan(r.Cfg.Cluster.Name, startIdx, opts.Count)
+	if checker, ok := r.ISO.(interface {
+		ValidateISOPlacement(context.Context, *config.Config) error
+	}); ok {
+		topology := *r.Cfg
+		topology.Topology.Workers.Count = startIdx + opts.Count
+		if err := checker.ValidateISOPlacement(ctx, &topology); err != nil {
+			return err
+		}
+	}
 
-	// Guards assume a clean baseline, so run them only on a fresh op.
 	if !resuming {
-		if err := r.preflightIgnitionArtifacts(); err != nil {
+		if err := r.preflightAdd(ctx, startIdx, opts); err != nil {
 			return err
-		}
-		nodes, err := r.Cluster.ListNodes(ctx)
-		if err != nil {
-			return &errtypes.ClusterError{Msg: msgListNodes, Err: err}
-		}
-		if err := validateWorkerCountMatchesCluster(nodes, startIdx); err != nil {
-			return err
-		}
-
-		delta := r.Cfg.Topology.Workers.MemoryMB * opts.Count
-		if opts.HostTotalMiB > 0 {
-			if err := validateMemoryBudget(opts.HostTotalMiB, opts.HostAllocatedMiB, delta); err != nil {
-				return err
-			}
-		} else if delta > 0 {
-			r.Log.Warn("node: could not verify host memory budget (no proxmox probe); ensure the host has headroom before adding nodes",
-				"delta_mib_total", delta, "nodes", opts.Count)
 		}
 	}
 
@@ -168,8 +164,10 @@ func (r *Runner) AddWorkers(ctx context.Context, opts AddOptions) error {
 	// One batch-scoped join window: revive now, defer teardown before any VM
 	// exists so it fires on every exit path. Teardown doesn't rewrite the op
 	// marker, so a failed batch keeps its per-node resume position.
-	if err := r.mark(OpAdd, batchLabel, StepIgnitionUp); err != nil {
-		return err
+	if !resuming {
+		if err := r.mark(OpAdd, batchLabel, StepIgnitionUp); err != nil {
+			return err
+		}
 	}
 	// Detached from ctx: a cancelled ctx would fail every systemctl call
 	// before it starts, leaving httpd serving the pull-secret-bearing
@@ -282,13 +280,17 @@ func (r *Runner) addOneWorker(ctx context.Context, idx int, marker *OpMarker) er
 // waitWorkerJoined blocks until node registers and reports Ready, approving
 // pending kubelet CSRs each poll since a joining node needs its bootstrap CSR approved first.
 func (r *Runner) waitWorkerJoined(ctx context.Context, node string) error {
+	identities, err := cluster.ExpectedCSRIdentities(r.Cfg, node)
+	if err != nil {
+		return err
+	}
 	stop := r.startProgress(fmt.Sprintf("waiting for %s to join and become ready", node))
 	defer stop()
 
 	approveWarn := logutil.NewDedupWarner(r.Log)
 	var lastReason string
 	ok := func(ctx context.Context) bool {
-		if approved, aerr := r.Cluster.ApprovePendingCSRs(ctx); aerr != nil {
+		if approved, aerr := r.Cluster.ApprovePendingCSRs(ctx, identities...); aerr != nil {
 			approveWarn.Warn(aerr.Error(), "node: csr approval check failed", "err", aerr)
 		} else {
 			approveWarn.Reset()
@@ -302,7 +304,8 @@ func (r *Runner) waitWorkerJoined(ctx context.Context, node string) error {
 			lastReason = "cluster api not reachable"
 			return false
 		}
-		for _, n := range nodes {
+		for i := range nodes {
+			n := &nodes[i]
 			if n.Name == node {
 				if n.Ready {
 					return true
@@ -316,6 +319,41 @@ func (r *Runner) waitWorkerJoined(ctx context.Context, node string) error {
 	}
 	if err := system.WaitForWithTimeout(ctx, "node", node+"-join", ok, r.NodeReadyTimeout, r.Log); err != nil {
 		return &errtypes.ClusterError{Msg: fmt.Sprintf("worker %s did not join and become Ready: %s", node, lastReason), Err: err}
+	}
+	return nil
+}
+
+func (r *Runner) preflightAdd(ctx context.Context, startIdx int, opts AddOptions) error {
+	if err := r.preflightIgnitionArtifacts(); err != nil {
+		return err
+	}
+	nodes, err := r.Cluster.ListNodes(ctx)
+	if err != nil {
+		return &errtypes.ClusterError{Msg: msgListNodes, Err: err}
+	}
+	if err := validateWorkerCountMatchesCluster(nodes, startIdx); err != nil {
+		return err
+	}
+
+	names := make([]string, opts.Count)
+	for i := range names {
+		names[i] = r.workerName(startIdx + i)
+	}
+	hosts, err := r.targetHosts(ctx, nodetypes.RoleWorker, names, false)
+	if err != nil {
+		return err
+	}
+	if err := r.checkAddCapacity(ctx, hosts); err != nil {
+		return err
+	}
+	delta := r.Cfg.Topology.Workers.MemoryMB * opts.Count
+	if opts.HostTotalMiB > 0 && r.Capacity == nil {
+		if err := validateMemoryBudget(opts.HostTotalMiB, opts.HostAllocatedMiB, delta); err != nil {
+			return err
+		}
+	} else if delta > 0 && r.Capacity == nil {
+		r.Log.Warn("node: could not verify host memory budget (no proxmox probe); ensure the host has headroom before adding nodes",
+			"delta_mib_total", delta, "nodes", opts.Count)
 	}
 	return nil
 }

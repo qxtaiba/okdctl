@@ -77,10 +77,33 @@ func WriteEnvFile(path string, creds *ProxmoxCredentials) error {
 		}
 	}
 
+	return writeEnvFileBody(creds, func(data []byte) error {
+		return system.AtomicWrite(path, data, 0o600)
+	})
+}
+
+func writeEnvFileBody(creds *ProxmoxCredentials, write func([]byte) error) error {
+	fields := []struct {
+		key   string
+		value []byte
+	}{
+		{envProxmoxEndpoint, []byte(creds.Endpoint)},
+		{envProxmoxUsername, []byte(creds.Username)},
+		{envProxmoxPassword, creds.Password},
+		{envProxmoxAPIToken, creds.APIToken},
+	}
+	for _, field := range fields {
+		v := field.value
+		quoted := len(v) >= 2 && ((v[0] == '\'' && v[len(v)-1] == '\'') ||
+			(v[0] == '"' && v[len(v)-1] == '"'))
+		if bytes.ContainsAny(v, "\r\n\x00") || !bytes.Equal(v, bytes.TrimSpace(v)) ||
+			quoted || len(field.key)+len(v)+2 >= bufio.MaxScanTokenSize {
+			return &errtypes.AuthError{Msg: "encode env file: " + field.key + " cannot be represented losslessly"}
+		}
+	}
 	data := buildEnvFileBody(creds)
-	err := system.AtomicWrite(path, data, 0o600)
-	clear(data)
-	return err
+	defer clear(data)
+	return write(data)
 }
 
 // buildEnvFileBody serialises creds into KEY=VALUE format; the caller must

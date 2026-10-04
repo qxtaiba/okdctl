@@ -2,6 +2,7 @@ package steps
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -38,7 +39,7 @@ type proxmoxDiscovery struct {
 	ISOs    []string // storage volids of ISO files, e.g. "local:iso/fcos.iso"
 }
 
-func discoverProxmox(cfg *config.Config) (*proxmoxDiscovery, error) {
+func discoverProxmox(parent context.Context, cfg *config.Config) (*proxmoxDiscovery, error) {
 	if cfg.Provider.Proxmox == nil {
 		return nil, fmt.Errorf("no proxmox config")
 	}
@@ -52,7 +53,7 @@ func discoverProxmox(cfg *config.Config) (*proxmoxDiscovery, error) {
 		return nil, fmt.Errorf("missing credentials — enter host, username, and password in the proxmox step")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
 	defer cancel()
 
 	httpClient := httputil.NewOptionalInsecure(px.Insecure, 10*time.Second)
@@ -89,24 +90,24 @@ func discoverProxmox(cfg *config.Config) (*proxmoxDiscovery, error) {
 		}
 	}
 
-	storage, bridges, isos := fetchNodeDetails(ctx, client, targetNode)
+	storage, bridges, isos, detailErr := fetchNodeDetails(ctx, client, targetNode)
 
 	return &proxmoxDiscovery{
 		Nodes:   nodes,
 		Storage: storage,
 		Bridges: bridges,
 		ISOs:    isos,
-	}, nil
+	}, detailErr
 }
 
-// fetchNodeDetails pulls storage/bridges/ISOs, best-effort — endpoint errors
-// are swallowed to nil slices rather than failing the whole discovery.
-func fetchNodeDetails(ctx context.Context, client *proxmox.Client, nodeName string) ([]proxmoxStorage, []proxmoxBridge, []string) {
+// fetchNodeDetails retains successful observations alongside endpoint failures.
+func fetchNodeDetails(ctx context.Context, client *proxmox.Client, nodeName string) ([]proxmoxStorage, []proxmoxBridge, []string, error) {
 	node, err := client.Node(ctx, nodeName)
 	if err != nil {
-		return nil, nil, nil
+		return nil, nil, nil, fmt.Errorf("inspect proxmox node %s: %w", nodeName, err)
 	}
 
+	var failures []error
 	var storage []proxmoxStorage
 	var isoStorageNames []string
 	if stores, err := node.Storages(ctx); err == nil {
@@ -124,6 +125,8 @@ func fetchNodeDetails(ctx context.Context, client *proxmox.Client, nodeName stri
 				isoStorageNames = append(isoStorageNames, s.Name)
 			}
 		}
+	} else {
+		failures = append(failures, fmt.Errorf("list storage: %w", err))
 	}
 
 	var bridges []proxmoxBridge
@@ -135,16 +138,20 @@ func fetchNodeDetails(ctx context.Context, client *proxmox.Client, nodeName stri
 				CIDR: n.CIDR,
 			})
 		}
+	} else {
+		failures = append(failures, fmt.Errorf("list bridges: %w", err))
 	}
 
 	var isos []string
 	for _, storeName := range isoStorageNames {
 		st, err := node.Storage(ctx, storeName)
 		if err != nil {
+			failures = append(failures, fmt.Errorf("inspect ISO storage %s: %w", storeName, err))
 			continue
 		}
 		contents, err := st.GetContent(ctx)
 		if err != nil {
+			failures = append(failures, fmt.Errorf("list ISOs in %s: %w", storeName, err))
 			continue
 		}
 		for _, c := range contents {
@@ -154,7 +161,7 @@ func fetchNodeDetails(ctx context.Context, client *proxmox.Client, nodeName stri
 		}
 	}
 
-	return storage, bridges, isos
+	return storage, bridges, isos, errors.Join(failures...)
 }
 
 func classifyError(err error) error {

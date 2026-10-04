@@ -69,6 +69,7 @@ type DatastoreInfo struct {
 	Name       string
 	TotalBytes uint64
 	AvailBytes uint64
+	Shared     bool
 }
 
 // HostProbe is the read-only snapshot ProbeHost returns; GuestAllocatedBytes
@@ -143,6 +144,7 @@ func ProbeHost(ctx context.Context, opts *ProbeOptions) (*HostProbe, error) {
 				Name:       name,
 				TotalBytes: st.Total,
 				AvailBytes: st.Avail,
+				Shared:     st.Shared != 0,
 			})
 		}
 	}
@@ -186,7 +188,7 @@ func mapVMStates(resources proxmox.ClusterResources, vmids []int) map[int]nodety
 	}
 	states := make(map[int]nodetypes.VMState, len(vmids))
 	for _, r := range resources {
-		if r.Type != "qemu" || !want[r.VMID] {
+		if r.Type != resourceTypeQEMU || !want[r.VMID] {
 			continue
 		}
 		state := nodetypes.VMState(r.Status)
@@ -289,3 +291,6 @@ func normalizeEndpoint(endpoint string) string {
 	}
 	return "https://" + e
 }
+
+// AvailGiB converts observed free storage to the capacity guard's GiB unit.
+func (d *DatastoreInfo) AvailGiB() int { return int(d.AvailBytes / (1024 * 1024 * 1024)) } //nolint:gosec // G115: GiB-scale values fit int on supported 64-bit targets

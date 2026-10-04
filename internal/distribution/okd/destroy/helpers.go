@@ -38,47 +38,45 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, cfg *config.Config, o
 		return &errtypes.ClusterError{Msg: msg}
 	}
 
-	// Snapshot before Init: init may rewrite terraform_version on schema migration.
-	snapPath, snapErr := tf.SnapshotState(ctx)
-	if snapErr != nil {
-		return &errtypes.ClusterError{Msg: "terraform destroy: state snapshot failed", Err: snapErr}
-	}
-
-	if err := tf.Init(ctx); err != nil {
-		return tf.WithLockHint(&errtypes.ClusterError{Msg: "terraform init failed", Err: err})
-	}
-
-	p.warnTopologyDrift(ctx, tf, cfg, len(opts.TerraformTargets) > 0)
-
-	// prevent_destroy on the master resource is lifted for exactly this
-	// destroy via a transient module override, removed on every exit path.
 	moduleDir := workspace.TerraformModuleDir(opts.ProjectRoot)
-	overridePath, ovrErr := terraform.WriteDestroyOverride(moduleDir)
-	if ovrErr != nil {
-		p.Log.Warn("destroy: could not write the transient prevent_destroy override; terraform will refuse to destroy master vms", "err", ovrErr)
-	} else {
-		defer func() {
-			if rmErr := terraform.RemoveDestroyOverride(moduleDir); rmErr != nil {
-				p.Log.Warn("destroy: could not remove the transient prevent_destroy override — delete it by hand or every non-destroy terraform run will refuse",
-					"path", overridePath, "err", rmErr)
-			}
-		}()
-	}
 
-	p.Log.Info("terraform: destroying infrastructure", "env", opts.TerraformEnv)
-	p.Log.Warn("terraform: this operation cannot be undone")
-
-	if err := tf.Destroy(ctx, terraform.DestroyOptions{
-		AutoApprove: opts.AutoApprove,
-		Parallelism: opts.Parallelism,
-		Targets:     opts.TerraformTargets,
-		UsePlan:     true, // use safer plan-then-apply approach
-	}); err != nil {
-		msg := "terraform destroy failed"
-		if snapPath != "" {
-			msg = fmt.Sprintf("terraform destroy failed (state backup: %s)", snapPath)
+	// Init can rewrite state during schema migration, so it belongs after the backup.
+	err := terraform.WithStateRecovery(ctx, tf, "terraform destroy", func() error {
+		if err := tf.Init(ctx); err != nil {
+			return tf.WithLockHint(&errtypes.ClusterError{Msg: "terraform init failed", Err: err})
 		}
-		return tf.WithLockHint(terraform.WithPreventDestroyHint(&errtypes.ClusterError{Msg: msg, Err: err}, moduleDir))
+
+		p.warnTopologyDrift(ctx, tf, cfg, len(opts.TerraformTargets) > 0)
+
+		// prevent_destroy on the master resource is lifted for exactly this
+		// destroy via a transient module override, removed on every exit path.
+		overridePath, ovrErr := terraform.WriteDestroyOverride(moduleDir)
+		if ovrErr != nil {
+			p.Log.Warn("destroy: could not write the transient prevent_destroy override; terraform will refuse to destroy master vms", "err", ovrErr)
+		} else {
+			defer func() {
+				if rmErr := terraform.RemoveDestroyOverride(moduleDir); rmErr != nil {
+					p.Log.Warn("destroy: could not remove the transient prevent_destroy override — delete it by hand or every non-destroy terraform run will refuse",
+						"path", overridePath, "err", rmErr)
+				}
+			}()
+		}
+
+		p.Log.Info("terraform: destroying infrastructure", "env", opts.TerraformEnv)
+		p.Log.Warn("terraform: this operation cannot be undone")
+
+		if err := tf.Destroy(ctx, terraform.DestroyOptions{
+			AutoApprove: opts.AutoApprove,
+			Parallelism: opts.Parallelism,
+			Targets:     opts.TerraformTargets,
+			UsePlan:     true, // use safer plan-then-apply approach
+		}); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return terraform.WithPreventDestroyHint(err, moduleDir)
 	}
 
 	if err := tf.CleanupPlans(); err != nil {

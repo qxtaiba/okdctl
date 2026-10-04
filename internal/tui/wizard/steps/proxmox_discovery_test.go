@@ -75,7 +75,7 @@ func TestDiscoverProxmox_Success(t *testing.T) {
 	server := newFakeProxmoxServer(t, "pve2")
 	defer server.Close()
 
-	got, err := discoverProxmox(testProxmoxConfig(server.URL))
+	got, err := discoverProxmox(t.Context(), testProxmoxConfig(server.URL))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -130,7 +130,7 @@ func TestDiscoverProxmox_NodesEndpointFailures(t *testing.T) {
 			server := httptest.NewServer(mux)
 			defer server.Close()
 
-			_, err := discoverProxmox(testProxmoxConfig(server.URL))
+			_, err := discoverProxmox(t.Context(), testProxmoxConfig(server.URL))
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("err = %v; want substring %q", err, tc.want)
 			}
@@ -154,7 +154,7 @@ func TestDiscoverProxmox_ValidationBranches(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := discoverProxmox(tc.cfg)
+			_, err := discoverProxmox(t.Context(), tc.cfg)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Errorf("err = %v; want substring %q", err, tc.want)
 			}
@@ -177,8 +177,11 @@ func TestFetchNodeDetails_PartialFailure(t *testing.T) {
 	defer server.Close()
 
 	client := proxmox.NewClient(server.URL + "/api2/json")
-	storage, bridges, isos := fetchNodeDetails(context.Background(), client, "pve1")
+	storage, bridges, isos, err := fetchNodeDetails(context.Background(), client, "pve1")
 
+	if err == nil || !strings.Contains(err.Error(), "storage") {
+		t.Fatalf("lost partial failure: %v", err)
+	}
 	if storage != nil {
 		t.Errorf("storage = %+v; want nil after storage endpoint 500", storage)
 	}

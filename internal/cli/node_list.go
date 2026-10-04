@@ -129,7 +129,8 @@ func loadNodeListSideData(cfg *config.Config, projectRoot string) nodeListSideDa
 
 func buildNodeListEntries(nodes []cluster.NodeDetail, cfg *config.Config, side nodeListSideData) []nodeListEntry {
 	entries := make([]nodeListEntry, 0, len(nodes))
-	for _, n := range nodes {
+	for i := range nodes {
+		n := &nodes[i]
 		e := nodeListEntry{Name: n.Name, Role: n.Role, Ready: n.Ready}
 		if idx, ok := cluster.NodeIndex(n.Name); ok {
 			e.TFIndex = &idx

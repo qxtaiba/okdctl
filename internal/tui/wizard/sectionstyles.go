@@ -24,16 +24,16 @@ type SectionStyles struct {
 func NewSectionStyles(width int) SectionStyles {
 	return SectionStyles{
 		Header: lipgloss.NewStyle().
-			Foreground(tui.ColorCyan500).
+			Foreground(tui.ColorAccent).
 			Bold(true),
 		Separator: lipgloss.NewStyle().
-			Foreground(tui.ColorSlate700).
+			Foreground(tui.ColorBorder).
 			Render(strings.Repeat("┄", width-4)),
 		ThickSeparator: lipgloss.NewStyle().
-			Foreground(tui.ColorSlate600).
+			Foreground(tui.ColorBorder).
 			Render(strings.Repeat("═", width-4)),
 		Label: lipgloss.NewStyle().
-			Foreground(tui.ColorSlate400).
+			Foreground(tui.ColorTextDim).
 			Width(18),
 		Value: lipgloss.NewStyle().
 			Foreground(tui.ColorText),

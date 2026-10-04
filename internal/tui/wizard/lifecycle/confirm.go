@@ -72,7 +72,7 @@ func (s *ConfirmStep) View(width, height int) string {
 
 	titleStyle := lipgloss.NewStyle().Foreground(tui.ColorError).Bold(true)
 	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
-	promptStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate300)
+	promptStyle := lipgloss.NewStyle().Foreground(tui.ColorText)
 
 	names := make([]string, 0, len(s.st.Plan.Nodes))
 	for i := range s.st.Plan.Nodes {

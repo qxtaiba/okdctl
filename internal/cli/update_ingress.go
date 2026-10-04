@@ -3,6 +3,8 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -39,7 +41,7 @@ affected controllers.
 
 Run this after deploying a LoadBalancer provider (e.g., MetalLB).`,
 	Example: `  okdctl update-ingress
-  okdctl update-ingress --yes --keep-haproxy
+  okdctl update-ingress --yes --confirm-cluster=homelab --keep-haproxy
   okdctl update-ingress --dry-run`,
 	Args: cobra.NoArgs,
 	RunE: runUpdateIngress,
@@ -55,31 +57,32 @@ func init() {
 
 // runUpdateIngressDryRun previews update-ingress mutations, probing
 // dnsmasq/haproxy state to label steps that are already no-ops.
-func runUpdateIngressDryRun(ctx context.Context, cfg *config.Config) error {
-	logutil.Info("dry-run: update-ingress for cluster",
-		logutil.LF("cluster", cfg.Cluster.Name), logutil.LF("domain", cfg.Cluster.Domain))
-	logutil.Info("would: query IngressControllers (oc get ingresscontroller -n openshift-ingress-operator)")
-	logutil.Info("would: wait for LoadBalancer IPs on router-* services in openshift-ingress")
+func runUpdateIngressDryRun(ctx context.Context, cfg *config.Config, out io.Writer) error {
+	var preview strings.Builder
+	fmt.Fprintf(&preview, "dry-run: update-ingress for cluster %s (%s)\n", cfg.Cluster.Name, cfg.Cluster.Domain)
+	fmt.Fprintln(&preview, "would: query IngressControllers (oc get ingresscontroller -n openshift-ingress-operator)")
+	fmt.Fprintln(&preview, "would: wait for LoadBalancer IPs on router-* services in openshift-ingress")
 
 	isBootstrap, err := dns.IsBootstrapDNS(cfg)
 	if err != nil {
 		return fmt.Errorf("dry-run: probe dnsmasq state: %w", err)
 	}
 	if isBootstrap {
-		logutil.Info("would: deploy production dnsmasq config pointing *.apps at LoadBalancer IPs")
+		fmt.Fprintln(&preview, "would: deploy production dnsmasq config pointing *.apps at LoadBalancer IPs")
 	} else {
-		logutil.Info("would: deploy production dnsmasq config pointing *.apps at LoadBalancer IPs (no-op: dns already cut over)")
+		fmt.Fprintln(&preview, "would: deploy production dnsmasq config pointing *.apps at LoadBalancer IPs (no-op: dns already cut over)")
 	}
 
 	if !updateIngressKeepHAProxy {
 		if system.IsServiceActive(ctx, "haproxy") {
-			logutil.Info("would: stop and disable haproxy on the bastion (if all controllers are LB-type)")
+			fmt.Fprintln(&preview, "would: stop and disable haproxy on the bastion (if all controllers are LB-type)")
 		} else {
-			logutil.Info("would: stop and disable haproxy on the bastion (no-op: haproxy already stopped)")
+			fmt.Fprintln(&preview, "would: stop and disable haproxy on the bastion (no-op: haproxy already stopped)")
 		}
 	}
-	logutil.Info("dry-run: re-run without --dry-run to execute update-ingress")
-	return nil
+	fmt.Fprintln(&preview, "dry-run: re-run without --dry-run to execute update-ingress")
+	_, err = io.WriteString(out, preview.String())
+	return err
 }
 
 func buildConvertConfirm(ctx context.Context, yes bool) func([]string) bool {
@@ -110,7 +113,7 @@ func runUpdateIngress(cmd *cobra.Command, _ []string) error {
 	}
 
 	if updateIngressDryRun {
-		return runUpdateIngressDryRun(ctx, cfg)
+		return runUpdateIngressDryRun(ctx, cfg, cmd.OutOrStdout())
 	}
 
 	if err := confirmClusterMatches(updateIngressYes, updateIngressConfirmCluster, cfg.Cluster.Name, "update-ingress"); err != nil {

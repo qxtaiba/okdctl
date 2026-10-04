@@ -217,23 +217,30 @@ func validateAndRestartDnsmasq(ctx context.Context, configName string) error {
 
 	// restore reverts to backup, or on first deploy (no backup) removes the
 	// drop-in to avoid leaving broken root-owned config.
-	restore := func() string {
+	restore := func() (string, error) {
 		if system.FileExists(backupPath) {
 			// No chmod: CopyFile preserves mode; chmod would follow symlinks.
-			_ = system.CopyFile(backupPath, configPath)
-			return "previous config restored"
+			if err := system.CopyFile(backupPath, configPath); err != nil {
+				return "restore failed", err
+			}
+			return "previous config restored", nil
 		}
-		_ = os.Remove(configPath)
-		return "rejected config removed"
+		if err := os.Remove(configPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return "remove rejected config failed", err
+		}
+		return "rejected config removed", nil
 	}
 
 	if err := validateDnsmasqConfigFn(ctx); err != nil {
-		outcome := restore()
-		return fmt.Errorf("dnsmasq config validation failed — %s: %w", outcome, err)
+		outcome, restoreErr := restore()
+		return fmt.Errorf("dnsmasq config validation failed — %s: %w", outcome, errors.Join(err, restoreErr))
 	}
 
 	if err := restartDnsmasqFn(ctx); err != nil {
-		outcome := restore()
+		outcome, restoreErr := restore()
+		if restoreErr != nil {
+			return fmt.Errorf("restart dnsmasq — %s: %w", outcome, errors.Join(err, restoreErr))
+		}
 		// Restart again so the service converges; ctx is detached so a Ctrl-C
 		// killing the first restart can't kill this one too.
 		rCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), recoveryRestartTimeout)

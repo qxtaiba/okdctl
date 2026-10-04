@@ -252,3 +252,22 @@ func TestFirstMatch(t *testing.T) {
 		t.Errorf("firstMatch(no options) = %q, want empty", got)
 	}
 }
+
+func TestUnstartedDiscoverySnapshotIsReleased(t *testing.T) {
+	cfg := newProxmoxTestConfig()
+	cfg.Provider.Proxmox.Password.Set("fixture-password")
+	step := NewNodePlacementStep()
+	step.ShouldShow(cfg)
+	step.Init()
+	copyBytes := step.ownedPasswords[0].Bytes()
+	step.Release()
+	for _, b := range copyBytes {
+		if b != 0 {
+			t.Fatal("unstarted command retained plaintext")
+		}
+	}
+	if string(cfg.Provider.Proxmox.Password.Bytes()) != "fixture-password" {
+		t.Fatal("release changed caller credentials")
+	}
+	cfg.Provider.Proxmox.Password.Zeroize()
+}

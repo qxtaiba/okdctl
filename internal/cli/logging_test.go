@@ -1,6 +1,9 @@
 package cli
 
 import (
+	"bytes"
+	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -184,5 +187,41 @@ func TestConfigureLogging_NoDefaultSinkForReadOnlyCmds(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, logutil.DefaultLogFileName)); !os.IsNotExist(err) {
 		t.Fatalf("okdctl.log created for a read-only command: stat err = %v", err)
+	}
+}
+
+func TestFileLoggerPolicyAndTerminalFailure(t *testing.T) {
+	oldSink, oldFormat, oldLevel := runLogSink, logFormat, logLevel
+	oldQuiet, oldVerbose := logQuiet, logVerbose
+	oldProgress := logutil.ProgressBarsEnabled()
+	t.Cleanup(func() {
+		runLogSink, logFormat, logLevel = oldSink, oldFormat, oldLevel
+		logQuiet, logVerbose = oldQuiet, oldVerbose
+		logutil.SetProgressBarsEnabled(oldProgress)
+	})
+	var buf bytes.Buffer
+	runLogSink, logFormat, logLevel = &buf, tui.FormatJSON, "debug"
+	logQuiet, logVerbose = false, false
+	fileOnlySlog().Debug("diagnostic", "password", "hidden-value")
+	var record map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &record); err != nil {
+		t.Fatal(err)
+	}
+	if record["password"] != "[redacted]" || record["run_id"] != logutil.RunID() {
+		t.Fatalf("unexpected record: %v", record)
+	}
+	buf.Reset()
+	logQuiet = true
+	fileOnlySlog().Info("suppressed")
+	if buf.Len() != 0 {
+		t.Fatal("quiet logger wrote info")
+	}
+	logutil.SetProgressBarsEnabled(true)
+	announceFailure(errors.New("terminal failure"))
+	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &record); err != nil {
+		t.Fatal(err)
+	}
+	if record["msg"] != "command failed" {
+		t.Fatalf("missing failure: %v", record)
 	}
 }

@@ -68,7 +68,8 @@ normal use.
 **What it checks:** Resolves the effective bin dir (OKDCTL_BIN_DIR env >
 `deployment.bin_dir` in `okdctl.yaml` > `/usr/local/bin`) and verifies that
 exact directory is present in `$PATH`. The setup phase installs `oc`,
-`openshift-install`, and `terraform` there; they must be reachable after
+`openshift-install`, and downloaded tools there; Terraform is installed
+through the host package manager. These tools must be reachable after
 installation. Membership is checked component-wise via `filepath.SplitList`,
 so `/home/user/bin` does not false-positive against `/home/user/bin-archived`.
 When the config file cannot be loaded, the detail is suffixed with
@@ -144,10 +145,10 @@ mkdir -p ~/bin
 **What it checks:** Probes for three categories of binaries using `exec.LookPath`:
 
 - **Host tools** (`curl`, `ssh`, `git`) — must already be installed; missing = `[fail]`.
-- **Installable CLIs** (`oc`, `openshift-install`, `terraform`) — downloaded by
+- **Installable CLIs** (`oc`, `openshift-install`) — downloaded by
   setup into the configured bin dir (see [bin dir](#bin-dir); defaults to
   `/usr/local/bin`); missing = `[warn]`.
-- **System packages** (`coreos-installer`, `haproxy`, `dnsmasq`, `apache`/`httpd`/`apache2`)
+- **System packages** (`terraform`, `coreos-installer`, `haproxy`, `dnsmasq`, `apache`/`httpd`/`apache2`)
   — installed by setup via `dnf`/`apt`; missing = `[warn]`.
 
 **Fail message (per missing host tool):**

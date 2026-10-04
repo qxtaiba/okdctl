@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -53,6 +54,11 @@ func loadExistingCert(certPath, keyPath, ip string) (certPEM, keyPEM []byte, ok 
 	}
 	keyRaw, err := os.ReadFile(keyPath)
 	if err != nil {
+		return nil, nil, false
+	}
+
+	if _, err := tls.X509KeyPair(certRaw, keyRaw); err != nil {
+		clear(keyRaw)
 		return nil, nil, false
 	}
 

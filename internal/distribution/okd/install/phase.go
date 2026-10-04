@@ -114,7 +114,7 @@ func (p *Phase) DeployInfrastructure(ctx context.Context, cfg *config.Config, op
 	)
 	defer prov.ZeroizeEnv()
 	if err := prov.Connect(ctx, cfg); err != nil {
-		return &errtypes.NetworkError{Msg: "connect to Proxmox", Err: err}
+		return fmt.Errorf("connect to Proxmox: %w", err)
 	}
 	defer func() { _ = prov.Disconnect(ctx) }()
 

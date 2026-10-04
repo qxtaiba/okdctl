@@ -45,6 +45,9 @@ func (f *fakePVE) actions() []string {
 func (f *fakePVE) start(t *testing.T) *PowerCycler {
 	t.Helper()
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api2/json/cluster/resources", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `{"data":[{"vmid":101,"type":"qemu","node":"pve1"}]}`)
+	})
 	mux.HandleFunc("GET /api2/json/nodes/pve1/status", func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprint(w, `{"data":{}}`)
 	})
@@ -234,5 +237,19 @@ func TestPowerCycleOptionsRedacted(t *testing.T) {
 	}
 	if got := (*PowerCycleOptions)(nil).String(); got != "PowerCycleOptions(nil)" {
 		t.Errorf("nil String() = %q", got)
+	}
+}
+
+func TestPowerCycleResolvesMigratedVM(t *testing.T) {
+	f := &fakePVE{vmStatus: "running"}
+	pc := f.start(t)
+	if err := pc.PowerCycleVM(t.Context(), "previous-host", fakeVMID); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.actions(); !slices.Equal(got, []string{actStop, actStart}) {
+		t.Fatalf("actions=%v", got)
+	}
+	if _, err := pc.VMOwner(t.Context(), 999); err == nil {
+		t.Fatal("missing VM owner accepted")
 	}
 }

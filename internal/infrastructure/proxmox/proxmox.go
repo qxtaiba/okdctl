@@ -212,12 +212,7 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 		PlanFile:    filepath.Join(p.terraformExec.WorkDir(), terraform.PlanFileName),
 		AutoApprove: opts.AutoApprove,
 	}
-	snapPath, snapErr := p.terraformExec.SnapshotState(ctx)
-	if snapErr != nil {
-		return &errtypes.ClusterError{Msg: "provision: state snapshot failed", Err: snapErr}
-	}
-
-	applyErr := p.terraformExec.Apply(ctx, applyOpts)
+	applyErr := terraform.WithStateRecovery(ctx, p.terraformExec, "terraform apply", func() error { return p.terraformExec.Apply(ctx, applyOpts) })
 	stopSpinner()
 	if applyErr != nil {
 		if errors.Is(ctx.Err(), context.Canceled) {
@@ -226,11 +221,7 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 			return fmt.Errorf("terraform apply interrupted: %w", errors.Join(ctx.Err(), applyErr))
 		}
 		p.logger.Warn("terraform: apply failed; partial infrastructure may exist. run 'okdctl destroy' to clean up", "err", applyErr)
-		msg := "terraform apply failed"
-		if snapPath != "" {
-			msg = fmt.Sprintf("terraform apply failed (state backup: %s)", snapPath)
-		}
-		return &errtypes.ClusterError{Msg: msg, Err: applyErr}
+		return applyErr
 	}
 
 	nodes, err := p.planProvisionedNodes(cfg)

@@ -44,6 +44,12 @@ func (r *Runner) Stop(ctx context.Context, opts StopOptions) error {
 	workers := namesByIndex(nodes, nodetypes.RoleWorker, true, r.Log)
 	masters := mastersByIndexAsc(nodes, r.Log)
 
+	if _, err := r.targetHosts(ctx, nodetypes.RoleWorker, workers, true); err != nil {
+		return err
+	}
+	if _, err := r.targetHosts(ctx, nodetypes.RoleMaster, masters, true); err != nil {
+		return err
+	}
 	plan := clusterPowerPlan(OpStop, r.Cfg.Cluster.Name, workers, masters)
 
 	r.reportSignerExpiry(ctx)

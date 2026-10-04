@@ -33,7 +33,7 @@ func TestOpStepSelectsOperations(t *testing.T) {
 func TestOpStepMarkerAddsResumeOptionAndArmsAck(t *testing.T) {
 	st := &State{
 		Cfg:    config.DefaultConfig(),
-		Marker: &node.OpMarker{Op: node.OpResize, Target: "homelab-master0", Step: node.StepPowerCycle},
+		Marker: &node.OpMarker{Op: node.OpResize, Target: "homelab-master0", Step: node.StepPowerCycle, Intent: &node.OpIntent{Scope: "/homelab-master0", MemoryMB: 24576, CPU: 4}},
 	}
 	s := NewOpStep(st)
 	if err := s.Apply(nil); err != nil {
@@ -62,7 +62,7 @@ func TestOpStepMarkerAddsResumeOptionAndArmsAck(t *testing.T) {
 func TestOpStepResumeRemoveSeedsTarget(t *testing.T) {
 	st := &State{
 		Cfg:    config.DefaultConfig(),
-		Marker: &node.OpMarker{Op: node.OpRemove, Target: "homelab-worker2", Step: node.StepDrain},
+		Marker: &node.OpMarker{Op: node.OpRemove, Target: "homelab-worker2", Step: node.StepDrain, Intent: &node.OpIntent{Scope: "homelab-worker2"}},
 	}
 	s := NewOpStep(st)
 	if err := s.Apply(nil); err != nil {
@@ -70,5 +70,49 @@ func TestOpStepResumeRemoveSeedsTarget(t *testing.T) {
 	}
 	if !st.Resume || st.Op != node.OpRemove || st.Target != "homelab-worker2" {
 		t.Fatalf("resume remove: Resume=%v Op=%v Target=%q", st.Resume, st.Op, st.Target)
+	}
+}
+
+func TestResumeRestoresRoleAndDisruption(t *testing.T) {
+	st := &State{Cfg: config.DefaultConfig(), Marker: &node.OpMarker{Op: node.OpResize, Target: "homelab-master1", Intent: &node.OpIntent{Scope: "master/", MemoryMB: 24576, CPU: 4, OSDiskGB: 100, RequestedMemoryMB: 24576, RequestedOSDiskGB: 100, SkipDrain: true}}}
+	s := NewOpStep(st)
+	if err := s.Apply(nil); err != nil {
+		t.Fatal(err)
+	}
+	if st.Scope.Role != "master" || st.Scope.Node != "" || st.MemoryMB != 24576 || st.OSDiskGB != 100 || !st.SkipDrain {
+		t.Fatalf("lost approved request: %+v", st)
+	}
+	if NewParamsStep(st).ShouldShow(st.Cfg) {
+		t.Fatal("resume can edit recorded intent")
+	}
+	st.Marker.Intent.DiskOnly = true
+	st.Marker.Intent.RequestedMemoryMB = 0
+	if err := s.Apply(nil); err != nil {
+		t.Fatal(err)
+	}
+	if st.MemoryMB != 0 || st.CPU != 0 || !st.DiskOnly() {
+		t.Fatal("disk-only resume became disruptive")
+	}
+}
+
+func TestLegacyMarkerOffersFreshOperationOnly(t *testing.T) {
+	st := &State{Cfg: config.DefaultConfig(), Marker: &node.OpMarker{Op: node.OpResize}}
+	s := NewOpStep(st)
+	if err := s.Apply(nil); err != nil {
+		t.Fatal(err)
+	}
+	if st.Resume || !st.Ack {
+		t.Fatal("legacy intent was inferred")
+	}
+}
+
+func TestResumePreservesOmittedCPU(t *testing.T) {
+	st := &State{Cfg: config.DefaultConfig(), Marker: &node.OpMarker{Op: node.OpResize, Intent: &node.OpIntent{Scope: "worker/", MemoryMB: 16384, CPU: 4, RequestedMemoryMB: 16384}}}
+	s := NewOpStep(st)
+	if err := s.Apply(nil); err != nil {
+		t.Fatal(err)
+	}
+	if st.MemoryMB != 16384 || st.CPU != 0 || st.OSDiskGB != 0 {
+		t.Fatal("resume manufactured an unrequested CPU or disk change")
 	}
 }

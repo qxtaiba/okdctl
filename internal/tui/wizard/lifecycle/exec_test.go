@@ -1,9 +1,12 @@
 package lifecycle
 
 import (
+	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
@@ -14,35 +17,50 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
-// pump replays bubbletea's cmd loop to StepCompleteMsg, dropping spinner ticks so it terminates.
 func pump(t *testing.T, s *ExecStep, first tea.Cmd) tea.Msg {
 	t.Helper()
-	queue := []tea.Cmd{first}
-	for range 50 {
-		if len(queue) == 0 {
-			t.Fatal("command queue drained before completion")
-		}
-		cmd := queue[0]
-		queue = queue[1:]
+	ctx, cancel := context.WithCancel(t.Context())
+	s.SetVisitContext(ctx)
+	var workers sync.WaitGroup
+	defer func() { cancel(); workers.Wait() }()
+	messages := make(chan tea.Msg, 32)
+	dispatch := func(cmd tea.Cmd) {
 		if cmd == nil {
-			continue
+			return
 		}
-		msg := cmd()
-		if batch, ok := msg.(tea.BatchMsg); ok {
-			queue = append(queue, batch...)
-			continue
-		}
-		if _, ok := msg.(spinner.TickMsg); ok {
-			continue
-		}
-		if _, ok := msg.(wizard.StepCompleteMsg); ok {
-			return msg
-		}
-		_, next := s.Update(msg)
-		queue = append(queue, next)
+		workers.Go(func() {
+			msg := cmd()
+			select {
+			case messages <- msg:
+			case <-ctx.Done():
+			}
+		})
 	}
-	t.Fatal("execution never completed")
-	return nil
+	dispatch(first)
+	timer := time.NewTimer(5 * time.Second)
+	defer timer.Stop()
+	for {
+		select {
+		case <-timer.C:
+			t.Fatal("execution did not finish")
+			return nil
+		case msg := <-messages:
+			if batch, ok := msg.(tea.BatchMsg); ok {
+				for _, cmd := range batch {
+					dispatch(cmd)
+				}
+				continue
+			}
+			if _, ok := msg.(spinner.TickMsg); ok {
+				continue
+			}
+			if _, ok := msg.(wizard.StepCompleteMsg); ok {
+				return msg
+			}
+			_, next := s.Update(msg)
+			dispatch(next)
+		}
+	}
 }
 
 func execState() *State {

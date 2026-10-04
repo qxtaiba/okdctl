@@ -11,7 +11,10 @@ import (
 // defaultPowerCycleTimeout bounds each stop/start task within a power-cycle.
 const defaultPowerCycleTimeout = 5 * time.Minute
 
-const powerTaskPollInterval = 2 * time.Second
+const (
+	powerTaskPollInterval = 2 * time.Second
+	resourceTypeQEMU      = "qemu"
+)
 
 // PowerCycleOptions carries the Proxmox API credentials for a power-cycle;
 // Password/APIToken are caller-owned bytes the caller must Zeroize.
@@ -74,12 +77,16 @@ func (pc *PowerCycler) timeout() time.Duration {
 }
 
 // vm builds a timeout-scoped client; go-proxmox populates status/config on lookup.
-func (pc *PowerCycler) vm(ctx context.Context, node string, vmid int, timeout time.Duration) (*proxmox.VirtualMachine, error) {
+func (pc *PowerCycler) vm(ctx context.Context, _ string, vmid int, timeout time.Duration) (*proxmox.VirtualMachine, error) {
 	client, err := newProxmoxClient(pc.opts.Endpoint, pc.opts.Username, pc.opts.Password, pc.opts.APIToken, pc.opts.Insecure, timeout)
 	if err != nil {
 		return nil, err
 	}
 
+	node, err := observedVMOwner(ctx, client, vmid)
+	if err != nil {
+		return nil, err
+	}
 	n, err := client.Node(ctx, node)
 	if err != nil {
 		return nil, fmt.Errorf("get proxmox node %s: %w", node, err)
@@ -171,4 +178,37 @@ func (pc *PowerCycler) StartVM(ctx context.Context, node string, vmid int) error
 		return fmt.Errorf("wait for vm %d start: %w", vmid, err)
 	}
 	return nil
+}
+
+// VMOwner resolves current ownership independently of desired placement after HA migration.
+func (pc *PowerCycler) VMOwner(ctx context.Context, vmid int) (string, error) {
+	client, err := newProxmoxClient(pc.opts.Endpoint, pc.opts.Username, pc.opts.Password, pc.opts.APIToken, pc.opts.Insecure, pc.timeout())
+	if err != nil {
+		return "", err
+	}
+	return observedVMOwner(ctx, client, vmid)
+}
+
+func observedVMOwner(ctx context.Context, client *proxmox.Client, vmid int) (string, error) {
+	var resources proxmox.ClusterResources
+	if err := client.Get(ctx, "/cluster/resources?type=vm", &resources); err != nil {
+		return "", fmt.Errorf("observe vm %d ownership: %w", vmid, err)
+	}
+	owner := ""
+	for _, resource := range resources {
+		if resource == nil {
+			return "", fmt.Errorf("vm %d ownership response contains null resource", vmid)
+		}
+		if vmid < 0 || resource.VMID != uint64(vmid) || resource.Type != resourceTypeQEMU {
+			continue
+		}
+		if owner != "" || resource.Node == "" {
+			return "", fmt.Errorf("vm %d ownership is ambiguous", vmid)
+		}
+		owner = resource.Node
+	}
+	if owner == "" {
+		return "", fmt.Errorf("vm %d ownership is unknown", vmid)
+	}
+	return owner, nil
 }

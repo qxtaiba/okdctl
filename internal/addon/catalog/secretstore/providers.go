@@ -22,7 +22,7 @@ var validVaultName = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 func validateHTTPURL(field, raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return fmt.Sprintf("%s must be a valid http:// or https:// URL, got %q", field, raw)
+		return fmt.Sprintf("%s must be a valid http:// or https:// URL", field)
 	}
 	return ""
 }

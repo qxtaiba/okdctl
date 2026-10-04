@@ -132,6 +132,7 @@ func ValidateWithOptions(cfg *Config, opts ValidationOptions) *ValidationResult 
 		return result
 	}
 
+	cfg = Effective(cfg)
 	for _, v := range validators {
 		if opts.Scope.HasScope(v.scope) {
 			v.validate(cfg, result)

@@ -39,7 +39,8 @@ func TestRemoveWorkerResumesBetweenApplyAndPersist(t *testing.T) {
 
 	r, _, _ := seedRunner(t, fc, ftf, cfg)
 	r.DryRun = false
-	seedMarker(t, r, OpRemove, target, StepTFApply)
+	intent := removeIntent(target, RemoveOptions{})
+	seedMarker(t, r, OpRemove, target, StepTFApply, intent)
 
 	if err := r.RemoveWorker(context.Background(), target, RemoveOptions{}); err != nil {
 		t.Fatalf("resumed remove: %v", err)
@@ -79,7 +80,8 @@ func TestRemoveWorkerResumesBetweenPersistAndDeleteMarker(t *testing.T) {
 
 	r, _, _ := seedRunner(t, fc, ftf, cfg)
 	r.DryRun = false
-	seedMarker(t, r, OpRemove, target, StepTFApply)
+	intent := removeIntent(target, RemoveOptions{})
+	seedMarker(t, r, OpRemove, target, StepTFApply, intent)
 
 	if err := r.RemoveWorker(context.Background(), target, RemoveOptions{}); err != nil {
 		t.Fatalf("resumed remove: %v", err)
@@ -123,7 +125,8 @@ func TestRemoveWorkerResumesBetweenApplyAndDeleteNode(t *testing.T) {
 
 	r, _, _ := seedRunner(t, fc, ftf, cfg)
 	r.DryRun = false
-	seedMarker(t, r, OpRemove, target, StepDeleteK8s)
+	intent := removeIntent(target, RemoveOptions{})
+	seedMarker(t, r, OpRemove, target, StepDeleteK8s, intent)
 
 	if err := r.RemoveWorker(context.Background(), target, RemoveOptions{}); err != nil {
 		t.Fatalf("resumed remove: %v", err)
@@ -163,7 +166,8 @@ func TestResizeResumesMidMasterRoll(t *testing.T) {
 	r, _, _ := seedRunner(t, fc, ftf, cfg)
 	r.DryRun = false
 	r.Power = fp
-	seedMarker(t, r, OpResize, "master1", StepPowerCycle)
+	intent := r.resizeIntent(ResizeScope{Role: nodetypes.RoleMaster}, nodetypes.RoleMaster, ResizeOptions{MemoryMB: 24576})
+	seedMarker(t, r, OpResize, "master1", StepPowerCycle, intent)
 
 	if err := r.Resize(context.Background(), ResizeScope{Role: nodetypes.RoleMaster}, ResizeOptions{MemoryMB: 24576}); err != nil {
 		t.Fatalf("resumed resize: %v", err)
@@ -427,7 +431,8 @@ func TestResizeResumesMidPowerCycleWithMemberDown(t *testing.T) {
 	r.DryRun = false
 	r.Power = fp
 	r.EtcdGateTimeout = 1 * time.Second // fails fast if the pre-gate wrongly runs against the down member
-	seedMarker(t, r, OpResize, "master1", StepPowerCycle)
+	intent := r.resizeIntent(ResizeScope{Role: nodetypes.RoleMaster}, nodetypes.RoleMaster, ResizeOptions{MemoryMB: 24576})
+	seedMarker(t, r, OpResize, "master1", StepPowerCycle, intent)
 
 	if err := r.Resize(context.Background(), ResizeScope{Role: nodetypes.RoleMaster}, ResizeOptions{MemoryMB: 24576}); err != nil {
 		t.Fatalf("resume with the marked master powered off must not deadlock on the pre-etcd gate: %v", err)
@@ -533,7 +538,8 @@ func TestResizeResumeFromStepDiskGrowRunsBothEtcdGates(t *testing.T) {
 	r, _, _ := seedRunner(t, fc, ftf, cfg)
 	r.DryRun = false
 	r.Disk = fg
-	seedMarker(t, r, OpResize, "master0", StepDiskGrow)
+	intent := r.resizeIntent(ResizeScope{Role: nodetypes.RoleMaster}, nodetypes.RoleMaster, ResizeOptions{OSDiskGB: 100})
+	seedMarker(t, r, OpResize, "master0", StepDiskGrow, intent)
 
 	// Role scope, not a single-node scope: --os-disk-gb is refused against a
 	// single node (see TestResizeRefusesOSDiskGBOnSingleNode), so this test's

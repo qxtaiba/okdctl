@@ -4,6 +4,7 @@ package secretstore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -171,32 +172,31 @@ func (s *secretStore) Verify(ctx context.Context, env *addon.Environment) error 
 	ns := defaultNamespace
 	for _, name := range p.secretNames() {
 		result, err := env.Exec.Run(ctx, "oc", "get", "secret", name, "-n", ns)
-		if err != nil || result.ExitCode != 0 {
-			return fmt.Errorf("secret %s not found in namespace %s", name, ns)
+		if err != nil {
+			return fmt.Errorf("get secret %s in namespace %s: %w", name, ns, err)
+		}
+		if result.ExitCode != 0 {
+			return fmt.Errorf("get secret %s in namespace %s: %w", name, ns, executor.NewExitError(ctx, "oc get secret", result.ExitCode, result.Stderr))
 		}
 	}
 	return nil
 }
 
-// Uninstall deletes the provider's auth Secrets and the ESO SecretStore CRD.
-// Deletion failures are logged but do not abort the sequence.
+// Uninstall attempts all provider resource deletions and joins failures.
 func (s *secretStore) Uninstall(ctx context.Context, env *addon.Environment) error {
-	p, kind := resolveProvider(env.AddonConfig.Settings)
-	ns := defaultNamespace
-	env.Logger.Info("secretstore: removing provider resources", "provider", string(kind))
-	if p != nil {
-		for _, name := range p.secretNames() {
-			// Run returns nil error even on non-zero exit; the exit code must
-			// be checked or a failed delete passes silently.
-			if res, err := env.Exec.Run(ctx, "oc", "delete", "secret", name, "-n", ns); err != nil || res.ExitCode != 0 {
-				env.Logger.Warn("secretstore: delete secret failed", "name", name, "exit", res.ExitCode, "err", err)
+	provider, _ := resolveProvider(env.AddonConfig.Settings)
+	var failures []error
+	if provider != nil {
+		for _, name := range provider.secretNames() {
+			if _, err := env.Exec.RunChecked(ctx, "oc", "delete", "secret", name, "-n", defaultNamespace, "--ignore-not-found"); err != nil {
+				failures = append(failures, fmt.Errorf("delete secret %s: %w", name, err))
 			}
 		}
 	}
-	if res, err := env.Exec.Run(ctx, "oc", "delete", "secretstore", esoSecretStoreName, "-n", ns); err != nil || res.ExitCode != 0 {
-		env.Logger.Warn("secretstore: delete SecretStore CRD failed", "name", esoSecretStoreName, "exit", res.ExitCode, "err", err)
+	if _, err := env.Exec.RunChecked(ctx, "oc", "delete", "secretstore", esoSecretStoreName, "-n", defaultNamespace, "--ignore-not-found"); err != nil {
+		failures = append(failures, fmt.Errorf("delete secretstore: %w", err))
 	}
-	return nil
+	return errors.Join(failures...)
 }
 
 // RequiredTools lists the external binaries needed to decrypt source files.
@@ -310,4 +310,8 @@ func secretManifestFromFile(ctx context.Context, env *addon.Environment, filePat
 		return "", fmt.Errorf("build %s secret: %w", secretName, err)
 	}
 	return manifest, nil
+}
+
+func (s *secretStore) PrepareRollback(ctx context.Context, env *addon.Environment) (func(context.Context) error, error) {
+	return addon.RollbackForNewNamespace(ctx, env, "external-secrets", func(cleanup context.Context) error { return s.Uninstall(cleanup, env) })
 }

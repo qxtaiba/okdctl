@@ -183,7 +183,7 @@ func (r *Runner) preflightCompact(ctx context.Context, workers, masters []string
 		pf.verdicts = append(pf.verdicts, v)
 	}
 
-	pf.memErr = r.projectCompactMemory(len(workers), len(masters), opts)
+	pf.memErr = r.projectCompactPlacement(ctx, workers, masters, opts)
 	if pf.memErr != nil && pf.blockErr == nil {
 		pf.blockErr = pf.memErr
 	}
@@ -361,7 +361,8 @@ func namesByIndex(nodes []cluster.NodeDetail, role nodetypes.NodeRole, ascending
 		idx  int
 	}
 	var items []ni
-	for _, n := range nodes {
+	for i := range nodes {
+		n := &nodes[i]
 		if n.Role != role {
 			continue
 		}

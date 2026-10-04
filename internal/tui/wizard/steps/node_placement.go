@@ -2,6 +2,7 @@ package steps
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/spinner"
@@ -49,6 +50,7 @@ type NodePlacementStep struct {
 	loadingSpinner spinner.Model
 	discovery      *proxmoxDiscovery
 	discoveryErr   error
+	ownedPasswords []*config.SecretBytes
 
 	// inner is the post-discovery form; fields below alias into it, nil if
 	// discovery didn't surface that field.
@@ -98,12 +100,22 @@ func (s *NodePlacementStep) Init() tea.Cmd {
 		return nil
 	}
 	s.phase = phaseDiscovering
-	return tea.Batch(s.loadingSpinner.Tick, s.fetchDiscovery)
+	return tea.Batch(s.loadingSpinner.Tick, s.fetchDiscovery())
 }
 
-func (s *NodePlacementStep) fetchDiscovery() tea.Msg {
-	disc, err := discoverProxmox(s.cfg)
-	return discoveryCompleteMsg{discovery: disc, err: err}
+func (s *NodePlacementStep) fetchDiscovery() tea.Cmd {
+	parent := s.Context()
+	cfg := *s.cfg
+	px := *cfg.Provider.Proxmox
+	px.Password = config.SecretBytes{}
+	px.Password.Set(string(cfg.Provider.Proxmox.Password.Bytes()))
+	cfg.Provider.Proxmox = &px
+	s.ownedPasswords = append(s.ownedPasswords, &px.Password)
+	return func() tea.Msg {
+		defer px.Password.Zeroize()
+		disc, err := discoverProxmox(parent, &cfg)
+		return discoveryCompleteMsg{discovery: disc, err: err}
+	}
 }
 
 // buildInnerStep builds the form's dropdowns, retaining typed field pointers so
@@ -223,13 +235,18 @@ func selectFieldGroup(fields []*components.SelectField) *components.InputGroup {
 // input to the built inner form once discovery completes.
 func (s *NodePlacementStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.KeyPressMsg:
+		if msg.String() == "r" && s.phase == phasePlacing {
+			cmd := s.Init()
+			return s, cmd
+		}
 	case discoveryCompleteMsg:
 		s.discovery = msg.discovery
 		s.discoveryErr = msg.err
 		s.phase = phasePlacing
 
 		var nodeNames []string
-		if msg.err == nil && msg.discovery != nil && len(msg.discovery.Nodes) > 0 {
+		if msg.discovery != nil && len(msg.discovery.Nodes) > 0 {
 			nodeNames = make([]string, len(msg.discovery.Nodes))
 			for i, n := range msg.discovery.Nodes {
 				nodeNames[i] = n.Name
@@ -277,7 +294,34 @@ func (s *NodePlacementStep) View(width, height int) string {
 		return s.loadingSpinner.View() + " discovering proxmox infrastructure..."
 	}
 
-	noteStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500).Italic(true).PaddingLeft(2)
+	header := s.discoveryHeader()
+
+	if s.inner != nil {
+		return header + s.inner.View(width)
+	}
+	return header
+}
+
+// SetSize propagates the viewport width to the placement fields.
+func (s *NodePlacementStep) SetSize(width, height int) {
+	s.BaseStep.SetSize(width, height)
+	if s.inner != nil {
+		s.inner.SetWidth(width)
+	}
+}
+
+// FocusBounds includes the discovery summary above the current field.
+func (s *NodePlacementStep) FocusBounds(_, _ int) (top, bottom int, ok bool) {
+	if s.inner == nil || s.phase == phaseDiscovering {
+		return 0, 0, false
+	}
+	top, bottom, ok = s.inner.FocusBounds()
+	offset := strings.Count(s.discoveryHeader(), "\n")
+	return top + offset, bottom + offset, ok
+}
+
+func (s *NodePlacementStep) discoveryHeader() string {
+	noteStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim).Italic(true).PaddingLeft(2)
 	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning).PaddingLeft(2)
 
 	var header string
@@ -288,9 +332,6 @@ func (s *NodePlacementStep) View(width, height int) string {
 			len(s.discovery.Nodes), len(s.discovery.Storage), len(s.discovery.Bridges))) + "\n\n"
 	}
 
-	if s.inner != nil {
-		return header + s.inner.View(width)
-	}
 	return header
 }
 
@@ -423,20 +464,22 @@ func filterStorageByContent(storage []proxmoxStorage, content string) []string {
 }
 
 func firstMatch(options []string, current, fallback string) string {
-	if current != "" {
-		for _, o := range options {
-			if o == current {
-				return current
-			}
-		}
+	if current != "" && slices.Contains(options, current) {
+		return current
 	}
-	for _, o := range options {
-		if o == fallback {
-			return fallback
-		}
+	if slices.Contains(options, fallback) {
+		return fallback
 	}
 	if len(options) > 0 {
 		return options[0]
 	}
 	return ""
+}
+
+// Release clears snapshots retained by commands that never started after UI exit.
+func (s *NodePlacementStep) Release() {
+	for _, password := range s.ownedPasswords {
+		password.Zeroize()
+	}
+	s.ownedPasswords = nil
 }

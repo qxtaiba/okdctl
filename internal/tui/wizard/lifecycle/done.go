@@ -67,7 +67,7 @@ func (s *DoneStep) View(width, height int) string {
 func (s *DoneStep) successView(width int) string {
 	st := wizard.NewSectionStyles(width)
 	okStyle := lipgloss.NewStyle().Foreground(tui.ColorSuccess).Bold(true)
-	dimStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
+	dimStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim)
 
 	out := okStyle.Render(tui.IconSuccess+" "+completionHeadline(s.st.Op)) + "\n\n"
 	out += st.KVPair("cluster", s.st.Cfg.Cluster.Name) + "\n"
@@ -103,7 +103,7 @@ func (s *DoneStep) successView(width int) string {
 func (s *DoneStep) failureView() string {
 	failStyle := lipgloss.NewStyle().Foreground(tui.ColorError).Bold(true)
 	textStyle := lipgloss.NewStyle().Foreground(tui.ColorText)
-	dimStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
+	dimStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim)
 
 	return failStyle.Render(tui.IconError+" "+string(s.st.Op)+" failed") + "\n\n" +
 		textStyle.Render(s.st.Result.Error()) + "\n\n" +

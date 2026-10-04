@@ -1,6 +1,7 @@
 package lifecycle
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -16,7 +17,7 @@ import (
 
 func loadedTarget(t *testing.T, st *State, nodes []cluster.NodeDetail) *TargetStep {
 	t.Helper()
-	s := NewTargetStep(st, Hooks{ListNodes: func() ([]cluster.NodeDetail, error) { return nodes, nil }})
+	s := NewTargetStep(st, Hooks{ListNodes: func(context.Context) ([]cluster.NodeDetail, error) { return nodes, nil }})
 	cmds := s.Init()
 	if cmds == nil {
 		t.Fatal("Init must fetch nodes")
@@ -85,7 +86,7 @@ func TestTargetStepEnterCompletes(t *testing.T) {
 
 func TestTargetStepLoadErrorBlocksCompletion(t *testing.T) {
 	st := &State{Cfg: config.DefaultConfig(), Op: node.OpResize}
-	s := NewTargetStep(st, Hooks{ListNodes: func() ([]cluster.NodeDetail, error) {
+	s := NewTargetStep(st, Hooks{ListNodes: func(context.Context) ([]cluster.NodeDetail, error) {
 		return nil, errors.New("cluster unreachable")
 	}})
 	_ = s.Init()

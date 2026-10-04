@@ -14,8 +14,8 @@ run on workers with a non-schedulable control plane (ingress outage).
 
 An interrupted removal records an op marker and resumes automatically on the
 next 'okdctl node remove' of the same worker, skipping already-completed
-steps. --acknowledge-interrupted-op overrides a marker left by a different op
-or node instead of refusing.
+steps. Resume requires the same scope and options. Changed intent or a legacy
+marker requires --acknowledge-interrupted-op to proceed fresh.
 
 ```
 okdctl node remove <name> [flags]
@@ -31,7 +31,7 @@ okdctl node remove <name> [flags]
 ### Options
 
 ```
-      --acknowledge-interrupted-op   override a stranded marker left by a different op or node and proceed fresh
+      --acknowledge-interrupted-op   override a stranded marker or changed operation intent and proceed fresh
       --confirm-cluster string       required with --yes; must equal the config cluster name
       --drain-timeout string         per-node drain timeout (default "10m")
       --dry-run                      run guards and the plan gate without mutating anything

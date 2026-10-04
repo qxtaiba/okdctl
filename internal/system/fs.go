@@ -103,10 +103,8 @@ func CopyFile(src, dst string) error {
 	return CopyFileMode(src, dst, info.Mode().Perm())
 }
 
-// CopyFileMode copies src to dst, creating dst with mode applied at open
-// time so a permissive umask never leaves it briefly world-readable. Close
-// errors on the destination are surfaced rather than discarded, since a
-// failing Close can mask an unflushed buffer or fsync problem.
+// CopyFileMode atomically replaces dst with a synced copy of src at mode.
+// Existing destination symlinks are refused and old readers retain the old inode.
 func CopyFileMode(src, dst string, mode os.FileMode) error {
 	sourceFile, err := os.Open(src)
 	if err != nil {
@@ -114,63 +112,15 @@ func CopyFileMode(src, dst string, mode os.FileMode) error {
 	}
 	defer func() { _ = sourceFile.Close() }()
 
-	if err := EnsureDirForFile(dst); err != nil {
-		return fmt.Errorf("create destination directory: %w", err)
-	}
-
-	// O_NOFOLLOW rejects a symlink at dst; under sudo re-exec the open runs
-	// as root, so following one would write to an attacker-chosen path.
-	if info, err := os.Lstat(dst); err == nil {
-		if info.Mode()&os.ModeSymlink != 0 {
-			return &errtypes.AuthError{
-				Msg: fmt.Sprintf("write target %q is a symlink; refusing to write", dst),
-				Err: os.ErrPermission,
-			}
+	return atomicWriteFile(dst, 0o600, func(f *os.File) error {
+		if _, err := io.Copy(f, sourceFile); err != nil {
+			return fmt.Errorf("copy file contents: %w", err)
 		}
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return &errtypes.AuthError{
-			Msg: fmt.Sprintf("lstat write target %q before write", dst),
-			Err: err,
+		if err := f.Chmod(mode); err != nil {
+			return fmt.Errorf("set file permissions: %w", err)
 		}
-	}
-
-	destFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC|syscall.O_NOFOLLOW, mode)
-	if err != nil {
-		return fmt.Errorf("create destination file: %w", err)
-	}
-
-	closed := false
-	success := false
-	defer func() {
-		if !closed {
-			_ = destFile.Close()
-		}
-		if !success {
-			_ = os.Remove(dst)
-		}
-	}()
-
-	if _, err := io.Copy(destFile, sourceFile); err != nil {
-		return fmt.Errorf("copy file contents: %w", err)
-	}
-
-	if err := destFile.Sync(); err != nil {
-		return fmt.Errorf("sync destination file: %w", err)
-	}
-
-	// O_CREATE won't change pre-existing dst permissions; chmod via the open fd
-	// instead so it can't follow a symlink.
-	if err := destFile.Chmod(mode); err != nil {
-		return fmt.Errorf("set file permissions: %w", err)
-	}
-
-	if err := destFile.Close(); err != nil {
-		return fmt.Errorf("close destination file: %w", err)
-	}
-	closed = true
-
-	success = true
-	return nil
+		return nil
+	})
 }
 
 // SafeRemove removes path recursively, returning nil if it doesn't already
@@ -201,6 +151,15 @@ func ExpandPath(path string) string {
 // never a partial write. The temp file is created next to path (not in
 // os.TempDir) since rename is only atomic on the same filesystem.
 func AtomicWrite(path string, data []byte, perm os.FileMode) error {
+	return atomicWriteFile(path, perm, func(f *os.File) error {
+		if _, err := f.Write(data); err != nil {
+			return fmt.Errorf("write data: %w", err)
+		}
+		return nil
+	})
+}
+
+func atomicWriteFile(path string, perm os.FileMode, write func(*os.File) error) error {
 	if err := EnsureDirForFile(path); err != nil {
 		return fmt.Errorf("create directory: %w", err)
 	}
@@ -233,9 +192,9 @@ func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 		}
 	}()
 
-	if _, err := tmpFile.Write(data); err != nil {
+	if err := write(tmpFile); err != nil {
 		_ = tmpFile.Close()
-		return fmt.Errorf("write data: %w", err)
+		return err
 	}
 
 	if err := tmpFile.Sync(); err != nil {

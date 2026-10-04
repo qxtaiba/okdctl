@@ -1,6 +1,7 @@
 package lifecycle
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -16,7 +17,7 @@ import (
 
 func previewWith(t *testing.T, st *State, plan *node.OpPlan, err error) *PreviewStep {
 	t.Helper()
-	s := NewPreviewStep(st, Hooks{DryRun: func(*State) (*node.OpPlan, error) { return plan, err }})
+	s := NewPreviewStep(st, Hooks{DryRun: func(context.Context, *State) (*node.OpPlan, error) { return plan, err }})
 	_ = s.Init()
 	updated, _ := s.Update(dryRunDoneMsg{plan: plan, err: err})
 	return updated.(*PreviewStep)
@@ -94,7 +95,7 @@ func TestPreviewDiskOnlyEntries(t *testing.T) {
 		Scope: node.ResizeScope{Role: nodetypes.RoleMaster},
 	}
 	plan := &node.OpPlan{
-		Op: node.OpResize, Cluster: "homelab", OSDiskGB: 100,
+		Op: node.OpResize, Cluster: "homelab", OSDiskGB: 100, ResizeMode: node.ResizeLiveDisk,
 		Nodes: []node.PlanNode{{
 			Name: "homelab-master0", Role: nodetypes.RoleMaster,
 			TFAddress: "m.master[0]", Action: terraform.PlanActionUpdate,
@@ -153,4 +154,21 @@ func TestPreviewBlocksEscWhileDryRunInFlight(t *testing.T) {
 	if updated.(*PreviewStep).InterceptBack() {
 		t.Error("esc must work again once the dry-run finished")
 	}
+}
+
+func TestPreviewCancellationReachesDryRun(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	started, finished := make(chan struct{}), make(chan struct{})
+	step := NewPreviewStep(resizePreviewState(), Hooks{DryRun: func(ctx context.Context, _ *State) (*node.OpPlan, error) {
+		close(started)
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}})
+	step.SetVisitContext(ctx)
+	batch := step.Init()().(tea.BatchMsg)
+	go func() { defer close(finished); batch[len(batch)-1]() }()
+	<-started
+	cancel()
+	<-finished
 }

@@ -19,38 +19,52 @@ func mustWriteEnv(t *testing.T, path, body string, perm os.FileMode) {
 }
 
 func TestWriteEnvFile_BufferZeroedAfterWrite(t *testing.T) {
-	const pw = "s3cret-pw"
-	creds := &ProxmoxCredentials{
-		Endpoint: "https://pve:8006",
-		Username: "root@pam",
-		Password: []byte(pw),
+	for _, fail := range []bool{false, true} {
+		t.Run(map[bool]string{false: "success", true: "failure"}[fail], func(t *testing.T) {
+			creds := &ProxmoxCredentials{Password: []byte("test-secret")}
+			var retained []byte
+			want := errors.New("write failure")
+			err := writeEnvFileBody(creds, func(data []byte) error {
+				retained = data
+				if !bytes.Contains(data, creds.Password) {
+					t.Fatal("missing password")
+				}
+				if fail {
+					return want
+				}
+				return nil
+			})
+			if (fail && !errors.Is(err, want)) || (!fail && err != nil) {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(retained) == 0 || !bytes.Equal(retained, make([]byte, len(retained))) {
+				t.Fatal("write buffer not cleared")
+			}
+			if string(creds.Password) != "test-secret" {
+				t.Fatal("caller password mutated")
+			}
+		})
 	}
+}
 
-	t.Run("WriteEnvFile writes password and pre-call slice is independent", func(t *testing.T) {
-		dir := t.TempDir()
-		path := filepath.Join(dir, "zeroize.env")
-
-		pre := buildEnvFileBody(creds)
-		if !bytes.Contains(pre, []byte(pw)) {
-			t.Fatalf("pre-call body missing password; got %q", pre)
-		}
-
-		if err := WriteEnvFile(path, creds); err != nil {
-			t.Fatalf("WriteEnvFile: %v", err)
-		}
-
-		body, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read: %v", err)
-		}
-		if !bytes.Contains(body, []byte(pw)) {
-			t.Errorf("written file missing password; got %q", body)
-		}
-
-		if !bytes.Contains(pre, []byte(pw)) {
-			t.Errorf("pre slice was zeroed by WriteEnvFile; allocations must be independent")
-		}
-	})
+func TestWriteEnvFileRejectsLossyValues(t *testing.T) {
+	for _, value := range []string{"secret\nPROXMOX_VE_INSECURE=true", "secret\rvalue", "secret\x00value", " secret", "secret ", "\"secret\"", "'secret'", strings.Repeat("s", 65536)} {
+		t.Run(value[:min(len(value), 20)], func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "credentials.env")
+			mustWriteEnv(t, path, "original", 0o600)
+			err := WriteEnvFile(path, &ProxmoxCredentials{Password: []byte(value)})
+			if err == nil {
+				t.Fatal("accepted unrepresentable value")
+			}
+			if strings.Contains(err.Error(), value) {
+				t.Fatal("error exposes credential")
+			}
+			body, readErr := os.ReadFile(path)
+			if readErr != nil || string(body) != "original" {
+				t.Fatal("destination changed")
+			}
+		})
+	}
 }
 
 func TestEnvFilePath(t *testing.T) {

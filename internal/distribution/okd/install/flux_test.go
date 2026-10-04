@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/executor"
@@ -219,4 +221,33 @@ func TestSetupClusterAccess_CtxCancelledLeavesDestUntouched(t *testing.T) {
 	if _, statErr := os.Stat(dest); !os.IsNotExist(statErr) {
 		t.Errorf("dest must not exist after ctx cancel; stat: %v", statErr)
 	}
+}
+
+func TestSetupClusterAccessBackupFailurePreservesDestination(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		home := stubHomeDir(t)
+		dest := filepath.Join(home, ".kube", "config")
+		if err := os.MkdirAll(filepath.Dir(dest), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(dest, []byte("old credentials"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		backup := dest + ".backup." + time.Now().Format("20060102-150405")
+		if err := os.Mkdir(backup, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		p := newInstallPhase(t)
+		err := p.SetupClusterAccess(context.Background(), seedKubeconfig(t, "new credentials"))
+		if err == nil || !strings.Contains(err.Error(), "backup existing kubeconfig") {
+			t.Fatalf("error = %v", err)
+		}
+		got, err := os.ReadFile(dest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != "old credentials" {
+			t.Fatalf("destination overwritten: %q", got)
+		}
+	})
 }

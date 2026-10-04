@@ -102,9 +102,9 @@ func TestDestroySteps_StepListAndSkipWiring(t *testing.T) {
 			wantSkip: map[distribution.StepID]bool{StepCleanupFiles: true},
 		},
 		{
-			name:     "absent workdir gates file cleanup",
+			name:     "absent workdir still checks independent cleanup",
 			mutate:   func(_ *config.Config, o *Options) { o.WorkDir = filepath.Join(o.WorkDir, "does-not-exist") },
-			wantSkip: map[distribution.StepID]bool{StepCleanupFiles: true},
+			wantSkip: map[distribution.StepID]bool{StepCleanupFiles: false},
 		},
 		{
 			name:     "skip-firewall gates firewall cleanup",
@@ -264,7 +264,7 @@ func TestDestroyExecute_RunsTerraformDestroy(t *testing.T) {
 		t.Fatalf("terraform invocations = %d (%q); want 4 (drift probes, plan, apply)", len(lines), lines)
 	}
 	for _, i := range []int{0, 1} {
-		if !strings.HasPrefix(lines[i], "state list module.okd_cluster.proxmox_virtual_environment_vm.") {
+		if lines[i] != "state list" {
 			t.Errorf("argv[%d] = %q; want a topology drift probe (state list)", i, lines[i])
 		}
 	}
@@ -317,7 +317,7 @@ func TestDestroyExecute_TerraformFailureStillReachesSummary(t *testing.T) {
 	if results[0].Success || results[0].Error == nil {
 		t.Errorf("infra step: Success=%v Error=%v; want failed with error", results[0].Success, results[0].Error)
 	}
-	for _, i := range []int{1, 2, 3} {
+	for _, i := range []int{1, 3} {
 		if !results[i].Skipped {
 			t.Errorf("%s: Skipped = false; want true after terraform failure", results[i].StepID)
 		}

@@ -88,9 +88,11 @@ func NewDistributionStep() *DistributionStep {
 
 // Init starts the release fetch and spins the loading indicator.
 func (s *DistributionStep) Init() tea.Cmd {
+	s.phase = phaseVersionLoading
+	s.loadError = nil
 	return tea.Batch(
 		s.loadingSpinner.Tick,
-		s.fetchVersions,
+		s.fetchVersions(),
 	)
 }
 
@@ -123,6 +125,9 @@ func (s *DistributionStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 
 func (s *DistributionStep) handleKeyMsg(msg tea.KeyPressMsg) (wizard.WizardStep, tea.Cmd) {
 	switch {
+	case key.Matches(msg, key.NewBinding(key.WithKeys("r"))):
+		cmd := s.Init()
+		return s, cmd
 	case key.Matches(msg, key.NewBinding(key.WithKeys("enter"))):
 		return s.handleEnterKey()
 	case key.Matches(msg, key.NewBinding(key.WithKeys("tab"))):
@@ -135,6 +140,11 @@ func (s *DistributionStep) handleKeyMsg(msg tea.KeyPressMsg) (wizard.WizardStep,
 
 func (s *DistributionStep) handleEnterKey() (wizard.WizardStep, tea.Cmd) {
 	selected := s.versionSelector.Selected()
+	if selected.ID == "" {
+		return s, func() tea.Msg {
+			return wizard.ErrorSetMsg{Error: fmt.Errorf("no release selected; press r to retry loading")}
+		}
+	}
 
 	if strings.HasPrefix(selected.ID, "minor:") {
 		minor := s.getMinorFromOptionID(selected.ID)
@@ -230,7 +240,7 @@ func (s *DistributionStep) View(width, height int) string {
 func (s *DistributionStep) viewLoadingPhase() string {
 	loading := s.loadingSpinner.View() + " fetching available okd versions..."
 	return lipgloss.NewStyle().
-		Foreground(tui.ColorSlate400).
+		Foreground(tui.ColorTextDim).
 		Render(loading)
 }
 
@@ -245,13 +255,16 @@ func (s *DistributionStep) viewVersionPhase() string {
 		content.WriteString(errMsg)
 		content.WriteString("\n\n")
 		content.WriteString(lipgloss.NewStyle().
-			Foreground(tui.ColorSlate500).
+			Foreground(tui.ColorTextDim).
 			Italic(true).
-			Render("please check your network connection and try again."))
+			Render("check your network connection; press r to retry."))
 		content.WriteString("\n\n")
 		return content.String()
 	}
 
+	if len(s.okdSeries) == 0 {
+		return "no OKD versions found. press r to retry."
+	}
 	content.WriteString(s.versionSelector.View())
 	content.WriteString("\n\n")
 
@@ -259,16 +272,16 @@ func (s *DistributionStep) viewVersionPhase() string {
 	if s.expandedMinor >= 0 {
 		hints = append(hints,
 			lipgloss.NewStyle().
-				Foreground(tui.ColorSlate600).
+				Foreground(tui.ColorBorder).
 				Render(fmt.Sprintf("showing patch versions for 4.%d", s.expandedMinor)),
 			lipgloss.NewStyle().
-				Foreground(tui.ColorSlate500).
+				Foreground(tui.ColorTextDim).
 				Italic(true).
 				Render("press tab to collapse"),
 		)
 	} else {
 		hints = append(hints, lipgloss.NewStyle().
-			Foreground(tui.ColorSlate500).
+			Foreground(tui.ColorTextDim).
 			Italic(true).
 			Render("press tab to expand patch versions"))
 	}
@@ -345,4 +358,12 @@ func (s *DistributionStep) DisplayTitle() string {
 	default:
 		return s.BaseStep.DisplayTitle()
 	}
+}
+
+// FocusBounds keeps the selected release visible while navigating.
+func (s *DistributionStep) FocusBounds(width, _ int) (top, bottom int, ok bool) {
+	if s.phase != phaseVersionSelect || s.loadError != nil {
+		return 0, 0, false
+	}
+	return s.versionSelector.FocusBounds(width)
 }

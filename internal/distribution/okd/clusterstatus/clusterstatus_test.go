@@ -2,12 +2,15 @@ package clusterstatus
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/addon"
+	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
@@ -31,11 +34,49 @@ func (f *fakeClient) RawGet(context.Context, string) (string, error) {
 	return "", f.healthzErr
 }
 
-func (f *fakeClient) GetJSON(_ context.Context, args ...string) (out string, found bool, err error) {
-	if len(args) >= 2 && args[1] == "nodes" {
-		return f.nodesJSON, false, f.nodesErr
+func (f *fakeClient) ListNodes(context.Context) ([]cluster.NodeDetail, error) {
+	if f.nodesErr != nil {
+		return nil, f.nodesErr
 	}
-	return f.operatorsJSON, false, f.operatorsErr
+	var list struct{ Items []json.RawMessage }
+	if err := json.Unmarshal([]byte(f.nodesJSON), &list); err != nil {
+		return nil, err
+	}
+	var nodes []cluster.NodeDetail
+	for _, raw := range list.Items {
+		n, err := cluster.ParseNode(raw)
+		if err != nil {
+			return nil, err
+		}
+		nodes = append(nodes, n)
+	}
+	return nodes, nil
+}
+
+func (f *fakeClient) ClusterOperatorHealth(context.Context) (cluster.OperatorHealth, error) {
+	if f.operatorsErr != nil {
+		return cluster.OperatorHealth{}, f.operatorsErr
+	}
+	var list struct {
+		Items []struct {
+			Status struct {
+				Conditions []struct{ Type, Status string }
+			}
+		}
+	}
+	if err := json.Unmarshal([]byte(f.operatorsJSON), &list); err != nil {
+		return cluster.OperatorHealth{}, err
+	}
+	var health cluster.OperatorHealth
+	for _, op := range list.Items {
+		for _, c := range op.Status.Conditions {
+			if c.Type == "Degraded" && c.Status == "True" {
+				health.Degraded = append(health.Degraded, "fixture")
+				break
+			}
+		}
+	}
+	return health, nil
 }
 
 type fakeVerifier struct {
@@ -58,7 +99,7 @@ func (f *fakePower) VMStates(context.Context) (map[int]nodetypes.VMState, error)
 func boolSource(v bool) func() bool { return func() bool { return v } }
 
 func TestParseNode(t *testing.T) {
-	n, err := ParseNode([]byte(readyMasterJSON))
+	n, err := cluster.ParseNode([]byte(readyMasterJSON))
 	if err != nil {
 		t.Fatalf("ParseNode: %v", err)
 	}
@@ -72,7 +113,7 @@ func TestParseNode(t *testing.T) {
 		t.Error("Ready = false; want true")
 	}
 
-	if _, err := ParseNode([]byte("{broken")); err == nil {
+	if _, err := cluster.ParseNode([]byte("{broken")); err == nil {
 		t.Error("corrupt JSON: want error, got nil")
 	}
 }
@@ -274,26 +315,21 @@ func TestTerraformStateHasResources(t *testing.T) {
 }
 
 func TestStatusNodeStatusPhase(t *testing.T) {
-	cases := []struct {
-		name       string
-		conditions []statusCondition
-		wantPhase  nodetypes.NodeStatusPhase
-		wantReady  bool
+	for _, tc := range []struct {
+		status string
+		want   nodetypes.NodeStatusPhase
 	}{
-		{"ready", []statusCondition{{Type: nodetypes.ConditionTypeReady, Status: nodetypes.ConditionStatusTrue}}, nodetypes.NodeStatusReady, true},
-		{"not-ready", []statusCondition{{Type: nodetypes.ConditionTypeReady, Status: nodetypes.ConditionStatusFalse}}, nodetypes.NodeStatusNotReady, false},
-		{"unknown-condition", []statusCondition{{Type: nodetypes.ConditionTypeReady, Status: nodetypes.ConditionStatusUnknown}}, nodetypes.NodeStatusUnknown, false},
-		{"missing-condition", nil, nodetypes.NodeStatusUnknown, false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			n := &statusNode{}
-			n.Status.Conditions = tc.conditions
-			if got := n.statusPhase(); got != tc.wantPhase {
-				t.Fatalf("statusPhase() = %q, want %q", got, tc.wantPhase)
+		{"True", nodetypes.NodeStatusReady}, {"False", nodetypes.NodeStatusNotReady}, {"Unknown", nodetypes.NodeStatusUnknown}, {"", nodetypes.NodeStatusUnknown},
+	} {
+		t.Run(tc.status, func(t *testing.T) {
+			raw := fmt.Sprintf(`{"metadata":{"name":"unknown-role"},"status":{"conditions":[{"type":"Ready","status":%q}]}}`, tc.status)
+			n, err := cluster.ParseNode([]byte(raw))
+			if err != nil {
+				t.Fatal(err)
 			}
-			if got := n.isReady(); got != tc.wantReady {
-				t.Fatalf("isReady() = %v, want %v", got, tc.wantReady)
+			got := projectNode(&n)
+			if got.Status != tc.want || got.Ready != (tc.status == "True") || got.Role != nodetypes.RoleUnknown {
+				t.Fatalf("projection: %+v", got)
 			}
 		})
 	}

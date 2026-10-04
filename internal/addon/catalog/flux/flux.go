@@ -231,22 +231,18 @@ func (f *fluxAddon) Verify(ctx context.Context, env *addon.Environment) error {
 	return nil
 }
 
-// Uninstall removes flux's Helm releases and namespace; step failures are logged, not aborted.
+// Uninstall attempts all cleanup steps and joins failures.
 func (f *fluxAddon) Uninstall(ctx context.Context, env *addon.Environment) error {
-	env.Logger.Info("flux: removing flux components")
-	// Run returns nil on a non-zero exit; the exit code must be checked explicitly.
-	warnOnErr := func(res *executor.Result, err error, desc string) {
-		if err != nil || res.ExitCode != 0 {
-			env.Logger.Warn("flux: uninstall step failed", "step", desc, "exit", res.ExitCode, "err", err)
+	var failures []error
+	for _, release := range []string{"flux-instance", "flux-operator"} {
+		if _, err := env.Exec.RunChecked(ctx, "helm", "uninstall", release, "--namespace", "flux-system", "--ignore-not-found"); err != nil {
+			failures = append(failures, fmt.Errorf("uninstall %s: %w", release, err))
 		}
 	}
-	res, err := env.Exec.Run(ctx, "helm", "uninstall", "flux-instance", "--namespace", "flux-system")
-	warnOnErr(res, err, "uninstall flux-instance")
-	res, err = env.Exec.Run(ctx, "helm", "uninstall", "flux-operator", "--namespace", "flux-system")
-	warnOnErr(res, err, "uninstall flux-operator")
-	res, err = env.Exec.Run(ctx, "oc", "delete", "ns", "flux-system")
-	warnOnErr(res, err, "delete flux-system namespace")
-	return nil
+	if _, err := env.Exec.RunChecked(ctx, "oc", "delete", "ns", "flux-system", "--ignore-not-found"); err != nil {
+		failures = append(failures, fmt.Errorf("delete flux namespace: %w", err))
+	}
+	return errors.Join(failures...)
 }
 
 func (f *fluxAddon) RequiredTools() []addon.ToolSpec {
@@ -398,6 +394,8 @@ func (f *fluxAddon) createDeployKeySecret(ctx context.Context, env *addon.Enviro
 		return fmt.Errorf("read deploy key: %w", err)
 	}
 
+	defer clear(privateKey)
+
 	// Public half is optional — flux only requires identity and known_hosts.
 	publicKeyFile := deployKeyFile + ".pub"
 	var publicKey []byte
@@ -416,17 +414,17 @@ func (f *fluxAddon) createDeployKeySecret(ctx context.Context, env *addon.Enviro
 		return fmt.Errorf("ssh-keyscan output for %s exceeded the capture limit; refusing to verify a partial host-key list", host)
 	}
 
-	if err := verifyKeyscanFingerprint(knownHostsResult.Stdout, host, fs.GitHostFingerprint, fs.AcceptHostKey, env.Logger); err != nil {
+	knownHosts, err := verifyKeyscanFingerprint(knownHostsResult.Stdout, host, fs.GitHostFingerprint, fs.AcceptHostKey, env.Logger)
+	if err != nil {
 		return fmt.Errorf("flux: host key verification failed: %w", err)
 	}
 
 	manifest, err := buildFluxDeployKeySecret("flux-system", "flux-system",
-		privateKey, publicKey, filterKeyscanLines(knownHostsResult.Stdout))
+		privateKey, publicKey, knownHosts)
 	if err != nil {
 		return fmt.Errorf("build deploy key secret: %w", err)
 	}
 	_, applyErr := env.Exec.RunWithStdinChecked(ctx, manifest, "oc", "apply", "-f", "-")
-	clear(privateKey)
 	if applyErr != nil {
 		return fmt.Errorf("apply deploy key secret: %w", applyErr)
 	}
@@ -435,51 +433,44 @@ func (f *fluxAddon) createDeployKeySecret(ctx context.Context, env *addon.Enviro
 	return nil
 }
 
-// verifyKeyscanFingerprint fails closed on an unpinned host unless acceptHostKey opts into TOFU.
-func verifyKeyscanFingerprint(keyscanOut, host, expected string, acceptHostKey bool, log *slog.Logger) error {
+// verifyKeyscanFingerprint returns only pinned keys, unless acceptHostKey opts into TOFU.
+func verifyKeyscanFingerprint(keyscanOut, host, expected string, acceptHostKey bool, log *slog.Logger) ([]byte, error) {
 	var observed []string
+	var trusted strings.Builder
 	sc := bufio.NewScanner(strings.NewReader(keyscanOut))
 	for sc.Scan() {
 		line := sc.Text()
-		if strings.HasPrefix(line, "#") || strings.TrimSpace(line) == "" {
-			continue
-		}
-		key, _, _, _, err := ssh.ParseAuthorizedKey([]byte(line))
+		_, _, key, _, _, err := ssh.ParseKnownHosts([]byte(line))
 		if err != nil {
 			continue
 		}
 		fp := ssh.FingerprintSHA256(key)
-		if expected != "" && fp == expected {
-			return nil
-		}
 		observed = append(observed, fp)
+		if fp == expected || (expected == "" && acceptHostKey) {
+			trusted.WriteString(line)
+			trusted.WriteByte('\n')
+		}
+	}
+	if err := sc.Err(); err != nil {
+		return nil, fmt.Errorf("read git host keys: %w", err)
+	}
+	if len(observed) == 0 {
+		return nil, fmt.Errorf("no valid git host keys found for %s", host)
 	}
 	if expected == "" {
 		if !acceptHostKey {
-			return fmt.Errorf("git host fingerprint not pinned for %s — set addons.flux.settings.git_host_fingerprint to one of the observed values [%s], or set accept_host_key=true to opt into TOFU",
+			return nil, fmt.Errorf("git host fingerprint not pinned for %s — set addons.flux.settings.git_host_fingerprint to one of the observed values [%s], or set accept_host_key=true to opt into TOFU",
 				host, strings.Join(observed, ", "))
 		}
 		log.Warn("flux: git host fingerprint not pinned — set addons.flux.settings.git_host_fingerprint to pin",
 			"host", host, "observed_fingerprints", strings.Join(observed, ", "))
-		return nil
+		return []byte(trusted.String()), nil
 	}
-	return fmt.Errorf("git host key mismatch for %s: expected %s, observed [%s]",
+	if trusted.Len() != 0 {
+		return []byte(trusted.String()), nil
+	}
+	return nil, fmt.Errorf("git host key mismatch for %s: expected %s, observed [%s]",
 		host, expected, strings.Join(observed, ", "))
-}
-
-// filterKeyscanLines drops comment/blank lines so the Secret is byte-stable across keyscan runs.
-func filterKeyscanLines(keyscanOut string) []byte {
-	var b strings.Builder
-	sc := bufio.NewScanner(strings.NewReader(keyscanOut))
-	for sc.Scan() {
-		line := sc.Text()
-		if strings.HasPrefix(line, "#") || strings.TrimSpace(line) == "" {
-			continue
-		}
-		b.WriteString(line)
-		b.WriteByte('\n')
-	}
-	return []byte(b.String())
 }
 
 // gitHost extracts the host from a git URL: ssh://, https://, or scp-style user@host:path.
@@ -544,4 +535,8 @@ func readKeyFile(path string) ([]byte, error) {
 	}
 	defer f.Close()
 	return io.ReadAll(f)
+}
+
+func (f *fluxAddon) PrepareRollback(ctx context.Context, env *addon.Environment) (func(context.Context) error, error) {
+	return addon.RollbackForNewNamespace(ctx, env, "flux-system", func(cleanup context.Context) error { return f.Uninstall(cleanup, env) })
 }

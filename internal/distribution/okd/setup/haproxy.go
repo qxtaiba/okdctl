@@ -126,13 +126,13 @@ func (p *Phase) ConfigureHAProxy(ctx context.Context, cfg *config.Config, _ *Opt
 		hasBackup = true
 	}
 
-	restartFn := func() error {
-		return system.ManageService(ctx, system.ServiceRestart, "haproxy")
-	}
 	rollback := func(reason string, cause error) error {
 		if !hasBackup {
 			return cause
 		}
+		recoveryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		defer cancel()
+		restartFn := func() error { return system.ManageService(recoveryCtx, system.ServiceRestart, "haproxy") }
 		p.Log.Warn("haproxy: restoring from backup", "reason", reason)
 		return attemptHAProxyRollback(cause, haproxyConfigPath, haproxyBackupPath, system.AtomicWriteString, restartFn)
 	}

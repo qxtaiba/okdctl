@@ -220,3 +220,17 @@ func TestBuildBitwardenSecretStoreCRD(t *testing.T) {
 		t.Errorf("auth credentials name = %v; want %s", creds["name"], bitwardenTokenSecretName)
 	}
 }
+
+func TestValidateHTTPURLDoesNotDiscloseInput(t *testing.T) {
+	for _, raw := range []string{
+		"ftp://alice:private-password@host/?token=private-token",
+		"https://alice:private-password@host/%zz?token=private-token",
+		"https://alice:private-password@host\n?token=private-token",
+		"https:///?token=private-token",
+	} {
+		got := validateHTTPURL("vault_server", raw)
+		if want := "vault_server must be a valid http:// or https:// URL"; got != want {
+			t.Errorf("validation error = %q, want %q", got, want)
+		}
+	}
+}

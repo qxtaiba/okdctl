@@ -41,6 +41,10 @@ main() {
     VERSION="${VERSION:-}"
     INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
     INSECURE="${INSECURE:-}"
+    case "$INSECURE" in
+        "" | 1) ;;
+        *) die "INSECURE must be unset, empty, or 1" ;;
+    esac
 
     require curl
     require tar
@@ -60,7 +64,7 @@ main() {
         fi
         red "WARNING: cosign not installed — falling back to sha256-only verification (INSECURE=1 set)."
         red "         Install cosign: https://docs.sigstore.dev/cosign/installation/"
-    elif [ -n "$INSECURE" ]; then
+    elif [ "$INSECURE" = "1" ]; then
         red "WARNING: INSECURE=1 is set — cosign signature verification SKIPPED."
         red "         SHA256 verification still runs; unset INSECURE to re-enable cosign."
     fi
@@ -140,7 +144,7 @@ main() {
             "$TMP/SHA256SUMS" >/dev/null ||
             die "cosign signature verification failed on SHA256SUMS"
         info "cosign signature verified"
-    elif [ -n "$INSECURE" ]; then
+    elif [ "$INSECURE" = "1" ]; then
         info "cosign signature verification skipped (INSECURE=1)"
     fi
 

@@ -7,7 +7,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// DefaultBinDir is where setup installs okd/terraform/yq/helm/sops.
+// DefaultBinDir is where setup installs oc, openshift-install, yq, helm, and sops.
 const DefaultBinDir = "/usr/local/bin"
 
 // ResolveBinDir returns the tool-install directory, preferring OKDCTL_BIN_DIR

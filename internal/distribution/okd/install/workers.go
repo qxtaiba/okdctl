@@ -2,7 +2,6 @@ package install
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -43,17 +42,8 @@ func (p *Phase) StartWorkerVMs(ctx context.Context, cfg *config.Config, opts *Op
 		Targets: []string{"module.okd_cluster.proxmox_virtual_environment_vm.worker"},
 	}
 
-	snapPath, snapErr := tf.SnapshotState(ctx)
-	if snapErr != nil {
-		return &errtypes.ClusterError{Msg: "workers: state snapshot failed", Err: snapErr}
-	}
-
-	if err := tf.Apply(ctx, applyOpts); err != nil {
-		msg := "start worker VMs"
-		if snapPath != "" {
-			msg = fmt.Sprintf("start worker VMs (state backup: %s)", snapPath)
-		}
-		return tf.WithLockHint(&errtypes.ClusterError{Msg: msg, Err: err})
+	if err := terraform.WithStateRecovery(ctx, tf, "start worker VMs", func() error { return tf.Apply(ctx, applyOpts) }); err != nil {
+		return err
 	}
 
 	p.Log.Info("workers: all worker nodes started")

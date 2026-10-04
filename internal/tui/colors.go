@@ -14,6 +14,7 @@ type ColorTheme int
 const (
 	ThemeDefault ColorTheme = iota
 	ThemeHighContrast
+	ThemeLight
 )
 
 // Palette — literal hex values kept stable across themes; setTheme
@@ -49,8 +50,11 @@ var (
 	ColorSlate700 = lipgloss.Color("#334155")
 	ColorSlate900 = lipgloss.Color("#0F172A")
 
+	ColorSurface = ColorSlate900
 	ColorText    = ColorSlate100
 	ColorTextDim = ColorSlate400
+	ColorBorder  = ColorSlate600
+	ColorAccent  = ColorCyan500
 )
 
 var (
@@ -66,6 +70,7 @@ var (
 func setTheme(theme ColorTheme) {
 	switch theme {
 	case ThemeHighContrast:
+		ColorSurface = lipgloss.Color("#000000")
 		ColorPrimary = hcColorPrimary
 		ColorPrimaryDim = hcColorPrimary
 		ColorSuccess = hcColorSuccess
@@ -74,7 +79,24 @@ func setTheme(theme ColorTheme) {
 		ColorInfo = hcColorInfo
 		ColorText = hcColorText
 		ColorTextDim = hcColorTextDim
+		ColorBorder = hcColorTextDim
+		ColorAccent = hcColorInfo
+	case ThemeLight:
+		ColorSurface = lipgloss.Color("#FFFFFF")
+		ColorPrimary = ColorPurple600
+		ColorPrimaryDim = ColorPurple800
+		ColorSuccess = lipgloss.Color("#15803D")
+		ColorWarning = lipgloss.Color("#92400E")
+		ColorError = lipgloss.Color("#B91C1C")
+		ColorInfo = lipgloss.Color("#1D4ED8")
+		ColorText = ColorSlate900
+		ColorTextDim = ColorSlate700
+		ColorBorder = ColorSlate500
+		ColorAccent = lipgloss.Color("#0E7490")
 	default:
+		ColorSurface = ColorSlate900
+		ColorBorder = ColorSlate600
+		ColorAccent = ColorCyan500
 		ColorPrimary = ColorPurple600
 		ColorPrimaryDim = ColorPurple800
 		ColorSuccess = ColorGreen500
@@ -92,6 +114,9 @@ func highContrastRequested() bool {
 }
 
 func init() {
+	if os.Getenv("OKDCTL_THEME") == "light" {
+		setTheme(ThemeLight)
+	}
 	if highContrastRequested() {
 		setTheme(ThemeHighContrast)
 	}

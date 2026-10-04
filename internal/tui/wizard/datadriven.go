@@ -5,6 +5,7 @@
 package wizard
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -39,6 +40,7 @@ type ConfigGetter func(cfg *config.Config) string
 // FieldDefinition declares a single wizard form field and how it binds to
 // the Config struct.
 type FieldDefinition struct {
+	Visible  func(map[string]string) bool
 	Key      string
 	Label    string
 	Default  string
@@ -54,9 +56,10 @@ type FieldDefinition struct {
 
 // SectionDefinition groups related fields under a shared title/note.
 type SectionDefinition struct {
-	Title  string
-	Note   string // e.g. prerequisites, shown below the title
-	Fields []FieldDefinition
+	Visible func(map[string]string) bool
+	Title   string
+	Note    string // e.g. prerequisites, shown below the title
+	Fields  []FieldDefinition
 }
 
 // StepDefinition is the declarative description of a data-driven wizard step.
@@ -76,24 +79,10 @@ type StepDefinition struct {
 // FormSection pairs a titled section with its built InputGroup — the
 // runtime counterpart to SectionDefinition that MultiSectionForm navigates across.
 type FormSection struct {
-	Title string
-	Note  string // e.g. prerequisites, shown below the title
-	Group *components.InputGroup
-}
-
-func (s *FormSection) isComplete() bool {
-	if s.Group == nil {
-		return false
-	}
-	for _, field := range s.Group.Fields() {
-		if field.Value() == "" {
-			return false
-		}
-		if err := field.Validate(); err != nil {
-			return false
-		}
-	}
-	return true
+	Title    string
+	Note     string // e.g. prerequisites, shown below the title
+	Group    *components.InputGroup
+	complete bool
 }
 
 // MultiSectionForm is a reusable multi-section input form with tab/shift-tab
@@ -141,6 +130,7 @@ func (f *MultiSectionForm) currentGroup() *components.InputGroup {
 
 // Init focuses the first input group so the user can type immediately.
 func (f *MultiSectionForm) Init() tea.Cmd {
+	f.refreshStatus()
 	if len(f.sections) > 0 && f.sections[0].Group != nil {
 		return f.sections[0].Group.Focus()
 	}
@@ -169,12 +159,17 @@ func (f *MultiSectionForm) Blur() {
 // to the focused group. On enter it reports enterPressed=true without
 // validating or completing — the caller layers that.
 func (f *MultiSectionForm) Update(msg tea.Msg) (cmd tea.Cmd, enterPressed bool) {
+	defer f.refreshStatus()
 	group := f.currentGroup()
 	if group == nil {
 		return nil, false
 	}
 
 	if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
+		if owner, ok := group.Field(group.FocusIndex()).(interface{ OwnsKey(tea.KeyPressMsg) bool }); ok && owner.OwnsKey(keyMsg) {
+			_, cmd := group.Update(msg)
+			return cmd, false
+		}
 		switch {
 		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("enter"))):
 			return nil, true
@@ -268,31 +263,51 @@ func (f *MultiSectionForm) emitFocusChanged() tea.Cmd {
 // Validate returns the first error from any section's group validation, or nil
 // when every field is valid.
 func (f *MultiSectionForm) Validate() error {
-	for _, section := range f.sections {
+	for i, section := range f.sections {
 		if section.Group == nil {
 			continue
 		}
-		if errs := section.Group.Validate(); len(errs) > 0 {
-			return errs[0]
+		for j, field := range section.Group.Fields() {
+			err := field.Validate()
+			if err == nil {
+				continue
+			}
+			f.Blur()
+			f.currentSection = i
+			section.Group.SetFocusIndex(j)
+			_ = section.Group.Focus()
+			f.refreshStatus()
+			return err
 		}
 	}
+	f.refreshStatus()
 	return nil
 }
 
-// View renders each section with its active/completed/pending indicator.
-func (f *MultiSectionForm) View(width int) string {
-	innerWidth := width - 4
-	if innerWidth < 40 {
-		innerWidth = 40
+func (f *MultiSectionForm) refreshStatus() {
+	for i := range f.sections {
+		section := &f.sections[i]
+		section.complete = section.Group != nil
+		if section.Group != nil {
+			for _, field := range section.Group.Fields() {
+				if cached, ok := field.(interface{ Valid() bool }); ok {
+					section.complete = cached.Valid() && section.complete
+				} else if field.Validate() != nil {
+					section.complete = false
+				}
+			}
+		}
 	}
+}
 
+// View renders each section with its active/completed/pending indicator.
+func (f *MultiSectionForm) View(_ int) string {
 	var content strings.Builder
 
 	for i, section := range f.sections {
 		if section.Group == nil {
 			continue
 		}
-		section.Group.SetWidth(innerWidth)
 
 		var style lipgloss.Style
 		var indicator string
@@ -301,7 +316,7 @@ func (f *MultiSectionForm) View(width int) string {
 		case i == f.currentSection:
 			style = formViewStyles.activeSection
 			indicator = formViewStyles.activeRender
-		case section.isComplete():
+		case section.complete:
 			style = formViewStyles.inactiveSection
 			indicator = formViewStyles.completedRender
 		default:
@@ -315,6 +330,9 @@ func (f *MultiSectionForm) View(width int) string {
 			sectionContent = sectionTitle + "\n" + formViewStyles.note.Render(section.Note) + "\n\n" + section.Group.View()
 		} else {
 			sectionContent = sectionTitle + "\n\n" + section.Group.View()
+		}
+		if content.Len() > 0 {
+			content.WriteString("\n\n")
 		}
 		content.WriteString(style.Render(sectionContent))
 	}
@@ -334,7 +352,10 @@ type DataDrivenStep struct {
 	definition *StepDefinition
 	fieldKeys  map[string]fieldLocation
 
-	form *MultiSectionForm
+	form          *MultiSectionForm
+	allSections   []FormSection
+	visibilityKey string
+	refresh       func(*DataDrivenStep)
 
 	// customExtraContent, when non-nil, overrides definition.ExtraContent (set
 	// via WithExtraContentFunc).
@@ -370,7 +391,9 @@ func NewDataDrivenStep(def *StepDefinition) *DataDrivenStep {
 		})
 	}
 
+	step.allSections = sections
 	step.form = NewMultiSectionForm(sections)
+	step.refreshVisibility()
 	return step
 }
 
@@ -423,7 +446,7 @@ func (s *DataDrivenStep) getField(fieldKey string) components.FormField {
 	if !ok {
 		return nil
 	}
-	return s.form.FieldAt(loc.section, loc.field)
+	return s.allSections[loc.section].Group.Field(loc.field)
 }
 
 // Value returns the current string value of the field named fieldKey.
@@ -466,6 +489,7 @@ func (s *DataDrivenStep) values() map[string]string {
 
 // LoadFromConfig seeds field values from cfg using each field's ConfigGet.
 func (s *DataDrivenStep) LoadFromConfig(cfg *config.Config) {
+	defer s.refreshState()
 	for sIdx := range s.definition.Sections {
 		for fIdx := range s.definition.Sections[sIdx].Fields {
 			fieldDef := &s.definition.Sections[sIdx].Fields[fIdx]
@@ -486,6 +510,7 @@ func (s *DataDrivenStep) WithExtraContentFunc(fn func(step *DataDrivenStep, widt
 
 // Init focuses the first input group so the user can type immediately.
 func (s *DataDrivenStep) Init() tea.Cmd {
+	s.refreshState()
 	return s.form.Init()
 }
 
@@ -502,17 +527,40 @@ func (s *DataDrivenStep) SetFocused(focused bool) {
 
 // ShortHelp returns the key bindings shown in the step's help footer.
 func (s *DataDrivenStep) ShortHelp() []KeyBinding {
-	return []KeyBinding{
-		{Key: "↑↓/tab", Help: HelpNavigate},
-		{Key: HelpEnter, Help: HelpContinue},
-		{Key: HelpEsc, Help: HelpBack},
+	help := []KeyBinding{{Key: "↑↓/tab", Help: HelpNavigate}, {Key: HelpEnter, Help: HelpContinue}, {Key: HelpEsc, Help: HelpBack}}
+	group := s.form.currentGroup()
+	if group == nil {
+		return help
 	}
+	switch field := group.Field(group.FocusIndex()).(type) {
+	case *components.SelectField:
+		help = append([]KeyBinding{{Key: "←→", Help: "change"}}, help...)
+	case *components.MultiSelectField:
+		help = append([]KeyBinding{{Key: "j/k", Help: "option"}, {Key: "space", Help: "toggle"}}, help...)
+	case *components.KeyValueField:
+		if field.Editing() {
+			return []KeyBinding{{Key: "enter", Help: "keep cell"}, {Key: "esc", Help: "undo cell"}, {Key: "tab", Help: "next field"}}
+		}
+		help = []KeyBinding{{Key: "j/k h/l", Help: "cell"}, {Key: "ctrl+e", Help: "edit"}, {Key: "a/d", Help: "add/delete"}, {Key: "tab", Help: "next field"}, {Key: HelpEnter, Help: HelpContinue}}
+	}
+	return help
+}
+
+// OwnsKey delegates cell-edit keys before flow navigation handles them.
+func (s *DataDrivenStep) OwnsKey(msg tea.KeyPressMsg) bool {
+	group := s.form.currentGroup()
+	if group == nil {
+		return false
+	}
+	owner, ok := group.Field(group.FocusIndex()).(interface{ OwnsKey(tea.KeyPressMsg) bool })
+	return ok && owner.OwnsKey(msg)
 }
 
 // Update forwards input to the embedded form and, on enter, runs
 // definition-aware validation before emitting StepCompleteMsg.
 func (s *DataDrivenStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 	cmd, enterPressed := s.form.Update(msg)
+	s.refreshState()
 	if !enterPressed {
 		return s, cmd
 	}
@@ -527,11 +575,25 @@ func (s *DataDrivenStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 // Validate runs the form's field validation, then the step-level Validate
 // function if the definition provides one.
 func (s *DataDrivenStep) Validate() error {
+	s.refreshVisibility()
 	if err := s.form.Validate(); err != nil {
 		return err
 	}
 	if s.definition.Validate != nil {
-		return s.definition.Validate(s.values())
+		err := s.definition.Validate(s.values())
+		if err == nil {
+			return nil
+		}
+		message := err.Error()
+		for _, section := range s.definition.Sections {
+			for index := range section.Fields {
+				field := &section.Fields[index]
+				if field.Type == FieldTypePassword && s.Value(field.Key) != "" {
+					message = strings.ReplaceAll(message, s.Value(field.Key), "<redacted>")
+				}
+			}
+		}
+		return errors.New(message)
 	}
 	return nil
 }
@@ -539,10 +601,15 @@ func (s *DataDrivenStep) Validate() error {
 // Apply writes each field's value into cfg using its ConfigSet, then runs
 // the step-level Apply function if provided.
 func (s *DataDrivenStep) Apply(cfg *config.Config) error {
+	values := s.values()
 	for sIdx := range s.definition.Sections {
+		section := &s.definition.Sections[sIdx]
+		if section.Visible != nil && !section.Visible(values) {
+			continue
+		}
 		for fIdx := range s.definition.Sections[sIdx].Fields {
 			fieldDef := &s.definition.Sections[sIdx].Fields[fIdx]
-			if fieldDef.ConfigSet == nil {
+			if fieldDef.ConfigSet == nil || (fieldDef.Visible != nil && !fieldDef.Visible(values)) {
 				continue
 			}
 			if err := fieldDef.ConfigSet(cfg, s.Value(fieldDef.Key)); err != nil {
@@ -576,12 +643,12 @@ var formViewStyles = struct {
 	note            lipgloss.Style
 }{
 	sectionHeader: lipgloss.NewStyle().
-		Foreground(tui.ColorCyan500).
+		Foreground(tui.ColorAccent).
 		Bold(true),
 	activeSection: lipgloss.NewStyle().
-		Padding(1, 2),
+		Padding(0, 2),
 	inactiveSection: lipgloss.NewStyle().
-		Padding(1, 2),
+		Padding(0, 2),
 	completedRender: lipgloss.NewStyle().
 		Foreground(tui.ColorSuccess).
 		Bold(true).
@@ -591,19 +658,17 @@ var formViewStyles = struct {
 		Bold(true).
 		Render(tui.IconActive),
 	pendingRender: lipgloss.NewStyle().
-		Foreground(tui.ColorSlate600).
+		Foreground(tui.ColorBorder).
 		Render(tui.IconPending),
 	note: lipgloss.NewStyle().
-		Foreground(tui.ColorSlate500).
+		Foreground(tui.ColorTextDim).
 		Italic(true).
 		PaddingLeft(2),
 }
 
 // View renders the step's sections via the embedded form and appends any
 // configured extra content.
-func (s *DataDrivenStep) View(width, height int) string {
-	s.SetSize(width, height)
-
+func (s *DataDrivenStep) View(width, _ int) string {
 	var content strings.Builder
 	content.WriteString(s.form.View(width))
 
@@ -657,4 +722,119 @@ func GetInt(getter func(cfg *config.Config) int) ConfigGetter {
 	return func(cfg *config.Config) string {
 		return strconv.Itoa(getter(cfg))
 	}
+}
+
+// SetSize propagates geometry before rendering.
+func (s *DataDrivenStep) SetSize(width, height int) {
+	s.BaseStep.SetSize(width, height)
+	for _, section := range s.form.sections {
+		if section.Group != nil {
+			section.Group.SetWidth(max(1, width-4))
+		}
+	}
+	for _, section := range s.allSections {
+		if section.Group != nil {
+			section.Group.SetWidth(max(1, width-4))
+		}
+	}
+}
+
+// FocusBounds reports the focused field including its help and validation lines.
+func (s *DataDrivenStep) FocusBounds(_, _ int) (top, bottom int, ok bool) {
+	return s.form.FocusBounds()
+}
+
+// SetWidth propagates the available content width to every field.
+func (f *MultiSectionForm) SetWidth(width int) {
+	for _, section := range f.sections {
+		if section.Group != nil {
+			section.Group.SetWidth(max(1, width-4))
+		}
+	}
+}
+
+// FocusBounds includes the focused field's help and validation lines.
+func (f *MultiSectionForm) FocusBounds() (topBound, bottomBound int, ok bool) {
+	top := 0
+	for i, section := range f.sections {
+		if section.Group == nil {
+			continue
+		}
+		prefix := formViewStyles.activeRender + " " + formViewStyles.sectionHeader.Render(strings.ToLower(section.Title))
+		if section.Note != "" {
+			prefix += "\n" + formViewStyles.note.Render(section.Note)
+		}
+		if i == f.currentSection {
+			start, end := section.Group.FocusBounds()
+			offset := top + formViewStyles.activeSection.GetPaddingTop() + lipgloss.Height(prefix) + 1
+			return offset + start, offset + end, true
+		}
+		top += lipgloss.Height(formViewStyles.inactiveSection.Render(prefix+"\n\n"+section.Group.View())) + 1
+	}
+	return 0, 0, false
+}
+
+// WithRefreshFunc refreshes external observations during initialization and input updates.
+func (s *DataDrivenStep) WithRefreshFunc(refresh func(*DataDrivenStep)) *DataDrivenStep {
+	s.refresh = refresh
+	return s
+}
+
+func (s *DataDrivenStep) refreshState() {
+	s.refreshVisibility()
+	if s.refresh != nil {
+		s.refresh(s)
+	}
+}
+
+func (s *DataDrivenStep) refreshVisibility() {
+	values := s.values()
+	var visible []FormSection
+	var signature strings.Builder
+	var focused components.FormField
+	if group := s.form.currentGroup(); group != nil {
+		focused = group.Field(group.FocusIndex())
+	}
+	for i, definition := range s.definition.Sections {
+		if definition.Visible != nil && !definition.Visible(values) {
+			continue
+		}
+		var fields []components.FormField
+		for j := range definition.Fields {
+			field := &definition.Fields[j]
+			if field.Visible != nil && !field.Visible(values) {
+				continue
+			}
+			fmt.Fprintf(&signature, "%d/%d;", i, j)
+			fields = append(fields, s.allSections[i].Group.Field(j))
+		}
+		if len(fields) == 0 {
+			continue
+		}
+		group := components.NewInputGroup(fields...)
+		group.SetWidth(max(1, s.width-4))
+		visible = append(visible, FormSection{Title: definition.Title, Note: definition.Note, Group: group})
+	}
+	if signature.String() == s.visibilityKey {
+		return
+	}
+	s.visibilityKey = signature.String()
+	s.form.Blur()
+	s.form.sections = visible
+	s.form.currentSection = 0
+	s.form.totalFieldsCache = -1
+	for i, section := range visible {
+		for j, field := range section.Group.Fields() {
+			if field == focused {
+				s.form.currentSection = i
+				section.Group.SetFocusIndex(j)
+			}
+		}
+	}
+	if s.IsFocused() {
+		if group := s.form.currentGroup(); group != nil {
+			_ = group.Focus()
+		}
+	}
+	s.form.refreshStatus()
 }

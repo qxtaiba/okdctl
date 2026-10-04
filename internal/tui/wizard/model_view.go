@@ -10,15 +10,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-const tooSmallNotice = "okdctl needs at least 60×20 — resize the terminal"
+const tooSmallNotice = "Resize terminal to at least 80 × 24. Ctrl+C quits."
 
-// tooSmall reports whether the terminal is below the floor the wizard chrome needs to render.
-func (m *Model) tooSmall() bool {
-	return m.width < minTerminalWidth || m.height < minTerminalHeight
-}
-
-// View implements tea.Model, rendering header, viewport, status row, and
-// footer into a bordered box drawn at exactly the terminal width.
+// View implements tea.Model, rendering header, viewport, scroll indicator,
+// optional error banner, and footer into a bordered box.
 func (m *Model) View() tea.View {
 	v := tea.View{AltScreen: true}
 
@@ -26,13 +21,14 @@ func (m *Model) View() tea.View {
 		return v
 	}
 
-	if !m.ready {
-		v.Content = "\n  Initializing..."
+	if m.width < minWidth || m.height < minHeight {
+		v.Content = lipgloss.NewStyle().MaxWidth(max(1, m.width)).MaxHeight(max(1, m.height)).
+			Render(tooSmallNotice)
 		return v
 	}
 
-	if m.tooSmall() {
-		v.Content = "\n  " + lipgloss.NewStyle().Foreground(tui.ColorTextDim).Render(tooSmallNotice)
+	if !m.ready {
+		v.Content = "\n  Initializing..."
 		return v
 	}
 
@@ -42,14 +38,20 @@ func (m *Model) View() tea.View {
 	content.WriteString("\n")
 	content.WriteString(m.viewport.View())
 	content.WriteString("\n")
-	content.WriteString(m.statusRow())
-	content.WriteString("\n")
+
+	if banner := m.renderError(); banner != "" {
+		content.WriteString(banner)
+		content.WriteString("\n")
+	}
+
 	content.WriteString(m.renderFooter())
 
 	// lipgloss v2 Width(N) counts the border inside N — pass contentWidth+2 or
 	// full-width lines clip by 2 chars.
+	innerWidth := m.contentWidth()
+
 	bordered := WizardBorderStyle.
-		Width(m.contentWidth() + wizardBorderHorizontal).
+		Width(innerWidth + wizardBorderHorizontal).
 		Render(content.String())
 
 	v.Content = OuterContainerStyle.Render(bordered)
@@ -59,29 +61,17 @@ func (m *Model) View() tea.View {
 // contentWidth is the inner content area every header/viewport/footer helper sizes itself to.
 func (m *Model) contentWidth() int {
 	width := m.width - outerHorizontalPadding - wizardBorderHorizontal
-	if width < minTerminalWidth-6 {
-		width = minTerminalWidth - 6
+	if width < 60 {
+		width = 60
 	}
 	return width
-}
-
-// statusRow is always exactly one row so the frame never grows; blank when clear.
-func (m *Model) statusRow() string {
-	width := m.contentWidth()
-	if m.err == nil {
-		return ""
-	}
-	// Padding is inert under Inline (lipgloss v2 skips it), so the 2-space
-	// inset — matching the body's viewport inset — is prepended literally.
-	style := lipgloss.NewStyle().Foreground(tui.ColorError).Inline(true).MaxWidth(width - 2)
-	return "  " + style.Render(tui.IconError+" "+m.err.Error())
 }
 
 func (m *Model) contentDimensions() (width, height int) {
 	width = m.contentWidth()
 	height = m.height - fixedLayoutOverhead
-	if height < 1 {
-		height = 1
+	if height < 10 {
+		height = 10
 	}
 	return width, height
 }
@@ -89,15 +79,21 @@ func (m *Model) contentDimensions() (width, height int) {
 func (m *Model) viewportDimensions() (width, height int) {
 	contentWidth := m.contentWidth()
 
-	viewportHeight := m.height - fixedLayoutOverhead
-	if viewportHeight < 1 {
-		viewportHeight = 1
+	viewportHeight := m.height - outerVerticalPadding -
+		lipgloss.Height(m.renderHeader()) - lipgloss.Height(m.renderFooter())
+	if banner := m.renderError(); banner != "" {
+		viewportHeight -= lipgloss.Height(banner)
 	}
+	viewportHeight = max(1, viewportHeight)
 
 	return contentWidth, viewportHeight
 }
 
 func (m *Model) syncViewportContent() {
+	if m.ready {
+		_, height := m.viewportDimensions()
+		m.viewport.SetHeight(height)
+	}
 	if len(m.steps) == 0 || m.currentStep < 0 || m.currentStep >= len(m.steps) {
 		m.viewport.SetContent("no steps configured")
 		return
@@ -120,6 +116,9 @@ func (m *Model) syncViewportContent() {
 		}
 	}
 
+	if sized, ok := step.(ResizableStep); ok {
+		sized.SetSize(innerWidth, 1000)
+	}
 	stepContent := step.View(innerWidth, 1000)
 
 	if c, ok := step.(centerable); ok && c.IsCentered() {
@@ -175,7 +174,7 @@ func (m *Model) renderHeader() string {
 
 	header := brand + "\n" + tagline + strings.Repeat(" ", spacing) + stepIndicator
 
-	return HeaderStyle.Render(header)
+	return HeaderStyle.Width(width).Render(header)
 }
 
 func (m *Model) renderFooter() string {
@@ -212,7 +211,7 @@ func (m *Model) renderStepTitle(title string) string {
 
 func (m *Model) renderScrollIndicator() string {
 	width := m.contentWidth()
-	lineStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate700)
+	lineStyle := lipgloss.NewStyle().Foreground(tui.ColorBorder)
 
 	contextBadge := m.renderContextBadge()
 	var badgeStyled string
@@ -238,8 +237,8 @@ func (m *Model) renderScrollIndicator() string {
 	atBottom := scrollPercent >= 1.0
 
 	arrowStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true)
-	dimArrowStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate600)
-	textStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate400)
+	dimArrowStyle := lipgloss.NewStyle().Foreground(tui.ColorBorder)
+	textStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim)
 
 	var arrows string
 	switch {
@@ -304,4 +303,13 @@ func (m *Model) currentVisibleStepIndex() int {
 		}
 	}
 	return index
+}
+
+func (m *Model) renderError() string {
+	if m.err == nil {
+		return ""
+	}
+	return lipgloss.NewStyle().Foreground(tui.ColorError).Bold(true).
+		Padding(0, 1).Width(m.contentWidth()).MaxHeight(max(1, m.height-fixedLayoutOverhead-1)).
+		Render(tui.IconError + " " + m.err.Error())
 }

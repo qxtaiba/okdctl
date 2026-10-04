@@ -71,7 +71,7 @@ var FilesStepDefinition = wizard.StepDefinition{
 	},
 	ExtraContent: func(_ map[string]string, _ int) string {
 		helpStyle := lipgloss.NewStyle().
-			Foreground(tui.ColorSlate500).
+			Foreground(tui.ColorTextDim).
 			Italic(true)
 
 		return helpStyle.Render(

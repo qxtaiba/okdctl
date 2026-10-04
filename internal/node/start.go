@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
@@ -38,6 +39,12 @@ func (r *Runner) Start(ctx context.Context, opts StartOptions) error {
 	masters := syntheticNodeNames(nodetypes.RoleMaster, cpCount)
 	workers := syntheticNodeNames(nodetypes.RoleWorker, workerCount)
 
+	if _, err := r.targetHosts(ctx, nodetypes.RoleWorker, workers, true); err != nil {
+		return err
+	}
+	if _, err := r.targetHosts(ctx, nodetypes.RoleMaster, masters, true); err != nil {
+		return err
+	}
 	plan := clusterPowerPlan(OpStart, r.Cfg.Cluster.Name, workers, masters)
 
 	if r.DryRun {
@@ -109,6 +116,10 @@ func (r *Runner) powerOnRole(ctx context.Context, role nodetypes.NodeRole, count
 // pending kubelet CSRs each poll so rotated certs can rejoin unattended;
 // List/Approve failures use independent log-once gates.
 func (r *Runner) waitClusterReadyWithCSRApproval(ctx context.Context) error {
+	identities, err := cluster.ExpectedCSRIdentities(r.Cfg, "")
+	if err != nil {
+		return err
+	}
 	stop := r.startProgress("waiting for cluster to become ready")
 	defer stop()
 
@@ -124,7 +135,7 @@ func (r *Runner) waitClusterReadyWithCSRApproval(ctx context.Context) error {
 		}
 		listWarn.Reset()
 
-		if approved, aerr := r.Cluster.ApprovePendingCSRs(ctx); aerr != nil {
+		if approved, aerr := r.Cluster.ApprovePendingCSRs(ctx, identities...); aerr != nil {
 			approveWarn.Warn(aerr.Error(), "node: csr approval check failed", "err", aerr)
 		} else {
 			approveWarn.Reset()
@@ -137,7 +148,8 @@ func (r *Runner) waitClusterReadyWithCSRApproval(ctx context.Context) error {
 			lastReason = "no nodes registered yet"
 			return false
 		}
-		for _, n := range nodes {
+		for i := range nodes {
+			n := &nodes[i]
 			if !n.Ready {
 				lastReason = fmt.Sprintf("node %s not ready", n.Name)
 				return false
@@ -161,7 +173,8 @@ func (r *Runner) uncordonAll(ctx context.Context) error {
 	if err != nil {
 		return &errtypes.ClusterError{Msg: msgListNodes, Err: err}
 	}
-	for _, n := range nodes {
+	for i := range nodes {
+		n := &nodes[i]
 		if err := r.Cluster.Uncordon(ctx, n.Name); err != nil {
 			return &errtypes.ClusterError{Msg: fmt.Sprintf("uncordon %s", n.Name), Err: err}
 		}

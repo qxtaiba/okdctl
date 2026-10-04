@@ -9,8 +9,10 @@ import (
 	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/pem"
+	"errors"
 	"math/big"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -200,4 +202,54 @@ func TestKubeconfigCAPool(t *testing.T) {
 			t.Error("expected error for kubeconfig with no certificate-authority-data")
 		}
 	})
+}
+
+func TestRedirectRefusesHTTPSDowngrade(t *testing.T) {
+	for _, auth := range []string{"", "Bearer synthetic"} {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://example.com/next", http.NoBody)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Authorization", auth)
+		previous, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://example.com/", http.NoBody)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := capRedirects(req, []*http.Request{previous}); !errors.Is(err, ErrInsecureRedirect) {
+			t.Fatalf("error = %v", err)
+		}
+	}
+}
+
+func TestCAServerNameRetainsChainVerification(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
+	defer server.Close()
+	pool := x509.NewCertPool()
+	pool.AddCert(server.Certificate())
+	for _, tc := range []struct {
+		name       string
+		roots      *x509.CertPool
+		serverName string
+		wantError  bool
+	}{
+		{"trusted DNS through IP", pool, "example.com", false},
+		{"untrusted issuer", x509.NewCertPool(), "example.com", true},
+		{"wrong DNS name", pool, "wrong.example.net", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client := NewWithCAServerName(tc.roots, tc.serverName, time.Second)
+			defer client.CloseIdleConnections()
+			request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL, http.NoBody)
+			if err != nil {
+				t.Fatal(err)
+			}
+			response, err := client.Do(request)
+			if response != nil {
+				_ = response.Body.Close()
+			}
+			if (err != nil) != tc.wantError {
+				t.Fatalf("error = %v, want error %v", err, tc.wantError)
+			}
+		})
+	}
 }

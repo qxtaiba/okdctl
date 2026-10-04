@@ -130,10 +130,10 @@ func (s *Selector) getOptionStyles() optionStyles {
 	}
 	styles := optionStyles{
 		bulletSelected:   lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true),
-		bulletUnselected: lipgloss.NewStyle().Foreground(tui.ColorSlate600),
-		desc:             lipgloss.NewStyle().Foreground(tui.ColorSlate500),
+		bulletUnselected: lipgloss.NewStyle().Foreground(tui.ColorBorder),
+		desc:             lipgloss.NewStyle().Foreground(tui.ColorTextDim),
 		recommended:      lipgloss.NewStyle().Foreground(tui.ColorSuccess).Italic(true),
-		line:             lipgloss.NewStyle().Foreground(tui.ColorSlate700),
+		line:             lipgloss.NewStyle().Foreground(tui.ColorBorder),
 	}
 	s.cachedStyles = &styles
 	return styles
@@ -144,13 +144,13 @@ func (s *Selector) getTitleStyle(style OptionStyle) lipgloss.Style {
 	case OptionStyleLatestStable:
 		return lipgloss.NewStyle().Foreground(tui.ColorSuccess)
 	case OptionStyleStable:
-		return lipgloss.NewStyle().Foreground(tui.ColorCyan400)
+		return lipgloss.NewStyle().Foreground(tui.ColorAccent)
 	case OptionStylePreview, OptionStyleLatestPreview:
 		return lipgloss.NewStyle().Foreground(tui.ColorWarning)
 	case OptionStyleLTS:
 		return lipgloss.NewStyle().Foreground(tui.ColorInfo)
 	default:
-		return lipgloss.NewStyle().Foreground(tui.ColorSlate300)
+		return lipgloss.NewStyle().Foreground(tui.ColorText)
 	}
 }
 
@@ -161,8 +161,8 @@ func (s *Selector) View() string {
 
 	dropdownStart, dropdownEnd := s.getDropdownBounds()
 
-	scrollIndicatorStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate500)
-	dropdownBorderStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate700)
+	scrollIndicatorStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim)
+	dropdownBorderStyle := lipgloss.NewStyle().Foreground(tui.ColorBorder)
 
 	i := 0
 	for i < len(s.options) {
@@ -292,7 +292,7 @@ func (s *CompactSelector) View() string {
 	var lines []string
 
 	selectedStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true)
-	unselectedStyle := lipgloss.NewStyle().Foreground(tui.ColorSlate400)
+	unselectedStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim)
 
 	for i, opt := range s.options {
 		var line string
@@ -305,4 +305,20 @@ func (s *CompactSelector) View() string {
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+// FocusBounds reports the selected option's rendered rows.
+func (s *Selector) FocusBounds(width int) (top, bottom int, ok bool) {
+	if len(s.options) == 0 {
+		return 0, 0, false
+	}
+	offset := 0
+	for _, line := range strings.Split(s.View(), "\n") {
+		if strings.Contains(line, "●") {
+			height := lipgloss.Height(lipgloss.NewStyle().Width(width).Render(s.renderOptionWithPrefix(&s.options[s.selected], true, false, "")))
+			return offset, offset + height, true
+		}
+		offset += lipgloss.Height(lipgloss.NewStyle().Width(width).Render(line))
+	}
+	return 0, 0, false
 }

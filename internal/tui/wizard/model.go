@@ -1,7 +1,9 @@
 package wizard
 
 import (
+	"context"
 	"os"
+	"sync"
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/viewport"
@@ -12,11 +14,10 @@ import (
 )
 
 const (
-	minTerminalWidth  = 60
-	minTerminalHeight = 20
+	minWidth  = 80
+	minHeight = 24
 
 	headerHeight = 3 // logo + tagline + step indicator
-	statusHeight = 1
 	// footer is 2 rows: the scroll-indicator line (also the top divider) + the help bar.
 	footerHeight         = 2
 	outerVerticalPadding = 4 // wizard border (2) + outer padding (2)
@@ -27,7 +28,7 @@ const (
 	// wizardBorderHorizontal: WizardBorderStyle.Border() = 1 left + 1 right.
 	wizardBorderHorizontal = 2
 
-	fixedLayoutOverhead = headerHeight + statusHeight + footerHeight + outerVerticalPadding
+	fixedLayoutOverhead = headerHeight + footerHeight + outerVerticalPadding
 )
 
 type earlyExiter interface {
@@ -50,8 +51,14 @@ type displayTitler interface {
 
 // Model is the bubbletea model backing the configuration wizard.
 type Model struct {
-	width  int
-	height int
+	workerMu    sync.Mutex
+	workers     sync.WaitGroup
+	closing     bool
+	flowContext context.Context
+	cancelVisit context.CancelFunc
+	generation  uint64
+	width       int
+	height      int
 
 	viewport viewport.Model
 	ready    bool
@@ -75,11 +82,20 @@ type Model struct {
 
 // Result is what the wizard returns when it exits.
 type Result struct {
-	Completed bool
-	Cancelled bool
-	Config    *config.Config
-	Action    Action
+	Outcome Outcome
+	Config  *config.Config
+	Action  Action
 }
+
+// Outcome identifies how the wizard terminated.
+type Outcome uint8
+
+// OutcomeUnset and the terminal outcomes are mutually exclusive.
+const (
+	OutcomeUnset Outcome = iota
+	OutcomeCompleted
+	OutcomeCancelled
+)
 
 // Action names the user's choice at the wizard's terminal step.
 type Action string
@@ -120,12 +136,12 @@ func defaultKeyMap() KeyMap {
 			key.WithHelp("pgdn", "scroll down"),
 		),
 		Home: key.NewBinding(
-			key.WithKeys("home"),
-			key.WithHelp("home", "top"),
+			key.WithKeys("ctrl+home"),
+			key.WithHelp("ctrl+home", "top"),
 		),
 		End: key.NewBinding(
-			key.WithKeys("end"),
-			key.WithHelp("end", "bottom"),
+			key.WithKeys("ctrl+end"),
+			key.WithHelp("ctrl+end", "bottom"),
 		),
 	}
 }
@@ -167,7 +183,7 @@ func NewFlowModel(steps []WizardStep, cfg *config.Config, chrome FlowChrome) *Mo
 func getTerminalSize() (width, height int) {
 	w, h, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil {
-		return 80, 24
+		return minWidth, minHeight
 	}
 	return w, h
 }
@@ -175,7 +191,8 @@ func getTerminalSize() (width, height int) {
 // Init implements tea.Model; it fires the first step's Init command.
 func (m *Model) Init() tea.Cmd {
 	if len(m.steps) > 0 {
-		return m.steps[m.currentStep].Init()
+		m.beginVisit()
+		return m.ownCommand(m.steps[m.currentStep].Init())
 	}
 	return nil
 }
@@ -183,6 +200,16 @@ func (m *Model) Init() tea.Cmd {
 // Update processes wizard-level messages (navigation, resize, quit) and
 // delegates the rest to the currently-active step.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if result, ok := msg.(visitResult); ok {
+		if result.generation != m.generation || !m.currentStepMatches(result.step) {
+			return m, nil
+		}
+		msg = result.message
+	}
+	return m.updateCurrent(msg)
+}
+
+func (m *Model) updateCurrent(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
@@ -200,7 +227,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			m.quitting = true
-			m.result = Result{Cancelled: true}
+			m.result = Result{Outcome: OutcomeCancelled}
 			return m, tea.Quit
 		}
 
@@ -208,7 +235,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		if key.Matches(msg, m.keyMap.Back) && m.currentStep > 0 {
+		if m.shouldGoBack(msg) {
 			if g, ok := m.steps[m.currentStep].(BackGuard); ok && g.InterceptBack() {
 				return m, nil
 			}
@@ -216,6 +243,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case StepCompleteMsg:
+		if !m.currentStepMatches(msg.StepID) {
+			return m, nil
+		}
 		return m.goToNextStep()
 
 	case StepBackMsg:
@@ -225,16 +255,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.jumpToStep(msg.StepID)
 
 	case ErrorSetMsg:
-		m.err = msg.Error
+		m.setError(msg.Error)
 		return m, nil
 
 	case FocusChangedMsg:
 		if m.ready {
+			m.syncViewportContent()
 			m.autoScrollToField(msg.FieldIndex, msg.TotalFields)
 		}
 		return m, nil
 
 	case ConfigSyncMsg:
+		if !m.currentStepMatches(msg.StepID) {
+			return m, nil
+		}
 		if len(m.steps) > 0 && m.currentStep >= 0 && m.currentStep < len(m.steps) {
 			if a, ok := m.steps[m.currentStep].(ConfigApplier); ok {
 				_ = a.Apply(m.config)
@@ -244,12 +278,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	if len(m.steps) > 0 && m.currentStep < len(m.steps) {
+		if _, editing := msg.(tea.KeyPressMsg); editing {
+			m.err = nil
+		}
 		updatedStep, cmd := m.steps[m.currentStep].Update(msg)
 		m.steps[m.currentStep] = updatedStep
-		cmds = append(cmds, cmd)
+		cmds = append(cmds, m.ownCommand(cmd))
 
 		if m.ready {
 			m.syncViewportContent()
+			m.followEditedFocus(msg)
 		}
 	}
 
@@ -287,4 +325,32 @@ func (m *Model) CurrentStep() WizardStep {
 		return m.steps[m.currentStep]
 	}
 	return nil
+}
+
+func (m *Model) currentStepMatches(id StepID) bool {
+	return m.CurrentStep() != nil && m.CurrentStep().ID() == id
+}
+
+func (m *Model) setError(err error) {
+	m.err = err
+	if m.ready {
+		m.syncViewportContent()
+		m.autoScrollToField(0, 0)
+	}
+}
+
+func (m *Model) followEditedFocus(msg tea.Msg) {
+	if _, editing := msg.(tea.KeyPressMsg); editing {
+		m.autoScrollToField(0, 0)
+	}
+}
+
+func (m *Model) shouldGoBack(msg tea.KeyPressMsg) bool {
+	if !key.Matches(msg, m.keyMap.Back) || m.currentStep == 0 {
+		return false
+	}
+	if owner, ok := m.CurrentStep().(interface{ OwnsKey(tea.KeyPressMsg) bool }); ok && owner.OwnsKey(msg) {
+		return false
+	}
+	return true
 }

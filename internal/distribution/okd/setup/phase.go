@@ -77,6 +77,11 @@ func New(opts ...phase.BasePhaseOption) *Phase {
 // re-checked here.
 func (p *Phase) Execute(ctx context.Context, cfg *config.Config, opts *Options) ([]distribution.StepResult, error) {
 	p.Log.Info("setup: starting okd cluster configuration")
+	if !opts.SkipISOs {
+		if err := p.ValidateISOPlacement(ctx, cfg); err != nil {
+			return nil, err
+		}
+	}
 
 	orchestrator := distribution.NewOrchestrator(distribution.BuildSteps(p.setupSteps(cfg, opts))...)
 	orchestrator.SetLogger(p.Log)

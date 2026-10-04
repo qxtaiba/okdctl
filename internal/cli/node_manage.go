@@ -19,6 +19,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/render"
+	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/lifecycle"
 	"github.com/qxtaiba/okdctl/internal/workspace"
@@ -81,16 +82,17 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 
 	st := &lifecycle.State{Cfg: cfg, Marker: marker}
 	hooks := lifecycle.Hooks{
-		ListNodes: func() ([]cluster.NodeDetail, error) { return cl.ListNodes(ctx) },
-		DryRun: func(s *lifecycle.State) (*node.OpPlan, error) {
+		ListNodes: func(visit context.Context) ([]cluster.NodeDetail, error) { return cl.ListNodes(visit) },
+		DryRun: func(visit context.Context, s *lifecycle.State) (*node.OpPlan, error) {
 			rc, err := env.newRunner(cmd, cfg, "manage", nodeConsent{dryRun: true}, fileOnlySlog(), subprocSink())
 			if err != nil {
 				return nil, err
 			}
 			defer rc.cleanup()
+			rc.runner.ResumePreview = s.Resume
 			var captured *node.OpPlan
 			rc.runner.Preview = func(p *node.OpPlan) { captured = p }
-			if err := runLifecycleOp(ctx, rc, s); err != nil {
+			if err := runLifecycleOp(visit, rc, s); err != nil {
 				return nil, err
 			}
 			return captured, nil
@@ -131,7 +133,7 @@ func reportLifecycleOutcome(cmd *cobra.Command, result wizard.Result, st *lifecy
 	case st.Executed:
 		fmt.Fprint(cmd.OutOrStdout(), render.NodeOpComplete(st.Plan, st.Elapsed))
 		return nil
-	case result.Cancelled || !st.Proceed:
+	case result.Outcome == wizard.OutcomeCancelled || !st.Proceed:
 		logutil.Info("no changes made")
 		return nil
 	default:
@@ -155,11 +157,13 @@ func executeLifecycleOp(opCtx context.Context, cmd *cobra.Command, cfg *config.C
 	}
 	rc.runner.Reporter = func(desc string) func() {
 		start := time.Now()
-		events <- lifecycle.ExecEvent{Desc: desc}
-		return func() { events <- lifecycle.ExecEvent{Desc: desc, Done: true, Took: time.Since(start)} }
+		sendLifecycleEvent(opCtx, events, &lifecycle.ExecEvent{Desc: desc})
+		return func() {
+			sendLifecycleEvent(opCtx, events, &lifecycle.ExecEvent{Desc: desc, Done: true, Took: time.Since(start)})
+		}
 	}
 	rc.runner.OnStep = func(target string, step node.Step) {
-		events <- lifecycle.ExecEvent{Node: target, Step: step}
+		sendLifecycleEvent(opCtx, events, &lifecycle.ExecEvent{Node: target, Step: step})
 	}
 	if err := runLifecycleOp(opCtx, rc, st); err != nil {
 		if errors.Is(err, node.ErrDeclined) {
@@ -185,7 +189,11 @@ func fileOnlySlog() *slog.Logger {
 	if runLogSink == nil {
 		return logutil.NopLogger
 	}
-	return slog.New(logutil.NewRedactHandler(slog.NewTextHandler(runLogSink, nil)))
+	handler, err := tui.NewLogHandler(effectiveLogLevel(), logFormat, runLogSink)
+	if err != nil {
+		return logutil.NopLogger
+	}
+	return slog.New(handler)
 }
 
 // runLifecycleOp dispatches the wizard-collected op onto the runner, merging
@@ -219,4 +227,11 @@ func addOptsFromWizard(rc *nodeRunnerCtx, st *lifecycle.State) node.AddOptions {
 	opts := lifecycle.AddOptionsFrom(st)
 	opts.HostTotalMiB, opts.HostAllocatedMiB = rc.HostTotalMiB, rc.HostAllocatedMiB
 	return opts
+}
+
+func sendLifecycleEvent(ctx context.Context, events chan<- lifecycle.ExecEvent, event *lifecycle.ExecEvent) {
+	select {
+	case events <- *event:
+	case <-ctx.Done():
+	}
 }
