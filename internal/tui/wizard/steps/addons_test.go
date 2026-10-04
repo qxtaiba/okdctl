@@ -179,3 +179,33 @@ func TestAddonsStep_WarningAttachesToSecretStoreSection(t *testing.T) {
 		t.Fatalf("want secretstore_secrets_dir (%d) < warning (%d) < secret store (onepassword) section (%d)", secretsDirIdx, warnIdx, nextSectionIdx)
 	}
 }
+
+// TestAddonsStep_ViewDoesNotCallSopsLookup pins the reconciliation-audit
+// defect where View synchronously ran exec.LookPath("sops") on every
+// render whenever secretstore was enabled, violating the contract that
+// View performs no file/PATH/network checks.
+func TestAddonsStep_ViewDoesNotCallSopsLookup(t *testing.T) {
+	calls := 0
+	prev := sopsOnPath
+	sopsOnPath = func() bool {
+		calls++
+		return true
+	}
+	defer func() { sopsOnPath = prev }()
+
+	cfg := config.DefaultConfig()
+	cfg.Addons = map[string]config.AddonConfig{"secretstore": {Enabled: true}}
+
+	step := NewAddonsStep()
+	step.LoadFromConfig(cfg, true)
+
+	afterConstruct := calls
+
+	for range 5 {
+		step.View(100, 30)
+	}
+
+	if calls != afterConstruct {
+		t.Fatalf("View() called the sops lookup %d extra time(s); it must resolve once outside the render path, not on every View()", calls-afterConstruct)
+	}
+}
