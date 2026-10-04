@@ -26,7 +26,7 @@ func RegisterAll(b *wizard.StepBuilder) {
 func deployPhases() []wizard.Stage {
 	return []wizard.Stage{
 		{Label: "connect", Steps: []wizard.StepID{wizard.StepIDWelcome, wizard.StepIDDistribution, wizard.StepIDProxmox}},
-		{Label: "cluster", Steps: []wizard.StepID{wizard.StepIDBasics, wizard.StepIDNodePlacement, wizard.StepIDNetworking, wizard.StepIDResources}},
+		{Label: labelCluster, Steps: []wizard.StepID{wizard.StepIDBasics, wizard.StepIDNodePlacement, wizard.StepIDNetworking, wizard.StepIDResources}},
 		{Label: "extras", Steps: []wizard.StepID{wizard.StepIDAddons, wizard.StepIDFiles, wizard.StepIDAdvanced}},
 		{Label: "review", Steps: []wizard.StepID{wizard.StepIDReview}},
 	}

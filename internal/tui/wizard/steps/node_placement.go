@@ -129,7 +129,7 @@ func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, nodeNames []s
 	px := s.cfg.Provider.Proxmox
 	clusterName := s.cfg.Cluster.Name
 	if clusterName == "" {
-		clusterName = "cluster"
+		clusterName = labelCluster
 	}
 
 	var sections []wizard.FormSection

@@ -516,8 +516,10 @@ func (s *WelcomeStep) View(width, height int) string {
 // clears it once the outer frame's own padding and border are subtracted.
 const hubGetStartedPanelMinWidth = 140
 
-const hubGetStartedPanelGap = 4
-const hubGetStartedPanelWidth = 42
+const (
+	hubGetStartedPanelGap   = 4
+	hubGetStartedPanelWidth = 42
+)
 
 // renderGetStartedPanel renders the blank-slate hub's second column: an
 // honest preview of the four phases "get started" walks through, drawn
@@ -526,7 +528,7 @@ const hubGetStartedPanelWidth = 42
 func renderGetStartedPanel() string {
 	phases := []struct{ label, detail string }{
 		{"connect", "provider, distribution, credentials"},
-		{"cluster", "name, nodes, networking, resources"},
+		{labelCluster, "name, nodes, networking, resources"},
 		{"extras", "add-ons, files, advanced settings"},
 		{"review", "confirm changes, deploy"},
 	}
@@ -535,8 +537,7 @@ func renderGetStartedPanel() string {
 
 	rows := make([]string, 0, len(phases)*2+2)
 	for _, phase := range phases {
-		rows = append(rows, labelStyle.Render(phase.label))
-		rows = append(rows, detailStyle.Render("  "+phase.detail))
+		rows = append(rows, labelStyle.Render(phase.label), detailStyle.Render("  "+phase.detail))
 	}
 	rows = append(rows, "", tui.DimStyle.Render("writes okdctl.yaml, ready to deploy"))
 	return tui.Card("GET STARTED", strings.Join(rows, "\n"), hubGetStartedPanelWidth, tui.ColorAccent())
