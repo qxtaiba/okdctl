@@ -45,6 +45,20 @@ func resizePlan() node.OpPlan {
 	}
 }
 
+func diskOnlyResizePlan() node.OpPlan {
+	return node.OpPlan{
+		Op:      node.OpResize,
+		Cluster: "grappleberry",
+		Nodes: []node.PlanNode{{
+			Name:      "master0",
+			Role:      nodetypes.RoleMaster,
+			TFAddress: "module.vm.master[0]",
+			Action:    terraform.PlanActionUpdate,
+		}},
+		OSDiskGB: 100,
+	}
+}
+
 func addPlan() node.OpPlan {
 	return node.OpPlan{
 		Op:      node.OpAdd,
@@ -234,6 +248,76 @@ func TestNodeOpCompleteTableSpeaksCompletionVoiceNotPlanVoice(t *testing.T) {
 	}
 	if strings.Contains(out, "delete") {
 		t.Errorf("completion box must not show the raw plan action %q:\n%s", "delete", out)
+	}
+}
+
+// TestNodeOpDiskOnlyResizeNeverClaimsPowerCycle guards the durable-output
+// truthfulness bug: a disk-only resize (OSDiskGB set, no memory/cpu change)
+// is realized live in-guest with no cordon/drain/power-cycle (node/resize.go's
+// diskOnly path), but the confirm box, dry-run box, and post-exit next-steps
+// all used to claim a power-cycle unconditionally for every OpResize plan.
+func TestNodeOpDiskOnlyResizeNeverClaimsPowerCycle(t *testing.T) {
+	p := diskOnlyResizePlan()
+
+	for _, got := range []string{NodeOpConfirm(&p), NodeOpDryRun(&p)} {
+		if strings.Contains(got, "power-cycled") {
+			t.Errorf("disk-only resize box must not claim a power-cycle happened:\n%s", got)
+		}
+		if !strings.Contains(got, "no drain, no power-cycle") {
+			t.Errorf("disk-only resize box must say the live path has no drain/power-cycle:\n%s", got)
+		}
+	}
+
+	steps := NodeOpNextSteps(&p)
+	joined := strings.Join(steps, "\n")
+	if strings.Contains(joined, "power-cycled to realize") {
+		t.Errorf("disk-only resize next-steps must not claim a power-cycle realized the change:\n%s", joined)
+	}
+	if !strings.Contains(joined, "no node was power-cycled") {
+		t.Errorf("disk-only resize next-steps must say no node was power-cycled:\n%s", joined)
+	}
+}
+
+// TestNodeOpRebootResizeStillClaimsPowerCycle guards the other half of the
+// same contract: a resize that actually power-cycles (memory/cpu change,
+// no disk-only shortcut) must still say so — the disk-only fix must not
+// silence the claim for a run that really does reboot.
+func TestNodeOpRebootResizeStillClaimsPowerCycle(t *testing.T) {
+	p := resizePlan() // MemoryMB set, no OSDiskGB: realizePowerCycle always runs
+
+	confirm := NodeOpConfirm(&p)
+	if !strings.Contains(confirm, "power-cycled") {
+		t.Errorf("a resize that really power-cycles must say so in the confirm box:\n%s", confirm)
+	}
+
+	joined := strings.Join(NodeOpNextSteps(&p), "\n")
+	if !strings.Contains(joined, "power-cycled to realize") {
+		t.Errorf("a resize that really power-cycles must say so in the next-steps:\n%s", joined)
+	}
+}
+
+// TestDiskOnlyResize pins the exact boolean this package derives the
+// durable-output copy from, against the same shape node/resize.go:76 and
+// lifecycle.State.DiskOnly() use — disk alone is the live path; disk bundled
+// with a memory/cpu change is not.
+func TestDiskOnlyResize(t *testing.T) {
+	cases := []struct {
+		name string
+		plan node.OpPlan
+		want bool
+	}{
+		{"disk alone", diskOnlyResizePlan(), true},
+		{"disk with memory", node.OpPlan{Op: node.OpResize, OSDiskGB: 100, MemoryMB: 4096}, false},
+		{"disk with cpu", node.OpPlan{Op: node.OpResize, OSDiskGB: 100, CPU: 4}, false},
+		{"memory only", resizePlan(), false},
+		{"not a resize", node.OpPlan{Op: node.OpAdd, OSDiskGB: 100}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := diskOnlyResize(&tc.plan); got != tc.want {
+				t.Errorf("diskOnlyResize() = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 

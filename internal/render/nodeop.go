@@ -125,6 +125,15 @@ func NodeOpRecapLines(plan *node.OpPlan, elapsed time.Duration) []string {
 	return append(lines, NodeOpNextSteps(plan)...)
 }
 
+// diskOnlyResize reports whether plan grows only the os disk — the live,
+// in-guest path with no cordon/drain/power-cycle. Mirrors the identical
+// check node.Runner.Resize (resize.go) and lifecycle.State.DiskOnly() already
+// gate execution on, so this durable copy can never diverge from what
+// execution actually does.
+func diskOnlyResize(plan *node.OpPlan) bool {
+	return plan.Op == node.OpResize && plan.OSDiskGB > 0 && plan.MemoryMB <= 0 && plan.CPU <= 0
+}
+
 // nodeOpDetails writes the shared header + per-node section for the confirm and dry-run boxes.
 func nodeOpDetails(sb *Builder, plan *node.OpPlan) {
 	sb.KV("cluster", plan.Cluster)
@@ -139,7 +148,11 @@ func nodeOpDetails(sb *Builder, plan *node.OpPlan) {
 		if plan.CPU > 0 {
 			sb.KV("target cpu", fmt.Sprintf("%d vCPU", plan.CPU))
 		}
-		sb.Note("disruption", "each node is drained, then hard power-cycled (stop→start) to realize the change")
+		disruption := "each node is drained, then hard power-cycled (stop→start) to realize the change"
+		if diskOnlyResize(plan) {
+			disruption = "the os disk is grown live in-guest via oc debug — no drain, no power-cycle"
+		}
+		sb.Note("disruption", disruption)
 	}
 	if plan.GrowMasterMemoryMB > 0 {
 		sb.KV("grow masters to", fmt.Sprintf("%d MiB", plan.GrowMasterMemoryMB))
@@ -208,6 +221,12 @@ func NodeOpNextSteps(plan *node.OpPlan) []string {
 			"verify the cluster with 'okdctl status'",
 		}
 	case node.OpResize:
+		if diskOnlyResize(plan) {
+			return []string{
+				"the os disk was grown live in-guest; no node was power-cycled",
+				"  verify with 'okdctl node list' or 'oc debug node/<name> -- df -h'",
+			}
+		}
 		return []string{
 			"each resized node was power-cycled to realize the change; verify with",
 			"  'okdctl node list' or 'oc debug node/<name> -- free -m'",
