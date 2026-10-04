@@ -83,7 +83,10 @@ var AddonsStepDefinition = wizard.StepDefinition{
 	Validate: func(values map[string]string) error {
 		if values["secretstore_enabled"] == valYes && values["secretstore_provider"] == providerVault &&
 			strings.TrimSpace(values["secretstore_vault_server"]) == "" {
-			return errors.New("vault server url is required — enter the vault address")
+			return wizard.NewCrossFieldError(
+				errors.New("vault server url is required — enter the vault address"),
+				"secretstore_vault_server",
+			)
 		}
 		return nil
 	},

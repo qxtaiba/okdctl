@@ -69,6 +69,13 @@ type HistoryChooser interface {
 	HistoryChooserOpen() bool
 }
 
+// FieldErrorSetter is implemented by fields that can render an externally
+// supplied error inline — a cross-field validator uses it to mark a field
+// invalid at the point of failure instead of only posting a status banner.
+type FieldErrorSetter interface {
+	SetError(err error)
+}
+
 // LabeledField is implemented by every concrete FormField, letting a caller
 // describe the currently focused field without a type switch over each
 // field kind — the wide-terminal context pane's focused-field echo uses it.
@@ -357,6 +364,14 @@ func (f *InputField) Validate() error {
 	f.touched = true
 	f.err = f.Check()
 	return f.err
+}
+
+// SetError marks the field invalid with err — set by a cross-field
+// validator that implicates this field — rendering it like a per-field
+// Check failure until the next edit clears it.
+func (f *InputField) SetError(err error) {
+	f.err = err
+	f.touched = true
 }
 
 // Update forwards msg to the underlying textinput, clearing any stale
