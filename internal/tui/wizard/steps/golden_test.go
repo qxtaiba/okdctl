@@ -138,6 +138,19 @@ func configureScenarios() []configureScenario {
 			},
 			interact: endKey,
 		},
+		{
+			// A saved baseline identical to the current config: the pane
+			// must say so honestly ("no edits since load · 0"), not stay
+			// silent or claim a brand-new, never-loaded configuration.
+			name: "review-no-changes",
+			id:   wizard.StepIDReview,
+			seed: func(m *wizard.Model) {
+				cfg := m.Config()
+				step := m.CurrentStep().(*ReviewStep)
+				step.SetConfig(cfg)
+				step.SetSavedConfig(cfg)
+			},
+		},
 	}
 }
 
@@ -484,7 +497,7 @@ func TestGolden_HubWideTerminals(t *testing.T) {
 // pins at 180x48: proxmox (a short form, so the split's idle vertical space
 // below the form is visible) and review (a long one, so the split survives
 // a scrolling body).
-var wideSplitScenarios = map[string]bool{"proxmox": true, "review": true, "review-edited": true, "node-placement": true}
+var wideSplitScenarios = map[string]bool{"proxmox": true, "review": true, "review-edited": true, "node-placement": true, "review-no-changes": true}
 
 // TestGolden_WideSplit pins the ≥150-col split layout — form column, rule,
 // context pane — at 180x48 for wideSplitScenarios; every other scenario
