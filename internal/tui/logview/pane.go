@@ -302,8 +302,21 @@ func renderPane(src Source, v view, width, height int, wrap bool) string {
 	if len(rows) == 0 {
 		rows = []string{lipgloss.NewStyle().Foreground(tui.ColorSubtle()).Render(emptyNote(v.filter))}
 	}
-	rows = withMinimap(rows, lines, width, int(end-first)-len(w), int(end-first))
+	rows = withMinimap(rows, lines, width, windowStart(&st, w, pos, first), int(end-first))
 	return strings.Join(append([]string{header}, rows...), "\n")
+}
+
+// windowStart is the raw stream index — relative to first, as withMinimap
+// wants it — of the first line w shows. w's raw-index span equals its own
+// length only when every line between pos-len(w) and pos survived the
+// filter; a sparse filter's matches are not contiguous in raw index space,
+// so the true start is read off st (which remembers each surviving member's
+// own raw index) rather than assumed from len(w).
+func windowStart(st *stream, w []Line, pos int, first int64) int {
+	if len(w) == 0 {
+		return 0
+	}
+	return int(st.at(pos-len(w)) - first)
 }
 
 // withMinimap pads each of rows out to the lane column and appends its own
@@ -442,7 +455,7 @@ func renderTail(src Source, v view, width, budget int) []string {
 		// — it is the only thing on screen explaining why they are gone.
 		rows = []string{lipgloss.NewStyle().Foreground(tui.ColorSubtle()).Render(emptyNote(v.filter))}
 	}
-	rows = withMinimap(rows, lines, width, int(end-first)-len(w), int(end-first))
+	rows = withMinimap(rows, lines, width, windowStart(&st, w, pos, first), int(end-first))
 	header := paneHeader(v, coords{
 		shown: len(w), end: end, total: first + int64(len(lines)),
 		pos: pos, matches: st.len(),
