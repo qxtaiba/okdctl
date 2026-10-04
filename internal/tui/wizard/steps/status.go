@@ -266,6 +266,19 @@ func statusEmptyLines(loading bool, err error) []string {
 
 func statusBoardLines(st *okd.ClusterStatus, loading bool, err error, selected string, detail bool, width int, split bool) []string {
 	compact := width < 80
+	lines := statusSummaryLines(st, compact)
+	lines = append(lines, statusNodeSectionLines(st, selected, detail, width, split, compact)...)
+	lines = append(lines, statusAddonSectionLines(st, compact)...)
+	lines = statusPrependBanners(lines, loading, err)
+	if !compact {
+		lines = append(lines, "", "↑/↓ select node · enter details · r refresh")
+	}
+	return lines
+}
+
+// statusSummaryLines renders the header, the phase/API/node/operator summary
+// line, and the NODES section heading shared by every width.
+func statusSummaryLines(st *okd.ClusterStatus, compact bool) []string {
 	phase := statusPhaseStyle(st.Phase).Render(string(st.Phase))
 	api := lipgloss.NewStyle().Foreground(tui.ColorError()).Render(tui.IconError + " unavailable")
 	if st.APIReachable {
@@ -307,6 +320,13 @@ func statusBoardLines(st *okd.ClusterStatus, loading bool, err error, selected s
 		lines = append(lines, "")
 	}
 	lines = append(lines, fmt.Sprintf("NODES · %d (%d master · %d worker)", nodes.total, nodes.masters, nodes.workers))
+	return lines
+}
+
+// statusNodeSectionLines renders the node table, or its unavailable/empty/
+// narrow-width fallbacks, including the selected node's detail rows.
+func statusNodeSectionLines(st *okd.ClusterStatus, selected string, detail bool, width int, split, compact bool) []string {
+	var lines []string
 	switch {
 	case !st.NodesAvailable:
 		lines = append(lines, lipgloss.NewStyle().Foreground(tui.ColorTextFaint()).Render("node inventory unavailable"))
@@ -344,22 +364,36 @@ func statusBoardLines(st *okd.ClusterStatus, loading bool, err error, selected s
 			}
 		}
 	}
-	if len(st.Addons) > 0 {
-		if !compact {
-			lines = append(lines, "", "ADD-ONS")
-		}
-		for i, addon := range st.Addons {
-			mark, style := tui.IconError, tui.ColorError()
-			if addon.Healthy {
-				mark, style = tui.IconSuccess, tui.ColorSuccess()
-			}
-			prefix := ""
-			if compact && i == 0 {
-				prefix = "ADD-ONS · "
-			}
-			lines = append(lines, prefix+lipgloss.NewStyle().Foreground(style).Render(mark)+" "+addon.Name+" · "+addon.Label())
-		}
+	return lines
+}
+
+// statusAddonSectionLines renders the ADD-ONS section, or no lines at all
+// when the cluster reports none.
+func statusAddonSectionLines(st *okd.ClusterStatus, compact bool) []string {
+	if len(st.Addons) == 0 {
+		return nil
 	}
+	var lines []string
+	if !compact {
+		lines = append(lines, "", "ADD-ONS")
+	}
+	for i, addon := range st.Addons {
+		mark, style := tui.IconError, tui.ColorError()
+		if addon.Healthy {
+			mark, style = tui.IconSuccess, tui.ColorSuccess()
+		}
+		prefix := ""
+		if compact && i == 0 {
+			prefix = "ADD-ONS · "
+		}
+		lines = append(lines, prefix+lipgloss.NewStyle().Foreground(style).Render(mark)+" "+addon.Name+" · "+addon.Label())
+	}
+	return lines
+}
+
+// statusPrependBanners prepends the in-flight and stale-snapshot banners
+// ahead of lines, in that order, when loading and err call for them.
+func statusPrependBanners(lines []string, loading bool, err error) []string {
 	if loading {
 		lines = append([]string{lipgloss.NewStyle().Foreground(tui.ColorAccent()).Render("refreshing cluster status…")}, lines...)
 	}
@@ -368,9 +402,6 @@ func statusBoardLines(st *okd.ClusterStatus, loading bool, err error, selected s
 			lipgloss.NewStyle().Foreground(tui.ColorWarning()).Render("refresh failed · showing last snapshot"),
 			lipgloss.NewStyle().Foreground(tui.ColorTextFaint()).Render(err.Error()),
 		}, lines...)
-	}
-	if !compact {
-		lines = append(lines, "", "↑/↓ select node · enter details · r refresh")
 	}
 	return lines
 }
@@ -458,7 +489,7 @@ func statusAddonLines(st *okd.ClusterStatus) []string {
 }
 
 func statusClusterFactLines(st *okd.ClusterStatus, width int) []string {
-	api := "unavailable"
+	api := statusUnavailable
 	if st.APIAvailable {
 		api = "unreachable"
 		if st.APIReachable {
@@ -468,7 +499,7 @@ func statusClusterFactLines(st *okd.ClusterStatus, width int) []string {
 	if st.APILatencyAvailable {
 		api += " · " + st.APILatency.Round(time.Millisecond).String()
 	}
-	nodes := "unavailable"
+	nodes := statusUnavailable
 	var masters, workers int
 	var readyMasters, readyWorkers int
 	if st.NodesAvailable {
@@ -492,7 +523,7 @@ func statusClusterFactLines(st *okd.ClusterStatus, width int) []string {
 		}
 		nodes = fmt.Sprintf("%d/%d ready", ready, len(st.Nodes))
 	}
-	operators := "unavailable"
+	operators := statusUnavailable
 	if st.OperatorsAvailable {
 		operators = fmt.Sprintf("%d degraded", st.DegradedOperators)
 	}

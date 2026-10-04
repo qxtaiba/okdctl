@@ -682,10 +682,10 @@ func (s *DataDrivenStep) FieldHistory() map[string][]string {
 	return s.history.Snapshot()
 }
 
-func fieldDefinition(def *StepDefinition, key string) *FieldDefinition {
+func fieldDefinition(def *StepDefinition, fieldKey string) *FieldDefinition {
 	for section := range def.Sections {
 		for field := range def.Sections[section].Fields {
-			if def.Sections[section].Fields[field].Key == key {
+			if def.Sections[section].Fields[field].Key == fieldKey {
 				return &def.Sections[section].Fields[field]
 			}
 		}

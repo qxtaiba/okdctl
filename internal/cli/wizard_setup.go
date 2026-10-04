@@ -121,17 +121,6 @@ func configureDraftHistory(built wizard.BuiltSteps, history map[string][]string)
 	}
 }
 
-func runHubSessionWithDraft(cmd *cobra.Command, flowSteps []wizard.WizardStep, cfg *config.Config, save func(*config.Config, wizard.StepID, string) error) (wizard.Result, error) {
-	restoreLogs := logutil.Redirect(subprocSink())
-	defer restoreLogs()
-
-	progressBars := logutil.ProgressBarsEnabled()
-	logutil.SetProgressBarsEnabled(false)
-	defer logutil.SetProgressBarsEnabled(progressBars)
-
-	return wizard.RunFlowWithDraft(cmd.Context(), flowSteps, cfg, steps.Chrome(), save)
-}
-
 func runHubSessionWithDraftState(cmd *cobra.Command, flowSteps []wizard.WizardStep, cfg *config.Config, save func(*config.Config, wizard.StepID, string, map[string][]string) error) (wizard.Result, error) {
 	restoreLogs := logutil.Redirect(subprocSink())
 	defer restoreLogs()

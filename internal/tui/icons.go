@@ -22,6 +22,7 @@ const (
 // house's text separator — so spell it from here by discipline.
 const IconLevelInfo = "·"
 
+// IconLatencySparkline is the eight-level glyph ramp used to chart latency history.
 const IconLatencySparkline = "▁▂▃▄▅▆▇█"
 
 // Progress-bar glyphs: the filled cell, the empty track, the phase-boundary

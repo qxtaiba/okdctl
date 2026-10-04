@@ -25,5 +25,8 @@ const (
 	labelDeploy               = "deploy"
 	statusUnavailable         = "unavailable"
 	statusNotChecked          = "not checked"
+	statusWaiting             = "waiting"
+	statusReady               = "ready"
+	statusNotReady            = "not ready"
 	labelSelectedCapacity     = "selected capacity"
 )

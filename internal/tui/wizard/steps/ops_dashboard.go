@@ -16,8 +16,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-const opsRefreshInterval = 30 * time.Second
-const opsLatencyHistoryLimit = 12
+const (
+	opsRefreshInterval     = 30 * time.Second
+	opsLatencyHistoryLimit = 12
+)
 
 var opsLatencyGlyphs = []rune(tui.IconLatencySparkline)
 
@@ -103,7 +105,7 @@ func renderOpsDashboard(status *opsSnapshot, loading bool, err error, width, hei
 func renderOpsWide(snapshot *opsSnapshot, loading bool, err error, width, height int) string {
 	phase, api, nodes, operators, addonSummary := opsValues(snapshot)
 	if snapshot == nil {
-		phase, api, nodes, operators = "—", "waiting", "waiting", "waiting"
+		phase, api, nodes, operators = "—", statusWaiting, statusWaiting, statusWaiting
 	}
 	if loading && snapshot == nil {
 		api = "probing"
@@ -138,23 +140,24 @@ func renderOpsWide(snapshot *opsSnapshot, loading bool, err error, width, height
 			header += "\n" + run
 		}
 	}
-	return strings.Join([]string{header, metrics}, "\n\n")
+	return header + "\n\n" + metrics
 }
 
-func opsMetricCard(title, value, detail string, width int, color color.Color) string {
-	valueStyle := lipgloss.NewStyle().Foreground(color).Bold(true)
+func opsMetricCard(title, value, detail string, width int, accent color.Color) string {
+	valueStyle := lipgloss.NewStyle().Foreground(accent).Bold(true)
 	detailStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim())
 	body := valueStyle.Render(value) + "\n" + detailStyle.Render(detail)
-	return tui.Card(title, body, width, color)
+	return tui.Card(title, body, width, accent)
 }
 
 func renderNodeCard(snapshot *opsSnapshot, width, height int) string {
 	rows := []string{}
-	if snapshot == nil || !snapshot.status.NodesAvailable {
+	switch {
+	case snapshot == nil || !snapshot.status.NodesAvailable:
 		rows = append(rows, "Node inventory unavailable")
-	} else if len(snapshot.status.Nodes) == 0 {
+	case len(snapshot.status.Nodes) == 0:
 		rows = append(rows, "No nodes reported")
-	} else {
+	default:
 		counts := nodeCounts(snapshot.status.Nodes)
 		ready := 0
 		for _, node := range snapshot.status.Nodes {
@@ -169,15 +172,15 @@ func renderNodeCard(snapshot *opsSnapshot, width, height int) string {
 				rows = append(rows, fmt.Sprintf("… %d more nodes", len(snapshot.status.Nodes)-i))
 				break
 			}
-			mark, state, color := tui.IconError, "not ready", tui.ColorError()
+			mark, state, style := tui.IconError, statusNotReady, tui.ColorError()
 			if node.Ready {
-				mark, state, color = tui.IconSuccess, "ready", tui.ColorSuccess()
+				mark, state, style = tui.IconSuccess, statusReady, tui.ColorSuccess()
 			}
 			role := string(node.Role)
 			if role == "" || node.Role == nodetypes.RoleUnknown {
 				role = "node"
 			}
-			rows = append(rows, lipgloss.NewStyle().Foreground(color).Render(mark)+"  "+
+			rows = append(rows, lipgloss.NewStyle().Foreground(style).Render(mark)+"  "+
 				lipgloss.NewStyle().Foreground(tui.ColorText()).Bold(true).Render(node.Name)+
 				"   "+lipgloss.NewStyle().Foreground(tui.ColorTextDim()).Render(role+" · "+state))
 		}
@@ -187,18 +190,19 @@ func renderNodeCard(snapshot *opsSnapshot, width, height int) string {
 
 func renderAddonCard(snapshot *opsSnapshot, width int) string {
 	rows := []string{}
-	if snapshot == nil || !snapshot.status.OperatorsAvailable {
+	switch {
+	case snapshot == nil || !snapshot.status.OperatorsAvailable:
 		rows = append(rows, "Operator health unavailable")
-	} else if len(snapshot.status.Addons) == 0 {
+	case len(snapshot.status.Addons) == 0:
 		rows = append(rows, "No enabled add-ons reported")
-	} else {
+	default:
 		rows = append(rows, fmt.Sprintf("%d degraded operators · %s", snapshot.status.DegradedOperators, addonHealthSummary(snapshot)))
 		for _, addon := range snapshot.status.Addons {
-			mark, state, color := tui.IconError, addon.Label(), tui.ColorWarning()
+			mark, state, style := tui.IconError, addon.Label(), tui.ColorWarning()
 			if addon.Healthy {
-				mark, color = tui.IconSuccess, tui.ColorSuccess()
+				mark, style = tui.IconSuccess, tui.ColorSuccess()
 			}
-			rows = append(rows, lipgloss.NewStyle().Foreground(color).Render(mark)+"  "+addon.Name+
+			rows = append(rows, lipgloss.NewStyle().Foreground(style).Render(mark)+"  "+addon.Name+
 				"   "+lipgloss.NewStyle().Foreground(tui.ColorTextDim()).Render(state))
 		}
 		if snapshot.status.DegradedOperators == 0 {
@@ -211,11 +215,11 @@ func renderAddonCard(snapshot *opsSnapshot, width int) string {
 func renderOpsCompact(snapshot *opsSnapshot, loading bool, err error, width, height int) string {
 	phase, api, nodes, operators, _ := opsValues(snapshot)
 	if snapshot == nil {
-		phase, api, nodes, operators = "waiting", "waiting", "waiting", "waiting"
+		phase, api, nodes, operators = statusWaiting, statusWaiting, statusWaiting, statusWaiting
 		if loading {
 			api = "probing"
 		} else if err != nil {
-			api = "unavailable"
+			api = statusUnavailable
 		}
 	}
 	updated := ""
@@ -382,21 +386,21 @@ func fitOpsLine(width int, line string) string {
 
 func opsValues(snapshot *opsSnapshot) (phase, api, nodes, operators, addons string) {
 	if snapshot == nil {
-		return "unknown", "unavailable", "unavailable", "unavailable", "add-ons unavailable"
+		return "unknown", statusUnavailable, statusUnavailable, statusUnavailable, "add-ons unavailable"
 	}
 	st := snapshot.status
 	phase = string(st.Phase)
 	if phase == "" || st.Phase == okd.PhaseUnknown {
 		phase = "unknown"
 	}
-	api = "unavailable"
+	api = statusUnavailable
 	if st.APIAvailable {
 		api = "unreachable"
 		if st.APIReachable {
 			api = "reachable"
 		}
 	}
-	nodes = "unavailable"
+	nodes = statusUnavailable
 	if st.NodesAvailable {
 		ready := 0
 		for _, node := range st.Nodes {
@@ -406,7 +410,7 @@ func opsValues(snapshot *opsSnapshot) (phase, api, nodes, operators, addons stri
 		}
 		nodes = strconv.Itoa(ready) + "/" + strconv.Itoa(len(st.Nodes)) + " ready"
 	}
-	operators = "unavailable"
+	operators = statusUnavailable
 	if st.OperatorsAvailable {
 		operators = strconv.Itoa(st.DegradedOperators) + " degraded"
 	}

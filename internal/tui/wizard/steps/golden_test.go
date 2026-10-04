@@ -176,10 +176,14 @@ func newGoldenModelWithCapacity(t *testing.T) (*wizard.Model, *WizardCapacitySna
 func demoDiscovery() *proxmoxDiscovery {
 	return &proxmoxDiscovery{
 		Nodes: []proxmoxNode{
-			{Name: "pve1", Status: "online", CPUs: 32, CPUsKnown: true, MemGB: 128, MemKnown: true,
-				Storage: demoNodeStorage(), StorageKnown: true, Bridges: demoNodeBridges(), BridgesKnown: true},
-			{Name: "pve2", Status: "online", CPUs: 24, CPUsKnown: true, MemGB: 96, MemKnown: true,
-				Storage: demoNodeStorage(), StorageKnown: true, Bridges: demoNodeBridges(), BridgesKnown: true},
+			{
+				Name: "pve1", Status: "online", CPUs: 32, CPUsKnown: true, MemGB: 128, MemKnown: true,
+				Storage: demoNodeStorage(), StorageKnown: true, Bridges: demoNodeBridges(), BridgesKnown: true,
+			},
+			{
+				Name: "pve2", Status: "online", CPUs: 24, CPUsKnown: true, MemGB: 96, MemKnown: true,
+				Storage: demoNodeStorage(), StorageKnown: true, Bridges: demoNodeBridges(), BridgesKnown: true,
+			},
 		},
 		Storage: []proxmoxStorage{
 			{Name: "local-lvm", Content: "images,rootdir", TotalGB: 1800},
@@ -202,8 +206,10 @@ func demoDiscovery() *proxmoxDiscovery {
 func demoDiscoverySingleNode() *proxmoxDiscovery {
 	disc := demoDiscovery()
 	disc.Nodes = []proxmoxNode{
-		{Name: "pve", Status: "online", CPUs: 32, CPUsKnown: true, MemGB: 128, MemKnown: true,
-			Storage: demoNodeStorage(), StorageKnown: true, Bridges: demoNodeBridges(), BridgesKnown: true},
+		{
+			Name: "pve", Status: "online", CPUs: 32, CPUsKnown: true, MemGB: 128, MemKnown: true,
+			Storage: demoNodeStorage(), StorageKnown: true, Bridges: demoNodeBridges(), BridgesKnown: true,
+		},
 	}
 	return disc
 }
@@ -420,11 +426,12 @@ func TestGolden_HubOperationsDashboard(t *testing.T) {
 			assertNoScrollIndicator(t, frame)
 			plain := tuitest.StripANSI(frame)
 			wants := []string{"6/6 ready", "0 degraded", "homelab-master0", "homelab-worker2", "destroy"}
-			if sz.w == 180 {
+			switch sz.w {
+			case 180:
 				wants = append(wants, "CLUSTER OPERATIONS", "CLUSTER PHASE", "API probe · 82ms", "NODE FLEET", "ADD-ONS & OPERATORS", "HUB ACTIONS", "apply the saved cluster configuration")
-			} else if sz.w == 80 {
+			case 80:
 				wants = append(wants, "API reachable", "RTT 82ms", "ACTIONS · ↑↓ choose · enter open")
-			} else {
+			default:
 				wants = append(wants, "CLUSTER OPERATIONS", "NODE FLEET", "HUB ACTIONS")
 			}
 			for _, want := range wants {
