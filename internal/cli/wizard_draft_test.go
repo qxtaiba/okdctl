@@ -70,6 +70,15 @@ func TestFormatDraftAge(t *testing.T) {
 	}
 }
 
+func TestWizardDraftPathFallsBackOnEmptyConfig(t *testing.T) {
+	if got := wizardDraftPath(""); got != "okdctl.yaml" {
+		t.Errorf("wizardDraftPath(%q) = %q, want %q", "", got, "okdctl.yaml")
+	}
+	if got := wizardDraftPath("my-cluster.yaml"); got != "my-cluster.yaml" {
+		t.Errorf("wizardDraftPath(%q) = %q, want it unchanged", "my-cluster.yaml", got)
+	}
+}
+
 func TestClearWizardDraftRemovesSidecar(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "okdctl.yaml")
 	store := wizarddraft.New(path)

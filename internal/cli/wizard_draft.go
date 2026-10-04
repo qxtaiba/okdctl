@@ -66,6 +66,11 @@ func configureDraftResume(built wizard.BuiltSteps, draft *wizarddraft.Draft, now
 	}
 }
 
+// wizardDraftPath falls back to "okdctl.yaml" for an empty path: reachable
+// via an explicit `okdctl deploy --config=""`, which runDeploy carries
+// straight through to deployOutputFile; without the fallback the sidecar
+// would resolve to the unrelated ".draft.json" in cwd instead of matching
+// the config path every other invocation defaults to.
 func wizardDraftPath(path string) string {
 	if path == "" {
 		return "okdctl.yaml"
