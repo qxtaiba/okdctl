@@ -452,6 +452,93 @@ func validatePlacementCounts(cfg *Config, result *ValidationResult) {
 	}
 }
 
+// ProxmoxNodeInventory records what one discovered Proxmox node reports for
+// storage and bridges, keyed by node name in the map passed to
+// ValidatePlacementAgainstInventory / ValidationOptions.ProxmoxInventory.
+type ProxmoxNodeInventory struct {
+	Storage []string
+	Bridges []string
+}
+
+// placementCandidateNodes returns the distinct Proxmox node names a
+// bootstrap, control-plane, or worker VM can land on: explicit per-VM
+// placement entries plus provider.proxmox.node, which backs the bootstrap
+// VM and any slot left unassigned.
+func placementCandidateNodes(cfg *Config) []string {
+	px := cfg.Provider.Proxmox
+	if px == nil {
+		return nil
+	}
+	seen := make(map[string]bool)
+	var out []string
+	add := func(n string) {
+		if n == "" || seen[n] {
+			return
+		}
+		seen[n] = true
+		out = append(out, n)
+	}
+	add(px.Node)
+	for i := range cfg.Topology.ControlPlane.Count {
+		if i < len(px.ControlPlaneNodes) && px.ControlPlaneNodes[i] != "" {
+			add(px.ControlPlaneNodes[i])
+		} else {
+			add(px.Node)
+		}
+	}
+	for i := range cfg.Topology.Workers.Count {
+		if i < len(px.WorkerNodes) && px.WorkerNodes[i] != "" {
+			add(px.WorkerNodes[i])
+		} else {
+			add(px.Node)
+		}
+	}
+	return out
+}
+
+// ValidatePlacementAgainstInventory checks that the configured storage pools
+// and bridge exist on every Proxmox node a role can land on, given
+// nodeInventory (discovered node name to what it reports); an empty
+// nodeInventory is a no-op since there is nothing discovered to check
+// against, and a candidate node absent from it is skipped for the same reason.
+func ValidatePlacementAgainstInventory(cfg *Config, nodeInventory map[string]ProxmoxNodeInventory) *ValidationResult {
+	result := &ValidationResult{}
+	if cfg == nil {
+		return result
+	}
+	validatePlacementInventory(cfg, nodeInventory, result)
+	return result
+}
+
+func validatePlacementInventory(cfg *Config, nodeInventory map[string]ProxmoxNodeInventory, result *ValidationResult) {
+	px := cfg.Provider.Proxmox
+	if px == nil || len(nodeInventory) == 0 {
+		return
+	}
+	for _, node := range placementCandidateNodes(cfg) {
+		inv, known := nodeInventory[node]
+		if !known {
+			continue
+		}
+		if px.Storage != "" && !slices.Contains(inv.Storage, px.Storage) {
+			result.AddError(FieldProxmoxStorage,
+				fmt.Sprintf("storage %q does not exist on proxmox node %q, which a role can land on", px.Storage, node))
+		}
+		if px.DataStorage != "" && !slices.Contains(inv.Storage, px.DataStorage) {
+			result.AddError(FieldProxmoxDataStorage,
+				fmt.Sprintf("storage %q does not exist on proxmox node %q, which a role can land on", px.DataStorage, node))
+		}
+		if px.ISOStorage != "" && !slices.Contains(inv.Storage, px.ISOStorage) {
+			result.AddError(FieldProxmoxISOStorage,
+				fmt.Sprintf("storage %q does not exist on proxmox node %q, which a role can land on", px.ISOStorage, node))
+		}
+		if px.Bridge != "" && !slices.Contains(inv.Bridges, px.Bridge) {
+			result.AddError(FieldProxmoxBridge,
+				fmt.Sprintf("bridge %q does not exist on proxmox node %q, which a role can land on", px.Bridge, node))
+		}
+	}
+}
+
 func validateProxmoxConfig(proxmox *ProxmoxConfig, result *ValidationResult) {
 	if proxmox == nil {
 		result.AddError(FieldProviderProxmox, "proxmox configuration is required when using proxmox provider — add a provider.proxmox block")

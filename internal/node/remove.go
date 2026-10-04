@@ -32,9 +32,9 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 	// Dry-run mutates nothing, so resume is irrelevant: skip beginOp so a
 	// stranded marker previews rather than refuses.
 	var marker *OpMarker
-	if !r.DryRun {
+	if !r.DryRun || r.ResumePreview {
 		var err error
-		marker, err = r.beginOp(OpRemove, func(m *OpMarker) bool { return m.Target == target }, opts.Acknowledge)
+		marker, err = r.beginIntent(OpRemove, func(m *OpMarker) bool { return m.Target == target }, opts.Acknowledge, removeIntent(target, opts))
 		if err != nil {
 			return err
 		}

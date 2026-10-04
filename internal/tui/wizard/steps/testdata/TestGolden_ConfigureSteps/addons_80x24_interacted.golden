@@ -3,12 +3,6 @@
   │ O K D C T L                                                              │  
   │ configure cluster addons         connect · cluster · extras ●○○ · review │  
   │──────────────────────────────────────────────────────────────────────────│  
-  │                                                                          │  
-  │    ✓ gitops (flux)                                                       │  
-  │                                                                          │  
-  │    enabled                                                               │  
-  │    ╭────────────────╮                                                    │  
-  │    │ ● no  ○ yes    │                                                    │  
   │    ╰────────────────╯                                                    │  
   │                                                                          │  
   │      repository settings appear when enabled.                            │  
@@ -17,8 +11,14 @@
   │      supports onepassword, vault, and bitwarden via external-secrets-    │  
   │      operator                                                            │  
   │                                                                          │  
+  │    enabled                                                               │  
+  │    ╭────────────────╮                                                    │  
+  │    │ ● no  ○ yes    │                                                    │  
+  │    ╰────────────────╯                                                    │  
+  │    bootstrap eso provider credentials and secretstore crd                │  
   │                                                                          │  
-  │─────────── ↑ ↓  scroll down for more ─────────── ▸ okd 4.22.0-okd-scos.7 │  
+  │                                                                          │  
+  │─────────── ↑ ↓  75% • scroll for more ─────────── ▸ okd 4.22.0-okd-scos.7│  
   │  ↑↓/tab navigate • enter continue • esc back … • ctrl+c quit • ? help    │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

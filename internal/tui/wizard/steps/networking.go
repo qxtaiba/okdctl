@@ -193,12 +193,9 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 	},
 	Apply: func(_ *wizard.DataDrivenStep, cfg *config.Config) error {
 		cfg.Networking.StaticIP.DNS = cfg.Networking.Bastion.IP
-		netmask, err := netutil.CIDRToNetmask(cfg.Networking.MachineCIDR)
-		if err != nil {
-			return err
-		}
-		cfg.Networking.StaticIP.Netmask = netmask
-		return nil
+		// Shared with loader.go's load-time derivation; unlike the loader
+		// this step rejects an invalid CIDR rather than leaving it for validators.
+		return config.DeriveStaticNetmask(cfg)
 	},
 }
 

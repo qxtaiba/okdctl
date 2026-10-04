@@ -9,7 +9,8 @@
   │  operation      resize masters                                                               │  
   │  target memory  12288 → 24576 MiB per node                                                   │  
   │  target cpu     unchanged                                                                    │  
-  │  disruption     each node is drained, then power-cycled (stop→start)                         │  
+  │  disruption     each node is drained, then hard power-cycled (stop→start) to realize the     │  
+  │  change                                                                                      │  
   │                                                                                              │  
   │  nodes — execution order                                                                     │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
@@ -22,9 +23,8 @@
   │  2 cordon + drain                     6 etcd health gate (post)                              │  
   │  3 terraform apply (in-place update)  7 uncordon + ceph health gate                          │  
   │  4 power-cycle vm                                                                            │  
-  │  ✓ plan gate passed — the safety gate allows exactly the listed changes                      │  
   │                                                                                              │  
-  │─────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
-  │  ● execute resize   ○ back to parameters   ○ exit without changes      ctrl+c quit • ? help  │  
+  │──────────────────────────── ↑ ↓  scroll down for more ──────────────────────────── ▸ homelab │  
+  │  scroll to review the plan               esc back • pgup/pgdn scroll • ctrl+c quit • ? help  │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                     

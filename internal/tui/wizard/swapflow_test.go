@@ -67,6 +67,13 @@ func swapIn(t *testing.T, m *Model) {
 		t.Fatal("confirming the hub produced no command")
 	}
 	msg := cmd()
+	// ownCommand wraps every step-issued command in a visitResult (the
+	// generation/step tag the real Update loop unwraps before delivering
+	// it) — unwrap it here the same way, rather than feeding the wrapper
+	// itself back in, which would just bounce off Update's staleness check.
+	if vr, ok := msg.(visitResult); ok {
+		msg = vr.message
+	}
 	if _, ok := msg.(SwapFlowMsg); !ok {
 		t.Fatalf("hub command produced %T, want SwapFlowMsg", msg)
 	}

@@ -128,11 +128,12 @@ func (s *TargetStep) startFetch() tea.Cmd {
 	s.generation++
 	generation := s.generation
 	listNodes := s.hooks.ListNodes
+	ctx := s.Context()
 	return func() tea.Msg {
 		if listNodes == nil {
 			return nodesLoadedMsg{generation: generation}
 		}
-		nodes, err := listNodes()
+		nodes, err := listNodes(ctx)
 		return nodesLoadedMsg{generation: generation, nodes: nodes, err: err}
 	}
 }
@@ -197,9 +198,10 @@ func (s *TargetStep) buildChoices(nodes []cluster.NodeDetail) {
 	if s.st.Op == node.OpRemove {
 		if len(workers) > 0 {
 			top := workers[0]
-			blockedAfter := make(map[string]string, len(workers)-1)
-			for _, w := range workers[1:] {
-				blockedAfter[w.Name] = top.Name
+			rest := workers[1:]
+			blockedAfter := make(map[string]string, len(rest))
+			for i := range rest {
+				blockedAfter[rest[i].Name] = top.Name
 			}
 			header, rows := nodeTable(workers, blockedAfter)
 			s.header = header
@@ -237,10 +239,10 @@ func (s *TargetStep) buildChoices(nodes []cluster.NodeDetail) {
 		allNodes = append(allNodes, workers...)
 		header, rows := nodeTable(allNodes, nil)
 		dropdownHeader = header
-		for i, n := range allNodes {
-			s.choices = append(s.choices, targetChoice{node: n.Name})
+		for i := range allNodes {
+			s.choices = append(s.choices, targetChoice{node: allNodes[i].Name})
 			opts = append(opts, components.Option{
-				ID:         n.Name,
+				ID:         allNodes[i].Name,
 				Title:      rows[i],
 				InDropdown: true,
 			})
@@ -259,7 +261,8 @@ func nodeTable(nodes []cluster.NodeDetail, blockedAfter map[string]string) (head
 	blockedStyle := lipgloss.NewStyle().Foreground(tui.ColorSubtle())
 
 	data := make([][]string, len(nodes))
-	for i, n := range nodes {
+	for i := range nodes {
+		n := &nodes[i]
 		var ready string
 		switch {
 		case blockedAfter[n.Name] != "":
@@ -278,9 +281,9 @@ func nodeTable(nodes []cluster.NodeDetail, blockedAfter map[string]string) (head
 
 func filterRole(nodes []cluster.NodeDetail, role nodetypes.NodeRole) []cluster.NodeDetail {
 	var out []cluster.NodeDetail
-	for _, n := range nodes {
-		if n.Role == role {
-			out = append(out, n)
+	for i := range nodes {
+		if nodes[i].Role == role {
+			out = append(out, nodes[i])
 		}
 	}
 	return out
@@ -314,10 +317,10 @@ func (s *TargetStep) View(width, height int) string {
 		warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning())
 		hintStyle := lipgloss.NewStyle().Foreground(tui.ColorTextFaint()).Italic(true)
 		return warnStyle.Render("list nodes: "+tui.SanitizeTerminalEscapes(s.loadErr.Error())) + "\n\n" +
-			hintStyle.Render("esc to go back")
+			hintStyle.Render("r to retry · esc to go back")
 	}
 	if s.selector == nil || len(s.choices) == 0 {
-		return lipgloss.NewStyle().Foreground(tui.ColorWarning()).Render("no eligible nodes found")
+		return lipgloss.NewStyle().Foreground(tui.ColorWarning()).Render("no eligible nodes found · r to retry")
 	}
 
 	s.applyDropdownBudget()
@@ -415,4 +418,12 @@ func (s *TargetStep) OverlayHelp() []wizard.KeyBinding {
 		return nil
 	}
 	return []wizard.KeyBinding{{Key: "r", Help: "refresh"}}
+}
+
+// FocusBounds keeps the selected node or role visible.
+func (s *TargetStep) FocusBounds(width, _ int) (top, bottom int, ok bool) {
+	if s.phase != targetPicking || s.loadErr != nil || s.selector == nil {
+		return 0, 0, false
+	}
+	return s.selector.FocusBounds(width)
 }

@@ -38,8 +38,9 @@ no effect on a disk-only resize, which never power-cycles.
 
 An interrupted role roll records an op marker and resumes automatically on the
 next 'okdctl node resize' of the same role or node, skipping already-completed
-nodes and steps. --acknowledge-interrupted-op overrides a marker left by a
-different op or node instead of refusing.
+nodes and steps. Resume requires the same scope, sizing and disruption options.
+Changed intent or a legacy marker requires --acknowledge-interrupted-op to
+proceed fresh.
 
 ```
 okdctl node resize (masters|workers|<name>) [flags]
@@ -59,14 +60,14 @@ okdctl node resize (masters|workers|<name>) [flags]
 ### Options
 
 ```
-      --acknowledge-interrupted-op   override a stranded marker left by a different op or node and proceed fresh
+      --acknowledge-interrupted-op   override a stranded marker or changed operation intent and proceed fresh
       --confirm-cluster string       required with --yes; must equal the config cluster name
       --cpu int                      new per-node cpu cores (0 keeps current)
       --dry-run                      run gates and the plan gate without mutating anything
   -h, --help                         help for resize
       --memory-mb int                new per-node memory in MiB (0 keeps current)
       --os-disk-gb int               grow the role's OS disk to this size in GiB (grow-only, role-scoped only — 'masters'/'workers', not a single node; disk-only resizes are live, no power-cycle)
-      --skip-drain                   power-cycle without cordon/drain so pods restart in place
+      --skip-drain                   power-cycle without cordon/drain so pods restart in place (use when a drain can't reschedule under memory pressure); etcd/Ceph gates still run
   -y, --yes                          skip confirmation prompt
 ```
 

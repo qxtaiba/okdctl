@@ -3,7 +3,6 @@
   │ O K D C T L                                                              │  
   │ configure files & ignition ser…  connect · cluster · extras ✓●○ · review │  
   │──────────────────────────────────────────────────────────────────────────│  
-  │                                                                          │  
   │    ● required files                                                      │  
   │                                                                          │  
   │    pull secret                                                           │  
@@ -18,7 +17,8 @@
   │    ╰────────────────────────────────────────────────────────────────╯    │  
   │    path to ssh public key for node access                                │  
   │                                                                          │  
-  │─────────── ↑ ↓  scroll down for more ─────────── ▸ okd 4.22.0-okd-scos.7 │  
+  │                                                                          │  
+  │─────────── ↑ ↓  7% • scroll for more ──────────── ▸ okd 4.22.0-okd-scos.7│  
   │  ↑↓/tab navigate • enter continue • esc back … • ctrl+c quit • ? help    │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

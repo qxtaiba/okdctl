@@ -55,8 +55,8 @@ func DemoHooks(stepDelay time.Duration) Hooks {
 	ring := logview.NewRing(logview.DefaultCap)
 	wait := demoWaitDelay(stepDelay)
 	return Hooks{
-		ListNodes: func() ([]cluster.NodeDetail, error) { return demoNodes(), nil },
-		DryRun:    demoPlan,
+		ListNodes: func(context.Context) ([]cluster.NodeDetail, error) { return demoNodes(), nil },
+		DryRun:    func(_ context.Context, st *State) (*node.OpPlan, error) { return demoPlan(st) },
 		CancelOp:  cancel,
 		Logs:      ring,
 		Done:      ctx.Done(),
@@ -126,16 +126,16 @@ func demoResizePlan(st *State) (*node.OpPlan, error) {
 
 	var targets []cluster.NodeDetail
 	if st.Scope.Node != "" {
-		for _, n := range nodes {
-			if n.Name == st.Scope.Node {
-				targets = []cluster.NodeDetail{n}
+		for i := range nodes {
+			if nodes[i].Name == st.Scope.Node {
+				targets = []cluster.NodeDetail{nodes[i]}
 				break
 			}
 		}
 	} else {
-		for _, n := range nodes {
-			if n.Role == st.Scope.Role {
-				targets = append(targets, n)
+		for i := range nodes {
+			if nodes[i].Role == st.Scope.Role {
+				targets = append(targets, nodes[i])
 			}
 		}
 	}
@@ -144,15 +144,15 @@ func demoResizePlan(st *State) (*node.OpPlan, error) {
 	}
 
 	planNodes := make([]node.PlanNode, 0, len(targets))
-	for _, n := range targets {
-		idx, ok := cluster.NodeIndex(n.Name)
+	for i := range targets {
+		idx, ok := cluster.NodeIndex(targets[i].Name)
 		if !ok {
 			continue
 		}
 		planNodes = append(planNodes, node.PlanNode{
-			Name:      n.Name,
-			Role:      n.Role,
-			TFAddress: demoAddress(n.Role, idx),
+			Name:      targets[i].Name,
+			Role:      targets[i].Role,
+			TFAddress: demoAddress(targets[i].Role, idx),
 			Action:    terraform.PlanActionUpdate,
 		})
 	}

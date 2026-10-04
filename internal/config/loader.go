@@ -7,7 +7,6 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/netutil"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -18,7 +17,11 @@ type Loader struct{}
 // NewLoader returns a Loader for okdctl YAML configs.
 func NewLoader() *Loader { return &Loader{} }
 
-// LoadFile parses the YAML config at path and returns the merged Config.
+// LoadFile parses the YAML config at path and returns it as authored —
+// omitted bootstrap/worker fields stay zero rather than being filled in, so
+// a later Save never materializes a value the operator did not write;
+// callers needing resolved topology values must call Effective. The static
+// netmask is the one field derived eagerly here (see DeriveStaticNetmask).
 // World/group-writable files are rejected, and unknown keys or the wrong
 // schemaVersion error instead of silently defaulting.
 func (l *Loader) LoadFile(path string) (*Config, error) {
@@ -42,11 +45,11 @@ func (l *Loader) LoadFile(path string) (*Config, error) {
 		return nil, err
 	}
 
-	cfg := DefaultConfig()
+	cfg := fileDefaults()
 	if err := yaml.UnmarshalStrict(data, cfg); err != nil {
 		return nil, &errtypes.ConfigError{Msg: "parse config", Err: err}
 	}
-	deriveStaticNetmask(cfg)
+	_ = DeriveStaticNetmask(cfg) // invalid/IPv6 CIDR is left for validators
 	return cfg, nil
 }
 
@@ -66,14 +69,6 @@ func checkSchemaVersion(data []byte, path string) error {
 		return &errtypes.ConfigError{Msg: fmt.Sprintf("config file %s missing required schemaVersion (expected %q)", path, SchemaVersionCurrent)}
 	default:
 		return &errtypes.ConfigError{Msg: fmt.Sprintf("config file %s has unsupported schemaVersion %q (expected %q)", path, probe.SchemaVersion, SchemaVersionCurrent)}
-	}
-}
-
-// deriveStaticNetmask overwrites StaticIP.Netmask with MachineCIDR's dotted
-// form so hand-edits can't desync them; invalid/IPv6 CIDRs are left for validators.
-func deriveStaticNetmask(cfg *Config) {
-	if netmask, err := netutil.CIDRToNetmask(cfg.Networking.MachineCIDR); err == nil {
-		cfg.Networking.StaticIP.Netmask = netmask
 	}
 }
 

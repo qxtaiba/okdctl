@@ -118,6 +118,13 @@ type InputField struct {
 	historyOpen  bool
 	focusValue   string
 	focusDefault bool
+
+	// validCache/validated back Valid(): cached until the value actually
+	// changes, so a caller that polls Valid() on every render (e.g. a
+	// section-completeness check) doesn't rerun a possibly-expensive
+	// Validator on every frame — only on a real edit.
+	validCache bool
+	validated  bool
 }
 
 // NewInputField builds a plain-text InputField from label and placeholder.
@@ -210,6 +217,7 @@ func (f *InputField) ConsumesTextInput() bool {
 func (f *InputField) SetValue(value string) {
 	f.input.SetValue(value)
 	f.isDefault = false
+	f.validated = false
 }
 
 // SetHistory assigns this non-password field a stable key in the session history.
@@ -373,6 +381,21 @@ func (f *InputField) Validate() error {
 	return f.err
 }
 
+// Valid reports whether the field's current value passes Check, without
+// marking it touched or recording an error for View to render — a cheap,
+// side-effect-free probe a caller (e.g. a section-completeness check) can
+// poll without disturbing the field's own displayed validation state. The
+// result is cached until Update or SetValue observes a real value change,
+// so polling it every render never reruns the Validator on pure cursor
+// motion.
+func (f *InputField) Valid() bool {
+	if !f.validated {
+		f.validCache = f.Check() == nil
+		f.validated = true
+	}
+	return f.validCache
+}
+
 // SetError marks the field invalid with err — set by a cross-field
 // validator that implicates this field — rendering it like a per-field
 // Check failure until the next edit clears it.
@@ -391,6 +414,17 @@ func (f *InputField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 	if !f.focused {
 		return f, nil
 	}
+
+	// before/defer invalidates the Valid() cache on any value change this
+	// call produces, however it returns — pure cursor motion (no value
+	// change) leaves the cache alone, which is what lets a per-render Valid()
+	// poll skip rerunning a possibly-expensive Validator between edits.
+	before := f.input.Value()
+	defer func() {
+		if f.input.Value() != before {
+			f.validated = false
+		}
+	}()
 
 	switch k := msg.(type) {
 	case tea.KeyPressMsg:

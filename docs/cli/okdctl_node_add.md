@@ -14,9 +14,9 @@ after the persisted worker count. The ignition server is revived once for the
 whole batch and torn down when the batch finishes, fails, or times out.
 
 An interrupted add records an op marker and resumes automatically on the
-next 'okdctl node add', skipping already-joined nodes and completed steps.
---acknowledge-interrupted-op overrides a marker left by a different op or
-node instead of refusing. While the marker is in flight, 'okdctl deploy'
+next 'okdctl node add' with the same batch size and sizing, skipping already-joined
+nodes and completed steps. Changed intent or a legacy marker requires
+--acknowledge-interrupted-op to proceed fresh. While the marker is in flight, 'okdctl deploy'
 refuses to run (a partial batch's config/tfvars undercount the workers
 terraform already created) unless it too is passed
 --acknowledge-interrupted-op.
@@ -35,7 +35,7 @@ okdctl node add [--count N] [flags]
 ### Options
 
 ```
-      --acknowledge-interrupted-op   override a stranded marker left by a different op or node and proceed fresh
+      --acknowledge-interrupted-op   override a stranded marker or changed operation intent and proceed fresh
       --confirm-cluster string       required with --yes; must equal the config cluster name
       --count int                    number of nodes to add in this batch (default 1)
       --dry-run                      run guards and the plan gate without mutating anything

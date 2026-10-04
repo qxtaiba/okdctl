@@ -189,14 +189,9 @@ func runDescribeNode(cmd *cobra.Command, args []string) error {
 
 	name := args[0]
 
-	raw, _, ocErr := cl.GetJSON(cmd.Context(), "get", "node", name, "-o", "json")
-	if ocErr != nil {
-		return &errtypes.ClusterError{Msg: fmt.Sprintf("describe node %s", name), Err: ocErr}
-	}
-
-	n, err := clusterstatus.ParseNode([]byte(raw))
+	n, err := cl.GetNode(cmd.Context(), name)
 	if err != nil {
-		return err
+		return &errtypes.ClusterError{Msg: fmt.Sprintf("describe node %s", name), Err: err}
 	}
 
 	if describeNodeOutput == outputJSON {

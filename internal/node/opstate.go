@@ -75,17 +75,21 @@ const (
 type opState struct {
 	marker.Envelope
 
-	Op     Op     `json:"op"`
-	Target string `json:"target"`
-	Step   Step   `json:"step"`
+	Op     Op        `json:"op"`
+	Target string    `json:"target"`
+	Step   Step      `json:"step"`
+	Intent *OpIntent `json:"intent,omitempty"`
 }
 
 var opMarkerFile = marker.File{Label: "node op", Version: opStateSchemaV1}
 
 // markStep writes the op marker before a mutating step; a write failure is
 // fatal — losing it loses resume context and the leave-cordoned guarantee.
-func markStep(path string, op Op, target string, step Step, runID, clusterName string) error {
+func markStep(path string, op Op, target string, step Step, runID, clusterName string, intent ...*OpIntent) error {
 	s := &opState{Op: op, Target: target, Step: step}
+	if len(intent) > 0 {
+		s.Intent = intent[0]
+	}
 	if err := opMarkerFile.Write(path, s, runID, clusterName); err != nil {
 		return fmt.Errorf("write op state marker: %w", err)
 	}
@@ -124,6 +128,7 @@ func markerPath(workDir string) string {
 // non-mutating callers like `okdctl node list`. It mirrors opState's fields
 // without exposing the marker's on-disk JSON shape.
 type OpMarker struct {
+	Intent      *OpIntent
 	Op          Op
 	Target      string
 	Step        Step
@@ -137,7 +142,7 @@ type OpMarker struct {
 // the widened worker count only after every node joins, so a target index below
 // workerCount means the batch finished before the marker was cleared.
 func (m *OpMarker) CompletedAddResidue(workerCount int) bool {
-	if m.Op != OpAdd {
+	if m.Op != OpAdd || m.Intent != nil {
 		return false
 	}
 	idx, ok := cluster.NodeIndex(m.Target)
@@ -157,7 +162,7 @@ func ReadOpMarker(workDir, clusterName string) (*OpMarker, error) {
 		return nil, nil
 	}
 	return &OpMarker{
-		Op:          s.Op,
+		Intent: s.Intent, Op: s.Op,
 		Target:      s.Target,
 		Step:        s.Step,
 		RunID:       s.RunID,

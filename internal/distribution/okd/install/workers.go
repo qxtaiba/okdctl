@@ -2,7 +2,6 @@ package install
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -31,10 +30,6 @@ func (p *Phase) StartWorkerVMs(ctx context.Context, cfg *config.Config, opts *Op
 	)
 	defer tf.ZeroizeEnv()
 
-	if err := tf.Init(ctx); err != nil {
-		return tf.WithLockHint(&errtypes.ClusterError{Msg: "terraform init failed", Err: err})
-	}
-
 	applyOpts := terraform.ApplyOptions{
 		AutoApprove: true,
 		Vars: map[string]string{
@@ -43,17 +38,14 @@ func (p *Phase) StartWorkerVMs(ctx context.Context, cfg *config.Config, opts *Op
 		Targets: []string{"module.okd_cluster.proxmox_virtual_environment_vm.worker"},
 	}
 
-	snapPath, snapErr := tf.SnapshotState(ctx)
-	if snapErr != nil {
-		return &errtypes.ClusterError{Msg: "workers: state snapshot failed", Err: snapErr}
-	}
-
-	if err := tf.Apply(ctx, applyOpts); err != nil {
-		msg := "start worker VMs"
-		if snapPath != "" {
-			msg = fmt.Sprintf("start worker VMs (state backup: %s)", snapPath)
+	// Init can rewrite state during schema migration, so it belongs after the backup.
+	if err := terraform.WithStateRecovery(ctx, tf, "start worker VMs", func() error {
+		if err := tf.Init(ctx); err != nil {
+			return tf.WithLockHint(&errtypes.ClusterError{Msg: "terraform init failed", Err: err})
 		}
-		return tf.WithLockHint(&errtypes.ClusterError{Msg: msg, Err: err})
+		return tf.Apply(ctx, applyOpts)
+	}); err != nil {
+		return err
 	}
 
 	p.Log.Info("workers: all worker nodes started")

@@ -72,7 +72,10 @@ func TestReviewDiffBaselineRequiresAnExistingConfig(t *testing.T) {
 			wizardCfg := wizard.DefaultConfig()
 			wizardCfg.InitialConfig = cfg
 			wizardCfg.ConfigExists = tc.configExists
-			built := buildWizardStepsWithState(wizardCfg)
+			built, err := buildWizardStepsWithState(wizardCfg)
+			if err != nil {
+				t.Fatal(err)
+			}
 			var review *steps.ReviewStep
 			for _, step := range built.Steps {
 				if candidate, ok := step.(*steps.ReviewStep); ok {
@@ -101,7 +104,10 @@ func TestReviewDiffKeepsTheSavedBaselineWhenResumingDraft(t *testing.T) {
 	wizardCfg.InitialConfig = draft
 	wizardCfg.ReviewBaseline = saved
 	wizardCfg.ConfigExists = true
-	built := buildWizardStepsWithState(wizardCfg)
+	built, err := buildWizardStepsWithState(wizardCfg)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var review *steps.ReviewStep
 	for _, step := range built.Steps {
 		if candidate, ok := step.(*steps.ReviewStep); ok {
@@ -125,5 +131,44 @@ func TestSaveSlotStateIsConfiguredWithoutInfrastructure(t *testing.T) {
 	if got := saveSlotState(cfg); got != steps.SaveSlotConfigured {
 		t.Errorf("saveSlotState() = %q in an empty workspace, want %q — the hub must never overstate a cluster",
 			got, steps.SaveSlotConfigured)
+	}
+}
+
+func TestWizardAssemblySeedsConfiguredOrder(t *testing.T) {
+	t.Setenv(wizardDemoEnv, "")
+	cfg := config.DefaultConfig()
+	cfg.Cluster.Name = "seeded-cluster"
+	spec := wizard.DefaultConfig()
+	spec.InitialConfig = cfg
+	spec.ConfigExists = true
+	built, err := buildWizardStepsWithState(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(built.Steps) == 0 {
+		t.Fatal("incomplete assembly")
+	}
+	if _, ok := built.Steps[0].(*steps.WelcomeStep); !ok {
+		t.Fatal("incomplete assembly: first step is not the welcome/hub step")
+	}
+	if len(built.Steps) != len(spec.Steps) {
+		t.Fatal("incomplete assembly")
+	}
+	for i, step := range built.Steps {
+		if string(step.ID()) != string(spec.Steps[i].Type) {
+			t.Fatalf("step %d: %s", i, step.ID())
+		}
+	}
+	state, ok := built.States[wizard.StepTypeResources].(*steps.ResourcesStepState)
+	if !ok || state.Cfg != cfg {
+		t.Fatal("resource preview lost seeded config")
+	}
+}
+
+func TestWizardAssemblyRejectsUnknownAndDuplicateSteps(t *testing.T) {
+	for _, kinds := range [][]wizard.StepConfig{{{Type: "unknown"}}, {{Type: wizard.StepTypeBasics}, {Type: wizard.StepTypeBasics}}} {
+		if _, err := buildWizardStepsWithState(wizard.Config{Steps: kinds}); err == nil {
+			t.Fatalf("accepted invalid assembly: %v", kinds)
+		}
 	}
 }

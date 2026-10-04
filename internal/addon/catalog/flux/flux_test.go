@@ -186,7 +186,7 @@ func TestVerifyKeyscanFingerprint(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := verifyKeyscanFingerprint(fixtureGitKeyscanOutput, "github.com", tc.expected, tc.acceptHostKey, logutil.NopLogger)
+			_, err := verifyKeyscanFingerprint(fixtureGitKeyscanOutput, "github.com", tc.expected, tc.acceptHostKey, logutil.NopLogger)
 			if tc.wantErr {
 				if err == nil {
 					t.Fatal("expected error; got nil")
@@ -203,20 +203,36 @@ func TestVerifyKeyscanFingerprint(t *testing.T) {
 	}
 }
 
-func TestFilterKeyscanLines(t *testing.T) {
-	got := string(filterKeyscanLines(fixtureGitKeyscanOutput))
-	if strings.Contains(got, "#") {
-		t.Errorf("filterKeyscanLines output contains comment line: %q", got)
+func TestVerifyKeyscanFingerprintTrustedSubset(t *testing.T) {
+	lines := strings.Split(strings.TrimSpace(fixtureGitKeyscanOutput), "\n")
+	for _, pinned := range lines[1:] {
+		knownHosts, err := verifyKeyscanFingerprint(fixtureGitKeyscanOutput, "github.com",
+			gitFingerprintFromFixture(t, pinned), true, logutil.NopLogger)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(knownHosts) != pinned+"\n" {
+			t.Fatalf("trusted keys = %q, want only %q", knownHosts, pinned)
+		}
 	}
-	if !strings.Contains(got, "ssh-ed25519") {
-		t.Errorf("filterKeyscanLines output missing ed25519 key line")
+	knownHosts, err := verifyKeyscanFingerprint(fixtureGitKeyscanOutput, "github.com", "", true, logutil.NopLogger)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(got, "ecdsa-sha2-nistp256") {
-		t.Errorf("filterKeyscanLines output missing ecdsa key line")
+	if string(knownHosts) != strings.Join(lines[1:], "\n")+"\n" {
+		t.Fatalf("TOFU keys = %q, want both scanned keys", knownHosts)
 	}
-	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
-	if len(lines) != 2 {
-		t.Errorf("filterKeyscanLines: got %d lines, want 2: %q", len(lines), got)
+}
+
+func TestVerifyKeyscanFingerprintIncompleteScan(t *testing.T) {
+	pinned := strings.Split(fixtureGitKeyscanOutput, "\n")[1]
+	for _, scan := range []string{"", "# comment\ninvalid key\n", fixtureGitKeyscanOutput + strings.Repeat("x", 65536)} {
+		for _, expected := range []string{"", gitFingerprintFromFixture(t, pinned)} {
+			keys, err := verifyKeyscanFingerprint(scan, "github.com", expected, true, logutil.NopLogger)
+			if err == nil || len(keys) != 0 {
+				t.Fatalf("incomplete scan trusted: keys=%q err=%v", keys, err)
+			}
+		}
 	}
 }
 

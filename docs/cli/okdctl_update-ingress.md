@@ -24,7 +24,7 @@ okdctl update-ingress [flags]
 
 ```
   okdctl update-ingress
-  okdctl update-ingress --yes --keep-haproxy
+  okdctl update-ingress --yes --confirm-cluster=homelab --keep-haproxy
   okdctl update-ingress --dry-run
 ```
 

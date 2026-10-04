@@ -67,3 +67,9 @@ type ToolSpec struct {
 type ToolProvider interface {
 	RequiredTools() []ToolSpec
 }
+
+// InstallCompensator identifies request-owned resources before any installation mutation.
+type InstallCompensator interface {
+	Addon
+	PrepareRollback(ctx context.Context, env *Environment) (func(context.Context) error, error)
+}

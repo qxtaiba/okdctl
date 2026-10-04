@@ -23,12 +23,13 @@ import (
 )
 
 // wizardDemoEnv enables README-demo recording mode: blank fields, no sudo
-// re-exec (see scripts/demo/record.sh).
-const wizardDemoEnv = "OKDCTL_WIZARD_DEMO"
-
-// wizardDemoReleasesEnv set to "fail" forces the demo distribution step's
-// release fetch into its error state, for the error-state screenshot fixture.
-const wizardDemoReleasesEnv = "OKDCTL_DEMO_RELEASES"
+// re-exec (see scripts/demo/record.sh). wizardDemoReleasesEnv set to "fail"
+// additionally forces the demo distribution step's release fetch into its
+// error state, for the error-state screenshot fixture.
+const (
+	wizardDemoEnv         = "OKDCTL_WIZARD_DEMO"
+	wizardDemoReleasesEnv = "OKDCTL_DEMO_RELEASES"
+)
 
 // errWizardExited reports a hub flow that finished assembling after the wizard
 // it was meant for had already quit.
@@ -64,7 +65,10 @@ func runWizardWithMode(cmd *cobra.Command, cfg *config.Config, configExists bool
 	wizardCfg.ConfigExists = configExists
 	wizardCfg.DraftPresent = hasDraft
 
-	built := buildWizardStepsWithState(wizardCfg)
+	built, err := buildWizardStepsWithState(wizardCfg)
+	if err != nil {
+		return hubOutcome{}, err
+	}
 	if hasDraft {
 		configureDraftResume(built, draft, time.Now())
 		configureDraftHistory(built, draft.FieldHistory)
@@ -234,10 +238,13 @@ func (s *collectedStatusSource) ClusterStatus(ctx context.Context) (*okd.Cluster
 	return &cs, nil
 }
 
-func buildWizardStepsWithState(wizardCfg wizard.Config) wizard.BuiltSteps {
+func buildWizardStepsWithState(wizardCfg wizard.Config) (wizard.BuiltSteps, error) {
 	builder := wizard.NewStepBuilder()
 	steps.RegisterAll(builder)
-	built := wizard.BuildSteps(wizardCfg, builder)
+	built, err := wizard.BuildSteps(wizardCfg, builder)
+	if err != nil {
+		return wizard.BuiltSteps{}, err
+	}
 
 	configureWelcomeStep(built, wizardCfg)
 	configureDemoVersionFetcher(built)
@@ -249,7 +256,7 @@ func buildWizardStepsWithState(wizardCfg wizard.Config) wizard.BuiltSteps {
 		configureReviewStep(built, wizardCfg.InitialConfig, wizardCfg.ConfigExists, wizardCfg.ReviewBaseline)
 	}
 
-	return built
+	return built, nil
 }
 
 // configureWelcomeStep marks the hub's config state, passing the loaded config

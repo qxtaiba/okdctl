@@ -27,9 +27,12 @@ type KeyValueField struct {
 	cursor   int
 	col      int
 	editMode bool
-	focused  bool
-	err      error
-	width    int
+	// editOriginal is the cell's value when edit mode was entered, restored
+	// on escape so a cancelled edit never leaves a partial keystroke behind.
+	editOriginal string
+	focused      bool
+	err          error
+	width        int
 }
 
 type kvRow struct {
@@ -171,9 +174,19 @@ func (f *KeyValueField) KeyHints() []KeyHint {
 	}
 }
 
-// Update routes messages: ctrl+e toggles edit mode and enter commits it;
-// navigate mode uses j/k/h/l/a/d; edit mode forwards other keys to the
-// active textinput.
+// OwnsKey reserves cell commit and cancel while an editor is active, so the
+// wizard's own Back/navigation handling never intercepts them.
+func (f *KeyValueField) OwnsKey(msg tea.KeyPressMsg) bool {
+	return f.editMode && (msg.Code == tea.KeyEnter || msg.Code == tea.KeyEscape)
+}
+
+// Editing reports whether typing currently changes a table cell.
+func (f *KeyValueField) Editing() bool { return f.editMode }
+
+// Update routes messages: ctrl+e toggles edit mode, enter commits it, and
+// escape cancels it by restoring the cell's pre-edit value; navigate mode
+// uses j/k/h/l/a/d; edit mode otherwise forwards keys to the active
+// textinput.
 func (f *KeyValueField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 	if !f.focused {
 		return f, nil
@@ -182,6 +195,18 @@ func (f *KeyValueField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 		if key.Matches(keyMsg, key.NewBinding(key.WithKeys("ctrl+e"))) {
 			cmd := f.toggleEditMode()
 			return f, cmd
+		}
+		if f.editMode && keyMsg.Code == tea.KeyEscape {
+			if len(f.rows) > 0 {
+				if f.col == 0 {
+					f.rows[f.cursor].keyInput.SetValue(f.editOriginal)
+				} else {
+					f.rows[f.cursor].valInput.SetValue(f.editOriginal)
+				}
+			}
+			f.editMode = false
+			f.blurAllInputs()
+			return f, nil
 		}
 		if f.editMode && key.Matches(keyMsg, key.NewBinding(key.WithKeys("enter"))) {
 			f.editMode = false
@@ -208,6 +233,11 @@ func (f *KeyValueField) toggleEditMode() tea.Cmd {
 		f.rows = []kvRow{newKVRow("", "")}
 	}
 	f.editMode = true
+	if f.col == 0 {
+		f.editOriginal = f.rows[f.cursor].keyInput.Value()
+	} else {
+		f.editOriginal = f.rows[f.cursor].valInput.Value()
+	}
 	return f.syncInputFocus()
 }
 

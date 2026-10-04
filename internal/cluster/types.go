@@ -1,7 +1,9 @@
 package cluster
 
-// CSR is the minimal view of a Kubernetes CertificateSigningRequest, kept as
-// a struct (not []string) so future fields don't break call-site shapes.
+import certificatesv1 "k8s.io/api/certificates/v1"
+
+// CSR retains the observed request used for policy checks and version-guarded approval.
 type CSR struct {
-	Name string
+	Name    string
+	Request certificatesv1.CertificateSigningRequest
 }

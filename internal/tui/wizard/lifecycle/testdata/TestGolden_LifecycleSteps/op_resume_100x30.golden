@@ -3,19 +3,15 @@
   │ O K D C T L  day-2 node operations                                                           │  
   │ choose an operation                                 op · target · params · plan · run · done │  
   │──────────────────────────────────────────────────────────────────────────────────────────────│  
+  │                                                                                              │  
   │                    cluster lifecycle                                                         │  
   │                    manage nodes on cluster "homelab"                                         │  
   │                                                                                              │  
   │                    ⚠ interrupted resize of homelab-master0 — step: power-                    │  
   │                    cycle, recorded 2h ago                                                    │  
-  │                    choosing anything but resume below abandons this                          │  
-  │                    marker — it cannot be resumed afterward                                   │  
+  │                    saved request unavailable; choose a fresh operation                       │  
   │                                                                                              │  
-  │                    ● resume interrupted resize                                               │  
-  │                      re-enters at the recorded step; completed nodes                         │  
-  │                      are skipped via a read-only plan probe                                  │  
-  │                                                                                              │  
-  │                    ○ resize nodes                                                            │  
+  │                    ● resize nodes                                                            │  
   │                      change per-role cpu/memory, rolled out one node at                      │  
   │                      a time behind etcd/ceph health gates                                    │  
   │                                                                                              │  
@@ -23,8 +19,12 @@
   │                      build + upload a per-node iso, revive the ignition                      │  
   │                      server, join and wait ready                                             │  
   │                                                                                              │  
+  │                    ○ remove worker                                                           │  
+  │                      cordon, drain, destroy the vm, delete the node                          │  
+  │                      (highest-numbered worker only)                                          │  
   │                                                                                              │  
-  │──────────────────────────── ↑ ↓  scroll down for more ──────────────────────────── ▸ homelab │  
-  │  ↑↓ select • enter confirm • pgup/pgdn scroll • ctrl+c quit • ? help                         │  
+  │                                                                                              │  
+  │─────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
+  │  ↑↓ select • enter confirm • ctrl+c quit • ? help                                            │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                     

@@ -3,7 +3,6 @@
   │ O K D C T L                                                              │  
   │ configure cluster addons         connect · cluster · extras ●○○ · review │  
   │──────────────────────────────────────────────────────────────────────────│  
-  │    ╰────────────────────────────────────────────────────────╯            │  
   │                                                                          │  
   │    ⚠ flux requires ssh deploy key at ~/.ssh/flux-deploy-key — create     │  
   │    it before deploying                                                   │  
@@ -18,7 +17,8 @@
   │    ╰────────────────╯                                                    │  
   │    bootstrap eso provider credentials and secretstore crd                │  
   │                                                                          │  
-  │────────── ↑ ↓  89% • scroll for more ─────────── ▸ okd 4.22.0-okd-scos.7 │  
+  │                                                                          │  
+  │─────────── ↑ ↓  93% • scroll for more ─────────── ▸ okd 4.22.0-okd-scos.7│  
   │  ↑↓/tab navigate • enter continue • esc back … • ctrl+c quit • ? help    │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

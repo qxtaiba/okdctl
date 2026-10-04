@@ -205,15 +205,14 @@ func TestCustomISONames(t *testing.T) {
 	}
 }
 
-// installFakeStateList makes `state list <addr>` exit 0 only for addresses in present.
 func installFakeStateList(t *testing.T, present ...string) {
 	t.Helper()
 	var b strings.Builder
-	b.WriteString("#!/bin/sh\nif [ \"$1\" != \"state\" ]; then exit 0; fi\ncase \"$3\" in\n")
+	b.WriteString("#!/bin/sh\nif [ \"$1\" != \"state\" ]; then exit 0; fi\n")
 	for _, addr := range present {
-		b.WriteString("  '" + addr + "') echo \"$3\"; exit 0 ;;\n")
+		b.WriteString("echo '" + addr + "'\n")
 	}
-	b.WriteString("  *) exit 1 ;;\nesac\n")
+	b.WriteString("exit 0\n")
 	testutil.InstallFakeBin(t, "terraform", b.String())
 }
 

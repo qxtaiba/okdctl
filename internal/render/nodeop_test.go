@@ -55,7 +55,8 @@ func diskOnlyResizePlan() node.OpPlan {
 			TFAddress: "module.vm.master[0]",
 			Action:    terraform.PlanActionUpdate,
 		}},
-		OSDiskGB: 100,
+		OSDiskGB:   100,
+		ResizeMode: node.ResizeLiveDisk,
 	}
 }
 
@@ -317,31 +318,6 @@ func TestNodeOpRebootResizeStillClaimsPowerCycle(t *testing.T) {
 	}
 }
 
-// TestDiskOnlyResize pins the exact boolean this package derives the
-// durable-output copy from, against the same shape node/resize.go:76 and
-// lifecycle.State.DiskOnly() use — disk alone is the live path; disk bundled
-// with a memory/cpu change is not.
-func TestDiskOnlyResize(t *testing.T) {
-	cases := []struct {
-		name string
-		plan node.OpPlan
-		want bool
-	}{
-		{"disk alone", diskOnlyResizePlan(), true},
-		{"disk with memory", node.OpPlan{Op: node.OpResize, OSDiskGB: 100, MemoryMB: 4096}, false},
-		{"disk with cpu", node.OpPlan{Op: node.OpResize, OSDiskGB: 100, CPU: 4}, false},
-		{"memory only", resizePlan(), false},
-		{"not a resize", node.OpPlan{Op: node.OpAdd, OSDiskGB: 100}, false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := diskOnlyResize(&tc.plan); got != tc.want {
-				t.Errorf("diskOnlyResize() = %v, want %v", got, tc.want)
-			}
-		})
-	}
-}
-
 func TestShortHost(t *testing.T) {
 	cases := []struct {
 		name string
@@ -398,6 +374,30 @@ func TestNodeOpCompleteWidthShrinksBox(t *testing.T) {
 	for _, line := range strings.Split(got, "\n") {
 		if w := lipgloss.Width(line); w > viewport {
 			t.Errorf("box line %d cols wide, want <= %d: %q", w, viewport, line)
+		}
+	}
+}
+
+func TestResizePreviewAndCompletionDisruption(t *testing.T) {
+	for _, tc := range []struct {
+		mode node.ResizeMode
+		want string
+	}{
+		{node.ResizeLiveDisk, "live resize"},
+		{node.ResizeUndrainedRestart, "without drain"},
+		{node.ResizeDrainedRestart, "each node is drained"},
+	} {
+		plan := &node.OpPlan{Op: node.OpResize, OSDiskGB: 100, ResizeMode: tc.mode}
+		out := NodeOpDryRun(plan)
+		if !strings.Contains(out, tc.want) || !strings.Contains(out, "100 GiB") {
+			t.Fatalf("misleading preview: %s", out)
+		}
+		// "no node was power-cycled" (the correct live-disk completion
+		// text) itself contains the substring "was power-cycled", so this
+		// must check for the restart-claiming phrase specifically, not a
+		// substring the correct negation also contains.
+		if tc.mode == node.ResizeLiveDisk && strings.Contains(NodeOpComplete(plan, time.Second), "power-cycled to realize") {
+			t.Fatal("live completion claims restart")
 		}
 	}
 }

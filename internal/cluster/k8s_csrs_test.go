@@ -2,11 +2,14 @@ package cluster
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	certificatesv1 "k8s.io/api/certificates/v1"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
@@ -14,7 +17,9 @@ import (
 )
 
 // installFakeOCForCSRs installs a PATH-shadow "oc" keyed off $OC_CSR_JSON,
-// $OC_GET_EXIT, $OC_ARGV_FILE, $OC_APPROVE_EXIT.
+// $OC_GET_EXIT, $OC_ARGV_FILE, $OC_APPROVE_EXIT, $OC_APPROVE_FAIL_NAME.
+// $OC_APPROVE_FAIL_NAME, when set, confines the $OC_APPROVE_EXIT failure to
+// the approval request naming that CSR; every other request exits 0.
 func installFakeOCForCSRs(t *testing.T) {
 	t.Helper()
 	script := `#!/bin/sh
@@ -28,9 +33,17 @@ case "$1" in
     fi
     exit "${OC_GET_EXIT:-0}"
     ;;
-  adm)
+  replace)
+    body="$(cat)"
+    printf '%s' "$body" >> "${OC_ARGV_FILE:-/dev/null}.body"
     if [ -n "${OC_ARGV_FILE:-}" ]; then
       echo "$@" >> "${OC_ARGV_FILE}"
+    fi
+    if [ -n "${OC_APPROVE_FAIL_NAME:-}" ]; then
+      case "$body" in
+        *"\"name\":\"${OC_APPROVE_FAIL_NAME}\""*) exit "${OC_APPROVE_EXIT:-1}" ;;
+        *) exit 0 ;;
+      esac
     fi
     exit "${OC_APPROVE_EXIT:-0}"
     ;;
@@ -58,7 +71,7 @@ func TestApprovePendingCSRs_EmptyList(t *testing.T) {
 	t.Setenv("OC_CSR_JSON", `{"items":[]}`)
 
 	c := newTestClient(t)
-	n, err := c.ApprovePendingCSRs(context.Background())
+	n, err := c.ApprovePendingCSRs(context.Background(), testCSRIdentity())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -70,18 +83,25 @@ func TestApprovePendingCSRs_EmptyList(t *testing.T) {
 	}
 }
 
-func TestApprovePendingCSRs_BatchedSingleCall(t *testing.T) {
+func TestApprovePendingCSRs_VersionGuardedRequests(t *testing.T) {
 	installFakeOCForCSRs(t)
 	dir := t.TempDir()
 	argvFile := filepath.Join(dir, "argv")
 	t.Setenv("OC_ARGV_FILE", argvFile)
-	t.Setenv("OC_CSR_JSON", `{"items":[`+
-		`{"metadata":{"name":"csr-1"},"status":{"conditions":[]}},`+
-		`{"metadata":{"name":"csr-2"},"status":{"conditions":[]}},`+
-		`{"metadata":{"name":"csr-3"},"status":{"conditions":[]}}]}`)
+	items := []certificatesv1.CertificateSigningRequest{}
+	for _, name := range []string{"csr-1", "csr-2", "csr-3"} {
+		csr := testCSR(t)
+		csr.Name = name
+		items = append(items, csr)
+	}
+	body, marshalErr := json.Marshal(certificatesv1.CertificateSigningRequestList{Items: items})
+	if marshalErr != nil {
+		t.Fatal(marshalErr)
+	}
+	t.Setenv("OC_CSR_JSON", string(body))
 
 	c := newTestClient(t)
-	n, err := c.ApprovePendingCSRs(context.Background())
+	n, err := c.ApprovePendingCSRs(context.Background(), testCSRIdentity())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -93,11 +113,11 @@ func TestApprovePendingCSRs_BatchedSingleCall(t *testing.T) {
 		t.Fatalf("argv file not written: %v", readErr)
 	}
 	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
-	if len(lines) != 1 {
-		t.Errorf("approve called %d times; want exactly 1 (batched)", len(lines))
+	if len(lines) != 3 {
+		t.Errorf("approve called %d times; want 3 version-guarded requests", len(lines))
 	}
 	for _, name := range []string{"csr-1", "csr-2", "csr-3"} {
-		if !strings.Contains(lines[0], name) {
+		if !strings.Contains(string(data), name) {
 			t.Errorf("argv line %q missing CSR name %q", lines[0], name)
 		}
 	}
@@ -108,7 +128,7 @@ func TestApprovePendingCSRs_PendingCSRsError(t *testing.T) {
 	t.Setenv("OC_GET_EXIT", "1")
 
 	c := newTestClient(t)
-	n, err := c.ApprovePendingCSRs(context.Background())
+	n, err := c.ApprovePendingCSRs(context.Background(), testCSRIdentity())
 	if err == nil {
 		t.Fatal("expected error when get csr exits non-zero")
 	}
@@ -123,11 +143,15 @@ func TestApprovePendingCSRs_PendingCSRsError(t *testing.T) {
 
 func TestApprovePendingCSRs_ApproveFailureWrapped(t *testing.T) {
 	installFakeOCForCSRs(t)
-	t.Setenv("OC_CSR_JSON", `{"items":[{"metadata":{"name":"csr-1"},"status":{"conditions":[]}}]}`)
+	body, marshalErr := json.Marshal(certificatesv1.CertificateSigningRequestList{Items: []certificatesv1.CertificateSigningRequest{testCSR(t)}})
+	if marshalErr != nil {
+		t.Fatal(marshalErr)
+	}
+	t.Setenv("OC_CSR_JSON", string(body))
 	t.Setenv("OC_APPROVE_EXIT", "1")
 
 	c := newTestClient(t)
-	n, err := c.ApprovePendingCSRs(context.Background())
+	n, err := c.ApprovePendingCSRs(context.Background(), testCSRIdentity())
 	if err == nil {
 		t.Fatal("expected error when approve exits non-zero")
 	}
@@ -140,5 +164,47 @@ func TestApprovePendingCSRs_ApproveFailureWrapped(t *testing.T) {
 	}
 	if !strings.HasPrefix(ce.Msg, "approve CSRs") {
 		t.Errorf("ClusterError.Msg = %q; want prefix %q", ce.Msg, "approve CSRs")
+	}
+}
+
+func TestApprovePendingCSRs_MixedBatchContinuesPastFailure(t *testing.T) {
+	installFakeOCForCSRs(t)
+	dir := t.TempDir()
+	argvFile := filepath.Join(dir, "argv")
+	t.Setenv("OC_ARGV_FILE", argvFile)
+	items := []certificatesv1.CertificateSigningRequest{}
+	for _, name := range []string{"csr-1", "csr-2", "csr-3"} {
+		csr := testCSR(t)
+		csr.Name = name
+		items = append(items, csr)
+	}
+	body, marshalErr := json.Marshal(certificatesv1.CertificateSigningRequestList{Items: items})
+	if marshalErr != nil {
+		t.Fatal(marshalErr)
+	}
+	t.Setenv("OC_CSR_JSON", string(body))
+	t.Setenv("OC_APPROVE_FAIL_NAME", "csr-2")
+	t.Setenv("OC_APPROVE_EXIT", "1")
+
+	c := newTestClient(t)
+	n, err := c.ApprovePendingCSRs(context.Background(), testCSRIdentity())
+	if err == nil {
+		t.Fatal("expected error reporting the csr-2 failure")
+	}
+	if n != 2 {
+		t.Errorf("approved count = %d; want 2 (csr-1 and csr-3 despite csr-2 failing)", n)
+	}
+	var ce *errtypes.ClusterError
+	if !errors.As(err, &ce) {
+		t.Fatalf("err is %T; want *errtypes.ClusterError in the joined error", err)
+	}
+	data, readErr := os.ReadFile(argvFile)
+	if readErr != nil {
+		t.Fatalf("argv file not written: %v", readErr)
+	}
+	for _, name := range []string{"csr-1", "csr-2", "csr-3"} {
+		if !strings.Contains(string(data), name) {
+			t.Errorf("csr %q was never attempted; batch stopped at the first failure", name)
+		}
 	}
 }

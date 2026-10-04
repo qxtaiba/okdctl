@@ -71,7 +71,9 @@ func BuildOpaqueSecret(namespace, name string, data map[string][]byte) (string, 
 }
 
 // EnsureNamespace checks whether a Kubernetes namespace exists and creates it
-// if missing, using the default addon retry policy.
+// if missing, using the default addon retry policy. A namespace it creates
+// is stamped with OwnershipLabel; a namespace found already present is left
+// untouched, so ownership is never inferred and never backfilled.
 func EnsureNamespace(ctx context.Context, env *Environment, namespace string) error {
 	// Log at Info once; demote retries to Debug per the poll-loop log-once
 	// convention (monitor.go).
@@ -92,9 +94,33 @@ func EnsureNamespace(ctx context.Context, env *Environment, namespace string) er
 			env.Logger.Info("creating namespace", "namespace", namespace)
 			logged = true
 		}
-		if _, err := env.Exec.RunChecked(ctx, "oc", "create", "namespace", namespace); err != nil {
+		manifest, err := buildOwnedNamespace(namespace)
+		if err != nil {
+			return fmt.Errorf("build %s namespace manifest: %w", namespace, err)
+		}
+		if _, err := env.Exec.RunWithStdinChecked(ctx, manifest, "oc", "apply", "-f", "-"); err != nil {
 			return fmt.Errorf("create %s namespace: %w", namespace, err)
 		}
 		return nil
 	})
+}
+
+// buildOwnedNamespace returns a Namespace manifest YAML carrying
+// OwnershipLabel, applied by EnsureNamespace only on the creation path.
+func buildOwnedNamespace(namespace string) (string, error) {
+	ns := corev1.Namespace{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Namespace",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   namespace,
+			Labels: map[string]string{OwnershipLabel: ownershipLabelValue},
+		},
+	}
+	out, err := yaml.Marshal(ns)
+	if err != nil {
+		return "", fmt.Errorf("marshal namespace %s: %w", namespace, err)
+	}
+	return string(out), nil
 }

@@ -12,7 +12,10 @@ import (
 func TestDeployPhases_CoverEveryRegisteredStepExactlyOnce(t *testing.T) {
 	builder := wizard.NewStepBuilder()
 	RegisterAll(builder)
-	built := wizard.BuildSteps(wizard.DefaultConfig(), builder)
+	built, err := wizard.BuildSteps(wizard.DefaultConfig(), builder)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	counts := make(map[wizard.StepID]int)
 	for _, stage := range deployPhases() {
@@ -34,7 +37,10 @@ func TestDeployPhases_CoverEveryRegisteredStepExactlyOnce(t *testing.T) {
 func TestRegisterAllSharesCapacitySnapshotWithReviewState(t *testing.T) {
 	builder := wizard.NewStepBuilder()
 	RegisterAll(builder)
-	built := wizard.BuildSteps(wizard.DefaultConfig(), builder)
+	built, err := wizard.BuildSteps(wizard.DefaultConfig(), builder)
+	if err != nil {
+		t.Fatal(err)
+	}
 	capacity, ok := built.States[wizard.StepTypeReview].(*WizardCapacitySnapshot)
 	if !ok || capacity == nil {
 		t.Fatalf("review state = %T, want *WizardCapacitySnapshot", built.States[wizard.StepTypeReview])

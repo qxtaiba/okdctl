@@ -34,9 +34,20 @@ type OpPlan struct {
 	MemoryMB           int
 	CPU                int
 	OSDiskGB           int
+	ResizeMode         ResizeMode
 	GrowMasterMemoryMB int
 	IngressReplicas    int
 }
+
+// ResizeMode describes the disruption required to realize a resize.
+type ResizeMode uint8
+
+// ResizeDrainedRestart and the other modes distinguish restart and live disk changes.
+const (
+	ResizeDrainedRestart ResizeMode = iota
+	ResizeUndrainedRestart
+	ResizeLiveDisk
+)
 
 // DestroysData reports whether the plan deletes a VM (and its data disk) — the
 // case the confirmation box flags in amber.

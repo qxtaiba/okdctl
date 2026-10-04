@@ -18,7 +18,7 @@
   │    vcpus          memory (mb)    os disk (gb)                            │  
   │    ╭─────────╮    ╭─────────╮    ╭─────────╮                             │  
   │                                                                          │  
-  │─────────── ↑ ↓  scroll down for more ─────────── ▸ okd 4.22.0-okd-scos.7 │  
+  │─────────── ↑ ↓  scroll down for more ──────────── ▸ okd 4.22.0-okd-scos.7│  
   │  40 vcpu · 104 gb ram · 1850 gb disk               ctrl+c quit • ? help  │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

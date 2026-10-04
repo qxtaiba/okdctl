@@ -2,6 +2,7 @@ package lifecycle
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/node"
+	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
@@ -42,7 +44,7 @@ type OpStep struct {
 // first when st.Marker names an interrupted op.
 func NewOpStep(st *State) *OpStep {
 	var ops []opChoice
-	if st.Marker != nil {
+	if st.Marker != nil && st.Marker.Intent != nil {
 		ops = append(ops, opChoice{
 			op:     st.Marker.Op,
 			resume: true,
@@ -118,12 +120,15 @@ func (s *OpStep) View(width, height int) string {
 			humanAge(s.now().Sub(s.st.Marker.Timestamp)))
 		content += warnStyle.Render(lipgloss.Wrap(banner, min(width, opCardWidth)-4, "")) + "\n"
 
-		// Picking anything but resume arms Ack (see Apply), which overwrites
-		// this marker the moment the new op's own first step runs — the old
-		// resume point is gone for good. The operator must see that cost
-		// before choosing, not discover it after the fact.
 		noteStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim())
 		note := "choosing anything but resume below abandons this marker — it cannot be resumed afterward"
+		if s.st.Marker.Intent == nil {
+			// No resume option was offered (see NewOpStep): restoreIntent
+			// has nothing to replay, so every available choice already
+			// abandons the marker — there is no "anything but resume" to
+			// warn about, only the fact that resume itself isn't on offer.
+			note = "saved request unavailable; choose a fresh operation"
+		}
 		content += noteStyle.Render(lipgloss.Wrap(note, min(width, opCardWidth)-4, "")) + "\n\n"
 	}
 
@@ -161,14 +166,29 @@ func (s *OpStep) Apply(_ *config.Config) error {
 	s.st.Scope = node.ResizeScope{}
 	s.st.Target = ""
 	if c.resume {
-		switch c.op {
-		case node.OpResize:
-			s.st.Scope = node.ResizeScope{Node: s.st.Marker.Target}
-		case node.OpRemove:
-			s.st.Target = s.st.Marker.Target
-		}
+		s.restoreIntent()
 	}
 	return nil
+}
+
+// restoreIntent replays the marker's recorded request parameters — scope,
+// sizing, and disruption options — so a resumed op proceeds with exactly
+// what was originally approved, not just its scope/target. Only called when
+// NewOpStep already confirmed Marker.Intent is non-nil.
+func (s *OpStep) restoreIntent() {
+	intent := s.st.Marker.Intent
+	s.st.MemoryMB, s.st.CPU, s.st.OSDiskGB = 0, 0, 0
+	s.st.SkipDrain, s.st.ForceStorage, s.st.DrainTimeout = intent.SkipDrain, intent.ForceStorage, intent.DrainTimeout
+	switch s.st.Op {
+	case node.OpResize:
+		role, target, _ := strings.Cut(intent.Scope, "/")
+		s.st.Scope = node.ResizeScope{Role: nodetypes.NodeRole(role), Node: target}
+		s.st.MemoryMB, s.st.CPU, s.st.OSDiskGB = intent.RequestedMemoryMB, intent.RequestedCPU, intent.RequestedOSDiskGB
+	case node.OpRemove:
+		s.st.Target = intent.Scope
+	case node.OpAdd:
+		s.st.Count = intent.AddCount
+	}
 }
 
 // Answered surfaces the interrupted-op marker as facts for the split

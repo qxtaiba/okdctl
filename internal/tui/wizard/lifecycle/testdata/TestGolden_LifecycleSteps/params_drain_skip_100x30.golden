@@ -3,6 +3,10 @@
   │ O K D C T L                                                                                  │  
   │ operation parameters                                op · target · params · plan · run · done │  
   │──────────────────────────────────────────────────────────────────────────────────────────────│  
+  │                                                                                              │  
+  │    ● disruption                                                                              │  
+  │                                                                                              │  
+  │    drain mode                                                                                │  
   │    ╭────────────────────────────────────────╮                                                │  
   │    │ ◂ skip drain — restart pods in place ▸ │                                                │  
   │    ╰────────────────────────────────────────╯                                                │  
@@ -19,12 +23,8 @@
   │    │ ● no  ○ yes    │ default                                                                │  
   │    ╰────────────────╯                                                                        │  
   │                                                                                              │  
-  │    ⚠ skip-drain: the node is destroyed without evacuating pods —                             │  
-  │      they die with the vm and reschedule onto the remaining nodes.                           │  
-  │      use when a memory-saturated cluster cannot reschedule evictions.                        │  
-  │      the ceph health gate still runs.                                                        │  
   │                                                                                              │  
-  │───────────────────────────── ↑ ↓  scroll up for more ───────────────────────────── ▸ homelab │  
+  │──────────────────────────── ↑ ↓  scroll down for more ──────────────────────────── ▸ homelab │  
   │  ↑↓/tab navigate • ← → change value • enter continue • esc back … • ctrl+c quit • ? help     │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                     

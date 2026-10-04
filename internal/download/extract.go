@@ -166,13 +166,13 @@ func ExtractTarGz(ctx context.Context, archivePath, destDir string, opts ...Extr
 	}
 	defer func() { _ = file.Close() }()
 
-	gzipReader, err := gzip.NewReader(file)
+	gzipReader, err := gzip.NewReader(&ctxReader{ctx: ctx, r: file})
 	if err != nil {
 		return fmt.Errorf("decompress archive %s: %w", archivePath, err)
 	}
 	defer func() { _ = gzipReader.Close() }()
 
-	tarReader := tar.NewReader(gzipReader)
+	tarReader := tar.NewReader(&ctxReader{ctx: ctx, r: gzipReader})
 
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return fmt.Errorf("create destination directory: %w", err)

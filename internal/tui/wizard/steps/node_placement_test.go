@@ -3,6 +3,9 @@ package steps
 import (
 	"errors"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"slices"
 	"strings"
 	"testing"
@@ -788,4 +791,88 @@ func TestNodePlacementStep_SanitizesHostileProxmoxText(t *testing.T) {
 			t.Fatalf("rendered view shows no sanitization marker for the tampered error:\n%q", view)
 		}
 	})
+}
+
+// TestUnstartedDiscoverySnapshotIsReleased guards the password clone's
+// lifecycle: Init clones the Proxmox password into a detached SecretBytes
+// for the discovery fetch; if the step is released before that fetch ever
+// ran (e.g. the user quit mid-discovery), Release must zeroize the orphaned
+// clone without touching the caller's own credentials.
+func TestUnstartedDiscoverySnapshotIsReleased(t *testing.T) {
+	cfg := newProxmoxTestConfig()
+	cfg.Provider.Proxmox.Password.Set("fixture-password")
+	step := NewNodePlacementStep()
+	step.ShouldShow(cfg)
+	step.Init()
+	copyBytes := step.ownedPasswords[0].Bytes()
+	if string(copyBytes) != "fixture-password" {
+		t.Fatalf("cloned password = %q, want fixture-password", copyBytes)
+	}
+	step.Release()
+	for _, b := range copyBytes {
+		if b != 0 {
+			t.Fatal("unstarted command retained plaintext")
+		}
+	}
+	if string(cfg.Provider.Proxmox.Password.Bytes()) != "fixture-password" {
+		t.Fatal("release changed caller credentials")
+	}
+	cfg.Provider.Proxmox.Password.Zeroize()
+}
+
+// TestStartDiscoveryNoStringPasswordConversion AST-scans startDiscovery
+// (proxmox_discovery.go) for a string(x.Bytes()) conversion: that copies
+// the password into an immutable, unzeroizable string that outlives the
+// fresh []byte SetBytes then wraps, so this path must clone the password
+// without ever hopping through a string. startDiscovery is this branch's
+// equivalent of the reviewed fetchDiscovery — renamed, not reintroduced —
+// and carries forward the exact fix the review required.
+func TestStartDiscoveryNoStringPasswordConversion(t *testing.T) {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "proxmox_discovery.go", nil, 0)
+	if err != nil {
+		t.Fatalf("parse proxmox_discovery.go: %v", err)
+	}
+
+	var fn *ast.FuncDecl
+	for _, decl := range f.Decls {
+		if d, ok := decl.(*ast.FuncDecl); ok && d.Name.Name == "startDiscovery" {
+			fn = d
+			break
+		}
+	}
+	if fn == nil {
+		t.Fatal("startDiscovery not found in proxmox_discovery.go")
+	}
+
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		ident, ok := call.Fun.(*ast.Ident)
+		if !ok || ident.Name != "string" || len(call.Args) != 1 {
+			return true
+		}
+		inner, ok := call.Args[0].(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		sel, ok := inner.Fun.(*ast.SelectorExpr)
+		if !ok || sel.Sel.Name != "Bytes" {
+			return true
+		}
+		pos := fset.Position(call.Pos())
+		t.Errorf("%s: startDiscovery converts password bytes through a string: %s", pos, renderExpr(call))
+		return true
+	})
+}
+
+func renderExpr(expr ast.Expr) string {
+	if call, ok := expr.(*ast.CallExpr); ok {
+		if ident, ok := call.Fun.(*ast.Ident); ok {
+			return ident.Name + "(...)"
+		}
+	}
+	return "<expr>"
 }

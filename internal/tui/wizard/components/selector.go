@@ -190,6 +190,13 @@ func (s *Selector) SelectedSpan() (start, end int, ok bool) {
 	return s.selectedSpan.start, s.selectedSpan.end, true
 }
 
+// FocusBounds reports the selected option's rendered rows, satisfying the
+// FocusedBounds interface via the span SelectedSpan already tracks live
+// during the last View.
+func (s *Selector) FocusBounds(_ int) (top, bottom int, ok bool) {
+	return s.SelectedSpan()
+}
+
 // View renders the selector as a vertical list with top-of-list options
 // above the scrollable dropdown region.
 func (s *Selector) View() string {

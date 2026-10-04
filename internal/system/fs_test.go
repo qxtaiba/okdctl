@@ -2,6 +2,7 @@ package system
 
 import (
 	"errors"
+	"io"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -111,9 +112,22 @@ func TestCopyFileMode(t *testing.T) {
 		if err := os.WriteFile(dst, []byte("old"), 0o644); err != nil {
 			t.Fatal(err)
 		}
+		old, err := os.Open(dst)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = old.Close() }()
 		if err := CopyFileMode(src, dst, 0o600); err != nil {
 			t.Fatalf("CopyFileMode: %v", err)
 		}
+		previous, err := io.ReadAll(old)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(previous) != "old" {
+			t.Fatalf("old reader received replacement: %q", previous)
+		}
+
 		fi, _ := os.Stat(dst)
 		if perm := fi.Mode().Perm(); perm != 0o600 {
 			t.Errorf("pre-existing dst perm = %#o, want 0o600 (tightened)", perm)

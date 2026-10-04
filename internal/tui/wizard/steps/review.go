@@ -82,8 +82,13 @@ func (s *ReviewStep) SetConfig(cfg *config.Config) {
 }
 
 // SetSavedConfig snapshots non-secret review values for the edit-config diff.
+// SetSavedConfig snapshots cfg through config.Effective before comparing —
+// loading no longer bakes resolved values (e.g. a mirrored bootstrap disk
+// size) into a saved config, so the raw saved and raw current configs can
+// each carry an unresolved zero that would otherwise show as a spurious
+// "0 → 50" change the operator never made.
 func (s *ReviewStep) SetSavedConfig(cfg *config.Config) {
-	s.saved = reviewConfigSnapshot(cfg)
+	s.saved = reviewConfigSnapshot(config.Effective(cfg))
 }
 
 // SetConfigPath records the file the deploy action will read or write.
@@ -223,6 +228,12 @@ func (s *ReviewStep) View(width, height int) string {
 		return s.renderInstallConfigPreview(width)
 	}
 
+	resolved := *s
+	resolved.cfg = config.Effective(s.cfg)
+	return resolved.renderSummary(width)
+}
+
+func (s *ReviewStep) renderSummary(width int) string {
 	st := wizard.NewSectionStyles(width)
 	var content strings.Builder
 
@@ -254,6 +265,11 @@ func (s *ReviewStep) visibleWizardStepCount() int {
 }
 
 // PaneContent summarizes deployment details beside the review.
+// PaneContent mirrors View's resolved-copy pattern: the raw s.cfg can carry
+// an unmaterialized zero (e.g. a bootstrap disk size loading no longer
+// bakes in), so both the deploy-plan table and the change-summary's
+// "current" snapshot read through config.Effective, matching what View
+// (and SetSavedConfig's own saved-side snapshot) already show.
 func (s *ReviewStep) PaneContent(width, height int) string {
 	if s.cfg == nil {
 		return ""
@@ -261,10 +277,13 @@ func (s *ReviewStep) PaneContent(width, height int) string {
 	if s.showPreview {
 		return "Install-config preview\n\nSecrets are replaced with placeholders.\nUse ↑/↓ to inspect the full file.\nPress p or esc to return."
 	}
+	resolved := *s
+	resolved.cfg = config.Effective(s.cfg)
+
 	lines := strings.Split(strings.TrimRight(renderReviewPreflight(s.preflight, width), "\n"), "\n")
-	lines = append(lines, s.renderChangeSummary(width)...)
+	lines = append(lines, resolved.renderChangeSummary(width)...)
 	lines = append(lines, "", lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText()).Render("DEPLOY PLAN"))
-	for _, row := range reviewPlanRows(s.cfg) {
+	for _, row := range reviewPlanRows(resolved.cfg) {
 		lines = append(lines, tui.Truncate(row, width))
 	}
 	lines = append(lines, "", lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText()).Render("WRITES"))
@@ -273,7 +292,7 @@ func (s *ReviewStep) PaneContent(width, height int) string {
 		path = "okdctl.yaml"
 	}
 	lines = append(lines, tui.Truncate(path, width), "", lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText()).Render("HEADLESS"))
-	command := reviewHeadlessCommand(path, s.cfg.Cluster.Name)
+	command := reviewHeadlessCommand(path, resolved.cfg.Cluster.Name)
 	lines = append(lines, tui.WrapLines(command, width)...)
 	lines = append(lines, "", tui.DimStyle.Render("p preview install-config.yaml"))
 	if len(lines) > height {
@@ -970,4 +989,13 @@ func (s *ReviewStep) FocusPaletteTarget(id string) tea.Cmd {
 		s.actions.Select(1)
 	}
 	return nil
+}
+
+// FocusBounds keeps review actions visible beneath the configuration summary.
+func (s *ReviewStep) FocusBounds(width, height int) (top, bottom int, ok bool) {
+	if s.cfg == nil {
+		return 0, 0, false
+	}
+	bottom = lipgloss.Height(lipgloss.NewStyle().Width(width).Render(s.View(width, height)))
+	return bottom - lipgloss.Height(s.actions.View()), bottom, true
 }

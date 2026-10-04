@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -33,6 +34,37 @@ case "$1" in
 esac
 `
 	testutil.InstallFakeBin(t, "terraform", script)
+}
+
+// installFakeTerraformBackupOrderForBootstrap records, for every terraform
+// invocation (not just apply), whether a state backup already exists — so a
+// test can assert the backup precedes the FIRST invocation.
+func installFakeTerraformBackupOrderForBootstrap(t *testing.T, backupLog string) {
+	t.Helper()
+	testutil.InstallFakeBin(t, "terraform", `#!/bin/sh
+if ls terraform.tfstate.*.bak >/dev/null 2>&1; then
+  printf 'present\n' >> "$TF_TEST_BACKUP_LOG"
+else
+  printf 'absent\n' >> "$TF_TEST_BACKUP_LOG"
+fi
+exit 0
+`)
+	t.Setenv("TF_TEST_BACKUP_LOG", backupLog)
+}
+
+// seedBootstrapStateOnly seeds a state file but no .terraform/lock
+// scaffolding, so Init actually shells out to terraform (unlike
+// seedBootstrapEnvDir, whose scaffolding makes Init's already-initialized
+// shortcut skip the subprocess entirely).
+func seedBootstrapStateOnly(t *testing.T, projectRoot string) {
+	t.Helper()
+	envDir := filepath.Join(projectRoot, "infrastructure", "terraform", "environments", "production")
+	if err := os.MkdirAll(envDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(envDir, "terraform.tfstate"), []byte(`{"version":4,"resources":[{"type":"x"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func seedBootstrapEnvDir(t *testing.T, projectRoot string) string {
@@ -99,5 +131,32 @@ func TestCleanupBootstrap(t *testing.T) {
 				t.Errorf("planPath still exists after %s; defer SafeRemove did not fire", tc.mode)
 			}
 		})
+	}
+}
+
+func TestCleanupBootstrap_BackupPrecedesFirstTerraformInvocation(t *testing.T) {
+	projectRoot := t.TempDir()
+	seedBootstrapStateOnly(t, projectRoot)
+	backupLog := filepath.Join(t.TempDir(), "backup.log")
+	installFakeTerraformBackupOrderForBootstrap(t, backupLog)
+
+	p := newTestPhase(t)
+	opts := &Options{BaseOptions: phase.BaseOptions{ProjectRoot: projectRoot, TerraformEnv: "production"}}
+	cfg := &config.Config{Cluster: config.ClusterConfig{Name: "test-cluster"}}
+
+	if err := p.CleanupBootstrap(context.Background(), cfg, opts); err != nil {
+		t.Fatalf("CleanupBootstrap() = %v; want nil", err)
+	}
+
+	data, err := os.ReadFile(backupLog)
+	if err != nil {
+		t.Fatalf("backup log missing: %v", err)
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	if len(lines) == 0 {
+		t.Fatal("no terraform invocations recorded")
+	}
+	if lines[0] != "present" {
+		t.Errorf("backup status at first terraform invocation = %q; want %q — the state backup must precede init/plan, not just apply", lines[0], "present")
 	}
 }

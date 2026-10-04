@@ -176,7 +176,10 @@ func newGoldenModelWithCapacity(t *testing.T) (*wizard.Model, *WizardCapacitySna
 	t.Helper()
 	builder := wizard.NewStepBuilder()
 	RegisterAll(builder)
-	built := wizard.BuildSteps(wizard.DefaultConfig(), builder)
+	built, err := wizard.BuildSteps(wizard.DefaultConfig(), builder)
+	if err != nil {
+		t.Fatal(err)
+	}
 	capacity, _ := built.States[wizard.StepTypeReview].(*WizardCapacitySnapshot)
 	cfg := config.DefaultConfig()
 	for _, step := range built.Steps {
@@ -967,7 +970,10 @@ func newGoldenModelFreshDefaults(t *testing.T) *wizard.Model {
 	t.Helper()
 	builder := wizard.NewStepBuilder()
 	RegisterAll(builder)
-	built := wizard.BuildSteps(wizard.DefaultConfig(), builder)
+	built, err := wizard.BuildSteps(wizard.DefaultConfig(), builder)
+	if err != nil {
+		t.Fatal(err)
+	}
 	return wizard.NewFlowModel(built.Steps, config.DefaultConfig(), Chrome())
 }
 

@@ -9,7 +9,7 @@
   │  operation      resize masters                                                                         │  ✓ parameters                                                       │  
   │  target memory  12288 → 24576 MiB per node                                                             │  ● plan preview                                                     │  
   │  target cpu     unchanged                                                                              │                                                                     │  
-  │  disruption     each node is drained, then power-cycled (stop→start)                                   │  CONFIGURED                                                         │  
+  │  disruption     each node is drained, then hard power-cycled (stop→start) to realize the change        │  CONFIGURED                                                         │  
   │                                                                                                        │  operation: resize masters                                          │  
   │  nodes — execution order                                                                               │  nodes: 1                                                           │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │                                                                     │  

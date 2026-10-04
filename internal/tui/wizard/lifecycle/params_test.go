@@ -250,19 +250,37 @@ func TestParamsStepRemoveForceStorage(t *testing.T) {
 	}
 }
 
-func TestParamsStepShownOnResume(t *testing.T) {
+func TestParamsStepShouldShow(t *testing.T) {
+	cfg := config.DefaultConfig()
+	intent := &node.OpIntent{Scope: "master/homelab-master0"}
+	for _, tc := range []struct {
+		name   string
+		resume bool
+		marker *node.OpMarker
+		want   bool
+	}{
+		{"not resuming", false, nil, true},
+		{"resume without a marker", true, nil, true},
+		{"resume with a marker but no approved intent", true, &node.OpMarker{}, true},
+		{"resume with an approved intent", true, &node.OpMarker{Intent: intent}, false},
+	} {
+		st := &State{Cfg: cfg, Op: node.OpResize, Resume: tc.resume, Marker: tc.marker}
+		if got := NewParamsStep(st).ShouldShow(cfg); got != tc.want {
+			t.Errorf("%s: ShouldShow() = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestParamsStepResumeInfersRoleFromScopeNode(t *testing.T) {
 	cfg := config.DefaultConfig()
 	st := &State{
 		Cfg: cfg, Op: node.OpResize, Resume: true,
 		Scope: node.ResizeScope{Node: "homelab-master0"},
 	}
 	s := NewParamsStep(st)
-	if !s.ShouldShow(cfg) {
-		t.Fatal("params must be shown on resume")
-	}
 	_ = s.Init()
 	if s.resizeRole() != nodetypes.RoleMaster {
-		t.Error("resume must infer the role from the marker target name")
+		t.Error("resume must infer the role from the scope's target node name")
 	}
 }
 

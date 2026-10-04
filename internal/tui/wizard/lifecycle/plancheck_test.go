@@ -17,6 +17,10 @@ func TestPlansEquivalent(t *testing.T) {
 		t.Error("identical plans must be equivalent")
 	}
 	mutations := []func(*node.OpPlan){
+		func(p *node.OpPlan) { p.MemoryMB = 8192 },
+		func(p *node.OpPlan) { p.CPU = 4 },
+		func(p *node.OpPlan) { p.OSDiskGB = 100 },
+		func(p *node.OpPlan) { p.ResizeMode = node.ResizeLiveDisk },
 		func(p *node.OpPlan) { p.Op = node.OpRemove },
 		func(p *node.OpPlan) { p.Cluster = "other" },
 		func(p *node.OpPlan) { p.Nodes = p.Nodes[:0] },

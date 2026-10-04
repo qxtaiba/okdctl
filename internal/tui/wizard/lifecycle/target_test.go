@@ -1,6 +1,7 @@
 package lifecycle
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -39,7 +40,7 @@ func TestSortByIndexUnindexedNodesSortLast(t *testing.T) {
 
 func loadedTarget(t *testing.T, st *State, nodes []cluster.NodeDetail) *TargetStep {
 	t.Helper()
-	s := NewTargetStep(st, Hooks{ListNodes: func() ([]cluster.NodeDetail, error) { return nodes, nil }})
+	s := NewTargetStep(st, Hooks{ListNodes: func(context.Context) ([]cluster.NodeDetail, error) { return nodes, nil }})
 	cmds := s.Init()
 	if cmds == nil {
 		t.Fatal("Init must fetch nodes")
@@ -173,7 +174,7 @@ func TestTargetStepEnterCompletes(t *testing.T) {
 
 func TestTargetStepLoadErrorBlocksCompletion(t *testing.T) {
 	st := &State{Cfg: config.DefaultConfig(), Op: node.OpResize}
-	s := NewTargetStep(st, Hooks{ListNodes: func() ([]cluster.NodeDetail, error) {
+	s := NewTargetStep(st, Hooks{ListNodes: func(context.Context) ([]cluster.NodeDetail, error) {
 		return nil, errors.New("cluster unreachable")
 	}})
 	_ = s.Init()
@@ -247,7 +248,7 @@ func TestTargetStepShouldShow(t *testing.T) {
 // first, and A's now-stale successful reply must not overwrite it.
 func TestTargetStep_StaleNodesSuccessCannotOverwriteNewer(t *testing.T) {
 	st := &State{Cfg: config.DefaultConfig(), Op: node.OpResize}
-	s := NewTargetStep(st, Hooks{ListNodes: func() ([]cluster.NodeDetail, error) { return nil, nil }})
+	s := NewTargetStep(st, Hooks{ListNodes: func(context.Context) ([]cluster.NodeDetail, error) { return nil, nil }})
 
 	s.Init()
 	genA := s.generation
@@ -275,7 +276,7 @@ func TestTargetStep_StaleNodesSuccessCannotOverwriteNewer(t *testing.T) {
 // replace B's good, newer result.
 func TestTargetStep_StaleNodesErrorCannotOverwriteNewer(t *testing.T) {
 	st := &State{Cfg: config.DefaultConfig(), Op: node.OpResize}
-	s := NewTargetStep(st, Hooks{ListNodes: func() ([]cluster.NodeDetail, error) { return nil, nil }})
+	s := NewTargetStep(st, Hooks{ListNodes: func(context.Context) ([]cluster.NodeDetail, error) { return nil, nil }})
 
 	s.Init()
 	genA := s.generation
@@ -322,7 +323,7 @@ func TestTargetStep_ReentryAfterSuccessReusesCachedNodes(t *testing.T) {
 func TestTargetStep_SanitizesHostileLoadErrorText(t *testing.T) {
 	const payload = "\x1b[2J\x1b[H"
 	st := &State{Cfg: config.DefaultConfig(), Op: node.OpResize}
-	s := NewTargetStep(st, Hooks{ListNodes: func() ([]cluster.NodeDetail, error) {
+	s := NewTargetStep(st, Hooks{ListNodes: func(context.Context) ([]cluster.NodeDetail, error) {
 		return nil, errors.New("cluster unreachable")
 	}})
 	s.Init()
@@ -346,7 +347,7 @@ func TestTargetStep_SanitizesHostileLoadErrorText(t *testing.T) {
 // error automatically retries instead of leaving the step stuck.
 func TestTargetStep_ReentryAfterErrorRefetches(t *testing.T) {
 	st := &State{Cfg: config.DefaultConfig(), Op: node.OpResize}
-	s := NewTargetStep(st, Hooks{ListNodes: func() ([]cluster.NodeDetail, error) {
+	s := NewTargetStep(st, Hooks{ListNodes: func(context.Context) ([]cluster.NodeDetail, error) {
 		return nil, errors.New("cluster unreachable")
 	}})
 
@@ -411,7 +412,7 @@ func TestTargetStep_OverlayHelp(t *testing.T) {
 	}
 
 	errSt := &State{Cfg: config.DefaultConfig(), Op: node.OpResize}
-	errored := NewTargetStep(errSt, Hooks{ListNodes: func() ([]cluster.NodeDetail, error) {
+	errored := NewTargetStep(errSt, Hooks{ListNodes: func(context.Context) ([]cluster.NodeDetail, error) {
 		return nil, errors.New("cluster unreachable")
 	}})
 	errored.Init()

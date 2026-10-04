@@ -1,6 +1,7 @@
 package lifecycle
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -25,7 +26,7 @@ import (
 // disarmed state.
 func previewWith(t *testing.T, st *State, plan *node.OpPlan, err error) *PreviewStep {
 	t.Helper()
-	s := NewPreviewStep(st, Hooks{DryRun: func(*State) (*node.OpPlan, error) { return plan, err }})
+	s := NewPreviewStep(st, Hooks{DryRun: func(context.Context, *State) (*node.OpPlan, error) { return plan, err }})
 	_ = s.Init()
 	updated, _ := s.Update(dryRunDoneMsg{plan: plan, err: err})
 	ps := updated.(*PreviewStep)
@@ -112,7 +113,7 @@ func TestPreviewDiskOnlyEntries(t *testing.T) {
 		Scope: node.ResizeScope{Role: nodetypes.RoleMaster},
 	}
 	plan := &node.OpPlan{
-		Op: node.OpResize, Cluster: "homelab", OSDiskGB: 100,
+		Op: node.OpResize, Cluster: "homelab", OSDiskGB: 100, ResizeMode: node.ResizeLiveDisk,
 		Nodes: []node.PlanNode{{
 			Name: "homelab-master0", Role: nodetypes.RoleMaster,
 			TFAddress: "m.master[0]", Action: terraform.PlanActionUpdate,
@@ -479,4 +480,26 @@ func TestPreviewFoldGuardArmsImmediatelyWhenEverythingFits(t *testing.T) {
 	if !strings.Contains(frame, tui.IconActive+" execute resize") {
 		t.Errorf("radio must arm immediately when the plan fits without scrolling:\n%s", frame)
 	}
+}
+
+// TestPreviewCancellationReachesDryRun guards the per-visit context wiring:
+// Init's returned command must carry the step's current SetVisitContext
+// down to the DryRun hook, so cancelling that context (leaving the step, or
+// the wizard shutting down) actually unblocks a hook that's waiting on it,
+// rather than leaking the goroutine running it.
+func TestPreviewCancellationReachesDryRun(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	started, finished := make(chan struct{}), make(chan struct{})
+	step := NewPreviewStep(resizePreviewState(), Hooks{DryRun: func(ctx context.Context, _ *State) (*node.OpPlan, error) {
+		close(started)
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}})
+	step.SetVisitContext(ctx)
+	cmd := step.Init()
+	go func() { defer close(finished); cmd() }()
+	<-started
+	cancel()
+	<-finished
 }

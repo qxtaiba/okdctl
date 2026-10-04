@@ -6,6 +6,7 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 func (m *Model) handleResize(msg tea.WindowSizeMsg) {
@@ -16,6 +17,11 @@ func (m *Model) handleResize(msg tea.WindowSizeMsg) {
 	m.resizeViewport()
 	m.syncViewportContent()
 	m.notifyIfAtBottom()
+	// Deliberately does not re-scroll to the focused field: a resize must
+	// resync content/height without fighting a scroll position the operator
+	// (or a test) just set deliberately — e.g. 'G'/'gg'/pgup/pgdn — which a
+	// forced autoScrollToField here would silently overwrite on every
+	// WindowSizeMsg, including a same-size one a render helper re-sends.
 }
 
 // sizeCurrentStep hands the active step the terminal's own dimensions and then
@@ -221,6 +227,33 @@ func (m *Model) viewportSpan(span LineSpan) (start, end int) {
 	return start, max(end, start)
 }
 
+// autoScrollToField scrolls by the focused field's exact pixel bounds
+// (FocusedBounds) rather than scrollToFocusedField's line-span mapping —
+// kept alongside it since not every focusable (e.g. lifecycle's
+// components.Input/Selector-backed fields) implements SpanProvider.
+func (m *Model) autoScrollToField(_, _ int) {
+	step := m.CurrentStep()
+	bounded, ok := step.(FocusedBounds)
+	if !ok {
+		return
+	}
+	top, bottom, ok := bounded.FocusBounds(max(40, m.contentWidth()-4), 1000)
+	if !ok {
+		return
+	}
+	if titled, ok := step.(displayTitler); ok && titled.DisplayTitle() != "" {
+		offset := lipgloss.Height(m.renderStepTitle(titled.DisplayTitle())) + 1
+		top += offset
+		bottom += offset
+	}
+	offset := m.viewport.YOffset()
+	if top < offset || bottom-top > m.viewport.Height() {
+		m.viewport.SetYOffset(top)
+	} else if bottom > offset+m.viewport.Height() {
+		m.viewport.SetYOffset(bottom - m.viewport.Height())
+	}
+}
+
 func (m *Model) goToNextStep() (tea.Model, tea.Cmd) {
 	if len(m.steps) > 0 && m.currentStep < len(m.steps) {
 		if a, ok := m.steps[m.currentStep].(ConfigApplier); ok {
@@ -237,9 +270,9 @@ func (m *Model) goToNextStep() (tea.Model, tea.Cmd) {
 					action = ag.GetSelectedAction()
 				}
 				m.result = Result{
-					Completed: true,
-					Config:    m.config,
-					Action:    action,
+					Outcome: OutcomeCompleted,
+					Config:  m.config,
+					Action:  action,
 				}
 				return m, tea.Quit
 			}
@@ -271,9 +304,9 @@ func (m *Model) goToNextStep() (tea.Model, tea.Cmd) {
 			}
 		}
 		m.result = Result{
-			Completed: true,
-			Config:    m.config,
-			Action:    action,
+			Outcome: OutcomeCompleted,
+			Config:  m.config,
+			Action:  action,
 		}
 		return m, tea.Quit
 	}
@@ -384,6 +417,7 @@ func (m *Model) indexOfStepByID(id StepID) int {
 func (m *Model) focusStep(idx int) (tea.Model, tea.Cmd) {
 	m.closeNavigationModals()
 	m.currentStep = idx
+	m.beginVisit()
 
 	m.sizeCurrentStep()
 	if f, ok := m.steps[idx].(FocusableStep); ok {
@@ -395,7 +429,7 @@ func (m *Model) focusStep(idx int) (tea.Model, tea.Cmd) {
 	// counter bumped per issue) and its own reuse-vs-refetch call, so a
 	// superseded reply is simply discarded rather than clobbering newer
 	// state, and re-entry never needs to be gated here.
-	initCmd := m.steps[idx].Init()
+	cmd := m.ownCommand(m.steps[idx].Init())
 	if (m.draftSaver != nil || m.draftStateSaver != nil) && isConfigDraftStep(m.steps[idx].ID()) {
 		fieldKey := ""
 		if cursor, ok := m.steps[idx].(interface{ DraftFieldKey() string }); ok {
@@ -413,7 +447,8 @@ func (m *Model) focusStep(idx int) (tea.Model, tea.Cmd) {
 		m.notifyIfAtBottom()
 	}
 
-	return m, initCmd
+	m.autoScrollToField(0, 0)
+	return m, cmd
 }
 
 func (m *Model) saveDraft(stepID StepID, fieldKey string) {

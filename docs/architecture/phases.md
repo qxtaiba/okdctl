@@ -41,12 +41,12 @@ orchestrator stops and returns the error — later steps do not run.
 type StepDef struct {
     ID          StepID
     Name        string
-    Desc        string
     NonFatal    bool
     ReRunSafe   ReRunSafety                              // required — BuildSteps panics on zero value
     AlreadyDone func(ctx context.Context) (bool, error)  // required for ReRunSafeNo steps — BuildSteps panics without it; optional for ReRunSafeYes
     SkipWhen    func() bool
     SkipReason  string
+    SkipReasonFunc func() string
     OnStart     func()                                   // optional hook fired before Exec
     Exec        func(ctx context.Context) error
     OnError     func(error)
@@ -70,8 +70,9 @@ top-level `setupSteps` function.
 internal representation — it panics if any `StepDef` omits `ReRunSafe`.
 `distribution.NewOrchestrator(...)` creates the runner. `orchestrator.Run(ctx)`
 iterates, emitting progress events and invoking each step's `Exec`. If `ctx`
-is cancelled mid-run (SIGINT / SIGTERM), the current step finishes but later
-steps are skipped — no forced kills.
+is cancelled mid-run (SIGINT / SIGTERM), cancellation reaches the active
+step and its subprocesses, and later steps are skipped. Subprocess shutdown
+is bounded and may terminate the active child; completion is not guaranteed.
 
 The orchestrator is intentionally simple. It does not do parallelism,
 DAG scheduling, or rollback — a failed step stops the run and leaves

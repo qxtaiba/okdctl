@@ -9,14 +9,14 @@
   │  operation      resize masters                                           │  
   │  target memory  12288 → 24576 MiB per node                               │  
   │  target cpu     unchanged                                                │  
-  │  disruption     each node is drained, then power-cycled (stop→start)     │  
+  │  disruption     each node is drained, then hard power-cycled             │  
+  │  (stop→start) to realize the change                                      │  
   │                                                                          │  
   │  nodes — execution order                                                 │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
   │  NODE             ROLE    ADDRESS      ACTION                            │  
   │  homelab-master0  master  m.master[0]  update                            │  
   │                                                                          │  
-  │  gates per node                                                          │  
   │                                                                          │  
   │────────────────── ↑ ↓  scroll down for more ────────────────── ▸ homelab │  
   │  scroll to review the plan            esc back … • ctrl+c quit • ? help  │  

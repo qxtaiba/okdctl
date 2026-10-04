@@ -144,23 +144,33 @@ type LoggerConfig struct {
 	ProgressBars bool
 }
 
-// ConfigureLoggers applies level, formatter, and writer settings to the
-// package-level loggers. Not safe for concurrent calls — call once in cobra
-// PersistentPreRunE before any subcommand runs.
-func ConfigureLoggers(cfg LoggerConfig) error {
-	lvl, err := charmlog.ParseLevel(cfg.Level)
+// parseLevelAndFormat resolves the charm/log level and formatter a caller
+// named by level/format string, shared by ConfigureLoggers and NewLogHandler
+// so the two accepted-value sets (and their error messages) can never drift.
+func parseLevelAndFormat(level, format string) (charmlog.Level, charmlog.Formatter, error) {
+	lvl, err := charmlog.ParseLevel(level)
 	if err != nil {
-		return fmt.Errorf("unknown log level %q: %w", cfg.Level, err)
+		return 0, charmlog.TextFormatter, fmt.Errorf("unknown log level %q: %w", level, err)
 	}
-
 	var formatter charmlog.Formatter
-	switch cfg.Format {
+	switch format {
 	case FormatText:
 		formatter = charmlog.TextFormatter
 	case FormatJSON:
 		formatter = charmlog.JSONFormatter
 	default:
-		return fmt.Errorf("unknown log format %q: must be text or json", cfg.Format)
+		return 0, charmlog.TextFormatter, fmt.Errorf("unknown log format %q: must be text or json", format)
+	}
+	return lvl, formatter, nil
+}
+
+// ConfigureLoggers applies level, formatter, and writer settings to the
+// package-level loggers. Not safe for concurrent calls — call once in cobra
+// PersistentPreRunE before any subcommand runs.
+func ConfigureLoggers(cfg LoggerConfig) error {
+	lvl, formatter, err := parseLevelAndFormat(cfg.Level, cfg.Format)
+	if err != nil {
+		return err
 	}
 
 	el := stderrLogger.Load()
@@ -198,6 +208,24 @@ func ConfigureLoggers(cfg LoggerConfig) error {
 	logutil.SetProgressBarsEnabled(cfg.ProgressBars)
 	logutil.InstallHandler(newStderrHandler())
 	return nil
+}
+
+// NewLogHandler builds a redacting handler for an ad-hoc log destination
+// outside the package-level stderr/sink loggers — e.g. the lifecycle
+// wizard's exec-screen log tee — with the same level/format policy
+// ConfigureLoggers applies to the console.
+func NewLogHandler(level, format string, w io.Writer) (slog.Handler, error) {
+	lvl, formatter, err := parseLevelAndFormat(level, format)
+	if err != nil {
+		return nil, err
+	}
+	l := buildSinkLogger(w)
+	l.SetLevel(lvl)
+	l.SetFormatter(formatter)
+	if id := logutil.RunID(); id != "" {
+		return logutil.NewRedactHandler(l.With("run_id", id)), nil
+	}
+	return logutil.NewRedactHandler(l), nil
 }
 
 // SuppressInfo raises the stderr logger to ErrorLevel (silencing Info/Warn)

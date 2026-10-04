@@ -89,7 +89,7 @@ func forbidWizard(t *testing.T) {
 	t.Helper()
 	runWizardFn = func(*cobra.Command, *config.Config, bool) (hubOutcome, error) {
 		t.Error("wizard must not be constructed on this path")
-		return hubOutcome{Result: wizard.Result{Cancelled: true}, Verb: steps.HubVerbEditConfig}, nil
+		return hubOutcome{Result: wizard.Result{Outcome: wizard.OutcomeCancelled}, Verb: steps.HubVerbEditConfig}, nil
 	}
 }
 
@@ -197,7 +197,7 @@ func TestRunDeploy_WizardCancelMakesNoChanges(t *testing.T) {
 	resetDeployState(t)
 	t.Chdir(t.TempDir())
 	forbidExecute(t)
-	stubWizard(t, wizard.Result{Cancelled: true}, steps.HubVerbGetStarted, nil)
+	stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCancelled}, steps.HubVerbGetStarted, nil)
 
 	if err := runDeploy(deployCmd, nil); err != nil {
 		t.Fatalf("cancelled wizard must exit 0: %v", err)
@@ -212,7 +212,7 @@ func TestRunDeploy_ExistingConfigSeedsWizard(t *testing.T) {
 	t.Chdir(t.TempDir())
 	seedDeployConfig(t)
 	forbidExecute(t)
-	rec := stubWizard(t, wizard.Result{Cancelled: true}, steps.HubVerbEditConfig, nil)
+	rec := stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCancelled}, steps.HubVerbEditConfig, nil)
 
 	if err := runDeploy(deployCmd, nil); err != nil {
 		t.Fatalf("runDeploy: %v", err)
@@ -232,7 +232,7 @@ func TestRunDeploy_CorruptConfigFallsBackToDefaultsInteractively(t *testing.T) {
 		t.Fatal(err)
 	}
 	forbidExecute(t)
-	rec := stubWizard(t, wizard.Result{Cancelled: true}, steps.HubVerbGetStarted, nil)
+	rec := stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCancelled}, steps.HubVerbGetStarted, nil)
 
 	if err := runDeploy(deployCmd, nil); err != nil {
 		t.Fatalf("interactive run must fall back to defaults, got: %v", err)
@@ -269,7 +269,7 @@ func TestRunDeploy_MinimalSeedsMinimalDefaults(t *testing.T) {
 	resetDeployState(t)
 	t.Chdir(t.TempDir())
 	forbidExecute(t)
-	rec := stubWizard(t, wizard.Result{Cancelled: true}, steps.HubVerbGetStarted, nil)
+	rec := stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCancelled}, steps.HubVerbGetStarted, nil)
 	deployMinimal = true
 
 	if err := runDeploy(deployCmd, nil); err != nil {
@@ -312,7 +312,7 @@ func TestRunDeploy_WizardSaveExitPersistsConfigAndSidecar(t *testing.T) {
 	wizardCfg.Cluster.Name = "wizarded"
 	wizardCfg.Provider.Proxmox.Username = "root@pam"
 	wizardCfg.Provider.Proxmox.Password.Set(fixturePassword)
-	stubWizard(t, wizard.Result{Completed: true, Config: wizardCfg, Action: wizard.ActionExit}, steps.HubVerbGetStarted, nil)
+	stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCompleted, Config: wizardCfg, Action: wizard.ActionExit}, steps.HubVerbGetStarted, nil)
 
 	if err := runDeploy(deployCmd, nil); err != nil {
 		t.Fatalf("runDeploy: %v", err)
@@ -352,7 +352,7 @@ func TestRunDeploy_WizardDeployActionExecutes(t *testing.T) {
 
 	wizardCfg := config.DefaultConfig()
 	wizardCfg.Cluster.Name = "deployme"
-	stubWizard(t, wizard.Result{Completed: true, Config: wizardCfg, Action: wizard.ActionDeploy}, steps.HubVerbGetStarted, nil)
+	stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCompleted, Config: wizardCfg, Action: wizard.ActionDeploy}, steps.HubVerbGetStarted, nil)
 
 	if err := runDeploy(deployCmd, nil); err != nil {
 		t.Fatalf("runDeploy: %v", err)
@@ -380,7 +380,7 @@ func TestRunDeploy_HubDeployVerbSkipsSave(t *testing.T) {
 	t.Chdir(t.TempDir())
 	seedDeployConfig(t)
 	exec := stubExecute(t)
-	stubWizard(t, wizard.Result{Completed: true}, steps.HubVerbDeploy, nil)
+	stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCompleted}, steps.HubVerbDeploy, nil)
 
 	if err := runDeploy(deployCmd, nil); err != nil {
 		t.Fatalf("runDeploy: %v", err)
@@ -410,7 +410,7 @@ func TestRunDeploy_HubDestroyVerbPrintsHandoffAndDestroysNothing(t *testing.T) {
 
 	var out bytes.Buffer
 	deployCmd.SetOut(&out)
-	stubWizard(t, wizard.Result{Completed: true}, steps.HubVerbDestroy, nil)
+	stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCompleted}, steps.HubVerbDestroy, nil)
 
 	if err := runDeploy(deployCmd, nil); err != nil {
 		t.Fatalf("runDeploy: %v", err)
@@ -439,7 +439,7 @@ func TestRunDeploy_HubQuitVerbChangesNothing(t *testing.T) {
 	isolateProxmoxEnv(t)
 	t.Chdir(t.TempDir())
 	forbidExecute(t)
-	stubWizard(t, wizard.Result{Completed: true}, steps.HubVerbQuit, nil)
+	stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCompleted}, steps.HubVerbQuit, nil)
 
 	if err := runDeploy(deployCmd, nil); err != nil {
 		t.Fatalf("runDeploy: %v", err)

@@ -3,6 +3,7 @@ package steps
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -62,6 +63,11 @@ type NodePlacementStep struct {
 	// header caches the last View's rendered discoveryHeader, so headerOffset
 	// doesn't need the render width again.
 	header string
+
+	// ownedPasswords tracks every detached SecretBytes a startDiscovery
+	// fetch clones the Proxmox password into, so Release can zeroize one
+	// whose fetch never got the chance to (the UI exited mid-flight).
+	ownedPasswords []*config.SecretBytes
 
 	// inner is the post-discovery form; fields below alias into it, nil if
 	// discovery didn't surface that field.
@@ -274,7 +280,7 @@ func (s *NodePlacementStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		}
 
 		var nodeNames []string
-		if msg.err == nil && msg.discovery != nil && len(msg.discovery.Nodes) > 0 {
+		if msg.discovery != nil && len(msg.discovery.Nodes) > 0 {
 			nodeNames = make([]string, len(msg.discovery.Nodes))
 			for i := range msg.discovery.Nodes {
 				nodeNames[i] = msg.discovery.Nodes[i].Name
@@ -522,6 +528,26 @@ func (s *NodePlacementStep) View(width, height int) string {
 	return header
 }
 
+// SetSize propagates the viewport width to the placement fields, so a
+// zero-arg FocusBounds/FocusedSpan call downstream measures against the
+// width the form last rendered at.
+func (s *NodePlacementStep) SetSize(width, height int) {
+	s.BaseStep.SetSize(width, height)
+	if s.inner != nil {
+		s.inner.SetWidth(width)
+	}
+}
+
+// FocusBounds includes the discovery summary above the current field.
+func (s *NodePlacementStep) FocusBounds(_, _ int) (top, bottom int, ok bool) {
+	if s.inner == nil || s.phase == phaseDiscovering {
+		return 0, 0, false
+	}
+	top, bottom, ok = s.inner.FocusBounds()
+	offset := s.headerOffset()
+	return top + offset, bottom + offset, ok
+}
+
 // FocusedSpan rebases the inner form's span onto this step's View, which
 // prepends the discovery header.
 func (s *NodePlacementStep) FocusedSpan() (wizard.LineSpan, bool) {
@@ -729,20 +755,22 @@ func filterStorageByContent(storage []proxmoxStorage, content string) []string {
 }
 
 func firstMatch(options []string, current, fallback string) string {
-	if current != "" {
-		for _, o := range options {
-			if o == current {
-				return current
-			}
-		}
+	if current != "" && slices.Contains(options, current) {
+		return current
 	}
-	for _, o := range options {
-		if o == fallback {
-			return fallback
-		}
+	if slices.Contains(options, fallback) {
+		return fallback
 	}
 	if len(options) > 0 {
 		return options[0]
 	}
 	return ""
+}
+
+// Release clears snapshots retained by commands that never started after UI exit.
+func (s *NodePlacementStep) Release() {
+	for _, password := range s.ownedPasswords {
+		password.Zeroize()
+	}
+	s.ownedPasswords = nil
 }

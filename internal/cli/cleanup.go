@@ -46,7 +46,7 @@ to a clean state.
 
 --kind scopes cleanup to a single subsystem instead of the "full" default.`,
 	Example: `  okdctl cleanup
-  okdctl cleanup --yes
+  okdctl cleanup --yes --confirm-cluster=homelab
   okdctl cleanup --kind work-only
   okdctl cleanup --dry-run`,
 	Args: cobra.NoArgs,

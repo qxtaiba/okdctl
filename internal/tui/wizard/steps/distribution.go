@@ -539,3 +539,11 @@ func (s *DistributionStep) anchorConfiguredVersion() {
 func (s *DistributionStep) SetVersionFetcher(f VersionFetcher) {
 	s.versionFetcher = f
 }
+
+// FocusBounds keeps the selected release visible while navigating.
+func (s *DistributionStep) FocusBounds(width, _ int) (top, bottom int, ok bool) {
+	if s.phase != phaseVersionSelect || s.loadError != nil {
+		return 0, 0, false
+	}
+	return s.versionSelector.FocusBounds(width)
+}

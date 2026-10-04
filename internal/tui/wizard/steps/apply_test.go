@@ -528,15 +528,18 @@ func TestResourcesStepDefinition_Fields(t *testing.T) {
 	}
 }
 
-func TestResourcesStepDefinition_CPDiskSeedsBootstrap(t *testing.T) {
+func TestResourcesStepDefinition_CPDiskLeavesBootstrapForEffective(t *testing.T) {
 	cfg := &config.Config{}
 
 	setField(t, &ResourcesStepDefinition, cfg, "cp_disk", "77")
 	if cfg.Topology.ControlPlane.DiskGB != 77 {
 		t.Errorf("ControlPlane.Disk = %d, want 77", cfg.Topology.ControlPlane.DiskGB)
 	}
-	if cfg.Topology.Bootstrap.DiskGB != 77 {
-		t.Errorf("Bootstrap.Disk = %d, want 77 (cp_disk must also seed bootstrap disk)", cfg.Topology.Bootstrap.DiskGB)
+	if cfg.Topology.Bootstrap.DiskGB != 0 {
+		t.Errorf("Bootstrap.Disk = %d, want 0 (raw cfg must stay unmaterialized; only Effective resolves it)", cfg.Topology.Bootstrap.DiskGB)
+	}
+	if got := config.Effective(cfg).Topology.Bootstrap.DiskGB; got != 77 {
+		t.Errorf("Effective(cfg).Bootstrap.Disk = %d, want 77 (mirrors control-plane disk)", got)
 	}
 }
 

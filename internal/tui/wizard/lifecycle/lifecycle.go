@@ -4,6 +4,7 @@
 package lifecycle
 
 import (
+	"context"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
@@ -96,8 +97,8 @@ type ExecEvent struct {
 // Hooks are the CLI-supplied closures the steps call into, so the
 // lifecycle package never imports the cli package's assembly code.
 type Hooks struct {
-	ListNodes func() ([]cluster.NodeDetail, error)
-	DryRun    func(st *State) (*node.OpPlan, error)
+	ListNodes func(context.Context) ([]cluster.NodeDetail, error)
+	DryRun    func(ctx context.Context, st *State) (*node.OpPlan, error)
 	Execute   func(st *State, events chan<- ExecEvent) error
 	CancelOp  func()
 	// Logs is the human log stream the log surface reads; nil leaves the

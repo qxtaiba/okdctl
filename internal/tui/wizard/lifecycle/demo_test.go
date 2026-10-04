@@ -34,7 +34,7 @@ func TestDemoWaitDelayHonorsEnvOverride(t *testing.T) {
 
 func TestDemoHooksListNodes(t *testing.T) {
 	hooks := DemoHooks(0)
-	nodes, err := hooks.ListNodes()
+	nodes, err := hooks.ListNodes(context.Background())
 	if err != nil {
 		t.Fatalf("ListNodes: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestDemoHooksDryRunPlanMatchesState(t *testing.T) {
 		Op:     node.OpRemove,
 		Target: DemoClusterName + "-worker2",
 	}
-	plan, err := hooks.DryRun(st)
+	plan, err := hooks.DryRun(context.Background(), st)
 	if err != nil {
 		t.Fatalf("DryRun: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestDemoHooksDryRunResizePlanMatchesState(t *testing.T) {
 		MemoryMB: 16384,
 		CPU:      8,
 	}
-	plan, err := hooks.DryRun(st)
+	plan, err := hooks.DryRun(context.Background(), st)
 	if err != nil {
 		t.Fatalf("DryRun: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestDemoHooksDryRunResizePlanMatchesState(t *testing.T) {
 func TestDemoHooksDryRunAddPlanMatchesState(t *testing.T) {
 	hooks := DemoHooks(0)
 	st := &State{Cfg: config.DefaultConfig(), Op: node.OpAdd, Count: 2}
-	plan, err := hooks.DryRun(st)
+	plan, err := hooks.DryRun(context.Background(), st)
 	if err != nil {
 		t.Fatalf("DryRun: %v", err)
 	}
@@ -129,12 +129,12 @@ func TestDemoHooksDryRunAddPlanMatchesState(t *testing.T) {
 func TestDemoHooksExecuteEmitsFinalAndHonoursCancel(t *testing.T) {
 	demoRemoveState := func() *State {
 		hooks := DemoHooks(0)
-		nodes, err := hooks.ListNodes()
+		nodes, err := hooks.ListNodes(context.Background())
 		if err != nil {
 			t.Fatalf("ListNodes: %v", err)
 		}
 		st := &State{Cfg: config.DefaultConfig(), Op: node.OpRemove, Target: nodes[len(nodes)-1].Name}
-		plan, err := hooks.DryRun(st)
+		plan, err := hooks.DryRun(context.Background(), st)
 		if err != nil {
 			t.Fatalf("DryRun: %v", err)
 		}

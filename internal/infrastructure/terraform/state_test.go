@@ -150,9 +150,9 @@ func TestExecutor_StateHasResource(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name:   "exit 1 with empty stdout and stderr means absent",
-			script: "#!/bin/sh\nexit 1\n",
-			want:   false,
+			name:    "exit 1 with empty stdout is an error",
+			script:  "#!/bin/sh\nexit 1\n",
+			wantErr: true,
 		},
 		{
 			name:    "exit 1 with stderr output is a hard error",
@@ -161,9 +161,12 @@ func TestExecutor_StateHasResource(t *testing.T) {
 		},
 		{
 			name:   "exit 0 means present",
-			script: "#!/bin/sh\necho \"$3\"\nexit 0\n",
+			script: "#!/bin/sh\necho '" + addr + "'\nexit 0\n",
 			want:   true,
 		},
+		{name: "empty successful inventory is absent", script: "#!/bin/sh\nexit 0\n"},
+		{name: "another address is absent", script: "#!/bin/sh\necho other.resource\n"},
+
 		{
 			name:    "other non-zero exit is a hard error, never silent absence",
 			script:  "#!/bin/sh\nexit 2\n",

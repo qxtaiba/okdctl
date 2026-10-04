@@ -3,7 +3,6 @@
   │ O K D C T L                                                              │  
   │ configure cluster networking    connect · cluster ✓✓●○ · extras · review │  
   │──────────────────────────────────────────────────────────────────────────│  
-  │    │ ◂ 23 ▸     │                                                        │  
   │    ╰────────────╯                                                        │  
   │                                                                          │  
   │    ● static ip allocation                                                │  
@@ -18,7 +17,8 @@
   │    sequentially and the api vip                                          │  
   │    derives from it                                                       │  
   │                                                                          │  
-  │────────── ↑ ↓  80% • scroll for more ─────────── ▸ okd 4.22.0-okd-scos.7 │  
+  │                                                                          │  
+  │─────────── ↑ ↓  82% • scroll for more ─────────── ▸ okd 4.22.0-okd-scos.7│  
   │  ↑↓/tab navigate • enter continue • esc back … • ctrl+c quit • ? help    │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

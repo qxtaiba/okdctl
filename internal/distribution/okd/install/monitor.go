@@ -58,7 +58,7 @@ func (p *Phase) WaitForBootstrap(ctx context.Context, clusterDir string, opts *O
 // csrApprover is the subset of cluster.Client MonitorInstallation uses, letting
 // tests inject a stub.
 type csrApprover interface {
-	ApprovePendingCSRs(ctx context.Context) (int, error)
+	ApprovePendingCSRs(ctx context.Context, identities ...cluster.CSRIdentity) (int, error)
 }
 
 // operatorCounter is the optional cluster-operator-health surface; a stub
@@ -81,7 +81,7 @@ func operatorStatusDetail(ctx context.Context, counter operatorCounter, csrs int
 // MonitorInstallation watches the post-bootstrap install until all operators
 // are Available, bounded by opts.InstallTimeout. A nil approver builds a
 // real cluster.Client from clusterDir/auth/kubeconfig.
-func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts *Options, approver csrApprover) error {
+func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts *Options, approver csrApprover, identities ...cluster.CSRIdentity) error {
 	ctx, cancel := context.WithTimeout(ctx, opts.InstallTimeout)
 	defer cancel()
 
@@ -138,7 +138,7 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 				return &errtypes.ClusterError{Msg: "installation failed", Err: err}
 			}
 
-			approved, csrErr := approver.ApprovePendingCSRs(ctx)
+			approved, csrErr := approver.ApprovePendingCSRs(ctx, identities...)
 			if csrErr != nil {
 				p.Log.Warn("csr: final approval had issues", "err", csrErr)
 			}
@@ -148,7 +148,7 @@ func (p *Phase) MonitorInstallation(ctx context.Context, clusterDir string, opts
 			return nil
 
 		case <-ticker.C:
-			approved, err := approver.ApprovePendingCSRs(ctx)
+			approved, err := approver.ApprovePendingCSRs(ctx, identities...)
 			if err != nil {
 				csrWarn.Warn(err.Error(), "csr: approval check failed", "err", err)
 			} else {

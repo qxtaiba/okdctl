@@ -73,10 +73,14 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					Required: true,
 					PairKey:  "cp_resources",
 					Validate: config.ValidateOSDisk,
-					ConfigSet: wizard.SetInt(func(c *config.Config, v int) {
-						c.Topology.ControlPlane.DiskGB = v
-						c.Topology.Bootstrap.DiskGB = v
-					}),
+					// Bootstrap disk intentionally not seeded here: it always
+					// mirrors control-plane disk, resolved once at point of
+					// use by config.Effective/NormalizeTopology — writing it
+					// here too would materialize a value that later desyncs
+					// when control-plane disk changes outside the wizard
+					// (e.g. 'okdctl node resize') without this field running
+					// again.
+					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.ControlPlane.DiskGB = v }),
 					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.ControlPlane.DiskGB }),
 				},
 			},

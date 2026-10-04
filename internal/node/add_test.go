@@ -418,7 +418,8 @@ func TestAddWorkersResumeSkipsJoinedWorker(t *testing.T) {
 	h := seedAddTest(t, fc, addTestConfig(0, 16384))
 	r, ftf, fiso, fign := h.r, h.ftf, h.fiso, h.fign
 	r.DryRun = false
-	seedMarker(t, r, OpAdd, "mycluster-worker1", StepWaitJoin)
+	intent := r.addIntent(0, 2)
+	seedMarker(t, r, OpAdd, "mycluster-worker1", StepWaitJoin, intent)
 
 	if err := r.AddWorkers(context.Background(), AddOptions{Count: 2}); err != nil {
 		t.Fatalf("resumed add: %v", err)

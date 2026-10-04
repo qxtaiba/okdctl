@@ -14,6 +14,9 @@ import (
 	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
+// installFakeOC installs an "oc" stub whose namespace-ownership query
+// (the "-l ... --ignore-not-found -o name" shape NamespaceOwnedByOkdctl
+// issues) answers owned when NS_OWNED=1, foreign otherwise.
 func installFakeOC(t *testing.T) {
 	t.Helper()
 	testutil.InstallFakeBin(t, "oc", "#!/bin/sh\n"+
@@ -23,13 +26,25 @@ func installFakeOC(t *testing.T) {
 		"    *\"$FAIL_ARG\"*) exit 1 ;;\n"+
 		"  esac\n"+
 		"fi\n"+
+		"case \"$*\" in\n"+
+		"  *\" -l \"*\"--ignore-not-found -o name\")\n"+
+		"    [ \"$NS_OWNED\" = \"1\" ] && echo \"namespace/external-secrets\"\n"+
+		"    ;;\n"+
+		"esac\n"+
 		"exit 0\n")
 }
 
 func makeUninstallEnv(argvLog, failArg string, log *slog.Logger) *addon.Environment {
+	return makeUninstallEnvOwned(argvLog, failArg, true, log)
+}
+
+func makeUninstallEnvOwned(argvLog, failArg string, nsOwned bool, log *slog.Logger) *addon.Environment {
 	extraEnv := []string{"ARGV_LOG=" + argvLog}
 	if failArg != "" {
 		extraEnv = append(extraEnv, "FAIL_ARG="+failArg)
+	}
+	if nsOwned {
+		extraEnv = append(extraEnv, "NS_OWNED=1")
 	}
 	return &addon.Environment{
 		AddonConfig: config.AddonConfig{},
@@ -66,9 +81,11 @@ func TestUninstall_HappyPath(t *testing.T) {
 
 	lines := readArgvLog(t, argvLog)
 	want := []string{
-		"oc:delete secret onepassword-connect-credentials -n external-secrets",
-		"oc:delete secret onepassword-connect-token -n external-secrets",
-		"oc:delete secretstore okdctl-secretstore -n external-secrets",
+		"oc:delete secret onepassword-connect-credentials -n external-secrets --ignore-not-found",
+		"oc:delete secret onepassword-connect-token -n external-secrets --ignore-not-found",
+		"oc:delete secretstore okdctl-secretstore -n external-secrets --ignore-not-found",
+		"oc:get namespace external-secrets -l okdctl.io/managed-by=okdctl --ignore-not-found -o name",
+		"oc:delete namespace external-secrets --ignore-not-found",
 	}
 	if len(lines) != len(want) {
 		t.Fatalf("expected %d argv records, got %d: %v", len(want), len(lines), lines)
@@ -91,16 +108,34 @@ func TestUninstall_PartialSecretFailureContinues(t *testing.T) {
 	env := makeUninstallEnv(argvLog, opCredentialsSecretName, slog.New(h))
 
 	s := &secretStore{}
-	if err := s.Uninstall(context.Background(), env); err != nil {
-		t.Fatalf("Uninstall must return nil even when a secret delete fails; got: %v", err)
+	if err := s.Uninstall(context.Background(), env); err == nil {
+		t.Fatal("cleanup failure lost")
 	}
 
 	lines := readArgvLog(t, argvLog)
-	if len(lines) != 3 {
-		t.Fatalf("expected 3 argv records (loop must continue past the failed delete), got %d: %v", len(lines), lines)
+	if len(lines) != 5 {
+		t.Fatalf("expected 5 argv records (loop must continue past the failed delete), got %d: %v", len(lines), lines)
+	}
+}
+
+// TestUninstall_PreservesForeignNamespace proves the destructive-compensation
+// invariant's other direction: a namespace that exists but was never labeled
+// by EnsureNamespace must never be deleted by Uninstall.
+func TestUninstall_PreservesForeignNamespace(t *testing.T) {
+	installFakeOC(t)
+	argvLog := filepath.Join(t.TempDir(), "argv.log")
+	h := &testutil.CaptureHandler{}
+	env := makeUninstallEnvOwned(argvLog, "", false, slog.New(h))
+
+	s := &secretStore{}
+	if err := s.Uninstall(context.Background(), env); err != nil {
+		t.Fatalf("Uninstall returned error: %v", err)
 	}
 
-	if got := h.CountLevel(slog.LevelWarn); got != 1 {
-		t.Errorf("warnCount = %d; want 1 (one failing secret delete)", got)
+	lines := readArgvLog(t, argvLog)
+	for _, l := range lines {
+		if strings.Contains(l, "delete namespace") {
+			t.Fatalf("Uninstall deleted a namespace it did not create: %v", lines)
+		}
 	}
 }

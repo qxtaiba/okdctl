@@ -20,6 +20,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/render"
+	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/logview"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/lifecycle"
@@ -151,16 +152,17 @@ func newLifecycleSession(cmd *cobra.Command, cfg *config.Config) (*lifecycleSess
 
 	st := &lifecycle.State{Cfg: cfg, Marker: marker}
 	hooks := lifecycle.Hooks{
-		ListNodes: func() ([]cluster.NodeDetail, error) { return cl.ListNodes(ctx) },
-		DryRun: func(s *lifecycle.State) (*node.OpPlan, error) {
+		ListNodes: func(visit context.Context) ([]cluster.NodeDetail, error) { return cl.ListNodes(visit) },
+		DryRun: func(visit context.Context, s *lifecycle.State) (*node.OpPlan, error) {
 			rc, err := env.newRunner(cmd, cfg, "manage", nodeConsent{dryRun: true}, lg, subprocSink())
 			if err != nil {
 				return nil, err
 			}
 			defer rc.cleanup()
+			rc.runner.ResumePreview = s.Resume
 			var captured *node.OpPlan
 			rc.runner.Preview = func(p *node.OpPlan) { captured = p }
-			if err := runLifecycleOp(ctx, rc, s); err != nil {
+			if err := runLifecycleOp(visit, rc, s); err != nil {
 				return nil, err
 			}
 			return captured, nil
@@ -196,7 +198,7 @@ func reportLifecycleOutcome(cmd *cobra.Command, result wizard.Result, st *lifecy
 	case st.Executed:
 		printLifecycleRecap(cmd, st)
 		return nil
-	case result.Cancelled || !st.Proceed:
+	case result.Outcome == wizard.OutcomeCancelled || !st.Proceed:
 		logutil.Info("no changes made")
 		return nil
 	default:
@@ -266,11 +268,18 @@ func subprocSink() io.Writer {
 // ringSlog tees the session's log stream into the exec screen's log ring on
 // its way to the okdctl.log sink, never stderr, which the AltScreen wizard
 // owns during execution; redaction wraps the tee, so the on-screen pane
-// only ever sees scrubbed records.
+// only ever sees scrubbed records. The sink leg honors the configured
+// --log-level via tui.NewLogHandler rather than a hardcoded Info-only
+// handler, so a debug run sees debug lines in both the ring and the file;
+// the format is pinned to text (never logFormat) to match buildSinkLogger's
+// own persistent-sink policy — one physical okdctl.log must never mix text
+// and json lines depending on which writer last touched it.
 func ringSlog(ring *logview.Ring) *slog.Logger {
 	var next slog.Handler
 	if runLogSink != nil {
-		next = slog.NewTextHandler(runLogSink, nil)
+		if handler, err := tui.NewLogHandler(effectiveLogLevel(), tui.FormatText, runLogSink); err == nil {
+			next = handler
+		}
 	}
 	return slog.New(logutil.NewRedactHandler(ring.Handler(next)))
 }

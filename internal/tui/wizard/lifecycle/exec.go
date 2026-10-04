@@ -181,8 +181,30 @@ func (s *ExecStep) sendFinal(err error) {
 	}
 }
 
+// listen waits for the next execution event, or gives up once the step's
+// visit context is cancelled (the operator left this step, or the wizard is
+// shutting down) — otherwise a run whose sendFinal gave up on an abandoned
+// feed would leave this goroutine blocked on s.events forever.
 func (s *ExecStep) listen() tea.Cmd {
-	return func() tea.Msg { return execEventMsg{ev: <-s.events} }
+	ctx := s.Context()
+	return func() tea.Msg {
+		select {
+		case event, open := <-s.events:
+			if !open {
+				return nil
+			}
+			return execEventMsg{ev: event}
+		case <-ctx.Done():
+			return nil
+		}
+	}
+}
+
+// Stop cancels backend work before the flow waits for command cleanup.
+func (s *ExecStep) Stop() {
+	if s.hooks.CancelOp != nil {
+		s.hooks.CancelOp()
+	}
 }
 
 // Update consumes execution events and shared-clock frames; every

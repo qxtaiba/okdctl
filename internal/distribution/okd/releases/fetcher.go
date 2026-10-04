@@ -77,6 +77,9 @@ func (f *OKDVersionFetcher) fetchAllPages(ctx context.Context, repo string) ([]g
 
 		releases, err := f.fetchFromGitHub(ctx, repo, page, perPage)
 		if err != nil {
+			if ctx.Err() != nil {
+				return nil, fmt.Errorf("fetch release page: %w", ctx.Err())
+			}
 			if page == 1 {
 				return nil, err
 			}

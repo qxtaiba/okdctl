@@ -160,7 +160,7 @@ func (p *Phase) VerifyKubeVIP(ctx context.Context, cfg *config.Config, opts *Opt
 		return "", &errtypes.ClusterError{Msg: "kube-vip vip not reachable", Err: err}
 	}
 
-	if err := p.verifyKubeVIPAPIHealthBootstrap(ctx, vip, workspace.ClusterConfigDir(opts.WorkDir)); err != nil {
+	if err := p.verifyKubeVIPAPIHealthBootstrap(ctx, vip, "api."+cfg.Cluster.Name+"."+cfg.Cluster.Domain, workspace.ClusterConfigDir(opts.WorkDir)); err != nil {
 		return "", &errtypes.ClusterError{Msg: "kube-vip api health check failed", Err: err}
 	}
 
@@ -207,10 +207,9 @@ func (p *Phase) waitForKubeVIPPing(ctx context.Context, vip string, opts *Option
 	return nil
 }
 
-// verifyKubeVIPAPIHealthBootstrap checks API health via VIP, falling back to
-// insecure TLS only on x509.HostnameError (pre-SAN cert reissue window).
-func (p *Phase) verifyKubeVIPAPIHealthBootstrap(ctx context.Context, vip, clusterDir string) error {
-	healthURL := fmt.Sprintf("https://%s:%d/healthz", vip, phase.KubeAPIPort)
+// verifyKubeVIPAPIHealthBootstrap verifies the cluster CA and API identity through the VIP.
+func (p *Phase) verifyKubeVIPAPIHealthBootstrap(ctx context.Context, vip, serverName, clusterDir string) error {
+	healthURL := "https://" + net.JoinHostPort(vip, strconv.Itoa(phase.KubeAPIPort)) + "/healthz"
 
 	kubeconfigPath := workspace.KubeconfigPath(clusterDir)
 	pool, caErr := httputil.KubeconfigCAPool(kubeconfigPath)
@@ -243,8 +242,8 @@ func (p *Phase) verifyKubeVIPAPIHealthBootstrap(ctx context.Context, vip, cluste
 		if !errors.As(err, &hostnameErr) {
 			return &errtypes.ClusterError{Msg: fmt.Sprintf("api health check at %s", healthURL), Err: err}
 		}
-		p.Log.Warn("kubevip: vip not in apiserver sans yet, retrying without tls verification", "vip", vip)
-		response, err = doRequest(httputil.NewInsecure(5 * time.Second))
+		p.Log.Warn("kubevip: verify API hostname through vip", "vip", vip)
+		response, err = doRequest(httputil.NewWithCAServerName(pool, serverName, 5*time.Second))
 		if err != nil {
 			return &errtypes.ClusterError{Msg: fmt.Sprintf("api health check at %s", healthURL), Err: err}
 		}

@@ -29,6 +29,8 @@ func runFlow(ctx context.Context, steps []WizardStep, cfg *config.Config, chrome
 	model := NewFlowModel(steps, cfg, chrome)
 	model.draftSaver = save
 	model.draftStateSaver = saveState
+	model.flowContext = ctx
+	defer model.shutdown()
 
 	p := tea.NewProgram(model,
 		tea.WithContext(ctx),
@@ -44,7 +46,7 @@ func runFlow(ctx context.Context, steps []WizardStep, cfg *config.Config, chrome
 	}
 
 	result := m.Result()
-	if result.Completed {
+	if result.Outcome == OutcomeCompleted {
 		result.Config = m.Config()
 	}
 

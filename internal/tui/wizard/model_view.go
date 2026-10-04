@@ -19,6 +19,26 @@ func (m *Model) tooSmall() bool {
 	return m.width < minTerminalWidth || m.height < minTerminalHeight
 }
 
+// tooSmallContent renders tooSmallNotice clamped to width×height: the one
+// message telling the operator to resize must itself fit however small the
+// terminal actually is, down to 1×1 — a wrapped-but-unclamped notice would
+// otherwise be the one thing that overflows a terminal too small to show it.
+func tooSmallContent(width, height int) string {
+	width, height = max(width, 1), max(height, 1)
+	style := lipgloss.NewStyle().Foreground(tui.ColorTextDim())
+	if height == 1 {
+		return style.Render(tui.Truncate(tooSmallNotice, width))
+	}
+	lines := tui.WrapLines(tooSmallNotice, max(width-2, 1))
+	if maxLines := height - 1; len(lines) > maxLines {
+		lines = lines[:maxLines]
+	}
+	for i, l := range lines {
+		lines[i] = tui.Truncate(l, width-2)
+	}
+	return style.Render("\n  " + strings.Join(lines, "\n  "))
+}
+
 // View implements tea.Model, rendering header, viewport, status row, and
 // footer into a bordered box drawn at exactly the terminal width.
 func (m *Model) View() tea.View {
@@ -38,7 +58,7 @@ func (m *Model) View() tea.View {
 	}
 
 	if m.tooSmall() {
-		v.Content = "\n  " + lipgloss.NewStyle().Foreground(tui.ColorTextDim()).Render(tooSmallNotice)
+		v.Content = tooSmallContent(m.width, m.height)
 		return v
 	}
 
@@ -217,11 +237,16 @@ func (m *Model) viewportDimensions() (width, height int) {
 	if viewportHeight < 1 {
 		viewportHeight = 1
 	}
+	viewportHeight = max(1, viewportHeight)
 
 	return contentWidth, viewportHeight
 }
 
 func (m *Model) syncViewportContent() {
+	if m.ready {
+		_, height := m.viewportDimensions()
+		m.viewport.SetHeight(height)
+	}
 	if len(m.steps) == 0 || m.currentStep < 0 || m.currentStep >= len(m.steps) {
 		m.viewport.SetContent("no steps configured")
 		return
@@ -356,6 +381,14 @@ func (m *Model) headerTitle() string {
 		}
 	}
 	return step.Title()
+}
+
+// renderStepTitle styles a step's DisplayTitle for the rare caller measuring
+// or rendering it outside the persistent header row (headerTitle/renderHeader
+// already show it there for every step); most steps never need this since
+// their title lives in the header, not inline in the scrollable body.
+func (m *Model) renderStepTitle(title string) string {
+	return lipgloss.NewStyle().Foreground(tui.ColorText()).Bold(true).Render(title)
 }
 
 // progressInfo reports the current step's position among visible steps for
@@ -596,7 +629,7 @@ func (m *Model) renderFooterRule() string {
 	if contextBadge != "" {
 		badgeStyled = lipgloss.NewStyle().
 			Foreground(tui.ColorSuccess()).
-			Bold(true).
+			Bold(true).Inline(true).MaxWidth(width / 3).
 			Render(" " + tui.IconCaretRight + " " + contextBadge + " ")
 		badgeWidth = lipgloss.Width(badgeStyled)
 		if badgeWidth > width {

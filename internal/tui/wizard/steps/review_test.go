@@ -95,8 +95,14 @@ func TestReviewStep_ShowsChangesFromSavedConfig(t *testing.T) {
 	frame := s.View(120, 100)
 	tuitest.AssertFits(t, frame, 120, 100)
 	out := tuitest.StripANSI(frame)
+	// Both snapshots resolve through config.Effective (loading no longer
+	// bakes a mirrored bootstrap size into a saved config, so the raw
+	// configs on either side of the diff must be resolved identically
+	// before comparing) — so control plane vcpus 4→8 ripples into a real,
+	// not spurious, bootstrap vcpus 4→8: the transient bootstrap VM mirrors
+	// control-plane sizing, and the operator should see that consequence.
 	for _, want := range []string{
-		"CONFIG CHANGES · 4",
+		"CONFIG CHANGES · 5",
 		"domain",
 		"k8s.local → prod.example",
 		"control plane vcpus",
@@ -105,13 +111,14 @@ func TestReviewStep_ShowsChangesFromSavedConfig(t *testing.T) {
 		"→ time.example",
 		"binary directory",
 		"→ /opt/okd/bin",
+		"bootstrap vcpus",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("View() missing config change %q:\n%s", want, out)
 		}
 	}
 	pane := tuitest.StripANSI(s.PaneContent(70, 30))
-	for _, want := range []string{"CHANGED SINCE LOAD · 4", "domain  k8s.local → prod.example", "control plane vcpus  4 → 8"} {
+	for _, want := range []string{"CHANGED SINCE LOAD · 5", "domain  k8s.local → prod.example", "control plane vcpus  4 → 8", "bootstrap vcpus  4 → 8"} {
 		if !strings.Contains(pane, want) {
 			t.Errorf("PaneContent() missing loaded-config delta %q:\n%s", want, pane)
 		}
@@ -491,5 +498,21 @@ func TestReviewStep_BodyHasNoActionRadio(t *testing.T) {
 	out := s.View(100, 100)
 	if strings.Contains(out, "deploy now") || strings.Contains(out, "save and exit") {
 		t.Error("View() body still renders the action radio, want it pinned to the footer only")
+	}
+}
+
+func TestReviewActionsVisibleAfterSummaryWraps(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Provider.Proxmox.Host = "https://long-hostname.cluster.example.com:8006"
+	step := NewReviewStep()
+	step.SetConfig(cfg)
+	m := wizard.NewModel([]wizard.WizardStep{step}, cfg)
+	m.Init()
+	for _, size := range [][2]int{{120, 40}, {80, 24}} {
+		m.Update(tea.WindowSizeMsg{Width: size[0], Height: size[1]})
+		out := m.View().Content
+		if !strings.Contains(out, "deploy now") || !strings.Contains(out, "save and exit") {
+			t.Fatalf("review actions hidden at %v: %s", size, out)
+		}
 	}
 }

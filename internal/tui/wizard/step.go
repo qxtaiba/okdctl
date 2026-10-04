@@ -1,6 +1,8 @@
 package wizard
 
 import (
+	"context"
+
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -140,6 +142,7 @@ type KeyBinding struct {
 // BaseStep implements common WizardStep fields and defaults; embed it in
 // concrete steps to avoid boilerplate.
 type BaseStep struct {
+	visitContext context.Context
 	id           StepID
 	title        string
 	displayTitle string
@@ -292,4 +295,21 @@ type ReviewJumper interface {
 // it there returns straight to review instead of replaying steps between.
 type JumpToStepMsg struct {
 	StepID StepID
+}
+
+// FocusedBounds identifies the active control in the step's rendered line coordinates.
+type FocusedBounds interface {
+	FocusBounds(width, height int) (top, bottom int, ok bool)
+}
+
+// SetVisitContext attaches the lifetime of the current visit to step requests.
+func (b *BaseStep) SetVisitContext(ctx context.Context) { b.visitContext = ctx }
+
+// Context returns the current visit context.
+func (b *BaseStep) Context() context.Context {
+	if b.visitContext != nil {
+		return b.visitContext
+	}
+	// Direct widget tests and render probes run outside the flow owner.
+	return context.Background()
 }

@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -94,8 +95,12 @@ func TestSignalLoop(t *testing.T) {
 				sigCh <- sig
 			}
 			close(sigCh)
+			// mainDone never closes: these cases exercise a hung (or
+			// nonexistent, for the single-signal case) main goroutine, so
+			// the second signal must fall through the grace bound.
+			mainDone := make(chan struct{})
 
-			signalLoop(sigCh, cancel, &caughtSig, func(code int) { exitCode = code })
+			signalLoop(sigCh, cancel, &caughtSig, func(code int) { exitCode = code }, mainDone, time.Millisecond)
 
 			if ctx.Err() == nil {
 				t.Fatal("expected context to be canceled after first signal")
@@ -108,6 +113,47 @@ func TestSignalLoop(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestSignalLoop_SecondSignalAwaitsCleanup proves a second real signal no
+// longer skips execute()'s deferred credential Zeroize/ZeroizeEnv and
+// model.shutdown — it waits for mainDone (ExecuteContext having returned,
+// meaning that cleanup already ran) before deciding whether to force exit.
+func TestSignalLoop_SecondSignalAwaitsCleanup(t *testing.T) {
+	t.Run("cleanup finishes within grace: no force exit", func(t *testing.T) {
+		sigCh := make(chan os.Signal, 2)
+		_, cancel := context.WithCancel(context.Background())
+		var caughtSig atomic.Value
+		exitCode := -1
+		sigCh <- syscall.SIGINT
+		sigCh <- syscall.SIGINT
+		close(sigCh)
+		mainDone := make(chan struct{})
+		close(mainDone) // ExecuteContext already returned; cleanup already ran.
+
+		signalLoop(sigCh, cancel, &caughtSig, func(code int) { exitCode = code }, mainDone, time.Hour)
+
+		if exitCode != -1 {
+			t.Fatalf("exit code = %d, want no forced exit once cleanup already finished", exitCode)
+		}
+	})
+
+	t.Run("cleanup hangs past grace: forces exit with the signal's code", func(t *testing.T) {
+		sigCh := make(chan os.Signal, 2)
+		_, cancel := context.WithCancel(context.Background())
+		var caughtSig atomic.Value
+		exitCode := -1
+		sigCh <- syscall.SIGTERM
+		sigCh <- syscall.SIGTERM
+		close(sigCh)
+		mainDone := make(chan struct{}) // never closes: cleanup is still hung.
+
+		signalLoop(sigCh, cancel, &caughtSig, func(code int) { exitCode = code }, mainDone, time.Millisecond)
+
+		if exitCode != 143 {
+			t.Fatalf("exit code = %d, want 143 once the grace bound is exceeded", exitCode)
+		}
+	})
 }
 
 // pins the exit-code contract; external scripts depend on this mapping, so a

@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -183,5 +185,45 @@ func TestConfigureLogging_NoDefaultSinkForReadOnlyCmds(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, logutil.DefaultLogFileName)); !os.IsNotExist(err) {
 		t.Fatalf("okdctl.log created for a read-only command: stat err = %v", err)
+	}
+}
+
+// TestLogFailureToSinkCarriesRunIDAndRespectsQuiet exercises
+// logFailureToSink — the path announceFailure takes when it prints the
+// pretty box straight to stderr instead of going through the logutil
+// facade, so a boxed failure on a TTY still reaches the persistent sink.
+// Secret redaction itself is covered at the logutil.RedactHandler layer
+// (internal/logutil/redact_test.go); this only pins logFailureToSink's own
+// contract — the failure lands with run_id attached, and --quiet (which
+// only raises the effective level to error, per effectiveLogLevel) does
+// NOT swallow it, since it's an Error-level write itself — quiet must
+// never hide the one thing it's reporting. The sink is always text (see
+// ringSlog's and buildSinkLogger's own "never mix text and json in one
+// physical okdctl.log" invariant), not whatever --log-format chose.
+func TestLogFailureToSinkCarriesRunIDAndSurvivesQuiet(t *testing.T) {
+	oldSink, oldLevel := runLogSink, logLevel
+	oldQuiet, oldVerbose := logQuiet, logVerbose
+	t.Cleanup(func() {
+		runLogSink, logLevel = oldSink, oldLevel
+		logQuiet, logVerbose = oldQuiet, oldVerbose
+	})
+	var buf bytes.Buffer
+	runLogSink, logLevel = &buf, "debug"
+	logQuiet, logVerbose = false, false
+
+	logFailureToSink(errors.New("terminal failure"))
+	out := buf.String()
+	if !strings.Contains(out, "command failed") {
+		t.Fatalf("sink missing the failure message: %q", out)
+	}
+	if !strings.Contains(out, logutil.RunID()) {
+		t.Fatalf("sink missing run_id: %q", out)
+	}
+
+	buf.Reset()
+	logQuiet = true
+	logFailureToSink(errors.New("still reported under quiet"))
+	if !strings.Contains(buf.String(), "command failed") {
+		t.Fatalf("quiet swallowed the failure report: %q", buf.String())
 	}
 }

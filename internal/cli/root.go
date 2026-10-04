@@ -203,7 +203,14 @@ func execute() (code int) {
 	defer cancel()
 
 	var caughtSig atomic.Value // os.Signal
-	go signalLoop(sigCh, cancel, &caughtSig, os.Exit)
+	// mainDone tells signalLoop's second-strike wait that ExecuteContext has
+	// returned, so credential Zeroize/ZeroizeEnv and model.shutdown — all
+	// deferred inside the command tree ctx cancellation already unwound —
+	// have already run; closed first among execute()'s defers (registered
+	// last, LIFO-first) so the signal is as timely as possible.
+	mainDone := make(chan struct{})
+	defer close(mainDone)
+	go signalLoop(sigCh, cancel, &caughtSig, os.Exit, mainDone, secondSignalGrace)
 
 	updateCh := version.BackgroundCheck(ctx)
 
@@ -222,9 +229,20 @@ func execute() (code int) {
 	return 0
 }
 
-// signalLoop is the two-strike handler: first signal cancels and warns, second
-// exits 143/130 bypassing cleanup since the user asked for a hard kill.
-func signalLoop(sigCh <-chan os.Signal, cancel context.CancelFunc, caughtSig *atomic.Value, exit func(int)) {
+// secondSignalGrace bounds how long a second real signal waits for the
+// first signal's ctx cancellation to finish unwinding (credential
+// Zeroize/ZeroizeEnv, model.shutdown) before forcing exit — long enough to
+// cover the common case where that unwind is already near done, short
+// enough that a second signal still terminates promptly if it is not (e.g.
+// an orchestrator's stop-timeout escalation landing mid-execution).
+const secondSignalGrace = 5 * time.Second
+
+// signalLoop is the two-strike handler: first signal cancels and warns.
+// Second signal waits up to grace for mainDone (ExecuteContext returning,
+// meaning its deferred cleanup already ran) before forcing exit — so
+// cleanup is skipped only when it was already hung past the bound, never as
+// a matter of course.
+func signalLoop(sigCh <-chan os.Signal, cancel context.CancelFunc, caughtSig *atomic.Value, exit func(int), mainDone <-chan struct{}, grace time.Duration) {
 	// converts a panic here to exit 70 (like execute()'s recover), since an
 	// unrecovered one would use Go's exit 2, reserved for ConfigError
 	defer func() {
@@ -244,11 +262,20 @@ func signalLoop(sigCh <-chan os.Signal, cancel context.CancelFunc, caughtSig *at
 	if !ok {
 		return
 	}
+	code := 130
 	if sig2 == syscall.SIGTERM {
-		exit(143)
-		return
+		code = 143
 	}
-	exit(130)
+	select {
+	case <-mainDone:
+		// ExecuteContext already returned — its deferred cleanup already
+		// ran, and execute() is already on its way to os.Exit(code) with
+		// the same code via signalExitCode, so there is nothing left for
+		// this goroutine to force.
+		return
+	case <-time.After(grace):
+		exit(code)
+	}
 }
 
 // printUpdateNotice writes the update-available banner to w, downsampling
@@ -283,6 +310,7 @@ func announceFailure(err error) {
 	stderrTTY := term.IsTerminal(int(os.Stderr.Fd()))
 	stdoutTTY := term.IsTerminal(int(os.Stdout.Fd()))
 	if shouldRenderErrorBox(stderrTTY, stdoutTTY, logFormat, err) {
+		logFailureToSink(err)
 		fmt.Fprintln(os.Stderr, render.ErrorSummary(err, exitCodeFor(err), logutil.RunID()))
 		return
 	}
@@ -291,6 +319,21 @@ func announceFailure(err error) {
 		logutil.Info("full run log persisted; attach it to bug reports or run 'okdctl debug-bundle'",
 			logutil.LF("path", runLogPath))
 	}
+}
+
+// logFailureToSink records the failure in the persistent run-log sink even
+// when announceFailure prints the pretty box straight to stderr instead of
+// going through the logutil facade — otherwise a boxed failure on a TTY
+// would never appear in okdctl.log or a pulled debug-bundle.
+func logFailureToSink(err error) {
+	if runLogSink == nil {
+		return
+	}
+	handler, hErr := tui.NewLogHandler(effectiveLogLevel(), tui.FormatText, runLogSink)
+	if hErr != nil {
+		return
+	}
+	slog.New(handler).Error("command failed", "err", err, "exit_code", exitCodeFor(err))
 }
 
 // shouldRenderErrorBox reports whether announceFailure draws the boxed

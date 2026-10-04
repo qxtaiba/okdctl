@@ -425,6 +425,10 @@ func (f *MultiSectionForm) Update(msg tea.Msg) (cmd tea.Cmd, enterPressed bool) 
 	}
 
 	if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
+		if owner, ok := group.Field(group.FocusIndex()).(interface{ OwnsKey(tea.KeyPressMsg) bool }); ok && owner.OwnsKey(keyMsg) {
+			_, cmd := group.Update(msg)
+			return cmd, false
+		}
 		switch {
 		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("enter"))):
 			if ec, isConsumer := f.FocusedField().(components.EnterConsumer); isConsumer && ec.ConsumesEnter() {
@@ -1204,6 +1208,16 @@ func (s *DataDrivenStep) ShortHelp() []KeyBinding {
 	return bindings
 }
 
+// OwnsKey delegates cell-edit keys before flow navigation handles them.
+func (s *DataDrivenStep) OwnsKey(msg tea.KeyPressMsg) bool {
+	field := s.form.FocusedField()
+	if field == nil {
+		return false
+	}
+	owner, ok := field.(interface{ OwnsKey(tea.KeyPressMsg) bool })
+	return ok && owner.OwnsKey(msg)
+}
+
 // ConsumesTextInput reports whether the focused field is mid-text-entry,
 // per TextInputConsumer.
 func (s *DataDrivenStep) ConsumesTextInput() bool {
@@ -1229,7 +1243,7 @@ func (s *DataDrivenStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 		return s, tea.Batch(s.form.FocusFirstInvalid(), func() tea.Msg { return ErrorSetMsg{Error: ErrFixHighlighted} })
 	}
 	if s.definition.Validate != nil {
-		if err := s.definition.Validate(s.values()); err != nil {
+		if err := s.redactedDefinitionValidate(); err != nil {
 			errCmd := func() tea.Msg { return ErrorSetMsg{Error: err} }
 			var cfe *crossFieldError
 			if errors.As(err, &cfe) {
@@ -1277,9 +1291,44 @@ func (s *DataDrivenStep) Validate() error {
 		return errs[0]
 	}
 	if s.definition.Validate != nil {
-		return s.definition.Validate(s.values())
+		return s.redactedDefinitionValidate()
 	}
 	return nil
+}
+
+// redactedDefinitionValidate runs the step-level Validate function and
+// scrubs any password field's live value out of the resulting error text —
+// a cross-field Validate composes its message from arbitrary field values,
+// and a password's raw value must never round-trip into a rendered error.
+// A crossFieldError's field-implication list survives the scrub so
+// focusCrossFieldError can still highlight the right fields.
+func (s *DataDrivenStep) redactedDefinitionValidate() error {
+	err := s.definition.Validate(s.values())
+	if err == nil {
+		return nil
+	}
+	message := err.Error()
+	redacted := false
+	for _, section := range s.definition.Sections {
+		for index := range section.Fields {
+			field := &section.Fields[index]
+			if field.Type != FieldTypePassword {
+				continue
+			}
+			if v := s.Value(field.Key); v != "" && strings.Contains(message, v) {
+				message = strings.ReplaceAll(message, v, "<redacted>")
+				redacted = true
+			}
+		}
+	}
+	if !redacted {
+		return err
+	}
+	var cfe *crossFieldError
+	if errors.As(err, &cfe) {
+		return &crossFieldError{err: errors.New(message), keys: cfe.keys}
+	}
+	return errors.New(message)
 }
 
 // Apply writes each field's value into cfg using its ConfigSet, then runs
@@ -1493,4 +1542,42 @@ func GetInt(getter func(cfg *config.Config) int) ConfigGetter {
 	return func(cfg *config.Config) string {
 		return strconv.Itoa(getter(cfg))
 	}
+}
+
+// SetSize propagates geometry to every section's input group before rendering.
+func (s *DataDrivenStep) SetSize(width, height int) {
+	s.BaseStep.SetSize(width, height)
+	s.form.SetWidth(width)
+}
+
+// FocusBounds reports the focused field's line span within the step's own
+// View, for callers that only have the FocusedBounds-shaped interface
+// (model_navigation.go's autoScrollToField); FocusedSpan is the same data
+// in LineSpan form and the one the rest of the package uses directly.
+func (s *DataDrivenStep) FocusBounds(_, _ int) (top, bottom int, ok bool) {
+	span, ok := s.FocusedSpan()
+	if !ok {
+		return 0, 0, false
+	}
+	return span.Start, span.End, true
+}
+
+// SetWidth propagates the available content width to every section's group.
+func (f *MultiSectionForm) SetWidth(width int) {
+	innerWidth := f.innerWidth(width)
+	for _, section := range f.sections {
+		if section.Group != nil {
+			section.Group.SetWidth(innerWidth)
+		}
+	}
+}
+
+// FocusBounds returns the focused field's span in the same LineSpan shape
+// FocusedSpan reports, for callers restricted to the FocusedBounds interface.
+func (f *MultiSectionForm) FocusBounds() (topBound, bottomBound int, ok bool) {
+	span, ok := f.FocusedSpan()
+	if !ok {
+		return 0, 0, false
+	}
+	return span.Start, span.End, true
 }

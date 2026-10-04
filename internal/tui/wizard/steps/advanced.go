@@ -1,6 +1,8 @@
 package steps
 
 import (
+	"fmt"
+
 	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -183,11 +185,11 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 		},
 	},
 	ExtraContentTitle: "notes",
-	ExtraContent: func(_ map[string]string, _ int) string {
+	ExtraContent: func(values map[string]string, _ int) string {
 		return lipgloss.NewStyle().
 			Foreground(tui.ColorTextDim()).
 			Italic(true).
-			Render("these settings have sensible defaults - adjust only if needed")
+			Render(fmt.Sprintf("current: vm ids from %s · cpu %s · HA %s\nbootstrap timeout %s · install timeout %s · auto approve %s", values["vm_id_base"], values["cpu_type"], values["ha_enabled"], values["bootstrap_timeout"], values["install_timeout"], values["auto_approve"]))
 	},
 }
 

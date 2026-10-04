@@ -1,7 +1,9 @@
 package wizard
 
 import (
+	"context"
 	"os"
+	"sync"
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/viewport"
@@ -120,8 +122,14 @@ type displayTitler interface {
 
 // Model is the bubbletea model backing the configuration wizard.
 type Model struct {
-	width  int
-	height int
+	workerMu    sync.Mutex
+	workers     sync.WaitGroup
+	closing     bool
+	flowContext context.Context
+	cancelVisit context.CancelFunc
+	generation  uint64
+	width       int
+	height      int
 
 	viewport viewport.Model
 	ready    bool
@@ -248,11 +256,20 @@ type SwapFlowMsg struct {
 
 // Result is what the wizard returns when it exits.
 type Result struct {
-	Completed bool
-	Cancelled bool
-	Config    *config.Config
-	Action    Action
+	Outcome Outcome
+	Config  *config.Config
+	Action  Action
 }
+
+// Outcome identifies how the wizard terminated.
+type Outcome uint8
+
+// OutcomeUnset and the terminal outcomes are mutually exclusive.
+const (
+	OutcomeUnset Outcome = iota
+	OutcomeCompleted
+	OutcomeCancelled
+)
 
 // Action names the user's choice at the wizard's terminal step.
 type Action string
@@ -307,12 +324,12 @@ func defaultKeyMap() KeyMap {
 			key.WithHelp("pgdn", "scroll down"),
 		),
 		Home: key.NewBinding(
-			key.WithKeys("home"),
-			key.WithHelp("home", "top"),
+			key.WithKeys("ctrl+home"),
+			key.WithHelp("ctrl+home", "top"),
 		),
 		End: key.NewBinding(
-			key.WithKeys("end"),
-			key.WithHelp("end", "bottom"),
+			key.WithKeys("ctrl+end"),
+			key.WithHelp("ctrl+end", "bottom"),
 		),
 		Up: key.NewBinding(
 			key.WithKeys("up"),
@@ -378,7 +395,8 @@ func getTerminalSize() (width, height int) {
 func (m *Model) Init() tea.Cmd {
 	var stepCmd tea.Cmd
 	if len(m.steps) > 0 {
-		stepCmd = m.steps[m.currentStep].Init()
+		m.beginVisit()
+		stepCmd = m.ownCommand(m.steps[m.currentStep].Init())
 	}
 	return tea.Batch(tea.RequestBackgroundColor, stepCmd, m.armClock())
 }
@@ -391,6 +409,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleClockTick(tick)
 	}
 	m.trackFocus(msg)
+	if result, ok := msg.(visitResult); ok {
+		if result.generation != m.generation || !m.currentStepMatches(result.step) {
+			return m, nil
+		}
+		msg = result.message
+	}
 	model, cmd := m.update(msg)
 	if clockCmd := m.armClock(); clockCmd != nil {
 		cmd = tea.Batch(cmd, clockCmd)
@@ -447,7 +471,7 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A late async completion from a step the user has already left
 		// (esc, SwapFlow) must not advance — and Apply — whichever step is
 		// current now.
-		if len(m.steps) > 0 && m.currentStep < len(m.steps) && msg.StepID != m.steps[m.currentStep].ID() {
+		if !m.currentStepMatches(msg.StepID) {
 			return m, nil
 		}
 		return m.goToNextStep()
@@ -475,7 +499,7 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.resumeDraft(msg)
 
 	case ErrorSetMsg:
-		m.err = msg.Error
+		m.setError(msg.Error)
 		return m, nil
 
 	case FocusChangedMsg:
@@ -485,41 +509,55 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.ready {
 			m.syncViewportContent()
 			m.scrollToFocusedField()
+			m.autoScrollToField(0, 0)
 		}
 		return m, nil
 
 	case ConfigSyncMsg:
-		if len(m.steps) == 0 || m.currentStep < 0 || m.currentStep >= len(m.steps) || msg.StepID != m.steps[m.currentStep].ID() {
-			return m, nil
+		return m.handleConfigSync(msg)
+	}
+
+	if len(m.steps) > 0 && m.currentStep < len(m.steps) {
+		if _, editing := msg.(tea.KeyPressMsg); editing {
+			m.err = nil
 		}
+		updatedStep, cmd := m.steps[m.currentStep].Update(msg)
+		m.steps[m.currentStep] = updatedStep
+		cmds = append(cmds, m.ownCommand(cmd))
+
+		if m.ready {
+			m.syncViewportContent()
+			m.notifyIfAtBottom()
+			m.followEditedFocus(msg)
+		}
+	}
+
+	return m, tea.Batch(cmds...)
+}
+
+// handleConfigSync applies a step's ConfigSyncMsg to the shared config and,
+// for draft-eligible steps, persists the draft. Split out of update so that
+// function stays under the linter's statement budget.
+func (m *Model) handleConfigSync(msg ConfigSyncMsg) (tea.Model, tea.Cmd) {
+	if !m.currentStepMatches(msg.StepID) {
+		return m, nil
+	}
+	if len(m.steps) > 0 && m.currentStep >= 0 && m.currentStep < len(m.steps) {
 		if a, ok := m.steps[m.currentStep].(ConfigApplier); ok {
 			if err := a.Apply(m.config); err != nil {
 				m.err = err
 				return m, nil
 			}
 		}
-		if isConfigDraftStep(msg.StepID) {
-			fieldKey := ""
-			if cursor, ok := m.steps[m.currentStep].(interface{ DraftFieldKey() string }); ok {
-				fieldKey = cursor.DraftFieldKey()
-			}
-			m.saveDraft(msg.StepID, fieldKey)
-		}
-		return m, nil
 	}
-
-	if len(m.steps) > 0 && m.currentStep < len(m.steps) {
-		updatedStep, cmd := m.steps[m.currentStep].Update(msg)
-		m.steps[m.currentStep] = updatedStep
-		cmds = append(cmds, cmd)
-
-		if m.ready {
-			m.syncViewportContent()
-			m.notifyIfAtBottom()
+	if isConfigDraftStep(msg.StepID) {
+		fieldKey := ""
+		if cursor, ok := m.steps[m.currentStep].(interface{ DraftFieldKey() string }); ok {
+			fieldKey = cursor.DraftFieldKey()
 		}
+		m.saveDraft(msg.StepID, fieldKey)
 	}
-
-	return m, tea.Batch(cmds...)
+	return m, nil
 }
 
 // handleWizardKey processes the wizard-level key bindings (quit, the help
@@ -540,7 +578,7 @@ func (m *Model) handleWizardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) 
 			}
 		}
 		m.quitting = true
-		m.result = Result{Cancelled: true}
+		m.result = Result{Outcome: OutcomeCancelled}
 		return m, tea.Quit, true
 	}
 
@@ -570,6 +608,9 @@ func (m *Model) handleWizardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) 
 	}
 
 	if key.Matches(msg, m.keyMap.Back) {
+		if owner, ok := m.CurrentStep().(interface{ OwnsKey(tea.KeyPressMsg) bool }); ok && owner.OwnsKey(msg) {
+			return m, nil, false
+		}
 		if g, ok := m.CurrentStep().(BackGuard); ok && g.InterceptBack() {
 			return m, nil, true
 		}
@@ -668,4 +709,22 @@ func (m *Model) CurrentStep() WizardStep {
 		return m.steps[m.currentStep]
 	}
 	return nil
+}
+
+func (m *Model) currentStepMatches(id StepID) bool {
+	return m.CurrentStep() != nil && m.CurrentStep().ID() == id
+}
+
+func (m *Model) setError(err error) {
+	m.err = err
+	if m.ready {
+		m.syncViewportContent()
+		m.autoScrollToField(0, 0)
+	}
+}
+
+func (m *Model) followEditedFocus(msg tea.Msg) {
+	if _, editing := msg.(tea.KeyPressMsg); editing {
+		m.autoScrollToField(0, 0)
+	}
 }

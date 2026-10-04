@@ -1490,3 +1490,28 @@ func TestDataDrivenStep_CollapsibleSectionEnterStickyExpand(t *testing.T) {
 		t.Fatalf("View() = %q, want the fold to stay expanded via its sticky latch after focus left", view)
 	}
 }
+
+func TestTableCellCommitDoesNotCompleteStep(t *testing.T) {
+	step := NewDataDrivenStep(&StepDefinition{ID: StepIDAdvanced, Sections: []SectionDefinition{{Title: "labels", Fields: []FieldDefinition{{Key: "labels", Label: "labels", Type: FieldTypeKeyValue}}}}})
+	step.SetFocused(true)
+	step.Init()
+	step.Update(tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl})
+	if !step.OwnsKey(tea.KeyPressMsg{Code: tea.KeyEnter}) {
+		t.Fatal("editor does not own enter")
+	}
+	step.Update(tea.KeyPressMsg{Code: 'x', Text: "x"})
+	step.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if step.Value("labels") != "" {
+		t.Fatal("cancel retained edited cell")
+	}
+	step.Update(tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl})
+	_, cmd := step.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd != nil {
+		if _, complete := cmd().(StepCompleteMsg); complete {
+			t.Fatal("cell commit advanced step")
+		}
+	}
+	if step.OwnsKey(tea.KeyPressMsg{Code: tea.KeyEnter}) {
+		t.Fatal("cell remained in edit mode")
+	}
+}

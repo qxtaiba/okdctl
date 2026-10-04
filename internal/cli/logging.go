@@ -100,13 +100,7 @@ func configureLogging(cmd *cobra.Command) error {
 	}
 
 	// --quiet/--verbose are sugar over --log-level; mutual exclusion is enforced at flag registration.
-	effectiveLevel := logLevel
-	switch {
-	case logQuiet:
-		effectiveLevel = "error"
-	case logVerbose:
-		effectiveLevel = "debug"
-	}
+	effectiveLevel := effectiveLogLevel()
 
 	stderrIsTTY := term.IsTerminal(int(os.Stderr.Fd()))
 	stdoutIsTTY := term.IsTerminal(int(os.Stdout.Fd()))
@@ -159,5 +153,16 @@ func configureLogging(cmd *cobra.Command) error {
 func quietForJSON(format string) {
 	if format == outputJSON && !logVerbose {
 		tui.SuppressInfo()
+	}
+}
+
+func effectiveLogLevel() string {
+	switch {
+	case logQuiet:
+		return "error"
+	case logVerbose:
+		return "debug"
+	default:
+		return logLevel
 	}
 }

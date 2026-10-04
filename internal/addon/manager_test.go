@@ -199,8 +199,8 @@ func TestInstallOne_AllOrNothingReverseRollback(t *testing.T) {
 	if b.uninstallN.Load() != 1 {
 		t.Errorf("b.uninstallN = %d; want 1 (all-or-nothing rollback must include b)", b.uninstallN.Load())
 	}
-	if c.uninstallN.Load() != 0 {
-		t.Errorf("c.uninstallN = %d; want 0 (failed addon already errored before install completed)", c.uninstallN.Load())
+	if c.uninstallN.Load() != 1 {
+		t.Errorf("c.uninstallN = %d; want 1 for partially installed addon", c.uninstallN.Load())
 	}
 }
 
@@ -403,4 +403,8 @@ func TestVerifyAll_CancelledCtxStopsIteration(t *testing.T) {
 	if a.verifyN.Load() != 0 {
 		t.Errorf("a.verifyN = %d; cancelled ctx must stop before Verify", a.verifyN.Load())
 	}
+}
+
+func (s *stubAddon) PrepareRollback(_ context.Context, env *Environment) (func(context.Context) error, error) {
+	return func(ctx context.Context) error { return s.Uninstall(ctx, env) }, nil
 }

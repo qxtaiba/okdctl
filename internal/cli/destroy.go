@@ -480,7 +480,7 @@ func runDestroyDryRun(ctx context.Context, w io.Writer, cfg *config.Config) erro
 		return tf.WithLockHint(&errtypes.ConfigError{Msg: "terraform init failed in dry-run", Err: err})
 	}
 
-	if err := tf.PlanStreamed(ctx, terraform.PlanOptions{Destroy: true, Targets: destroyTargets}); err != nil {
+	if err := tf.PreviewDestroy(ctx, workspace.TerraformModuleDir(projectRoot), destroyTargets); err != nil {
 		return tf.WithLockHint(&errtypes.ConfigError{Msg: "terraform destroy plan failed", Err: err})
 	}
 

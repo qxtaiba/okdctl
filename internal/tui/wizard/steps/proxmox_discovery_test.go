@@ -77,7 +77,7 @@ func TestDiscoverProxmox_Success(t *testing.T) {
 	server := newFakeProxmoxServer(t, "pve2")
 	defer server.Close()
 
-	got, err := discoverProxmox(testProxmoxConfig(server.URL))
+	got, err := discoverProxmox(t.Context(), testProxmoxConfig(server.URL))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -174,7 +174,7 @@ func TestDiscoverProxmox_IntersectsAcrossOnlineNodes(t *testing.T) {
 	server := newFakeHeterogeneousServer(t)
 	defer server.Close()
 
-	got, err := discoverProxmox(testProxmoxConfig(server.URL))
+	got, err := discoverProxmox(t.Context(), testProxmoxConfig(server.URL))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -193,11 +193,32 @@ func TestDiscoverProxmox_IntersectsAcrossOnlineNodes(t *testing.T) {
 	}
 }
 
+// TestDiscoverProxmox_FlagsPlacementUnreachableStorage exercises the
+// placement-validation half of the discovery fix: a config that already
+// targets worker_nodes on a node lacking the chosen storage must surface
+// that mismatch from discovery, not silently accept it — "tank" exists
+// only on pve1 in newFakeHeterogeneousServer's fixture, so pinning the
+// worker to pve2 while storage="tank" must fail.
+func TestDiscoverProxmox_FlagsPlacementUnreachableStorage(t *testing.T) {
+	server := newFakeHeterogeneousServer(t)
+	defer server.Close()
+
+	cfg := testProxmoxConfig(server.URL)
+	cfg.Provider.Proxmox.Storage = "tank"
+	cfg.Provider.Proxmox.WorkerNodes = []string{"pve2"}
+	cfg.Topology.Workers.Count = 1
+
+	_, err := discoverProxmox(t.Context(), cfg)
+	if err == nil || !strings.Contains(err.Error(), "tank") {
+		t.Fatalf("err = %v; want a validation error naming storage %q as unreachable on pve2", err, "tank")
+	}
+}
+
 func TestDiscoverProxmox_SingleOnlineNodeIsHomogeneous(t *testing.T) {
 	server := newFakeProxmoxServer(t, "pve2")
 	defer server.Close()
 
-	got, err := discoverProxmox(testProxmoxConfig(server.URL))
+	got, err := discoverProxmox(t.Context(), testProxmoxConfig(server.URL))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -230,7 +251,7 @@ func TestDiscoverProxmox_NodesEndpointFailures(t *testing.T) {
 			server := httptest.NewServer(mux)
 			defer server.Close()
 
-			_, err := discoverProxmox(testProxmoxConfig(server.URL))
+			_, err := discoverProxmox(t.Context(), testProxmoxConfig(server.URL))
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("err = %v; want substring %q", err, tc.want)
 			}
@@ -254,7 +275,7 @@ func TestDiscoverProxmox_ValidationBranches(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := discoverProxmox(tc.cfg)
+			_, err := discoverProxmox(t.Context(), tc.cfg)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Errorf("err = %v; want substring %q", err, tc.want)
 			}

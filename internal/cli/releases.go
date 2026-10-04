@@ -51,11 +51,11 @@ non-draft release. Results are served from a 1-hour on-disk cache
 var releasesShowCmd = &cobra.Command{
 	Use:   "show <version>",
 	Short: "Show release info for a single OKD version",
-	Long: `Print metadata for a single OKD release identified by its version string
-("4.21.3") or GitHub tag. The version list is resolved from the disk cache;
+	Long: `Print metadata for a single OKD release identified by its full GitHub tag
+(e.g. "4.21.3-okd-scos.0"). The version list is resolved from the disk cache;
 use --channel=all with 'releases list' to discover pre-release tags.`,
-	Example: `  okdctl releases show 4.21.3
-  okdctl releases show 4.21.3 --output json`,
+	Example: `  okdctl releases show 4.21.3-okd-scos.0
+  okdctl releases show 4.21.3-okd-scos.0 --output json`,
 	Args: cobra.ExactArgs(1),
 	ValidArgsFunction: func(cmd *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		fetcher := releases.NewOKDVersionFetcher()

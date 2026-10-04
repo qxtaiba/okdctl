@@ -3,27 +3,6 @@
   │ O K D C T L                                                                                                      │  
   │ review your configuration                                                    connect · cluster · extras · review │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
-  │  PREFLIGHT · 1 passed · 0 warnings · 2 failed · 0 not checked                                                    │  
-  │  ✗ pull secret · not configured                                                                                  │  
-  │  ✗ ssh public key · not configured                                                                               │  
-  │  ✓ CIDR ranges · no overlap · 192.168.1.0/24 · 10.128.0.0/14 · 172.30.0.0/16                                     │  
-  │  [1] cluster identity                                                                                            │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
-  │  name          mycluster                                                                                         │  
-  │  domain        k8s.local                                                                                         │  
-  │  distribution  OKD 4.22.0-okd-scos.7                                                                             │  
-  │                                                                                                                  │  
-  │  [2] proxmox                                                                                                     │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
-  │  host            192.168.1.100:8006                                                                              │  
-  │  bootstrap node  pve                                                                                             │  
-  │  bridge          vmbr0                                                                                           │  
-  │  storage         local-lvm                                                                                       │  
-  │  iso storage     local                                                                                           │  
-  │                                                                                                                  │  
-  │  [3] networking                                                                                                  │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
-  │  machine cidr     192.168.1.0/24                                                                                 │  
   │  gateway          192.168.1.1                                                                                    │  
   │  upstream dns     192.168.1.1                                                                                    │  
   │  bastion          192.168.1.20                                                                                   │  
@@ -33,8 +12,29 @@
   │  service cidr     172.30.0.0/16                                                                                  │  
   │  static ip start  192.168.1.140                                                                                  │  
   │  interface        ens18                                                                                          │  
+  │  netmask          255.255.255.0 (from cidr)                                                                      │  
+  │  vm dns           192.168.1.20 (bastion/dnsmasq)                                                                 │  
   │                                                                                                                  │  
-  │─────────────────────────────── ↑ ↓  scroll down for more ─────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
+  │  [4] compute                                                                                                     │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
+  │  control plane     3 × (4 vcpu, 12 GB RAM, 50 GB os disk)                                                        │  
+  │  workers           3 × (8 vcpu, 20 GB RAM, 50 GB os disk)                                                        │  
+  │  worker data disk  500 gb per worker (1500 gb total)                                                             │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
+  │  total             40 vcpu, 104 gb ram, 1850 gb disk                                                             │  
+  │                                                                                                                  │  
+  │  [5] files & ignition                                                                                            │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
+  │  ignition server  https://192.168.1.20                                                                           │  
+  │  web root         /var/www/html                                                                                  │  
+  │                                                                                                                  │  
+  │  [6] advanced                                                                                                    │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
+  │  vm id base             6000                                                                                     │  
+  │  timeouts               bootstrap 60m, install 120m                                                              │  
+  │  terraform environment  production                                                                               │  
+  │                                                                                                                  │  
+  │──────────────────────────────── ↑ ↓  scroll up for more ──────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
   │  ○ deploy now   ● save and exit  p preview install config • ←/→ choose • enter confirm … • ctrl+c quit • ? help  │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                                         

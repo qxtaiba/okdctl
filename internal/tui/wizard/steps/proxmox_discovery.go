@@ -56,7 +56,14 @@ type proxmoxDiscovery struct {
 	Heterogeneous bool
 }
 
-func discoverProxmox(cfg *config.Config) (*proxmoxDiscovery, error) {
+// discoverProxmox queries every online Proxmox node — not just one sampled
+// node — so Storage/Bridges/ISOs reflect what every node actually shares,
+// and cross-checks the config's already-chosen placement (storage/bridge
+// per role) against each node's own reported inventory: a selection valid
+// when it was made can go stale the moment discovery reports a node that
+// doesn't actually carry it. parent bounds the whole fetch to the current
+// wizard visit — leaving the step cancels any request still in flight.
+func discoverProxmox(parent context.Context, cfg *config.Config) (*proxmoxDiscovery, error) {
 	if cfg.Provider.Proxmox == nil {
 		return nil, fmt.Errorf("no proxmox config")
 	}
@@ -70,7 +77,7 @@ func discoverProxmox(cfg *config.Config) (*proxmoxDiscovery, error) {
 		return nil, fmt.Errorf("missing credentials — enter host, username, and password in the proxmox step")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
 	defer cancel()
 
 	httpClient := httputil.NewOptionalInsecure(px.Insecure, 10*time.Second)
@@ -122,26 +129,55 @@ func discoverProxmox(cfg *config.Config) (*proxmoxDiscovery, error) {
 		}
 	}
 
-	return &proxmoxDiscovery{
+	disc := &proxmoxDiscovery{
 		Nodes:         nodes,
 		Storage:       storage,
 		Bridges:       bridges,
 		ISOs:          isos,
 		Heterogeneous: heterogeneous,
-	}, nil
+	}
+
+	// Each node's OWN full inventory (not the cross-node intersection
+	// above) is what placement validity actually depends on — a storage
+	// pool missing from the shared set can still be exactly right for the
+	// one node a role is pinned to.
+	placementInventory := make(map[string]config.ProxmoxNodeInventory, len(inventories))
+	for name, inv := range inventories {
+		placementInventory[name] = config.ProxmoxNodeInventory{
+			Storage: storageNames(inv.Storage),
+			Bridges: bridgeNames(inv.Bridges),
+		}
+	}
+	if result := config.ValidatePlacementAgainstInventory(cfg, placementInventory); !result.IsValid() {
+		return disc, errors.New(result.Error())
+	}
+
+	return disc, nil
 }
 
 // startDiscovery resets the step into the discovering phase and issues a
 // generation-tagged discovery fetch over a snapshotted cfg, so the returned
-// tea.Cmd never touches s once it is handed to bubbletea.
+// tea.Cmd never touches s once it is handed to bubbletea. The Proxmox
+// password is cloned via SetBytes rather than a string hop — a string copy
+// would be immutable and unzeroizable for the process lifetime — into a
+// detached SecretBytes the closure (and only the closure) zeroizes once the
+// fetch finishes; ownedPasswords tracks it so Release can still zeroize it
+// if the UI exits before the fetch completes.
 func (s *NodePlacementStep) startDiscovery() tea.Cmd {
 	s.phase = phaseDiscovering
 	s.discoveryErr = nil
 	s.generation++
 	generation := s.generation
-	cfg := s.cfg
+	parent := s.Context()
+	cfg := *s.cfg
+	px := *cfg.Provider.Proxmox
+	px.Password = config.SecretBytes{}
+	px.Password.SetBytes(cfg.Provider.Proxmox.Password.Bytes())
+	cfg.Provider.Proxmox = &px
+	s.ownedPasswords = append(s.ownedPasswords, &px.Password)
 	return func() tea.Msg {
-		disc, err := discoverProxmox(cfg)
+		defer px.Password.Zeroize()
+		disc, err := discoverProxmox(parent, &cfg)
 		return discoveryCompleteMsg{generation: generation, discovery: disc, err: err}
 	}
 }
@@ -203,6 +239,18 @@ func keepShared[T any](base, other []T, key func(T) string) ([]T, bool) {
 		}
 	}
 	return kept, len(kept) != len(base) || len(kept) != len(other)
+}
+
+// storageNames and bridgeNames project a node's typed inventory down to the
+// plain names config.ValidatePlacementAgainstInventory compares against.
+// bridgeNames (sanitized display names, which are still valid equality
+// keys here) lives in node_placement.go.
+func storageNames(storage []proxmoxStorage) []string {
+	names := make([]string, len(storage))
+	for i, s := range storage {
+		names[i] = s.Name
+	}
+	return names
 }
 
 // fetchNodeDetails pulls storage/bridges/ISOs, best-effort — endpoint errors

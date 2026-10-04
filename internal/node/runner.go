@@ -53,7 +53,7 @@ type clusterClient interface {
 	SetMastersSchedulable(ctx context.Context, schedulable bool) error
 	PodsForSelector(ctx context.Context, namespace, selector string) ([]cluster.PodPlacement, error)
 	Apply(ctx context.Context, manifest []byte) error
-	ApprovePendingCSRs(ctx context.Context) (int, error)
+	ApprovePendingCSRs(ctx context.Context, identities ...cluster.CSRIdentity) (int, error)
 	SignerNotAfter(ctx context.Context) (time.Time, error)
 }
 
@@ -143,20 +143,24 @@ type ignitionServer interface {
 // to reconcile against. projectRoot/workDir/envDir are unexported so NewRunner's
 // derive-from-root invariant can't be skewed by a later field assignment.
 type Runner struct {
-	Cluster     clusterClient
-	TF          terraformExec
-	Cfg         *config.Config
-	ConfigPath  string
-	projectRoot string
-	workDir     string
-	envDir      string
-	RunID       string
-	DryRun      bool
-	Log         *slog.Logger
-	Reporter    logutil.ProgressReporter
+	afterPersist  func() error
+	intent        *OpIntent
+	Cluster       clusterClient
+	TF            terraformExec
+	Cfg           *config.Config
+	ConfigPath    string
+	projectRoot   string
+	workDir       string
+	envDir        string
+	RunID         string
+	DryRun        bool
+	ResumePreview bool // inspect the persisted request without changing its checkpoint
+	Log           *slog.Logger
+	Reporter      logutil.ProgressReporter
 
 	// Power performs the post-resize power-cycle; nil (no Proxmox credentials) makes resize fail safe.
-	Power vmPowerCycler
+	Power    vmPowerCycler
+	Capacity func(context.Context, string, string) (HostCapacity, error)
 
 	// Disk realizes an OS-disk grow inside the guest; nil fails disk resizes closed, mirroring Power.
 	Disk diskGrower
@@ -264,7 +268,7 @@ func (r *Runner) mark(op Op, target string, step Step) error {
 	if r.OnStep != nil {
 		r.OnStep(target, step)
 	}
-	return markStep(r.marker(), op, target, step, r.RunID, r.Cfg.Cluster.Name)
+	return markStep(r.marker(), op, target, step, r.RunID, r.Cfg.Cluster.Name, r.intent)
 }
 
 // startProgress starts r.Reporter for desc unless dry-run (also silences gates
@@ -290,6 +294,9 @@ func (r *Runner) persistTopology() error {
 	}
 	if err := provision.WriteTerraformVars(r.Cfg, r.envDir); err != nil {
 		return fmt.Errorf("render terraform vars: %w", err)
+	}
+	if r.afterPersist != nil {
+		return r.afterPersist()
 	}
 	return nil
 }
@@ -367,10 +374,18 @@ func (r *Runner) planTargeted(ctx context.Context, address string, want terrafor
 
 // targetedApply plans, gates to (address, want), snapshots state, and applies;
 // a gate failure aborts before any mutation, and planVars keep dry-run previews
-// truthful without writing tfvars.
+// truthful without writing tfvars. The backup precedes planTargeted's Init and
+// Plan too — either can rewrite state (schema migration, refresh), not only
+// apply — except on a dry run, which never reaches an apply and so never needs one.
 func (r *Runner) targetedApply(ctx context.Context, address string, want terraform.PlanAction, planVars map[string]string, resuming bool) error {
 	stop := r.startProgress(fmt.Sprintf("applying terraform change to %s", address))
 	defer stop()
+
+	if !r.DryRun {
+		if err := r.snapshotBeforePlan(ctx); err != nil {
+			return err
+		}
+	}
 
 	planPath, alreadyAtTarget, cleanup, err := r.planTargeted(ctx, address, want, planVars, resuming)
 	if err != nil {
@@ -395,19 +410,18 @@ func (r *Runner) targetedApply(ctx context.Context, address string, want terrafo
 		return nil
 	}
 
-	snap, snapErr := r.TF.SnapshotState(ctx)
-	if snapErr != nil {
-		return &errtypes.ClusterError{Msg: "state snapshot", Err: snapErr}
-	}
+	return terraform.WithStateRecovery(ctx, r.TF, "terraform apply", func() error {
+		return r.TF.Apply(ctx, terraform.ApplyOptions{PlanFile: planPath})
+	})
+}
 
-	if err := r.TF.Apply(ctx, terraform.ApplyOptions{PlanFile: planPath}); err != nil {
-		msg := "terraform apply"
-		if snap != "" {
-			msg = fmt.Sprintf("terraform apply (state backup: %s)", snap)
-		}
-		return r.TF.WithLockHint(&errtypes.ClusterError{Msg: msg, Err: err})
+// snapshotBeforePlan backs up state ahead of planTargeted's Init/Plan so
+// neither ever runs unprotected merely because no apply has been decided on yet.
+func (r *Runner) snapshotBeforePlan(ctx context.Context) error {
+	if _, err := r.TF.SnapshotState(ctx); err != nil {
+		return &errtypes.ClusterError{Msg: "terraform apply: snapshot state", Err: err}
 	}
-	return nil
+	return ctx.Err()
 }
 
 // waitEtcdHealthy blocks until the etcd quorum is healthy or the gate times
@@ -451,10 +465,7 @@ func healthGateMsg(subsystem, phase, reason string) string {
 }
 
 func (r *Runner) vmTarget(role nodetypes.NodeRole, index int) (node string, vmid int) {
-	if r.Cfg.Provider.Proxmox != nil {
-		node = r.Cfg.Provider.Proxmox.Node
-	}
-	return node, nodetypes.VMID(r.Cfg, role, index)
+	return nodetypes.ProxmoxNode(r.Cfg, role, index), nodetypes.VMID(r.Cfg, role, index)
 }
 
 // resolveVMID resolves target's node name to vmid/role/Ready via ListNodes, so
@@ -464,7 +475,8 @@ func (r *Runner) resolveVMID(ctx context.Context, target string) (vmid int, role
 	if err != nil {
 		return 0, "", false, &errtypes.ClusterError{Msg: msgListNodes, Err: err}
 	}
-	for _, n := range nodes {
+	for i := range nodes {
+		n := &nodes[i]
 		if n.Name != target {
 			continue
 		}
@@ -473,6 +485,17 @@ func (r *Runner) resolveVMID(ctx context.Context, target string) (vmid int, role
 			return 0, "", false, &errtypes.ConfigError{Msg: fmt.Sprintf("cannot derive a terraform index from node name %q", n.Name)}
 		}
 		_, vmid := r.vmTarget(n.Role, idx)
+		if observer, ok := r.Snapshot.(interface {
+			VMOwner(context.Context, *hostssh.RemoteISOParams, int) (string, error)
+		}); ok && r.Proxmox != nil {
+			owner, err := observer.VMOwner(ctx, r.Proxmox, vmid)
+			if err != nil {
+				return 0, "", false, err
+			}
+			remote := *r.Proxmox
+			remote.Node = owner
+			r.Proxmox = &remote
+		}
 		return vmid, n.Role, n.Ready, nil
 	}
 	return 0, "", false, &errtypes.ConfigError{Msg: fmt.Sprintf("node %q not found in cluster; run 'okdctl node list' to list nodes", target)}
@@ -540,7 +563,8 @@ func (r *Runner) waitNodeReady(ctx context.Context, node string) error {
 		if err != nil {
 			return false
 		}
-		for _, n := range nodes {
+		for i := range nodes {
+			n := &nodes[i]
 			if n.Name == node {
 				return n.Ready
 			}
@@ -551,4 +575,9 @@ func (r *Runner) waitNodeReady(ctx context.Context, node string) error {
 		return &errtypes.ClusterError{Msg: fmt.Sprintf("node %s did not become Ready", node), Err: err}
 	}
 	return nil
+}
+
+// VMOwner resolves snapshot routing before any drain or mutation.
+func (HostsshSnapshotClient) VMOwner(ctx context.Context, p *hostssh.RemoteISOParams, vmid int) (string, error) {
+	return hostssh.VMOwner(ctx, p, vmid)
 }

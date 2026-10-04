@@ -14,11 +14,9 @@ type Config struct {
 	DraftPresent   bool
 }
 
-// StepConfig declares one step in a wizard's sequence: its registry type
-// and whether it is required (required steps cannot be skipped).
+// StepConfig declares sequence order; visible steps must validate before advancing.
 type StepConfig struct {
-	Type     StepType
-	Required bool
+	Type StepType
 }
 
 // StepType names an entry in the StepBuilder factory registry, distinct
@@ -45,17 +43,17 @@ const (
 func DefaultConfig() Config {
 	return Config{
 		Steps: []StepConfig{
-			{Type: StepTypeWelcome, Required: true},
-			{Type: StepTypeDistribution, Required: true},
-			{Type: StepTypeProxmox, Required: true},
-			{Type: StepTypeBasics, Required: true},
-			{Type: StepTypeNodePlacement, Required: false},
-			{Type: StepTypeNetworking, Required: true},
-			{Type: StepTypeResources, Required: true},
-			{Type: StepTypeAddons, Required: false},
-			{Type: StepTypeFiles, Required: true},
-			{Type: StepTypeAdvanced, Required: false},
-			{Type: StepTypeReview, Required: true},
+			{Type: StepTypeWelcome},
+			{Type: StepTypeDistribution},
+			{Type: StepTypeProxmox},
+			{Type: StepTypeBasics},
+			{Type: StepTypeNodePlacement},
+			{Type: StepTypeNetworking},
+			{Type: StepTypeResources},
+			{Type: StepTypeAddons},
+			{Type: StepTypeFiles},
+			{Type: StepTypeAdvanced},
+			{Type: StepTypeReview},
 		},
 	}
 }
