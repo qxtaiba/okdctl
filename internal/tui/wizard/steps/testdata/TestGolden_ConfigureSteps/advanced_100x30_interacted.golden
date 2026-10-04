@@ -5,13 +5,9 @@
   │──────────────────────────────────────────────────────────────────────────────────────────────│  
   │  advanced settings                                                                           │  
   │                                                                                              │  
-  │                                                                                              │  
   │    ✓ vm settings                                                                             │  
   │                                                                                              │  
-  │    vm id base (starting vm id in proxmox (e.g., 6000, 6001, ...))                            │  
-  │    ╭────────────────────────────────────────────────────────────────────────────────╮        │  
-  │    │ > 6000                                                                         │        │  
-  │    ╰────────────────────────────────────────────────────────────────────────────────╯        │  
+  │    vm id base: 6000                                                                          │  
   │                                                                                              │  
   │    ● proxmox vm settings                                                                     │  
   │                                                                                              │  
@@ -20,11 +16,15 @@
   │    │ ◂ host ▸                                                                       │        │  
   │    ╰────────────────────────────────────────────────────────────────────────────────╯        │  
   │                                                                                              │  
-  │    enable numa (enable numa topology for vms — improves performance on multi-socket hosts)   │  
-  │    ╭────────────────────────────────────────────────────────────────────────────────╮        │  
-  │    │ > no                                                                           │        │  
+  │    enable numa: no                                                                           │  
   │                                                                                              │  
-  │───────────────────────────────── ↑ ↓  scroll down for more ───────── ▸ okd 4.22.0-okd-scos.7 │  
-  │   ↑↓/tab  navigate    enter  continue    esc  back                                           │  
+  │    enable ha anti-affinity: no                                                               │  
+  │                                                                                              │  
+  │    ✓ clock synchronization                                                                   │  
+  │                                                                                              │  
+  │    ntp server:                                                                               │  
+  │                                                                                              │  
+  │───────────────────── ↑ ↓  scroll down for more ───────────────────── ▸ okd 4.22.0-okd-scos.7 │  
+  │   ←→  change    ↑↓/tab  navigate    enter  continue    esc  back                             │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                     

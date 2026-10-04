@@ -314,7 +314,7 @@ func (s *Selector) FocusBounds(width int) (top, bottom int, ok bool) {
 	}
 	offset := 0
 	for _, line := range strings.Split(s.View(), "\n") {
-		if strings.Contains(line, "●") {
+		if strings.Contains(line, tui.IconActive) {
 			height := lipgloss.Height(lipgloss.NewStyle().Width(width).Render(s.renderOptionWithPrefix(&s.options[s.selected], true, false, "")))
 			return offset, offset + height, true
 		}

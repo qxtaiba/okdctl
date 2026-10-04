@@ -5,21 +5,20 @@
   │──────────────────────────────────────────────────────────────────────────│  
   │  configure cluster addons                                                │  
   │                                                                          │  
+  │    ✓ gitops (flux)                                                       │  
   │                                                                          │  
-  │    ● gitops (flux)                                                       │  
-  │      requires: ssh deploy key at ~/.ssh/flux-deploy-key                  │  
+  │    enabled: no                                                           │  
   │                                                                          │  
-  │    enabled (enable gitops deployment)                                    │  
+  │    ● secret store (common)                                               │  
+  │                                                                          │  
+  │    enabled (bootstrap eso provider credentials and secretstore crd)      │  
   │    ╭────────────────────────────────────────────────────────────╮        │  
-  │    │ > no                                                       │        │  
+  │    │ ◂ no ▸                                                     │        │  
   │    ╰────────────────────────────────────────────────────────────╯        │  
   │                                                                          │  
-  │    repository (git repository url (e.g.,                                 │  
-  │  ssh://git@github.com/org/repo.git))                                     │  
-  │    ╭────────────────────────────────────────────────────────────╮        │  
   │                                                                          │  
-  │─────────────────────── ↑ ↓  scroll down for more ─── ▸ okd 4.22.0-okd-   │  
-  │scos.7                                                                    │  
-  │   ↑↓/tab  navigate    enter  continue    esc  back                       │  
+  │                                                                          │  
+  │────────────────────────────────────────────────── ▸ okd 4.22.0-okd-scos.7│  
+  │   ←→  change    ↑↓/tab  navigate    enter  continue    esc  back         │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

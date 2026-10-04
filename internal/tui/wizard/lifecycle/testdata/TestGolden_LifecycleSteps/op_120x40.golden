@@ -10,6 +10,7 @@
   │                                                                                                                  │  
   │                                                                                                                  │  
   │                                                                                                                  │  
+  │                                                                                                                  │  
   │                               cluster lifecycle                                                                  │  
   │                                                                                                                  │  
   │                               manage nodes on cluster "mycluster"                                                │  
@@ -25,7 +26,6 @@
   │                               ○ remove worker                                                                    │  
   │                                 cordon, drain, destroy the vm, delete the node                                   │  
   │                                 (highest-numbered worker only)                                                   │  
-  │                                                                                                                  │  
   │                                                                                                                  │  
   │                                                                                                                  │  
   │                                                                                                                  │  

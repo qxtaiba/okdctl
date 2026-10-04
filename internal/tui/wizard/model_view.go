@@ -219,7 +219,7 @@ func (m *Model) renderScrollIndicator() string {
 	if contextBadge != "" {
 		badgeStyled = lipgloss.NewStyle().
 			Foreground(tui.ColorSuccess).
-			Bold(true).
+			Bold(true).Inline(true).MaxWidth(width / 3).
 			Render(" ▸ " + contextBadge + " ")
 		badgeWidth = lipgloss.Width(badgeStyled)
 	}
@@ -263,7 +263,7 @@ func (m *Model) renderScrollIndicator() string {
 	indicator := arrows + "  " + textStyle.Render(message)
 	indicatorWidth := lipgloss.Width(indicator)
 
-	leftWidth := (width-indicatorWidth)/2 - 1                         // -1 for space before indicator
+	leftWidth := (width-indicatorWidth-badgeWidth)/2 - 1              // -1 for space before indicator
 	rightWidth := width - leftWidth - indicatorWidth - badgeWidth - 2 // -2 for spaces around indicator
 	if leftWidth < 3 {
 		leftWidth = 3
