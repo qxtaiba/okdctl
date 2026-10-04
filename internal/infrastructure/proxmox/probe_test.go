@@ -2,7 +2,11 @@ package proxmox
 
 import (
 	"bytes"
+	"fmt"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -103,6 +107,110 @@ func TestProbeHostRequiresNode(t *testing.T) {
 	_, err := ProbeHost(t.Context(), &ProbeOptions{Endpoint: "https://pve:8006", APIToken: []byte("user@pam!t=secret")})
 	if err == nil || !strings.Contains(err.Error(), "node is required") {
 		t.Fatalf("ProbeHost without node: err = %v; want node-is-required error", err)
+	}
+}
+
+// probeServerStatus maps a datastore name to the HTTP status its
+// /storage/<name>/status endpoint returns; 0 (or absent) serves a healthy
+// response, any other code makes that one datastore's read fail.
+func newProbeServer(t *testing.T, nodeStatusFails bool, storageStatus map[string]int) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api2/json/nodes", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `{"data":[{"node":"pve1","maxmem":17179869184}]}`)
+	})
+	mux.HandleFunc("GET /api2/json/cluster/status", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `{"data":[{"type":"cluster","id":"cluster","name":"test","version":1,"quorate":1}]}`)
+	})
+	mux.HandleFunc("GET /api2/json/cluster/resources", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `{"data":[]}`)
+	})
+	mux.HandleFunc("GET /api2/json/nodes/pve1/status", func(w http.ResponseWriter, _ *http.Request) {
+		if nodeStatusFails {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		fmt.Fprint(w, `{"data":{}}`)
+	})
+	for name, status := range storageStatus {
+		path := "GET /api2/json/nodes/pve1/storage/" + name + "/status"
+		code := status
+		mux.HandleFunc(path, func(w http.ResponseWriter, _ *http.Request) {
+			if code != 0 {
+				w.WriteHeader(code)
+				return
+			}
+			fmt.Fprint(w, `{"data":{"total":1000,"avail":500,"shared":0}}`)
+		})
+	}
+	return httptest.NewServer(mux)
+}
+
+func probeOpts(endpoint string, datastores []string) *ProbeOptions {
+	return &ProbeOptions{
+		Endpoint:   endpoint,
+		APIToken:   []byte("user@pam!t=secret"),
+		Node:       "pve1",
+		Datastores: datastores,
+	}
+}
+
+func TestProbeHost_DatastoreSuccess(t *testing.T) {
+	server := newProbeServer(t, false, map[string]int{"local-lvm": 0})
+	defer server.Close()
+
+	probe, err := ProbeHost(t.Context(), probeOpts(server.URL, []string{"local-lvm"}))
+	if err != nil {
+		t.Fatalf("ProbeHost: %v", err)
+	}
+	if len(probe.Datastores) != 1 || probe.Datastores[0].Name != "local-lvm" {
+		t.Fatalf("Datastores = %+v; want [local-lvm]", probe.Datastores)
+	}
+	if len(probe.FailedDatastores) != 0 {
+		t.Fatalf("FailedDatastores = %v; want empty on full success", probe.FailedDatastores)
+	}
+}
+
+// TestProbeHost_PartialDatastoreFailureIsVisible is the Item 5 reproduction:
+// a failing per-datastore read must be recorded, not silently skipped, so
+// an empty Datastores for that name is distinguishable from "no datastore".
+func TestProbeHost_PartialDatastoreFailureIsVisible(t *testing.T) {
+	server := newProbeServer(t, false, map[string]int{
+		"local-lvm": 0,
+		"ghost":     http.StatusInternalServerError,
+	})
+	defer server.Close()
+
+	probe, err := ProbeHost(t.Context(), probeOpts(server.URL, []string{"local-lvm", "ghost"}))
+	if err != nil {
+		t.Fatalf("ProbeHost: %v", err)
+	}
+	if len(probe.Datastores) != 1 || probe.Datastores[0].Name != "local-lvm" {
+		t.Fatalf("Datastores = %+v; want only [local-lvm]", probe.Datastores)
+	}
+	if !slices.Contains(probe.FailedDatastores, "ghost") {
+		t.Fatalf("FailedDatastores = %v; want it to contain the failed read %q", probe.FailedDatastores, "ghost")
+	}
+	if slices.Contains(probe.FailedDatastores, "local-lvm") {
+		t.Fatalf("FailedDatastores = %v; must not include the successful read", probe.FailedDatastores)
+	}
+}
+
+func TestProbeHost_NodeLookupFailureFailsAllRequestedDatastores(t *testing.T) {
+	server := newProbeServer(t, true, nil)
+	defer server.Close()
+
+	probe, err := ProbeHost(t.Context(), probeOpts(server.URL, []string{"local-lvm", "fast-nvme"}))
+	if err != nil {
+		t.Fatalf("ProbeHost: %v", err)
+	}
+	if len(probe.Datastores) != 0 {
+		t.Fatalf("Datastores = %+v; want none when the node lookup itself failed", probe.Datastores)
+	}
+	for _, name := range []string{"local-lvm", "fast-nvme"} {
+		if !slices.Contains(probe.FailedDatastores, name) {
+			t.Errorf("FailedDatastores = %v; want it to contain %q", probe.FailedDatastores, name)
+		}
 	}
 }
 
