@@ -83,7 +83,10 @@ var AddonsStepDefinition = wizard.StepDefinition{
 	Validate: func(values map[string]string) error {
 		if values["secretstore_enabled"] == valYes && values["secretstore_provider"] == providerVault &&
 			strings.TrimSpace(values["secretstore_vault_server"]) == "" {
-			return errors.New("vault server url is required — enter the vault address")
+			return wizard.NewCrossFieldError(
+				errors.New("vault server url is required — enter the vault address"),
+				"secretstore_vault_server",
+			)
 		}
 		return nil
 	},
@@ -169,15 +172,7 @@ var AddonsStepDefinition = wizard.StepDefinition{
 			Visible: func(values map[string]string) bool {
 				return values["secretstore_enabled"] == valYes
 			},
-			Warning: func(values map[string]string) string {
-				if values["secretstore_enabled"] != valYes {
-					return ""
-				}
-				if _, err := exec.LookPath("sops"); err == nil {
-					return ""
-				}
-				return "secretstore requires sops — install before deploying"
-			},
+			Warning: secretStoreSopsWarning(sopsOnPath),
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "secretstore_provider",
@@ -317,7 +312,40 @@ var AddonsStepDefinition = wizard.StepDefinition{
 	},
 }
 
-// NewAddonsStep returns the addons wizard step.
+// sopsOnPath resolves whether the sops binary is reachable on PATH; a test
+// overrides it to prove the render path never calls it directly.
+var sopsOnPath = func() bool {
+	_, err := exec.LookPath("sops")
+	return err == nil
+}
+
+// secretStoreSopsWarning returns the secret-store-settings section's
+// Warning, deferring the sops-on-PATH question to check.
+func secretStoreSopsWarning(check func() bool) func(values map[string]string) string {
+	return func(values map[string]string) string {
+		if values["secretstore_enabled"] != valYes {
+			return ""
+		}
+		if check() {
+			return ""
+		}
+		return "secretstore requires sops — install before deploying"
+	}
+}
+
+// NewAddonsStep returns the addons wizard step, resolving the secretstore
+// section's sops-on-PATH check once here instead of on every render.
 func NewAddonsStep() *wizard.DataDrivenStep {
-	return wizard.NewDataDrivenStep(&AddonsStepDefinition)
+	def := AddonsStepDefinition
+	def.Sections = append([]wizard.SectionDefinition(nil), AddonsStepDefinition.Sections...)
+
+	sopsFound := sopsOnPath()
+	for i := range def.Sections {
+		if def.Sections[i].Title != "secret store settings" {
+			continue
+		}
+		def.Sections[i].Warning = secretStoreSopsWarning(func() bool { return sopsFound })
+	}
+
+	return wizard.NewDataDrivenStep(&def)
 }

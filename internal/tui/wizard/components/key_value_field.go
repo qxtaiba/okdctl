@@ -310,7 +310,7 @@ func (f *KeyValueField) View() string {
 	out := tui.Card(f.Label, strings.Join(rows, "\n"), f.width, accent)
 	switch {
 	case f.err != nil:
-		out += "\n" + errStyle.Render(tui.IconError+" "+strings.ToLower(f.err.Error()))
+		out += "\n" + errStyle.Render(tui.IconError+" "+f.err.Error())
 	case f.focused && f.Help != "":
 		out += "\n" + helpStyle.Width(f.width).Render(f.Help)
 	}

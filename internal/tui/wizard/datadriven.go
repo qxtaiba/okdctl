@@ -26,6 +26,21 @@ import (
 // scrolled to the first one.
 var ErrFixHighlighted = errors.New("fix the highlighted fields to continue")
 
+// crossFieldError is a StepDefinition.Validate error that also names the
+// field keys it implicates.
+type crossFieldError struct {
+	err  error
+	keys []string
+}
+
+func (e *crossFieldError) Error() string { return e.err.Error() }
+func (e *crossFieldError) Unwrap() error { return e.err }
+
+// NewCrossFieldError wraps err so it implicates the given field keys.
+func NewCrossFieldError(err error, keys ...string) error {
+	return &crossFieldError{err: err, keys: keys}
+}
+
 // FieldType classifies how a FieldDefinition is rendered and validated.
 type FieldType int
 
@@ -488,15 +503,31 @@ func (f *MultiSectionForm) FocusFirstInvalid() tea.Cmd {
 			if field.Check() == nil {
 				continue
 			}
-			if cur := f.currentGroup(); cur != nil {
-				cur.Blur()
-			}
-			f.currentSection = si
-			group.SetFocusIndex(fi)
-			return tea.Batch(group.Focus(), focusChanged)
+			return f.focusAt(si, fi)
 		}
 	}
 	return focusChanged
+}
+
+// focusAt blurs the current group and focuses the field at section/field,
+// returning a command that runs the focus side effect followed by
+// FocusChangedMsg so the wizard re-syncs its viewport and scrolls the field
+// into view — the same focus switch FocusFirstInvalid performs, reused by a
+// cross-field error's implicated-field focus.
+func (f *MultiSectionForm) focusAt(section, field int) tea.Cmd {
+	if section < 0 || section >= len(f.sections) || !f.sections[section].isVisible() {
+		return focusChanged
+	}
+	group := f.sections[section].Group
+	if group == nil || group.Field(field) == nil {
+		return focusChanged
+	}
+	if cur := f.currentGroup(); cur != nil {
+		cur.Blur()
+	}
+	f.currentSection = section
+	group.SetFocusIndex(field)
+	return tea.Batch(group.Focus(), focusChanged)
 }
 
 // innerWidth is the width left to a section's fields inside its horizontal padding.
@@ -948,12 +979,44 @@ func (s *DataDrivenStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 	}
 	if s.definition.Validate != nil {
 		if err := s.definition.Validate(s.values()); err != nil {
-			return s, func() tea.Msg { return ErrorSetMsg{Error: err} }
+			errCmd := func() tea.Msg { return ErrorSetMsg{Error: err} }
+			var cfe *crossFieldError
+			if errors.As(err, &cfe) {
+				return s, tea.Batch(s.focusCrossFieldError(cfe), errCmd)
+			}
+			return s, errCmd
 		}
 	}
 	return s, func() tea.Msg {
 		return StepCompleteMsg{StepID: s.ID()}
 	}
+}
+
+// focusCrossFieldError focuses/reveals the first field cfe implicates, then
+// marks every implicated field invalid inline via components.FieldErrorSetter
+// — in that order, since focusAt's blur pass would otherwise re-run
+// Validate on a touched field and erase the error this sets.
+func (s *DataDrivenStep) focusCrossFieldError(cfe *crossFieldError) tea.Cmd {
+	var first *fieldLocation
+	for _, fieldKey := range cfe.keys {
+		if loc, ok := s.fieldKeys[fieldKey]; ok {
+			first = &loc
+			break
+		}
+	}
+
+	var cmd tea.Cmd = focusChanged
+	if first != nil {
+		cmd = s.form.focusAt(first.section, first.field)
+	}
+
+	for _, fieldKey := range cfe.keys {
+		if setter, ok := s.getField(fieldKey).(components.FieldErrorSetter); ok {
+			setter.SetError(cfe)
+		}
+	}
+
+	return cmd
 }
 
 // Validate runs the form's field validation, then the step-level Validate

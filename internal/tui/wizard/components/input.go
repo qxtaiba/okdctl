@@ -3,6 +3,7 @@
 package components
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -13,6 +14,24 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
+
+// errPasteRejected is the inline error InputField shows when a paste would
+// be silently corrupted by newline, carriage return, or control-byte
+// normalization — it never echoes the rejected content, which may be a
+// secret.
+var errPasteRejected = errors.New("paste rejected — contains a newline, carriage return, or control character; paste a single-line value")
+
+// pasteCorrupting reports whether content has a newline, carriage return,
+// or other C0 control byte that bubbles' textinput would silently collapse
+// into a space or drop.
+func pasteCorrupting(content string) bool {
+	for _, r := range content {
+		if r == '\n' || r == '\r' || r < 0x20 {
+			return true
+		}
+	}
+	return false
+}
 
 // FormField is the interface all form field types must implement to be
 // usable in an InputGroup.
@@ -48,6 +67,13 @@ type EnterConsumer interface {
 type HistoryChooser interface {
 	// HistoryChooserOpen reports whether the inline value chooser is active.
 	HistoryChooserOpen() bool
+}
+
+// FieldErrorSetter is implemented by fields that can render an externally
+// supplied error inline — a cross-field validator uses it to mark a field
+// invalid at the point of failure instead of only posting a status banner.
+type FieldErrorSetter interface {
+	SetError(err error)
 }
 
 // LabeledField is implemented by every concrete FormField, letting a caller
@@ -340,6 +366,14 @@ func (f *InputField) Validate() error {
 	return f.err
 }
 
+// SetError marks the field invalid with err — set by a cross-field
+// validator that implicates this field — rendering it like a per-field
+// Check failure until the next edit clears it.
+func (f *InputField) SetError(err error) {
+	f.err = err
+	f.touched = true
+}
+
 // Update forwards msg to the underlying textinput, clearing any stale
 // validation error on keypress; a genuine edit (typing over, backspace,
 // delete, or a bracketed paste) while the value is still an unmodified
@@ -375,6 +409,10 @@ func (f *InputField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 			f.input.SetValue("")
 		}
 	case tea.PasteMsg:
+		if pasteCorrupting(k.Content) {
+			f.err = errPasteRejected
+			return f, nil
+		}
 		f.err = nil
 		if f.isDefault {
 			f.isDefault = false

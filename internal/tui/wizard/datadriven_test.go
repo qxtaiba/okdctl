@@ -652,6 +652,81 @@ func TestDataDrivenStep_EnterDefinitionErrorEmitsErrorSetMsg(t *testing.T) {
 	}
 }
 
+// crossFieldTestDefinition models a networking-shaped overlap check: two
+// fields whose cross-field Validate failure implicates the second one, the
+// way machine_cidr/service_cidr overlap implicates service_cidr.
+func crossFieldTestDefinition() *StepDefinition {
+	return &StepDefinition{
+		ID:    StepIDBasics,
+		Title: "cross-field test step",
+		Sections: []SectionDefinition{
+			{
+				Title: "section one",
+				Fields: []FieldDefinition{
+					{Key: "machine_cidr", Label: "machine cidr"},
+					{Key: "service_cidr", Label: "service cidr"},
+				},
+			},
+		},
+		Validate: func(values map[string]string) error {
+			if values["machine_cidr"] != "" && values["machine_cidr"] == values["service_cidr"] {
+				return NewCrossFieldError(
+					errors.New("machine cidr and service cidr must not overlap — widen or move one of the ranges"),
+					"service_cidr",
+				)
+			}
+			return nil
+		},
+	}
+}
+
+// TestDataDrivenStep_CrossFieldErrorFocusesAndMarksImplicatedField pins the
+// reconciliation-audit defect where a cross-field failure (the CIDR-overlap
+// shape) only ever reached the status-row banner: the implicated field
+// never got focused, revealed, or marked invalid inline, so an operator
+// with the field scrolled out of view saw a complaint with no indication
+// of where.
+func TestDataDrivenStep_CrossFieldErrorFocusesAndMarksImplicatedField(t *testing.T) {
+	step := NewDataDrivenStep(crossFieldTestDefinition())
+	step.SetFocused(true)
+	step.setValue("machine_cidr", "10.0.0.0/16")
+	step.setValue("service_cidr", "10.0.0.0/16")
+
+	// Park focus on the first field — standing in for the implicated field
+	// being scrolled out of view when enter is pressed.
+	if cmd := step.form.FocusField(0, 0); cmd != nil {
+		cmd()
+	}
+
+	_, cmd := step.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Update(enter) with overlapping cidrs: want a cmd, got nil")
+	}
+	if !containsFocusChanged(cmd) {
+		t.Fatal("Update(enter) with a cross-field error did not emit FocusChangedMsg")
+	}
+
+	if got := step.form.FocusedField(); got != step.getField("service_cidr") {
+		t.Fatalf("FocusedField() after a cross-field error = %v, want the implicated field (service_cidr)", got)
+	}
+
+	view := tuitest.StripANSI(step.View(80, 24))
+	if !strings.Contains(view, "must not overlap") {
+		t.Fatalf("View() after a cross-field error = %q, want the inline error visible", view)
+	}
+
+	// Correcting the value clears the stale inline error.
+	if cmd := step.form.FocusField(0, 1); cmd != nil {
+		cmd()
+	}
+	_, _ = step.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+
+	fieldView := tuitest.StripANSI(step.getField("service_cidr").View())
+	if strings.Contains(fieldView, "must not overlap") {
+		t.Fatalf("field View() after editing = %q, still shows the stale cross-field error", fieldView)
+	}
+}
+
 func TestDataDrivenStep_ShortHelpIncludesFieldHints(t *testing.T) {
 	step := NewDataDrivenStep(testStepDefinition())
 	step.SetFocused(true)

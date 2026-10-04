@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
@@ -32,6 +34,36 @@ func TestAddonsStep_EnabledAddonsRequireTheirEndpoints(t *testing.T) {
 	disabled := map[string]string{"flux_enabled": valNo, "secretstore_enabled": valNo}
 	if err := AddonsStepDefinition.Validate(disabled); err != nil {
 		t.Fatalf("Validate with everything disabled = %v, want nil", err)
+	}
+}
+
+// TestAddonsStep_CrossFieldErrorFocusesVaultServerField pins the
+// reconciliation-audit defect's addons half: the vault-server cross-field
+// failure only ever reached the status-row banner, never the vault server
+// field itself, so an operator focused elsewhere saw a complaint with no
+// indication of where to fix it.
+func TestAddonsStep_CrossFieldErrorFocusesVaultServerField(t *testing.T) {
+	step := NewAddonsStep()
+	step.SetFocused(true)
+	step.SetValue("secretstore_enabled", valYes)
+	step.SetValue("secretstore_provider", providerVault)
+
+	_, cmd := step.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Update(enter) with a missing vault server url: want a cmd, got nil")
+	}
+	if !containsFocusChanged(cmd) {
+		t.Fatal("Update(enter) with a cross-field error did not emit FocusChangedMsg")
+	}
+
+	label, _, ok := step.FocusedFieldHelp()
+	if !ok || label != "server url" {
+		t.Fatalf("FocusedFieldHelp() label = %q, ok=%v, want the vault server field focused", label, ok)
+	}
+
+	view := tuitest.StripANSI(step.View(100, 30))
+	if !strings.Contains(view, "vault server url is required") {
+		t.Fatalf("View() after a cross-field error = %q, want the inline error visible", view)
 	}
 }
 
@@ -145,5 +177,35 @@ func TestAddonsStep_WarningAttachesToSecretStoreSection(t *testing.T) {
 	}
 	if secretsDirIdx >= warnIdx || warnIdx >= nextSectionIdx {
 		t.Fatalf("want secretstore_secrets_dir (%d) < warning (%d) < secret store (onepassword) section (%d)", secretsDirIdx, warnIdx, nextSectionIdx)
+	}
+}
+
+// TestAddonsStep_ViewDoesNotCallSopsLookup pins the reconciliation-audit
+// defect where View synchronously ran exec.LookPath("sops") on every
+// render whenever secretstore was enabled, violating the contract that
+// View performs no file/PATH/network checks.
+func TestAddonsStep_ViewDoesNotCallSopsLookup(t *testing.T) {
+	calls := 0
+	prev := sopsOnPath
+	sopsOnPath = func() bool {
+		calls++
+		return true
+	}
+	defer func() { sopsOnPath = prev }()
+
+	cfg := config.DefaultConfig()
+	cfg.Addons = map[string]config.AddonConfig{"secretstore": {Enabled: true}}
+
+	step := NewAddonsStep()
+	step.LoadFromConfig(cfg, true)
+
+	afterConstruct := calls
+
+	for range 5 {
+		step.View(100, 30)
+	}
+
+	if calls != afterConstruct {
+		t.Fatalf("View() called the sops lookup %d extra time(s); it must resolve once outside the render path, not on every View()", calls-afterConstruct)
 	}
 }
