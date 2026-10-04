@@ -30,10 +30,6 @@ func (p *Phase) StartWorkerVMs(ctx context.Context, cfg *config.Config, opts *Op
 	)
 	defer tf.ZeroizeEnv()
 
-	if err := tf.Init(ctx); err != nil {
-		return tf.WithLockHint(&errtypes.ClusterError{Msg: "terraform init failed", Err: err})
-	}
-
 	applyOpts := terraform.ApplyOptions{
 		AutoApprove: true,
 		Vars: map[string]string{
@@ -42,7 +38,13 @@ func (p *Phase) StartWorkerVMs(ctx context.Context, cfg *config.Config, opts *Op
 		Targets: []string{"module.okd_cluster.proxmox_virtual_environment_vm.worker"},
 	}
 
-	if err := terraform.WithStateRecovery(ctx, tf, "start worker VMs", func() error { return tf.Apply(ctx, applyOpts) }); err != nil {
+	// Init can rewrite state during schema migration, so it belongs after the backup.
+	if err := terraform.WithStateRecovery(ctx, tf, "start worker VMs", func() error {
+		if err := tf.Init(ctx); err != nil {
+			return tf.WithLockHint(&errtypes.ClusterError{Msg: "terraform init failed", Err: err})
+		}
+		return tf.Apply(ctx, applyOpts)
+	}); err != nil {
 		return err
 	}
 

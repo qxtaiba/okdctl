@@ -1005,8 +1005,11 @@ func TestTargetedApplyAlreadyAtTargetSkipsApply(t *testing.T) {
 	if ftf.stateCalls != 1 {
 		t.Errorf("expected exactly one StateHasResource probe on the empty-plan path, got %d", ftf.stateCalls)
 	}
-	if ftf.applyCalls != 0 || ftf.snapshots != 0 {
-		t.Errorf("already-at-target must skip apply: apply=%d snapshot=%d", ftf.applyCalls, ftf.snapshots)
+	if ftf.applyCalls != 0 {
+		t.Errorf("already-at-target must skip apply: apply=%d", ftf.applyCalls)
+	}
+	if ftf.snapshots != 1 {
+		t.Errorf("already-at-target must still back up state ahead of init/plan: snapshot=%d", ftf.snapshots)
 	}
 }
 
@@ -1063,8 +1066,11 @@ func TestTargetedApplyResumedEmptyUpdatePlanSkips(t *testing.T) {
 	if err := r.targetedApply(context.Background(), testWorkerAddress, terraform.PlanActionUpdate, nil, true); err != nil {
 		t.Fatalf("resumed empty update plan must skip, not error: %v", err)
 	}
-	if ftf.applyCalls != 0 || ftf.snapshots != 0 {
-		t.Errorf("already-at-target resume must skip apply: apply=%d snapshot=%d", ftf.applyCalls, ftf.snapshots)
+	if ftf.applyCalls != 0 {
+		t.Errorf("already-at-target resume must skip apply: apply=%d", ftf.applyCalls)
+	}
+	if ftf.snapshots != 1 {
+		t.Errorf("already-at-target resume must still back up state ahead of init/plan: snapshot=%d", ftf.snapshots)
 	}
 }
 
