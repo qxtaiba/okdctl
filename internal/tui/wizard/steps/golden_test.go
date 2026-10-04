@@ -390,7 +390,7 @@ func TestGolden_HubReachesClusterStatus(t *testing.T) {
 }
 
 func TestGolden_HubOperationsDashboard(t *testing.T) {
-	for _, sz := range []struct{ w, h int }{{80, 24}, {140, 40}, {180, 48}} {
+	for _, sz := range []struct{ w, h int }{{80, 24}, {100, 30}, {120, 40}, {140, 40}, {180, 48}} {
 		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
 			forceHeroColor(t)
 			tui.SetTerminalWidth(sz.w)
@@ -409,13 +409,7 @@ func TestGolden_HubOperationsDashboard(t *testing.T) {
 			hub.opsStatus.updated = time.Date(2026, time.January, 2, 15, 4, 5, 0, time.UTC)
 			hub.opsStatus.latency = 82 * time.Millisecond
 			hub.opsStatus.latencyAvailable = true
-			hub.opsStatus.latencyHistory = []opsLatencySample{
-				{duration: 54 * time.Millisecond, available: true},
-				{duration: 68 * time.Millisecond, available: true},
-				{duration: 82 * time.Millisecond, available: true},
-				{available: false},
-				{duration: 73 * time.Millisecond, available: true},
-			}
+			hub.opsStatus.latencyHistory = fullOpsLatencyHistory()
 			hub.opsStatus.status.LastDeployRunID = "run-demo-123"
 			hub.opsStatus.status.LastDeployCluster = "prod-cluster"
 			hub.opsStatus.status.LastDeployAt = hub.opsStatus.updated.Add(-2 * time.Hour)
@@ -427,12 +421,13 @@ func TestGolden_HubOperationsDashboard(t *testing.T) {
 			plain := tuitest.StripANSI(frame)
 			wants := []string{"6/6 ready", "0 degraded", "homelab-master0", "homelab-worker2", "destroy"}
 			switch sz.w {
-			case 180:
-				wants = append(wants, "CLUSTER OPERATIONS", "CLUSTER PHASE", "API probe · 82ms", "NODE FLEET", "ADD-ONS & OPERATORS", "HUB ACTIONS", "apply the saved cluster configuration")
-			case 80:
+			case 180, 140:
+				wants = append(wants, "CLUSTER OPERATIONS", "CLUSTER PHASE", "RTT 82ms", "NODE FLEET", "ADD-ONS & OPERATORS", "HUB ACTIONS", "apply the saved cluster configuration")
+			case 80, 100, 120:
+				// Below the frame's effective ~122-column wide threshold (the
+				// 112 cutoff plus the viewport's fixed 10-column inset), the
+				// hub stays in the compact, card-free layout even at 120.
 				wants = append(wants, "API reachable", "RTT 82ms", "ACTIONS · ↑↓ choose · enter open")
-			default:
-				wants = append(wants, "CLUSTER OPERATIONS", "NODE FLEET", "HUB ACTIONS")
 			}
 			for _, want := range wants {
 				if !strings.Contains(plain, want) {
