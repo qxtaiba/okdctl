@@ -1,14 +1,17 @@
 # Wizard screenshots
 
 `make screenshots` (or `scripts/screenshot/run.sh` directly) renders the
-11-step `okdctl deploy` wizard against the fakepve fixture and screenshots
-the header of every step, at three terminal sizes: 80x24, 100x30, 120x40.
-Requires `vhs` (`brew install vhs`) and `go`; nothing touches a real
-hypervisor or deploys.
+11-step `okdctl deploy` wizard, the hero-hub's live cluster dashboard, a
+distribution-step failure, and the Cluster Lifecycle wizard against the
+fakepve fixture, and screenshots every step, at four terminal sizes:
+80x24, 100x30, 120x40, 180x48. Requires `vhs` (`brew install vhs`) and
+`go`; nothing touches a real hypervisor or deploys.
 
-Output lands in `scripts/screenshot/out/` (gitignored): 33 PNGs
-(`<size>-<step>.png`, e.g. `80x24-basics.png`) plus a `<size>.txt` raw
-terminal capture and `calib-<size>.txt` calibration readout per size.
+Output lands in `scripts/screenshot/out/` (gitignored): 24 PNGs per size
+(`<size>-<step>.png`, e.g. `80x24-basics.png`), a `<size>.txt`,
+`<size>-hub-dashboard.txt`, `<size>-distribution-fail.txt`, and
+`<size>-lifecycle.txt` raw terminal capture, and a `calib-<size>.txt`
+calibration readout per size.
 
 ## How it works
 
@@ -27,7 +30,17 @@ terminal capture and `calib-<size>.txt` calibration readout per size.
   step and advance to the next. Keystrokes mirror `docs/assets/demo.tape`
   (the human-paced README recording) with sleeps compressed for unattended
   batch rendering.
-- `run.sh` substitutes `@W@`/`@H@`/`@NAME@` into both templates per preset,
+- `hub-dashboard.tape.in` walks the hero-hub's own deployed-state screens:
+  the live dashboard, `cluster status` and its node-detail drill-in, and
+  the `manage nodes` operation picker, seeded with a fake Terraform state
+  so the hub renders its rich dashboard rather than the plain launcher.
+- `distribution-fail.tape.in` captures the distribution step's error state
+  under `OKDCTL_DEMO_RELEASES=fail` — the empty state and retry ribbon,
+  with no interaction beyond opening the step.
+- `lifecycle.tape.in` walks `okdctl node manage`'s remove-worker flow
+  against `lifecycle.DemoHooks`' static six-node fixture, through all
+  seven of its screens.
+- `run.sh` substitutes `@W@`/`@H@`/`@NAME@` into every template per preset,
   builds the demo binary, starts fakepve, and renders each preset in turn.
 
 ## Width/height presets
