@@ -32,15 +32,8 @@ func StartSpinnerWithPrefix(ctx context.Context, prefix, desc string) func() {
 	return startSpinnerWithPrefix(ctx, prefix, desc, os.Stderr)
 }
 
-// StartStatusLine renders a spinner whose description can be replaced while
-// running (live operator/CSR counts); returns set/stop funcs sharing
-// StartSpinner's teardown semantics, both no-op when ProgressBarsEnabled is
-// false.
-func StartStatusLine(ctx context.Context, desc string) (set func(string), stop func()) {
-	return StartStatusLineWithPrefix(ctx, "", desc)
-}
-
-// StartStatusLineWithPrefix is StartStatusLine with prefix kept dim and
+// StartStatusLineWithPrefix renders a spinner whose description can be
+// replaced while running (live operator/CSR counts), with prefix kept dim and
 // visible ahead of the frame, sharing StartSpinnerWithPrefix's prefix
 // semantics; both funcs are no-op when ProgressBarsEnabled is false.
 func StartStatusLineWithPrefix(ctx context.Context, prefix, desc string) (set func(string), stop func()) {
@@ -48,10 +41,6 @@ func StartStatusLineWithPrefix(ctx context.Context, prefix, desc string) (set fu
 		return func(string) {}, func() {}
 	}
 	return startStatusLineWithPrefix(ctx, prefix, desc, os.Stderr)
-}
-
-func startStatusLine(ctx context.Context, desc string, w io.Writer) (set func(string), stop func()) {
-	return startStatusLineWithPrefix(ctx, "", desc, w)
 }
 
 func startStatusLineWithPrefix(ctx context.Context, prefix, desc string, w io.Writer) (set func(string), stop func()) {

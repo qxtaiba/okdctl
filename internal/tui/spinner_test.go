@@ -168,7 +168,7 @@ func TestStartSpinner_NonTTYNoOp(t *testing.T) {
 func TestStatusLine_SetUpdatesDesc(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var buf bytes.Buffer
-		set, stop := startStatusLine(context.Background(), "waiting for cluster operators", &buf)
+		set, stop := startStatusLineWithPrefix(context.Background(), "", "waiting for cluster operators", &buf)
 		if !lineReg.hasOwner() {
 			t.Fatal("status line did not register as line owner")
 		}
@@ -187,14 +187,14 @@ func TestStatusLine_SetUpdatesDesc(t *testing.T) {
 	})
 }
 
-func TestStartStatusLine_NonTTYNoOp(t *testing.T) {
+func TestStartStatusLineWithPrefix_NonTTYNoOp(t *testing.T) {
 	prev := logutil.ProgressBarsEnabled()
 	logutil.SetProgressBarsEnabled(false)
 	t.Cleanup(func() { logutil.SetProgressBarsEnabled(prev) })
 
-	set, stop := StartStatusLine(context.Background(), "quiet")
+	set, stop := StartStatusLineWithPrefix(context.Background(), "", "quiet")
 	if lineReg.hasOwner() {
-		t.Fatal("non-TTY StartStatusLine registered a line owner")
+		t.Fatal("non-TTY StartStatusLineWithPrefix registered a line owner")
 	}
 	set("detail") // must not panic
 	stop()        // must not panic or block
