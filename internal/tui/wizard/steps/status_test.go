@@ -299,6 +299,70 @@ func TestStatusStepWithoutASourceReportsIt(t *testing.T) {
 	}
 }
 
+// TestGolden_StatusBoardBanners pins three previously goldenless states: the
+// initial in-flight probe (no snapshot yet), a probe failure with no
+// snapshot yet, and a refresh failure that keeps showing the last good
+// snapshot under its "showing last snapshot" banner.
+func TestGolden_StatusBoardBanners(t *testing.T) {
+	cases := []struct {
+		name  string
+		build func() *StatusStep
+		want  []string
+	}{
+		{
+			name: "loading",
+			build: func() *StatusStep {
+				s := NewStatusStep(&countingSource{status: statusFixture()})
+				s.Init()
+				return s
+			},
+			want: []string{"reading cluster status"},
+		},
+		{
+			name: "probe-failure",
+			build: func() *StatusStep {
+				s := NewStatusStep(&countingSource{err: errors.New("read cluster status: oc not found")})
+				s.Update(s.Init()())
+				return s
+			},
+			want: []string{"cluster status unavailable", "press r to retry", "oc not found"},
+		},
+		{
+			name: "stale-snapshot-banner",
+			build: func() *StatusStep {
+				src := &countingSource{status: statusFixture()}
+				s := NewStatusStep(src)
+				s.Update(s.Init()())
+				src.err = errors.New("probe timed out")
+				_, cmd := s.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
+				s.Update(cmd())
+				return s
+			},
+			want: []string{"refresh failed", "showing last snapshot", "probe timed out", "homelab-master0"},
+		},
+	}
+
+	for _, tc := range cases {
+		for _, sz := range []struct{ w, h int }{{80, 24}, {180, 48}} {
+			t.Run(fmt.Sprintf("%s_%dx%d", tc.name, sz.w, sz.h), func(t *testing.T) {
+				s := tc.build()
+				s.SetTerminalSize(sz.w, sz.h)
+
+				frame := s.View(sz.w, sz.h)
+				tuitest.Golden(t, fmt.Sprintf("status-banner-%s_%dx%d", tc.name, sz.w, sz.h), frame)
+				tuitest.AssertFits(t, frame, sz.w, sz.h)
+
+				plain := tuitest.StripANSI(frame)
+				for _, want := range tc.want {
+					if !strings.Contains(plain, want) {
+						t.Errorf("%s at %dx%d is missing %q:\n%s", tc.name, sz.w, sz.h, want, plain)
+					}
+				}
+			})
+		}
+	}
+}
+
 func TestStatusStepUsesTheWideSplit(t *testing.T) {
 	if NewStatusStep(nil).SuppressesSplit() {
 		t.Error("SuppressesSplit() = true; the status board has selected-node context to show")
