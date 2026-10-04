@@ -177,19 +177,15 @@ func renderResourceFooter(step *wizard.DataDrivenStep, state *ResourcesStepState
 		}
 		values[key] = value
 	}
-	cpCount := cfg.Topology.ControlPlane.Count
-	workerCount := cfg.Topology.Workers.Count
-	bootstrap := cfg.Topology.Bootstrap
-	// The bootstrap VM runs alongside the control plane during installation.
-	if bootstrap.CPU == 0 && bootstrap.MemoryMB == 0 {
-		bootstrap.CPU = values["cp_vcpus"]
-		bootstrap.MemoryMB = values["cp_memory"]
-	}
-	bootstrap.DiskGB = values["cp_disk"]
-	totalCPU := values["cp_vcpus"]*cpCount + values["worker_vcpus"]*workerCount + bootstrap.CPU
-	totalMemoryMB := values["cp_memory"]*cpCount + values["worker_memory"]*workerCount + bootstrap.MemoryMB
-	totalDiskGB := values["cp_disk"]*cpCount + values["worker_disk"]*workerCount + bootstrap.DiskGB +
-		values["worker_data_disk"]*workerCount + values["cp_data_disk"]*cpCount
+	in := EffectiveResourceInputsFromConfig(cfg)
+	in.ControlPlaneCPU, in.ControlPlaneMemoryMB, in.ControlPlaneDiskGB = values["cp_vcpus"], values["cp_memory"], values["cp_disk"]
+	in.WorkerCPU, in.WorkerMemoryMB, in.WorkerDiskGB = values["worker_vcpus"], values["worker_memory"], values["worker_disk"]
+	in.WorkerDataDiskGB, in.ControlPlaneDataDiskGB = values["worker_data_disk"], values["cp_data_disk"]
+	// The bootstrap VM runs alongside the control plane during installation;
+	// ComputeEffectiveResourceTotals falls back to control-plane sizing when
+	// cfg carries no explicit bootstrap cpu/memory of its own.
+	totals := ComputeEffectiveResourceTotals(&in)
+	totalCPU, totalMemoryMB, totalDiskGB := totals.CPU, totals.MemoryMB, totals.OSDiskGB+totals.DataDiskGB
 	label := fmt.Sprintf("%d vcpu · %d gb ram · %d gb disk", totalCPU, totalMemoryMB/1024, totalDiskGB)
 	capacity := state.Capacity.OnlineTotals()
 	over := (capacity.CPUsKnown && totalCPU > capacity.CPUs) ||

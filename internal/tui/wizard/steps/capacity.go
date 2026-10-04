@@ -116,3 +116,54 @@ func (s *WizardCapacitySnapshot) counts() (controlPlanes, workers int, ok bool) 
 	}
 	return s.cfg.Topology.ControlPlane.Count, s.cfg.Topology.Workers.Count, true
 }
+
+// EffectiveResourceInputs is the per-role sizing the shared totals
+// calculation reads, built either from a committed Config or from a
+// configure step's live, as-typed field values.
+type EffectiveResourceInputs struct {
+	ControlPlaneCPU, ControlPlaneMemoryMB, ControlPlaneDiskGB, ControlPlaneCount int
+	WorkerCPU, WorkerMemoryMB, WorkerDiskGB, WorkerCount                         int
+	BootstrapCPU, BootstrapMemoryMB                                              int
+	WorkerDataDiskGB, ControlPlaneDataDiskGB                                     int
+}
+
+// EffectiveResourceInputsFromConfig builds EffectiveResourceInputs from
+// cfg's topology and data-disk sizing.
+func EffectiveResourceInputsFromConfig(cfg *config.Config) EffectiveResourceInputs {
+	cp := cfg.Topology.ControlPlane
+	workers := cfg.Topology.Workers
+	bootstrap := cfg.Topology.Bootstrap
+	return EffectiveResourceInputs{
+		ControlPlaneCPU: cp.CPU, ControlPlaneMemoryMB: cp.MemoryMB, ControlPlaneDiskGB: cp.DiskGB, ControlPlaneCount: cp.Count,
+		WorkerCPU: workers.CPU, WorkerMemoryMB: workers.MemoryMB, WorkerDiskGB: workers.DiskGB, WorkerCount: workers.Count,
+		BootstrapCPU: bootstrap.CPU, BootstrapMemoryMB: bootstrap.MemoryMB,
+		WorkerDataDiskGB: cfg.Disks.WorkerDataSizeGB, ControlPlaneDataDiskGB: cfg.Disks.ControlPlaneDataSizeGB,
+	}
+}
+
+// EffectiveResourceTotals is the one vcpu/memory/disk total the resources
+// and review screens both render from.
+type EffectiveResourceTotals struct {
+	CPU        int
+	MemoryMB   int
+	OSDiskGB   int
+	DataDiskGB int
+}
+
+// ComputeEffectiveResourceTotals derives total vcpu, memory, os-disk, and
+// data-disk allocation across bootstrap, control-plane, and worker nodes.
+// The bootstrap vm falls back to control-plane cpu/memory sizing only when
+// both are unset, and always inherits the control-plane os disk size — the
+// one sizing rule TopologyConfig.Bootstrap documents.
+func ComputeEffectiveResourceTotals(in *EffectiveResourceInputs) EffectiveResourceTotals {
+	bootstrapCPU, bootstrapMemoryMB := in.BootstrapCPU, in.BootstrapMemoryMB
+	if bootstrapCPU == 0 && bootstrapMemoryMB == 0 {
+		bootstrapCPU, bootstrapMemoryMB = in.ControlPlaneCPU, in.ControlPlaneMemoryMB
+	}
+	return EffectiveResourceTotals{
+		CPU:        in.ControlPlaneCPU*in.ControlPlaneCount + in.WorkerCPU*in.WorkerCount + bootstrapCPU,
+		MemoryMB:   in.ControlPlaneMemoryMB*in.ControlPlaneCount + in.WorkerMemoryMB*in.WorkerCount + bootstrapMemoryMB,
+		OSDiskGB:   in.ControlPlaneDiskGB*in.ControlPlaneCount + in.WorkerDiskGB*in.WorkerCount + in.ControlPlaneDiskGB,
+		DataDiskGB: in.WorkerDataDiskGB*in.WorkerCount + in.ControlPlaneDataDiskGB*in.ControlPlaneCount,
+	}
+}

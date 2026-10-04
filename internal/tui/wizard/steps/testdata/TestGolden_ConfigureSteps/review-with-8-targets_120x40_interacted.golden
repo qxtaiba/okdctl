@@ -3,6 +3,8 @@
   │ O K D C T L                                                                                                      │  
   │ review your configuration                                                    connect · cluster · extras · review │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
+  │  host prefix      23                                                                                             │  
+  │  pod cidr         10.128.0.0/14                                                                                  │  
   │  service cidr     172.30.0.0/16                                                                                  │  
   │  static ip start  192.168.1.140                                                                                  │  
   │  interface        ens18                                                                                          │  
@@ -16,8 +18,6 @@
   │  worker data disk  500 gb per worker (1500 gb total)                                                             │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
   │  total             40 vcpu, 104 gb ram, 1850 gb disk                                                             │  
-  │  ⚠ total ram exceeds 64 gb across 4 nodes — verify your proxmox host(s) have sufficient memory                   │  
-  │  ⚠ total vcpu exceeds 32 across 4 nodes — verify your proxmox host(s) have sufficient cores                      │  
   │                                                                                                                  │  
   │  [6] files & ignition                                                                                            │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  

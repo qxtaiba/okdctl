@@ -3,6 +3,8 @@
   │ O K D C T L                                                                                                      │  
   │ review your configuration                                                    connect · cluster · extras · review │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
+  │  gateway          192.168.1.1                                                                                    │  
+  │  upstream dns     192.168.1.1                                                                                    │  
   │  bastion          192.168.1.20                                                                                   │  
   │  api vip          192.168.1.10 (auto)                                                                            │  
   │  host prefix      23                                                                                             │  
@@ -20,8 +22,6 @@
   │  worker data disk  500 gb per worker (1500 gb total)                                                             │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
   │  total             40 vcpu, 104 gb ram, 1850 gb disk                                                             │  
-  │  ⚠ total ram exceeds 64 gb across 4 nodes — verify your proxmox host(s) have sufficient memory                   │  
-  │  ⚠ total vcpu exceeds 32 across 4 nodes — verify your proxmox host(s) have sufficient cores                      │  
   │                                                                                                                  │  
   │  [6] files & ignition                                                                                            │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  

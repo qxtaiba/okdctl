@@ -659,15 +659,17 @@ func (s *ReviewStep) renderCompute(st *wizard.SectionStyles, width int) string {
 	var b strings.Builder
 	b.WriteString(s.renderComputeSpecs(&fitted))
 
-	totalCPU, totalMemGB, totalOSDiskGB, totalDataDiskGB := s.computeTotals()
+	inputs := EffectiveResourceInputsFromConfig(s.cfg)
+	totals := ComputeEffectiveResourceTotals(&inputs)
+	totalMemGB := totals.MemoryMB / 1024
 
 	b.WriteString(fitted.Separator)
 	b.WriteString("\n")
-	totalSpec := fmt.Sprintf("%d vcpu, %d gb ram, %d gb disk", totalCPU, totalMemGB, totalOSDiskGB+totalDataDiskGB)
+	totalSpec := fmt.Sprintf("%d vcpu, %d gb ram, %d gb disk", totals.CPU, totalMemGB, totals.OSDiskGB+totals.DataDiskGB)
 	b.WriteString(fitted.KVPair("total", totalSpec))
 	b.WriteString("\n")
 
-	b.WriteString(s.renderComputeWarnings(totalCPU, totalMemGB, width))
+	b.WriteString(s.renderComputeWarnings(totals.CPU, totalMemGB, width))
 	b.WriteString("\n")
 
 	return b.String()
@@ -719,37 +721,9 @@ func (s *ReviewStep) renderComputeSpecs(st *wizard.SectionStyles) string {
 	return b.String()
 }
 
-// computeTotals sums control-plane, worker, and bootstrap allocations into
-// the review's total vcpu, ram, os-disk, and data-disk figures.
-func (s *ReviewStep) computeTotals() (totalCPU, totalMemGB, totalOSDiskGB, totalDataDiskGB int) {
-	cpCPU := s.cfg.Topology.ControlPlane.CPU
-	cpDisk := s.cfg.Topology.ControlPlane.DiskGB
-	cpCount := s.cfg.Topology.ControlPlane.Count
-
-	totalCPU = cpCPU*cpCount + 4                                              // +4 for bootstrap
-	totalMemGB = (s.cfg.Topology.ControlPlane.MemoryMB*cpCount + 8192) / 1024 // +8192 for bootstrap
-	totalOSDiskGB = cpDisk*cpCount + 50                                       // +50 for bootstrap
-
-	wCount := 0
-	if s.cfg.Topology.Workers.Count > 0 {
-		wCount = s.cfg.Topology.Workers.Count
-		totalCPU += s.cfg.Topology.Workers.CPU * wCount
-		totalMemGB += (s.cfg.Topology.Workers.MemoryMB * wCount) / 1024
-		totalOSDiskGB += s.cfg.Topology.Workers.DiskGB * wCount
-	}
-
-	if s.cfg.Disks.WorkerDataSizeGB > 0 {
-		totalDataDiskGB += s.cfg.Disks.WorkerDataSizeGB * wCount
-	}
-	if s.cfg.Disks.ControlPlaneDataSizeGB > 0 {
-		totalDataDiskGB += s.cfg.Disks.ControlPlaneDataSizeGB * cpCount
-	}
-
-	return totalCPU, totalMemGB, totalOSDiskGB, totalDataDiskGB
-}
-
 // renderComputeWarnings renders the wrapped, amber ⚠ lines flagging totals
-// that exceed the review's ram/vcpu thresholds, or "" when neither trips.
+// that exceed the review's known online Proxmox capacity, or "" when
+// capacity is unknown or the totals fit.
 func (s *ReviewStep) renderComputeWarnings(totalCPU, totalMemGB, width int) string {
 	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning())
 	nodeCount := countUniqueNodes(s.cfg)
@@ -758,14 +732,15 @@ func (s *ReviewStep) renderComputeWarnings(totalCPU, totalMemGB, width int) stri
 		perHost = fmt.Sprintf(" across %d nodes", nodeCount)
 	}
 
+	capacity := s.capacity.OnlineTotals()
 	var b strings.Builder
-	if totalMemGB > 64 {
-		text := fmt.Sprintf("%s total ram exceeds 64 gb%s — verify your proxmox host(s) have sufficient memory", tui.IconWarning, perHost)
+	if capacity.MemoryKnown && totalMemGB > capacity.MemoryGB {
+		text := fmt.Sprintf("%s total ram exceeds online capacity (%d gb)%s — verify your proxmox host(s) have sufficient memory", tui.IconWarning, capacity.MemoryGB, perHost)
 		b.WriteString(warnStyle.Render(lipgloss.Wrap(text, width, "")))
 		b.WriteString("\n")
 	}
-	if totalCPU > 32 {
-		text := fmt.Sprintf("%s total vcpu exceeds 32%s — verify your proxmox host(s) have sufficient cores", tui.IconWarning, perHost)
+	if capacity.CPUsKnown && totalCPU > capacity.CPUs {
+		text := fmt.Sprintf("%s total vcpu exceeds online capacity (%d)%s — verify your proxmox host(s) have sufficient cores", tui.IconWarning, capacity.CPUs, perHost)
 		b.WriteString(warnStyle.Render(lipgloss.Wrap(text, width, "")))
 		b.WriteString("\n")
 	}

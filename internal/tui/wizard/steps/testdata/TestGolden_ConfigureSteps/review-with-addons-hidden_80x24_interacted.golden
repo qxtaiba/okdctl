@@ -3,9 +3,9 @@
   │ O K D C T L                                                              │  
   │ review your configuration            connect · cluster · extras · review │  
   │──────────────────────────────────────────────────────────────────────────│  
-  │  have sufficient memory                                                  │  
-  │  ⚠ total vcpu exceeds 32 across 4 nodes — verify your proxmox host(s)    │  
-  │  have sufficient cores                                                   │  
+  │  worker data disk  500 gb per worker (1500 gb total)                     │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
+  │  total             40 vcpu, 104 gb ram, 1850 gb disk                     │  
   │                                                                          │  
   │  [6] files & ignition                                                    │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
