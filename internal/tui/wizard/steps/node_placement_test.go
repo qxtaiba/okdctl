@@ -650,3 +650,65 @@ func TestNodePlacementStep_RefreshKeyRefetchesDiscovery(t *testing.T) {
 		t.Fatal("'r' must bump the generation")
 	}
 }
+
+// TestNodePlacementStep_SanitizesHostileProxmoxText drives a tampered
+// Proxmox discovery response — a node, storage pool, and bridge name each
+// carrying a CSI sequence that would otherwise clear the screen and move the
+// cursor home, the first two moves of forging a line of okdctl-looking
+// chrome — through the step's real View path, and separately pins a hostile
+// discoveryErr through the same screen's error row. The view legitimately
+// carries okdctl's own SGR styling (this step renders with lipgloss's
+// default, TTY-detected profile regardless of tui's own tracked profile), so
+// the test checks for the exact tampered byte sequence rather than any ESC
+// byte: that sequence can only survive if sanitization failed, since no
+// legitimate style this step emits coincides with a CSI clear-screen/
+// cursor-home pair.
+func TestNodePlacementStep_SanitizesHostileProxmoxText(t *testing.T) {
+	const payload = "\x1b[2J\x1b[H"
+
+	t.Run("node, storage, bridge, and iso names", func(t *testing.T) {
+		const hostileISO = "local:iso/fcos" + payload + ".iso"
+		cfg := newProxmoxTestConfig()
+		cfg.Topology.ControlPlane.Count = 1
+		cfg.Provider.Proxmox.FCOSIso = hostileISO // pre-selects it as the field's current value
+		s := NewNodePlacementStep()
+		s.cfg = cfg
+
+		disc := &proxmoxDiscovery{
+			Nodes: []proxmoxNode{{
+				Name: "pve1" + payload, Status: "online",
+				CPUsKnown: true, CPUs: 4, MemKnown: true, MemGB: 8,
+				StorageKnown: true,
+				Storage:      []proxmoxStorage{{Name: "local-lvm" + payload, Content: "images", TotalKnown: true, TotalGB: 100}},
+			}},
+			Storage: []proxmoxStorage{{Name: "local-lvm" + payload, Content: "images"}},
+			Bridges: []proxmoxBridge{{Name: "vmbr0" + payload}},
+			ISOs:    []string{hostileISO},
+		}
+		step, _ := s.Update(discoveryCompleteMsg{discovery: disc})
+		s = step.(*NodePlacementStep)
+
+		view := s.View(100, 40)
+		if strings.Contains(view, payload) {
+			t.Fatalf("rendered view carries the raw clear-screen/cursor-home payload:\n%q", view)
+		}
+		if !strings.Contains(view, "�") {
+			t.Fatalf("rendered view shows no sanitization marker for the tampered names:\n%q", view)
+		}
+	})
+
+	t.Run("discovery error", func(t *testing.T) {
+		s := NewNodePlacementStep()
+		s.cfg = newProxmoxTestConfig()
+		s.phase = phasePlacing
+		s.discoveryErr = errors.New("dial proxmox: " + payload)
+
+		view := s.View(100, 40)
+		if strings.Contains(view, payload) {
+			t.Fatalf("rendered view carries the raw clear-screen/cursor-home payload:\n%q", view)
+		}
+		if !strings.Contains(view, "�") {
+			t.Fatalf("rendered view shows no sanitization marker for the tampered error:\n%q", view)
+		}
+	})
+}

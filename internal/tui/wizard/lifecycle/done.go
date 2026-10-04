@@ -153,7 +153,7 @@ func (s *DoneStep) View(width, _ int) string {
 // that led up to it. The card carries no hint of its own — the next-moves
 // block is the fix, stated once.
 func (s *DoneStep) incidentReport(boxWidth, col int) string {
-	card := strings.Trim(render.ErrorCard(s.failureKind(), s.st.Result.Error(), "", boxWidth), "\n")
+	card := strings.Trim(render.ErrorCard(s.failureKind(), tui.SanitizeTerminalEscapes(s.st.Result.Error()), "", boxWidth), "\n")
 	return section(
 		frozenChecklist(s.st, s.Styles(), col),
 		strings.Split(card, "\n"),

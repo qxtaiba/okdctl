@@ -174,6 +174,27 @@ func TestNodeOpBoxes(t *testing.T) {
 	}
 }
 
+// TestNodeOpConfirmSanitizesHostileBlockedText drives a blocked-verdict
+// error whose Error() text carries a CSI sequence — n.Blocked can wrap a
+// terraform-plan error, unlike this function's other okdctl-composed
+// strings — through NodeOpConfirm's real render path.
+func TestNodeOpConfirmSanitizesHostileBlockedText(t *testing.T) {
+	const payload = "\x1b[2J\x1b[H"
+	p := removePlan()
+	p.Nodes[0].Blocked = errors.New("holds 1 rook-ceph OSD" + payload)
+
+	out := NodeOpConfirm(&p)
+	if strings.Contains(out, payload) {
+		t.Fatalf("confirm box carries the raw clear-screen/cursor-home payload:\n%q", out)
+	}
+	if !strings.Contains(out, "�") {
+		t.Fatalf("confirm box shows no sanitization marker:\n%q", out)
+	}
+	if !strings.Contains(out, "holds 1 rook-ceph OSD") {
+		t.Fatalf("confirm box lost the legitimate blocked-verdict text:\n%q", out)
+	}
+}
+
 func TestNodeOpConfirmTableHeadersAndFit(t *testing.T) {
 	for _, w := range []int{80, 120} {
 		t.Run(fmt.Sprintf("w%d", w), func(t *testing.T) {

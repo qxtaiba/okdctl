@@ -319,7 +319,7 @@ func (s *DoneStep) failureMessage() string {
 	if wasCancelled(s.st.Result) {
 		return "the operator cancelled this run; nothing beyond the step already in flight was attempted."
 	}
-	return s.st.Result.Error()
+	return tui.SanitizeTerminalEscapes(s.st.Result.Error())
 }
 
 // wasCancelled reports whether err is (or wraps) context.Canceled — the

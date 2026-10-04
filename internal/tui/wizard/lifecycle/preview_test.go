@@ -160,6 +160,25 @@ func TestPreviewDryRunErrorRendered(t *testing.T) {
 	}
 }
 
+// TestPreviewSanitizesHostileDryRunErrorText drives a dry-run error whose
+// Error() text carries a CSI sequence through the preview's real View path.
+func TestPreviewSanitizesHostileDryRunErrorText(t *testing.T) {
+	const payload = "\x1b[2J\x1b[H"
+	st := &State{Cfg: config.DefaultConfig(), Op: node.OpResize}
+	s := previewWith(t, st, nil, errors.New("plan safety gate refused"+payload+"the change"))
+
+	out := s.View(90, 40)
+	if strings.Contains(out, payload) {
+		t.Fatalf("preview carries the raw clear-screen/cursor-home payload:\n%q", out)
+	}
+	if !strings.Contains(out, "�") {
+		t.Fatalf("preview shows no sanitization marker:\n%q", out)
+	}
+	if !strings.Contains(out, "plan safety gate refused") || !strings.Contains(out, "the change") {
+		t.Fatalf("preview lost the legitimate error text:\n%q", out)
+	}
+}
+
 // TestPreviewDryRunErrorRendersGateReason guards item 3 of the second-cut
 // safety findings: the preview used to render only the generic "plan safety
 // gate refused the change" (node.Runner's planTargeted now folds the

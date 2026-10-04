@@ -313,7 +313,7 @@ func (s *TargetStep) View(width, height int) string {
 	if s.loadErr != nil {
 		warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning())
 		hintStyle := lipgloss.NewStyle().Foreground(tui.ColorTextFaint()).Italic(true)
-		return warnStyle.Render("list nodes: "+s.loadErr.Error()) + "\n\n" +
+		return warnStyle.Render("list nodes: "+tui.SanitizeTerminalEscapes(s.loadErr.Error())) + "\n\n" +
 			hintStyle.Render("esc to go back")
 	}
 	if s.selector == nil || len(s.choices) == 0 {

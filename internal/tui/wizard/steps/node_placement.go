@@ -169,6 +169,7 @@ func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, nodeNames []s
 			s.fcosField = newSelectField("fcos iso",
 				"pre-uploaded coreos iso — blank to let okdctl download and upload it",
 				isoOptions, firstMatch(disc.ISOs, px.FCOSIso, ""), px.FCOSIso)
+			s.fcosField.SetDisplayOptions(sanitizeNames(isoOptions))
 			infraFields = append(infraFields, s.fcosField)
 		}
 
@@ -329,7 +330,7 @@ func (s *NodePlacementStep) discoveryHeader(width int) string {
 
 	switch {
 	case s.discoveryErr != nil:
-		return warnStyle.Width(width - 2).Render(s.discoveryErr.Error())
+		return warnStyle.Width(width - 2).Render(tui.SanitizeTerminalEscapes(s.discoveryErr.Error()))
 	case s.discovery != nil:
 		header := noteStyle.Width(width - 2).Render(fmt.Sprintf("discovered %d node(s), %d storage pool(s), %d bridge(s)",
 			len(s.discovery.Nodes), len(s.discovery.Storage), len(s.discovery.Bridges)))
@@ -346,7 +347,7 @@ func (s *NodePlacementStep) discoveryHeader(width int) string {
 			if node.Status != proxmoxStatusOnline {
 				status = lipgloss.NewStyle().Foreground(tui.ColorWarning()).Render("offline")
 			}
-			header += "\n" + noteStyle.Width(width-2).Render(fmt.Sprintf("%s %s · %s · %s", node.Name, status, cpu, memory))
+			header += "\n" + noteStyle.Width(width-2).Render(fmt.Sprintf("%s %s · %s · %s", tui.SanitizeTerminalEscapes(node.Name), status, cpu, memory))
 		}
 		if demand := s.assignmentDemand(width - 2); demand != "" {
 			header += "\n" + demand
@@ -371,7 +372,7 @@ func nodeDisplayOptions(nodes []proxmoxNode, values []string) []string {
 	for i, name := range values {
 		node, ok := byName[name]
 		if !ok {
-			display[i] = name
+			display[i] = tui.SanitizeTerminalEscapes(name)
 			continue
 		}
 		cpu, memory := "?c", "?g"
@@ -381,7 +382,7 @@ func nodeDisplayOptions(nodes []proxmoxNode, values []string) []string {
 		if node.MemKnown {
 			memory = fmt.Sprintf("%dg", node.MemGB)
 		}
-		display[i] = fmt.Sprintf("%s — %s/%s", name, cpu, memory)
+		display[i] = fmt.Sprintf("%s — %s/%s", tui.SanitizeTerminalEscapes(name), cpu, memory)
 		if node.Status != proxmoxStatusOnline {
 			display[i] += " " + lipgloss.NewStyle().Foreground(tui.ColorWarning()).Render("offline")
 		}
@@ -399,27 +400,29 @@ func setNodeDisplayOptions(fields []*components.SelectField, nodes []proxmoxNode
 func storageDisplayOptions(discovery *proxmoxDiscovery, values []string) []string {
 	display := make([]string, len(values))
 	for i, name := range values {
+		safeName := tui.SanitizeTerminalEscapes(name)
 		parts := make([]string, 0, len(discovery.Nodes))
 		for nodeIndex := range discovery.Nodes {
 			node := &discovery.Nodes[nodeIndex]
 			if node.Status != proxmoxStatusOnline {
 				continue
 			}
+			safeNode := tui.SanitizeTerminalEscapes(node.Name)
 			if !node.StorageKnown {
-				parts = append(parts, node.Name+" ?")
+				parts = append(parts, safeNode+" ?")
 				continue
 			}
 			for _, pool := range node.Storage {
 				if pool.Name == name {
-					parts = append(parts, node.Name+" "+formatStorageGB(pool.TotalGB, pool.TotalKnown))
+					parts = append(parts, safeNode+" "+formatStorageGB(pool.TotalGB, pool.TotalKnown))
 					break
 				}
 			}
 		}
 		if len(parts) == 0 {
-			display[i] = name + " — capacity unknown"
+			display[i] = safeName + " — capacity unknown"
 		} else {
-			display[i] = name + " — " + strings.Join(parts, " · ")
+			display[i] = safeName + " — " + strings.Join(parts, " · ")
 		}
 	}
 	return display
@@ -477,7 +480,7 @@ func (s *NodePlacementStep) assignmentDemand(width int) string {
 		if !assigned {
 			continue
 		}
-		row := fmt.Sprintf("%s: %dc/%dg/%dgb", node.Name, used[0], used[1], used[2])
+		row := fmt.Sprintf("%s: %dc/%dg/%dgb", tui.SanitizeTerminalEscapes(node.Name), used[0], used[1], used[2])
 		if (node.CPUsKnown && used[0] > node.CPUs) || (node.MemKnown && used[1] > node.MemGB) {
 			row = lipgloss.NewStyle().Foreground(tui.ColorWarning()).Render(row + " · oversubscribed")
 		}
@@ -638,12 +641,28 @@ func (s *NodePlacementStep) ShortHelp() []wizard.KeyBinding {
 	return help
 }
 
+// bridgeNames returns bridges' names sanitized for display: unlike the node
+// and storage pick lists, a bridge's dropdown option is also its selected
+// value (no SetDisplayOptions overlay exists here, and components.
+// MultiSelectField — additionalNetworks' type — offers none at all), so
+// this is the one place that can keep a tampered bridge name off the screen.
 func bridgeNames(bridges []proxmoxBridge) []string {
 	names := make([]string, len(bridges))
 	for i, b := range bridges {
-		names[i] = b.Name
+		names[i] = tui.SanitizeTerminalEscapes(b.Name)
 	}
 	return names
+}
+
+// sanitizeNames returns names with every element passed through
+// tui.SanitizeTerminalEscapes, for display-only option lists built from
+// Proxmox-reported data.
+func sanitizeNames(names []string) []string {
+	out := make([]string, len(names))
+	for i, n := range names {
+		out[i] = tui.SanitizeTerminalEscapes(n)
+	}
+	return out
 }
 
 func additionalNetworksBridges(nets []config.AdditionalNetwork) string {

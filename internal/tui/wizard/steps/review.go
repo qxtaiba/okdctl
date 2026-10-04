@@ -469,26 +469,31 @@ func reviewConfigSnapshot(cfg *config.Config) map[string]string {
 		"deployment.bin_dir":                 cfg.Deployment.BinDir,
 	}
 	if p := cfg.Provider.Proxmox; p != nil {
+		// Node/storage/bridge names trace back to a Proxmox discovery
+		// response (see node_placement.go); every other field here is
+		// operator-authored connection config, so only those are sanitized
+		// before this snapshot feeds the change-summary and config-changes
+		// diffs below.
 		values["proxmox.host"] = p.Host
-		values["proxmox.bootstrap_node"] = p.Node
-		values["proxmox.storage"] = p.Storage
-		values["proxmox.data_storage"] = p.DataStorage
-		values["proxmox.iso_storage"] = p.ISOStorage
-		values["proxmox.fcos_iso"] = p.FCOSIso
-		values["proxmox.bridge"] = p.Bridge
+		values["proxmox.bootstrap_node"] = tui.SanitizeTerminalEscapes(p.Node)
+		values["proxmox.storage"] = tui.SanitizeTerminalEscapes(p.Storage)
+		values["proxmox.data_storage"] = tui.SanitizeTerminalEscapes(p.DataStorage)
+		values["proxmox.iso_storage"] = tui.SanitizeTerminalEscapes(p.ISOStorage)
+		values["proxmox.fcos_iso"] = tui.SanitizeTerminalEscapes(p.FCOSIso)
+		values["proxmox.bridge"] = tui.SanitizeTerminalEscapes(p.Bridge)
 		values["proxmox.token_id"] = p.TokenID
 		values["proxmox.insecure"] = strconv.FormatBool(p.Insecure)
 		values["proxmox.insecure_http"] = strconv.FormatBool(p.InsecureHTTP)
 		values["proxmox.cpu_type"] = p.CPUType
 		values["proxmox.numa"] = strconv.FormatBool(p.NUMAEnabled)
 		values["proxmox.ha_anti_affinity"] = strconv.FormatBool(p.HAEnabled)
-		values["proxmox.control_plane_nodes"] = strings.Join(p.ControlPlaneNodes, ", ")
-		values["proxmox.worker_nodes"] = strings.Join(p.WorkerNodes, ", ")
+		values["proxmox.control_plane_nodes"] = tui.SanitizeTerminalEscapes(strings.Join(p.ControlPlaneNodes, ", "))
+		values["proxmox.worker_nodes"] = tui.SanitizeTerminalEscapes(strings.Join(p.WorkerNodes, ", "))
 		values["proxmox.ssh_host_fingerprint"] = p.SSHHostFingerprint
 		values["proxmox.require_pinned_fingerprint"] = strconv.FormatBool(p.RequirePinnedFingerprint)
 		for i, network := range p.AdditionalNetworks {
 			fieldPath := fmt.Sprintf("proxmox.additional_networks.%d", i+1)
-			values[fieldPath] = fmt.Sprintf("%s / %s / vlan %d", network.Bridge, network.Model, network.VLANTag)
+			values[fieldPath] = tui.SanitizeTerminalEscapes(fmt.Sprintf("%s / %s / vlan %d", network.Bridge, network.Model, network.VLANTag))
 		}
 	}
 	values["disks.control_plane_mon_size_gb"] = strconv.Itoa(cfg.Disks.ControlPlaneMonSizeGB)
@@ -583,16 +588,16 @@ func (s *ReviewStep) renderProxmox(st *wizard.SectionStyles) string {
 	for i, n := range p.AdditionalNetworks {
 		bridges[i] = n.Bridge
 	}
-	addlNetworks := strings.Join(bridges, ", ")
+	addlNetworks := tui.SanitizeTerminalEscapes(strings.Join(bridges, ", "))
 	return wizard.RenderSection(st, s.sectionTitle("proxmox", wizard.StepIDProxmox), []wizard.KVEntry{
 		{Label: "host", Value: p.Host},
 		{Label: "token id", Value: p.TokenID, Skip: p.TokenID == ""},
-		{Label: "bootstrap node", Value: p.Node},
-		{Label: "bridge", Value: p.Bridge},
-		{Label: "storage", Value: p.Storage},
-		{Label: "data storage", Value: p.DataStorage, Skip: p.DataStorage == "" || p.DataStorage == p.Storage},
-		{Label: "iso storage", Value: p.ISOStorage, Skip: p.ISOStorage == ""},
-		{Label: "fcos iso", Value: p.FCOSIso, Skip: p.FCOSIso == ""},
+		{Label: "bootstrap node", Value: tui.SanitizeTerminalEscapes(p.Node)},
+		{Label: "bridge", Value: tui.SanitizeTerminalEscapes(p.Bridge)},
+		{Label: "storage", Value: tui.SanitizeTerminalEscapes(p.Storage)},
+		{Label: "data storage", Value: tui.SanitizeTerminalEscapes(p.DataStorage), Skip: p.DataStorage == "" || p.DataStorage == p.Storage},
+		{Label: "iso storage", Value: tui.SanitizeTerminalEscapes(p.ISOStorage), Skip: p.ISOStorage == ""},
+		{Label: "fcos iso", Value: tui.SanitizeTerminalEscapes(p.FCOSIso), Skip: p.FCOSIso == ""},
 		{Label: "extra networks", Value: addlNetworks, Skip: len(p.AdditionalNetworks) == 0},
 	})
 }
@@ -605,8 +610,8 @@ func (s *ReviewStep) renderNodePlacement(st *wizard.SectionStyles) string {
 		return ""
 	}
 	return wizard.RenderSection(st, s.sectionTitle("node placement", wizard.StepIDNodePlacement), []wizard.KVEntry{
-		{Label: "control plane nodes", Value: strings.Join(p.ControlPlaneNodes, ", "), Skip: len(p.ControlPlaneNodes) == 0},
-		{Label: "worker nodes", Value: strings.Join(p.WorkerNodes, ", "), Skip: len(p.WorkerNodes) == 0},
+		{Label: "control plane nodes", Value: tui.SanitizeTerminalEscapes(strings.Join(p.ControlPlaneNodes, ", ")), Skip: len(p.ControlPlaneNodes) == 0},
+		{Label: "worker nodes", Value: tui.SanitizeTerminalEscapes(strings.Join(p.WorkerNodes, ", ")), Skip: len(p.WorkerNodes) == 0},
 	})
 }
 

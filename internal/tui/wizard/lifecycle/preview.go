@@ -194,7 +194,7 @@ func (s *PreviewStep) View(width, height int) string {
 	if s.st.DryRunErr != nil {
 		errStyle := lipgloss.NewStyle().Foreground(tui.ColorError()).Bold(true)
 		hintStyle := lipgloss.NewStyle().Foreground(tui.ColorTextFaint()).Italic(true)
-		reason := lipgloss.Wrap(s.st.DryRunErr.Error(), width, "")
+		reason := lipgloss.Wrap(tui.SanitizeTerminalEscapes(s.st.DryRunErr.Error()), width, "")
 		return errStyle.Render("dry-run failed") + "\n\n" +
 			lipgloss.NewStyle().Foreground(tui.ColorText()).Render(reason) + "\n\n" +
 			hintStyle.Render("esc to go back and adjust")

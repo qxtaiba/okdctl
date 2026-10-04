@@ -86,10 +86,13 @@ func errorBody(kind, message, hint string, width int) *Builder {
 }
 
 // describeError decomposes err via errtypes.Describe, falling back to a plain
-// "error" chip for untyped errors.
+// "error" chip for untyped errors. The typed path's Message/Hint are
+// okdctl-authored strings; the untyped fallback is err.Error() verbatim —
+// which, unlike a typed error's Msg, can be raw backend/subprocess text this
+// process never composed — so only the fallback is sanitized before display.
 func describeError(err error) (kind, headline, hint string) {
 	if d, ok := errtypes.Describe(err); ok {
 		return d.Kind.Label(), strings.TrimSpace(d.Message), strings.TrimSpace(d.Hint)
 	}
-	return "error", strings.TrimSpace(err.Error()), ""
+	return "error", tui.SanitizeTerminalEscapes(strings.TrimSpace(err.Error())), ""
 }

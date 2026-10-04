@@ -51,6 +51,33 @@ func TestDoneStepFailureCarriesError(t *testing.T) {
 	}
 }
 
+// TestDoneStepSanitizesHostileEngineErrorText drives a node-op engine error
+// whose Error() text carries an OSC sequence (the window-title/clipboard
+// family) through the incident report's real View path. The error reaches
+// the screen twice — the error card (Result.Error() inline) and the
+// incident facts' "cause" row (leadingClause) — so this also proves neither
+// call site was missed.
+func TestDoneStepSanitizesHostileEngineErrorText(t *testing.T) {
+	const payload = "\x1b]0;pwned\x07"
+
+	st := doneState()
+	st.Result = errors.New("etcd health gate (post-master0) failed" + payload + ": quorum lost")
+	out := NewDoneStep(st, Hooks{}).View(90, 40)
+
+	if strings.Contains(out, payload) {
+		t.Fatalf("incident report carries the raw osc payload:\n%q", out)
+	}
+	if strings.Contains(out, "pwned") {
+		t.Fatalf("osc payload text leaked into the incident report:\n%q", out)
+	}
+	if !strings.Contains(out, "�") {
+		t.Fatalf("incident report shows no sanitization marker:\n%q", out)
+	}
+	if !strings.Contains(out, "quorum lost") {
+		t.Fatalf("incident report lost the legitimate engine error text:\n%q", out)
+	}
+}
+
 // TestDoneStepCancelledRendersInterrupted pins bug 13: a graceful ctrl+c
 // cancel ends on "interrupted", not on a failure card claiming the resize
 // failed — the same distinction deployexec's done screen already draws.

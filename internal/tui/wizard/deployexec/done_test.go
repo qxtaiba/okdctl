@@ -117,6 +117,33 @@ func TestDoneViewRendersTheErrorCardOnFailure(t *testing.T) {
 	}
 }
 
+// TestDoneViewSanitizesHostileEngineErrorText drives a deploy-engine error
+// whose Error() text carries an OSC sequence (the window-title/clipboard
+// family) through the incident report's real View path. The error reaches
+// the screen twice — the error card (failureMessage) and the incident
+// facts' "cause" row (leadingClause) — so this also proves neither call
+// site was missed.
+func TestDoneViewSanitizesHostileEngineErrorText(t *testing.T) {
+	const payload = "\x1b]0;pwned\x07"
+
+	st := doneState()
+	st.Result = errors.New("terraform apply failed" + payload + ": vm 9001 already exists")
+	out := NewDoneStep(st, Hooks{}).View(96, 40)
+
+	if strings.Contains(out, payload) {
+		t.Fatalf("incident report carries the raw osc payload:\n%q", out)
+	}
+	if strings.Contains(out, "pwned") {
+		t.Fatalf("osc payload text leaked into the incident report:\n%q", out)
+	}
+	if !strings.Contains(out, "�") {
+		t.Fatalf("incident report shows no sanitization marker:\n%q", out)
+	}
+	if !strings.Contains(out, "vm 9001 already exists") {
+		t.Fatalf("incident report lost the legitimate engine error text:\n%q", out)
+	}
+}
+
 func TestDoneViewNamesACancelledRunInterrupted(t *testing.T) {
 	st := doneState()
 	st.Result = context.Canceled

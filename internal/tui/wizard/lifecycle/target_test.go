@@ -316,6 +316,31 @@ func TestTargetStep_ReentryAfterSuccessReusesCachedNodes(t *testing.T) {
 	}
 }
 
+// TestTargetStep_SanitizesHostileLoadErrorText drives a node-list load
+// error whose Error() text carries a CSI sequence through the target
+// selector's real View path.
+func TestTargetStep_SanitizesHostileLoadErrorText(t *testing.T) {
+	const payload = "\x1b[2J\x1b[H"
+	st := &State{Cfg: config.DefaultConfig(), Op: node.OpResize}
+	s := NewTargetStep(st, Hooks{ListNodes: func() ([]cluster.NodeDetail, error) {
+		return nil, errors.New("cluster unreachable")
+	}})
+	s.Init()
+	step, _ := s.Update(nodesLoadedMsg{generation: s.generation, err: errors.New("cluster unreachable" + payload)})
+	s = step.(*TargetStep)
+
+	out := s.View(90, 40)
+	if strings.Contains(out, payload) {
+		t.Fatalf("target view carries the raw clear-screen/cursor-home payload:\n%q", out)
+	}
+	if !strings.Contains(out, "�") {
+		t.Fatalf("target view shows no sanitization marker:\n%q", out)
+	}
+	if !strings.Contains(out, "cluster unreachable") {
+		t.Fatalf("target view lost the legitimate error text:\n%q", out)
+	}
+}
+
 // TestTargetStep_ReentryAfterErrorRefetches pins the other half of the
 // reuse decision: a failed attempt is never cached, so re-entering after an
 // error automatically retries instead of leaving the step stuck.

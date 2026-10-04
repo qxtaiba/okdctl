@@ -187,7 +187,10 @@ func nodeOpDetails(sb *Builder, plan *node.OpPlan) {
 			sb.SubKV(shortHost(n.Name)+" ingress", fmt.Sprintf("%d router pod(s) here", len(n.Ingress)))
 		}
 		if n.Blocked != nil {
-			sb.SubKV(shortHost(n.Name)+" blocked", n.Blocked.Error())
+			// n.Blocked can wrap a terraform-plan error carrying raw
+			// subprocess output, unlike the rest of this function's
+			// okdctl-composed strings.
+			sb.SubKV(shortHost(n.Name)+" blocked", tui.SanitizeTerminalEscapes(n.Blocked.Error()))
 		}
 	}
 	sb.Newline()

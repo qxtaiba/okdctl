@@ -110,7 +110,7 @@ func leadingClause(err error) string {
 	if err == nil {
 		return ""
 	}
-	msg := err.Error()
+	msg := tui.SanitizeTerminalEscapes(err.Error())
 	if i := strings.Index(msg, ": "); i > 0 {
 		return msg[:i]
 	}

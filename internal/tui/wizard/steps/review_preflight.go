@@ -186,11 +186,11 @@ func reviewCapacityCheck(cfg *config.Config, snapshot *WizardCapacitySnapshot) r
 		case !node.CPUsKnown || !node.MemoryKnown:
 			state, unknown = "capacity unknown", true
 		}
-		rows = append(rows, fmt.Sprintf("%s %s · %dc/%d GB → %sc/%s", node.Name, state, demand.cpu, demand.memoryMB/1024, cpu, memory))
+		rows = append(rows, fmt.Sprintf("%s %s · %dc/%d GB → %sc/%s", tui.SanitizeTerminalEscapes(node.Name), state, demand.cpu, demand.memoryMB/1024, cpu, memory))
 	}
 	for name := range use {
 		if _, found := byName[name]; !found {
-			rows = append(rows, name+" unavailable")
+			rows = append(rows, tui.SanitizeTerminalEscapes(name)+" unavailable")
 			warning = true
 		}
 	}

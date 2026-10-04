@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 // DefaultCap is how many human log lines the pane keeps: enough headroom to
@@ -145,9 +147,13 @@ func recordText(rec *slog.Record, carried []slog.Attr) string {
 	return b.String()
 }
 
+// writeAttr formats a into the line body before it ever reaches the pane's
+// render sites, sanitizing the formatted value since an attr — "err" above
+// all — routinely carries backend/subprocess text this process never
+// composed.
 func writeAttr(b *strings.Builder, a slog.Attr) {
 	if a.Equal(slog.Attr{}) {
 		return
 	}
-	fmt.Fprintf(b, " %s=%v", a.Key, a.Value)
+	fmt.Fprintf(b, " %s=%s", a.Key, tui.SanitizeTerminalEscapes(a.Value.String()))
 }

@@ -160,6 +160,41 @@ func TestReviewStep_ShowsNewProviderValues(t *testing.T) {
 	}
 }
 
+// TestReviewStep_SanitizesHostileProxmoxFieldText drives a tampered node
+// name (as it would arrive stored in cfg.Provider.Proxmox after a hostile
+// discovery response was selected in the node placement step) through both
+// renderProxmox/renderNodePlacement and the config-changes diff path
+// (reviewConfigSnapshot's downstream renderConfigChanges/
+// renderChangeSummary), which read the same field independently.
+func TestReviewStep_SanitizesHostileProxmoxFieldText(t *testing.T) {
+	const payload = "\x1b[2J\x1b[H"
+
+	saved := reviewTestConfig()
+	cfg := reviewTestConfig()
+	cfg.Provider.Proxmox.Node = "pve1" + payload
+	cfg.Provider.Proxmox.Bridge = "vmbr0" + payload
+	cfg.Provider.Proxmox.ControlPlaneNodes = []string{"pve1" + payload, "pve2", "pve3"}
+	s := NewReviewStep()
+	s.SetConfig(cfg)
+	s.SetSavedConfig(saved)
+
+	frame := s.View(100, 100)
+	if strings.Contains(frame, payload) {
+		t.Fatalf("View() carries the raw clear-screen/cursor-home payload:\n%q", frame)
+	}
+	if !strings.Contains(frame, "�") {
+		t.Fatalf("View() shows no sanitization marker for the tampered node/bridge:\n%q", frame)
+	}
+
+	pane := s.PaneContent(70, 30)
+	if strings.Contains(pane, payload) {
+		t.Fatalf("PaneContent() carries the raw clear-screen/cursor-home payload:\n%q", pane)
+	}
+	if !strings.Contains(pane, "�") {
+		t.Fatalf("PaneContent() shows no sanitization marker for the tampered node:\n%q", pane)
+	}
+}
+
 func TestReviewStep_PreflightChecksSelectedNodeCapacity(t *testing.T) {
 	cfg := reviewTestConfig()
 	cfg.Provider.Proxmox.Node = "pve1"
@@ -182,6 +217,35 @@ func TestReviewStep_PreflightChecksSelectedNodeCapacity(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("review omitted capacity status %q:\n%s", want, out)
 		}
+	}
+}
+
+// TestReviewStep_PreflightSanitizesHostileCapacityNodeText drives a
+// tampered Proxmox node name — both a node present in the discovery
+// snapshot and one assigned but missing from it — through the capacity
+// preflight check's real PaneContent path.
+func TestReviewStep_PreflightSanitizesHostileCapacityNodeText(t *testing.T) {
+	const payload = "\x1b[2J\x1b[H"
+
+	cfg := reviewTestConfig()
+	cfg.Provider.Proxmox.Node = "pve1" + payload
+	cfg.Provider.Proxmox.ControlPlaneNodes = []string{"pve1" + payload}
+	cfg.Provider.Proxmox.WorkerNodes = []string{"missing" + payload}
+	cfg.Topology.ControlPlane = config.NodeConfig{Count: 1, CPU: 8, MemoryMB: 32768}
+	cfg.Topology.Workers = config.NodeConfig{Count: 1, CPU: 4, MemoryMB: 16384}
+	snapshot := &WizardCapacitySnapshot{discovery: &proxmoxDiscovery{Nodes: []proxmoxNode{
+		{Name: "pve1" + payload, Status: "online", CPUs: 24, CPUsKnown: true, MemGB: 96, MemKnown: true},
+	}}}
+	s := NewReviewStep()
+	s.SetConfig(cfg)
+	s.SetCapacity(snapshot)
+
+	frame := s.PaneContent(70, 30)
+	if strings.Contains(frame, payload) {
+		t.Fatalf("PaneContent() carries the raw clear-screen/cursor-home payload:\n%q", frame)
+	}
+	if !strings.Contains(frame, "�") {
+		t.Fatalf("PaneContent() shows no sanitization marker:\n%q", frame)
 	}
 }
 

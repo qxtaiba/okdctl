@@ -1,6 +1,7 @@
 package logview
 
 import (
+	"errors"
 	"log/slog"
 	"strings"
 	"sync"
@@ -76,6 +77,33 @@ func TestLogRingHandlerCarriesWithAttrs(t *testing.T) {
 	lines, _ := r.Snapshot()
 	if len(lines) != 1 || !strings.Contains(lines[0].Text, "run_id=run-42") {
 		t.Errorf("captured %+v, want the carried run_id", lines)
+	}
+}
+
+// TestLogRingHandlerSanitizesHostileAttrValue drives a hostile escape
+// sequence through a real slog call — as an "err" attr value, the pattern
+// every wrapped error logged through this ring uses — and confirms the
+// rendered pane never carries the raw escape or the text it tried to write
+// into the window title.
+func TestLogRingHandlerSanitizesHostileAttrValue(t *testing.T) {
+	const payload = "\x1b]0;pwned\x07"
+
+	r := NewRing(DefaultCap)
+	log := slog.New(r.Handler(nil))
+	log.Error("discovery failed", "err", errors.New("dial proxmox"+payload))
+
+	frame := renderPane(r, view{}, 80, 5, false)
+	if strings.Contains(frame, payload) {
+		t.Fatalf("rendered pane carries the raw osc payload:\n%q", frame)
+	}
+	if strings.Contains(frame, "pwned") {
+		t.Fatalf("osc payload text leaked into the rendered pane:\n%q", frame)
+	}
+	if !strings.Contains(frame, "�") {
+		t.Fatalf("rendered pane shows no sanitization marker for the hostile attr:\n%q", frame)
+	}
+	if !strings.Contains(frame, "discovery failed") {
+		t.Fatalf("rendered pane lost the legitimate message text:\n%q", frame)
 	}
 }
 

@@ -143,6 +143,32 @@ func TestErrorSummaryGoldenAtWidths(t *testing.T) {
 	}
 }
 
+// TestErrorSummarySanitizesHostileBackendText proves a backend error whose
+// Error() text carries an OSC 0 sequence (sets the window title) never
+// reaches the rendered error box as a live escape: describeError's fallback
+// for an untyped error is the one generic sink every CLI command failure
+// flows through (ErrorSummary -> describeError), so this exercises it
+// directly rather than one of its many callers.
+func TestErrorSummarySanitizesHostileBackendText(t *testing.T) {
+	const payload = "\x1b]0;pwned\x07"
+	err := errors.New("connection refused" + payload + " while contacting proxmox")
+
+	out := ErrorSummary(err, 1, "run-1")
+
+	if strings.Contains(out, payload) {
+		t.Fatalf("rendered error box carries the raw osc payload:\n%q", out)
+	}
+	if strings.Contains(out, "pwned") {
+		t.Fatalf("osc payload text leaked into the rendered error box:\n%q", out)
+	}
+	if !strings.Contains(out, "�") {
+		t.Fatalf("rendered error box shows no sanitization marker:\n%q", out)
+	}
+	if !strings.Contains(out, "connection refused") || !strings.Contains(out, "while contacting proxmox") {
+		t.Fatalf("rendered error box lost the legitimate message text:\n%q", out)
+	}
+}
+
 func TestWrapTextHardSplitsLongToken(t *testing.T) {
 	long := strings.Repeat("a", 50)
 	lines := tui.WrapLines(long, 20)
