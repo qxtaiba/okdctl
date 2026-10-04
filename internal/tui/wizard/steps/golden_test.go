@@ -975,6 +975,68 @@ func TestGolden_NetworkingMalformedCIDRShowsOneCleanError(t *testing.T) {
 	}
 }
 
+// TestGolden_NetworkingPairedFieldsVisible pins mechanism 2's two declared
+// networking pairs (start_ip+interface, bastion_ip+vip) once tabbed into
+// view — both sections are below the fold in the step's default-focus
+// goldens, so this is the only pinned coverage proving they actually render
+// as one joined row rather than two.
+func TestGolden_NetworkingPairedFieldsVisible(t *testing.T) {
+	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
+
+	for _, sz := range []struct{ w, h int }{{80, 24}, {120, 40}} {
+		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
+			tui.SetTerminalWidth(sz.w)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+			m := newGoldenModel(t)
+			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
+			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDNetworking})
+
+			// machine_cidr -> gateway -> dns_servers -> pod_cidr ->
+			// service_cidr -> host_prefix -> start_ip (6 tabs).
+			for range 6 {
+				m.Update(tabKey)
+			}
+			m.Update(wizard.FocusChangedMsg{})
+			staticIPFrame := tuitest.RenderAt(t, m, sz.w, sz.h)
+			tuitest.Golden(t, fmt.Sprintf("networking-paired-static-ip_%dx%d", sz.w, sz.h), staticIPFrame)
+			tuitest.AssertFits(t, staticIPFrame, sz.w, sz.h)
+			plain := tuitest.StripANSI(staticIPFrame)
+			startIdx := strings.Index(plain, "start ip")
+			ifaceIdx := strings.Index(plain, "interface")
+			if startIdx < 0 || ifaceIdx < 0 {
+				t.Fatalf("frame is missing start ip or interface:\n%s", plain)
+			}
+			if startLine, ifaceLine := lineOf(plain, startIdx), lineOf(plain, ifaceIdx); startLine != ifaceLine {
+				t.Errorf("start ip and interface labels are on different rows, want them paired on one row:\n%s", plain)
+			}
+
+			// interface -> bastion_ip (2 more tabs).
+			for range 2 {
+				m.Update(tabKey)
+			}
+			m.Update(wizard.FocusChangedMsg{})
+			loadBalancingFrame := tuitest.RenderAt(t, m, sz.w, sz.h)
+			tuitest.Golden(t, fmt.Sprintf("networking-paired-load-balancing_%dx%d", sz.w, sz.h), loadBalancingFrame)
+			tuitest.AssertFits(t, loadBalancingFrame, sz.w, sz.h)
+			plain = tuitest.StripANSI(loadBalancingFrame)
+			bastionIdx := strings.Index(plain, "bastion ip")
+			vipIdx := strings.Index(plain, "api vip")
+			if bastionIdx < 0 || vipIdx < 0 {
+				t.Fatalf("frame is missing bastion ip or api vip:\n%s", plain)
+			}
+			if bastionLine, vipLine := lineOf(plain, bastionIdx), lineOf(plain, vipIdx); bastionLine != vipLine {
+				t.Errorf("bastion ip and api vip labels are on different rows, want them paired on one row:\n%s", plain)
+			}
+		})
+	}
+}
+
+// lineOf returns the 0-based line number byteIdx falls on within s.
+func lineOf(s string, byteIdx int) int {
+	return strings.Count(s[:byteIdx], "\n")
+}
+
 func TestGolden_ProxmoxEnterHighlightsInvalidFields(t *testing.T) {
 	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
 	enterKey := tea.KeyPressMsg{Code: tea.KeyEnter}

@@ -38,6 +38,12 @@ func fieldBox(content string, outer int, focused, hasErr, disabled bool) string 
 // so the box never resizes when the user's first edit drops the tag.
 const defaultTagReserve = 8
 
+// DefaultTagReserve mirrors defaultTagReserve for a caller outside the
+// package that must reserve the same room — the wizard's field pairing
+// keeps a paired column's box width even with its sibling's by reserving
+// this much in both halves whenever either one carries a default tag.
+const DefaultTagReserve = defaultTagReserve
+
 // All four are assigned by RebuildStyles: under the dual-polarity Theme
 // every role rebinds on the background flip, so an init-captured color
 // would freeze its dark value.

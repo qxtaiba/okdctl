@@ -6,6 +6,11 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
+// pairKeyCredentials joins username and password into one paired row;
+// named apart from the "credentials" section title since the two strings
+// serve different purposes and a shared literal would read as accidental.
+const pairKeyCredentials = "username_password"
+
 func proxmoxGet(getter func(p *config.ProxmoxConfig) string) wizard.ConfigGetter {
 	return func(cfg *config.Config) string {
 		if cfg.Provider.Proxmox == nil {
@@ -57,6 +62,7 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 					Default:   "root@pam",
 					Help:      "proxmox username (user@realm)",
 					Required:  true,
+					PairKey:   pairKeyCredentials,
 					ConfigSet: proxmoxSet(func(p *config.ProxmoxConfig, v string) { p.Username = v }),
 					ConfigGet: proxmoxGet(func(p *config.ProxmoxConfig) string { return p.Username }),
 				},
@@ -67,6 +73,7 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 					Help:      "proxmox password",
 					Type:      wizard.FieldTypePassword,
 					Required:  true,
+					PairKey:   pairKeyCredentials,
 					ConfigSet: proxmoxSet(func(p *config.ProxmoxConfig, v string) { p.Password.Set(v) }),
 					// Don't load password from config
 				},

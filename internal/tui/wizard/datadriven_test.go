@@ -1189,3 +1189,116 @@ func TestDataDrivenDraftCursorRestoresSafeFieldAndOmitsCredentialField(t *testin
 		t.Fatal("SetDraftFieldKey(api_token) = true, want credential fields rejected")
 	}
 }
+
+// pairedTestDefinition declares two short text fields sharing a PairKey, in
+// a section of their own so the surrounding section head never interferes
+// with the row-join assertions below.
+func pairedTestDefinition() *StepDefinition {
+	return &StepDefinition{
+		ID:    StepIDBasics,
+		Title: "paired test step",
+		Sections: []SectionDefinition{
+			{
+				Title: "pair section",
+				Fields: []FieldDefinition{
+					{Key: "field_a", Label: "field a", PairKey: "p"},
+					{Key: "field_b", Label: "field b", PairKey: "p"},
+				},
+			},
+		},
+	}
+}
+
+// TestDataDrivenStep_PairedFieldsRenderOnOneRow pins mechanism 2: two
+// fields sharing a PairKey join into a single visual row once the form
+// column is wide enough, with one combined LineSpan covering both.
+func TestDataDrivenStep_PairedFieldsRenderOnOneRow(t *testing.T) {
+	step := NewDataDrivenStep(pairedTestDefinition())
+	step.SetFocused(true)
+
+	view := tuitest.StripANSI(step.View(100, 24))
+	found := false
+	for _, line := range strings.Split(view, "\n") {
+		if strings.Contains(line, "field a") && strings.Contains(line, "field b") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("View(100) = %q, want a row containing both paired labels", view)
+	}
+
+	if cmd := step.form.FocusField(0, 0); cmd != nil {
+		cmd()
+	}
+	spanA, okA := step.FocusedSpan()
+	if cmd := step.form.FocusField(0, 1); cmd != nil {
+		cmd()
+	}
+	spanB, okB := step.FocusedSpan()
+	if !okA || !okB || spanA != spanB {
+		t.Fatalf("FocusedSpan() for paired fields = %v (ok=%v), %v (ok=%v), want identical spans", spanA, okA, spanB, okB)
+	}
+}
+
+// TestDataDrivenStep_PairedFieldsFallBackBelowCompactFloor pins the
+// pairMinInnerWidth floor: below the 80-column "ordinary" tier, a declared
+// pair renders single column instead of joining a row.
+func TestDataDrivenStep_PairedFieldsFallBackBelowCompactFloor(t *testing.T) {
+	step := NewDataDrivenStep(pairedTestDefinition())
+	step.SetFocused(true)
+
+	view := tuitest.StripANSI(step.View(60, 24))
+	for _, line := range strings.Split(view, "\n") {
+		if strings.Contains(line, "field a") && strings.Contains(line, "field b") {
+			t.Fatalf("View(60) = %q, want field a and field b on separate rows below the pairing floor", view)
+		}
+	}
+}
+
+// TestDataDrivenStep_PairedFieldsReserveDefaultTagSymmetrically pins the
+// controller ruling that a pair mixing a default-tagged field with an
+// untagged one reserves the tag's room in both halves, so the two boxes
+// stay the same width rather than the tagged one rendering visibly
+// narrower than its sibling.
+func TestDataDrivenStep_PairedFieldsReserveDefaultTagSymmetrically(t *testing.T) {
+	def := &StepDefinition{
+		ID:    StepIDBasics,
+		Title: "mixed default pair test",
+		Sections: []SectionDefinition{
+			{
+				Title: "pair section",
+				Fields: []FieldDefinition{
+					{Key: "has_default", Label: "has default", Default: "x", PairKey: "p"},
+					{Key: "no_default", Label: "no default", PairKey: "p"},
+				},
+			},
+		},
+	}
+	step := NewDataDrivenStep(def)
+	step.SetFocused(true)
+
+	view := tuitest.StripANSI(step.View(100, 24))
+	lines := strings.Split(view, "\n")
+	var boxTop string
+	for _, line := range lines {
+		if strings.Contains(line, "╭") {
+			boxTop = line
+			break
+		}
+	}
+	if boxTop == "" {
+		t.Fatalf("View(100) = %q, want a box border row", view)
+	}
+	openA := strings.Index(boxTop, "╭")
+	closeA := strings.Index(boxTop[openA:], "╮") + openA
+	openB := strings.Index(boxTop[closeA:], "╭") + closeA
+	closeB := strings.Index(boxTop[openB:], "╮") + openB
+	if openA < 0 || closeA < openA || openB < closeA || closeB < openB {
+		t.Fatalf("box border row = %q, want two boxes", boxTop)
+	}
+	leftWidth := closeA - openA + 1
+	rightWidth := closeB - openB + 1
+	if leftWidth != rightWidth {
+		t.Errorf("paired box widths = %d (default-tagged) vs %d (untagged), want equal", leftWidth, rightWidth)
+	}
+}

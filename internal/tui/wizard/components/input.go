@@ -239,6 +239,13 @@ func (f *InputField) IsDefault() bool {
 	return f.isDefault
 }
 
+// HasDefaultTag reports whether the field has ever carried a default value
+// — pairing uses this to decide whether a column pair needs a symmetric
+// "default" tag reserve, matching boxOuterWidth's own hasDefault check.
+func (f *InputField) HasDefaultTag() bool {
+	return f.hasDefault
+}
+
 // Focus gives the field focus, marks it touched so a later Blur will
 // validate it, restores the cursor to where Blur last left it, and returns
 // the textinput blink command.

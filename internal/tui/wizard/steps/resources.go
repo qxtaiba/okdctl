@@ -12,6 +12,13 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
+// pairKeyControlPlaneResources and pairKeyWorkerResources group each
+// role's three resource fields into one 3-up row.
+const (
+	pairKeyControlPlaneResources = "cp_resources"
+	pairKeyWorkerResources       = "worker_resources"
+)
+
 // ResourcesStepState pairs the resources step with the Config it edits, so
 // callers can inspect values after the wizard completes.
 type ResourcesStepState struct {
@@ -40,6 +47,7 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					Help:      "okd minimum: 4 vcpus",
 					Width:     wizard.FieldWidthNumber,
 					Required:  true,
+					PairKey:   pairKeyControlPlaneResources,
 					Validate:  config.ValidateCPU,
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.ControlPlane.CPU = v }),
 					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.ControlPlane.CPU }),
@@ -51,6 +59,7 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					Help:      "okd minimum: 8192 mb (8 gb)",
 					Width:     wizard.FieldWidthNumber,
 					Required:  true,
+					PairKey:   pairKeyControlPlaneResources,
 					Validate:  config.ValidateMemory,
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.ControlPlane.MemoryMB = v }),
 					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.ControlPlane.MemoryMB }),
@@ -62,6 +71,7 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					Help:     "boot disk for control plane nodes (okd minimum: 50 gb)",
 					Width:    wizard.FieldWidthNumber,
 					Required: true,
+					PairKey:  "cp_resources",
 					Validate: config.ValidateOSDisk,
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) {
 						c.Topology.ControlPlane.DiskGB = v
@@ -81,6 +91,7 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					Help:      "okd minimum: 2 vcpus",
 					Width:     wizard.FieldWidthNumber,
 					Required:  true,
+					PairKey:   pairKeyWorkerResources,
 					Validate:  config.ValidateCPU,
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.Workers.CPU = v }),
 					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.Workers.CPU }),
@@ -92,6 +103,7 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					Help:      "okd minimum: 8192 mb (8 gb)",
 					Width:     wizard.FieldWidthNumber,
 					Required:  true,
+					PairKey:   pairKeyWorkerResources,
 					Validate:  config.ValidateMemory,
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.Workers.MemoryMB = v }),
 					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.Workers.MemoryMB }),
@@ -103,6 +115,7 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					Help:      "boot disk for worker nodes (okd minimum: 50 gb)",
 					Width:     wizard.FieldWidthNumber,
 					Required:  true,
+					PairKey:   pairKeyWorkerResources,
 					Validate:  config.ValidateOSDisk,
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.Workers.DiskGB = v }),
 					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.Workers.DiskGB }),
@@ -111,7 +124,6 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 		},
 		{
 			Title: fieldDataStorage,
-			//nolint:dupl // two int fields share the FieldDefinition shape with advanced.go's timeouts section; data, not logic
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "worker_data_disk",
@@ -120,6 +132,7 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					Help:      "data disk per worker for ceph/storage — set to 0 to disable",
 					Width:     wizard.FieldWidthNumber,
 					Required:  true,
+					PairKey:   "data_disks",
 					Validate:  config.ValidateDataDisk,
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Disks.WorkerDataSizeGB = v }),
 					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Disks.WorkerDataSizeGB }),
@@ -131,6 +144,7 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					Help:      "data disk per control plane node for ceph/storage — set to 0 to disable",
 					Width:     wizard.FieldWidthNumber,
 					Required:  true,
+					PairKey:   "data_disks",
 					Validate:  config.ValidateDataDisk,
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Disks.ControlPlaneDataSizeGB = v }),
 					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Disks.ControlPlaneDataSizeGB }),
