@@ -22,14 +22,9 @@ func (p *Phase) CleanupBootstrap(ctx context.Context, cfg *config.Config, opts *
 	)
 	defer tf.ZeroizeEnv()
 
-	if err := tf.Init(ctx); err != nil {
-		return tf.WithLockHint(&errtypes.ClusterError{Msg: "bootstrap: terraform init failed", Err: err})
-	}
-
 	vars := map[string]string{"bootstrap_enabled": "false"}
 	targets := []string{"module.okd_cluster.proxmox_virtual_environment_vm.bootstrap"}
 
-	p.Log.Info("bootstrap: planning vm destruction")
 	planFile := "bootstrap-destroy.tfplan"
 	planPath := filepath.Join(terraformDir, planFile)
 	// Removed on exit — a leftover plan file blocks reuse on the next run.
@@ -38,15 +33,23 @@ func (p *Phase) CleanupBootstrap(ctx context.Context, cfg *config.Config, opts *
 			p.Log.Warn("bootstrap: plan file cleanup failed", "err", err)
 		}
 	}()
-	if err := tf.Plan(ctx, terraform.PlanOptions{
-		OutputPlanFile: planFile,
-		Vars:           vars,
-		Targets:        targets,
-	}); err != nil {
-		return tf.WithLockHint(&errtypes.ClusterError{Msg: "bootstrap: terraform plan failed", Err: err})
-	}
 
+	// Init and plan can both rewrite state (schema migration, refresh), so
+	// both belong after the backup, alongside the apply they lead into.
 	err := terraform.WithStateRecovery(ctx, tf, "bootstrap: terraform apply", func() error {
+		if err := tf.Init(ctx); err != nil {
+			return tf.WithLockHint(&errtypes.ClusterError{Msg: "bootstrap: terraform init failed", Err: err})
+		}
+
+		p.Log.Info("bootstrap: planning vm destruction")
+		if err := tf.Plan(ctx, terraform.PlanOptions{
+			OutputPlanFile: planFile,
+			Vars:           vars,
+			Targets:        targets,
+		}); err != nil {
+			return tf.WithLockHint(&errtypes.ClusterError{Msg: "bootstrap: terraform plan failed", Err: err})
+		}
+
 		// Written before apply so a crash never leaves tfvars claiming the VM
 		// should exist while state says otherwise (which would trigger re-creation).
 		statePath := filepath.Join(terraformDir, workspace.BootstrapStateSentinelFile)
