@@ -141,14 +141,12 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 }
 
 // NewResourcesStep returns the resources wizard step and its state.
-func NewResourcesStep(capacity ...*WizardCapacitySnapshot) (*wizard.DataDrivenStep, *ResourcesStepState) {
+func NewResourcesStep(capacity *WizardCapacitySnapshot) (*wizard.DataDrivenStep, *ResourcesStepState) {
 	step := wizard.NewDataDrivenStep(&ResourcesStepDefinition)
 
 	state := &ResourcesStepState{
-		Step: step,
-	}
-	if len(capacity) > 0 {
-		state.Capacity = capacity[0]
+		Step:     step,
+		Capacity: capacity,
 	}
 	step.WithPinnedFooterFunc(func(s *wizard.DataDrivenStep, width int) string {
 		return renderResourceFooter(s, state, width)

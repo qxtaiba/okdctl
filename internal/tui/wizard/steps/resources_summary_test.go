@@ -1,6 +1,7 @@
 package steps
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -17,7 +18,7 @@ import (
 func TestResourceSummaryRebindsOnPolarityFlip(t *testing.T) {
 	t.Cleanup(func() { tui.SetDarkBackground(true) })
 
-	step, state := NewResourcesStep()
+	step, state := NewResourcesStep(nil)
 	tui.SetDarkBackground(false)
 
 	out := renderResourceFooter(step, state, 120)
@@ -55,9 +56,81 @@ func TestResourcePinnedFooterIncludesBootstrapAndOnlineCapacity(t *testing.T) {
 	}
 }
 
+// resourcesFooterTestConfig returns a small, fixed topology shared by the
+// resources footer's three branch goldens, so only the capacity snapshot
+// (known-and-sufficient, known-but-exceeded, or unknown) varies between them.
+func resourcesFooterTestConfig() *config.Config {
+	cfg := config.MinimalConfig()
+	cfg.Topology.ControlPlane.Count = 2
+	cfg.Topology.Workers.Count = 1
+	cfg.Topology.Workers.CPU = 4
+	cfg.Topology.Workers.MemoryMB = 8192
+	cfg.Topology.Workers.DiskGB = 50
+	cfg.Disks.WorkerDataSizeGB = 0
+	cfg.Topology.Bootstrap = config.NodeConfig{Count: 1, CPU: 4, MemoryMB: 8192, DiskGB: 50}
+	return cfg
+}
+
+// TestGolden_ResourcesFooterBranches pins the pinned footer's three mutually
+// exclusive outcomes against the same topology: capacity known and
+// sufficient (healthy), known and exceeded, and unknown (no CPU/memory
+// probe for an online node).
+func TestGolden_ResourcesFooterBranches(t *testing.T) {
+	cases := []struct {
+		name      string
+		discovery *proxmoxDiscovery
+		want      []string
+	}{
+		{
+			name: "healthy",
+			discovery: &proxmoxDiscovery{Nodes: []proxmoxNode{
+				{Name: "pve1", Status: "online", CPUs: 64, CPUsKnown: true, MemGB: 256, MemKnown: true},
+			}},
+			want: []string{"16 vcpu", "32 gb ram", "200 gb disk"},
+		},
+		{
+			name: "exceeds",
+			discovery: &proxmoxDiscovery{Nodes: []proxmoxNode{
+				{Name: "pve1", Status: "online", CPUs: 4, CPUsKnown: true, MemGB: 8, MemKnown: true},
+			}},
+			want: []string{"16 vcpu", "exceeds online capacity"},
+		},
+		{
+			name: "unknown",
+			discovery: &proxmoxDiscovery{Nodes: []proxmoxNode{
+				{Name: "pve1", Status: "online", CPUsKnown: false, MemKnown: false},
+			}},
+			want: []string{"16 vcpu", "online capacity unknown"},
+		},
+	}
+
+	for _, tc := range cases {
+		for _, width := range []int{80, 180} {
+			t.Run(fmt.Sprintf("%s_w%d", tc.name, width), func(t *testing.T) {
+				cfg := resourcesFooterTestConfig()
+				capacity := &WizardCapacitySnapshot{cfg: cfg, discovery: tc.discovery}
+				step, state := NewResourcesStep(capacity)
+				state.Cfg = cfg
+				step.LoadFromConfig(cfg, true)
+
+				footer := step.PinnedFooter(width)
+				tuitest.Golden(t, fmt.Sprintf("resources-footer-%s_w%d", tc.name, width), footer)
+				tuitest.AssertFits(t, footer, width, 0)
+
+				plain := tuitest.StripANSI(footer)
+				for _, want := range tc.want {
+					if !strings.Contains(plain, want) {
+						t.Errorf("%s footer at width %d is missing %q:\n%s", tc.name, width, want, plain)
+					}
+				}
+			})
+		}
+	}
+}
+
 func TestResourcePinnedFooterTracksKeyInput(t *testing.T) {
 	cfg := config.DefaultConfig()
-	step, state := NewResourcesStep()
+	step, state := NewResourcesStep(nil)
 	state.Cfg = cfg
 	step.LoadFromConfig(cfg, true)
 	step.Init()

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -496,8 +497,50 @@ func (s *WelcomeStep) View(width, height int) string {
 	if s.opening != "" {
 		parts = append(parts, "", wizard.Spinner(s.frame)+" "+tui.MutedStyle.Render("opening "+s.opening+"…"))
 	}
+	launcher := lipgloss.JoinVertical(lipgloss.Center, parts...)
 
-	return lipgloss.JoinVertical(lipgloss.Center, parts...)
+	// The "get started" panel only describes what's ahead for a truly
+	// blank slate (s.saveSlot == ""); a config already on disk reaches
+	// this same centered layout too (no live cluster to probe yet), where
+	// that copy would be wrong.
+	if width < hubGetStartedPanelMinWidth || s.saveSlot != "" {
+		return launcher
+	}
+	return lipgloss.JoinHorizontal(lipgloss.Center, launcher, strings.Repeat(" ", hubGetStartedPanelGap), renderGetStartedPanel())
+}
+
+// hubGetStartedPanelMinWidth is the content width at and above which the
+// blank-slate hub earns a second column instead of sitting as a lone
+// centered menu in an otherwise empty frame — chosen so a 150-column
+// terminal (the frame's own form+pane split threshold, wizard.SplitsFrame)
+// clears it once the outer frame's own padding and border are subtracted.
+const hubGetStartedPanelMinWidth = 140
+
+const (
+	hubGetStartedPanelGap   = 4
+	hubGetStartedPanelWidth = 42
+)
+
+// renderGetStartedPanel renders the blank-slate hub's second column: an
+// honest preview of the four phases "get started" walks through, drawn
+// from the same connect/cluster/extras/review grouping the header trail
+// and deployPhases use, not invented marketing copy.
+func renderGetStartedPanel() string {
+	phases := []struct{ label, detail string }{
+		{"connect", "provider, distribution, credentials"},
+		{labelCluster, "name, nodes, networking, resources"},
+		{"extras", "add-ons, files, advanced settings"},
+		{"review", "confirm changes, deploy"},
+	}
+	labelStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true)
+	detailStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim())
+
+	rows := make([]string, 0, len(phases)*2+2)
+	for _, phase := range phases {
+		rows = append(rows, labelStyle.Render(phase.label), detailStyle.Render("  "+phase.detail))
+	}
+	rows = append(rows, "", tui.DimStyle.Render("writes okdctl.yaml, ready to deploy"))
+	return tui.Card("GET STARTED", strings.Join(rows, "\n"), hubGetStartedPanelWidth, tui.ColorAccent())
 }
 
 // Validate always returns nil; the hub has no inputs to validate.

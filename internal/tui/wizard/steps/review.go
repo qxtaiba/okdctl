@@ -543,7 +543,12 @@ func reviewChangeLabel(fieldPath string) string {
 	if strings.HasPrefix(fieldPath, "addons.") {
 		return strings.TrimSuffix(strings.TrimPrefix(fieldPath, "addons."), ".enabled") + " enabled"
 	}
-	return labels[fieldPath]
+	if label, ok := labels[fieldPath]; ok {
+		return label
+	}
+	// An unmapped path falls back to itself rather than "", so a new config
+	// field surfaces here visibly instead of vanishing from the diff.
+	return fieldPath
 }
 
 // PinnedFooter renders the deploy/save action selector inline on the help

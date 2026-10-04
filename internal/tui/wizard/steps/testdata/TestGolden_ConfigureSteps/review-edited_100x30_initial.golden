@@ -3,9 +3,9 @@
   │ O K D C T L                                                                                  │  
   │ review your configuration                                connect · cluster · extras · review │  
   │──────────────────────────────────────────────────────────────────────────────────────────────│  
-  │  PREFLIGHT · 1 passed · 0 warnings · 2 not checked                                           │  
-  │  ○ pull secret · not configured                                                              │  
-  │  ○ ssh public key · not configured                                                           │  
+  │  PREFLIGHT · 1 passed · 0 warnings · 2 failed · 0 not checked                                │  
+  │  ✗ pull secret · not configured                                                              │  
+  │  ✗ ssh public key · not configured                                                           │  
   │  ✓ CIDR ranges · no overlap · 192.168.1.0/24 · 10.128.0.0/14 · 172.30.0.0/16                 │  
   │  CONFIG CHANGES · 2                                                                          │  
   │    domain                  k8s.local → prod.example                                          │  

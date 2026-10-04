@@ -26,15 +26,13 @@ const statusRefreshKey = "r"
 
 const statusRefreshInterval = 30 * time.Second
 
-// The split form's 104-cell width loses four cells to the viewport inset.
-const statusSplitBodyWidth = 100
-
 // errNoStatusSource reports a status screen assembled with no source behind it.
 var errNoStatusSource = errors.New("read cluster status: no source configured")
 
-// StatusSource supplies the snapshot the status screen renders. The collecting
-// side owns its own context (the way lifecycle.Hooks do), so the screen never
-// fabricates one, and a test or the demo seeds a fixture through the same seam.
+// StatusSource supplies the snapshot the status screen renders, with the
+// collecting side owning its own context (as lifecycle.Hooks do) so the
+// screen never fabricates one and a test or the demo seeds a fixture
+// through the same seam.
 type StatusSource interface {
 	ClusterStatus(context.Context) (*okd.ClusterStatus, error)
 }
@@ -70,6 +68,8 @@ type StatusStep struct {
 	generation      uint64
 	selectedNode    string
 	detailOpen      bool
+	termWidth       int
+	termHeight      int
 	lifecycleCtx    context.Context
 	cancelLifecycle context.CancelFunc
 	cancelProbe     context.CancelFunc
@@ -222,6 +222,14 @@ func (s *StatusStep) SuppressesSplit() bool {
 	return false
 }
 
+// SetTerminalSize records the terminal's own dimensions, the frame's actual
+// split-layout gate (wizard.SplitsFrame) — not a second, independently
+// guessed content-width threshold that can disagree with it and strand the
+// selected node's detail off-screen.
+func (s *StatusStep) SetTerminalSize(width, height int) {
+	s.termWidth, s.termHeight = width, height
+}
+
 // View renders the probe's box, its in-flight notice, or its failure.
 func (s *StatusStep) View(width, height int) string {
 	s.SetSize(width, height)
@@ -231,7 +239,10 @@ func (s *StatusStep) View(width, height int) string {
 	if s.status == nil {
 		return fitStatusLines(statusEmptyLines(s.loading, s.err), width, height)
 	}
-	return fitStatusLines(statusBoardLines(s.status, s.loading, s.err, s.selectedNode, s.detailOpen, width, width >= statusSplitBodyWidth), width, height)
+	// 1: StatusFlow always wraps this step alone, so it's always the frame's
+	// only step for splitMinHeight's purposes.
+	split := wizard.SplitsFrame(s.termWidth, s.termHeight, 1)
+	return fitStatusLines(statusBoardLines(s.status, s.loading, s.err, s.selectedNode, s.detailOpen, width, split), width, height)
 }
 
 // PaneContent renders selected-node and cluster facts beside the grouped node table.

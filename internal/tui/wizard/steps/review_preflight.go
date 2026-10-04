@@ -15,11 +15,13 @@ import (
 )
 
 type reviewCheck struct {
-	label   string
-	status  string
-	detail  string
-	passed  bool
-	warning bool
+	label         string
+	status        string
+	detail        string
+	passed        bool
+	warning       bool
+	failed        bool // a required input is missing or unusable — blocks deploy
+	notApplicable bool // the check doesn't apply to this config, not merely unrun
 }
 
 func reviewPreflight(cfg *config.Config, capacity ...*WizardCapacitySnapshot) []reviewCheck {
@@ -27,11 +29,11 @@ func reviewPreflight(cfg *config.Config, capacity ...*WizardCapacitySnapshot) []
 		return nil
 	}
 	checks := []reviewCheck{
-		reviewFileCheck("pull secret", cfg.Files.PullSecret),
-		reviewFileCheck("ssh public key", cfg.Files.SSHPublicKey),
+		reviewFileCheck("pull secret", cfg.Files.PullSecret, true),
+		reviewFileCheck("ssh public key", cfg.Files.SSHPublicKey, true),
 	}
 	if cfg.Addons["flux"].Enabled {
-		check := reviewFileCheck("flux deploy key", system.ExpandPath("~/.ssh/flux-deploy-key"))
+		check := reviewFileCheck("flux deploy key", system.ExpandPath("~/.ssh/flux-deploy-key"), false)
 		check.detail = "~/.ssh/flux-deploy-key"
 		checks = append(checks, check)
 	}
@@ -74,7 +76,7 @@ func reviewPreflight(cfg *config.Config, capacity ...*WizardCapacitySnapshot) []
 		networkStatus = "no overlap"
 		result := config.ValidateWithOptions(cfg, config.ValidationOptions{Scope: config.ScopeNetworking})
 		for _, err := range result.Errors {
-			if strings.Contains(err.Message, "overlaps with") {
+			if err.Code == config.ValidationErrorCodeCIDROverlap {
 				networkStatus = "overlap detected"
 				networkWarning = true
 				break
@@ -102,17 +104,26 @@ func configuredCIDRs(networks []string) []string {
 	return configured
 }
 
-func reviewFileCheck(label, path string) reviewCheck {
+// reviewFileCheck checks path's readability for a preflight row; required
+// marks a missing or unreadable path as a blocking failure rather than a
+// mere warning, since the deploy cannot proceed without it.
+func reviewFileCheck(label, path string, required bool) reviewCheck {
 	status := readableFileStatus(path)
-	return reviewCheck{
-		label: label, status: status, detail: path, passed: status == "readable",
-		warning: status == statusUnavailable,
+	readable := status == "readable"
+	check := reviewCheck{label: label, status: status, detail: path, passed: readable}
+	switch {
+	case readable:
+	case required:
+		check.failed = true
+	case status == statusUnavailable:
+		check.warning = true
 	}
+	return check
 }
 
 func reviewCapacityCheck(cfg *config.Config, snapshot *WizardCapacitySnapshot) reviewCheck {
 	if cfg.Provider.Proxmox == nil {
-		return reviewCheck{label: labelSelectedCapacity, status: "not applicable"}
+		return reviewCheck{label: labelSelectedCapacity, status: "not applicable", notApplicable: true}
 	}
 	nodes := snapshot.Nodes()
 	if len(nodes) == 0 {
@@ -220,9 +231,12 @@ func renderReviewPreflight(checks []reviewCheck, width int) string {
 	if len(checks) == 0 {
 		return ""
 	}
-	passed, warnings, unchecked := 0, 0, 0
+	passed, warnings, failed, unchecked := 0, 0, 0, 0
 	for _, check := range checks {
 		switch {
+		case check.notApplicable:
+		case check.failed:
+			failed++
 		case check.warning:
 			warnings++
 		case check.passed:
@@ -232,12 +246,14 @@ func renderReviewPreflight(checks []reviewCheck, width int) string {
 		}
 	}
 	var b strings.Builder
-	header := fmt.Sprintf("PREFLIGHT · %d passed · %d warnings · %d not checked", passed, warnings, unchecked)
+	header := fmt.Sprintf("PREFLIGHT · %d passed · %d warnings · %d failed · %d not checked", passed, warnings, failed, unchecked)
 	b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText()).Render(tui.Truncate(header, width)))
 	b.WriteString("\n")
 	for _, check := range checks {
 		icon, color := tui.IconPending, tui.ColorTextFaint()
 		switch {
+		case check.failed:
+			icon, color = tui.IconError, tui.ColorError()
 		case check.warning:
 			icon, color = tui.IconWarning, tui.ColorWarning()
 		case check.passed:

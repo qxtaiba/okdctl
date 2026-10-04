@@ -106,6 +106,9 @@ func TestStatusStepWidePaneTracksSelectionAndDetails(t *testing.T) {
 			t.Errorf("expanded wide pane is missing %q:\n%s", want, body)
 		}
 	}
+	// A terminal this size actually splits (wizard.SplitsFrame), so View's
+	// own body content must defer the detail to the pane.
+	s.SetTerminalSize(180, 48)
 	if strings.Contains(s.View(100, 30), "Ready condition") {
 		t.Errorf("wide detail should stay in the pane, not duplicate under the table:\n%s", s.View(100, 30))
 	}
@@ -296,6 +299,70 @@ func TestStatusStepWithoutASourceReportsIt(t *testing.T) {
 	}
 }
 
+// TestGolden_StatusBoardBanners pins three previously goldenless states: the
+// initial in-flight probe (no snapshot yet), a probe failure with no
+// snapshot yet, and a refresh failure that keeps showing the last good
+// snapshot under its "showing last snapshot" banner.
+func TestGolden_StatusBoardBanners(t *testing.T) {
+	cases := []struct {
+		name  string
+		build func() *StatusStep
+		want  []string
+	}{
+		{
+			name: "loading",
+			build: func() *StatusStep {
+				s := NewStatusStep(&countingSource{status: statusFixture()})
+				s.Init()
+				return s
+			},
+			want: []string{"reading cluster status"},
+		},
+		{
+			name: "probe-failure",
+			build: func() *StatusStep {
+				s := NewStatusStep(&countingSource{err: errors.New("read cluster status: oc not found")})
+				s.Update(s.Init()())
+				return s
+			},
+			want: []string{"cluster status unavailable", "press r to retry", "oc not found"},
+		},
+		{
+			name: "stale-snapshot-banner",
+			build: func() *StatusStep {
+				src := &countingSource{status: statusFixture()}
+				s := NewStatusStep(src)
+				s.Update(s.Init()())
+				src.err = errors.New("probe timed out")
+				_, cmd := s.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
+				s.Update(cmd())
+				return s
+			},
+			want: []string{"refresh failed", "showing last snapshot", "probe timed out", "homelab-master0"},
+		},
+	}
+
+	for _, tc := range cases {
+		for _, sz := range []struct{ w, h int }{{80, 24}, {180, 48}} {
+			t.Run(fmt.Sprintf("%s_%dx%d", tc.name, sz.w, sz.h), func(t *testing.T) {
+				s := tc.build()
+				s.SetTerminalSize(sz.w, sz.h)
+
+				frame := s.View(sz.w, sz.h)
+				tuitest.Golden(t, fmt.Sprintf("status-banner-%s_%dx%d", tc.name, sz.w, sz.h), frame)
+				tuitest.AssertFits(t, frame, sz.w, sz.h)
+
+				plain := tuitest.StripANSI(frame)
+				for _, want := range tc.want {
+					if !strings.Contains(plain, want) {
+						t.Errorf("%s at %dx%d is missing %q:\n%s", tc.name, sz.w, sz.h, want, plain)
+					}
+				}
+			})
+		}
+	}
+}
+
 func TestStatusStepUsesTheWideSplit(t *testing.T) {
 	if NewStatusStep(nil).SuppressesSplit() {
 		t.Error("SuppressesSplit() = true; the status board has selected-node context to show")
@@ -336,11 +403,17 @@ func TestGolden_StatusBoardResponsive(t *testing.T) {
 				t.Fatal("single-column status frame unexpectedly rendered a context pane")
 			}
 
-			if size.width == 180 {
-				m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-				detail := tuitest.RenderAt(t, m, size.width, size.height)
-				tuitest.Golden(t, "status-details_180x48", detail)
-				tuitest.AssertFits(t, detail, size.width, size.height)
+			// Selecting a node must surface its detail somewhere on screen
+			// — inline in the body below splitMinHeight's/wideSplitWidth's
+			// threshold, in the context pane at and above it — never
+			// neither, which a content-width threshold that disagreed
+			// with the frame's own split gate used to do at 120x40.
+			m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+			detail := tuitest.RenderAt(t, m, size.width, size.height)
+			tuitest.Golden(t, fmt.Sprintf("status-details_%dx%d", size.width, size.height), detail)
+			tuitest.AssertFits(t, detail, size.width, size.height)
+			if !strings.Contains(tuitest.StripANSI(detail), "Selected node") {
+				t.Fatalf("selecting a node produced no visible detail at %dx%d:\n%s", size.width, size.height, detail)
 			}
 		})
 	}

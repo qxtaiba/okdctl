@@ -294,7 +294,7 @@ func renderOpsLatencyCompact(snapshot *opsSnapshot) string {
 	var chart strings.Builder
 	for _, sample := range snapshot.latencyHistory {
 		if !sample.available {
-			chart.WriteRune('·')
+			chart.WriteString(tui.IconLevelInfo)
 			continue
 		}
 		chart.WriteRune(opsLatencyGlyph(sample.duration, snapshot.latencyHistory))
@@ -336,21 +336,26 @@ func renderOpsActionRows(s *WelcomeStep, width, height int) string {
 	return strings.Join(rows, "\n")
 }
 
+// renderOpsLatency renders the API tile's RTT readout, which the wide
+// dashboard must keep inside the narrowest tile it ever draws (24 inner
+// columns at the 112-column compact cutoff) even with a full
+// opsLatencyHistoryLimit-sample history, so it stays short and fixed-shape
+// rather than growing with the label.
 func renderOpsLatency(snapshot *opsSnapshot) string {
 	if snapshot == nil || len(snapshot.latencyHistory) == 0 {
-		return "probe latency unavailable"
+		return "RTT unavailable"
 	}
-	current := "latest unavailable"
+	current := "n/a"
 	if snapshot.latencyAvailable {
 		current = formatOpsLatency(snapshot.latency)
 	}
 	var chart strings.Builder
-	chart.WriteString("API probe · ")
+	chart.WriteString("RTT ")
 	chart.WriteString(current)
 	chart.WriteString(" ")
 	for _, sample := range snapshot.latencyHistory {
 		if !sample.available {
-			chart.WriteRune('·')
+			chart.WriteString(tui.IconLevelInfo)
 			continue
 		}
 		chart.WriteRune(opsLatencyGlyph(sample.duration, snapshot.latencyHistory))
@@ -380,8 +385,11 @@ func opsLatencyGlyph(duration time.Duration, samples []opsLatencySample) rune {
 	return opsLatencyGlyphs[max(0, min(level, len(opsLatencyGlyphs)-1))]
 }
 
+// fitOpsLine rune-safely truncates line to width columns with a visible
+// "…" so a status word past the fit point is elided, never silently
+// wrapped away.
 func fitOpsLine(width int, line string) string {
-	return lipgloss.NewStyle().Width(width).MaxHeight(1).Render(line)
+	return tui.Truncate(line, width)
 }
 
 func opsValues(snapshot *opsSnapshot) (phase, api, nodes, operators, addons string) {

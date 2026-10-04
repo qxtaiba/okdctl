@@ -2,13 +2,16 @@ package steps
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
@@ -141,6 +144,56 @@ func TestNodePlacementCapacityLabelsAndDemandFollowSelection(t *testing.T) {
 	}
 	if got := s.bootstrapField.Value(); got != "pve2" {
 		t.Fatalf("selected node value = %q, want saved value pve2", got)
+	}
+}
+
+// TestNodePlacementAssignmentDemandElidesVisiblyAtNarrowWidth pins the width
+// idiom on the per-node demand row: several long node names must overflow a
+// narrow row into a single, visibly elided ("…") line rather than silently
+// wrapping and dropping a trailing node's demand, which the forbidden bare
+// Width-based render used to do.
+func TestNodePlacementAssignmentDemandElidesVisiblyAtNarrowWidth(t *testing.T) {
+	cfg := newProxmoxTestConfig()
+	cfg.Topology.ControlPlane = config.NodeConfig{Count: 3, CPU: 4, MemoryMB: 8192, DiskGB: 50}
+	cfg.Topology.Workers = config.NodeConfig{Count: 1, CPU: 2, MemoryMB: 4096, DiskGB: 20}
+	cfg.Provider.Proxmox.ControlPlaneNodes = []string{
+		"homelab-rack-a-master-node-001",
+		"homelab-rack-b-master-node-002",
+		"homelab-rack-c-master-node-003",
+	}
+	cfg.Provider.Proxmox.WorkerNodes = []string{"homelab-rack-a-worker-node-001"}
+
+	s := NewNodePlacementStep()
+	s.cfg = cfg
+	disc := &proxmoxDiscovery{Nodes: []proxmoxNode{
+		{Name: "homelab-rack-a-master-node-001", Status: "online", CPUs: 2, CPUsKnown: true, MemGB: 4, MemKnown: true},
+		{Name: "homelab-rack-b-master-node-002", Status: "online", CPUs: 8, CPUsKnown: true, MemGB: 16, MemKnown: true},
+		{Name: "homelab-rack-c-master-node-003", Status: "online", CPUs: 8, CPUsKnown: true, MemGB: 16, MemKnown: true},
+		{Name: "homelab-rack-a-worker-node-001", Status: "online", CPUs: 8, CPUsKnown: true, MemGB: 16, MemKnown: true},
+	}}
+	step, _ := s.Update(discoveryCompleteMsg{discovery: disc})
+	s = step.(*NodePlacementStep)
+
+	demand := s.assignmentDemand(78)
+	if got := lipgloss.Width(demand); got > 78 {
+		t.Fatalf("demand row is %d columns wide, want <= 78: %q", got, tuitest.StripANSI(demand))
+	}
+	if strings.Contains(demand, "\n") {
+		t.Fatalf("demand row wrapped onto multiple lines instead of eliding:\n%s", tuitest.StripANSI(demand))
+	}
+	plain := tuitest.StripANSI(demand)
+	if !strings.Contains(plain, "assigned demand") {
+		t.Fatalf("demand row lost its own label: %q", plain)
+	}
+	if !strings.HasSuffix(strings.TrimRight(plain, " "), "…") {
+		t.Fatalf("overflowing demand row has no visible elision marker: %q", plain)
+	}
+
+	view := tuitest.StripANSI(s.View(80, 40))
+	for _, line := range strings.Split(view, "\n") {
+		if got := lipgloss.Width(line); got > 80 {
+			t.Fatalf("view line is %d columns wide, want <= 80: %q", got, line)
+		}
 	}
 }
 
@@ -394,5 +447,72 @@ func TestFirstMatch(t *testing.T) {
 	}
 	if got := firstMatch(nil, "z", "z"); got != "" {
 		t.Errorf("firstMatch(no options) = %q, want empty", got)
+	}
+}
+
+// demoDiscoveryUnknownCapacity is a single-node fixture exercising two
+// honest-unknown displays at once: the node's CPU/memory probe came back
+// unknown (nodeDisplayOptions renders "?c/?g"), and a cluster-level storage
+// pool no online node reports renders "<pool> — capacity unknown"
+// (storageDisplayOptions).
+func demoDiscoveryUnknownCapacity() *proxmoxDiscovery {
+	return &proxmoxDiscovery{
+		Nodes: []proxmoxNode{{
+			Name: "pve1", Status: "online",
+			CPUsKnown: false, MemKnown: false,
+			StorageKnown: true,
+			Storage:      []proxmoxStorage{{Name: "local-lvm", Content: "images", TotalGB: 500, TotalKnown: true}},
+			BridgesKnown: true, Bridges: demoNodeBridges(),
+		}},
+		Storage: []proxmoxStorage{
+			{Name: "local-lvm", Content: "images,rootdir", TotalGB: 500},
+			{Name: "orphan-pool", Content: "images", TotalGB: 900},
+		},
+		Bridges: demoNodeBridges(),
+	}
+}
+
+// TestGolden_NodePlacementUnknownCapacity pins demoDiscoveryUnknownCapacity
+// through the full model (so the viewport, not the bare step, governs
+// height), at both the compact and the wide-split tiers.
+func TestGolden_NodePlacementUnknownCapacity(t *testing.T) {
+	for _, sz := range []struct{ w, h int }{{80, 24}, {180, 48}} {
+		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
+			tui.SetTerminalWidth(sz.w)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+			m := newGoldenModel(t)
+			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
+			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDNodePlacement})
+			// Selects the orphaned pool so its "capacity unknown" display
+			// renders in the collapsed box, not just inside
+			// storageDisplayOptions' own return value; clears the default
+			// config's stale "pve" bootstrap node so the field falls back
+			// to the fixture's actual node instead of an unmatched value.
+			px := m.Config().Provider.Proxmox
+			px.DataStorage = "orphan-pool"
+			px.Node = ""
+			m.Update(discoveryCompleteMsg{discovery: demoDiscoveryUnknownCapacity()})
+
+			// Tabs past bridge, additional networks, os storage, and data
+			// storage to focus bootstrap, scrolling both capacity-unknown
+			// rows into view at the compact tier too.
+			tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
+			for range 4 {
+				m.Update(tabKey)
+				m.Update(wizard.FocusChangedMsg{})
+			}
+
+			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
+			tuitest.Golden(t, fmt.Sprintf("node-placement-unknown-capacity_%dx%d", sz.w, sz.h), frame)
+			tuitest.AssertFits(t, frame, sz.w, sz.h)
+
+			plain := tuitest.StripANSI(frame)
+			for _, want := range []string{"pve1 — ?c/?g", "orphan-pool — capacity unknown"} {
+				if !strings.Contains(plain, want) {
+					t.Errorf("view is missing %q:\n%s", want, plain)
+				}
+			}
+		})
 	}
 }

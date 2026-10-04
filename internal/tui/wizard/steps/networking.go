@@ -164,19 +164,13 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 		podCIDR := values["pod_cidr"]
 		serviceCIDR := values["service_cidr"]
 
-		if overlap, err := netutil.CIDRsOverlap(machineCIDR, podCIDR); err != nil {
-			return err
-		} else if overlap {
+		if overlap, ok := cidrsOverlapIfValid(machineCIDR, podCIDR); ok && overlap {
 			return errors.New("machine cidr and pod cidr must not overlap — widen or move one of the ranges")
 		}
-		if overlap, err := netutil.CIDRsOverlap(machineCIDR, serviceCIDR); err != nil {
-			return err
-		} else if overlap {
+		if overlap, ok := cidrsOverlapIfValid(machineCIDR, serviceCIDR); ok && overlap {
 			return errors.New("machine cidr and service cidr must not overlap — widen or move one of the ranges")
 		}
-		if overlap, err := netutil.CIDRsOverlap(podCIDR, serviceCIDR); err != nil {
-			return err
-		} else if overlap {
+		if overlap, ok := cidrsOverlapIfValid(podCIDR, serviceCIDR); ok && overlap {
 			return errors.New("pod cidr and service cidr must not overlap — widen or move one of the ranges")
 		}
 		if err := config.ValidateGatewayInCIDR(values[fieldGateway], machineCIDR); err != nil {
@@ -195,26 +189,38 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 	},
 }
 
-// NewNetworkingStep returns the networking wizard step.
-func NewNetworkingStep(capacity ...*WizardCapacitySnapshot) *wizard.DataDrivenStep {
+// cidrsOverlapIfValid reports whether a and b overlap, with checked false
+// when either fails to parse — the per-field CIDR validator already shows
+// its own clean format error for a malformed value, so the overlap check
+// stays silent rather than surfacing netutil's wrapped netip parse error.
+func cidrsOverlapIfValid(a, b string) (overlap, checked bool) {
+	if !config.IsValidCIDR(a) || !config.IsValidCIDR(b) {
+		return false, false
+	}
+	overlap, err := netutil.CIDRsOverlap(a, b)
+	return overlap, err == nil
+}
+
+// NewNetworkingStep returns the networking wizard step, with an allocation
+// preview once capacity is non-nil.
+func NewNetworkingStep(capacity *WizardCapacitySnapshot) *wizard.DataDrivenStep {
 	step := wizard.NewDataDrivenStep(&NetworkingStepDefinition)
-	if len(capacity) == 0 {
+	if capacity == nil {
 		return step
 	}
-	snapshot := capacity[0]
 	step.WithExtraContentFunc("allocation preview", func(s *wizard.DataDrivenStep, _ int) string {
-		cpCount, workerCount, known := snapshot.counts()
-		if !known || snapshot.discovery == nil {
+		cpCount, workerCount, known := capacity.counts()
+		if !known || capacity.discovery == nil {
 			return ""
 		}
 		values := make(map[string]string, 8)
 		for _, key := range []string{"machine_cidr", fieldGateway, "start_ip", "bastion_ip", "vip"} {
 			values[key] = s.Value(key)
 		}
-		if snapshot.cfg != nil {
-			values["ignition_ip"] = snapshot.cfg.HTTPServer.IgnitionServerIP
-			if snapshot.cfg.Provider.Proxmox != nil {
-				values["proxmox_host"] = snapshot.cfg.Provider.Proxmox.Host
+		if capacity.cfg != nil {
+			values["ignition_ip"] = capacity.cfg.HTTPServer.IgnitionServerIP
+			if capacity.cfg.Provider.Proxmox != nil {
+				values["proxmox_host"] = capacity.cfg.Provider.Proxmox.Host
 			}
 		}
 		return renderNetworkAllocationPreview(values, cpCount, workerCount)

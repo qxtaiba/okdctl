@@ -108,7 +108,7 @@ func checkCIDROverlap(cidr1, cidr2, field, otherName string, result *ValidationR
 	if err != nil {
 		result.AddError(field, fmt.Sprintf("cannot check overlap with %s: %v", otherName, err))
 	} else if overlap {
-		result.AddError(field, "overlaps with "+otherName+" — widen or move one of the ranges")
+		result.AddErrorCode(field, "overlaps with "+otherName+" — widen or move one of the ranges", ValidationErrorCodeCIDROverlap)
 	}
 }
 
