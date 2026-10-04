@@ -1,7 +1,9 @@
 package lifecycle
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -418,6 +420,105 @@ func TestExecStepFailurePropagatesToState(t *testing.T) {
 	}
 	if !errors.Is(st.Result, boom) {
 		t.Errorf("Result = %v, want the execute error", st.Result)
+	}
+}
+
+// TestExecStepCancelBeforeMutationLeavesEveryNodeUntouched covers the
+// cancel-before-mutation execution state: the operator's first ctrl+c lands
+// while the backend is still blocked ahead of its first mutating call, so
+// the run ends cancelled with every gate row exactly as it started —
+// pending, not promoted to done or failed.
+func TestExecStepCancelBeforeMutationLeavesEveryNodeUntouched(t *testing.T) {
+	cancelCh := make(chan struct{})
+	st := threeMasterState()
+	s := NewExecStep(st, Hooks{
+		CancelOp: func() { close(cancelCh) },
+		Execute: func(*State, chan<- ExecEvent) error {
+			<-cancelCh // the fake backend never emits a single event
+			return fmt.Errorf("run resize: %w", context.Canceled)
+		},
+	})
+
+	cmd := s.Init()
+	if !s.InterceptQuit() {
+		t.Fatal("first ctrl+c must be intercepted")
+	}
+	msg := pump(t, s, cmd)
+	if _, ok := msg.(wizard.StepCompleteMsg); !ok {
+		t.Fatalf("a before-mutation cancel must still advance to the done screen, got %T", msg)
+	}
+	if !errors.Is(st.Result, context.Canceled) {
+		t.Errorf("Result = %v, want a cancellation", st.Result)
+	}
+	for i := range s.nodes {
+		for j := range s.nodes[i].rows {
+			if got := s.nodes[i].rows[j].status; got != rowPending {
+				t.Errorf("node %d row %d status = %v, want rowPending — nothing ran before the cancel", i, j, got)
+			}
+		}
+	}
+}
+
+// TestExecStepCancelAfterPartialMutationShowsPartialNotRollback covers the
+// cancel-after-partial-mutation execution state: master0 is fully realized
+// before the operator cancels mid-master1, so the run must end showing real
+// partial progress — master0 still done, master1 settled at the gate the
+// cancel caught it in, master2 untouched — and never read as a rollback of
+// the work master0 already completed (contract: "partial failure is not
+// rollback").
+func TestExecStepCancelAfterPartialMutationShowsPartialNotRollback(t *testing.T) {
+	cancelCh := make(chan struct{})
+	st := threeMasterState()
+	s := NewExecStep(st, Hooks{
+		CancelOp: func() { close(cancelCh) },
+		Execute: func(_ *State, ch chan<- ExecEvent) error {
+			ch <- ExecEvent{Node: "homelab-master0", Step: node.StepTFApply}
+			ch <- ExecEvent{Node: "homelab-master0", Step: node.StepPowerCycle, Done: true}
+			// master1's gate starts; the cancel below catches it mid-apply.
+			ch <- ExecEvent{Node: "homelab-master1", Step: node.StepTFApply}
+			<-cancelCh
+			return fmt.Errorf("run resize: %w", context.Canceled)
+		},
+	})
+
+	cmd := s.Init()
+	if !s.InterceptQuit() {
+		t.Fatal("first ctrl+c must be intercepted")
+	}
+	msg := pump(t, s, cmd)
+	if _, ok := msg.(wizard.StepCompleteMsg); !ok {
+		t.Fatalf("a partial-mutation cancel must still advance to the done screen, got %T", msg)
+	}
+	if !errors.Is(st.Result, context.Canceled) {
+		t.Fatalf("Result = %v, want a cancellation", st.Result)
+	}
+
+	master0 := s.nodes[0].rows
+	if last := master0[len(master0)-1].status; last != rowDone {
+		t.Errorf("master0's last row = %v, want rowDone — a later cancel must not roll an already-realized node back", last)
+	}
+
+	master1 := s.nodes[1].rows
+	tfApply := rowIndex(rowLabels(master1), "terraform apply")
+	if tfApply < 0 {
+		t.Fatal("master1 has no terraform-apply row to assert on")
+	}
+	if got := master1[tfApply].status; got != rowFailed {
+		t.Errorf("master1's in-flight row status = %v, want rowFailed — it must show where the cancel landed, not vanish", got)
+	}
+
+	for i, r := range s.nodes[2].rows {
+		if r.status != rowPending {
+			t.Errorf("master2 row %d status = %v, want rowPending — it was never reached", i, r.status)
+		}
+	}
+
+	out := tuitest.StripANSI(NewDoneStep(st, Hooks{}).View(100, 40))
+	if strings.Contains(strings.ToLower(out), "rollback") {
+		t.Fatalf("a partial-mutation cancel must never be presented as a rollback:\n%s", out)
+	}
+	if !strings.Contains(out, "homelab-master0") {
+		t.Fatalf("incident report must still credit master0's completed work:\n%s", out)
 	}
 }
 

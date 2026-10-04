@@ -68,15 +68,22 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 
 	result, err := wizard.RunFlow(ctx, sess.steps, cfg, lifecycle.Chrome())
 	if err != nil {
-		// A tea failure mid-execution must still surface the resume marker, not
-		// read as a configuration problem.
-		if sess.state.Started && !sess.state.Executed {
-			return &errtypes.ClusterError{Msg: lifecycleInterruptedMsg, Err: err}
-		}
-		return (&errtypes.ConfigError{Msg: "lifecycle wizard failed", Err: err}).
-			WithHint("try again, or use 'okdctl node resize/add/remove' instead")
+		return lifecycleRunFlowErr(err, sess.state)
 	}
 	return reportLifecycleOutcome(cmd, result, sess.state)
+}
+
+// lifecycleRunFlowErr maps a wizard.RunFlow failure — most commonly a
+// renderer/terminal crash — to the error runNodeManage returns: one that hit
+// mid-execution (started, not yet executed) must still surface the resume
+// marker, exactly like a graceful cancel, not read as a configuration
+// problem the operator would otherwise retry blind.
+func lifecycleRunFlowErr(err error, st *lifecycle.State) error {
+	if st.Started && !st.Executed {
+		return &errtypes.ClusterError{Msg: lifecycleInterruptedMsg, Err: err}
+	}
+	return (&errtypes.ConfigError{Msg: "lifecycle wizard failed", Err: err}).
+		WithHint("try again, or use 'okdctl node resize/add/remove' instead")
 }
 
 // lifecycleConfig resolves the config the Cluster Lifecycle flow runs against:

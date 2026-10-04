@@ -83,6 +83,48 @@ func TestReportLifecycleOutcomeSuccessPrintsRecap(t *testing.T) {
 	}
 }
 
+// TestLifecycleRunFlowErrMapsRendererFailureToInterrupted guards the
+// renderer-failure execution state: a wizard.RunFlow error (a tea.Program
+// crash, e.g.) arriving mid-execution — Started but not yet Executed — must
+// map to the same interrupted/resume guidance as a graceful cancel, never
+// read as a configuration problem with nothing to resume.
+func TestLifecycleRunFlowErrMapsRendererFailureToInterrupted(t *testing.T) {
+	boom := errors.New("tea: renderer panicked")
+	st := &lifecycle.State{Started: true, Executed: false}
+
+	err := lifecycleRunFlowErr(boom, st)
+
+	var ce *errtypes.ClusterError
+	if !errors.As(err, &ce) {
+		t.Fatalf("renderer failure mid-execution must be a *errtypes.ClusterError, got %T: %v", err, err)
+	}
+	if !strings.Contains(err.Error(), "resume") {
+		t.Errorf("renderer failure mid-execution must point at the resume marker: %v", err)
+	}
+	if !errors.Is(err, boom) {
+		t.Errorf("the underlying renderer error must still be wrapped: %v", err)
+	}
+}
+
+// TestLifecycleRunFlowErrMapsPreExecutionFailureToConfigError guards the
+// other half: a RunFlow failure before execution ever started carries no
+// marker to resume, so it must read as a configuration problem, not an
+// interrupted operation.
+func TestLifecycleRunFlowErrMapsPreExecutionFailureToConfigError(t *testing.T) {
+	boom := errors.New("tea: could not open a new tty")
+	st := &lifecycle.State{Started: false, Executed: false}
+
+	err := lifecycleRunFlowErr(boom, st)
+
+	var ce *errtypes.ConfigError
+	if !errors.As(err, &ce) {
+		t.Fatalf("pre-execution renderer failure must be a *errtypes.ConfigError, got %T: %v", err, err)
+	}
+	if strings.Contains(err.Error(), "resume") {
+		t.Errorf("pre-execution failure must not claim a resumable marker: %v", err)
+	}
+}
+
 func TestReportLifecycleOutcomeFailurePropagatesBackendError(t *testing.T) {
 	plan := &node.OpPlan{
 		Op: node.OpResize, Cluster: "homelab",

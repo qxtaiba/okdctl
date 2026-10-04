@@ -8,6 +8,8 @@
   │                                                                          │  
   │          ⚠ interrupted resize of homelab-master0 — step: power-          │  
   │          cycle, recorded 2h ago                                          │  
+  │          choosing anything but resume below abandons this                │  
+  │          marker — it cannot be resumed afterward                         │  
   │                                                                          │  
   │          ● resume interrupted resize                                     │  
   │            re-enters at the recorded step; completed nodes               │  
@@ -15,8 +17,6 @@
   │                                                                          │  
   │          ○ resize nodes                                                  │  
   │            change per-role cpu/memory, rolled out one node at            │  
-  │            a time behind etcd/ceph health gates                          │  
-  │                                                                          │  
   │                                                                          │  
   │────────────────── ↑ ↓  scroll down for more ────────────────── ▸ homelab │  
   │  ↑↓ select • enter confirm • pgup/pgdn scroll • ctrl+c quit • ? help     │  
