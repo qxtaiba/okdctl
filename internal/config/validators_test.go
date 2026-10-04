@@ -1,6 +1,7 @@
 package config
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -803,5 +804,133 @@ func TestWizardWrapperValidators(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			checkAcceptReject(t, tc.fn, tc.accept, tc.reject)
 		})
+	}
+}
+
+func TestPlacementCandidateNodes(t *testing.T) {
+	cases := []struct {
+		name string
+		cfg  *Config
+		want []string
+	}{
+		{
+			name: "explicit placement",
+			cfg: &Config{
+				Provider: ProviderConfig{Proxmox: &ProxmoxConfig{
+					Node:              "pve1",
+					ControlPlaneNodes: []string{"pve1"},
+					WorkerNodes:       []string{"pve2"},
+				}},
+				Topology: TopologyConfig{
+					ControlPlane: NodeConfig{Count: 1},
+					Workers:      NodeConfig{Count: 1},
+				},
+			},
+			want: []string{"pve1", "pve2"},
+		},
+		{
+			name: "unassigned slots fall back to provider node",
+			cfg: &Config{
+				Provider: ProviderConfig{Proxmox: &ProxmoxConfig{Node: "pve1"}},
+				Topology: TopologyConfig{
+					ControlPlane: NodeConfig{Count: 2},
+					Workers:      NodeConfig{Count: 1},
+				},
+			},
+			want: []string{"pve1"},
+		},
+		{
+			name: "no proxmox config",
+			cfg:  &Config{},
+			want: nil,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := placementCandidateNodes(tc.cfg); !slices.Equal(got, tc.want) {
+				t.Errorf("placementCandidateNodes = %v; want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestValidatePlacementAgainstInventory is the reviewer's heterogeneous-
+// cluster reproduction (Item 4): pve1 has fast-nvme/vmbr1, pve2 has only
+// local-lvm/vmbr0; worker_nodes targets pve2 but storage/bridge were chosen
+// from pve1's inventory, so every worker VM would land on a node without them.
+func TestValidatePlacementAgainstInventory(t *testing.T) {
+	inventory := map[string]ProxmoxNodeInventory{
+		"pve1": {Storage: []string{"fast-nvme", "local-lvm"}, Bridges: []string{"vmbr0", "vmbr1"}},
+		"pve2": {Storage: []string{"local-lvm"}, Bridges: []string{"vmbr0"}},
+	}
+	cfg := &Config{
+		Provider: ProviderConfig{Proxmox: &ProxmoxConfig{
+			Node:        "pve1",
+			Storage:     "fast-nvme",
+			Bridge:      "vmbr1",
+			WorkerNodes: []string{"pve2"},
+		}},
+		Topology: TopologyConfig{
+			ControlPlane: NodeConfig{Count: 1},
+			Workers:      NodeConfig{Count: 1},
+		},
+	}
+
+	result := ValidatePlacementAgainstInventory(cfg, inventory)
+	if result.IsValid() {
+		t.Fatal("want errors: pve2 (worker_nodes[0]) has neither storage fast-nvme nor bridge vmbr1")
+	}
+	if !hasFieldError(result, FieldProxmoxStorage) {
+		t.Errorf("want %s error; got %v", FieldProxmoxStorage, result.Errors)
+	}
+	if !hasFieldError(result, FieldProxmoxBridge) {
+		t.Errorf("want %s error; got %v", FieldProxmoxBridge, result.Errors)
+	}
+}
+
+func TestValidatePlacementAgainstInventory_HomogeneousAccepted(t *testing.T) {
+	inventory := map[string]ProxmoxNodeInventory{
+		"pve1": {Storage: []string{"fast-nvme", "local-lvm"}, Bridges: []string{"vmbr0", "vmbr1"}},
+		"pve2": {Storage: []string{"local-lvm"}, Bridges: []string{"vmbr0"}},
+	}
+	cfg := &Config{
+		Provider: ProviderConfig{Proxmox: &ProxmoxConfig{
+			Node:        "pve1",
+			Storage:     "local-lvm",
+			Bridge:      "vmbr0",
+			WorkerNodes: []string{"pve2"},
+		}},
+		Topology: TopologyConfig{
+			ControlPlane: NodeConfig{Count: 1},
+			Workers:      NodeConfig{Count: 1},
+		},
+	}
+	if result := ValidatePlacementAgainstInventory(cfg, inventory); !result.IsValid() {
+		t.Errorf("unexpected errors: %v", result.Errors)
+	}
+}
+
+func TestValidatePlacementAgainstInventory_EmptyInventoryIsNoOp(t *testing.T) {
+	cfg := &Config{
+		Provider: ProviderConfig{Proxmox: &ProxmoxConfig{Node: "pve1", Storage: "whatever-nonexistent"}},
+		Topology: TopologyConfig{ControlPlane: NodeConfig{Count: 1}},
+	}
+	if result := ValidatePlacementAgainstInventory(cfg, nil); !result.IsValid() {
+		t.Errorf("unexpected errors with no discovered inventory: %v", result.Errors)
+	}
+}
+
+func TestValidatePlacementAgainstInventory_UnknownNodeSkipped(t *testing.T) {
+	cfg := &Config{
+		Provider: ProviderConfig{Proxmox: &ProxmoxConfig{
+			Node:        "pve3",
+			Storage:     "whatever-nonexistent",
+			WorkerNodes: []string{"pve3"},
+		}},
+		Topology: TopologyConfig{Workers: NodeConfig{Count: 1}},
+	}
+	inventory := map[string]ProxmoxNodeInventory{"pve1": {Storage: []string{"local-lvm"}}}
+	if result := ValidatePlacementAgainstInventory(cfg, inventory); !result.IsValid() {
+		t.Errorf("unexpected errors for a node absent from the discovered inventory: %v", result.Errors)
 	}
 }
