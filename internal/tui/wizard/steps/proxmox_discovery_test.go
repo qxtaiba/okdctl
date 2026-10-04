@@ -2,6 +2,8 @@ package steps
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -294,8 +296,11 @@ func TestClassifyError(t *testing.T) {
 		err  error
 		want string
 	}{
-		{"tls certificate error", errors.New("x509: certificate signed by unknown authority"), "tls certificate verification failed"},
-		{"tls lowercase prefix", errors.New("tls: handshake failure"), "tls certificate verification failed"},
+		// Untyped tls/x509 failures the typed checks below don't catch
+		// (e.g. a protocol-level handshake failure unrelated to any
+		// certificate) get an honest generic message, not a guessed cause.
+		{"tls certificate error", errors.New("x509: certificate signed by unknown authority"), "tls handshake failed"},
+		{"tls lowercase prefix", errors.New("tls: handshake failure"), "tls handshake failed"},
 		{"connection refused", errors.New("dial tcp 10.0.0.1:8006: connect: connection refused"), "connection refused"},
 		{"no such host", errors.New("dial tcp: lookup pve.invalid: no such host"), "host not found"},
 		{"io timeout", errors.New("dial tcp 10.0.0.1:8006: i/o timeout"), "connection timed out"},
@@ -309,6 +314,57 @@ func TestClassifyError(t *testing.T) {
 			got := classifyError(tc.err)
 			if got == nil || !strings.Contains(got.Error(), tc.want) {
 				t.Errorf("classifyError(%v) = %v; want substring %q", tc.err, got, tc.want)
+			}
+			if strings.Contains(got.Error(), "skip tls verify") {
+				t.Errorf("classifyError(%v) = %v; must not nudge toward disabling tls verification", tc.err, got)
+			}
+		})
+	}
+}
+
+// TestClassifyError_TLSCausesGetDistinctSafeRemedies pins the three
+// distinguishable TLS failure causes, each wrapped the way crypto/tls
+// actually returns it (tls.CertificateVerificationError wrapping the real
+// x509 cause): every remedy must be specific to the real cause, safe (never
+// "disable verification"), and must not swallow the underlying error.
+func TestClassifyError_TLSCausesGetDistinctSafeRemedies(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{
+			name: "untrusted issuer",
+			err:  &tls.CertificateVerificationError{Err: x509.UnknownAuthorityError{}},
+			want: "ca certificate",
+		},
+		{
+			name: "hostname mismatch",
+			err:  &tls.CertificateVerificationError{Err: x509.HostnameError{Certificate: &x509.Certificate{}, Host: "10.0.0.5"}},
+			want: "name on the certificate",
+		},
+		{
+			name: "certificate expired",
+			err:  &tls.CertificateVerificationError{Err: x509.CertificateInvalidError{Reason: x509.Expired}},
+			want: "renew",
+		},
+		{
+			name: "certificate invalid, other reason: honest generic, no guess",
+			err:  &tls.CertificateVerificationError{Err: x509.CertificateInvalidError{Reason: x509.NotAuthorizedToSign}},
+			want: "tls certificate invalid",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := classifyError(tc.err)
+			if got == nil || !strings.Contains(got.Error(), tc.want) {
+				t.Errorf("classifyError(%v) = %v; want substring %q", tc.err, got, tc.want)
+			}
+			if strings.Contains(got.Error(), "skip tls verify") {
+				t.Errorf("classifyError(%v) = %v; must not nudge toward disabling tls verification", tc.err, got)
+			}
+			if !errors.Is(got, tc.err) {
+				t.Errorf("classifyError(%v) = %v; lost the underlying error (not wrapped with %%w)", tc.err, got)
 			}
 		})
 	}
