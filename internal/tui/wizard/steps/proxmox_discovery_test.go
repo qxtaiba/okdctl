@@ -71,6 +71,97 @@ func testProxmoxConfig(host string) *config.Config {
 	}}}
 }
 
+// newHeterogeneousProxmoxServer mocks a two-node cluster where pve1 has an
+// extra datastore (fast-nvme) and bridge (vmbr1) that pve2 lacks — both
+// nodes are online, so both are placement candidates.
+func newHeterogeneousProxmoxServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api2/json/access/ticket", func(w http.ResponseWriter, _ *http.Request) {
+		writeData(w, map[string]any{"ticket": "PVE:test", "CSRFPreventionToken": "tok", "username": "root@pam"})
+	})
+	mux.HandleFunc("GET /api2/json/nodes", func(w http.ResponseWriter, _ *http.Request) {
+		writeData(w, []map[string]any{
+			{"node": "pve1", "status": "online", "maxcpu": 8, "maxmem": 17179869184},
+			{"node": "pve2", "status": "online", "maxcpu": 4, "maxmem": 8589934592},
+		})
+	})
+	storageByNode := map[string][]map[string]any{
+		"pve1": {
+			{"storage": "local-lvm", "type": "lvmthin", "content": "images", "enabled": 1, "total": 214748364800, "used_fraction": 0.1},
+			{"storage": "fast-nvme", "type": "lvmthin", "content": "images", "enabled": 1, "total": 500000000000, "used_fraction": 0.1},
+		},
+		"pve2": {
+			{"storage": "local-lvm", "type": "lvmthin", "content": "images", "enabled": 1, "total": 214748364800, "used_fraction": 0.1},
+		},
+	}
+	bridgesByNode := map[string][]map[string]any{
+		"pve1": {
+			{"iface": "vmbr0", "active": 1, "cidr": "192.168.1.1/24"},
+			{"iface": "vmbr1", "active": 1, "cidr": "10.1.0.1/24"},
+		},
+		"pve2": {
+			{"iface": "vmbr0", "active": 1, "cidr": "192.168.1.1/24"},
+		},
+	}
+	for _, name := range []string{"pve1", "pve2"} {
+		storage, bridges := storageByNode[name], bridgesByNode[name]
+		mux.HandleFunc("GET /api2/json/nodes/"+name+"/status", func(w http.ResponseWriter, _ *http.Request) {
+			writeData(w, map[string]any{})
+		})
+		mux.HandleFunc("GET /api2/json/nodes/"+name+"/storage", func(w http.ResponseWriter, _ *http.Request) {
+			writeData(w, storage)
+		})
+		mux.HandleFunc("GET /api2/json/nodes/"+name+"/network", func(w http.ResponseWriter, _ *http.Request) {
+			writeData(w, bridges)
+		})
+	}
+	return httptest.NewServer(mux)
+}
+
+// TestDiscoverProxmox_HeterogeneousClusterOffersOnlySharedInventory is the
+// reviewer's Item 4 reproduction: discovery must sample every online node,
+// not just the first, and must offer only storage/bridges every candidate
+// node actually has — plus a visible warning when inventories differ.
+func TestDiscoverProxmox_HeterogeneousClusterOffersOnlySharedInventory(t *testing.T) {
+	server := newHeterogeneousProxmoxServer(t)
+	defer server.Close()
+
+	got, err := discoverProxmox(t.Context(), testProxmoxConfig(server.URL))
+	if got == nil {
+		t.Fatalf("discoverProxmox returned nil discovery; err = %v", err)
+	}
+
+	if len(got.Storage) != 1 || got.Storage[0].Name != "local-lvm" {
+		t.Errorf("Storage = %+v; want only [local-lvm] (fast-nvme exists only on pve1, not every candidate node)", got.Storage)
+	}
+	if len(got.Bridges) != 1 || got.Bridges[0].Name != "vmbr0" {
+		t.Errorf("Bridges = %+v; want only [vmbr0] (vmbr1 exists only on pve1)", got.Bridges)
+	}
+	if err == nil || !strings.Contains(err.Error(), "different storage pools") {
+		t.Errorf("err = %v; want a visible warning that node inventories differ", err)
+	}
+}
+
+// TestDiscoverProxmox_FlagsPlacementUnreachableStorage exercises the
+// validation half of Item 4: a config that already targets worker_nodes on
+// a node lacking the chosen storage must surface that mismatch from
+// discovery, not silently accept it.
+func TestDiscoverProxmox_FlagsPlacementUnreachableStorage(t *testing.T) {
+	server := newHeterogeneousProxmoxServer(t)
+	defer server.Close()
+
+	cfg := testProxmoxConfig(server.URL)
+	cfg.Provider.Proxmox.Storage = "fast-nvme"
+	cfg.Provider.Proxmox.WorkerNodes = []string{"pve2"}
+	cfg.Topology.Workers.Count = 1
+
+	_, err := discoverProxmox(t.Context(), cfg)
+	if err == nil || !strings.Contains(err.Error(), "fast-nvme") {
+		t.Fatalf("err = %v; want a validation error naming storage %q as unreachable on pve2", err, "fast-nvme")
+	}
+}
+
 func TestDiscoverProxmox_Success(t *testing.T) {
 	server := newFakeProxmoxServer(t, "pve2")
 	defer server.Close()
