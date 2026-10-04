@@ -74,8 +74,12 @@ func TestExecLockAndFullKeys(t *testing.T) {
 	s.SetSize(100, 20)
 	s.SetTerminalSize(180, 48)
 
-	if _, cmd := s.Update(tea.KeyPressMsg{Code: logview.KeyLock, Text: "l"}); cmd != nil {
-		t.Error("locking the log must not emit a command")
+	_, lockCmd := s.Update(tea.KeyPressMsg{Code: logview.KeyLock, Text: "l"})
+	if lockCmd == nil {
+		t.Fatal("locking the log must nudge the outer viewport toward the tail")
+	}
+	if _, ok := lockCmd().(wizard.FocusChangedMsg); !ok {
+		t.Errorf("l emitted %T, want FocusChangedMsg", lockCmd())
 	}
 	if !s.log.Locked() {
 		t.Fatal("l must lock the log")

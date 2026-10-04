@@ -3,11 +3,6 @@
   │ O K D C T L  installing okd over proxmox                                 │  
   │ deploying homelab                                         install · done │  
   │──────────────────────────────────────────────────────────────────────────│  
-  │  deploying homelab  2 / 7                             elapsed 1m15s      │  
-  │  █████████████████│░░░░░░░░░░░░░░░░░│░░░░░░░░│░░░░░░░│░░░░░░░░  28%      │  
-  │  ✓ prep                                                         40s      │  
-  │  ● ignition                                                              │  
-  │      ⣾ generate ignition                                        35s      │  
   │      ○ build isos                                                        │  
   │  ○ infra                                                                 │  
   │  ○ install                                                               │  
@@ -17,8 +12,13 @@
   │  · 09:00:00 deploy step started step=step-00 phase=setup          ▎      │  
   │  · 09:00:07 deploy step started step=step-01 phase=setup          ┃      │  
   │  · 09:00:14 deploy step started step=step-02 phase=setup          │      │  
+  │  · 09:00:21 deploy step started step=step-03 phase=setup          │      │  
+  │  E 09:00:28 ERROR etcd member 0 refused the join request          │      │  
   │                                                                          │  
-  │────────────────── ↑ ↓  scroll down for more ────────────────── ▸ homelab │  
+  │  full log okd-install/okdctl.log · ctrl+c cancels after the current      │  
+  │  step                                                                    │  
+  │                                                                          │  
+  │─────────────────── ↑ ↓  scroll up for more ─────────────────── ▸ homelab │  
   │  l follow the log tail … • ctrl+c cancel (twice to force-quit) • ? help  │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

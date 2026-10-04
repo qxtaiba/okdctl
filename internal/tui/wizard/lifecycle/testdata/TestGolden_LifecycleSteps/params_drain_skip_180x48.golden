@@ -9,8 +9,8 @@
   │    drain mode                                                                                          │  ● parameters                                                       │  
   │    ╭────────────────────────────────────────╮                                                          │  ○ plan preview                                                     │  
   │    │ ◂ skip drain — restart pods in place ▸ │                                                          │                                                                     │  
-  │    ╰────────────────────────────────────────╯                                                          │                                                                     │  
-  │    how pods leave the node                                                                             │                                                                     │  
+  │    ╰────────────────────────────────────────╯                                                          │  CONFIGURED                                                         │  
+  │    how pods leave the node                                                                             │  operation: remove                                                  │  
   │                                                                                                        │                                                                     │  
   │    drain timeout                                                                                       │                                                                     │  
   │    ╭──────────────────────────────────────╮                                                            │                                                                     │  

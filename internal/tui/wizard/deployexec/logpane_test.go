@@ -41,8 +41,12 @@ func TestFlowStepCountMatchesNewSteps(t *testing.T) {
 func TestStreamLockKeyTogglesFollow(t *testing.T) {
 	s := NewStreamStep(streamState(), Hooks{Logs: seededRing(10)})
 
-	if _, cmd := s.Update(tea.KeyPressMsg{Code: logview.KeyLock, Text: "l"}); cmd != nil {
-		t.Error("locking the log must not emit a command")
+	_, cmd := s.Update(tea.KeyPressMsg{Code: logview.KeyLock, Text: "l"})
+	if cmd == nil {
+		t.Fatal("locking the log must nudge the outer viewport toward the tail")
+	}
+	if _, ok := cmd().(wizard.FocusChangedMsg); !ok {
+		t.Errorf("l emitted %T, want FocusChangedMsg", cmd())
 	}
 	if !s.log.Locked() {
 		t.Fatal("l must lock the log")

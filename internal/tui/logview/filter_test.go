@@ -2,6 +2,7 @@ package logview
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -223,6 +224,76 @@ func TestJumpStepsMatchesWhileFilteringKeepsTheKeysOneVocabulary(t *testing.T) {
 	}
 	if s.JumpHelp() != "next/prev match" {
 		t.Errorf("jump help = %q, want the match wording under a filter", s.JumpHelp())
+	}
+}
+
+// TestHandleKeyReportsMovedOnLockAndJump is what an owning step's narrow
+// tail needs to nudge the outer viewport toward it: lock and jump both move
+// the window without toggling layout, so the step cannot know to re-scroll
+// unless HandleKey says so apart from the layout-toggle report KeyFull uses.
+func TestHandleKeyReportsMovedOnLockAndJump(t *testing.T) {
+	s := &Surface{Src: mixedRing()}
+	s.RenderPane(70, 6)
+
+	if _, moved := s.HandleKey(tea.KeyPressMsg{Code: KeyLock, Text: "l"}, true); !moved {
+		t.Error("locking the window must report moved")
+	}
+	if _, moved := s.HandleKey(tea.KeyPressMsg{Code: KeyLock, Text: "l"}, true); !moved {
+		t.Error("releasing the lock must report moved too")
+	}
+	if _, moved := s.HandleKey(tea.KeyPressMsg{Code: KeyPrevMatch, Text: "N"}, true); !moved {
+		t.Error("N must report moved")
+	}
+	if _, moved := s.HandleKey(tea.KeyPressMsg{Code: KeyNextMatch, Text: "n"}, true); !moved {
+		t.Error("n must report moved")
+	}
+	if relayout, moved := s.HandleKey(tea.KeyPressMsg{Code: KeyFull, Text: "f"}, true); !relayout || moved {
+		t.Errorf("f must report relayout alone, got relayout=%v moved=%v", relayout, moved)
+	}
+}
+
+// shownTexts reports the Text of every line s's window currently shows at
+// budget rows, bypassing rendering so a header count's honest update (the
+// stream grew) cannot mask a window that quietly moved too.
+func shownTexts(s *Surface, budget int) []string {
+	lines, first := s.Src.Snapshot()
+	st := s.v.filter.selectFrom(lines, first)
+	w, _, _ := windowIn(&st, s.v, budget)
+	texts := make([]string, len(w))
+	for i := range w {
+		texts[i] = w[i].Text
+	}
+	return texts
+}
+
+// TestLockedFilteredWindowIgnoresLinesThatArriveAfterTheLock pins the
+// unexercised combination of a committed filter and a lock together: lockAt
+// is an absolute raw-stream index (lockedAt reads it off the unfiltered
+// snapshot), so it holds regardless of whether a filter is selecting a
+// subsequence — a line arriving afterward, matching or not, must not move
+// the window, exactly as an unfiltered lock already proves. The header's
+// total legitimately grows (the stream did), so the window itself — not the
+// rendered frame — is the thing to compare.
+func TestLockedFilteredWindowIgnoresLinesThatArriveAfterTheLock(t *testing.T) {
+	r := mixedRing()
+	s := &Surface{Src: r}
+	typeFilter(s, "etcd")
+	s.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter}, false)
+	s.HandleKey(tea.KeyPressMsg{Code: KeyLock, Text: "l"}, false)
+	if !s.Locked() || !s.Filtered() {
+		t.Fatal("setup: window must be both filtered and locked")
+	}
+	lockPoint := s.LockPoint()
+	before := shownTexts(s, 8)
+
+	r.Append(Line{At: logBase.Add(41 * time.Second), Level: "INFO", Text: "etcd member 41 healthy"})
+	r.Append(Line{At: logBase.Add(42 * time.Second), Level: "INFO", Text: "deploy step 42"})
+
+	if got := s.LockPoint(); got != lockPoint {
+		t.Errorf("lockAt moved from %d to %d after new lines arrived", lockPoint, got)
+	}
+	if after := shownTexts(s, 8); !slices.Equal(after, before) {
+		t.Errorf("a locked filtered window must not change when new lines arrive:\nbefore: %v\nafter:  %v", before, after)
 	}
 }
 

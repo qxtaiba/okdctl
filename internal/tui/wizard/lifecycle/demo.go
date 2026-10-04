@@ -3,6 +3,7 @@ package lifecycle
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -22,6 +23,27 @@ const DemoClusterName = "homelab"
 // for OKD VM resources, so the demo preview's addresses read like the real ones.
 const demoTFPrefix = "module.okd_cluster.proxmox_virtual_environment_vm."
 
+// demoStepDelayEnv lets a human or a screenshot tape slow the scripted demo
+// feed down (or speed it up) independent of the caller's own hardcoded
+// cadence — the normal pace is too fast to catch a mid-run state (progress,
+// a lock, a filter, a graceful cancel) at every terminal size. Every event
+// here carries its own pre-scripted duration (demoRowScript), so — unlike
+// deployexec's demo, where one value serves both roles — overriding the
+// wait alone cannot skew a reported number.
+const demoStepDelayEnv = "OKDCTL_DEMO_STEP_DELAY"
+
+// demoWaitDelay resolves the actual pause between demo events: d, the
+// caller's own pace, unless OKDCTL_DEMO_STEP_DELAY names a valid duration to
+// wait instead.
+func demoWaitDelay(d time.Duration) time.Duration {
+	if v := os.Getenv(demoStepDelayEnv); v != "" {
+		if parsed, err := time.ParseDuration(v); err == nil {
+			return parsed
+		}
+	}
+	return d
+}
+
 // DemoHooks returns Hooks that drive the lifecycle wizard against a static
 // six-node fixture and a GateRows-derived execution script paced by
 // stepDelay, so every screen renders without a live Proxmox/OKD cluster —
@@ -31,6 +53,7 @@ func DemoHooks(stepDelay time.Duration) Hooks {
 	// source is the wizard's exec-step graceful cancel, wired through CancelOp.
 	ctx, cancel := context.WithCancel(context.Background())
 	ring := logview.NewRing(logview.DefaultCap)
+	wait := demoWaitDelay(stepDelay)
 	return Hooks{
 		ListNodes: func() ([]cluster.NodeDetail, error) { return demoNodes(), nil },
 		DryRun:    demoPlan,
@@ -38,7 +61,7 @@ func DemoHooks(stepDelay time.Duration) Hooks {
 		Logs:      ring,
 		Done:      ctx.Done(),
 		Execute: func(st *State, events chan<- ExecEvent) error {
-			return demoExecute(ctx, st, events, ring, stepDelay)
+			return demoExecute(ctx, st, events, ring, wait)
 		},
 	}
 }
@@ -170,7 +193,7 @@ func demoAddress(role nodetypes.NodeRole, idx int) string {
 // graceful cancel on the exec screen unblocks promptly instead of running
 // the fixture to completion. Each event also appends one human line to the
 // ring, so the log surface fills from the same script the checklist reads.
-func demoExecute(ctx context.Context, st *State, events chan<- ExecEvent, ring *logview.Ring, stepDelay time.Duration) error {
+func demoExecute(ctx context.Context, st *State, events chan<- ExecEvent, ring *logview.Ring, wait time.Duration) error {
 	if st.Plan == nil {
 		return nil
 	}
@@ -182,7 +205,7 @@ func demoExecute(ctx context.Context, st *State, events chan<- ExecEvent, ring *
 			case events <- ev:
 			}
 			ring.Append(demoLogLine(&ev))
-			if err := demoWait(ctx, stepDelay); err != nil {
+			if err := demoWait(ctx, wait); err != nil {
 				return err
 			}
 		}

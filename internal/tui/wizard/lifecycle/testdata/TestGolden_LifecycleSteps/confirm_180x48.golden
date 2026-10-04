@@ -12,11 +12,11 @@
   │                                                                                                        │  ○ execute                                                          │  
   │                                                                                                        │  ○ done                                                             │  
   │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
+  │                                                                                                        │  CONFIGURED                                                         │  
+  │                                                                                                        │  operation: remove                                                  │  
+  │                                                                                                        │  node: homelab-worker2 (worker)                                     │  
+  │                                                                                                        │  storage: 1 ceph osd(s) destroyed                                   │  
+  │                                                                                                        │  ingress: 1 router pod(s) here                                      │  
   │                       ⚠ confirm irreversible removal                                                   │                                                                     │  
   │                                                                                                        │                                                                     │  
   │                       irreversible: destroys homelab-worker2 and its data disk;                        │                                                                     │  

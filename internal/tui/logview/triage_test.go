@@ -128,6 +128,36 @@ func TestLogMinimapYieldsTheColumnOnANarrowWindow(t *testing.T) {
 	}
 }
 
+// TestLogMinimapHonorsSparseFilterSpan proves the thumb spans the window's
+// real raw-index reach, not its matched-line count: three matches scattered
+// across 1000 raw lines (at 10, 500, and 990) must still read as a window
+// reaching nearly the whole stream back, not one hugging the tail — the
+// bug computed the span from len(w) (3), which only holds when matches are
+// contiguous.
+func TestLogMinimapHonorsSparseFilterSpan(t *testing.T) {
+	r := NewRing(2000)
+	for i := range 1000 {
+		text := fmt.Sprintf("step-%03d", i)
+		if i == 10 || i == 500 || i == 990 {
+			text = "needle " + text
+		}
+		r.Append(Line{At: logBase.Add(time.Duration(i) * time.Second), Level: "INFO", Text: text})
+	}
+
+	out := tuitest.StripANSI(renderPane(r, view{filter: filter{text: "needle"}}, 60, 10, false))
+	rows := strings.Split(out, "\n")[1:] // drop the header
+
+	if len(rows) != 3 {
+		t.Fatalf("setup: rendered %d rows, want the 3 matches:\n%s", len(rows), out)
+	}
+	// The oldest match sits at raw index 10 of 1000; a window that honestly
+	// reports its reach marks the lane's oldest bucket thumb too, not just
+	// the one nearest the tail.
+	if !strings.HasSuffix(rows[0], tui.IconBarTick) {
+		t.Errorf("oldest lane bucket = %q, want the window thumb (the window reaches back to raw index 10 of 1000)", rows[0])
+	}
+}
+
 // TestLogPaneRowsFitTheWidthWithTheLane pins the width idiom with the lane
 // attached: every row stays within the pane's columns, never one over.
 func TestLogPaneRowsFitTheWidthWithTheLane(t *testing.T) {

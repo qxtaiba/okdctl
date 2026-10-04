@@ -184,12 +184,45 @@ func TestSwapFlowFooterAdvertisesTheHubEscape(t *testing.T) {
 
 // hasEscBinding reports whether bindings advertise esc as the hub round-trip.
 func hasEscBinding(bindings []KeyBinding) bool {
+	return escHelp(bindings) == "hub"
+}
+
+// escHelp returns the Help text of bindings' esc entry, or "" if none.
+func escHelp(bindings []KeyBinding) string {
 	for _, b := range bindings {
-		if b.Key == HelpEsc && b.Help == "hub" {
-			return true
+		if b.Key == HelpEsc {
+			return b.Help
 		}
 	}
-	return false
+	return ""
+}
+
+// TestSwapFlowFromANonHubScreenAdvertisesBackNotHub pins the chained-flow
+// case the hub round-trip assumed away: a flow swapped in from a screen
+// that is not itself the hub (deployexec's finish screen opening cluster
+// status via its "s" key, say) returns esc to that screen, not to the
+// five-verb hub — the footer must say so rather than reusing the hub's own
+// wording, which a step's own ShortHelp cannot know to avoid on its own.
+func TestSwapFlowFromANonHubScreenAdvertisesBackNotHub(t *testing.T) {
+	origin := &fakeStep{id: "deploy-done"}
+	m := NewFlowModel([]WizardStep{origin}, config.DefaultConfig(), DefaultChrome())
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+
+	sub := &opLikeStep{fakeStep{id: "status-first"}}
+	mm, _ := m.Update(SwapFlowMsg{Steps: []WizardStep{sub}, Chrome: FlowChrome{Tagline: "status"}})
+	m = mm.(*Model)
+
+	if got := m.CurrentStep().ID(); got != "status-first" {
+		t.Fatalf("current step after swap = %q, want status-first", got)
+	}
+	if help := escHelp(m.footerBindings()); help == "hub" {
+		t.Error("esc from a flow chained off a non-hub screen must not claim it returns to the hub")
+	}
+
+	m.Update(escKey)
+	if got := m.CurrentStep().ID(); got != "deploy-done" {
+		t.Errorf("esc = %q, want back to the origin screen deploy-done", got)
+	}
 }
 
 // The fake hub here carries no confirm guard of its own, so this pins the

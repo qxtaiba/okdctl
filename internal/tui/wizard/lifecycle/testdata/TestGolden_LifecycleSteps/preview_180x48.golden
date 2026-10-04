@@ -9,9 +9,9 @@
   │  operation      resize masters                                                                         │  ✓ parameters                                                       │  
   │  target memory  12288 → 24576 MiB per node                                                             │  ● plan preview                                                     │  
   │  target cpu     unchanged                                                                              │                                                                     │  
-  │  disruption     each node is drained, then power-cycled (stop→start)                                   │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │  nodes — execution order                                                                               │                                                                     │  
+  │  disruption     each node is drained, then power-cycled (stop→start)                                   │  CONFIGURED                                                         │  
+  │                                                                                                        │  operation: resize masters                                          │  
+  │  nodes — execution order                                                                               │  nodes: 1                                                           │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │                                                                     │  
   │  NODE             ROLE    ADDRESS      ACTION                                                          │                                                                     │  
   │  homelab-master0  master  m.master[0]  update                                                          │                                                                     │  

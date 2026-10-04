@@ -8,6 +8,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
@@ -117,6 +118,24 @@ func (s *ConfirmStep) View(width, height int) string {
 		b.WriteString(okStyle.Render(tui.IconSuccess + " matches — press enter"))
 	}
 	return b.String()
+}
+
+// Answered recaps exactly what the typed name is about to authorize, for the
+// split layout's context pane — the node table and the irreversible stakes,
+// the two things most worth having in view while typing the confirmation.
+func (s *ConfirmStep) Answered() []render.Fact {
+	facts := []render.Fact{{Key: factKeyOperation, Value: string(s.st.Plan.Op)}}
+	for i := range s.st.Plan.Nodes {
+		n := &s.st.Plan.Nodes[i]
+		facts = append(facts, render.Fact{Key: "node", Value: fmt.Sprintf("%s (%s)", n.Name, n.Role)})
+		if len(n.OSDs) > 0 {
+			facts = append(facts, render.Fact{Key: "storage", Value: fmt.Sprintf("%d ceph osd(s) destroyed", len(n.OSDs))})
+		}
+		if len(n.Ingress) > 0 {
+			facts = append(facts, render.Fact{Key: "ingress", Value: fmt.Sprintf("%d router pod(s) here", len(n.Ingress))})
+		}
+	}
+	return facts
 }
 
 // destroySummary names the destroyed nodes and their data disks, pluralising

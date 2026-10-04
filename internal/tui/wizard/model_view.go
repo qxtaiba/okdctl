@@ -440,18 +440,37 @@ func (m *Model) footerBindings() []KeyBinding {
 
 // withHubEscape advertises the esc round-trip on a swapped-in flow's first
 // screen, where esc leaves the sub-flow instead of stepping back within it.
-// Steps that already bind esc themselves are left alone — theirs says where it
-// goes, and two esc entries in one ribbon would read as a contradiction.
+// The label names where esc actually lands rather than assuming it is
+// always the hub: a flow chained off a non-hub screen (deployexec's finish
+// screen opening cluster status via its "s" key, say) returns esc there,
+// not to the five-verb hub, and the ribbon must not promise what esc does
+// not do. A step's own ShortHelp cannot know which case it is in — its own
+// esc entry (e.g. a hardcoded "hub") is corrected in place rather than left
+// alone, so the wording stays truthful regardless of what the step declared.
 func (m *Model) withHubEscape(bindings []KeyBinding) []KeyBinding {
 	if m.suspended == nil || m.currentStep != 0 {
 		return bindings
 	}
-	for _, b := range bindings {
+	label := m.escDestinationLabel()
+	for i, b := range bindings {
 		if b.Key == HelpEsc {
+			bindings[i].Help = label
 			return bindings
 		}
 	}
-	return append(bindings, KeyBinding{Key: HelpEsc, Help: "hub"})
+	return append(bindings, KeyBinding{Key: HelpEsc, Help: label})
+}
+
+// escDestinationLabel names what esc returns to from a swapped-in flow's
+// first screen: "hub" only when the suspended flow's own return point is
+// the hub screen itself, "back" for every other chained origin.
+func (m *Model) escDestinationLabel() string {
+	if m.suspended.currentStep >= 0 && m.suspended.currentStep < len(m.suspended.steps) {
+		if m.suspended.steps[m.suspended.currentStep].ID() == StepIDWelcome {
+			return "hub"
+		}
+	}
+	return "back"
 }
 
 // windowTitler is implemented by steps whose terminal-tab title carries

@@ -148,6 +148,40 @@ func TestInputField_HistoryChooserAndUndo(t *testing.T) {
 	}
 }
 
+func TestInputField_UndoAfterHistoryRecallRestoresFocusValue(t *testing.T) {
+	f := NewInputField("host", "")
+	f.SetWidth(60)
+	history := NewFieldHistory(3)
+	history.Record("proxmox.host", "v1")
+	f.SetHistory(history, "proxmox.host")
+	f.SetValue("v2")
+	f.Focus()
+
+	// Edit the field without blurring it.
+	f.Update(tea.KeyPressMsg{Code: tea.KeyEnd})
+	for range len("v2") {
+		f.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	}
+	for _, r := range "typed-value" {
+		f.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	if got := f.Value(); got != "typed-value" {
+		t.Fatalf("setup: value = %q, want typed-value", got)
+	}
+
+	f.Update(tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl})
+	f.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	f.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if got := f.Value(); got != "v1" {
+		t.Fatalf("setup: recalled value = %q, want v1", got)
+	}
+
+	f.Update(tea.KeyPressMsg{Code: 'z', Mod: tea.ModCtrl})
+	if got := f.Value(); got != "v2" {
+		t.Fatalf("undo after a history recall = %q, want v2 (the value at focus)", got)
+	}
+}
+
 func TestInputField_HistoryIsBoundedAndPasswordIsExcluded(t *testing.T) {
 	history := NewFieldHistory(2)
 	f := NewInputField("host", "")

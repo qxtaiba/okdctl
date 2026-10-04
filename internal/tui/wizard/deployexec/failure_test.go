@@ -1,10 +1,12 @@
 package deployexec
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -60,6 +62,70 @@ func TestIncidentReportShowsTheChecklistFrozenAtFailure(t *testing.T) {
 		if !strings.Contains(checklist, want) {
 			t.Errorf("frozen checklist missing %q:\n%s", want, checklist)
 		}
+	}
+}
+
+// seedCancelledRun drives the run into the ignition phase, then ends it with
+// context.Canceled instead of a backend failure — the graceful-cancel path a
+// single ctrl+c on the stream screen takes (StreamStep.InterceptQuit calls
+// CancelDeploy, whose demo/real Execute hook returns ctx.Err()).
+func seedCancelledRun(m *wizard.Model, st *State) {
+	s, ok := m.CurrentStep().(*StreamStep)
+	if !ok {
+		return
+	}
+	base := time.Date(2026, 9, 25, 9, 0, 0, 0, time.UTC)
+	cur := base
+	s.now = func() time.Time { return cur }
+	s.started = base
+	s.buildRows()
+
+	for _, meta := range s.st.Plan[:2] {
+		s.applyEvent(&Event{StepID: meta.ID})
+		cur = cur.Add(20 * time.Second)
+		s.applyEvent(&Event{StepID: meta.ID, Done: true, Took: 20 * time.Second})
+	}
+	s.applyEvent(&Event{StepID: s.st.Plan[2].ID})
+	cur = cur.Add(5 * time.Second)
+	st.Elapsed = cur.Sub(base)
+	s.Update(streamEventMsg{ev: Event{Final: true, Err: context.Canceled}})
+	m.Update(wizard.JumpToStepMsg{StepID: StepIDDone})
+}
+
+// cancelledModel drives the deploy flow through a graceful ctrl+c cancel
+// onto the incident report — failedModel's sibling for the cancel path.
+func cancelledModel(t *testing.T) (*wizard.Model, *State) {
+	t.Helper()
+	tui.SetTerminalWidth(120)
+	t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+	st := streamState()
+	m := wizard.NewFlowModel(NewSteps(st, goldenHooks()), st.Cfg, Chrome())
+	_ = tuitest.RenderAt(t, m, 120, 40)
+	m.Update(wizard.JumpToStepMsg{StepID: StepIDStream})
+	seedCancelledRun(m, st)
+	return m, st
+}
+
+// TestIncidentReportDistinguishesCancelFromFailure is the coordinator's
+// screenshot-QA finding: a graceful ctrl+c must read as interrupted, not as
+// an engine failure — no ✗ on the row the operator stopped, and no raw
+// context.Canceled error text standing in for an honest explanation.
+func TestIncidentReportDistinguishesCancelFromFailure(t *testing.T) {
+	m, _ := cancelledModel(t)
+	out := reportOf(t, m)
+
+	if !strings.Contains(out, "interrupted") {
+		t.Errorf("report must say interrupted, not failed:\n%s", out)
+	}
+	if strings.Contains(out, "context canceled") {
+		t.Errorf("report must not surface the raw context.Canceled error text:\n%s", out)
+	}
+	if strings.Contains(out, tui.IconError+" ignition") {
+		t.Errorf("the interrupted phase must not read as failed (✗):\n%s", out)
+	}
+	if strings.Contains(out, tui.IconError+" generate ignition") {
+		t.Errorf("the interrupted row must not read as failed (✗):\n%s", out)
 	}
 }
 

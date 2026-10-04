@@ -373,8 +373,16 @@ func (m *Model) indexOfStepByID(id StepID) int {
 }
 
 // focusStep is the shared tail of every step transition: resize, focus, refresh
-// jump targets, resync viewport.
+// jump targets, resync viewport. It is also the single point every
+// navigation-mutating message (StepCompleteMsg, StepBackMsg, SwapFlowMsg,
+// JumpToStepMsg, DraftResumeMsg) funnels through, so it closes the palette
+// and help overlay first — both gate only tea.KeyPressMsg, so one of those
+// messages can otherwise arrive asynchronously while a modal is open and
+// move the current step (or replace the whole step set, on SwapFlow)
+// underneath it, leaving the modal rendering targets or bindings for a step
+// the user never navigated to.
 func (m *Model) focusStep(idx int) (tea.Model, tea.Cmd) {
+	m.closeNavigationModals()
 	m.currentStep = idx
 
 	m.sizeCurrentStep()

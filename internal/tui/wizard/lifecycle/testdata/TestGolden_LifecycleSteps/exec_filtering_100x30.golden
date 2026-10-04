@@ -1,0 +1,30 @@
+                                                                                                    
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L                                                                                  │  
+  │ resizing masters                                    op · target · params · plan · run · done │  
+  │──────────────────────────────────────────────────────────────────────────────────────────────│  
+  │  resizing masters  2 / 3                                                  elapsed 1m15s      │  
+  │  ✓ homelab-master0                                                                 1m0s      │  
+  │  ● homelab-master1                                                                           │  
+  │      ✓ etcd health gate (pre)                                                         —      │  
+  │      ✓ cordon + drain                                                                 —      │  
+  │      ⣾ terraform apply (in-place update)                                            15s      │  
+  │      ○ power-cycle vm                                                                        │  
+  │      ○ wait for node ready                                                                   │  
+  │      ○ etcd health gate (post)                                                               │  
+  │      ○ uncordon + ceph health gate                                                           │  
+  │  ○ homelab-master2                                                                           │  
+  │                                                                                              │  
+  │  LOG · ▸ /step-2 (4/24)                                                                      │  
+  │  · 09:02:20 terraform apply step=step-20 node=homelab-master0                         │      │  
+  │  · 09:02:27 terraform apply step=step-21 node=homelab-master0                         │      │  
+  │  · 09:02:34 terraform apply step=step-22 node=homelab-master0                         │      │  
+  │  · 09:02:41 terraform apply step=step-23 node=homelab-master0                         ▎      │  
+  │                                                                                              │  
+  │  marker okd-install/.okdctl-node-op.json · full log okd-install/okdctl.log · ctrl+c          │  
+  │  cancels after the current gate                                                              │  
+  │                                                                                              │  
+  │─────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
+  │  enter commit the filter • esc cancel it • ctrl+c cancel (twice to force-quit) • ? help      │  
+  ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
+                                                                                                    

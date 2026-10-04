@@ -9,9 +9,9 @@
   │  operation   remove homelab-worker2                                                                    │  ✓ parameters                         │  
   │                                                                                                        │  ● plan preview                       │  
   │  nodes — execution order                                                                               │                                       │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │                                       │  
-  │  NODE             ROLE    ADDRESS      ACTION                                                          │                                       │  
-  │  homelab-worker2  worker  m.worker[2]  delete                                                          │                                       │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  CONFIGURED                           │  
+  │  NODE             ROLE    ADDRESS      ACTION                                                          │  operation: remove homelab-worker2    │  
+  │  homelab-worker2  worker  m.worker[2]  delete                                                          │  nodes: 1                             │  
   │    storage: 1 rook-ceph OSD(s) — data disk destroyed                                                   │                                       │  
   │    ingress: 1 router pod(s) here                                                                       │                                       │  
   │                                                                                                        │                                       │  

@@ -64,19 +64,23 @@ func (s *Surface) LockPoint() int64 {
 
 // HandleKey applies one of the log surface's keys: KeyLock freezes the
 // window where it stands (or releases it back to the tail), KeyFull swaps
-// the log full-screen and back — reported through layoutToggled so the
-// owning step can ask its frame for a re-measure — pgup/pgdn page the
-// window through the whole ring, and the arrows walk it line by line in
-// full-screen mode. paneCarries names the window the geometry keys move by:
-// the split pane when the frame gives the log one, the tail otherwise. With
-// a nil Src every key is inert.
-func (s *Surface) HandleKey(msg tea.KeyPressMsg, paneCarries bool) (layoutToggled bool) {
+// the log full-screen and back — reported through relayout so the owning
+// step can ask its frame for a re-measure — pgup/pgdn page the window
+// through the whole ring, and the arrows walk it line by line in
+// full-screen mode. moved reports that KeyLock or a jump (KeyNextMatch,
+// KeyPrevMatch) moved the window without any layout change: on the narrow
+// tail the window rides below the step's own body, so the owning step must
+// still nudge the outer viewport toward it, or the newly-locked or
+// newly-jumped-to line can sit off screen below the fold. paneCarries names
+// the window the geometry keys move by: the split pane when the frame gives
+// the log one, the tail otherwise. With a nil Src every key is inert.
+func (s *Surface) HandleKey(msg tea.KeyPressMsg, paneCarries bool) (relayout, moved bool) {
 	if s.Src == nil {
-		return false
+		return false, false
 	}
 	if s.v.filter.typing {
 		s.editFilter(msg)
-		return false
+		return false, false
 	}
 	switch {
 	case letterKey(msg, KeyLock):
@@ -84,9 +88,10 @@ func (s *Surface) HandleKey(msg tea.KeyPressMsg, paneCarries bool) (layoutToggle
 		if s.v.locked {
 			s.v.lockAt = lockedAt(s.Src)
 		}
+		return false, true
 	case letterKey(msg, KeyFull):
 		s.v.full = !s.v.full
-		return true
+		return true, false
 	case letterKey(msg, KeyFilter):
 		// The pattern starts empty on every open: filter-as-you-type counts
 		// its matches from the first keystroke, and re-opening to edit a long
@@ -94,8 +99,10 @@ func (s *Surface) HandleKey(msg tea.KeyPressMsg, paneCarries bool) (layoutToggle
 		s.committed, s.v.filter = s.v.filter, filter{typing: true}
 	case letterKey(msg, KeyNextMatch):
 		jump(&s.v, s.Src, 1)
+		return false, true
 	case letterKey(msg, KeyPrevMatch):
 		jump(&s.v, s.Src, -1)
+		return false, true
 	case msg.Code == tea.KeyPgUp:
 		s.ScrollBy(-s.PageSize(paneCarries), paneCarries)
 	case msg.Code == tea.KeyPgDown:
@@ -109,7 +116,7 @@ func (s *Surface) HandleKey(msg tea.KeyPressMsg, paneCarries bool) (layoutToggle
 			s.ScrollBy(1, paneCarries)
 		}
 	}
-	return false
+	return false, false
 }
 
 // letterKey reports whether msg is the printable key r. Text is the field a

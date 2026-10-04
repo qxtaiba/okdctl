@@ -3,8 +3,6 @@
   │ O K D C T L                                                                                  │  
   │ resizing masters                                    op · target · params · plan · run · done │  
   │──────────────────────────────────────────────────────────────────────────────────────────────│  
-  │  resizing masters  2 / 3                                                  elapsed 1m15s      │  
-  │  ✓ homelab-master0                                                                 1m0s      │  
   │  ● homelab-master1                                                                           │  
   │      ✓ etcd health gate (pre)                                                         —      │  
   │      ✓ cordon + drain                                                                 —      │  
@@ -23,8 +21,10 @@
   │  · 09:02:34 terraform apply step=step-22 node=homelab-master0                         ▎      │  
   │  · 09:02:41 terraform apply step=step-23 node=homelab-master0                         ▎      │  
   │                                                                                              │  
+  │  marker okd-install/.okdctl-node-op.json · full log okd-install/okdctl.log · ctrl+c          │  
+  │  cancels after the current gate                                                              │  
   │                                                                                              │  
-  │──────────────────────────── ↑ ↓  scroll down for more ──────────────────────────── ▸ homelab │  
+  │───────────────────────────── ↑ ↓  scroll up for more ───────────────────────────── ▸ homelab │  
   │  l follow the log tail • f full-screen log … • ctrl+c cancel (twice to force-quit) • ? help  │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                     

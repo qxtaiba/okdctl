@@ -12,7 +12,6 @@ import (
 type StepID string
 
 // Built-in StepID values for each wizard step in DefaultConfig.
-// PaletteTargetStep, PaletteTargetField, and PaletteTargetAction are command-palette target kinds.
 const (
 	StepIDWelcome       StepID = "welcome"
 	StepIDDistribution  StepID = "distribution"
