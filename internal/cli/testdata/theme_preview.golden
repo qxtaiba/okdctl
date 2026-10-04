@@ -13,9 +13,9 @@ subtle     ○ waiting
 rule       ------------------------------
 code       oc get nodes
 success    ✓ healthy
-warning    ! attention
-error      × unavailable
-info       i update available
+warning    ⚠ attention
+error      ✗ unavailable
+info       update available
 accent     ● active section
 
 light
@@ -31,9 +31,9 @@ subtle     ○ waiting
 rule       ------------------------------
 code       oc get nodes
 success    ✓ healthy
-warning    ! attention
-error      × unavailable
-info       i update available
+warning    ⚠ attention
+error      ✗ unavailable
+info       update available
 accent     ● active section
 
 high-contrast · dark background
@@ -49,9 +49,9 @@ subtle     ○ waiting
 rule       ------------------------------
 code       oc get nodes
 success    ✓ healthy
-warning    ! attention
-error      × unavailable
-info       i update available
+warning    ⚠ attention
+error      ✗ unavailable
+info       update available
 accent     ● active section
 
 inherit · dark background
@@ -67,7 +67,7 @@ subtle     ○ waiting
 rule       ------------------------------
 code       oc get nodes
 success    ✓ healthy
-warning    ! attention
-error      × unavailable
-info       i update available
+warning    ⚠ attention
+error      ✗ unavailable
+info       update available
 accent     ● active section
