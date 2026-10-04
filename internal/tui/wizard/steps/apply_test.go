@@ -37,6 +37,30 @@ func TestBasicsStepDefinition_Fields(t *testing.T) {
 	if cfg.Topology.ControlPlane.Count != 5 {
 		t.Errorf("ControlPlane.Count = %d, want 5", cfg.Topology.ControlPlane.Count)
 	}
+
+	name := setField(t, &BasicsStepDefinition, cfg, "cluster_name", "homelab")
+	if cfg.Cluster.Name != "homelab" {
+		t.Errorf("Cluster.Name = %q, want homelab", cfg.Cluster.Name)
+	}
+	if got := name.ConfigGet(cfg); got != "homelab" {
+		t.Errorf("ConfigGet(cluster_name) = %q, want homelab", got)
+	}
+
+	domain := setField(t, &BasicsStepDefinition, cfg, fieldDomain, "prod.example")
+	if cfg.Cluster.Domain != "prod.example" {
+		t.Errorf("Cluster.Domain = %q, want prod.example", cfg.Cluster.Domain)
+	}
+	if got := domain.ConfigGet(cfg); got != "prod.example" {
+		t.Errorf("ConfigGet(domain) = %q, want prod.example", got)
+	}
+
+	workers := setField(t, &BasicsStepDefinition, cfg, "worker_count", "5")
+	if cfg.Topology.Workers.Count != 5 {
+		t.Errorf("Workers.Count = %d, want 5", cfg.Topology.Workers.Count)
+	}
+	if got := workers.ConfigGet(cfg); got != "5" {
+		t.Errorf("ConfigGet(worker_count) = %q, want 5", got)
+	}
 }
 
 func TestAdvancedStepDefinition_Fields(t *testing.T) {
@@ -54,6 +78,70 @@ func TestAdvancedStepDefinition_Fields(t *testing.T) {
 	}
 	if got := ha.ConfigGet(cfg); got != valYes {
 		t.Errorf("ConfigGet(ha_enabled) = %q, want yes", got)
+	}
+
+	vmid := setField(t, &AdvancedStepDefinition, cfg, "vm_id_base", "7000")
+	if cfg.Topology.VMIDBase != 7000 {
+		t.Errorf("Topology.VMIDBase = %d, want 7000", cfg.Topology.VMIDBase)
+	}
+	if got := vmid.ConfigGet(cfg); got != "7000" {
+		t.Errorf("ConfigGet(vm_id_base) = %q, want 7000", got)
+	}
+
+	cpuType := setField(t, &AdvancedStepDefinition, cfg, "cpu_type", "x86-64-v2")
+	if cfg.Provider.Proxmox.CPUType != "x86-64-v2" {
+		t.Errorf("Provider.Proxmox.CPUType = %q, want x86-64-v2", cfg.Provider.Proxmox.CPUType)
+	}
+	if got := cpuType.ConfigGet(cfg); got != "x86-64-v2" {
+		t.Errorf("ConfigGet(cpu_type) = %q, want x86-64-v2", got)
+	}
+
+	numa := setField(t, &AdvancedStepDefinition, cfg, "numa_enabled", "yes")
+	if !cfg.Provider.Proxmox.NUMAEnabled {
+		t.Error("Provider.Proxmox.NUMAEnabled = false, want true")
+	}
+	if got := numa.ConfigGet(cfg); got != valYes {
+		t.Errorf("ConfigGet(numa_enabled) = %q, want yes", got)
+	}
+
+	ntp := setField(t, &AdvancedStepDefinition, cfg, "ntp_server", "time.example.com")
+	if cfg.Networking.NTPServer != "time.example.com" {
+		t.Errorf("Networking.NTPServer = %q, want time.example.com", cfg.Networking.NTPServer)
+	}
+	if got := ntp.ConfigGet(cfg); got != "time.example.com" {
+		t.Errorf("ConfigGet(ntp_server) = %q, want time.example.com", got)
+	}
+
+	bootstrapTimeout := setField(t, &AdvancedStepDefinition, cfg, "bootstrap_timeout", "1800")
+	if cfg.Deployment.BootstrapTimeout != 1800 {
+		t.Errorf("Deployment.BootstrapTimeout = %d, want 1800", cfg.Deployment.BootstrapTimeout)
+	}
+	if got := bootstrapTimeout.ConfigGet(cfg); got != "1800" {
+		t.Errorf("ConfigGet(bootstrap_timeout) = %q, want 1800", got)
+	}
+
+	installTimeout := setField(t, &AdvancedStepDefinition, cfg, "install_timeout", "3600")
+	if cfg.Deployment.InstallTimeout != 3600 {
+		t.Errorf("Deployment.InstallTimeout = %d, want 3600", cfg.Deployment.InstallTimeout)
+	}
+	if got := installTimeout.ConfigGet(cfg); got != "3600" {
+		t.Errorf("ConfigGet(install_timeout) = %q, want 3600", got)
+	}
+
+	terraformEnv := setField(t, &AdvancedStepDefinition, cfg, "terraform_env", "staging")
+	if cfg.Deployment.TerraformEnv != "staging" {
+		t.Errorf("Deployment.TerraformEnv = %q, want staging", cfg.Deployment.TerraformEnv)
+	}
+	if got := terraformEnv.ConfigGet(cfg); got != "staging" {
+		t.Errorf("ConfigGet(terraform_env) = %q, want staging", got)
+	}
+
+	binDir := setField(t, &AdvancedStepDefinition, cfg, "bin_dir", "/opt/bin")
+	if cfg.Deployment.BinDir != "/opt/bin" {
+		t.Errorf("Deployment.BinDir = %q, want /opt/bin", cfg.Deployment.BinDir)
+	}
+	if got := binDir.ConfigGet(cfg); got != "/opt/bin" {
+		t.Errorf("ConfigGet(bin_dir) = %q, want /opt/bin", got)
 	}
 }
 
@@ -77,6 +165,22 @@ func TestFilesStepDefinition_Fields(t *testing.T) {
 	setField(t, &FilesStepDefinition, cfg, "web_root", "/srv/ignition")
 	if cfg.HTTPServer.Root != "/srv/ignition" {
 		t.Errorf("HTTPServer.Root = %q", cfg.HTTPServer.Root)
+	}
+
+	pullSecret := setField(t, &FilesStepDefinition, cfg, "pull_secret", "/tmp/pull-secret.json")
+	if cfg.Files.PullSecret != "/tmp/pull-secret.json" {
+		t.Errorf("Files.PullSecret = %q, want /tmp/pull-secret.json", cfg.Files.PullSecret)
+	}
+	if got := pullSecret.ConfigGet(cfg); got != "/tmp/pull-secret.json" {
+		t.Errorf("ConfigGet(pull_secret) = %q, want /tmp/pull-secret.json", got)
+	}
+
+	sshKey := setField(t, &FilesStepDefinition, cfg, "ssh_public_key", "/tmp/id_ed25519.pub")
+	if cfg.Files.SSHPublicKey != "/tmp/id_ed25519.pub" {
+		t.Errorf("Files.SSHPublicKey = %q, want /tmp/id_ed25519.pub", cfg.Files.SSHPublicKey)
+	}
+	if got := sshKey.ConfigGet(cfg); got != "/tmp/id_ed25519.pub" {
+		t.Errorf("ConfigGet(ssh_public_key) = %q, want /tmp/id_ed25519.pub", got)
 	}
 }
 
@@ -112,6 +216,33 @@ func TestNetworkingStepDefinition_DNSServersRoundTrip(t *testing.T) {
 	}
 	if got := dns.ConfigGet(cfg); got != "192.168.1.1, 8.8.8.8" {
 		t.Errorf("ConfigGet(dns_servers) = %q", got)
+	}
+}
+
+// TestNetworkingStepDefinition_FieldsRoundTrip extends dns_servers' own
+// round-trip test above to every other networking field: each gets a fresh
+// Config, a non-default ConfigSet value, and a ConfigGet assertion that
+// value comes back unchanged.
+func TestNetworkingStepDefinition_FieldsRoundTrip(t *testing.T) {
+	cases := []struct{ key, value string }{
+		{"machine_cidr", "10.0.0.0/24"},
+		{fieldGateway, "10.0.0.1"},
+		{"pod_cidr", "10.132.0.0/14"},
+		{"service_cidr", "172.31.0.0/16"},
+		{"host_prefix", "24"},
+		{"start_ip", "10.0.0.50"},
+		{fieldInterface, "eth0"},
+		{"bastion_ip", "10.0.0.20"},
+		{"vip", "10.0.0.99"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.key, func(t *testing.T) {
+			cfg := &config.Config{}
+			f := setField(t, &NetworkingStepDefinition, cfg, tc.key, tc.value)
+			if got := f.ConfigGet(cfg); got != tc.value {
+				t.Errorf("ConfigGet(%s) = %q, want %q", tc.key, got, tc.value)
+			}
+		})
 	}
 }
 
@@ -203,6 +334,17 @@ func TestProxmoxStepDefinition_Fields(t *testing.T) {
 	if got := insecure.ConfigGet(cfg); got != valYes {
 		t.Errorf("ConfigGet(skip_tls_verify) = %q, want yes", got)
 	}
+
+	tokenID := setField(t, &ProxmoxStepDefinition, cfg, "token_id", "user@pve!okdctl")
+	if cfg.Provider.Proxmox.TokenID != "user@pve!okdctl" {
+		t.Errorf("TokenID = %q, want user@pve!okdctl", cfg.Provider.Proxmox.TokenID)
+	}
+	if got := tokenID.ConfigGet(cfg); got != "user@pve!okdctl" {
+		t.Errorf("ConfigGet(token_id) = %q, want user@pve!okdctl", got)
+	}
+
+	// password is intentionally write-only (ConfigGet is nil): it must never
+	// be read back into the form, so there is no round-trip to assert here.
 }
 
 func TestProxmoxStepDefinition_FieldsOnNilProxmoxConfig(t *testing.T) {
@@ -284,6 +426,74 @@ func TestProxmoxStepDefinition_ApplySetsProviderType(t *testing.T) {
 	}
 }
 
+func TestResourcesStepDefinition_Fields(t *testing.T) {
+	cfg := &config.Config{}
+
+	cpVCPUs := setField(t, &ResourcesStepDefinition, cfg, "cp_vcpus", "6")
+	if cfg.Topology.ControlPlane.CPU != 6 {
+		t.Errorf("ControlPlane.CPU = %d, want 6", cfg.Topology.ControlPlane.CPU)
+	}
+	if got := cpVCPUs.ConfigGet(cfg); got != "6" {
+		t.Errorf("ConfigGet(cp_vcpus) = %q, want 6", got)
+	}
+
+	cpMemory := setField(t, &ResourcesStepDefinition, cfg, "cp_memory", "16384")
+	if cfg.Topology.ControlPlane.MemoryMB != 16384 {
+		t.Errorf("ControlPlane.MemoryMB = %d, want 16384", cfg.Topology.ControlPlane.MemoryMB)
+	}
+	if got := cpMemory.ConfigGet(cfg); got != "16384" {
+		t.Errorf("ConfigGet(cp_memory) = %q, want 16384", got)
+	}
+
+	cpDisk := setField(t, &ResourcesStepDefinition, cfg, "cp_disk", "80")
+	if cfg.Topology.ControlPlane.DiskGB != 80 {
+		t.Errorf("ControlPlane.DiskGB = %d, want 80", cfg.Topology.ControlPlane.DiskGB)
+	}
+	if got := cpDisk.ConfigGet(cfg); got != "80" {
+		t.Errorf("ConfigGet(cp_disk) = %q, want 80", got)
+	}
+
+	workerVCPUs := setField(t, &ResourcesStepDefinition, cfg, "worker_vcpus", "12")
+	if cfg.Topology.Workers.CPU != 12 {
+		t.Errorf("Workers.CPU = %d, want 12", cfg.Topology.Workers.CPU)
+	}
+	if got := workerVCPUs.ConfigGet(cfg); got != "12" {
+		t.Errorf("ConfigGet(worker_vcpus) = %q, want 12", got)
+	}
+
+	workerMemory := setField(t, &ResourcesStepDefinition, cfg, "worker_memory", "24576")
+	if cfg.Topology.Workers.MemoryMB != 24576 {
+		t.Errorf("Workers.MemoryMB = %d, want 24576", cfg.Topology.Workers.MemoryMB)
+	}
+	if got := workerMemory.ConfigGet(cfg); got != "24576" {
+		t.Errorf("ConfigGet(worker_memory) = %q, want 24576", got)
+	}
+
+	workerDisk := setField(t, &ResourcesStepDefinition, cfg, "worker_disk", "100")
+	if cfg.Topology.Workers.DiskGB != 100 {
+		t.Errorf("Workers.DiskGB = %d, want 100", cfg.Topology.Workers.DiskGB)
+	}
+	if got := workerDisk.ConfigGet(cfg); got != "100" {
+		t.Errorf("ConfigGet(worker_disk) = %q, want 100", got)
+	}
+
+	workerDataDisk := setField(t, &ResourcesStepDefinition, cfg, "worker_data_disk", "750")
+	if cfg.Disks.WorkerDataSizeGB != 750 {
+		t.Errorf("Disks.WorkerDataSizeGB = %d, want 750", cfg.Disks.WorkerDataSizeGB)
+	}
+	if got := workerDataDisk.ConfigGet(cfg); got != "750" {
+		t.Errorf("ConfigGet(worker_data_disk) = %q, want 750", got)
+	}
+
+	cpDataDisk := setField(t, &ResourcesStepDefinition, cfg, "cp_data_disk", "25")
+	if cfg.Disks.ControlPlaneDataSizeGB != 25 {
+		t.Errorf("Disks.ControlPlaneDataSizeGB = %d, want 25", cfg.Disks.ControlPlaneDataSizeGB)
+	}
+	if got := cpDataDisk.ConfigGet(cfg); got != "25" {
+		t.Errorf("ConfigGet(cp_data_disk) = %q, want 25", got)
+	}
+}
+
 func TestResourcesStepDefinition_CPDiskSeedsBootstrap(t *testing.T) {
 	cfg := &config.Config{}
 
@@ -339,5 +549,39 @@ func TestAddonsStepDefinition_FieldWiring(t *testing.T) {
 	setField(t, &AddonsStepDefinition, cfg, "flux_enabled", "yes")
 	if !cfg.Addons["flux"].Enabled {
 		t.Fatal("flux.Enabled = false after ConfigSet(yes)")
+	}
+}
+
+// TestAddonsStepDefinition_FieldsRoundTrip covers every remaining addons
+// field: each gets a fresh Config, a non-default ConfigSet value, and a
+// ConfigGet assertion that value comes back unchanged.
+func TestAddonsStepDefinition_FieldsRoundTrip(t *testing.T) {
+	cases := []struct{ key, value string }{
+		{"flux_enabled", valYes},
+		{"flux_repository", "ssh://git@github.com/example/repo.git"},
+		{"flux_branch", "develop"},
+		{"flux_path", "clusters/prod"},
+		{"secretstore_enabled", valYes},
+		{"secretstore_provider", providerVault},
+		{"secretstore_secrets_dir", "config/secrets"},
+		{"secretstore_op_connect_host", "http://1password:8080"},
+		{"secretstore_op_vaults", "homelab=1,shared=2"},
+		{"secretstore_vault_server", "https://vault.example.com"},
+		{"secretstore_vault_path", "kv"},
+		{"secretstore_vault_version", "v1"},
+		{"secretstore_bw_org_id", "org-123"},
+		{"secretstore_bw_project_id", "proj-456"},
+		{"secretstore_bw_api_url", "https://api.bitwarden.example.com"},
+		{"secretstore_bw_identity_url", "https://identity.bitwarden.example.com"},
+		{"secretstore_bw_sdk_url", "https://sdk.bitwarden.example.com"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.key, func(t *testing.T) {
+			cfg := &config.Config{}
+			f := setField(t, &AddonsStepDefinition, cfg, tc.key, tc.value)
+			if got := f.ConfigGet(cfg); got != tc.value {
+				t.Errorf("ConfigGet(%s) = %q, want %q", tc.key, got, tc.value)
+			}
+		})
 	}
 }
