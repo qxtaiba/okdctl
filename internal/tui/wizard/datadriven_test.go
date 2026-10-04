@@ -758,13 +758,21 @@ func TestFieldWidth_Cols(t *testing.T) {
 		avail int
 		want  int
 	}{
-		{FieldWidthAuto, 90, 64},
+		// Below either class's derived ceiling, the avail clamp wins —
+		// unchanged from before the ceilings started tracking formMaxWidth.
+		{FieldWidthAuto, 90, 90},
 		{FieldWidthNumber, 90, 16},
-		{FieldWidthPath, 90, 80},
+		{FieldWidthPath, 90, 90},
 		{FieldWidthFull, 90, 90},
 		{FieldWidthPath, 50, 50},
 		{FieldWidthAuto, 32, 32},
 		{FieldWidthPath, 74, 74},
+		// A generous avail (a wide split-layout form column) lets each
+		// class's own derived ceiling — tied to formMaxWidth, not a bare
+		// literal — win instead.
+		{FieldWidthAuto, 1000, formMaxWidth - formFieldChrome},
+		{FieldWidthPath, 1000, formMaxWidth - 4},
+		{FieldWidthFull, 1000, 1000},
 	}
 	for _, c := range cases {
 		if got := c.w.Cols(c.avail); got != c.want {

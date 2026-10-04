@@ -47,22 +47,30 @@ type ConfigGetter func(cfg *config.Config) string
 // FieldWidth sets an input box's preferred width, clamped to its section.
 type FieldWidth int
 
+// formFieldChrome is the section indent and field-row padding a box's
+// preferred width must clear beneath formMaxWidth (model.go), so
+// FieldWidthAuto and FieldWidthPath track the form column's own measure
+// instead of a bigger guessed constant each time a box falls short of it.
+const formFieldChrome = 8
+
 // Field width classes for data-driven step definitions.
 const (
-	FieldWidthAuto   FieldWidth = 0 // zero value — 64 columns
+	FieldWidthAuto   FieldWidth = 0 // zero value — special-cased in Cols
 	FieldWidthNumber FieldWidth = 16
-	FieldWidthPath   FieldWidth = 80
+	FieldWidthPath   FieldWidth = formMaxWidth - 4
 	FieldWidthFull   FieldWidth = -1 // the whole inner width
 )
 
 // Cols resolves w to a concrete box width in columns, clamped to avail;
-// FieldWidthFull always returns avail itself.
+// FieldWidthFull always returns avail itself, and FieldWidthAuto derives
+// from formMaxWidth rather than a bare literal so a wide form column
+// doesn't leave the box stranded short of the space it was given.
 func (w FieldWidth) Cols(avail int) int {
 	if w == FieldWidthFull {
 		return avail
 	}
 	if w == FieldWidthAuto {
-		return min(64, avail)
+		return min(formMaxWidth-formFieldChrome, avail)
 	}
 	return min(int(w), avail)
 }
