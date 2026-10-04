@@ -402,6 +402,65 @@ func TestGolden_HubReachesClusterStatus(t *testing.T) {
 	}
 }
 
+// TestGolden_HubWideTiers pins the hub against the owner's dead-space
+// grievance at wide/tall terminals: a blank-slate launcher must earn a
+// genuine second column instead of sitting as a lone centered menu in an
+// otherwise empty frame, and an existing-config hub's live ops dashboard
+// must hold the same way.
+func TestGolden_HubWideTiers(t *testing.T) {
+	for _, sz := range []struct{ w, h int }{{150, 24}, {180, 48}} {
+		t.Run(fmt.Sprintf("blank-slate_%dx%d", sz.w, sz.h), func(t *testing.T) {
+			forceHeroColor(t)
+			tui.SetTerminalWidth(sz.w)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+			m := newGoldenModel(t)
+			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
+			tuitest.Golden(t, fmt.Sprintf("hub-blank-slate_%dx%d", sz.w, sz.h), frame)
+			tuitest.AssertFits(t, frame, sz.w, sz.h)
+
+			plain := tuitest.StripANSI(frame)
+			for _, want := range []string{"get started", "GET STARTED", "connect", "cluster", "extras", "review"} {
+				if !strings.Contains(plain, want) {
+					t.Errorf("blank-slate hub at %dx%d is missing %q — it should earn its space, not sit in a void:\n%s", sz.w, sz.h, want, plain)
+				}
+			}
+		})
+
+		t.Run(fmt.Sprintf("existing-config_%dx%d", sz.w, sz.h), func(t *testing.T) {
+			forceHeroColor(t)
+			tui.SetTerminalWidth(sz.w)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+			m := newGoldenModel(t)
+			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
+			seedHubSaveSlot(m)
+			hub := m.CurrentStep().(*WelcomeStep)
+			hub.SetOpsDashboard(StaticStatusSource{Status: statusFixture()})
+			hub.opsCtx, hub.opsCancel = context.WithCancel(context.Background())
+			t.Cleanup(hub.opsCancel)
+			hub.opsActive = true
+			hub.opsGeneration = 1
+			hub.Update(hub.probeOps(1)())
+			hub.opsStatus.updated = time.Date(2026, time.January, 2, 15, 4, 5, 0, time.UTC)
+			hub.opsStatus.latency = 42 * time.Millisecond
+			hub.opsStatus.latencyAvailable = true
+			hub.opsStatus.latencyHistory = fullOpsLatencyHistory()
+
+			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
+			tuitest.Golden(t, fmt.Sprintf("hub-existing-config_%dx%d", sz.w, sz.h), frame)
+			tuitest.AssertFits(t, frame, sz.w, sz.h)
+
+			plain := tuitest.StripANSI(frame)
+			for _, want := range []string{"6/6 ready", "prod-cluster"} {
+				if !strings.Contains(plain, want) {
+					t.Errorf("existing-config hub at %dx%d is missing %q:\n%s", sz.w, sz.h, want, plain)
+				}
+			}
+		})
+	}
+}
+
 func TestGolden_HubOperationsDashboard(t *testing.T) {
 	for _, sz := range []struct{ w, h int }{{80, 24}, {100, 30}, {120, 40}, {140, 40}, {180, 48}} {
 		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
