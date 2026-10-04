@@ -74,11 +74,17 @@ type DatastoreInfo struct {
 
 // HostProbe is the read-only snapshot ProbeHost returns; GuestAllocatedBytes
 // sums running-guest memory on Node for the memory-budget over-commit guard.
+// Datastores holds only the requested names ProbeHost could actually read —
+// a name ProbeHost couldn't read is recorded in FailedDatastores instead of
+// being silently dropped, so an empty Datastores is distinguishable from a
+// failed probe: check FailedDatastores before treating "no entries" as "no
+// datastores".
 type HostProbe struct {
 	Node                string
 	HostMemTotalBytes   uint64
 	GuestAllocatedBytes uint64
 	Datastores          []DatastoreInfo
+	FailedDatastores    []string
 }
 
 // HostMemTotalMiB reports physical host memory in MiB for the memory-budget guard.
@@ -132,21 +138,26 @@ func ProbeHost(ctx context.Context, opts *ProbeOptions) (*HostProbe, error) {
 		GuestAllocatedBytes: sumRunningGuestMem(resources, opts.Node),
 	}
 
-	// Per-datastore reads are best-effort: a failing lookup is skipped, not fatal.
+	// Per-datastore reads are best-effort: a failing lookup is recorded in
+	// FailedDatastores, not fatal to the overall probe.
+	names := dedupe(opts.Datastores)
 	node, err := client.Node(ctx, opts.Node)
-	if err == nil {
-		for _, name := range dedupe(opts.Datastores) {
-			st, stErr := node.Storage(ctx, name)
-			if stErr != nil {
-				continue
-			}
-			probe.Datastores = append(probe.Datastores, DatastoreInfo{
-				Name:       name,
-				TotalBytes: st.Total,
-				AvailBytes: st.Avail,
-				Shared:     st.Shared != 0,
-			})
+	if err != nil {
+		probe.FailedDatastores = names
+		return probe, nil
+	}
+	for _, name := range names {
+		st, stErr := node.Storage(ctx, name)
+		if stErr != nil {
+			probe.FailedDatastores = append(probe.FailedDatastores, name)
+			continue
 		}
+		probe.Datastores = append(probe.Datastores, DatastoreInfo{
+			Name:       name,
+			TotalBytes: st.Total,
+			AvailBytes: st.Avail,
+			Shared:     st.Shared != 0,
+		})
 	}
 
 	return probe, nil
