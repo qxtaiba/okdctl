@@ -1303,6 +1303,71 @@ func TestDataDrivenStep_PairedFieldsReserveDefaultTagSymmetrically(t *testing.T)
 	}
 }
 
+// absenceNoteTestDefinition declares a toggle field and a section hidden
+// until the toggle flips to "yes", carrying an AbsenceNote.
+func absenceNoteTestDefinition() *StepDefinition {
+	return &StepDefinition{
+		ID:    StepIDBasics,
+		Title: "absence note test step",
+		Sections: []SectionDefinition{
+			{
+				Title: "toggle",
+				Fields: []FieldDefinition{
+					{Key: "enabled", Label: "enabled", Default: "no"},
+				},
+			},
+			{
+				Title: "conditional",
+				Visible: func(values map[string]string) bool {
+					return values["enabled"] == testValYes
+				},
+				AbsenceNote: func(values map[string]string) string {
+					if values["enabled"] == testValYes {
+						return ""
+					}
+					return "conditional settings appear when enabled."
+				},
+				Fields: []FieldDefinition{
+					{Key: "detail", Label: "detail"},
+				},
+			},
+		},
+	}
+}
+
+// TestDataDrivenStep_AbsenceNoteRendersWhenSectionHidden pins mechanism 4:
+// a hidden conditional section renders its AbsenceNote line instead of
+// vanishing with zero output.
+func TestDataDrivenStep_AbsenceNoteRendersWhenSectionHidden(t *testing.T) {
+	step := NewDataDrivenStep(absenceNoteTestDefinition())
+	step.SetFocused(true)
+
+	view := tuitest.StripANSI(step.View(100, 24))
+	if !strings.Contains(view, "conditional settings appear when enabled.") {
+		t.Fatalf("View() = %q, want the hidden section's AbsenceNote visible", view)
+	}
+	if strings.Contains(view, "detail") {
+		t.Fatalf("View() = %q, want the hidden section's own field to stay hidden", view)
+	}
+}
+
+// TestDataDrivenStep_AbsenceNoteClearsWhenSectionBecomesVisible pins the
+// other half: once the section is visible, its real content renders and
+// the absence note disappears.
+func TestDataDrivenStep_AbsenceNoteClearsWhenSectionBecomesVisible(t *testing.T) {
+	step := NewDataDrivenStep(absenceNoteTestDefinition())
+	step.setValue("enabled", testValYes)
+	step.SetFocused(true)
+
+	view := tuitest.StripANSI(step.View(100, 24))
+	if strings.Contains(view, "appear when enabled") {
+		t.Fatalf("View() = %q, want no AbsenceNote once the section is visible", view)
+	}
+	if !strings.Contains(view, "detail") {
+		t.Fatalf("View() = %q, want the now-visible section's field rendered", view)
+	}
+}
+
 // collapsibleTestDefinition declares a primary section plus a Collapsible
 // "advanced" section with one Required field — the shape the HARD
 // CONSTRAINT exists to protect (a fold must never hide required work).

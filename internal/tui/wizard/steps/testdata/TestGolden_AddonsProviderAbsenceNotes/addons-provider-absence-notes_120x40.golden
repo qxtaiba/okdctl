@@ -4,37 +4,37 @@
   │ configure cluster addons                                                 connect · cluster · extras ●○○ · review │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
   │                                                                                                                  │  
-  │    ○ flux settings                                                                                               │  
-  │      requires: ssh deploy key at ~/.ssh/flux-deploy-key                                                          │  
+  │    ✓ secret store settings                                                                                       │  
   │                                                                                                                  │  
-  │    repository                                                                                                    │  
-  │    ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮          │  
-  │    │ ·                                                                                                │          │  
-  │    ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯          │  
-  │    ✗ repository is required — enter a value                                                                      │  
+  │    provider                                                                                                      │  
+  │    ╭─────────────────╮                                                                                           │  
+  │    │ ◂ onepassword ▸ │                                                                                           │  
+  │    ╰─────────────────╯                                                                                           │  
   │                                                                                                                  │  
-  │    branch                                                                                                        │  
+  │    secrets directory                                                                                             │  
   │    ╭────────────────────────────────────────────────────────────────────────────────────────────╮                │  
-  │    │ main                                                                                       │                │  
+  │    │ automation/config/secrets                                                                  │                │  
   │    ╰────────────────────────────────────────────────────────────────────────────────────────────╯                │  
   │                                                                                                                  │  
-  │    path                                                                                                          │  
+  │    ✓ secret store (onepassword)                                                                                  │  
+  │      requires: sops-encrypted 1password-credentials.json and 1password-token.txt + age key on bastion            │  
+  │                                                                                                                  │  
+  │    connect host                                                                                                  │  
   │    ╭────────────────────────────────────────────────────────────────────────────────────────────╮                │  
-  │    │ kubernetes/clusters/production                                                             │                │  
+  │    │ http://onepassword-connect:8080                                                            │ default        │  
   │    ╰────────────────────────────────────────────────────────────────────────────────────────────╯                │  
   │                                                                                                                  │  
-  │    ⚠ flux requires ssh deploy key at ~/.ssh/flux-deploy-key — create it before deploying                         │  
+  │    ╭─ vaults ───────────────────────────────────────────────────────────────────────────────────────────╮        │  
+  │    │ homelab                                           1                                                │        │  
+  │    │ + add                                                                                              │        │  
+  │    ╰────────────────────────────────────────────────────────────────────────────────────────────────────╯        │  
   │                                                                                                                  │  
-  │    ● secret store (common)                                                                                       │  
-  │      supports onepassword, vault, and bitwarden via external-secrets-operator                                    │  
+  │      vault settings appear when selected.                                                                        │  
   │                                                                                                                  │  
-  │    enabled                                                                                                       │  
-  │    ╭────────────────╮                                                                                            │  
-  │    │ ● no  ○ yes    │                                                                                            │  
-  │    ╰────────────────╯                                                                                            │  
-  │    bootstrap eso provider credentials and secretstore crd                                                        │  
+  │      bitwarden settings appear when selected.                                                                    │  
   │                                                                                                                  │  
-  │────────────────────────────── ↑ ↓  70% • scroll for more ─────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
+  │                                                                                                                  │  
+  │──────────────────────────────── ↑ ↓  scroll up for more ──────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
   │  ↑↓/tab navigate • enter continue • esc back • pgup/pgdn scroll • ctrl+c quit • ? help                           │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                                         

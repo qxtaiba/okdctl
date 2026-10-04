@@ -6,25 +6,25 @@
   │                                                                                              │  
   │                                                                                              │  
   │                                                                                              │  
-  │                                                                                              │  
-  │    ╭───────────────────────────────────────────────────────────────────────────────────╮     │  
-  │    │ key bindings                                                                      │     │  
-  │    │                                                                                   │     │  
-  │    │ screen                                                                            │     │  
-  │    │   ↑↓/tab navigate                                                                 │     │  
-  │    │   enter continue                                                                  │     │  
-  │    │                                                                                   │     │  
-  │    │ vim     j/k scroll • ctrl+d/u half page • gg/G top/bottom                         │     │  
-  │    │ global  esc back • ctrl+c quit • ? help • ctrl+k jump to a step, field, or action │     │  
-  │    │                                                                                   │     │  
-  │    │ esc or ? closes                                                                   │     │  
-  │    ╰───────────────────────────────────────────────────────────────────────────────────╯     │  
-  │                                                                                              │  
-  │                                                                                              │  
+  │                ╭────────────────────────────────────────────────────────────╮                │  
+  │                │ key bindings                                               │                │  
+  │                │                                                            │                │  
+  │                │ screen                                                     │                │  
+  │                │   ↑↓/tab navigate                                          │                │  
+  │                │   enter continue                                           │                │  
+  │                │                                                            │                │  
+  │                │ vim     j/k scroll • ctrl+d/u half page • gg/G top/bottom  │                │  
+  │                │ global  esc back • ctrl+c quit • pgup/pgdn scroll • ? help │                │  
+  │                │         ctrl+k jump to a step, field, or action            │                │  
+  │                │                                                            │                │  
+  │                │ esc or ? closes                                            │                │  
+  │                ╰────────────────────────────────────────────────────────────╯                │  
   │                                                                                              │  
   │                                                                                              │  
   │                                                                                              │  
-  │───────────────────────────────────────────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
-  │  ↑↓/tab navigate • enter continue • esc back • ctrl+c quit • ? help                          │  
+  │                                                                                              │  
+  │                                                                                              │  
+  │───────────────────── ↑ ↓  scroll down for more ───────────────────── ▸ okd 4.22.0-okd-scos.7 │  
+  │  ↑↓/tab navigate • enter continue • esc back • pgup/pgdn scroll • ctrl+c quit • ? help       │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                     

@@ -139,6 +139,12 @@ type SectionDefinition struct {
 	// section's one-line collapsed summary echoes; nil renders the label
 	// alone. Never return a fact whose Value is credential material.
 	FoldSummary func(values map[string]string) []tui.FactRow
+
+	// AbsenceNote, when the section is hidden (Visible returns false),
+	// supplies one line of explanation rendered in its place; nil or an
+	// empty return renders nothing, preserving the section's prior silent
+	// skip.
+	AbsenceNote func(values map[string]string) string
 }
 
 // StepDefinition is the declarative description of a data-driven wizard step.
@@ -175,10 +181,23 @@ type FormSection struct {
 	// guarantees this by prepending a components.FoldToggleField).
 	Collapsible bool
 
+	// absenceNote mirrors SectionDefinition.AbsenceNote, resolved against
+	// live values the same way Warning is.
+	absenceNote func() string
+
 	// pairKeys[j] is Fields[j].PairKey, aligned to Group.Fields() order —
 	// View's pairing pass reads this instead of walking back to the
 	// declarative FieldDefinition.
 	pairKeys []string
+}
+
+// absenceText returns the section's AbsenceNote text, or "" when it has
+// none — mirroring warningText's nil-safe pattern.
+func (s *FormSection) absenceText() string {
+	if s.absenceNote == nil {
+		return ""
+	}
+	return s.absenceNote()
 }
 
 func (s *FormSection) warningText() string {
@@ -766,6 +785,9 @@ func (f *MultiSectionForm) View(width int) string {
 
 	for i := range f.sections {
 		if !f.sections[i].isVisible() {
+			if note := f.sections[i].absenceText(); note != "" {
+				_ = emit(formViewStyles.note.Width(innerWidth).Render(note))
+			}
 			continue
 		}
 		group := f.sections[i].Group
@@ -892,6 +914,11 @@ func NewDataDrivenStep(def *StepDefinition) *DataDrivenStep {
 			visible = func() bool { return sectionDef.Visible(step.rawValues()) }
 		}
 
+		var absenceNote func() string
+		if sectionDef.AbsenceNote != nil {
+			absenceNote = func() string { return sectionDef.AbsenceNote(step.rawValues()) }
+		}
+
 		sections = append(sections, FormSection{
 			Title:       sectionDef.Title,
 			Note:        sectionDef.Note,
@@ -899,6 +926,7 @@ func NewDataDrivenStep(def *StepDefinition) *DataDrivenStep {
 			Warning:     warning,
 			Visible:     visible,
 			Collapsible: sectionDef.Collapsible,
+			absenceNote: absenceNote,
 			pairKeys:    pairKeys,
 		})
 	}

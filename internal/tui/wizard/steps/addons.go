@@ -112,6 +112,12 @@ var AddonsStepDefinition = wizard.StepDefinition{
 			Visible: func(values map[string]string) bool {
 				return values["flux_enabled"] == valYes
 			},
+			AbsenceNote: func(values map[string]string) string {
+				if values["flux_enabled"] == valYes {
+					return ""
+				}
+				return "repository settings appear when enabled."
+			},
 			Warning: func(values map[string]string) string {
 				if values["flux_enabled"] != valYes {
 					return ""
@@ -172,6 +178,12 @@ var AddonsStepDefinition = wizard.StepDefinition{
 			Visible: func(values map[string]string) bool {
 				return values["secretstore_enabled"] == valYes
 			},
+			AbsenceNote: func(values map[string]string) string {
+				if values["secretstore_enabled"] == valYes {
+					return ""
+				}
+				return "secret store settings appear when enabled."
+			},
 			Warning: secretStoreSopsWarning(sopsOnPath),
 			Fields: []wizard.FieldDefinition{
 				{
@@ -200,6 +212,7 @@ var AddonsStepDefinition = wizard.StepDefinition{
 			Visible: func(values map[string]string) bool {
 				return values["secretstore_enabled"] == valYes && values["secretstore_provider"] == providerOnepassword
 			},
+			AbsenceNote: providerAbsenceNote(providerOnepassword),
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "secretstore_op_connect_host",
@@ -227,6 +240,7 @@ var AddonsStepDefinition = wizard.StepDefinition{
 			Visible: func(values map[string]string) bool {
 				return values["secretstore_enabled"] == valYes && values["secretstore_provider"] == providerVault
 			},
+			AbsenceNote: providerAbsenceNote(providerVault),
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "secretstore_vault_server",
@@ -261,6 +275,7 @@ var AddonsStepDefinition = wizard.StepDefinition{
 			Visible: func(values map[string]string) bool {
 				return values["secretstore_enabled"] == valYes && values["secretstore_provider"] == providerBitwarden
 			},
+			AbsenceNote: providerAbsenceNote(providerBitwarden),
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "secretstore_bw_org_id",
@@ -317,6 +332,20 @@ var AddonsStepDefinition = wizard.StepDefinition{
 var sopsOnPath = func() bool {
 	_, err := exec.LookPath("sops")
 	return err == nil
+}
+
+// providerAbsenceNote returns a secret-store provider section's
+// AbsenceNote, naming provider; it stays silent while secret store is
+// disabled entirely, since "secret store settings" already explains that
+// case, firing only once secret store is enabled but a different provider
+// is selected.
+func providerAbsenceNote(provider string) func(values map[string]string) string {
+	return func(values map[string]string) string {
+		if values["secretstore_enabled"] != valYes || values["secretstore_provider"] == provider {
+			return ""
+		}
+		return provider + " settings appear when selected."
+	}
 }
 
 // secretStoreSopsWarning returns the secret-store-settings section's

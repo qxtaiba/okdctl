@@ -885,6 +885,50 @@ func TestGolden_AddonsFluxWarning(t *testing.T) {
 	}
 }
 
+// TestGolden_AddonsProviderAbsenceNotes pins mechanism 4's other half: once
+// secret store is enabled with onepassword selected, the inactive vault and
+// bitwarden provider sections each show their own "<provider> settings
+// appear when selected." line rather than vanishing silently — distinct
+// from the "secret store settings appear when enabled." line those same
+// sections show while secret store itself is off (TestGolden_ConfigureSteps
+// already pins that case). Scrolls to the bottom (G) since the two notes
+// sit below onepassword's own unfolded fields, with nothing focusable to
+// tab the viewport toward.
+func TestGolden_AddonsProviderAbsenceNotes(t *testing.T) {
+	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
+	rightKey := tea.KeyPressMsg{Code: tea.KeyRight}
+	bottomKey := tea.KeyPressMsg{Code: 'G', Text: "G"}
+
+	for _, sz := range []struct{ w, h int }{{80, 24}, {120, 40}} {
+		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
+			tui.SetTerminalWidth(sz.w)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+			m := newGoldenModel(t)
+			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
+			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDAddons})
+
+			// flux_enabled -> secretstore_enabled (toggle on with right).
+			m.Update(tabKey)
+			m.Update(wizard.FocusChangedMsg{})
+			m.Update(rightKey)
+			m.Update(bottomKey)
+
+			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
+			tuitest.Golden(t, fmt.Sprintf("addons-provider-absence-notes_%dx%d", sz.w, sz.h), frame)
+			tuitest.AssertFits(t, frame, sz.w, sz.h)
+
+			plain := tuitest.StripANSI(frame)
+			if !strings.Contains(plain, "vault settings appear when selected.") {
+				t.Errorf("frame is missing the vault absence note:\n%s", plain)
+			}
+			if !strings.Contains(plain, "bitwarden settings appear when selected.") {
+				t.Errorf("frame is missing the bitwarden absence note:\n%s", plain)
+			}
+		})
+	}
+}
+
 // newGoldenModelFreshDefaults mirrors newGoldenModel but skips
 // LoadFromConfig (matching OKDCTL_WIZARD_DEMO=1's real code path in
 // internal/cli/wizard_setup.go), so fields still carry their raw
