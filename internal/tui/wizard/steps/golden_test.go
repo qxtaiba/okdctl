@@ -1081,6 +1081,60 @@ func lineOf(s string, byteIdx int) int {
 	return strings.Count(s[:byteIdx], "\n")
 }
 
+// TestGolden_ProxmoxAdvancedFoldExpandedStaysOpenAfterFocusLeaves pins the
+// fold's sticky expand latch at the real step/golden level (beyond
+// TestDataDrivenStep_CollapsibleSectionEnterStickyExpand's synthetic
+// definition): tab to the toggle, enter to expand it, then tab away to
+// username — the HARD CONSTRAINT's focus-forced-open case (i ==
+// currentSection) no longer applies once focus leaves, so this is the
+// sticky latch specifically, not just a focused section rendering in full.
+func TestGolden_ProxmoxAdvancedFoldExpandedStaysOpenAfterFocusLeaves(t *testing.T) {
+	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
+	shiftTabKey := tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift}
+	enterKey := tea.KeyPressMsg{Code: tea.KeyEnter}
+	pageDown := tea.KeyPressMsg{Code: tea.KeyPgDown}
+
+	for _, sz := range []struct{ w, h int }{{80, 24}, {120, 40}} {
+		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
+			tui.SetTerminalWidth(sz.w)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+			m := newGoldenModel(t)
+			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
+			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDProxmox})
+
+			// host -> username -> password -> the fold toggle (3 tabs).
+			for range 3 {
+				m.Update(tabKey)
+				m.Update(wizard.FocusChangedMsg{})
+			}
+			m.Update(enterKey)
+			// Tab away: shift+tab back onto password, so currentSection
+			// returns to "credentials" and the fold is no longer focused —
+			// then page down, since the now-expanded fields sit below
+			// password's own scroll position at the cramped 80x24 tier.
+			m.Update(shiftTabKey)
+			m.Update(wizard.FocusChangedMsg{})
+			m.Update(pageDown)
+
+			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
+			tuitest.Golden(t, fmt.Sprintf("proxmox-advanced-fold-expanded_%dx%d", sz.w, sz.h), frame)
+			tuitest.AssertFits(t, frame, sz.w, sz.h)
+
+			plain := tuitest.StripANSI(frame)
+			if !strings.Contains(plain, labelTokenID) {
+				t.Errorf("frame is missing the expanded fold's token id field, want it to stay open after focus left:\n%s", plain)
+			}
+			if !strings.Contains(plain, "skip tls verify") {
+				t.Errorf("frame is missing the expanded fold's skip tls verify field:\n%s", plain)
+			}
+			if strings.Contains(plain, "verification:") {
+				t.Errorf("frame still shows the collapsed summary's \"verification:\" fact, want the fold expanded:\n%s", plain)
+			}
+		})
+	}
+}
+
 // TestGolden_ProxmoxAdvancedFoldCollapsedAt80x24 pins mechanism 3's
 // collapsed state at the 80x24 "compact" tier: proxmox_80x24_initial
 // (TestGolden_ConfigureSteps) never scrolls far enough to show the fold
