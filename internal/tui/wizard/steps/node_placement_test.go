@@ -2,6 +2,7 @@ package steps
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
@@ -445,5 +447,72 @@ func TestFirstMatch(t *testing.T) {
 	}
 	if got := firstMatch(nil, "z", "z"); got != "" {
 		t.Errorf("firstMatch(no options) = %q, want empty", got)
+	}
+}
+
+// demoDiscoveryUnknownCapacity is a single-node fixture exercising two
+// honest-unknown displays at once: the node's CPU/memory probe came back
+// unknown (nodeDisplayOptions renders "?c/?g"), and a cluster-level storage
+// pool no online node reports renders "<pool> — capacity unknown"
+// (storageDisplayOptions).
+func demoDiscoveryUnknownCapacity() *proxmoxDiscovery {
+	return &proxmoxDiscovery{
+		Nodes: []proxmoxNode{{
+			Name: "pve1", Status: "online",
+			CPUsKnown: false, MemKnown: false,
+			StorageKnown: true,
+			Storage:      []proxmoxStorage{{Name: "local-lvm", Content: "images", TotalGB: 500, TotalKnown: true}},
+			BridgesKnown: true, Bridges: demoNodeBridges(),
+		}},
+		Storage: []proxmoxStorage{
+			{Name: "local-lvm", Content: "images,rootdir", TotalGB: 500},
+			{Name: "orphan-pool", Content: "images", TotalGB: 900},
+		},
+		Bridges: demoNodeBridges(),
+	}
+}
+
+// TestGolden_NodePlacementUnknownCapacity pins demoDiscoveryUnknownCapacity
+// through the full model (so the viewport, not the bare step, governs
+// height), at both the compact and the wide-split tiers.
+func TestGolden_NodePlacementUnknownCapacity(t *testing.T) {
+	for _, sz := range []struct{ w, h int }{{80, 24}, {180, 48}} {
+		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
+			tui.SetTerminalWidth(sz.w)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+			m := newGoldenModel(t)
+			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
+			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDNodePlacement})
+			// Selects the orphaned pool so its "capacity unknown" display
+			// renders in the collapsed box, not just inside
+			// storageDisplayOptions' own return value; clears the default
+			// config's stale "pve" bootstrap node so the field falls back
+			// to the fixture's actual node instead of an unmatched value.
+			px := m.Config().Provider.Proxmox
+			px.DataStorage = "orphan-pool"
+			px.Node = ""
+			m.Update(discoveryCompleteMsg{discovery: demoDiscoveryUnknownCapacity()})
+
+			// Tabs past bridge, additional networks, os storage, and data
+			// storage to focus bootstrap, scrolling both capacity-unknown
+			// rows into view at the compact tier too.
+			tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
+			for range 4 {
+				m.Update(tabKey)
+				m.Update(wizard.FocusChangedMsg{})
+			}
+
+			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
+			tuitest.Golden(t, fmt.Sprintf("node-placement-unknown-capacity_%dx%d", sz.w, sz.h), frame)
+			tuitest.AssertFits(t, frame, sz.w, sz.h)
+
+			plain := tuitest.StripANSI(frame)
+			for _, want := range []string{"pve1 — ?c/?g", "orphan-pool — capacity unknown"} {
+				if !strings.Contains(plain, want) {
+					t.Errorf("view is missing %q:\n%s", want, plain)
+				}
+			}
+		})
 	}
 }

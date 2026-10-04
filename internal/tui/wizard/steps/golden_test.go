@@ -484,7 +484,7 @@ func TestGolden_HubWideTerminals(t *testing.T) {
 // pins at 180x48: proxmox (a short form, so the split's idle vertical space
 // below the form is visible) and review (a long one, so the split survives
 // a scrolling body).
-var wideSplitScenarios = map[string]bool{"proxmox": true, "review": true, "review-edited": true}
+var wideSplitScenarios = map[string]bool{"proxmox": true, "review": true, "review-edited": true, "node-placement": true}
 
 // TestGolden_WideSplit pins the ≥150-col split layout — form column, rule,
 // context pane — at 180x48 for wideSplitScenarios; every other scenario
