@@ -1081,6 +1081,44 @@ func lineOf(s string, byteIdx int) int {
 	return strings.Count(s[:byteIdx], "\n")
 }
 
+// TestGolden_ProxmoxAdvancedFoldCollapsedAt80x24 pins mechanism 3's
+// collapsed state at the 80x24 "compact" tier: proxmox_80x24_initial
+// (TestGolden_ConfigureSteps) never scrolls far enough to show the fold
+// line itself (host plus the paired username/password row alone exceed
+// the 15-row viewport), so this scrolls to the bottom (G, independent of
+// field focus) to pin that the collapsed summary row still renders
+// correctly at the narrowest supported tier, not just at 100x30/120x40.
+func TestGolden_ProxmoxAdvancedFoldCollapsedAt80x24(t *testing.T) {
+	// pgdn, not the vim "G", since G/gg fall through to a focused text
+	// input (typed as literal text) while pgdn scrolls regardless of
+	// focus — host stays focused throughout, matching the step's real
+	// initial-focus state the way TestGolden_ConfigureSteps's own
+	// proxmox_80x24_initial does.
+	pageDown := tea.KeyPressMsg{Code: tea.KeyPgDown}
+
+	tui.SetTerminalWidth(80)
+	t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+	m := newGoldenModel(t)
+	_ = tuitest.RenderAt(t, m, 80, 24)
+	m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDProxmox})
+	for range 3 {
+		m.Update(pageDown)
+	}
+
+	frame := tuitest.RenderAt(t, m, 80, 24)
+	tuitest.Golden(t, "proxmox-advanced-fold-collapsed_80x24", frame)
+	tuitest.AssertFits(t, frame, 80, 24)
+
+	plain := tuitest.StripANSI(frame)
+	if !strings.Contains(plain, "advanced") || !strings.Contains(plain, "verification: enabled") {
+		t.Errorf("frame is missing the collapsed fold's summary row:\n%s", plain)
+	}
+	if hasExactLine(plain, labelTokenID) {
+		t.Errorf("collapsed fold leaks the token id field's own label row:\n%s", plain)
+	}
+}
+
 func TestGolden_ProxmoxEnterHighlightsInvalidFields(t *testing.T) {
 	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
 	enterKey := tea.KeyPressMsg{Code: tea.KeyEnter}
