@@ -164,19 +164,13 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 		podCIDR := values["pod_cidr"]
 		serviceCIDR := values["service_cidr"]
 
-		if overlap, err := netutil.CIDRsOverlap(machineCIDR, podCIDR); err != nil {
-			return err
-		} else if overlap {
+		if overlap, ok := cidrsOverlapIfValid(machineCIDR, podCIDR); ok && overlap {
 			return errors.New("machine cidr and pod cidr must not overlap — widen or move one of the ranges")
 		}
-		if overlap, err := netutil.CIDRsOverlap(machineCIDR, serviceCIDR); err != nil {
-			return err
-		} else if overlap {
+		if overlap, ok := cidrsOverlapIfValid(machineCIDR, serviceCIDR); ok && overlap {
 			return errors.New("machine cidr and service cidr must not overlap — widen or move one of the ranges")
 		}
-		if overlap, err := netutil.CIDRsOverlap(podCIDR, serviceCIDR); err != nil {
-			return err
-		} else if overlap {
+		if overlap, ok := cidrsOverlapIfValid(podCIDR, serviceCIDR); ok && overlap {
 			return errors.New("pod cidr and service cidr must not overlap — widen or move one of the ranges")
 		}
 		if err := config.ValidateGatewayInCIDR(values[fieldGateway], machineCIDR); err != nil {
@@ -193,6 +187,18 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 		cfg.Networking.StaticIP.Netmask = netmask
 		return nil
 	},
+}
+
+// cidrsOverlapIfValid reports whether a and b overlap, with checked false
+// when either fails to parse — the per-field CIDR validator already shows
+// its own clean format error for a malformed value, so the overlap check
+// stays silent rather than surfacing netutil's wrapped netip parse error.
+func cidrsOverlapIfValid(a, b string) (overlap, checked bool) {
+	if !config.IsValidCIDR(a) || !config.IsValidCIDR(b) {
+		return false, false
+	}
+	overlap, err := netutil.CIDRsOverlap(a, b)
+	return overlap, err == nil
 }
 
 // NewNetworkingStep returns the networking wizard step, with an allocation

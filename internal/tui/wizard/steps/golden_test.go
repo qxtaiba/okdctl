@@ -879,6 +879,38 @@ func TestGolden_BasicsDefaultAsRealValue(t *testing.T) {
 // form's validation, paints a red box plus field error on password, shows
 // the generic status-row message, and scrolls/focuses the first invalid
 // field.
+// TestGolden_NetworkingMalformedCIDRShowsOneCleanError pins the fix: typing
+// a malformed machine CIDR and tabbing away must show exactly one honest,
+// actionable error — never a second, raw netip parse failure alongside it.
+func TestGolden_NetworkingMalformedCIDRShowsOneCleanError(t *testing.T) {
+	tui.SetTerminalWidth(80)
+	t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+	m := newGoldenModel(t)
+	_ = tuitest.RenderAt(t, m, 80, 24)
+	m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDNetworking})
+
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnd})
+	for range 20 {
+		m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	}
+	m.Update(tea.PasteMsg{Content: "999.999.1.0/99"})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	m.Update(wizard.FocusChangedMsg{})
+
+	frame := tuitest.RenderAt(t, m, 80, 24)
+	tuitest.Golden(t, "networking-bad-cidr_80x24", frame)
+	tuitest.AssertFits(t, frame, 80, 24)
+
+	plain := tuitest.StripANSI(frame)
+	if !strings.Contains(plain, "invalid cidr format") {
+		t.Errorf("malformed CIDR view is missing the clean per-field error:\n%s", plain)
+	}
+	if strings.Contains(plain, "netip.ParsePrefix") || strings.Contains(plain, "ParseAddr") {
+		t.Errorf("malformed CIDR view leaked a raw netip error:\n%s", plain)
+	}
+}
+
 func TestGolden_ProxmoxEnterHighlightsInvalidFields(t *testing.T) {
 	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
 	enterKey := tea.KeyPressMsg{Code: tea.KeyEnter}

@@ -54,6 +54,25 @@ func TestNetworkingAllocationPreviewTracksTypedStartIP(t *testing.T) {
 	}
 }
 
+// TestNetworkingValidateNeverLeaksRawNetipErrorOnMalformedCIDR pins the fix:
+// the section-level overlap check must never surface netutil's wrapped
+// netip.ParsePrefix error for a malformed CIDR — the per-field CIDR
+// validator already shows a clean "invalid cidr format" error, and a
+// malformed value reaching this function (now or from a future caller)
+// must stay silent on overlap rather than echoing the raw parse failure.
+func TestNetworkingValidateNeverLeaksRawNetipErrorOnMalformedCIDR(t *testing.T) {
+	values := map[string]string{
+		"machine_cidr": "999.999.1.0/99",
+		"pod_cidr":     "10.128.0.0/14",
+		"service_cidr": "172.30.0.0/16",
+		fieldGateway:   "192.168.1.1",
+	}
+	err := NetworkingStepDefinition.Validate(values)
+	if err != nil && (strings.Contains(err.Error(), "netip.ParsePrefix") || strings.Contains(err.Error(), "ParseAddr")) {
+		t.Fatalf("Validate() leaked a raw netip error instead of staying silent on a malformed CIDR: %v", err)
+	}
+}
+
 func TestNetworkingWithoutDiscoveryOmitsAllocationPreview(t *testing.T) {
 	step := NewNetworkingStep(nil)
 	if got := step.View(100, 30); strings.Contains(got, "allocation preview") {
