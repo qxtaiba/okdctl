@@ -9,12 +9,13 @@
   │                                                                                                        │  ○ plan preview                       │  
   │                                                                                                        │                                       │  
   │                                                                                                        │  CONFIGURED                           │  
-  │                                                                                                        │  interrupted: resize                  │  
-  │                         cluster lifecycle                                                              │  target: homelab-master0              │  
-  │                         manage nodes on cluster "homelab"                                              │  stopped at: power-cycle              │  
-  │                                                                                                        │  recorded: 2h ago                     │  
-  │                         ⚠ interrupted resize of homelab-master0 — step: power-                         │                                       │  
+  │                         cluster lifecycle                                                              │  interrupted: resize                  │  
+  │                         manage nodes on cluster "homelab"                                              │  target: homelab-master0              │  
+  │                                                                                                        │  stopped at: power-cycle              │  
+  │                         ⚠ interrupted resize of homelab-master0 — step: power-                         │  recorded: 2h ago                     │  
   │                         cycle, recorded 2h ago                                                         │                                       │  
+  │                         choosing anything but resume below abandons this                               │                                       │  
+  │                         marker — it cannot be resumed afterward                                        │                                       │  
   │                                                                                                        │                                       │  
   │                         ● resume interrupted resize                                                    │                                       │  
   │                           re-enters at the recorded step; completed nodes                              │                                       │  
@@ -31,7 +32,6 @@
   │                         ○ remove worker                                                                │                                       │  
   │                           cordon, drain, destroy the vm, delete the node                               │                                       │  
   │                           (highest-numbered worker only)                                               │                                       │  
-  │                                                                                                        │                                       │  
   │                                                                                                        │                                       │  
   │                                                                                                        │                                       │  
   │                                                                                                        │                                       │  

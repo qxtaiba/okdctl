@@ -116,7 +116,15 @@ func (s *OpStep) View(width, height int) string {
 		banner := fmt.Sprintf("%s interrupted %s of %s — step: %s, recorded %s ago",
 			tui.IconWarning, s.st.Marker.Op, s.st.Marker.Target, s.st.Marker.Step,
 			humanAge(s.now().Sub(s.st.Marker.Timestamp)))
-		content += warnStyle.Render(lipgloss.Wrap(banner, min(width, opCardWidth)-4, "")) + "\n\n"
+		content += warnStyle.Render(lipgloss.Wrap(banner, min(width, opCardWidth)-4, "")) + "\n"
+
+		// Picking anything but resume arms Ack (see Apply), which overwrites
+		// this marker the moment the new op's own first step runs — the old
+		// resume point is gone for good. The operator must see that cost
+		// before choosing, not discover it after the fact.
+		noteStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim())
+		note := "choosing anything but resume below abandons this marker — it cannot be resumed afterward"
+		content += noteStyle.Render(lipgloss.Wrap(note, min(width, opCardWidth)-4, "")) + "\n\n"
 	}
 
 	for i, o := range s.ops {

@@ -83,6 +83,26 @@ func TestOpStepMarkerAddsResumeOptionAndArmsAck(t *testing.T) {
 	}
 }
 
+// TestOpStepMarkerScreenWarnsAbandonmentIsPermanent guards the silent
+// marker-abandonment bug: Apply arms Ack on any non-resume pick (proven
+// above), which permanently overwrites the marker — but the entry screen
+// must say so before the operator picks, not just record the choice.
+func TestOpStepMarkerScreenWarnsAbandonmentIsPermanent(t *testing.T) {
+	st := &State{
+		Cfg:    config.DefaultConfig(),
+		Marker: &node.OpMarker{Op: node.OpResize, Target: "homelab-master0", Step: node.StepPowerCycle},
+	}
+	s := NewOpStep(st)
+	out := tuitest.StripANSI(s.View(100, 30))
+
+	if !strings.Contains(out, "abandons") {
+		t.Fatalf("entry screen must warn that a non-resume pick abandons the marker:\n%s", out)
+	}
+	if !strings.Contains(out, "cannot be resumed") {
+		t.Fatalf("entry screen must warn the abandoned marker cannot be resumed afterward:\n%s", out)
+	}
+}
+
 func TestOpStepResumeRemoveSeedsTarget(t *testing.T) {
 	st := &State{
 		Cfg:    config.DefaultConfig(),
