@@ -1,6 +1,9 @@
 package steps
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"slices"
 	"testing"
 
@@ -260,6 +263,9 @@ func TestUnstartedDiscoverySnapshotIsReleased(t *testing.T) {
 	step.ShouldShow(cfg)
 	step.Init()
 	copyBytes := step.ownedPasswords[0].Bytes()
+	if string(copyBytes) != "fixture-password" {
+		t.Fatalf("cloned password = %q, want fixture-password", copyBytes)
+	}
 	step.Release()
 	for _, b := range copyBytes {
 		if b != 0 {
@@ -270,4 +276,58 @@ func TestUnstartedDiscoverySnapshotIsReleased(t *testing.T) {
 		t.Fatal("release changed caller credentials")
 	}
 	cfg.Provider.Proxmox.Password.Zeroize()
+}
+
+// TestFetchDiscoveryNoStringPasswordConversion AST-scans fetchDiscovery for a
+// string(x.Bytes()) conversion: that copies the password into an immutable,
+// unzeroizable string that outlives the fresh []byte Set then wraps, so this
+// path must clone the password without ever hopping through a string.
+func TestFetchDiscoveryNoStringPasswordConversion(t *testing.T) {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "node_placement.go", nil, 0)
+	if err != nil {
+		t.Fatalf("parse node_placement.go: %v", err)
+	}
+
+	var fn *ast.FuncDecl
+	for _, decl := range f.Decls {
+		if d, ok := decl.(*ast.FuncDecl); ok && d.Name.Name == "fetchDiscovery" {
+			fn = d
+			break
+		}
+	}
+	if fn == nil {
+		t.Fatal("fetchDiscovery not found in node_placement.go")
+	}
+
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		ident, ok := call.Fun.(*ast.Ident)
+		if !ok || ident.Name != "string" || len(call.Args) != 1 {
+			return true
+		}
+		inner, ok := call.Args[0].(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		sel, ok := inner.Fun.(*ast.SelectorExpr)
+		if !ok || sel.Sel.Name != "Bytes" {
+			return true
+		}
+		pos := fset.Position(call.Pos())
+		t.Errorf("%s: fetchDiscovery converts password bytes through a string: %s", pos, renderExpr(call))
+		return true
+	})
+}
+
+func renderExpr(expr ast.Expr) string {
+	if call, ok := expr.(*ast.CallExpr); ok {
+		if ident, ok := call.Fun.(*ast.Ident); ok {
+			return ident.Name + "(...)"
+		}
+	}
+	return "<expr>"
 }
