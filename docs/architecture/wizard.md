@@ -44,6 +44,46 @@ scripted or automation-adjacent entry: `okdctl node manage` refuses
 outright without a terminal, naming `okdctl node resize/add/remove` as
 the alternative, while `okdctl deploy` always opens on the hub first.
 
+## Draft persistence: resuming the configure flow
+
+The configure flow autosaves its progress to a sidecar file as the
+operator moves between steps, so a session that gets interrupted —
+closed, crashed, or simply quit — can be resumed later. That sidecar
+lives beside the config file the deploy command targets, at
+`<config-path>.draft.json` (`wizarddraft.New`, `internal/wizarddraft/store.go`);
+for a plain `okdctl deploy`, that path is `okdctl.yaml.draft.json`. The
+draft is a sidecar only — it is never written into `okdctl.yaml` itself,
+since only `persistWizardConfig` and `saveConfig` touch that file, and
+only once the configure flow finishes and the operator's chosen action
+is confirmed. That active draft also surfaces as a sixth hub entry,
+`resume draft`, ahead of the usual five or two, labelled with the step
+it left off at and how long ago (`WelcomeStep.SetDraftResume`).
+
+That sidecar strips credentials before it ever reaches disk. The config
+clone `SaveWithHistory` marshals has its Proxmox username, password, API
+token, and token ID cleared, and any addon setting whose key looks
+sensitive dropped, before it is written (`safeConfig`). That same
+filtering reaches the per-field recall history saved alongside it: a
+value that looks like a password, token, private key, or SSH key is
+skipped (`containsSensitiveValue`), and a field whose key itself reads
+as a secret is dropped entirely (`safeFieldKey`).
+
+This persistence is scoped to the configure flow proper, not the whole
+wizard: `supportedStep` recognizes only the ten data-driven steps from
+distribution through review, so a cursor sitting on the hub or on a
+read-only utility screen like cluster status is never saved, and never
+resumed into.
+
+In particular, a draft is only trusted when it is strictly newer than
+the config file it would resume (`loadWizardDraft`,
+`internal/cli/wizard_draft.go`). That is deliberate: a draft timestamped
+at or before the config's own mtime is treated as stale and silently
+ignored, on the reasoning that the config already on disk is then the
+more recent, authoritative state. That staleness check, together with a
+schema-version gate on both the draft document and the config value it
+embeds, keeps an old or foreign draft from resurrecting outdated or
+incompatible values into a fresh session.
+
 ## Data-driven, not code-driven
 
 The wizard is built on a **data-driven** model: each step is declared as
