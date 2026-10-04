@@ -188,31 +188,35 @@ func (p *Provider) Provision(ctx context.Context, cfg *config.Config, opts Provi
 	if p.terraformExec == nil {
 		return &errtypes.ConfigError{Msg: "terraform executor not configured — set ProjectRoot and TerraformEnv", Err: ErrTerraformNotConfigured}
 	}
-
-	p.logger.Info("terraform: initializing backend and providers")
-	if err := p.initWithRetry(ctx); err != nil {
-		return &errtypes.ClusterError{Msg: "terraform init failed", Err: err}
-	}
-
-	p.logger.Info("terraform: creating execution plan")
-	planOpts := terraform.PlanOptions{
-		OutputPlanFile: terraform.PlanFileName,
-	}
-	if err := p.terraformExec.Plan(ctx, planOpts); err != nil {
-		return &errtypes.ClusterError{Msg: "terraform plan failed", Err: err}
-	}
 	defer func() { _ = p.terraformExec.CleanupPlans() }()
 
 	totalNodes := 1 + cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count
-	p.logger.Info("terraform: plan will create virtual machines", "count", totalNodes)
 
-	p.logger.Info("terraform: applying infrastructure changes")
+	// Init can rewrite state during schema migration and plan can refresh it,
+	// so both belong after the backup, alongside the apply they lead into.
 	stopSpinner := p.reporter("applying terraform infrastructure")
-	applyOpts := terraform.ApplyOptions{
-		PlanFile:    filepath.Join(p.terraformExec.WorkDir(), terraform.PlanFileName),
-		AutoApprove: opts.AutoApprove,
-	}
-	applyErr := terraform.WithStateRecovery(ctx, p.terraformExec, "terraform apply", func() error { return p.terraformExec.Apply(ctx, applyOpts) })
+	applyErr := terraform.WithStateRecovery(ctx, p.terraformExec, "terraform apply", func() error {
+		p.logger.Info("terraform: initializing backend and providers")
+		if err := p.initWithRetry(ctx); err != nil {
+			return &errtypes.ClusterError{Msg: "terraform init failed", Err: err}
+		}
+
+		p.logger.Info("terraform: creating execution plan")
+		planOpts := terraform.PlanOptions{
+			OutputPlanFile: terraform.PlanFileName,
+		}
+		if err := p.terraformExec.Plan(ctx, planOpts); err != nil {
+			return &errtypes.ClusterError{Msg: "terraform plan failed", Err: err}
+		}
+
+		p.logger.Info("terraform: plan will create virtual machines", "count", totalNodes)
+		p.logger.Info("terraform: applying infrastructure changes")
+		applyOpts := terraform.ApplyOptions{
+			PlanFile:    filepath.Join(p.terraformExec.WorkDir(), terraform.PlanFileName),
+			AutoApprove: opts.AutoApprove,
+		}
+		return p.terraformExec.Apply(ctx, applyOpts)
+	})
 	stopSpinner()
 	if applyErr != nil {
 		if errors.Is(ctx.Err(), context.Canceled) {
