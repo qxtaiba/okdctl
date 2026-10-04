@@ -1,6 +1,7 @@
 package components
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -89,6 +90,24 @@ func TestKeyValueField_ValueRoundTrip(t *testing.T) {
 
 	if got := f.Value(); got != "homelab=1,shared=2" {
 		t.Fatalf("Value() = %q, want %q", got, "homelab=1,shared=2")
+	}
+}
+
+// TestKeyValueField_ErrorPreservesCase pins the reconciliation-audit
+// defect where View lowercased a validator's whole error message before
+// display; a path, hostname, or identifier embedded in the error must
+// survive byte-for-byte rather than losing its case.
+func TestKeyValueField_ErrorPreservesCase(t *testing.T) {
+	f := NewKeyValueField("pull secret")
+	f.Validator = func(string) error {
+		return errors.New("path /Users/Admin/Pull-Secret.json not found — check the path")
+	}
+	f.SetWidth(60)
+	_ = f.Validate()
+
+	view := tuitest.StripANSI(f.View())
+	if !strings.Contains(view, "/Users/Admin/Pull-Secret.json") {
+		t.Fatalf("View() = %q, want the validator error's mixed-case path preserved byte-for-byte", view)
 	}
 }
 
