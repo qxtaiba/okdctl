@@ -1,30 +1,30 @@
                                                                                                     
   ╭──────────────────────────────────────────────────────────────────────────────────────────────╮  
   │ O K D C T L                                                                                  │  
-  │ okd over proxmox, the easy way                           ●─●─●─●─●─●─●─●─●─●─● step 11 of 11 │  
+  │ review your configuration                                connect · cluster · extras · review │  
   │──────────────────────────────────────────────────────────────────────────────────────────────│  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
+  │  vm dns           192.168.1.20 (bastion/dnsmasq)                                             │  
+  │                                                                                              │  
+  │  [4] compute                                                                                 │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
+  │  control plane     3 × (4 vcpu, 12 GB RAM, 50 GB os disk)                                    │  
+  │  workers           3 × (8 vcpu, 20 GB RAM, 50 GB os disk)                                    │  
+  │  worker data disk  500 gb per worker (1500 gb total)                                         │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
   │  total             40 vcpu, 104 gb ram, 1850 gb disk                                         │  
-  │    total ram exceeds 64 gb — verify your proxmox host(s) have sufficient memory              │  
-  │    total vcpu exceeds 32 — verify your proxmox host(s) have sufficient cores                 │  
   │                                                                                              │  
-  │  [6] files & ignition                                                                        │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
-  │  ignition server   https://192.168.1.20                                                      │  
-  │  web root          /var/www/html                                                             │  
+  │  [5] files & ignition                                                                        │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
+  │  ignition server  https://192.168.1.20                                                       │  
+  │  web root         /var/www/html                                                              │  
   │                                                                                              │  
-  │  [8] advanced                                                                                │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
-  │  vm id base        6000                                                                      │  
-  │  timeouts          bootstrap 60m, install 120m                                               │  
-  │  terraform                                                                                   │  
-  │  environment       production                                                                │  
+  │  [6] advanced                                                                                │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
+  │  vm id base             6000                                                                 │  
+  │  timeouts               bootstrap 60m, install 120m                                          │  
+  │  terraform environment  production                                                           │  
   │                                                                                              │  
-  │  ══════════════════════════════════════════════════════════════════════════════════════      │  
-  │                                                                                              │  
-  │  ○ deploy now                                                                                │  
-  │  ● save and exit                                                                             │  
   │────────────────────── ↑ ↓  scroll up for more ────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
-  │   ↑↓  select action    enter  confirm    esc  back    ctrl+c  quit    1-9  jump to section   │  
+  │  ○ deploy now   ● save and exit           p preview install config … • ctrl+c quit • ? help  │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                     

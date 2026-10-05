@@ -3,24 +3,27 @@
 package steps
 
 import (
+	"errors"
 	"os/exec"
-	"slices"
 	"strings"
-
-	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/addon/catalog/flux"
 	"github.com/qxtaiba/okdctl/internal/addon/catalog/secretstore"
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/system"
-	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
 const (
-	valYes                   = "yes"
-	valNo                    = "no"
-	addonProviderOnepassword = "onepassword"
+	valYes     = "yes"
+	valEnabled = "enabled"
+	valNo      = "no"
+
+	// secretstore provider values, shared by the field's Default/Options and
+	// each provider section's Visible gate below.
+	providerOnepassword = "onepassword"
+	providerVault       = "vault"
+	providerBitwarden   = "bitwarden"
 )
 
 func addonEnabled(name string) wizard.ConfigGetter {
@@ -72,14 +75,28 @@ var AddonsStepDefinition = wizard.StepDefinition{
 	Title:        "cluster addons",
 	DisplayTitle: "configure cluster addons",
 	Description:  "enable optional cluster features",
+	// Validate rejects an enabled addon missing the endpoint its install
+	// cannot run without, so the wizard fails here rather than the addon
+	// manager an hour into the deploy; the flux repository and bitwarden ids
+	// are field-level Required instead, live exactly while their sections
+	// are unfolded.
+	Validate: func(values map[string]string) error {
+		if values["secretstore_enabled"] == valYes && values["secretstore_provider"] == providerVault &&
+			strings.TrimSpace(values["secretstore_vault_server"]) == "" {
+			return wizard.NewCrossFieldError(
+				errors.New("vault server url is required — enter the vault address"),
+				"secretstore_vault_server",
+			)
+		}
+		return nil
+	},
 	Sections: []wizard.SectionDefinition{
 		{
 			Title: "gitops (flux)",
-			Note:  "requires: ssh deploy key at ~/.ssh/flux-deploy-key",
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "flux_enabled",
-					Label:     "enabled",
+					Label:     valEnabled,
 					Default:   "no",
 					Help:      "enable gitops deployment",
 					Type:      wizard.FieldTypeSelect,
@@ -87,11 +104,37 @@ var AddonsStepDefinition = wizard.StepDefinition{
 					ConfigSet: setAddonEnabled("flux"),
 					ConfigGet: addonEnabled("flux"),
 				},
+			},
+		},
+		{
+			Title: "flux settings",
+			Note:  "requires: ssh deploy key at ~/.ssh/flux-deploy-key",
+			Visible: func(values map[string]string) bool {
+				return values["flux_enabled"] == valYes
+			},
+			AbsenceNote: func(values map[string]string) string {
+				if values["flux_enabled"] == valYes {
+					return ""
+				}
+				return "repository settings appear when enabled."
+			},
+			Warning: func(values map[string]string) string {
+				if values["flux_enabled"] != valYes {
+					return ""
+				}
+				if system.FileExists(system.ExpandPath("~/.ssh/flux-deploy-key")) {
+					return ""
+				}
+				return "flux requires ssh deploy key at ~/.ssh/flux-deploy-key — create it before deploying"
+			},
+			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "flux_repository",
 					Label:     "repository",
 					Default:   "",
 					Help:      "git repository url (e.g., ssh://git@github.com/org/repo.git)",
+					Width:     wizard.FieldWidthPath,
+					Required:  true,
 					ConfigSet: setAddonSetting("flux", flux.SettingRepository),
 					ConfigGet: addonSetting("flux", flux.SettingRepository),
 				},
@@ -108,6 +151,7 @@ var AddonsStepDefinition = wizard.StepDefinition{
 					Label:     "path",
 					Default:   "kubernetes/clusters/production",
 					Help:      "path within repository for manifests",
+					Width:     wizard.FieldWidthPath,
 					ConfigSet: setAddonSetting("flux", flux.SettingPath),
 					ConfigGet: addonSetting("flux", flux.SettingPath),
 				},
@@ -119,21 +163,36 @@ var AddonsStepDefinition = wizard.StepDefinition{
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "secretstore_enabled",
-					Label:     "enabled",
+					Label:     valEnabled,
 					Default:   "no",
-					Help:      "bootstrap ESO provider credentials and SecretStore CRD",
+					Help:      "bootstrap eso provider credentials and secretstore crd",
 					Type:      wizard.FieldTypeSelect,
 					Options:   []string{valNo, valYes},
 					ConfigSet: setAddonEnabled("secretstore"),
 					ConfigGet: addonEnabled("secretstore"),
 				},
+			},
+		},
+		{
+			Title: "secret store settings",
+			Visible: func(values map[string]string) bool {
+				return values["secretstore_enabled"] == valYes
+			},
+			AbsenceNote: func(values map[string]string) string {
+				if values["secretstore_enabled"] == valYes {
+					return ""
+				}
+				return "secret store settings appear when enabled."
+			},
+			Warning: secretStoreSopsWarning(sopsOnPath),
+			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "secretstore_provider",
 					Label:     "provider",
-					Default:   addonProviderOnepassword,
-					Help:      "ESO backend: onepassword, vault, bitwarden",
+					Default:   providerOnepassword,
+					Help:      "eso backend: onepassword, vault, bitwarden",
 					Type:      wizard.FieldTypeSelect,
-					Options:   []string{addonProviderOnepassword, "vault", "bitwarden"},
+					Options:   []string{providerOnepassword, providerVault, providerBitwarden},
 					ConfigSet: setAddonSetting("secretstore", secretstore.SettingProvider),
 					ConfigGet: addonSetting("secretstore", secretstore.SettingProvider),
 				},
@@ -150,12 +209,17 @@ var AddonsStepDefinition = wizard.StepDefinition{
 		{
 			Title: "secret store (onepassword)",
 			Note:  "requires: sops-encrypted 1password-credentials.json and 1password-token.txt + age key on bastion",
+			Visible: func(values map[string]string) bool {
+				return values["secretstore_enabled"] == valYes && values["secretstore_provider"] == providerOnepassword
+			},
+			AbsenceNote: providerAbsenceNote(providerOnepassword),
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "secretstore_op_connect_host",
 					Label:     "connect host",
 					Default:   "http://onepassword-connect:8080",
-					Help:      "1Password Connect server URL",
+					Help:      "1password connect server url",
+					Width:     wizard.FieldWidthPath,
 					ConfigSet: setAddonSetting("secretstore", secretstore.SettingOnepasswordConnectHost),
 					ConfigGet: addonSetting("secretstore", secretstore.SettingOnepasswordConnectHost),
 				},
@@ -173,12 +237,17 @@ var AddonsStepDefinition = wizard.StepDefinition{
 		{
 			Title: "secret store (vault)",
 			Note:  "requires: vault-token.txt in secrets directory (plaintext or sops-encrypted)",
+			Visible: func(values map[string]string) bool {
+				return values["secretstore_enabled"] == valYes && values["secretstore_provider"] == providerVault
+			},
+			AbsenceNote: providerAbsenceNote(providerVault),
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "secretstore_vault_server",
 					Label:     "server url",
 					Default:   "",
-					Help:      "Vault server URL (e.g. https://vault.example.com)",
+					Help:      "vault server url (e.g. https://vault.example.com)",
+					Width:     wizard.FieldWidthPath,
 					ConfigSet: setAddonSetting("secretstore", secretstore.SettingVaultServer),
 					ConfigGet: addonSetting("secretstore", secretstore.SettingVaultServer),
 				},
@@ -186,7 +255,7 @@ var AddonsStepDefinition = wizard.StepDefinition{
 					Key:       "secretstore_vault_path",
 					Label:     "secret path",
 					Default:   "secret",
-					Help:      "Vault KV mount path",
+					Help:      "vault kv mount path",
 					ConfigSet: setAddonSetting("secretstore", secretstore.SettingVaultPath),
 					ConfigGet: addonSetting("secretstore", secretstore.SettingVaultPath),
 				},
@@ -194,7 +263,7 @@ var AddonsStepDefinition = wizard.StepDefinition{
 					Key:       "secretstore_vault_version",
 					Label:     "kv version",
 					Default:   "v2",
-					Help:      "Vault KV engine version: v1 or v2",
+					Help:      "vault kv engine version: v1 or v2",
 					ConfigSet: setAddonSetting("secretstore", secretstore.SettingVaultVersion),
 					ConfigGet: addonSetting("secretstore", secretstore.SettingVaultVersion),
 				},
@@ -203,12 +272,17 @@ var AddonsStepDefinition = wizard.StepDefinition{
 		{
 			Title: "secret store (bitwarden)",
 			Note:  "requires: bitwarden-token.txt in secrets directory (plaintext or sops-encrypted)",
+			Visible: func(values map[string]string) bool {
+				return values["secretstore_enabled"] == valYes && values["secretstore_provider"] == providerBitwarden
+			},
+			AbsenceNote: providerAbsenceNote(providerBitwarden),
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "secretstore_bw_org_id",
 					Label:     "organization id",
 					Default:   "",
-					Help:      "Bitwarden organization UUID",
+					Help:      "bitwarden organization uuid",
+					Required:  true,
 					ConfigSet: setAddonSetting("secretstore", secretstore.SettingBitwardenOrganizationID),
 					ConfigGet: addonSetting("secretstore", secretstore.SettingBitwardenOrganizationID),
 				},
@@ -216,7 +290,8 @@ var AddonsStepDefinition = wizard.StepDefinition{
 					Key:       "secretstore_bw_project_id",
 					Label:     "project id",
 					Default:   "",
-					Help:      "Bitwarden project UUID",
+					Help:      "bitwarden project uuid",
+					Required:  true,
 					ConfigSet: setAddonSetting("secretstore", secretstore.SettingBitwardenProjectID),
 					ConfigGet: addonSetting("secretstore", secretstore.SettingBitwardenProjectID),
 				},
@@ -224,7 +299,8 @@ var AddonsStepDefinition = wizard.StepDefinition{
 					Key:       "secretstore_bw_api_url",
 					Label:     "api url",
 					Default:   "https://api.bitwarden.com",
-					Help:      "Bitwarden Secrets Manager API URL",
+					Help:      "bitwarden secrets manager api url",
+					Width:     wizard.FieldWidthPath,
 					ConfigSet: setAddonSetting("secretstore", secretstore.SettingBitwardenAPIURL),
 					ConfigGet: addonSetting("secretstore", secretstore.SettingBitwardenAPIURL),
 				},
@@ -232,7 +308,8 @@ var AddonsStepDefinition = wizard.StepDefinition{
 					Key:       "secretstore_bw_identity_url",
 					Label:     "identity url",
 					Default:   "https://identity.bitwarden.com",
-					Help:      "Bitwarden identity service URL",
+					Help:      "bitwarden identity service url",
+					Width:     wizard.FieldWidthPath,
 					ConfigSet: setAddonSetting("secretstore", secretstore.SettingBitwardenIdentityURL),
 					ConfigGet: addonSetting("secretstore", secretstore.SettingBitwardenIdentityURL),
 				},
@@ -240,7 +317,8 @@ var AddonsStepDefinition = wizard.StepDefinition{
 					Key:       "secretstore_bw_sdk_url",
 					Label:     "sdk server url",
 					Default:   "https://bitwarden-sdk-server.external-secrets.svc.cluster.local:9998",
-					Help:      "in-cluster bitwarden-sdk-server URL",
+					Help:      "in-cluster bitwarden-sdk-server url",
+					Width:     wizard.FieldWidthPath,
 					ConfigSet: setAddonSetting("secretstore", secretstore.SettingBitwardenSDKServerURL),
 					ConfigGet: addonSetting("secretstore", secretstore.SettingBitwardenSDKServerURL),
 				},
@@ -249,65 +327,54 @@ var AddonsStepDefinition = wizard.StepDefinition{
 	},
 }
 
-// NewAddonsStep returns the addons wizard step.
-func NewAddonsStep() *wizard.DataDrivenStep {
-	definition := AddonsStepDefinition
-	definition.Sections = slices.Clone(definition.Sections)
-	for i := range definition.Sections {
-		section := &definition.Sections[i]
-		if section.Title == "gitops (flux)" || section.Title == "secret store (common)" {
-			section.Note = ""
-		}
-		section.Fields = slices.Clone(section.Fields)
-		for j := range section.Fields {
-			field := &section.Fields[j]
-			switch {
-			case strings.HasPrefix(field.Key, "flux_") && field.Key != "flux_enabled":
-				field.Visible = func(values map[string]string) bool { return values["flux_enabled"] == valYes }
-			case strings.HasPrefix(field.Key, "secretstore_") && field.Key != "secretstore_enabled":
-				field.Visible = func(values map[string]string) bool { return values["secretstore_enabled"] == valYes }
-			}
-		}
-		for _, provider := range []string{addonProviderOnepassword, "vault", "bitwarden"} {
-			if section.Title == "secret store ("+provider+")" {
-				section.Visible = func(values map[string]string) bool {
-					return values["secretstore_enabled"] == valYes && values["secretstore_provider"] == provider
-				}
-			}
-		}
-	}
-	step := wizard.NewDataDrivenStep(&definition)
-	cached, inputs := "", ""
-	step.WithRefreshFunc(func(s *wizard.DataDrivenStep) {
-		key := s.Value("flux_enabled") + "/" + s.Value("secretstore_enabled")
-		if key != inputs {
-			inputs = key
-			cached = renderAddonWarnings(s)
-		}
-	})
-	step.WithExtraContentFunc(func(_ *wizard.DataDrivenStep, _ int) string { return cached })
-	return step
+// sopsOnPath resolves whether the sops binary is reachable on PATH; a test
+// overrides it to prove the render path never calls it directly.
+var sopsOnPath = func() bool {
+	_, err := exec.LookPath("sops")
+	return err == nil
 }
 
-func renderAddonWarnings(step *wizard.DataDrivenStep) string {
-	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
-	var warnings []string
-
-	if step.Value("flux_enabled") == valYes {
-		keyPath := system.ExpandPath("~/.ssh/flux-deploy-key")
-		if !system.FileExists(keyPath) {
-			warnings = append(warnings, warnStyle.Render("  flux requires ssh deploy key at ~/.ssh/flux-deploy-key — create it before deploying"))
+// providerAbsenceNote returns a secret-store provider section's
+// AbsenceNote, naming provider; it stays silent while secret store is
+// disabled entirely, since "secret store settings" already explains that
+// case, firing only once secret store is enabled but a different provider
+// is selected.
+func providerAbsenceNote(provider string) func(values map[string]string) string {
+	return func(values map[string]string) string {
+		if values["secretstore_enabled"] != valYes || values["secretstore_provider"] == provider {
+			return ""
 		}
+		return provider + " settings appear when selected."
 	}
+}
 
-	if step.Value("secretstore_enabled") == valYes {
-		if _, err := exec.LookPath("sops"); err != nil {
-			warnings = append(warnings, warnStyle.Render("  secretstore requires sops — install before deploying"))
+// secretStoreSopsWarning returns the secret-store-settings section's
+// Warning, deferring the sops-on-PATH question to check.
+func secretStoreSopsWarning(check func() bool) func(values map[string]string) string {
+	return func(values map[string]string) string {
+		if values["secretstore_enabled"] != valYes {
+			return ""
 		}
+		if check() {
+			return ""
+		}
+		return "secretstore requires sops — install before deploying"
+	}
+}
+
+// NewAddonsStep returns the addons wizard step, resolving the secretstore
+// section's sops-on-PATH check once here instead of on every render.
+func NewAddonsStep() *wizard.DataDrivenStep {
+	def := AddonsStepDefinition
+	def.Sections = append([]wizard.SectionDefinition(nil), AddonsStepDefinition.Sections...)
+
+	sopsFound := sopsOnPath()
+	for i := range def.Sections {
+		if def.Sections[i].Title != "secret store settings" {
+			continue
+		}
+		def.Sections[i].Warning = secretStoreSopsWarning(func() bool { return sopsFound })
 	}
 
-	if len(warnings) == 0 {
-		return ""
-	}
-	return "\n" + strings.Join(warnings, "\n")
+	return wizard.NewDataDrivenStep(&def)
 }

@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strings"
 	"time"
@@ -15,10 +16,16 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
+
+// cleanupIrreversibleWarning is the ConfirmBox irreversible text for a
+// cleanup kind that wipes admin credentials (kubeconfig, kubeadmin-password).
+const cleanupIrreversibleWarning = "wipes cluster credentials (kubeconfig, kubeadmin-password); they cannot be recovered without a fresh deploy"
 
 var (
 	cleanupYes            bool
@@ -59,39 +66,32 @@ func init() {
 	rootCmd.AddCommand(cleanupCmd)
 }
 
-type cleanupDryRunTarget struct {
-	msg    string
-	fields []logutil.LogField
-}
-
 // runCleanupDryRun mirrors cleanup.cleanupSteps' switch so the preview cannot drift from execution.
-func runCleanupDryRun(cfg *config.Config, projectRoot string, kind cleanup.Kind) {
-	workDir := cleanupDryRunTarget{"dry-run: would remove work directory", []logutil.LogField{logutil.LF("path", workspace.WorkDir(projectRoot))}}
-	webServer := cleanupDryRunTarget{"dry-run: would remove ignition files from web server", []logutil.LogField{logutil.LF("dir", cfg.HTTPServer.Root)}}
-	haproxy := cleanupDryRunTarget{"dry-run: would stop haproxy and remove its config block", []logutil.LogField{logutil.LF("path", phase.DefaultHAProxyConfigPath)}}
-	apache := cleanupDryRunTarget{msg: "dry-run: would stop apache httpd service"}
-	dnsmasq := cleanupDryRunTarget{"dry-run: would stop dnsmasq and remove its drop-in", []logutil.LogField{logutil.LF("dir", phase.DefaultDNSMasqConfigDir)}}
-	terraform := cleanupDryRunTarget{"dry-run: would remove generated terraform artifacts and the post-destroy tfstate", []logutil.LogField{logutil.LF("env", cfg.TerraformEnvName())}}
-	packages := cleanupDryRunTarget{"dry-run: would remove packages and tool binaries", []logutil.LogField{logutil.LF("packages", cleanup.InstalledPackages()), logutil.LF("binaries", cleanup.InstalledBinaries())}}
-	ignitionCerts := cleanupDryRunTarget{"dry-run: would remove generated ignition TLS certs", []logutil.LogField{logutil.LF("path", filepath.Join(projectRoot, "certs", "ignition"))}}
+func runCleanupDryRun(w io.Writer, cfg *config.Config, projectRoot string, kind cleanup.Kind) {
+	workDir := "remove work directory (" + workspace.WorkDir(projectRoot) + ")"
+	webServer := "remove ignition files from web server (" + cfg.HTTPServer.Root + ")"
+	haproxy := "stop haproxy and remove its config block (" + phase.DefaultHAProxyConfigPath + ")"
+	apache := "stop apache httpd service"
+	dnsmasq := "stop dnsmasq and remove its drop-in (" + phase.DefaultDNSMasqConfigDir + ")"
+	terraformArtifacts := "remove generated terraform artifacts and the post-destroy tfstate (env=" + cfg.TerraformEnvName() + ")"
+	packages := "remove packages (" + strings.Join(cleanup.InstalledPackages(), ", ") + ") and tool binaries (" + strings.Join(cleanup.InstalledBinaries(), ", ") + ")"
+	ignitionCerts := "remove generated ignition TLS certs (" + filepath.Join(projectRoot, "certs", "ignition") + ")"
 
-	var targets []cleanupDryRunTarget
+	var would []string
 	switch kind {
 	case cleanup.Full:
-		targets = []cleanupDryRunTarget{workDir, webServer, haproxy, apache, dnsmasq, terraform, packages, ignitionCerts}
+		would = []string{workDir, webServer, haproxy, apache, dnsmasq, terraformArtifacts, packages, ignitionCerts}
 	case cleanup.WorkOnly:
-		targets = []cleanupDryRunTarget{workDir}
+		would = []string{workDir}
 	case cleanup.WebOnly:
-		targets = []cleanupDryRunTarget{webServer}
+		would = []string{webServer}
 	case cleanup.HAProxyOnly:
-		targets = []cleanupDryRunTarget{haproxy}
+		would = []string{haproxy}
 	case cleanup.TerraformOnly:
-		targets = []cleanupDryRunTarget{terraform}
+		would = []string{terraformArtifacts}
 	}
-	for _, t := range targets {
-		logutil.Info(t.msg, t.fields...)
-	}
-	logutil.Info("dry-run: re-run without --dry-run to execute cleanup")
+
+	fmt.Fprintln(w, render.DryRunActions("cleanup", cleanupConfirmFacts(cfg, projectRoot, kind), would))
 }
 
 // cleanupKindRemovesCredentials reports whether kind wipes kubeconfig/kubeadmin-password.
@@ -103,12 +103,22 @@ func cleanupKindRemovesCredentials(kind cleanup.Kind) bool {
 // credential-removing kinds; scoped kinds keep a single y/N.
 func confirmCleanupInteractive(ctx context.Context, cfg *config.Config, kind cleanup.Kind) (bool, error) {
 	if cleanupKindRemovesCredentials(kind) {
-		nameConfirmed, err := promptForClusterNameConfirmation(ctx, cfg.Cluster.Name, "type cluster name to confirm cleanup: ")
+		nameConfirmed, err := promptForClusterNameConfirmation(ctx, cfg.Cluster.Name, tui.PromptLine("type cluster name to confirm cleanup"))
 		if err != nil || !nameConfirmed {
 			return false, err
 		}
 	}
-	return promptForConfirmation(ctx, "proceed with cleanup? [y/N]: ")
+	return promptForConfirmation(ctx, tui.PromptLine("proceed with cleanup? [y/N]"))
+}
+
+// cleanupConfirmFacts builds the ConfirmBox facts for cfg's cluster, kind,
+// and the resolved work directory.
+func cleanupConfirmFacts(cfg *config.Config, projectRoot string, kind cleanup.Kind) []render.Fact {
+	return []render.Fact{
+		{Key: factKeyCluster, Value: cfg.Cluster.Name},
+		{Key: "kind", Value: string(kind)},
+		{Key: "work dir", Value: workspace.WorkDir(projectRoot)},
+	}
 }
 
 func runCleanup(cmd *cobra.Command, _ []string) error {
@@ -127,19 +137,21 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
+	projectRoot, err := resolveProjectRootOrDie()
+	if err != nil {
+		return err
+	}
+
 	if cleanupDryRun {
-		projectRoot, err := resolveProjectRootOrDie()
-		if err != nil {
-			return err
-		}
-		runCleanupDryRun(cfg, projectRoot, kind)
+		runCleanupDryRun(cmd.OutOrStdout(), cfg, projectRoot, kind)
 		return nil
 	}
 
-	logutil.Warn("this will remove all local artifacts for cluster", logutil.LF("cluster", cfg.Cluster.Name))
+	irreversible := ""
 	if cleanupKindRemovesCredentials(kind) {
-		logutil.Warn("once the infrastructure is destroyed this includes the admin credentials (kubeconfig, kubeadmin-password)")
+		irreversible = cleanupIrreversibleWarning
 	}
+	fmt.Fprintln(cmd.ErrOrStderr(), render.ConfirmBox("cleanup", cleanupConfirmFacts(cfg, projectRoot, kind), irreversible))
 
 	if err := confirmClusterMatches(cleanupYes, cleanupConfirmCluster, cfg.Cluster.Name, "cleanup"); err != nil {
 		return err
@@ -154,11 +166,6 @@ func runCleanup(cmd *cobra.Command, _ []string) error {
 			logutil.Info("cancelled")
 			return nil
 		}
-	}
-
-	projectRoot, err := resolveProjectRootOrDie()
-	if err != nil {
-		return err
 	}
 
 	lock, err := runlock.Acquire(projectRoot, "cleanup")

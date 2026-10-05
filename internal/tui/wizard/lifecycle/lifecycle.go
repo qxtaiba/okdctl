@@ -10,6 +10,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/node"
+	"github.com/qxtaiba/okdctl/internal/tui/logview"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
@@ -23,6 +24,11 @@ const (
 	StepIDExec    wizard.StepID = "lifecycle-exec"
 	StepIDDone    wizard.StepID = "lifecycle-done"
 )
+
+// factKeyOperation is the fact key every screen that names the chosen
+// operation (preview's own entry, and the params/confirm/incident context
+// panes) shares, so the word never drifts into a second spelling.
+const factKeyOperation = "operation"
 
 // State is shared by pointer across all lifecycle steps — the role
 // *config.Config plays for the configure wizard. Steps write into it from
@@ -59,6 +65,14 @@ type State struct {
 
 	Result  error
 	Elapsed time.Duration
+
+	// frozen is the per-node gate checklist exactly as the operation left it,
+	// handed over by the execution screen on its final event so the incident
+	// report can show the run's shape above the error card; frozenAt names the
+	// node that was in flight. Unexported because only this package's two
+	// screens share it.
+	frozen   []nodeProgress
+	frozenAt int
 }
 
 // DiskOnly reports whether the collected resize params grow only the os
@@ -87,4 +101,16 @@ type Hooks struct {
 	DryRun    func(ctx context.Context, st *State) (*node.OpPlan, error)
 	Execute   func(st *State, events chan<- ExecEvent) error
 	CancelOp  func()
+	// Logs is the human log stream the log surface reads; nil leaves the
+	// pane to the wizard's own context pane.
+	Logs logview.Source
+	// LogPath is the resolved path of the run-log sink that keeps every
+	// byte the ring evicts; empty when no file sink is open, and no screen
+	// may then point at one.
+	LogPath string
+	// Done is closed once the op's context is cancelled. The exec step's
+	// final send selects on it, so a force-quit never strands the runner
+	// goroutine (holding the run lock) on a feed nobody drains; a nil
+	// channel simply never fires.
+	Done <-chan struct{}
 }

@@ -9,8 +9,29 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/node"
+	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
+
+// TestConfirmHeadingCarriesWarningIcon guards item 4 of the second-cut safety
+// findings: "confirm irreversible removal" was the flow's only color-alone
+// risk signal (ColorError() with no glyph), so a NO_COLOR/colorblind operator
+// had nothing but hue distinguishing it from any other heading.
+func TestConfirmHeadingCarriesWarningIcon(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Cluster.Name = "homelab"
+	plan := &node.OpPlan{
+		Op: node.OpRemove, Cluster: "homelab",
+		Nodes: []node.PlanNode{{Name: "homelab-worker2", Action: terraform.PlanActionDelete}},
+	}
+	st := &State{Cfg: cfg, Op: node.OpRemove, Plan: plan, Proceed: true}
+	s := NewConfirmStep(st)
+	_ = s.Init()
+
+	if got := s.View(80, 40); !strings.Contains(got, tui.IconWarning+" confirm irreversible removal") {
+		t.Errorf("heading must carry the warning glyph, got %q", got)
+	}
+}
 
 func TestConfirmStepGatesOnExactClusterName(t *testing.T) {
 	cfg := config.DefaultConfig()
@@ -38,6 +59,55 @@ func TestConfirmStepGatesOnExactClusterName(t *testing.T) {
 	}
 	if !strings.Contains(s.View(80, 40), "homelab-worker2") {
 		t.Error("confirm screen must name the destroyed node")
+	}
+}
+
+func TestConfirmValidatorFeedback(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Cluster.Name = "homelab"
+	plan := &node.OpPlan{
+		Op: node.OpRemove, Cluster: "homelab",
+		Nodes: []node.PlanNode{{Name: "homelab-worker2", Action: terraform.PlanActionDelete}},
+	}
+	st := &State{Cfg: cfg, Op: node.OpRemove, Plan: plan, Proceed: true}
+	s := NewConfirmStep(st)
+	_ = s.Init()
+
+	for _, r := range "homela" {
+		s.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	if got := s.View(80, 40); !strings.Contains(got, `must match "homelab"`) {
+		t.Fatalf("View() = %q, want a must-match error", got)
+	}
+
+	s.Update(tea.KeyPressMsg{Code: 'b', Text: "b"})
+	if got := s.View(80, 40); !strings.Contains(got, "matches — press enter") {
+		t.Fatalf("View() = %q, want the matches confirmation", got)
+	}
+}
+
+func TestConfirmPluralisesNodes(t *testing.T) {
+	for _, tc := range []struct {
+		names []string
+		want  string
+	}{
+		{[]string{"a", "b"}, "destroys a and b and their data disks"},
+		{[]string{"a", "b", "c"}, "destroys a, b, and c and their data disks"},
+	} {
+		cfg := config.DefaultConfig()
+		cfg.Cluster.Name = "homelab"
+		nodes := make([]node.PlanNode, len(tc.names))
+		for i, name := range tc.names {
+			nodes[i] = node.PlanNode{Name: name, Action: terraform.PlanActionDelete}
+		}
+		plan := &node.OpPlan{Op: node.OpRemove, Cluster: "homelab", Nodes: nodes}
+		st := &State{Cfg: cfg, Op: node.OpRemove, Plan: plan, Proceed: true}
+		s := NewConfirmStep(st)
+		_ = s.Init()
+
+		if got := s.View(120, 40); !strings.Contains(got, tc.want) {
+			t.Fatalf("View() = %q, want %q", got, tc.want)
+		}
 	}
 }
 

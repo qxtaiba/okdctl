@@ -1,0 +1,24 @@
+                                                                                
+  ╭──────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L                                                              │  
+  │ done                                                      install · done │  
+  │──────────────────────────────────────────────────────────────────────────│  
+  │  D E P L O Y E D                                                         │  
+  │                                                                          │  
+  │  homelab.lab.example.com                             run-01 · 42m0s      │  
+  │                                                                          │  
+  │  ACCESS                                                                  │  
+  │  cluster ....... homelab.lab.example.com                                 │  
+  │  console ....... https://console-openshift-console.apps.homelab.la       │  
+  │                  b.example.com                                           │  
+  │  api ........... https://api.homelab.lab.example.com:6443                │  
+  │                                                                          │  
+  │  DNS RECORDS                                                             │  
+  │  api.homelab.lab.example.com ... 192.0.2.10 (kube-vip)                   │  
+  │  *.apps.homelab.lab.example.com ... 192.168.1.20 (haproxy)               │  
+  │                                                                          │  
+  │                                                                          │  
+  │────────────────── ↑ ↓  scroll down for more ────────────────── ▸ homelab │  
+  │  s cluster status • n manage nodes • o open console … • ? help           │  
+  ╰──────────────────────────────────────────────────────────────────────────╯  
+                                                                                

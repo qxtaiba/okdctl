@@ -2,6 +2,8 @@ package steps
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -71,97 +73,6 @@ func testProxmoxConfig(host string) *config.Config {
 	}}}
 }
 
-// newHeterogeneousProxmoxServer mocks a two-node cluster where pve1 has an
-// extra datastore (fast-nvme) and bridge (vmbr1) that pve2 lacks — both
-// nodes are online, so both are placement candidates.
-func newHeterogeneousProxmoxServer(t *testing.T) *httptest.Server {
-	t.Helper()
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api2/json/access/ticket", func(w http.ResponseWriter, _ *http.Request) {
-		writeData(w, map[string]any{"ticket": "PVE:test", "CSRFPreventionToken": "tok", "username": "root@pam"})
-	})
-	mux.HandleFunc("GET /api2/json/nodes", func(w http.ResponseWriter, _ *http.Request) {
-		writeData(w, []map[string]any{
-			{"node": "pve1", "status": "online", "maxcpu": 8, "maxmem": 17179869184},
-			{"node": "pve2", "status": "online", "maxcpu": 4, "maxmem": 8589934592},
-		})
-	})
-	storageByNode := map[string][]map[string]any{
-		"pve1": {
-			{"storage": "local-lvm", "type": "lvmthin", "content": "images", "enabled": 1, "total": 214748364800, "used_fraction": 0.1},
-			{"storage": "fast-nvme", "type": "lvmthin", "content": "images", "enabled": 1, "total": 500000000000, "used_fraction": 0.1},
-		},
-		"pve2": {
-			{"storage": "local-lvm", "type": "lvmthin", "content": "images", "enabled": 1, "total": 214748364800, "used_fraction": 0.1},
-		},
-	}
-	bridgesByNode := map[string][]map[string]any{
-		"pve1": {
-			{"iface": "vmbr0", "active": 1, "cidr": "192.168.1.1/24"},
-			{"iface": "vmbr1", "active": 1, "cidr": "10.1.0.1/24"},
-		},
-		"pve2": {
-			{"iface": "vmbr0", "active": 1, "cidr": "192.168.1.1/24"},
-		},
-	}
-	for _, name := range []string{"pve1", "pve2"} {
-		storage, bridges := storageByNode[name], bridgesByNode[name]
-		mux.HandleFunc("GET /api2/json/nodes/"+name+"/status", func(w http.ResponseWriter, _ *http.Request) {
-			writeData(w, map[string]any{})
-		})
-		mux.HandleFunc("GET /api2/json/nodes/"+name+"/storage", func(w http.ResponseWriter, _ *http.Request) {
-			writeData(w, storage)
-		})
-		mux.HandleFunc("GET /api2/json/nodes/"+name+"/network", func(w http.ResponseWriter, _ *http.Request) {
-			writeData(w, bridges)
-		})
-	}
-	return httptest.NewServer(mux)
-}
-
-// TestDiscoverProxmox_HeterogeneousClusterOffersOnlySharedInventory is the
-// reviewer's Item 4 reproduction: discovery must sample every online node,
-// not just the first, and must offer only storage/bridges every candidate
-// node actually has — plus a visible warning when inventories differ.
-func TestDiscoverProxmox_HeterogeneousClusterOffersOnlySharedInventory(t *testing.T) {
-	server := newHeterogeneousProxmoxServer(t)
-	defer server.Close()
-
-	got, err := discoverProxmox(t.Context(), testProxmoxConfig(server.URL))
-	if got == nil {
-		t.Fatalf("discoverProxmox returned nil discovery; err = %v", err)
-	}
-
-	if len(got.Storage) != 1 || got.Storage[0].Name != "local-lvm" {
-		t.Errorf("Storage = %+v; want only [local-lvm] (fast-nvme exists only on pve1, not every candidate node)", got.Storage)
-	}
-	if len(got.Bridges) != 1 || got.Bridges[0].Name != "vmbr0" {
-		t.Errorf("Bridges = %+v; want only [vmbr0] (vmbr1 exists only on pve1)", got.Bridges)
-	}
-	if err == nil || !strings.Contains(err.Error(), "different storage pools") {
-		t.Errorf("err = %v; want a visible warning that node inventories differ", err)
-	}
-}
-
-// TestDiscoverProxmox_FlagsPlacementUnreachableStorage exercises the
-// validation half of Item 4: a config that already targets worker_nodes on
-// a node lacking the chosen storage must surface that mismatch from
-// discovery, not silently accept it.
-func TestDiscoverProxmox_FlagsPlacementUnreachableStorage(t *testing.T) {
-	server := newHeterogeneousProxmoxServer(t)
-	defer server.Close()
-
-	cfg := testProxmoxConfig(server.URL)
-	cfg.Provider.Proxmox.Storage = "fast-nvme"
-	cfg.Provider.Proxmox.WorkerNodes = []string{"pve2"}
-	cfg.Topology.Workers.Count = 1
-
-	_, err := discoverProxmox(t.Context(), cfg)
-	if err == nil || !strings.Contains(err.Error(), "fast-nvme") {
-		t.Fatalf("err = %v; want a validation error naming storage %q as unreachable on pve2", err, "fast-nvme")
-	}
-}
-
 func TestDiscoverProxmox_Success(t *testing.T) {
 	server := newFakeProxmoxServer(t, "pve2")
 	defer server.Close()
@@ -180,6 +91,14 @@ func TestDiscoverProxmox_Success(t *testing.T) {
 	if got.Nodes[1].Name != "pve2" || got.Nodes[1].Status != "online" || got.Nodes[1].CPUs != 4 || got.Nodes[1].MemGB != 8 {
 		t.Errorf("Nodes[1] = %+v", got.Nodes[1])
 	}
+	if !got.Nodes[1].StorageKnown || len(got.Nodes[1].Storage) != 2 ||
+		got.Nodes[1].Storage[0].Name != "local" || got.Nodes[1].Storage[0].TotalGB != 100 {
+		t.Errorf("Nodes[1].Storage = %+v, known=%v", got.Nodes[1].Storage, got.Nodes[1].StorageKnown)
+	}
+	if !got.Nodes[1].BridgesKnown || len(got.Nodes[1].Bridges) != 1 ||
+		got.Nodes[1].Bridges[0].Name != "vmbr0" {
+		t.Errorf("Nodes[1].Bridges = %+v, known=%v", got.Nodes[1].Bridges, got.Nodes[1].BridgesKnown)
+	}
 
 	if len(got.Storage) != 2 {
 		t.Fatalf("len(Storage) = %d; want 2 (disabled storage excluded); got %+v", len(got.Storage), got.Storage)
@@ -194,6 +113,117 @@ func TestDiscoverProxmox_Success(t *testing.T) {
 
 	if len(got.ISOs) != 1 || got.ISOs[0] != "local:iso/fcos-38.iso" {
 		t.Errorf("ISOs = %+v; want [local:iso/fcos-38.iso]", got.ISOs)
+	}
+}
+
+// newFakeHeterogeneousServer mocks a two-online-node cluster whose
+// inventories differ: pve1 carries an extra storage pool, bridge, and ISO
+// that pve2 lacks.
+func newFakeHeterogeneousServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api2/json/access/ticket", func(w http.ResponseWriter, _ *http.Request) {
+		writeData(w, map[string]any{"ticket": "PVE:test", "CSRFPreventionToken": "tok", "username": "root@pam"})
+	})
+	mux.HandleFunc("GET /api2/json/nodes", func(w http.ResponseWriter, _ *http.Request) {
+		writeData(w, []map[string]any{
+			{"node": "pve1", "status": "online", "maxcpu": 8, "maxmem": 17179869184},
+			{"node": "pve2", "status": "online", "maxcpu": 4, "maxmem": 8589934592},
+		})
+	})
+	for _, n := range []string{"pve1", "pve2"} {
+		node := n
+		mux.HandleFunc("GET /api2/json/nodes/"+node+"/status", func(w http.ResponseWriter, _ *http.Request) {
+			writeData(w, map[string]any{})
+		})
+		mux.HandleFunc("GET /api2/json/nodes/"+node+"/storage", func(w http.ResponseWriter, _ *http.Request) {
+			stores := []map[string]any{
+				{"storage": "local", "type": "dir", "content": "iso,vztmpl", "enabled": 1, "total": 107374182400},
+				{"storage": "local-lvm", "type": "lvmthin", "content": "images", "enabled": 1, "total": 214748364800},
+			}
+			if node == "pve1" {
+				stores = append(stores, map[string]any{"storage": "tank", "type": "zfspool", "content": "images", "enabled": 1, "total": 4294967296000})
+			}
+			writeData(w, stores)
+		})
+		mux.HandleFunc("GET /api2/json/nodes/"+node+"/network", func(w http.ResponseWriter, _ *http.Request) {
+			bridges := []map[string]any{{"iface": "vmbr0", "active": 1, "cidr": "192.168.1.1/24"}}
+			if node == "pve1" {
+				bridges = append(bridges, map[string]any{"iface": "vmbr1", "active": 1, "cidr": "10.10.0.1/24"})
+			}
+			writeData(w, bridges)
+		})
+		mux.HandleFunc("GET /api2/json/nodes/"+node+"/storage/local/status", func(w http.ResponseWriter, _ *http.Request) {
+			writeData(w, map[string]any{})
+		})
+		mux.HandleFunc("GET /api2/json/nodes/"+node+"/storage/local/content", func(w http.ResponseWriter, _ *http.Request) {
+			isos := []map[string]any{{"volid": "local:iso/fcos-38.iso"}}
+			if node == "pve1" {
+				isos = append(isos, map[string]any{"volid": "local:iso/extra.iso"})
+			}
+			writeData(w, isos)
+		})
+	}
+	return httptest.NewServer(mux)
+}
+
+// TestDiscoverProxmox_IntersectsAcrossOnlineNodes pins bug 10: discovery
+// reads every online node, offers only the storage/bridges/ISOs common to
+// all of them, and flags the cluster heterogeneous so the wizard can warn.
+func TestDiscoverProxmox_IntersectsAcrossOnlineNodes(t *testing.T) {
+	server := newFakeHeterogeneousServer(t)
+	defer server.Close()
+
+	got, err := discoverProxmox(t.Context(), testProxmoxConfig(server.URL))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(got.Storage) != 2 || got.Storage[0].Name != "local" || got.Storage[1].Name != "local-lvm" {
+		t.Errorf("Storage = %+v; want the two pools common to both nodes", got.Storage)
+	}
+	if len(got.Bridges) != 1 || got.Bridges[0].Name != "vmbr0" {
+		t.Errorf("Bridges = %+v; want only vmbr0", got.Bridges)
+	}
+	if len(got.ISOs) != 1 || got.ISOs[0] != "local:iso/fcos-38.iso" {
+		t.Errorf("ISOs = %+v; want only the shared ISO", got.ISOs)
+	}
+	if !got.Heterogeneous {
+		t.Error("Heterogeneous = false, want true for differing inventories")
+	}
+}
+
+// TestDiscoverProxmox_FlagsPlacementUnreachableStorage exercises the
+// placement-validation half of the discovery fix: a config that already
+// targets worker_nodes on a node lacking the chosen storage must surface
+// that mismatch from discovery, not silently accept it — "tank" exists
+// only on pve1 in newFakeHeterogeneousServer's fixture, so pinning the
+// worker to pve2 while storage="tank" must fail.
+func TestDiscoverProxmox_FlagsPlacementUnreachableStorage(t *testing.T) {
+	server := newFakeHeterogeneousServer(t)
+	defer server.Close()
+
+	cfg := testProxmoxConfig(server.URL)
+	cfg.Provider.Proxmox.Storage = "tank"
+	cfg.Provider.Proxmox.WorkerNodes = []string{"pve2"}
+	cfg.Topology.Workers.Count = 1
+
+	_, err := discoverProxmox(t.Context(), cfg)
+	if err == nil || !strings.Contains(err.Error(), "tank") {
+		t.Fatalf("err = %v; want a validation error naming storage %q as unreachable on pve2", err, "tank")
+	}
+}
+
+func TestDiscoverProxmox_SingleOnlineNodeIsHomogeneous(t *testing.T) {
+	server := newFakeProxmoxServer(t, "pve2")
+	defer server.Close()
+
+	got, err := discoverProxmox(t.Context(), testProxmoxConfig(server.URL))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Heterogeneous {
+		t.Error("Heterogeneous = true for a single online node, want false")
 	}
 }
 
@@ -268,19 +298,16 @@ func TestFetchNodeDetails_PartialFailure(t *testing.T) {
 	defer server.Close()
 
 	client := proxmox.NewClient(server.URL + "/api2/json")
-	storage, bridges, isos, err := fetchNodeDetails(context.Background(), client, "pve1")
+	details := fetchNodeDetails(context.Background(), client, "pve1")
 
-	if err == nil || !strings.Contains(err.Error(), "storage") {
-		t.Fatalf("lost partial failure: %v", err)
+	if details.StorageKnown || details.Storage != nil {
+		t.Errorf("storage = %+v known=%v; want unknown after storage endpoint 500", details.Storage, details.StorageKnown)
 	}
-	if storage != nil {
-		t.Errorf("storage = %+v; want nil after storage endpoint 500", storage)
+	if !details.BridgesKnown || len(details.Bridges) != 1 || details.Bridges[0].Name != "vmbr0" {
+		t.Errorf("bridges = %+v known=%v; want [{vmbr0 ...}] despite storage failure", details.Bridges, details.BridgesKnown)
 	}
-	if len(bridges) != 1 || bridges[0].Name != "vmbr0" {
-		t.Errorf("bridges = %+v; want [{vmbr0 ...}] despite storage failure", bridges)
-	}
-	if isos != nil {
-		t.Errorf("isos = %+v; want nil (no iso-tagged storage)", isos)
+	if details.ISOs != nil {
+		t.Errorf("isos = %+v; want nil (no iso-tagged storage)", details.ISOs)
 	}
 }
 
@@ -290,8 +317,11 @@ func TestClassifyError(t *testing.T) {
 		err  error
 		want string
 	}{
-		{"tls certificate error", errors.New("x509: certificate signed by unknown authority"), "tls certificate verification failed"},
-		{"tls lowercase prefix", errors.New("tls: handshake failure"), "tls certificate verification failed"},
+		// Untyped tls/x509 failures the typed checks below don't catch
+		// (e.g. a protocol-level handshake failure unrelated to any
+		// certificate) get an honest generic message, not a guessed cause.
+		{"tls certificate error", errors.New("x509: certificate signed by unknown authority"), "tls handshake failed"},
+		{"tls lowercase prefix", errors.New("tls: handshake failure"), "tls handshake failed"},
 		{"connection refused", errors.New("dial tcp 10.0.0.1:8006: connect: connection refused"), "connection refused"},
 		{"no such host", errors.New("dial tcp: lookup pve.invalid: no such host"), "host not found"},
 		{"io timeout", errors.New("dial tcp 10.0.0.1:8006: i/o timeout"), "connection timed out"},
@@ -305,6 +335,57 @@ func TestClassifyError(t *testing.T) {
 			got := classifyError(tc.err)
 			if got == nil || !strings.Contains(got.Error(), tc.want) {
 				t.Errorf("classifyError(%v) = %v; want substring %q", tc.err, got, tc.want)
+			}
+			if strings.Contains(got.Error(), "skip tls verify") {
+				t.Errorf("classifyError(%v) = %v; must not nudge toward disabling tls verification", tc.err, got)
+			}
+		})
+	}
+}
+
+// TestClassifyError_TLSCausesGetDistinctSafeRemedies pins the three
+// distinguishable TLS failure causes, each wrapped the way crypto/tls
+// actually returns it (tls.CertificateVerificationError wrapping the real
+// x509 cause): every remedy must be specific to the real cause, safe (never
+// "disable verification"), and must not swallow the underlying error.
+func TestClassifyError_TLSCausesGetDistinctSafeRemedies(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{
+			name: "untrusted issuer",
+			err:  &tls.CertificateVerificationError{Err: x509.UnknownAuthorityError{}},
+			want: "ca certificate",
+		},
+		{
+			name: "hostname mismatch",
+			err:  &tls.CertificateVerificationError{Err: x509.HostnameError{Certificate: &x509.Certificate{}, Host: "10.0.0.5"}},
+			want: "name on the certificate",
+		},
+		{
+			name: "certificate expired",
+			err:  &tls.CertificateVerificationError{Err: x509.CertificateInvalidError{Reason: x509.Expired}},
+			want: "renew",
+		},
+		{
+			name: "certificate invalid, other reason: honest generic, no guess",
+			err:  &tls.CertificateVerificationError{Err: x509.CertificateInvalidError{Reason: x509.NotAuthorizedToSign}},
+			want: "tls certificate invalid",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := classifyError(tc.err)
+			if got == nil || !strings.Contains(got.Error(), tc.want) {
+				t.Errorf("classifyError(%v) = %v; want substring %q", tc.err, got, tc.want)
+			}
+			if strings.Contains(got.Error(), "skip tls verify") {
+				t.Errorf("classifyError(%v) = %v; must not nudge toward disabling tls verification", tc.err, got)
+			}
+			if !errors.Is(got, tc.err) {
+				t.Errorf("classifyError(%v) = %v; lost the underlying error (not wrapped with %%w)", tc.err, got)
 			}
 		})
 	}

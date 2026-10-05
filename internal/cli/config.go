@@ -66,7 +66,7 @@ func runConfigValidate(cmd *cobra.Command, _ []string) error {
 		return nil
 	}
 	// Mirrors runFullDeployment's gate shape: result stays in the Unwrap chain.
-	return &errtypes.ConfigError{Msg: "config validation failed", Err: result}
+	return (&errtypes.ConfigError{Msg: "config validation failed", Err: result}).WithHint("review the errors listed above")
 }
 
 func runConfigShow(cmd *cobra.Command, _ []string) error {

@@ -12,14 +12,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/credentials"
 	"github.com/qxtaiba/okdctl/internal/deploy"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/node"
+	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/testutil"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/steps"
+	"github.com/qxtaiba/okdctl/internal/wizarddraft"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 const (
@@ -68,23 +73,23 @@ type wizardCapture struct {
 	configExists bool
 }
 
-func stubWizard(t *testing.T, res wizard.Result, mode steps.WelcomeMode, err error) *wizardCapture {
+func stubWizard(t *testing.T, res wizard.Result, verb steps.HubVerb, err error) *wizardCapture {
 	t.Helper()
 	rec := &wizardCapture{}
-	runWizardFn = func(_ context.Context, cfg *config.Config, exists bool) (wizard.Result, steps.WelcomeMode, error) {
+	runWizardFn = func(_ *cobra.Command, cfg *config.Config, exists bool) (hubOutcome, error) {
 		rec.called = true
 		rec.cfg = cfg
 		rec.configExists = exists
-		return res, mode, err
+		return hubOutcome{Result: res, Verb: verb}, err
 	}
 	return rec
 }
 
 func forbidWizard(t *testing.T) {
 	t.Helper()
-	runWizardFn = func(context.Context, *config.Config, bool) (wizard.Result, steps.WelcomeMode, error) {
+	runWizardFn = func(*cobra.Command, *config.Config, bool) (hubOutcome, error) {
 		t.Error("wizard must not be constructed on this path")
-		return wizard.Result{Outcome: wizard.OutcomeCancelled}, steps.WelcomeModeEdit, nil
+		return hubOutcome{Result: wizard.Result{Outcome: wizard.OutcomeCancelled}, Verb: steps.HubVerbEditConfig}, nil
 	}
 }
 
@@ -100,21 +105,21 @@ type executeCapture struct {
 func stubExecute(t *testing.T) *executeCapture {
 	t.Helper()
 	rec := &executeCapture{}
-	deployExecuteFn = func(_ context.Context, cfg *config.Config, opts deploy.Options, _ io.Writer) error {
+	deployExecuteFn = func(_ context.Context, cfg *config.Config, opts *deploy.Options, _ io.Writer) (*deploy.Outcome, error) {
 		rec.called = true
 		rec.cfg = cfg
-		rec.opts = opts
+		rec.opts = *opts
 		rec.credsValid = opts.Credentials != nil && opts.Credentials.IsValid()
-		return nil
+		return &deploy.Outcome{}, nil
 	}
 	return rec
 }
 
 func forbidExecute(t *testing.T) {
 	t.Helper()
-	deployExecuteFn = func(context.Context, *config.Config, deploy.Options, io.Writer) error {
+	deployExecuteFn = func(context.Context, *config.Config, *deploy.Options, io.Writer) (*deploy.Outcome, error) {
 		t.Error("deployment engine must not run on this path")
-		return nil
+		return nil, nil
 	}
 }
 
@@ -192,7 +197,7 @@ func TestRunDeploy_WizardCancelMakesNoChanges(t *testing.T) {
 	resetDeployState(t)
 	t.Chdir(t.TempDir())
 	forbidExecute(t)
-	stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCancelled}, steps.WelcomeModeFresh, nil)
+	stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCancelled}, steps.HubVerbGetStarted, nil)
 
 	if err := runDeploy(deployCmd, nil); err != nil {
 		t.Fatalf("cancelled wizard must exit 0: %v", err)
@@ -207,7 +212,7 @@ func TestRunDeploy_ExistingConfigSeedsWizard(t *testing.T) {
 	t.Chdir(t.TempDir())
 	seedDeployConfig(t)
 	forbidExecute(t)
-	rec := stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCancelled}, steps.WelcomeModeEdit, nil)
+	rec := stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCancelled}, steps.HubVerbEditConfig, nil)
 
 	if err := runDeploy(deployCmd, nil); err != nil {
 		t.Fatalf("runDeploy: %v", err)
@@ -227,7 +232,7 @@ func TestRunDeploy_CorruptConfigFallsBackToDefaultsInteractively(t *testing.T) {
 		t.Fatal(err)
 	}
 	forbidExecute(t)
-	rec := stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCancelled}, steps.WelcomeModeFresh, nil)
+	rec := stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCancelled}, steps.HubVerbGetStarted, nil)
 
 	if err := runDeploy(deployCmd, nil); err != nil {
 		t.Fatalf("interactive run must fall back to defaults, got: %v", err)
@@ -264,7 +269,7 @@ func TestRunDeploy_MinimalSeedsMinimalDefaults(t *testing.T) {
 	resetDeployState(t)
 	t.Chdir(t.TempDir())
 	forbidExecute(t)
-	rec := stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCancelled}, steps.WelcomeModeFresh, nil)
+	rec := stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCancelled}, steps.HubVerbGetStarted, nil)
 	deployMinimal = true
 
 	if err := runDeploy(deployCmd, nil); err != nil {
@@ -282,7 +287,7 @@ func TestRunDeploy_WizardErrorIsConfigError(t *testing.T) {
 	resetDeployState(t)
 	t.Chdir(t.TempDir())
 	forbidExecute(t)
-	stubWizard(t, wizard.Result{}, steps.WelcomeModeFresh, errors.New("tty exploded"))
+	stubWizard(t, wizard.Result{}, steps.HubVerbGetStarted, errors.New("tty exploded"))
 
 	err := runDeploy(deployCmd, nil)
 	var ce *errtypes.ConfigError
@@ -299,11 +304,15 @@ func TestRunDeploy_WizardSaveExitPersistsConfigAndSidecar(t *testing.T) {
 	t.Chdir(t.TempDir())
 	forbidExecute(t)
 
+	draftStore := wizarddraft.New("okdctl.yaml")
+	if err := draftStore.Save(config.DefaultConfig(), wizarddraft.Cursor{StepID: wizard.StepIDBasics}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
 	wizardCfg := config.DefaultConfig()
 	wizardCfg.Cluster.Name = "wizarded"
 	wizardCfg.Provider.Proxmox.Username = "root@pam"
 	wizardCfg.Provider.Proxmox.Password.Set(fixturePassword)
-	stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCompleted, Config: wizardCfg, Action: wizard.ActionExit}, steps.WelcomeModeFresh, nil)
+	stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCompleted, Config: wizardCfg, Action: wizard.ActionExit}, steps.HubVerbGetStarted, nil)
 
 	if err := runDeploy(deployCmd, nil); err != nil {
 		t.Fatalf("runDeploy: %v", err)
@@ -330,6 +339,9 @@ func TestRunDeploy_WizardSaveExitPersistsConfigAndSidecar(t *testing.T) {
 	if !wizardCfg.Provider.Proxmox.Password.IsEmpty() {
 		t.Error("in-memory password must be cleared after the save pipeline")
 	}
+	if _, err := os.Stat(draftStore.Path()); !os.IsNotExist(err) {
+		t.Errorf("saved configuration must clear its draft, got stat err %v", err)
+	}
 }
 
 func TestRunDeploy_WizardDeployActionExecutes(t *testing.T) {
@@ -340,7 +352,7 @@ func TestRunDeploy_WizardDeployActionExecutes(t *testing.T) {
 
 	wizardCfg := config.DefaultConfig()
 	wizardCfg.Cluster.Name = "deployme"
-	stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCompleted, Config: wizardCfg, Action: wizard.ActionDeploy}, steps.WelcomeModeFresh, nil)
+	stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCompleted, Config: wizardCfg, Action: wizard.ActionDeploy}, steps.HubVerbGetStarted, nil)
 
 	if err := runDeploy(deployCmd, nil); err != nil {
 		t.Fatalf("runDeploy: %v", err)
@@ -362,13 +374,13 @@ func TestRunDeploy_WizardDeployActionExecutes(t *testing.T) {
 	}
 }
 
-func TestRunDeploy_WelcomeModeDeploySkipsSave(t *testing.T) {
+func TestRunDeploy_HubDeployVerbSkipsSave(t *testing.T) {
 	resetDeployState(t)
 	isolateProxmoxEnv(t)
 	t.Chdir(t.TempDir())
 	seedDeployConfig(t)
 	exec := stubExecute(t)
-	stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCompleted}, steps.WelcomeModeDeploy, nil)
+	stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCompleted}, steps.HubVerbDeploy, nil)
 
 	if err := runDeploy(deployCmd, nil); err != nil {
 		t.Fatalf("runDeploy: %v", err)
@@ -384,10 +396,67 @@ func TestRunDeploy_WelcomeModeDeploySkipsSave(t *testing.T) {
 	}
 }
 
+func TestRunDeploy_HubDestroyVerbPrintsHandoffAndDestroysNothing(t *testing.T) {
+	resetDeployState(t)
+	isolateProxmoxEnv(t)
+	t.Chdir(t.TempDir())
+	seedDeployConfig(t)
+	forbidExecute(t)
+
+	before, err := os.ReadFile("okdctl.yaml")
+	if err != nil {
+		t.Fatalf("read seeded config: %v", err)
+	}
+
+	var out bytes.Buffer
+	deployCmd.SetOut(&out)
+	stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCompleted}, steps.HubVerbDestroy, nil)
+
+	if err := runDeploy(deployCmd, nil); err != nil {
+		t.Fatalf("runDeploy: %v", err)
+	}
+
+	if !strings.Contains(out.String(), destroyHandoff) {
+		t.Errorf("destroy verb must print the handoff line %q:\n%s", destroyHandoff, out.String())
+	}
+	after, err := os.ReadFile("okdctl.yaml")
+	if err != nil {
+		t.Fatalf("read config after: %v", err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Error("the destroy verb must not run the save pipeline over the on-disk config")
+	}
+	if _, err := os.Stat("okdctl.env"); !os.IsNotExist(err) {
+		t.Errorf("the destroy verb must not write a credential sidecar, got stat err %v", err)
+	}
+	if _, err := os.Stat(workspace.WorkDirName); err == nil {
+		t.Error("the destroy verb must not touch the work directory")
+	}
+}
+
+func TestRunDeploy_HubQuitVerbChangesNothing(t *testing.T) {
+	resetDeployState(t)
+	isolateProxmoxEnv(t)
+	t.Chdir(t.TempDir())
+	forbidExecute(t)
+	stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCompleted}, steps.HubVerbQuit, nil)
+
+	if err := runDeploy(deployCmd, nil); err != nil {
+		t.Fatalf("runDeploy: %v", err)
+	}
+	if _, err := os.Stat("okdctl.yaml"); !os.IsNotExist(err) {
+		t.Errorf("the quit verb must not write a config, got stat err %v", err)
+	}
+}
+
 func TestRunDeploy_DryRunShortCircuitsBeforeWizard(t *testing.T) {
 	resetDeployState(t)
 	isolateProxmoxEnv(t)
 	t.Chdir(t.TempDir())
+	// Item 6 of the second-cut safety findings: dry-run now requires an
+	// existing config rather than silently planning compiled-in defaults
+	// against whatever terraform workspace sits in cwd.
+	seedDeployConfig(t)
 	forbidWizard(t)
 	forbidExecute(t)
 	testutil.InstallFakeBin(t, "terraform", "#!/bin/sh\nexit 0\n")
@@ -404,6 +473,43 @@ func TestRunDeploy_DryRunShortCircuitsBeforeWizard(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "DEPLOY STEP LISTING") {
 		t.Errorf("step listing missing from output:\n%s", out.String())
+	}
+}
+
+// TestRunDeployDryRun_SurfacesLockConflictNotGenericWrap pins the fix: a
+// concurrent-lock conflict from runlock.Acquire must reach the user as its
+// own specific message, not get buried behind runDeployDryRun's generic
+// "dry-run: plan preview failed" wrap (which errors.As/Describe can't see
+// past, since they only look at the outermost *errtypes.ConfigError).
+//
+// Calls runDeployDryRun directly rather than through runDeploy: runDeploy
+// itself takes an unrelated project lock first (for MaterializeTerraform),
+// which would conflict with a pre-held lock before ever reaching the code
+// under test.
+func TestRunDeployDryRun_SurfacesLockConflictNotGenericWrap(t *testing.T) {
+	resetDeployState(t)
+	isolateProxmoxEnv(t)
+	t.Chdir(t.TempDir())
+	testutil.InstallFakeBin(t, "terraform", "#!/bin/sh\nexit 0\n")
+
+	root, err := resolveWorkspaceRoot()
+	if err != nil {
+		t.Fatalf("resolveWorkspaceRoot: %v", err)
+	}
+	lock, err := runlock.Acquire(root, "some-other-command")
+	if err != nil {
+		t.Fatalf("pre-acquire lock: %v", err)
+	}
+	defer lock.Release()
+
+	var out bytes.Buffer
+	runErr := runDeployDryRun(context.Background(), config.DefaultConfig(), &out)
+	var cfgErr *errtypes.ConfigError
+	if !errors.As(runErr, &cfgErr) {
+		t.Fatalf("want *errtypes.ConfigError, got %T: %v", runErr, runErr)
+	}
+	if !strings.Contains(cfgErr.Msg, "another okdctl process holds the project lock") {
+		t.Fatalf("dry-run must surface the lock-conflict message unwrapped, got Msg=%q", cfgErr.Msg)
 	}
 }
 

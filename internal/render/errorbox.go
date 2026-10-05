@@ -32,23 +32,48 @@ func IsPresented(err error) bool {
 }
 
 // ErrorSummary renders err in the deploy-summary boxed chrome, using
-// errtypes.Describe (never re-parsed Error() text) for the kind and hint.
+// errtypes.Describe (never re-parsed Error() text) for the kind and hint,
+// plus an exit-code/run-id footer.
 func ErrorSummary(err error, exitCode int, runID string) string {
 	kind, headline, hint := describeError(err)
 
-	contentWidth := tui.DefaultBoxWidth - 4
+	sb := errorBody(kind, headline, hint, tui.DefaultBoxWidth)
+	sb.Newline()
+	footer := fmt.Sprintf("exit %d · run_id %s", exitCode, runID)
+	sb.WriteString("  " + tui.MutedStyle.Render(footer) + "\n")
 
-	sb := NewBuilder()
+	return "\n" + tui.BoxedSectionAccent(sb.String(), "error", tui.DefaultBoxWidth, tui.ColorError()) + "\n"
+}
+
+// ErrorCard renders the red error box body — kind chip, wrapped message, and
+// pointer-led hint — without the exit-code/run-id footer ErrorSummary adds.
+func ErrorCard(kind, message, hint string, width int) string {
+	sb := errorBody(kind, message, hint, width)
+	return "\n" + tui.BoxedSectionAccent(sb.String(), "error", width, tui.ColorError()) + "\n"
+}
+
+// errorBody writes the kind chip, wrapped message, and pointer-led hint
+// shared by ErrorSummary and ErrorCard, sized to fit inside width.
+func errorBody(kind, message, hint string, width int) *Builder {
+	sb := NewBuilderWidth(width)
+	contentWidth := sb.ContentWidth()
 	sb.Newline()
 	sb.WriteString("  " + tui.ErrorStyle.Render(tui.IconError+"  "+kind) + "\n")
 	sb.Newline()
-	for _, line := range wrapText(headline, contentWidth) {
+	for _, line := range tui.WrapLines(message, contentWidth) {
 		sb.WriteString("  " + line + "\n")
 	}
 	if hint != "" {
 		sb.Newline()
 		pointer := tui.HighlightStyle.Render(tui.IconPointer)
-		wrapped := wrapText(hint, contentWidth-2)
+		// contentWidth-2 covers only the pointer glyph and its trailing
+		// space; both the first line's "pointer " prefix and every
+		// continuation's "    " indent are 4 columns wide against a
+		// 2-column margin already folded into contentWidth, so a line that
+		// reaches the wrap width lands exactly on the box's right border
+		// with no gutter. The extra -1 reserves that column so a wrapped
+		// hint never renders flush against the border.
+		wrapped := tui.WrapLines(hint, contentWidth-3)
 		for i, line := range wrapped {
 			if i == 0 {
 				sb.WriteString("  " + pointer + " " + line + "\n")
@@ -57,51 +82,17 @@ func ErrorSummary(err error, exitCode int, runID string) string {
 			}
 		}
 	}
-	sb.Newline()
-	footer := fmt.Sprintf("exit %d · run_id %s", exitCode, runID)
-	sb.WriteString("  " + tui.MutedStyle.Render(footer) + "\n")
-
-	return "\n" + tui.BoxedSectionAccent(sb.String(), "error", tui.DefaultBoxWidth, tui.ColorError) + "\n"
+	return sb
 }
 
 // describeError decomposes err via errtypes.Describe, falling back to a plain
-// "error" chip for untyped errors.
+// "error" chip for untyped errors. The typed path's Message/Hint are
+// okdctl-authored strings; the untyped fallback is err.Error() verbatim —
+// which, unlike a typed error's Msg, can be raw backend/subprocess text this
+// process never composed — so only the fallback is sanitized before display.
 func describeError(err error) (kind, headline, hint string) {
 	if d, ok := errtypes.Describe(err); ok {
 		return d.Kind.Label(), strings.TrimSpace(d.Message), strings.TrimSpace(d.Hint)
 	}
-	return "error", strings.TrimSpace(err.Error()), ""
-}
-
-// wrapText greedy-wraps s to width columns, hard-splitting tokens that exceed
-// it; returns at least one line.
-func wrapText(s string, width int) []string {
-	width = max(width, 1)
-	var lines []string
-	var cur strings.Builder
-	for _, word := range strings.Fields(s) {
-		for len(word) > width {
-			if cur.Len() > 0 {
-				lines = append(lines, cur.String())
-				cur.Reset()
-			}
-			lines = append(lines, word[:width])
-			word = word[width:]
-		}
-		switch {
-		case cur.Len() == 0:
-			cur.WriteString(word)
-		case cur.Len()+1+len(word) <= width:
-			cur.WriteByte(' ')
-			cur.WriteString(word)
-		default:
-			lines = append(lines, cur.String())
-			cur.Reset()
-			cur.WriteString(word)
-		}
-	}
-	if cur.Len() > 0 || len(lines) == 0 {
-		lines = append(lines, cur.String())
-	}
-	return lines
+	return "error", tui.SanitizeTerminalEscapes(strings.TrimSpace(err.Error())), ""
 }

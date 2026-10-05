@@ -2,13 +2,18 @@ package render
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	"charm.land/lipgloss/v2"
+
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
+	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 )
 
 func removePlan() node.OpPlan {
@@ -19,7 +24,7 @@ func removePlan() node.OpPlan {
 		Nodes: []node.PlanNode{{
 			Name:      "worker2",
 			Role:      nodetypes.RoleWorker,
-			TFAddress: "module.okd_cluster.proxmox_virtual_environment_vm.worker[2]",
+			TFAddress: "module.vm.worker[2]",
 			Action:    terraform.PlanActionDelete,
 			OSDs:      []string{"rook-ceph/osd-3"},
 		}},
@@ -33,10 +38,25 @@ func resizePlan() node.OpPlan {
 		Nodes: []node.PlanNode{{
 			Name:      "master0",
 			Role:      nodetypes.RoleMaster,
-			TFAddress: "module.okd_cluster.proxmox_virtual_environment_vm.master[0]",
+			TFAddress: "module.vm.master[0]",
 			Action:    terraform.PlanActionUpdate,
 		}},
 		MemoryMB: 24576,
+	}
+}
+
+func diskOnlyResizePlan() node.OpPlan {
+	return node.OpPlan{
+		Op:      node.OpResize,
+		Cluster: "grappleberry",
+		Nodes: []node.PlanNode{{
+			Name:      "master0",
+			Role:      nodetypes.RoleMaster,
+			TFAddress: "module.vm.master[0]",
+			Action:    terraform.PlanActionUpdate,
+		}},
+		OSDiskGB:   100,
+		ResizeMode: node.ResizeLiveDisk,
 	}
 }
 
@@ -47,7 +67,7 @@ func addPlan() node.OpPlan {
 		Nodes: []node.PlanNode{{
 			Name:      "grappleberry-worker2",
 			Role:      nodetypes.RoleWorker,
-			TFAddress: "module.okd_cluster.proxmox_virtual_environment_vm.worker[2]",
+			TFAddress: "module.vm.worker[2]",
 			Action:    terraform.PlanActionCreate,
 		}},
 	}
@@ -155,6 +175,209 @@ func TestNodeOpBoxes(t *testing.T) {
 	}
 }
 
+// TestNodeOpConfirmSanitizesHostileBlockedText drives a blocked-verdict
+// error whose Error() text carries a CSI sequence — n.Blocked can wrap a
+// terraform-plan error, unlike this function's other okdctl-composed
+// strings — through NodeOpConfirm's real render path.
+func TestNodeOpConfirmSanitizesHostileBlockedText(t *testing.T) {
+	const payload = "\x1b[2J\x1b[H"
+	p := removePlan()
+	p.Nodes[0].Blocked = errors.New("holds 1 rook-ceph OSD" + payload)
+
+	out := NodeOpConfirm(&p)
+	if strings.Contains(out, payload) {
+		t.Fatalf("confirm box carries the raw clear-screen/cursor-home payload:\n%q", out)
+	}
+	if !strings.Contains(out, "�") {
+		t.Fatalf("confirm box shows no sanitization marker:\n%q", out)
+	}
+	if !strings.Contains(out, "holds 1 rook-ceph OSD") {
+		t.Fatalf("confirm box lost the legitimate blocked-verdict text:\n%q", out)
+	}
+}
+
+func TestNodeOpConfirmTableHeadersAndFit(t *testing.T) {
+	for _, w := range []int{80, 120} {
+		t.Run(fmt.Sprintf("w%d", w), func(t *testing.T) {
+			tui.SetTerminalWidth(w)
+			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+
+			p := removePlan()
+			out := NodeOpConfirm(&p)
+
+			for _, header := range []string{"NODE", "ROLE", "ADDRESS", "ACTION"} {
+				if !strings.Contains(out, header) {
+					t.Errorf("confirm box missing table header %q:\n%s", header, out)
+				}
+			}
+			tuitest.AssertFits(t, out, w, 0)
+			if w == 80 {
+				tuitest.Golden(t, "nodeop-confirm-remove-80", out)
+			}
+		})
+	}
+}
+
+// Regression guard for the box-growth-era truncation bug: a real-length
+// terraform address must keep its trailing [N] index once the ADDRESS
+// column middle-truncates it, instead of losing it to a trailing ellipsis.
+func TestNodeOpConfirmTableAddressTruncationKeepsIndexTail(t *testing.T) {
+	const realAddress = "module.okd_cluster.proxmox_virtual_environment_vm.worker[3]"
+	p := node.OpPlan{
+		Op:      node.OpRemove,
+		Cluster: "grappleberry",
+		Nodes: []node.PlanNode{{
+			Name:      "worker3",
+			Role:      nodetypes.RoleWorker,
+			TFAddress: realAddress,
+			Action:    terraform.PlanActionDelete,
+		}},
+	}
+	out := NodeOpConfirm(&p)
+
+	if !strings.Contains(out, "worker[3]") {
+		t.Errorf("ADDRESS column must middle-truncate a long address and keep the [N] index tail:\n%s", out)
+	}
+	if strings.Contains(out, realAddress) {
+		t.Errorf("a %d-char address should have been truncated in the ADDRESS column, not rendered whole:\n%s", len(realAddress), out)
+	}
+	tuitest.AssertFits(t, out, tui.DefaultBoxWidth, 0)
+}
+
+// Regression guard: a "dry-run — no changes made" box is a self-contradiction
+// if its table claims a node was already "removed" — the pre-execution
+// table speaks the raw plan action, not the completion verb.
+func TestNodeOpDryRunTableSpeaksPlanVoiceNotCompletionVoice(t *testing.T) {
+	p := removePlan()
+	out := NodeOpDryRun(&p)
+
+	if !strings.Contains(out, "delete") {
+		t.Errorf("dry-run table must show the raw plan action %q:\n%s", "delete", out)
+	}
+	if strings.Contains(out, "removed") {
+		t.Errorf("dry-run box must not speak completion voice (%q); nothing has changed yet:\n%s", "removed", out)
+	}
+}
+
+// Regression guard: the completion box speaks the past-tense completion
+// verb, not the raw plan action the table showed before the op ran.
+func TestNodeOpCompleteTableSpeaksCompletionVoiceNotPlanVoice(t *testing.T) {
+	p := removePlan()
+	out := NodeOpComplete(&p, 90*time.Second)
+
+	if !strings.Contains(out, "removed") {
+		t.Errorf("completion box must show the completion verb %q:\n%s", "removed", out)
+	}
+	if strings.Contains(out, "delete") {
+		t.Errorf("completion box must not show the raw plan action %q:\n%s", "delete", out)
+	}
+}
+
+// TestNodeOpDiskOnlyResizeNeverClaimsPowerCycle guards the durable-output
+// truthfulness bug: a disk-only resize (OSDiskGB set, no memory/cpu change)
+// is realized live in-guest with no cordon/drain/power-cycle (node/resize.go's
+// diskOnly path), but the confirm box, dry-run box, and post-exit next-steps
+// all used to claim a power-cycle unconditionally for every OpResize plan.
+func TestNodeOpDiskOnlyResizeNeverClaimsPowerCycle(t *testing.T) {
+	p := diskOnlyResizePlan()
+
+	for _, got := range []string{NodeOpConfirm(&p), NodeOpDryRun(&p)} {
+		if strings.Contains(got, "power-cycled") {
+			t.Errorf("disk-only resize box must not claim a power-cycle happened:\n%s", got)
+		}
+		if !strings.Contains(got, "no drain, no power-cycle") {
+			t.Errorf("disk-only resize box must say the live path has no drain/power-cycle:\n%s", got)
+		}
+	}
+
+	steps := NodeOpNextSteps(&p)
+	joined := strings.Join(steps, "\n")
+	if strings.Contains(joined, "power-cycled to realize") {
+		t.Errorf("disk-only resize next-steps must not claim a power-cycle realized the change:\n%s", joined)
+	}
+	if !strings.Contains(joined, "no node was power-cycled") {
+		t.Errorf("disk-only resize next-steps must say no node was power-cycled:\n%s", joined)
+	}
+}
+
+// TestNodeOpRebootResizeStillClaimsPowerCycle guards the other half of the
+// same contract: a resize that actually power-cycles (memory/cpu change,
+// no disk-only shortcut) must still say so — the disk-only fix must not
+// silence the claim for a run that really does reboot.
+func TestNodeOpRebootResizeStillClaimsPowerCycle(t *testing.T) {
+	p := resizePlan() // MemoryMB set, no OSDiskGB: realizePowerCycle always runs
+
+	confirm := NodeOpConfirm(&p)
+	if !strings.Contains(confirm, "power-cycled") {
+		t.Errorf("a resize that really power-cycles must say so in the confirm box:\n%s", confirm)
+	}
+
+	joined := strings.Join(NodeOpNextSteps(&p), "\n")
+	if !strings.Contains(joined, "power-cycled to realize") {
+		t.Errorf("a resize that really power-cycles must say so in the next-steps:\n%s", joined)
+	}
+}
+
+func TestShortHost(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"dotted FQDN keeps the first label", "worker2.cluster.local", "worker2"},
+		{"no dot returns the name unchanged", "worker2", "worker2"},
+		{"IPv4 address returns unchanged", "192.168.1.24", "192.168.1.24"},
+		{"IPv6 address returns unchanged", "fe80::1", "fe80::1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := shortHost(tc.in); got != tc.want {
+				t.Errorf("shortHost(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestNodeOpCompleteWidthWrapsLongNextSteps guards a resize completion's
+// next-steps note at a narrow box width (the width an 80x24 terminal leaves
+// the wizard's done card): the note is long enough to overflow one line at
+// this width, and must wrap onto a continuation line rather than truncate
+// mid-word with an ellipsis — a truncated "verify" reads as "ver…" and loses
+// the actual follow-up instruction.
+func TestNodeOpCompleteWidthWrapsLongNextSteps(t *testing.T) {
+	p := resizePlan()
+	got := NodeOpCompleteWidth(&p, 90*time.Second, 70)
+	stripped := tuitest.StripANSI(got)
+
+	if strings.Contains(stripped, "…") {
+		t.Fatalf("next-steps text was mid-word truncated with an ellipsis, want a wrapped continuation line:\n%s", stripped)
+	}
+	// The whole word must survive somewhere in the box, whichever line word-wrap
+	// lands it on — unlike the old truncate-to-"ver…", nothing is lost.
+	if !strings.Contains(stripped, "verify") {
+		t.Fatalf("next-steps text lost the word \"verify\" to truncation:\n%s", stripped)
+	}
+	if !strings.Contains(stripped, "with") {
+		t.Fatalf("next-steps text lost the word \"with\" to truncation:\n%s", stripped)
+	}
+	for _, line := range strings.Split(got, "\n") {
+		if w := lipgloss.Width(line); w > 70 {
+			t.Errorf("box line %d cols wide, want <= 70: %q", w, line)
+		}
+	}
+}
+
+func TestNodeOpCompleteWidthShrinksBox(t *testing.T) {
+	p := resizePlan()
+	const viewport = 70
+	got := NodeOpCompleteWidth(&p, 90*time.Second, viewport-2)
+	for _, line := range strings.Split(got, "\n") {
+		if w := lipgloss.Width(line); w > viewport {
+			t.Errorf("box line %d cols wide, want <= %d: %q", w, viewport, line)
+		}
+	}
+}
+
 func TestResizePreviewAndCompletionDisruption(t *testing.T) {
 	for _, tc := range []struct {
 		mode node.ResizeMode
@@ -169,7 +392,11 @@ func TestResizePreviewAndCompletionDisruption(t *testing.T) {
 		if !strings.Contains(out, tc.want) || !strings.Contains(out, "100 GiB") {
 			t.Fatalf("misleading preview: %s", out)
 		}
-		if tc.mode == node.ResizeLiveDisk && strings.Contains(NodeOpComplete(plan, time.Second), "was power-cycled") {
+		// "no node was power-cycled" (the correct live-disk completion
+		// text) itself contains the substring "was power-cycled", so this
+		// must check for the restart-claiming phrase specifically, not a
+		// substring the correct negation also contains.
+		if tc.mode == node.ResizeLiveDisk && strings.Contains(NodeOpComplete(plan, time.Second), "power-cycled to realize") {
 			t.Fatal("live completion claims restart")
 		}
 	}

@@ -1,0 +1,48 @@
+                                                                                                                                                                                    
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L                                                                                                                                                                  │  
+  │ review your configuration                                                                                                                connect · cluster · extras · review │  
+  │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
+  │  CONFIG CHANGES · 2                                                                                    │  PREFLIGHT · 1 passed · 0 warnings · 2 failed · 0 not checked       │  
+  │    domain                  k8s.local → prod.example                                                    │  ✗ pull secret · not configured                                     │  
+  │    control plane vcpus     4 → 5                                                                       │  ✗ ssh public key · not configured                                  │  
+  │                                                                                                        │  ✓ CIDR ranges · no overlap · 192.168.1.0/24 · 10.128.0.0/14 ·      │  
+  │  [1] cluster identity                                                                                  │    172.30.0.0/16                                                    │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │                                                                     │  
+  │  name          mycluster                                                                               │  CHANGED SINCE LOAD · 2                                             │  
+  │  domain        prod.example                                                                            │    domain  k8s.local → prod.example                                 │  
+  │  distribution  OKD 4.22.0-okd-scos.7                                                                   │    control plane vcpus  4 → 5                                       │  
+  │                                                                                                        │                                                                     │  
+  │  [2] proxmox                                                                                           │  DEPLOY PLAN                                                        │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  role      vms vcpu   ram os disk                                   │  
+  │  host            192.168.1.100:8006                                                                    │  bootstrap   1    4  8 gb   50 gb                                   │  
+  │  bootstrap node  pve                                                                                   │  masters     3    5 12 gb   50 gb                                   │  
+  │  bridge          vmbr0                                                                                 │  workers     3    8 20 gb   50 gb                                   │  
+  │  storage         local-lvm                                                                             │                                                                     │  
+  │  iso storage     local                                                                                 │  WRITES                                                             │  
+  │                                                                                                        │  okdctl.yaml                                                        │  
+  │  [3] networking                                                                                        │                                                                     │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  HEADLESS                                                           │  
+  │  machine cidr     192.168.1.0/24                                                                       │  okdctl deploy --config 'okdctl.yaml' --yes --confirm-cluster       │  
+  │  gateway          192.168.1.1                                                                          │  'mycluster'                                                        │  
+  │  upstream dns     192.168.1.1                                                                          │                                                                     │  
+  │  bastion          192.168.1.20                                                                         │  p preview install-config.yaml                                      │  
+  │  api vip          192.168.1.10 (auto)                                                                  │                                                                     │  
+  │  host prefix      23                                                                                   │                                                                     │  
+  │  pod cidr         10.128.0.0/14                                                                        │                                                                     │  
+  │  service cidr     172.30.0.0/16                                                                        │                                                                     │  
+  │  static ip start  192.168.1.140                                                                        │                                                                     │  
+  │  interface        ens18                                                                                │                                                                     │  
+  │  netmask          255.255.255.0 (from cidr)                                                            │                                                                     │  
+  │  vm dns           192.168.1.20 (bastion/dnsmasq)                                                       │                                                                     │  
+  │                                                                                                        │                                                                     │  
+  │  [4] compute                                                                                           │                                                                     │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │                                                                     │  
+  │  control plane     3 × (5 vcpu, 12 GB RAM, 50 GB os disk)                                              │                                                                     │  
+  │  workers           3 × (8 vcpu, 20 GB RAM, 50 GB os disk)                                              │                                                                     │  
+  │  worker data disk  500 gb per worker (1500 gb total)                                                   │                                                                     │  
+  │                                                                                                                                                                              │  
+  │───────────────────────────────────────────────────────────── ↑ ↓  scroll down for more ───────────────────────────────────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
+  │  ● deploy now   ○ save and exit            p preview install config • ←/→ choose • enter confirm • esc back • 1-9 jump to section • pgup/pgdn scroll • ctrl+c quit • ? help  │  
+  ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
+                                                                                                                                                                                    

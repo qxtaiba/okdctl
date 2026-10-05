@@ -1,40 +1,40 @@
                                                                                                                         
   ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
   │ O K D C T L                                                                                                      │  
-  │ okd over proxmox, the easy way                                                ●─●─●─●─●─○─○─○─○─○─○ step 5 of 11 │  
+  │ configure node placement                                                connect · cluster ✓●○○ · extras · review │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
-  │  configure proxmox infrastructure                                                                                │  
-  │                                                                                                                  │  
   │    discovered 2 node(s), 3 storage pool(s), 2 bridge(s)                                                          │  
+  │    pve1 ✓ online · 32c · 128g                                                                                    │  
+  │    pve2 ✓ online · 24c · 96g                                                                                     │  
+  │    assigned demand · pve1: 36c/96g/1800gb · oversubscribed                                                       │  
+  │                                                                                                                  │  
   │                                                                                                                  │  
   │    ● infrastructure                                                                                              │  
   │                                                                                                                  │  
-  │    bridge (network bridge for vms)                                                                               │  
+  │    bridge                                                                                                        │  
+  │    ╭────────────╮                                                                                                │  
+  │    │ ◂ vmbr0 ▸  │                                                                                                │  
+  │    ╰────────────╯                                                                                                │  
+  │    network bridge for vms                                                                                        │  
+  │                                                                                                                  │  
+  │    additional networks                                                                                           │  
   │    ╭────────────────────────────────────────────────────────────────────────────────────────────────────╮        │  
-  │    │ ◂ vmbr0 ▸                                                                                          │        │  
+  │    │   [ ] vmbr0    [ ] vmbr1                                                                           │        │  
   │    ╰────────────────────────────────────────────────────────────────────────────────────────────────────╯        │  
   │                                                                                                                  │  
-  │    additional networks (extra bridges to attach to all vms — leave empty for none)                               │  
-  │      [ ] vmbr0                                                                                                   │  
-  │      [ ] vmbr1                                                                                                   │  
+  │    os storage                                                                                                    │  
+  │    ╭─────────────────────────────────────────╮                                                                   │  
+  │    │ ◂ local-lvm — pve1 1.8tb · pve2 1.8tb ▸ │                                                                   │  
+  │    ╰─────────────────────────────────────────╯                                                                   │  
   │                                                                                                                  │  
-  │    os storage: local-lvm                                                                                         │  
+  │    data storage                                                                                                  │  
+  │    ╭─────────────────────────────────────────╮                                                                   │  
+  │    │ ◂ local-lvm — pve1 1.8tb · pve2 1.8tb ▸ │                                                                   │  
+  │    ╰─────────────────────────────────────────╯                                                                   │  
   │                                                                                                                  │  
-  │    data storage: local-lvm                                                                                       │  
-  │                                                                                                                  │  
-  │    iso storage: local                                                                                            │  
-  │                                                                                                                  │  
-  │    fcos iso:                                                                                                     │  
-  │                                                                                                                  │  
-  │    ✓ bootstrap                                                                                                   │  
-  │                                                                                                                  │  
-  │    mycluster-bootstrap (default): pve1                                                                           │  
-  │                                                                                                                  │  
-  │    ✓ control plane                                                                                               │  
-  │                                                                                                                  │  
-  │    mycluster-master0 (default): pve1                                                                             │  
+  │    iso storage                                                                                                   │  
   │                                                                                                                  │  
   │─────────────────────────────── ↑ ↓  scroll down for more ─────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
-  │   ↑↓  navigate    ← →  change value    enter  confirm    esc  back                                               │  
+  │  ↑↓ navigate • ← → change value • enter continue • esc back • pgup/pgdn scroll • ctrl+c quit • ? help            │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                                         

@@ -3,70 +3,386 @@ package lifecycle
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
-	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
+	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
+// pump replays bubbletea's cmd loop to StepCompleteMsg, dropping spinner ticks so it terminates.
 func pump(t *testing.T, s *ExecStep, first tea.Cmd) tea.Msg {
 	t.Helper()
-	ctx, cancel := context.WithCancel(t.Context())
-	s.SetVisitContext(ctx)
-	var workers sync.WaitGroup
-	defer func() { cancel(); workers.Wait() }()
-	messages := make(chan tea.Msg, 32)
-	dispatch := func(cmd tea.Cmd) {
+	queue := []tea.Cmd{first}
+	for range 50 {
+		if len(queue) == 0 {
+			t.Fatal("command queue drained before completion")
+		}
+		cmd := queue[0]
+		queue = queue[1:]
 		if cmd == nil {
-			return
+			continue
 		}
-		workers.Go(func() {
-			msg := cmd()
-			select {
-			case messages <- msg:
-			case <-ctx.Done():
-			}
-		})
-	}
-	dispatch(first)
-	timer := time.NewTimer(5 * time.Second)
-	defer timer.Stop()
-	for {
-		select {
-		case <-timer.C:
-			t.Fatal("execution did not finish")
-			return nil
-		case msg := <-messages:
-			if batch, ok := msg.(tea.BatchMsg); ok {
-				for _, cmd := range batch {
-					dispatch(cmd)
-				}
-				continue
-			}
-			if _, ok := msg.(spinner.TickMsg); ok {
-				continue
-			}
-			if _, ok := msg.(wizard.StepCompleteMsg); ok {
-				return msg
-			}
-			_, next := s.Update(msg)
-			dispatch(next)
+		msg := cmd()
+		if batch, ok := msg.(tea.BatchMsg); ok {
+			queue = append(queue, batch...)
+			continue
 		}
+		if _, ok := msg.(wizard.StepCompleteMsg); ok {
+			return msg
+		}
+		_, next := s.Update(msg)
+		queue = append(queue, next)
 	}
+	t.Fatal("execution never completed")
+	return nil
 }
 
 func execState() *State {
 	st := doneState()
 	st.Scope = node.ResizeScope{Role: nodetypes.RoleMaster}
 	return st
+}
+
+// threeMasterState builds a resize-masters plan with three nodes, so tests
+// can exercise the checklist's collapse/expand/pending states side by side;
+// the config's cluster name matches the plan's, so trails never show a
+// default-config name over homelab bodies.
+func threeMasterState() *State {
+	cfg := config.DefaultConfig()
+	cfg.Cluster.Name = "homelab"
+	return &State{
+		Cfg: cfg, Op: node.OpResize,
+		Scope: node.ResizeScope{Role: nodetypes.RoleMaster},
+		Plan: &node.OpPlan{
+			Op: node.OpResize, Cluster: "homelab",
+			Nodes: []node.PlanNode{
+				{Name: "homelab-master0", Role: nodetypes.RoleMaster},
+				{Name: "homelab-master1", Role: nodetypes.RoleMaster},
+				{Name: "homelab-master2", Role: nodetypes.RoleMaster},
+			},
+		},
+		Proceed: true,
+	}
+}
+
+// newSeededExecStep constructs an ExecStep against st with rows built and a
+// fixed clock installed, without starting the Runner goroutine — the
+// package-internal seeding path golden and unit tests use to drive the
+// checklist deterministically.
+func newSeededExecStep(st *State, clock *time.Time) *ExecStep {
+	s := NewExecStep(st, Hooks{})
+	s.now = func() time.Time { return *clock }
+	s.started = *clock
+	s.buildRows()
+	return s
+}
+
+// TestRowDurDistinguishesImpliedFromMeasured pins bug 29: a row whose
+// completion was inferred renders "—", a real sub-second measurement
+// renders "<1s", and only genuine measurements render as durations.
+func TestRowDurDistinguishesImpliedFromMeasured(t *testing.T) {
+	cases := []struct {
+		name string
+		row  execRow
+		want string
+	}{
+		{"implied", execRow{status: rowDone, implied: true}, "—"},
+		{"sub-second", execRow{status: rowDone, took: 400 * time.Millisecond}, "<1s"},
+		{"measured", execRow{status: rowDone, took: 3 * time.Second}, "3s"},
+	}
+	for _, tc := range cases {
+		if got := rowDur(&tc.row); got != tc.want {
+			t.Errorf("%s: rowDur() = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestPromoteRowDoneMarksBackfilledRowsImplied(t *testing.T) {
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	pending := execRow{status: rowPending}
+	promoteRowDone(&pending, now)
+	if !pending.implied {
+		t.Error("a promoted pending row must be marked implied")
+	}
+
+	measured := execRow{status: rowRunning, start: now.Add(-2 * time.Second)}
+	promoteRowDone(&measured, now)
+	if measured.implied {
+		t.Error("a promoted running row carries a real elapsed, not an implied one")
+	}
+}
+
+// TestNodeIndexForNeverCollidesWorker1WithWorker10 pins bug 26: an event
+// whose description mentions homelab-worker10 must resolve to worker10,
+// not to worker1 via a bare substring match.
+func TestNodeIndexForNeverCollidesWorker1WithWorker10(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	cur := base
+	st := threeMasterState()
+	st.Plan.Nodes = []node.PlanNode{
+		{Name: "homelab-worker1", Role: nodetypes.RoleWorker},
+		{Name: "homelab-worker10", Role: nodetypes.RoleWorker},
+	}
+	s := newSeededExecStep(st, &cur)
+
+	got := s.nodeIndexFor(&ExecEvent{Desc: "power-cycle homelab-worker10"})
+	if got != 1 {
+		t.Fatalf("nodeIndexFor(worker10 desc) = %d, want 1", got)
+	}
+	got = s.nodeIndexFor(&ExecEvent{Node: "homelab-worker10"})
+	if got != 1 {
+		t.Fatalf("nodeIndexFor(worker10 node) = %d, want 1", got)
+	}
+	got = s.nodeIndexFor(&ExecEvent{Desc: "cordon + drain homelab-worker1"})
+	if got != 0 {
+		t.Fatalf("nodeIndexFor(worker1 desc) = %d, want 0", got)
+	}
+}
+
+func TestExecViewCollapsesFinishedAndExpandsCurrent(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	cur := base
+	s := newSeededExecStep(threeMasterState(), &cur)
+
+	s.applyEvent(&ExecEvent{Node: "homelab-master0", Step: node.StepTFApply})
+	cur = base.Add(60 * time.Second)
+	s.applyEvent(&ExecEvent{Node: "homelab-master1", Step: node.StepTFApply})
+
+	out := tuitest.StripANSI(s.View(100, 40))
+	lines := strings.Split(out, "\n")
+
+	var m0Line, runningRow string
+	sawM2Pending := false
+	for _, l := range lines {
+		trimmed := strings.TrimSpace(l)
+		switch {
+		case strings.Contains(l, "homelab-master0"):
+			m0Line = l
+		case strings.Contains(l, "terraform apply (in-place update)"):
+			runningRow = trimmed
+		case trimmed == tui.IconPending+" homelab-master2":
+			sawM2Pending = true
+		}
+	}
+
+	if !strings.HasPrefix(strings.TrimSpace(m0Line), tui.IconSuccess+" homelab-master0") {
+		t.Errorf("m0 must render collapsed with a success icon, got %q", m0Line)
+	}
+	if !strings.HasSuffix(strings.TrimRight(m0Line, " "), "1m0s") {
+		t.Errorf("m0 line = %q, want it to end with 1m0s", m0Line)
+	}
+	if runningRow == "" {
+		t.Fatalf("m1's running row must render:\n%s", out)
+	}
+	if strings.HasPrefix(runningRow, tui.IconSuccess) || strings.HasPrefix(runningRow, tui.IconPending) || strings.HasPrefix(runningRow, tui.IconError) {
+		t.Errorf("m1's running row must use the spinner glyph, got %q", runningRow)
+	}
+	if !sawM2Pending {
+		t.Errorf("m2 must render collapsed pending:\n%s", out)
+	}
+}
+
+func TestExecFocusedSpanTracksRunningRow(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	cur := base
+	s := newSeededExecStep(threeMasterState(), &cur)
+
+	t.Run("running row", func(t *testing.T) {
+		s.applyEvent(&ExecEvent{Node: "homelab-master0", Step: node.StepTFApply})
+		out := s.View(100, 40)
+		span, ok := s.FocusedSpan()
+		if !ok {
+			t.Fatal("FocusedSpan must report ok once rows exist")
+		}
+		lines := strings.Split(out, "\n")
+		if span.Start != span.End {
+			t.Fatalf("running-row span must be a single line, got %+v", span)
+		}
+		if !strings.Contains(lines[span.Start], "terraform apply (in-place update)") {
+			t.Errorf("span line = %q, want the running row", lines[span.Start])
+		}
+	})
+
+	t.Run("next node", func(t *testing.T) {
+		s.applyEvent(&ExecEvent{Node: "homelab-master1", Step: node.StepCordon})
+		out := s.View(100, 40)
+		span, ok := s.FocusedSpan()
+		if !ok {
+			t.Fatal("FocusedSpan must report ok on the second node")
+		}
+		lines := strings.Split(out, "\n")
+		if !strings.Contains(lines[span.Start], "cordon + drain") {
+			t.Errorf("span line after advancing = %q, want the new running row", lines[span.Start])
+		}
+	})
+
+	t.Run("finished", func(t *testing.T) {
+		s.finished = true
+		out := s.View(100, 40)
+		span, ok := s.FocusedSpan()
+		if !ok {
+			t.Fatal("FocusedSpan must report ok when finished")
+		}
+		if want := len(strings.Split(out, "\n")) - 1; span.Start != want {
+			t.Errorf("finished span = %+v, want last line %d", span, want)
+		}
+	})
+}
+
+// TestExecFootnoteDropsCancelHintOnceFinished guards E-L8(f): once the op
+// has finished there is nothing left to cancel, so repeating "ctrl+c
+// cancels after the current gate" reads as stale advice on an otherwise-done
+// screen — the footnote must still name the marker file, just not the
+// cancel clause.
+func TestExecFootnoteDropsCancelHintOnceFinished(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	cur := base
+	s := newSeededExecStep(threeMasterState(), &cur)
+
+	running := s.View(100, 40)
+	if !strings.Contains(running, "ctrl+c cancels after the current gate") {
+		t.Fatalf("running view must still show the cancel hint:\n%s", running)
+	}
+	if !strings.Contains(running, "marker okd-install/") {
+		t.Fatalf("running view lost the marker path:\n%s", running)
+	}
+
+	s.finished = true
+	finished := s.View(100, 40)
+	if strings.Contains(finished, "ctrl+c cancels after the current gate") {
+		t.Fatalf("finished view still shows the stale cancel hint:\n%s", finished)
+	}
+	if !strings.Contains(finished, "marker okd-install/") {
+		t.Fatalf("finished view lost the marker path:\n%s", finished)
+	}
+}
+
+// TestExecShortHelpMatchesStreamStepCancelLabel guards NEW(T8): the
+// lifecycle exec screen's cancel label must read identically to the deploy
+// stream screen's, so the same gesture reads as one system on both
+// full-screen exec surfaces.
+func TestExecShortHelpMatchesStreamStepCancelLabel(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	cur := base
+	s := newSeededExecStep(threeMasterState(), &cur)
+
+	bindings := s.ShortHelp()
+	if len(bindings) != 1 || bindings[0].Help != "cancel (twice to force-quit)" {
+		t.Fatalf("ShortHelp() = %+v, want a single \"cancel (twice to force-quit)\" binding", bindings)
+	}
+}
+
+func TestExecRowDurationsTruncateToSeconds(t *testing.T) {
+	if got := fmtDur(90*time.Second + 700*time.Millisecond); got != "1m30s" {
+		t.Errorf("fmtDur = %q, want 1m30s", got)
+	}
+
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	cur := base
+	s := newSeededExecStep(threeMasterState(), &cur)
+
+	s.applyEvent(&ExecEvent{Node: "homelab-master0", Desc: "cordoning and draining homelab-master0"})
+	s.applyEvent(&ExecEvent{
+		Node: "homelab-master0", Desc: "cordoning and draining homelab-master0",
+		Done: true, Took: 90*time.Second + 700*time.Millisecond,
+	})
+
+	out := tuitest.StripANSI(s.View(100, 40))
+	if !strings.Contains(out, "1m30s") {
+		t.Errorf("view must show the truncated duration:\n%s", out)
+	}
+	if strings.Contains(out, "1m30.7s") || strings.Contains(out, ".7s") {
+		t.Errorf("view must truncate sub-second precision:\n%s", out)
+	}
+}
+
+func TestExecHeadlineRightAlignsElapsed(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	elapsed := base.Add(6*time.Minute + 12*time.Second)
+	s := newSeededExecStep(threeMasterState(), &elapsed)
+	s.started = base
+
+	const width = 100
+	out := s.View(width, 40)
+	line := strings.Split(out, "\n")[0]
+	if got := lipgloss.Width(line); got != width-4 {
+		t.Errorf("headline width = %d, want %d", got, width-4)
+	}
+	plain := tuitest.StripANSI(line)
+	if !strings.HasSuffix(strings.TrimRight(plain, " "), "elapsed 6m12s") {
+		t.Errorf("headline = %q, want it to end with the elapsed time", plain)
+	}
+}
+
+func TestExecExtraShownOnlyUnderRunningRow(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	cur := base
+	s := newSeededExecStep(threeMasterState(), &cur)
+
+	s.applyEvent(&ExecEvent{Node: "homelab-master0", Step: node.StepTFApply})
+	s.applyEvent(&ExecEvent{Node: "homelab-master0", Desc: "polling proxmox task status"})
+
+	out := tuitest.StripANSI(s.View(100, 40))
+	if !strings.Contains(out, "polling proxmox task status") {
+		t.Fatalf("extra must render under the running row:\n%s", out)
+	}
+
+	s.applyEvent(&ExecEvent{
+		Node: "homelab-master0", Desc: "applying terraform change to m.master[0]",
+		Done: true, Took: time.Second,
+	})
+	out = tuitest.StripANSI(s.View(100, 40))
+	if strings.Contains(out, "polling proxmox task status") {
+		t.Errorf("extra must not render once no row is running:\n%s", out)
+	}
+
+	s.applyEvent(&ExecEvent{Node: "homelab-master0", Step: node.StepPowerCycle})
+	out = tuitest.StripANSI(s.View(100, 40))
+	if strings.Contains(out, "polling proxmox task status") {
+		t.Errorf("stale extra must not leak onto the next running row:\n%s", out)
+	}
+}
+
+func TestExecFailedRowShowsDuration(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	cur := base
+	s := newSeededExecStep(threeMasterState(), &cur)
+
+	s.applyEvent(&ExecEvent{Node: "homelab-master0", Step: node.StepTFApply})
+	cur = base.Add(2 * time.Minute)
+	_, _ = s.Update(execEventMsg{ev: ExecEvent{Final: true, Err: errors.New("terraform apply failed")}})
+
+	out := tuitest.StripANSI(s.View(100, 40))
+	var failedRow string
+	for _, l := range strings.Split(out, "\n") {
+		if strings.Contains(l, "terraform apply (in-place update)") {
+			failedRow = strings.TrimSpace(l)
+		}
+	}
+	if !strings.HasPrefix(failedRow, tui.IconError) {
+		t.Fatalf("failed row = %q, want it to start with the error icon", failedRow)
+	}
+	if !strings.HasSuffix(strings.TrimRight(failedRow, " "), "2m0s") {
+		t.Errorf("failed row = %q, want it to end with 2m0s", failedRow)
+	}
+}
+
+func TestJustifyClampsOversizedRight(t *testing.T) {
+	got := justify("short", "a right side longer than the available width", 10)
+	if w := lipgloss.Width(got); w > 10 {
+		t.Errorf("justify() = %q, width %d, want <= 10", got, w)
+	}
 }
 
 func TestExecStepRunsToCompletion(t *testing.T) {
@@ -107,6 +423,105 @@ func TestExecStepFailurePropagatesToState(t *testing.T) {
 	}
 }
 
+// TestExecStepCancelBeforeMutationLeavesEveryNodeUntouched covers the
+// cancel-before-mutation execution state: the operator's first ctrl+c lands
+// while the backend is still blocked ahead of its first mutating call, so
+// the run ends cancelled with every gate row exactly as it started —
+// pending, not promoted to done or failed.
+func TestExecStepCancelBeforeMutationLeavesEveryNodeUntouched(t *testing.T) {
+	cancelCh := make(chan struct{})
+	st := threeMasterState()
+	s := NewExecStep(st, Hooks{
+		CancelOp: func() { close(cancelCh) },
+		Execute: func(*State, chan<- ExecEvent) error {
+			<-cancelCh // the fake backend never emits a single event
+			return fmt.Errorf("run resize: %w", context.Canceled)
+		},
+	})
+
+	cmd := s.Init()
+	if !s.InterceptQuit() {
+		t.Fatal("first ctrl+c must be intercepted")
+	}
+	msg := pump(t, s, cmd)
+	if _, ok := msg.(wizard.StepCompleteMsg); !ok {
+		t.Fatalf("a before-mutation cancel must still advance to the done screen, got %T", msg)
+	}
+	if !errors.Is(st.Result, context.Canceled) {
+		t.Errorf("Result = %v, want a cancellation", st.Result)
+	}
+	for i := range s.nodes {
+		for j := range s.nodes[i].rows {
+			if got := s.nodes[i].rows[j].status; got != rowPending {
+				t.Errorf("node %d row %d status = %v, want rowPending — nothing ran before the cancel", i, j, got)
+			}
+		}
+	}
+}
+
+// TestExecStepCancelAfterPartialMutationShowsPartialNotRollback covers the
+// cancel-after-partial-mutation execution state: master0 is fully realized
+// before the operator cancels mid-master1, so the run must end showing real
+// partial progress — master0 still done, master1 settled at the gate the
+// cancel caught it in, master2 untouched — and never read as a rollback of
+// the work master0 already completed (contract: "partial failure is not
+// rollback").
+func TestExecStepCancelAfterPartialMutationShowsPartialNotRollback(t *testing.T) {
+	cancelCh := make(chan struct{})
+	st := threeMasterState()
+	s := NewExecStep(st, Hooks{
+		CancelOp: func() { close(cancelCh) },
+		Execute: func(_ *State, ch chan<- ExecEvent) error {
+			ch <- ExecEvent{Node: "homelab-master0", Step: node.StepTFApply}
+			ch <- ExecEvent{Node: "homelab-master0", Step: node.StepPowerCycle, Done: true}
+			// master1's gate starts; the cancel below catches it mid-apply.
+			ch <- ExecEvent{Node: "homelab-master1", Step: node.StepTFApply}
+			<-cancelCh
+			return fmt.Errorf("run resize: %w", context.Canceled)
+		},
+	})
+
+	cmd := s.Init()
+	if !s.InterceptQuit() {
+		t.Fatal("first ctrl+c must be intercepted")
+	}
+	msg := pump(t, s, cmd)
+	if _, ok := msg.(wizard.StepCompleteMsg); !ok {
+		t.Fatalf("a partial-mutation cancel must still advance to the done screen, got %T", msg)
+	}
+	if !errors.Is(st.Result, context.Canceled) {
+		t.Fatalf("Result = %v, want a cancellation", st.Result)
+	}
+
+	master0 := s.nodes[0].rows
+	if last := master0[len(master0)-1].status; last != rowDone {
+		t.Errorf("master0's last row = %v, want rowDone — a later cancel must not roll an already-realized node back", last)
+	}
+
+	master1 := s.nodes[1].rows
+	tfApply := rowIndex(rowLabels(master1), "terraform apply")
+	if tfApply < 0 {
+		t.Fatal("master1 has no terraform-apply row to assert on")
+	}
+	if got := master1[tfApply].status; got != rowFailed {
+		t.Errorf("master1's in-flight row status = %v, want rowFailed — it must show where the cancel landed, not vanish", got)
+	}
+
+	for i, r := range s.nodes[2].rows {
+		if r.status != rowPending {
+			t.Errorf("master2 row %d status = %v, want rowPending — it was never reached", i, r.status)
+		}
+	}
+
+	out := tuitest.StripANSI(NewDoneStep(st, Hooks{}).View(100, 40))
+	if strings.Contains(strings.ToLower(out), "rollback") {
+		t.Fatalf("a partial-mutation cancel must never be presented as a rollback:\n%s", out)
+	}
+	if !strings.Contains(out, "homelab-master0") {
+		t.Fatalf("incident report must still credit master0's completed work:\n%s", out)
+	}
+}
+
 func TestExecStepQuitGuardCancelsThenForces(t *testing.T) {
 	cancelled := false
 	s := NewExecStep(execState(), Hooks{
@@ -139,7 +554,26 @@ func TestExecAndDoneStepsAreForwardOnly(t *testing.T) {
 	if !NewExecStep(st, Hooks{}).InterceptBack() {
 		t.Error("exec step must intercept esc — navigating away orphans the event pump")
 	}
-	if !NewDoneStep(st).InterceptBack() {
+	if !NewDoneStep(st, Hooks{}).InterceptBack() {
 		t.Error("done step must intercept esc — going back re-enters a finished run")
+	}
+}
+
+// TestExecStylesFollowThemeFlip pins flip-safety for a CLI-launched flow:
+// the step is constructed before the terminal's background reply lands, so
+// its styles must resolve at render time, not freeze their dark values.
+func TestExecStylesFollowThemeFlip(t *testing.T) {
+	t.Cleanup(func() { tui.SetDarkBackground(true) })
+	tui.SetDarkBackground(true)
+
+	s := NewExecStep(threeMasterState(), Hooks{})
+	base := time.Date(2026, 8, 30, 9, 0, 0, 0, time.UTC)
+	s.now = func() time.Time { return base }
+	s.started = base
+	s.buildRows()
+
+	tui.SetDarkBackground(false)
+	if out := s.View(100, 40); !strings.Contains(out, "15;23;42") {
+		t.Errorf("post-flip headline misses the light Text tier (#0F172A):\n%q", out)
 	}
 }

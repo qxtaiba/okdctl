@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/node"
+	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/lifecycle"
 )
@@ -50,24 +52,87 @@ func TestReportLifecycleOutcomeInterruptedIsNotSilent(t *testing.T) {
 	}
 }
 
-func TestReportLifecycleOutcomeExecutedPaths(t *testing.T) {
+// TestReportLifecycleOutcomeSuccessPrintsRecap supersedes the former
+// TestReportLifecycleOutcomeExecutedPaths, which asserted success prints
+// nothing ("the done screen already showed the box"). That ruling is
+// reversed: the AltScreen clears the done card from scrollback on exit, so
+// success now prints a short plain recap (item 5, second-cut safety
+// findings) — this test honestly updates the old expectation rather than
+// silently deleting it.
+func TestReportLifecycleOutcomeSuccessPrintsRecap(t *testing.T) {
 	plan := &node.OpPlan{
 		Op: node.OpResize, Cluster: "homelab",
 		Nodes: []node.PlanNode{{Name: "m0", Role: "master", Action: terraform.PlanActionUpdate}},
 	}
 
 	cmd, out := outcomeCmd()
-	st := &lifecycle.State{Proceed: true, Started: true, Executed: true, Plan: plan}
+	st := &lifecycle.State{Proceed: true, Started: true, Executed: true, Plan: plan, Elapsed: 90 * time.Second}
 	if err := reportLifecycleOutcome(cmd, wizard.Result{Outcome: wizard.OutcomeCompleted}, st); err != nil {
 		t.Fatalf("successful run: %v", err)
 	}
-	if !strings.Contains(out.String(), "resize") {
-		t.Error("successful run must print the completion box")
+	got := out.String()
+	for _, want := range []string{"resize complete", "m0", "1m30s"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("success recap missing %q, got %q", want, got)
+		}
 	}
+	for _, step := range render.NodeOpNextSteps(plan) {
+		if !strings.Contains(got, step) {
+			t.Errorf("success recap missing next-step line %q, got %q", step, got)
+		}
+	}
+}
 
+// TestLifecycleRunFlowErrMapsRendererFailureToInterrupted guards the
+// renderer-failure execution state: a wizard.RunFlow error (a tea.Program
+// crash, e.g.) arriving mid-execution — Started but not yet Executed — must
+// map to the same interrupted/resume guidance as a graceful cancel, never
+// read as a configuration problem with nothing to resume.
+func TestLifecycleRunFlowErrMapsRendererFailureToInterrupted(t *testing.T) {
+	boom := errors.New("tea: renderer panicked")
+	st := &lifecycle.State{Started: true, Executed: false}
+
+	err := lifecycleRunFlowErr(boom, st)
+
+	var ce *errtypes.ClusterError
+	if !errors.As(err, &ce) {
+		t.Fatalf("renderer failure mid-execution must be a *errtypes.ClusterError, got %T: %v", err, err)
+	}
+	if !strings.Contains(err.Error(), "resume") {
+		t.Errorf("renderer failure mid-execution must point at the resume marker: %v", err)
+	}
+	if !errors.Is(err, boom) {
+		t.Errorf("the underlying renderer error must still be wrapped: %v", err)
+	}
+}
+
+// TestLifecycleRunFlowErrMapsPreExecutionFailureToConfigError guards the
+// other half: a RunFlow failure before execution ever started carries no
+// marker to resume, so it must read as a configuration problem, not an
+// interrupted operation.
+func TestLifecycleRunFlowErrMapsPreExecutionFailureToConfigError(t *testing.T) {
+	boom := errors.New("tea: could not open a new tty")
+	st := &lifecycle.State{Started: false, Executed: false}
+
+	err := lifecycleRunFlowErr(boom, st)
+
+	var ce *errtypes.ConfigError
+	if !errors.As(err, &ce) {
+		t.Fatalf("pre-execution renderer failure must be a *errtypes.ConfigError, got %T: %v", err, err)
+	}
+	if strings.Contains(err.Error(), "resume") {
+		t.Errorf("pre-execution failure must not claim a resumable marker: %v", err)
+	}
+}
+
+func TestReportLifecycleOutcomeFailurePropagatesBackendError(t *testing.T) {
+	plan := &node.OpPlan{
+		Op: node.OpResize, Cluster: "homelab",
+		Nodes: []node.PlanNode{{Name: "m0", Role: "master", Action: terraform.PlanActionUpdate}},
+	}
 	boom := errors.New("etcd gate failed")
-	cmd, _ = outcomeCmd()
-	st = &lifecycle.State{Proceed: true, Started: true, Executed: true, Plan: plan, Result: boom}
+	cmd, _ := outcomeCmd()
+	st := &lifecycle.State{Proceed: true, Started: true, Executed: true, Plan: plan, Result: boom}
 	if err := reportLifecycleOutcome(cmd, wizard.Result{Outcome: wizard.OutcomeCompleted}, st); !errors.Is(err, boom) {
 		t.Errorf("failed run must propagate the backend error, got %v", err)
 	}
@@ -119,5 +184,23 @@ func TestAddOptsFromWizardMergesHostBudget(t *testing.T) {
 	}
 	if opts.Count != 2 {
 		t.Errorf("wizard-collected count lost in the merge: %+v", opts)
+	}
+}
+
+// TestSendExecEventDeliversAfterGracefulCancel pins biased delivery on the
+// runner's Reporter/OnStep seam: gate transitions racing the cancel must
+// keep landing while the exec screen is still draining the feed.
+func TestSendExecEventDeliversAfterGracefulCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	for range 200 {
+		events := make(chan lifecycle.ExecEvent, 1)
+		sendExecEvent(ctx, events, &lifecycle.ExecEvent{Desc: "drain node"})
+		select {
+		case <-events:
+		default:
+			t.Fatal("a graceful cancel dropped an exec event despite buffer space")
+		}
 	}
 }

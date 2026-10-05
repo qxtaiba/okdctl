@@ -15,8 +15,21 @@ import (
 var outputProfile atomic.Pointer[colorprofile.Profile]
 
 func init() {
-	p := colorprofile.Detect(os.Stdout, os.Environ())
+	p := detect(os.Stdout)
 	outputProfile.Store(&p)
+}
+
+// detect returns NoTTY when NO_COLOR is set to any value — colorprofile.Detect
+// parses NO_COLOR as a bool, so a non-boolean value like "yes" would otherwise
+// leak color — and delegates to colorprofile.Detect(w, os.Environ()) otherwise.
+// NoTTY, not Ascii: colorprofile.Writer leaves bare "\x1b[m" reset markers
+// around color-only spans at the Ascii profile (it only strips the color
+// params, not the reset), while NoTTY takes the full ansi.Strip path.
+func detect(w io.Writer) colorprofile.Profile {
+	if os.Getenv("NO_COLOR") != "" {
+		return colorprofile.NoTTY
+	}
+	return colorprofile.Detect(w, os.Environ())
 }
 
 // SetColorProfileFor re-detects the render color profile from w and the
@@ -24,17 +37,44 @@ func init() {
 // boxed print so redirected output/tests don't see the init-time os.Stdout
 // snapshot.
 func SetColorProfileFor(w io.Writer) {
-	p := colorprofile.Detect(w, os.Environ())
+	p := detect(w)
 	outputProfile.Store(&p)
+	resolveActiveTheme(IsDarkBackground())
+}
+
+// DisableColor forces the render color profile to strip all ANSI for the
+// rest of the process; see detect's doc for why NoTTY rather than Ascii.
+func DisableColor() {
+	p := colorprofile.NoTTY
+	outputProfile.Store(&p)
+	resolveActiveTheme(IsDarkBackground())
 }
 
 func colorProfile() colorprofile.Profile {
 	return *outputProfile.Load()
 }
 
+// OutputColorProfile reports the profile used for CLI-rendered colors.
+func OutputColorProfile() colorprofile.Profile { return colorProfile() }
+
 // colorEnabled reports whether the active profile emits any color.
 func colorEnabled() bool {
 	return colorProfile() > colorprofile.Ascii
+}
+
+// ColorEnabled reports whether the active color profile emits any color.
+func ColorEnabled() bool {
+	return colorEnabled()
+}
+
+// Hyperlink wraps text in an OSC 8 terminal hyperlink to url when the
+// active color profile renders escapes at all; off-TTY and under NO_COLOR
+// the text comes back plain.
+func Hyperlink(url, text string) string {
+	if url == "" || !colorEnabled() {
+		return text
+	}
+	return "\x1b]8;;" + url + "\x1b\\" + text + "\x1b]8;;\x1b\\"
 }
 
 // Downsample rewrites s so ANSI escapes match the active profile —

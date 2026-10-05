@@ -1,24 +1,24 @@
                                                                                 
   ╭──────────────────────────────────────────────────────────────────────────╮  
   │ O K D C T L                                                              │  
-  │ okd over proxmox, the easy way        ●─●─●─●─●─●─●─●─●─○─○ step 9 of 11 │  
+  │ configure files & ignition ser…  connect · cluster · extras ✓●○ · review │  
   │──────────────────────────────────────────────────────────────────────────│  
-  │  configure files & ignition server                                       │  
   │                                                                          │  
   │    ● required files                                                      │  
   │                                                                          │  
-  │    > pull secret (path to okd pull-secret.json from red hat)             │  
-  │    ╭────────────────────────────────────────────────────────────╮        │  
-  │    │ > ~/pull-secret.json                                       │        │  
-  │    ╰────────────────────────────────────────────────────────────╯        │  
+  │    pull secret                                                           │  
+  │    ╭────────────────────────────────────────────────────────────────╮    │  
+  │    │ ~/pull-secret.json                                             │    │  
+  │    ╰────────────────────────────────────────────────────────────────╯    │  
+  │    path to okd pull-secret.json from red hat                             │  
   │                                                                          │  
-  │    ssh public key: ~/.ssh/id_ed25519.pub                                 │  
+  │    ssh public key                                                        │  
+  │    ╭────────────────────────────────────────────────────────────────╮    │  
+  │    │ ~/.ssh/id_ed25519.pub                                          │    │  
+  │    ╰────────────────────────────────────────────────────────────────╯    │  
   │                                                                          │  
-  │    ✓ ignition server                                                     │  
   │                                                                          │  
-  │    web root: /var/www/html                                               │  
-  │  pull secret: get from https://cloud.redhat.com/openshift/install/pull-  │  
   │─────────── ↑ ↓  scroll down for more ──────────── ▸ okd 4.22.0-okd-scos.7│  
-  │   ↑↓/tab  navigate    enter  continue    esc  back                       │  
+  │  ↑↓/tab navigate • enter continue • esc back … • ctrl+c quit • ? help    │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

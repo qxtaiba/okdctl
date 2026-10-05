@@ -1,24 +1,24 @@
                                                                                 
   ╭──────────────────────────────────────────────────────────────────────────╮  
   │ O K D C T L                                                              │  
-  │ okd over proxmox, the easy way        ●─●─●─●─●─●─●─●─○─○─○ step 8 of 11 │  
+  │ configure cluster addons         connect · cluster · extras ●○○ · review │  
   │──────────────────────────────────────────────────────────────────────────│  
-  │  configure cluster addons                                                │  
   │                                                                          │  
   │    ● gitops (flux)                                                       │  
   │                                                                          │  
-  │    enabled (enable gitops deployment)                                    │  
-  │    ╭────────────────────────────────────────────────────────────╮        │  
-  │    │ ◂ no ▸                                                     │        │  
-  │    ╰────────────────────────────────────────────────────────────╯        │  
+  │    enabled                                                               │  
+  │    ╭────────────────╮                                                    │  
+  │    │ ● no  ○ yes    │                                                    │  
+  │    ╰────────────────╯                                                    │  
+  │    enable gitops deployment                                              │  
+  │                                                                          │  
+  │      repository settings appear when enabled.                            │  
   │                                                                          │  
   │    ✓ secret store (common)                                               │  
+  │      supports onepassword, vault, and bitwarden via external-secrets-    │  
+  │      operator                                                            │  
   │                                                                          │  
-  │    enabled: no                                                           │  
-  │                                                                          │  
-  │                                                                          │  
-  │                                                                          │  
-  │────────────────────────────────────────────────── ▸ okd 4.22.0-okd-scos.7│  
-  │   ←→  change    ↑↓/tab  navigate    enter  continue    esc  back         │  
+  │─────────── ↑ ↓  scroll down for more ──────────── ▸ okd 4.22.0-okd-scos.7│  
+  │  ↑↓/tab navigate • enter continue • esc back … • ctrl+c quit • ? help    │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

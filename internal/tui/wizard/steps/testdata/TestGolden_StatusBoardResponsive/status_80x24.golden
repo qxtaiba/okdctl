@@ -1,0 +1,24 @@
+                                                                                
+  ╭──────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L  read-only cluster snapshot                                  │  
+  │ cluster status                                                           │  
+  │──────────────────────────────────────────────────────────────────────────│  
+  │  CLUSTER STATUS · Running                                                │  
+  │  API ✓ healthy · 42ms   OPERATORS 0 degraded                             │  
+  │  NODES · 6 (3 master · 3 worker)                                         │  
+  │  master                                                                  │  
+  │  >   homelab-master0                                          ready      │  
+  │      homelab-master1                                          ready      │  
+  │      homelab-master2                                          ready      │  
+  │  worker                                                                  │  
+  │      homelab-worker0                                          ready      │  
+  │      homelab-worker1                                          ready      │  
+  │      homelab-worker2                                          ready      │  
+  │  ADD-ONS · ✓ flux · healthy                                              │  
+  │                                                                          │  
+  │                                                                          │  
+  │                                                                          │  
+  │────────────────────────────────────────────────────────── ▸ prod-cluster │  
+  │  esc hub • r refresh • ↑↓ nodes • enter details • ctrl+c quit • ? help   │  
+  ╰──────────────────────────────────────────────────────────────────────────╯  
+                                                                                

@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/qxtaiba/okdctl/internal/addon"
 	"github.com/qxtaiba/okdctl/internal/cluster"
@@ -23,20 +25,31 @@ const (
 )
 
 type fakeClient struct {
-	healthzErr    error
-	nodesJSON     string
-	nodesErr      error
-	operatorsJSON string
-	operatorsErr  error
+	healthzErr         error
+	nodesJSON          string
+	nodesErr           error
+	nodesTruncated     bool
+	operatorsJSON      string
+	operatorsErr       error
+	operatorsTruncated bool
+	healthzStarted     chan struct{}
+	healthzRelease     chan struct{}
 }
 
-func (f *fakeClient) RawGet(context.Context, string) (string, error) {
+func (f *fakeClient) RawGet(_ context.Context, path string) (string, error) {
+	if path == "/healthz" && f.healthzStarted != nil {
+		close(f.healthzStarted)
+		<-f.healthzRelease
+	}
 	return "", f.healthzErr
 }
 
 func (f *fakeClient) ListNodes(context.Context) ([]cluster.NodeDetail, error) {
 	if f.nodesErr != nil {
 		return nil, f.nodesErr
+	}
+	if f.nodesTruncated {
+		return nil, errors.New("nodes output truncated")
 	}
 	var list struct{ Items []json.RawMessage }
 	if err := json.Unmarshal([]byte(f.nodesJSON), &list); err != nil {
@@ -56,6 +69,9 @@ func (f *fakeClient) ListNodes(context.Context) ([]cluster.NodeDetail, error) {
 func (f *fakeClient) ClusterOperatorHealth(context.Context) (cluster.OperatorHealth, error) {
 	if f.operatorsErr != nil {
 		return cluster.OperatorHealth{}, f.operatorsErr
+	}
+	if f.operatorsTruncated {
+		return cluster.OperatorHealth{}, errors.New("operators output truncated")
 	}
 	var list struct {
 		Items []struct {
@@ -136,6 +152,9 @@ func TestCollect_RunningCluster(t *testing.T) {
 	if !cs.APIReachable {
 		t.Error("APIReachable = false; want true")
 	}
+	if !cs.APIAvailable || !cs.NodesAvailable || !cs.OperatorsAvailable {
+		t.Errorf("availability flags = api:%v nodes:%v operators:%v; want all true", cs.APIAvailable, cs.NodesAvailable, cs.OperatorsAvailable)
+	}
 	if len(cs.Nodes) != 1 || cs.Nodes[0].Status != nodetypes.NodeStatusReady {
 		t.Errorf("Nodes = %+v; want one ready node", cs.Nodes)
 	}
@@ -147,6 +166,90 @@ func TestCollect_RunningCluster(t *testing.T) {
 	}
 	if cs.Addons[1].Error != "pods not ready" {
 		t.Errorf("Addons[1].Error = %q; want pods not ready", cs.Addons[1].Error)
+	}
+}
+
+func TestCollectMeasuresAPILatency(t *testing.T) {
+	started, release := make(chan struct{}), make(chan struct{})
+	cl := &fakeClient{
+		nodesJSON:      `{"items":[` + readyMasterJSON + `]}`,
+		operatorsJSON:  `{"items":[]}`,
+		healthzStarted: started,
+		healthzRelease: release,
+	}
+	result := make(chan okd.ClusterStatus, 1)
+	go func() { result <- Collect(context.Background(), cl, &fakeVerifier{}, LifecycleSources{}) }()
+	<-started
+	time.Sleep(20 * time.Millisecond)
+	close(release)
+	cs := <-result
+	if cs.APILatency <= 0 {
+		t.Errorf("API latency = %s, want measured positive duration", cs.APILatency)
+	}
+	if cs.APILatency < 10*time.Millisecond {
+		t.Errorf("API latency = %s, want to include the delayed /healthz round trip", cs.APILatency)
+	}
+}
+
+func TestReadLastDeployRunUsesTrustedHistory(t *testing.T) {
+	root := t.TempDir()
+	workDir := filepath.Join(root, "okd-install")
+	kubeconfig := filepath.Join(workDir, "cluster-config", "auth", "kubeconfig")
+	if err := os.MkdirAll(filepath.Dir(kubeconfig), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(kubeconfig, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stamp := time.Date(2026, time.September, 27, 8, 0, 0, 0, time.UTC)
+	history := map[string]any{"schema_version": "v1", "run_id": "run-abc", "timestamp": stamp, "cluster_name": "prod-cluster", "steps": map[string]float64{"setup-configure": 12}}
+	data, err := json.Marshal(history)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workDir, ".okdctl-step-history.json"), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got := readLastDeployRun(kubeconfig, "prod-cluster")
+	if got.RunID != "run-abc" || got.ClusterName != "prod-cluster" || !got.At.Equal(stamp) {
+		t.Errorf("last run = %+v, want run-abc at %s", got, stamp)
+	}
+	if got := readLastDeployRun(kubeconfig, "other-cluster"); got.RunID != "" || !got.At.IsZero() {
+		t.Errorf("foreign-cluster history = %+v, want unavailable", got)
+	}
+}
+
+func TestReadLastDeployRunRejectsSymlinkAndInvalidHistory(t *testing.T) {
+	root := t.TempDir()
+	workDir := filepath.Join(root, "okd-install")
+	kubeconfig := filepath.Join(workDir, "cluster-config", "auth", "kubeconfig")
+	if err := os.MkdirAll(filepath.Dir(kubeconfig), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(kubeconfig, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	historyPath := filepath.Join(workDir, ".okdctl-step-history.json")
+	if err := os.WriteFile(historyPath, []byte(strings.Repeat("x", 1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := readLastDeployRun(kubeconfig, "prod-cluster"); got.RunID != "" {
+		t.Errorf("invalid history = %+v, want unavailable", got)
+	}
+
+	outside := filepath.Join(root, "outside.json")
+	if err := os.WriteFile(outside, []byte(`{"schema_version":"v1","run_id":"run-x","cluster_name":"prod-cluster"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(historyPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, historyPath); err != nil {
+		t.Fatal(err)
+	}
+	if got := readLastDeployRun(kubeconfig, "prod-cluster"); got.RunID != "" {
+		t.Errorf("symlinked history = %+v, want unavailable", got)
 	}
 }
 
@@ -190,8 +293,22 @@ func TestCollect_APIUnreachable(t *testing.T) {
 	if cs.APIReachable {
 		t.Error("APIReachable = true; want false")
 	}
+	if !cs.APIAvailable || cs.NodesAvailable || cs.OperatorsAvailable {
+		t.Errorf("availability flags = api:%v nodes:%v operators:%v; want queried api and unavailable sections", cs.APIAvailable, cs.NodesAvailable, cs.OperatorsAvailable)
+	}
 	if cs.Nodes != nil || cs.DegradedOperators != 0 {
 		t.Errorf("want empty sections; got nodes=%v degraded=%d", cs.Nodes, cs.DegradedOperators)
+	}
+}
+
+func TestCollect_TruncatedSectionsAreUnavailable(t *testing.T) {
+	cl := &fakeClient{
+		nodesJSON: `{"items":[]}`, nodesTruncated: true,
+		operatorsJSON: `{"items":[]}`, operatorsTruncated: true,
+	}
+	cs := Collect(context.Background(), cl, &fakeVerifier{}, LifecycleSources{})
+	if cs.NodesAvailable || cs.OperatorsAvailable {
+		t.Errorf("truncated sections marked available: nodes=%v operators=%v", cs.NodesAvailable, cs.OperatorsAvailable)
 	}
 }
 

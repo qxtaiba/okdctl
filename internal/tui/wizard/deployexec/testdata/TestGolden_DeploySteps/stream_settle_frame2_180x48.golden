@@ -1,0 +1,48 @@
+                                                                                                                                                                                    
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L  installing okd over proxmox                                                                                                                                     │  
+  │ deploying homelab                                                                                                                                             install · done │  
+  │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
+  │  deploying homelab  7 / 7                                                           elapsed 2m20s      │  LOG                                                                │  
+  │  ██████████████████████████│████████████████████████│██████████░░│░░░░░░░░░░░░│░░░░░░░░░░░░  100%      │  · 09:00:00 deploy step started step=step-00 phase=setup            │  
+  │  ✓ prep                                                                                       40s      │  · 09:00:07 deploy step started step=step-01 phase=setup            │  
+  │  ✓ ignition                                                                                   40s      │  · 09:00:14 deploy step started step=step-02 phase=setup            │  
+  │  ✓ infra                                                                                      20s      │  · 09:00:21 deploy step started step=step-03 phase=setup            │  
+  │  ✓ install                                                                                    20s      │  · 09:00:28 deploy step started step=step-04 phase=setup            │  
+  │  ✓ verify                                                                                     20s      │  · 09:00:35 deploy step started step=step-05 phase=setup            │  
+  │                                                                                                        │  · 09:00:42 deploy step started step=step-06 phase=setup            │  
+  │  PHASES                                                                                                │  · 09:00:49 deploy step started step=step-07 phase=setup            │  
+  │  prep      ████████████████████████                                                           40s      │  · 09:00:56 deploy step started step=step-08 phase=setup            │  
+  │  ignition  ████████████████████████                                                           40s      │  · 09:01:03 deploy step started step=step-09 phase=setup            │  
+  │  infra     ████████████                                                                       20s      │  · 09:01:10 deploy step started step=step-10 phase=setup            │  
+  │  install   ████████████                                                                       20s      │  · 09:01:17 deploy step started step=step-11 phase=setup            │  
+  │  verify    ████████████                                                                       20s      │  · 09:01:24 deploy step started step=step-12 phase=setup            │  
+  │                                                                                                        │  · 09:01:31 deploy step started step=step-13 phase=setup            │  
+  │  full log okd-install/okdctl.log                                                                       │  · 09:01:38 deploy step started step=step-14 phase=setup            │  
+  │                                                                                                        │  · 09:01:45 deploy step started step=step-15 phase=setup            │  
+  │                                                                                                        │  · 09:01:52 deploy step started step=step-16 phase=setup            │  
+  │                                                                                                        │  · 09:01:59 deploy step started step=step-17 phase=setup            │  
+  │                                                                                                        │  · 09:02:06 deploy step started step=step-18 phase=setup            │  
+  │                                                                                                        │  · 09:02:13 deploy step started step=step-19 phase=setup            │  
+  │                                                                                                        │  · 09:02:20 deploy step started step=step-20 phase=setup            │  
+  │                                                                                                        │  · 09:02:27 deploy step started step=step-21 phase=setup            │  
+  │                                                                                                        │  · 09:02:34 deploy step started step=step-22 phase=setup            │  
+  │                                                                                                        │  · 09:02:41 deploy step started step=step-23 phase=setup            │  
+  │                                                                                                        │                                                                     │  
+  │                                                                                                        │                                                                     │  
+  │                                                                                                        │                                                                     │  
+  │                                                                                                        │                                                                     │  
+  │                                                                                                        │                                                                     │  
+  │                                                                                                        │                                                                     │  
+  │                                                                                                        │                                                                     │  
+  │                                                                                                        │                                                                     │  
+  │                                                                                                        │                                                                     │  
+  │                                                                                                        │                                                                     │  
+  │                                                                                                        │                                                                     │  
+  │                                                                                                        │                                                                     │  
+  │                                                                                                        │                                                                     │  
+  │                                                                                                                                                                              │  
+  │─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
+  │  / filter the log • l lock the log here • f full-screen log • ctrl+c cancel (twice to force-quit) • ? help                                                                   │  
+  ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
+                                                                                                                                                                                    

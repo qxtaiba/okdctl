@@ -1,7 +1,13 @@
-# README demo: full wizard walkthrough for a 3 control-plane / 3 worker
-# cluster, quitting from the review screen — nothing deploys.
+# README demo: hero-hub to deploy-stream walkthrough for a 3 control-plane /
+# 3 worker cluster. Launches on the hub, picks "edit config", walks all ten
+# configure steps (gated on the header's phase trail — connect/cluster/
+# extras/review, not step numbers; see scripts/screenshot/wizard.tape.in),
+# confirms the review's default "deploy now" action, then watches the
+# deploy stream run its five phases against OKDCTL_WIZARD_DEMO's scripted
+# feed through to the done box.
 # Regenerate with scripts/demo/record.sh (or `make demo`), which builds
-# the binary, starts the fake Proxmox API, and exports OKDCTL_DEMO_BIN /
+# the binary, starts the fake Proxmox API, seeds a saved okdctl.yaml so the
+# hub renders its five-verb menu, and exports OKDCTL_DEMO_BIN /
 # OKDCTL_DEMO_HOME / OKDCTL_DEMO_CWD consumed by the hidden setup line.
 Output docs/assets/demo.gif
 Set FontSize 18
@@ -27,13 +33,17 @@ Show
 Type "okdctl deploy"
 Sleep 600ms
 Enter
-Sleep 4.5s
+Wait+Screen@10s /cluster status/
 
-# step 1/11 welcome
+# the hub — deploy is the first verb and deploys the saved configuration
+# outright; the walkthrough wants the configure flow, which is the second.
+Sleep 1.5s
+Down
+Sleep 900ms
 Enter
-Sleep 8s
+Wait+Screen@10s /connect ✓●○ · cluster · extras · review/
 
-# step 2/11 okd version — expand recommended group, browse, confirm
+# okd version — expand recommended group, browse, confirm
 Enter
 Sleep 2s
 Down
@@ -45,10 +55,16 @@ Sleep 1.4s
 Up
 Sleep 2s
 Enter
-Sleep 4.5s
+Wait+Screen@10s /connect ✓✓● · cluster · extras · review/
 
-# step 3/11 proxmox connection — type every box
+# proxmox connection — initial focus lands past the host field, so back up
+# to it before typing every box
+Shift+Tab
+Sleep 450ms
+Shift+Tab
+Sleep 450ms
 Type "127.0.0.1:8006"
+Wait+Screen@2s /127.0.0.1:8006/
 Sleep 1.4s
 Tab
 Type "root@pam"
@@ -63,9 +79,9 @@ Sleep 1.2s
 Right
 Sleep 2s
 Enter
-Sleep 4.5s
+Wait+Screen@10s /connect · cluster ●○○○ · extras · review/
 
-# step 4/11 basics — name, domain, 3 control-plane / 3 workers
+# basics — name, domain, 3 control-plane / 3 workers
 Type "homelab"
 Sleep 1.4s
 Tab
@@ -78,9 +94,9 @@ Tab
 Type "3"
 Sleep 2s
 Enter
-Sleep 4.5s
+Wait+Screen@10s /connect · cluster ✓●○○ · extras · review/
 
-# step 5/11 node placement — live discovery, walk every assignment
+# node placement — live discovery, walk every assignment
 Sleep 4.5s
 Tab
 Sleep 1.2s
@@ -107,9 +123,9 @@ Sleep 1.2s
 Tab
 Sleep 2s
 Enter
-Sleep 4.5s
+Wait+Screen@10s /connect · cluster ✓✓●○ · extras · review/
 
-# step 6/11 networking — type every box; api vip stays blank (auto-derived)
+# networking — type every box; api vip stays blank (auto-derived)
 Sleep 2s
 Type "192.168.1.0/24"
 Sleep 1.2s
@@ -139,9 +155,9 @@ Sleep 1.2s
 Tab
 Sleep 1.5s
 Enter
-Sleep 4.5s
+Wait+Screen@10s /connect · cluster ✓✓✓● · extras · review/
 
-# step 7/11 resources — type control plane and worker sizing
+# resources — type control plane and worker sizing
 Sleep 2s
 Type "4"
 Sleep 1s
@@ -167,9 +183,9 @@ Tab
 Type "0"
 Sleep 2s
 Enter
-Sleep 4.5s
+Wait+Screen@10s /connect · cluster · extras ●○○ · review/
 
-# step 8/11 addons — browse the catalog
+# addons — browse the catalog
 Sleep 2.5s
 Down
 Sleep 1.3s
@@ -180,22 +196,22 @@ Sleep 1.3s
 Up
 Sleep 2s
 Enter
-Sleep 4.5s
+Wait+Screen@10s /connect · cluster · extras ✓●○ · review/
 
-# step 9/11 files — type pull secret, ssh key, web root
+# files — type pull secret, ssh key, web root
 Sleep 1.5s
-Type "~/pull-secret.json"
+Type "pull-secret.json"
 Sleep 1.3s
 Tab
-Type "~/.ssh/id_ed25519.pub"
+Type ".ssh/id_ed25519.pub"
 Sleep 1.4s
 Tab
 Type "/var/www/html"
 Sleep 2s
 Enter
-Sleep 4.5s
+Wait+Screen@10s /connect · cluster · extras ✓✓● · review/
 
-# step 10/11 advanced — type vm ids and timeouts
+# advanced — type vm ids and timeouts
 Sleep 2s
 Type "6000"
 Sleep 1.2s
@@ -221,9 +237,9 @@ Sleep 1.2s
 Tab
 Sleep 2s
 Enter
-Sleep 4.5s
+Wait+Screen@10s /connect · cluster · extras · review/
 
-# step 11/11 review — scroll the whole summary
+# review — scroll the whole summary, then confirm the default "deploy now"
 Sleep 5s
 Down
 Sleep 1.2s
@@ -240,10 +256,16 @@ Sleep 1.2s
 Down
 Sleep 1.2s
 Down
+Sleep 1.2s
+Up
 Sleep 1.4s
 Up
-Sleep 1s
-Up
 Sleep 4s
-Ctrl+C
-Sleep 1.5s
+Enter
+
+# deploy stream — the phase checklist and log pane run against the scripted
+# feed, then hand off to the done box.
+Wait+Screen@10s /deploying homelab/
+Sleep 3s
+Wait+Screen@15s /ACCESS/
+Sleep 3s

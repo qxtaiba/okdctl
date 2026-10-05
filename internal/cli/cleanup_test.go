@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/cleanup"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
@@ -105,11 +107,21 @@ func TestRunCleanup_Wiring(t *testing.T) {
 		sentinel := seedCleanupWorkspace(t)
 		cleanupDryRun = true
 		cleanupCmd.SetContext(context.Background())
+		var stdout bytes.Buffer
+		cleanupCmd.SetOut(&stdout)
+		t.Cleanup(func() { cleanupCmd.SetOut(nil) })
 
 		if err := runCleanup(cleanupCmd, nil); err != nil {
 			t.Fatalf("runCleanup --dry-run: %v", err)
 		}
 		mustSurviveCleanup(t, sentinel)
+
+		out := stdout.String()
+		for _, want := range []string{"would", "work directory"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("dry-run preview missing %q:\n%s", want, out)
+			}
+		}
 	})
 
 	t.Run("invalid --kind is a UsageError", func(t *testing.T) {
@@ -175,4 +187,29 @@ func TestRunCleanup_Wiring(t *testing.T) {
 		}
 		mustSurviveCleanup(t, sentinel)
 	})
+}
+
+// TestRunCleanup_PrintsConfirmBox pins that the confirm box reaches stderr
+// even under --yes, on the same refusal path TestRunCleanup_Wiring already
+// exercises so no real cleanup runs.
+func TestRunCleanup_PrintsConfirmBox(t *testing.T) {
+	resetCleanupFlags(t)
+	sentinel := seedCleanupWorkspace(t)
+	cleanupYes = true
+	var stderr bytes.Buffer
+	cleanupCmd.SetContext(context.Background())
+	cleanupCmd.SetErr(&stderr)
+	t.Cleanup(func() { cleanupCmd.SetErr(nil) })
+
+	if err := runCleanup(cleanupCmd, nil); err == nil {
+		t.Fatal("scripted cleanup without --confirm-cluster must be refused")
+	}
+	mustSurviveCleanup(t, sentinel)
+
+	out := stderr.String()
+	for _, want := range []string{"confirm cleanup", tui.IconWarning, guardTestCluster, "kind", "work dir"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("confirm box missing %q:\n%s", want, out)
+		}
+	}
 }

@@ -1,24 +1,24 @@
                                                                                 
   ╭──────────────────────────────────────────────────────────────────────────╮  
   │ O K D C T L                                                              │  
-  │ okd over proxmox, the easy way       ●─●─●─●─●─●─●─●─●─●─● step 11 of 11 │  
+  │ review your configuration            connect · cluster · extras · review │  
   │──────────────────────────────────────────────────────────────────────────│  
-  │  ignition server   https://192.168.1.20                                  │  
-  │  web root          /var/www/html                                         │  
+  │  worker data disk  500 gb per worker (1500 gb total)                     │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
+  │  total             40 vcpu, 104 gb ram, 1850 gb disk                     │  
   │                                                                          │  
-  │  [8] advanced                                                            │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
-  │  vm id base        6000                                                  │  
-  │  timeouts          bootstrap 60m, install 120m                           │  
-  │  terraform                                                               │  
-  │  environment       production                                            │  
+  │  [5] files & ignition                                                    │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
+  │  ignition server  https://192.168.1.20                                   │  
+  │  web root         /var/www/html                                          │  
   │                                                                          │  
-  │  ══════════════════════════════════════════════════════════════════      │  
+  │  [6] advanced                                                            │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
+  │  vm id base             6000                                             │  
+  │  timeouts               bootstrap 60m, install 120m                      │  
+  │  terraform environment  production                                       │  
   │                                                                          │  
-  │  ○ deploy now                                                            │  
-  │  ● save and exit                                                         │  
   │──────────── ↑ ↓  scroll up for more ───────────── ▸ okd 4.22.0-okd-scos.7│  
-  │   ↑↓  select action    enter  confirm    esc  back    ctrl+c  quit       │  
-  │  1-9  jump to section                                                    │  
+  │  ○ deploy now   ● save and exit                    ctrl+c quit • ? help  │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

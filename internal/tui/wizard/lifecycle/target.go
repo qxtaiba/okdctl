@@ -1,12 +1,9 @@
 package lifecycle
 
 import (
-	"cmp"
 	"fmt"
-	"slices"
-	"strings"
+	"sort"
 
-	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -27,8 +24,9 @@ const (
 )
 
 type nodesLoadedMsg struct {
-	nodes []cluster.NodeDetail
-	err   error
+	generation uint64
+	nodes      []cluster.NodeDetail
+	err        error
 }
 
 // targetChoice is one selectable option: a whole role or a single node.
@@ -46,38 +44,63 @@ type TargetStep struct {
 	st    *State
 	hooks Hooks
 
-	phase          targetPhase
-	loadingSpinner spinner.Model
-	loadErr        error
+	phase   targetPhase
+	frame   uint64
+	loadErr error
+
+	// generation increments on every node-list fetch this step issues; a
+	// nodesLoadedMsg carrying a stale generation is a superseded fetch's
+	// reply and Update discards it unapplied, so a slow first fetch can
+	// never clobber a newer one's result.
+	generation uint64
 
 	selector *components.Selector
 	choices  []targetChoice
+	// header: the node table's header row, shown above the selector for remove
+	// (resize carries its own copy via selector.DropdownHeader instead).
+	header string
 	// blocked: remove-ineligible workers, rendered dimmed to teach the top-down constraint.
 	blocked []string
+	// dropdownAbove: non-dropdown option rows (masters/workers) rendered
+	// above the dropdown region, used to size its per-render budget.
+	dropdownAbove int
+	// contentHeight: the step's real inner height from the last genuine
+	// SetSize call, kept apart from BaseStep's own field since View() is
+	// re-run with an unbounded placeholder height on every viewport sync.
+	contentHeight int
+}
+
+// SetSize updates the step's inner width and height, remembering the real
+// content height so the dropdown's render-time budget survives renders that
+// carry a placeholder height.
+func (s *TargetStep) SetSize(width, height int) {
+	s.BaseStep.SetSize(width, height)
+	s.contentHeight = height
 }
 
 // NewTargetStep constructs the target-select step.
 func NewTargetStep(st *State, hooks Hooks) *TargetStep {
-	sp := spinner.New()
-	sp.Spinner = spinner.Dot
-	sp.Style = lipgloss.NewStyle().Foreground(tui.ColorPrimary)
-
 	return &TargetStep{
-		BaseStep:       wizard.NewBaseStepWithDisplayTitle(StepIDTarget, "target", "", ""),
-		st:             st,
-		hooks:          hooks,
-		phase:          targetLoading,
-		loadingSpinner: sp,
+		BaseStep: wizard.NewBaseStepWithDisplayTitle(StepIDTarget, "target", "", ""),
+		st:       st,
+		hooks:    hooks,
+		phase:    targetLoading,
 	}
 }
 
-// DisplayTitle names the screen for the chosen op; computed at render
-// time because the step is constructed before the op screen runs.
+// Animating reports whether the node-fetch indicator needs frame ticks.
+func (s *TargetStep) Animating() bool {
+	return s.phase == targetLoading
+}
+
+// DisplayTitle names the screen for the chosen op; computed at render time
+// because the step is constructed before the op screen runs — kept short so
+// it still fits beside the six-stage trail at 80 columns.
 func (s *TargetStep) DisplayTitle() string {
 	if s.st.Op == node.OpRemove {
-		return "which worker should be removed?"
+		return "worker to remove"
 	}
-	return "which nodes should be resized?"
+	return "nodes to resize"
 }
 
 // ShouldShow hides the step for add (workers only) and on resume.
@@ -85,26 +108,44 @@ func (s *TargetStep) ShouldShow(_ *config.Config) bool {
 	return (s.st.Op == node.OpResize || s.st.Op == node.OpRemove) && !s.st.Resume
 }
 
-// Init kicks off the live node fetch and the loading spinner.
+// Init kicks off the live node fetch, reusing an already-loaded list on
+// re-entry instead of re-issuing the request; a failed attempt is never
+// cached and retries automatically. The shared frame clock animates the
+// loading indicator while Animating reports true.
 func (s *TargetStep) Init() tea.Cmd {
-	s.phase = targetLoading
-	s.loadErr = nil
-	ctx := s.Context()
-	fetch := func() tea.Msg {
-		if s.hooks.ListNodes == nil {
-			return nodesLoadedMsg{}
-		}
-		nodes, err := s.hooks.ListNodes(ctx)
-		return nodesLoadedMsg{nodes: nodes, err: err}
+	if s.phase == targetPicking && s.loadErr == nil {
+		return nil
 	}
-	return tea.Batch(s.loadingSpinner.Tick, fetch)
+	return s.startFetch()
 }
 
-// Update handles node-list arrival, spinner ticks, selector navigation,
-// and enter to confirm.
+// startFetch resets the step into the loading phase and issues a
+// generation-tagged node-list fetch over a snapshotted hook, so the
+// returned tea.Cmd never touches s once it is handed to bubbletea.
+func (s *TargetStep) startFetch() tea.Cmd {
+	s.phase = targetLoading
+	s.loadErr = nil
+	s.generation++
+	generation := s.generation
+	listNodes := s.hooks.ListNodes
+	ctx := s.Context()
+	return func() tea.Msg {
+		if listNodes == nil {
+			return nodesLoadedMsg{generation: generation}
+		}
+		nodes, err := listNodes(ctx)
+		return nodesLoadedMsg{generation: generation, nodes: nodes, err: err}
+	}
+}
+
+// Update handles node-list arrival, shared-clock frames, selector
+// navigation, and enter to confirm.
 func (s *TargetStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	switch msg := msg.(type) {
 	case nodesLoadedMsg:
+		if msg.generation != s.generation {
+			return s, nil
+		}
 		s.phase = targetPicking
 		s.loadErr = msg.err
 		if msg.err == nil {
@@ -113,19 +154,22 @@ func (s *TargetStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		}
 		return s, nil
 
-	case spinner.TickMsg:
-		if s.phase == targetLoading {
-			var cmd tea.Cmd
-			s.loadingSpinner, cmd = s.loadingSpinner.Update(msg)
-			return s, cmd
-		}
+	case wizard.FrameMsg:
+		s.frame = msg.Frame
 
 	case tea.KeyPressMsg:
-		if msg.String() == "r" && s.phase != targetLoading {
-			cmd := s.Init()
+		if s.phase != targetPicking {
+			return s, nil
+		}
+		// 'r' forces a refresh of the loaded node list; footer-silent like
+		// the vim scroll vocabulary (model_navigation.go's
+		// handleVimScrollKey) — Init() otherwise reuses a prior successful
+		// fetch on re-entry.
+		if msg.String() == "r" {
+			cmd := s.startFetch()
 			return s, cmd
 		}
-		if s.phase != targetPicking || s.loadErr != nil || s.selector == nil || len(s.choices) == 0 {
+		if s.loadErr != nil || s.selector == nil || len(s.choices) == 0 {
 			return s, nil
 		}
 		if msg.Code == tea.KeyEnter {
@@ -145,23 +189,30 @@ func (s *TargetStep) buildChoices(nodes []cluster.NodeDetail) {
 	sortByIndex(workers, s.st.Op == node.OpRemove)
 
 	s.choices = nil
+	s.header = ""
 	s.blocked = nil
+	s.dropdownAbove = 0
 	var opts []components.Option
+	var dropdownHeader string
 
 	if s.st.Op == node.OpRemove {
 		if len(workers) > 0 {
 			top := workers[0]
+			rest := workers[1:]
+			blockedAfter := make(map[string]string, len(rest))
+			for i := range rest {
+				blockedAfter[rest[i].Name] = top.Name
+			}
+			header, rows := nodeTable(workers, blockedAfter)
+			s.header = header
+
 			s.choices = append(s.choices, targetChoice{node: top.Name})
 			opts = append(opts, components.Option{
 				ID:    top.Name,
-				Title: nodeLine(&top),
+				Title: rows[0],
 			})
-			after := []string{top.Name}
-			for i := 1; i < len(workers); i++ {
-				w := &workers[i]
-				s.blocked = append(s.blocked,
-					fmt.Sprintf("%s %s      removable only after %s (top-down)", tui.IconPending, w.Name, strings.Join(after, ", ")))
-				after = append(after, w.Name)
+			for i := range workers[1:] {
+				s.blocked = append(s.blocked, tui.IconSkip+" "+rows[i+1])
 			}
 		}
 	} else {
@@ -172,6 +223,7 @@ func (s *TargetStep) buildChoices(nodes []cluster.NodeDetail) {
 				Title:       fmt.Sprintf("masters — all %d control-plane nodes", len(masters)),
 				Description: "rolled one at a time; etcd-gated before and after every node",
 			})
+			s.dropdownAbove++
 		}
 		if len(workers) > 0 {
 			s.choices = append(s.choices, targetChoice{role: nodetypes.RoleWorker})
@@ -180,28 +232,51 @@ func (s *TargetStep) buildChoices(nodes []cluster.NodeDetail) {
 				Title:       fmt.Sprintf("workers — all %d worker nodes", len(workers)),
 				Description: "rolled one at a time; no etcd gate",
 			})
+			s.dropdownAbove++
 		}
-		allNodes := slices.Concat(masters, workers)
+		allNodes := make([]cluster.NodeDetail, 0, len(masters)+len(workers))
+		allNodes = append(allNodes, masters...)
+		allNodes = append(allNodes, workers...)
+		header, rows := nodeTable(allNodes, nil)
+		dropdownHeader = header
 		for i := range allNodes {
-			n := &allNodes[i]
-			s.choices = append(s.choices, targetChoice{node: n.Name})
+			s.choices = append(s.choices, targetChoice{node: allNodes[i].Name})
 			opts = append(opts, components.Option{
-				ID:         n.Name,
-				Title:      nodeLine(n),
+				ID:         allNodes[i].Name,
+				Title:      rows[i],
 				InDropdown: true,
 			})
 		}
 	}
 
 	s.selector = components.NewSelector(opts)
+	s.selector.DropdownHeader = dropdownHeader
 }
 
-func nodeLine(n *cluster.NodeDetail) string {
-	ready := "ready"
-	if !n.Ready {
-		ready = "notready"
+// nodeTable renders nodes as an aligned NODE/ROLE/READY table, pre-styling
+// each READY cell as ready, notready, or blocked-after via blockedAfter.
+func nodeTable(nodes []cluster.NodeDetail, blockedAfter map[string]string) (header string, rows []string) {
+	readyStyle := lipgloss.NewStyle().Foreground(tui.ColorSuccess())
+	notReadyStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning())
+	blockedStyle := lipgloss.NewStyle().Foreground(tui.ColorSubtle())
+
+	data := make([][]string, len(nodes))
+	for i := range nodes {
+		n := &nodes[i]
+		var ready string
+		switch {
+		case blockedAfter[n.Name] != "":
+			ready = blockedStyle.Render(fmt.Sprintf("blocked until %s is removed", blockedAfter[n.Name]))
+		case n.Ready:
+			ready = readyStyle.Render(tui.IconSuccess + " ready")
+		default:
+			ready = notReadyStyle.Render("notready")
+		}
+		data[i] = []string{n.Name, string(n.Role), ready}
 	}
-	return fmt.Sprintf("%-22s %-8s %s", n.Name, n.Role, ready)
+
+	lines := tui.Table([]string{"NODE", "ROLE", "READY"}, data, tui.TableOptions{})
+	return lines[0], lines[1:]
 }
 
 func filterRole(nodes []cluster.NodeDetail, role nodetypes.NodeRole) []cluster.NodeDetail {
@@ -217,51 +292,79 @@ func filterRole(nodes []cluster.NodeDetail, role nodetypes.NodeRole) []cluster.N
 // sortByIndex orders by terraform index (desc for remove's top-down list);
 // unindexed nodes sort last.
 func sortByIndex(nodes []cluster.NodeDetail, descending bool) {
-	slices.SortStableFunc(nodes, func(left, right cluster.NodeDetail) int {
-		a, aok := cluster.NodeIndex(left.Name)
-		b, bok := cluster.NodeIndex(right.Name)
-		if aok != bok {
-			if aok {
-				return -1
-			}
-			return 1
-		}
-		if !aok {
-			return 0
+	sort.SliceStable(nodes, func(i, j int) bool {
+		a, aok := cluster.NodeIndex(nodes[i].Name)
+		b, bok := cluster.NodeIndex(nodes[j].Name)
+		if !aok || !bok {
+			return aok
 		}
 		if descending {
-			return cmp.Compare(b, a)
+			return a > b
 		}
-		return cmp.Compare(a, b)
+		return a < b
 	})
 }
 
 // View renders the spinner, a load error, or the target selector plus any
 // blocked-worker lines.
 func (s *TargetStep) View(width, height int) string {
-	s.SetSize(width, height)
+	s.BaseStep.SetSize(width, height)
 
 	if s.phase == targetLoading {
-		return s.loadingSpinner.View() + " listing cluster nodes..."
+		return wizard.Spinner(s.frame) + " listing cluster nodes..."
 	}
 	if s.loadErr != nil {
-		warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
-		hintStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim).Italic(true)
-		return warnStyle.Render("list nodes: "+s.loadErr.Error()) + "\n\n" +
+		warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning())
+		hintStyle := lipgloss.NewStyle().Foreground(tui.ColorTextFaint()).Italic(true)
+		return warnStyle.Render("list nodes: "+tui.SanitizeTerminalEscapes(s.loadErr.Error())) + "\n\n" +
 			hintStyle.Render("r to retry · esc to go back")
 	}
 	if s.selector == nil || len(s.choices) == 0 {
-		return lipgloss.NewStyle().Foreground(tui.ColorWarning).Render("no eligible nodes found · r to retry")
+		return lipgloss.NewStyle().Foreground(tui.ColorWarning()).Render("no eligible nodes found · r to retry")
 	}
 
+	s.applyDropdownBudget()
+
 	out := s.selector.View()
+	if s.header != "" {
+		out = "  " + s.header + "\n" + out
+	}
 	if len(s.blocked) > 0 {
-		dim := lipgloss.NewStyle().Foreground(tui.ColorBorder)
+		dim := lipgloss.NewStyle().Foreground(tui.ColorSubtle())
 		for _, line := range s.blocked {
 			out += "\n" + dim.Render(line)
 		}
 	}
 	return out
+}
+
+// applyDropdownBudget sizes the selector's dropdown window to fit the step's
+// real content height around its own chrome: the masters/workers rows above
+// the dropdown, the remove header/blocked lines outside it, and the
+// dropdown box's own border and header rows. Node rows carry no
+// description, so N shown items cost 2N-1 lines (a connector between every
+// consecutive pair); the budget is solved for the largest N that still fits.
+func (s *TargetStep) applyDropdownBudget() {
+	above := s.dropdownAbove * 2 // title + description per row
+	if s.dropdownAbove > 1 {
+		above += s.dropdownAbove - 1 // a connector line between consecutive rows
+	}
+	// outer is always 0 today: header/blocked are only ever set for
+	// OpRemove, which has no dropdown at all (getDropdownBounds finds
+	// nothing InDropdown), so this call is a harmless no-op on that path.
+	// Charged anyway so a future change that adds a header or blocked
+	// rows to the resize path doesn't silently under-budget the dropdown.
+	outer := len(s.blocked)
+	if s.header != "" {
+		outer++
+	}
+	dropdownChrome := 2 // top + bottom border
+	if s.selector.DropdownHeader != "" {
+		dropdownChrome++
+	}
+
+	avail := s.contentHeight - above - outer - dropdownChrome
+	s.selector.SetDropdownBudget((avail + 1) / 2)
 }
 
 // Apply writes the selected target into the shared state.
@@ -291,10 +394,13 @@ func (s *TargetStep) SetFocused(focused bool) {
 	}
 }
 
-// ShortHelp returns the step's help bar, or nil while loading.
+// ShortHelp returns the step's help bar, back/quit only while loading.
 func (s *TargetStep) ShortHelp() []wizard.KeyBinding {
 	if s.phase == targetLoading {
-		return nil
+		return []wizard.KeyBinding{
+			{Key: wizard.HelpEsc, Help: wizard.HelpBack},
+			{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
+		}
 	}
 	return []wizard.KeyBinding{
 		{Key: "↑↓", Help: "select"},
@@ -302,6 +408,16 @@ func (s *TargetStep) ShortHelp() []wizard.KeyBinding {
 		{Key: wizard.HelpEsc, Help: wizard.HelpBack},
 		{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
 	}
+}
+
+// OverlayHelp lists the footer-silent "r" refresh for the "?" overlay, once
+// the node list has settled — success or error alike, since 'r' re-issues
+// the fetch either way (Update's targetPicking branch).
+func (s *TargetStep) OverlayHelp() []wizard.KeyBinding {
+	if s.phase != targetPicking {
+		return nil
+	}
+	return []wizard.KeyBinding{{Key: "r", Help: "refresh"}}
 }
 
 // FocusBounds keeps the selected node or role visible.

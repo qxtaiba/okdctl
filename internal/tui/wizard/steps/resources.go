@@ -2,6 +2,8 @@ package steps
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 
 	"charm.land/lipgloss/v2"
 
@@ -10,68 +12,23 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
+// pairKeyControlPlaneResources and pairKeyWorkerResources group each
+// role's three resource fields into one 3-up row.
+const (
+	pairKeyControlPlaneResources = "cp_resources"
+	pairKeyWorkerResources       = "worker_resources"
+)
+
 // ResourcesStepState pairs the resources step with the Config it edits, so
 // callers can inspect values after the wizard completes.
 type ResourcesStepState struct {
-	Step *wizard.DataDrivenStep
-	Cfg  *config.Config
+	Step     *wizard.DataDrivenStep
+	Cfg      *config.Config
+	Capacity *WizardCapacitySnapshot
 }
 
 // IsWizardStepState marks ResourcesStepState as a valid wizard.StepState.
 func (s *ResourcesStepState) IsWizardStepState() {}
-
-// nodeResourceRole bundles what differs between the control-plane and
-// workers field blocks below (key prefix, defaults/help text, and which
-// NodeConfig a field writes/reads); node must return a pointer into cfg's
-// Topology so ConfigSet mutates the caller's Config in place.
-type nodeResourceRole struct {
-	prefix                string
-	vcpuDefault, vcpuHelp string
-	memDefault, memHelp   string
-	diskHelp              string
-	node                  func(cfg *config.Config) *config.NodeConfig
-}
-
-// nodeResourceFields declares the vcpus/memory/os-disk fields for one
-// topology role. Bootstrap disk is intentionally not seeded by the disk
-// field here: it always mirrors control-plane disk, resolved once at point
-// of use by config.Effective/NormalizeTopology — writing it here too would
-// materialize a value that later desyncs when control-plane disk changes
-// outside the wizard (e.g. 'okdctl node resize') without this field running again.
-func nodeResourceFields(role *nodeResourceRole) []wizard.FieldDefinition {
-	return []wizard.FieldDefinition{
-		{
-			Key:       role.prefix + "_vcpus",
-			Label:     "vcpus",
-			Default:   role.vcpuDefault,
-			Help:      role.vcpuHelp,
-			Required:  true,
-			Validate:  config.ValidateCPU,
-			ConfigSet: wizard.SetInt(func(c *config.Config, v int) { role.node(c).CPU = v }),
-			ConfigGet: wizard.GetInt(func(c *config.Config) int { return role.node(c).CPU }),
-		},
-		{
-			Key:       role.prefix + "_memory",
-			Label:     "memory (mb)",
-			Default:   role.memDefault,
-			Help:      role.memHelp,
-			Required:  true,
-			Validate:  config.ValidateMemory,
-			ConfigSet: wizard.SetInt(func(c *config.Config, v int) { role.node(c).MemoryMB = v }),
-			ConfigGet: wizard.GetInt(func(c *config.Config) int { return role.node(c).MemoryMB }),
-		},
-		{
-			Key:       role.prefix + "_disk",
-			Label:     "os disk (gb)",
-			Default:   "50",
-			Help:      role.diskHelp,
-			Required:  true,
-			Validate:  config.ValidateOSDisk,
-			ConfigSet: wizard.SetInt(func(c *config.Config, v int) { role.node(c).DiskGB = v }),
-			ConfigGet: wizard.GetInt(func(c *config.Config) int { return role.node(c).DiskGB }),
-		},
-	}
-}
 
 // ResourcesStepDefinition declares the node-resources step fields.
 var ResourcesStepDefinition = wizard.StepDefinition{
@@ -82,23 +39,92 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 	Sections: []wizard.SectionDefinition{
 		{
 			Title: roleLabelControlPlane,
-			Fields: nodeResourceFields(&nodeResourceRole{
-				prefix:      "cp",
-				vcpuDefault: "4", vcpuHelp: "okd minimum: 4 vcpus",
-				memDefault: "12288", memHelp: "okd minimum: 8192 mb (8 gb)",
-				diskHelp: "boot disk for control plane nodes (okd minimum: 50 gb)",
-				node:     func(cfg *config.Config) *config.NodeConfig { return &cfg.Topology.ControlPlane },
-			}),
+			Fields: []wizard.FieldDefinition{
+				{
+					Key:       "cp_vcpus",
+					Label:     "vcpus",
+					Default:   "4",
+					Help:      "okd minimum: 4 vcpus",
+					Width:     wizard.FieldWidthNumber,
+					Required:  true,
+					PairKey:   pairKeyControlPlaneResources,
+					Validate:  config.ValidateCPU,
+					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.ControlPlane.CPU = v }),
+					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.ControlPlane.CPU }),
+				},
+				{
+					Key:       "cp_memory",
+					Label:     "memory (mb)",
+					Default:   "12288",
+					Help:      "okd minimum: 8192 mb (8 gb)",
+					Width:     wizard.FieldWidthNumber,
+					Required:  true,
+					PairKey:   pairKeyControlPlaneResources,
+					Validate:  config.ValidateMemory,
+					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.ControlPlane.MemoryMB = v }),
+					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.ControlPlane.MemoryMB }),
+				},
+				{
+					Key:      "cp_disk",
+					Label:    "os disk (gb)",
+					Default:  "50",
+					Help:     "boot disk for control plane nodes (okd minimum: 50 gb)",
+					Width:    wizard.FieldWidthNumber,
+					Required: true,
+					PairKey:  "cp_resources",
+					Validate: config.ValidateOSDisk,
+					// Bootstrap disk intentionally not seeded here: it always
+					// mirrors control-plane disk, resolved once at point of
+					// use by config.Effective/NormalizeTopology — writing it
+					// here too would materialize a value that later desyncs
+					// when control-plane disk changes outside the wizard
+					// (e.g. 'okdctl node resize') without this field running
+					// again.
+					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.ControlPlane.DiskGB = v }),
+					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.ControlPlane.DiskGB }),
+				},
+			},
 		},
 		{
 			Title: roleLabelWorkers,
-			Fields: nodeResourceFields(&nodeResourceRole{
-				prefix:      "worker",
-				vcpuDefault: "8", vcpuHelp: "recommended: 4-16 vcpus",
-				memDefault: "20480", memHelp: "recommended: 8192-65536 mb",
-				diskHelp: "boot disk for worker nodes (okd minimum: 50 gb)",
-				node:     func(cfg *config.Config) *config.NodeConfig { return &cfg.Topology.Workers },
-			}),
+			Fields: []wizard.FieldDefinition{
+				{
+					Key:       "worker_vcpus",
+					Label:     "vcpus",
+					Default:   "8",
+					Help:      "okd minimum: 2 vcpus",
+					Width:     wizard.FieldWidthNumber,
+					Required:  true,
+					PairKey:   pairKeyWorkerResources,
+					Validate:  config.ValidateCPU,
+					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.Workers.CPU = v }),
+					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.Workers.CPU }),
+				},
+				{
+					Key:       "worker_memory",
+					Label:     "memory (mb)",
+					Default:   "20480",
+					Help:      "okd minimum: 8192 mb (8 gb)",
+					Width:     wizard.FieldWidthNumber,
+					Required:  true,
+					PairKey:   pairKeyWorkerResources,
+					Validate:  config.ValidateMemory,
+					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.Workers.MemoryMB = v }),
+					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.Workers.MemoryMB }),
+				},
+				{
+					Key:       "worker_disk",
+					Label:     "os disk (gb)",
+					Default:   "50",
+					Help:      "boot disk for worker nodes (okd minimum: 50 gb)",
+					Width:     wizard.FieldWidthNumber,
+					Required:  true,
+					PairKey:   pairKeyWorkerResources,
+					Validate:  config.ValidateOSDisk,
+					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.Workers.DiskGB = v }),
+					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.Workers.DiskGB }),
+				},
+			},
 		},
 		{
 			Title: fieldDataStorage,
@@ -108,7 +134,9 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					Label:     "worker data disk (gb)",
 					Default:   "500",
 					Help:      "data disk per worker for ceph/storage — set to 0 to disable",
+					Width:     wizard.FieldWidthNumber,
 					Required:  true,
+					PairKey:   "data_disks",
 					Validate:  config.ValidateDataDisk,
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Disks.WorkerDataSizeGB = v }),
 					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Disks.WorkerDataSizeGB }),
@@ -118,7 +146,9 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					Label:     "control plane data disk (gb)",
 					Default:   "0",
 					Help:      "data disk per control plane node for ceph/storage — set to 0 to disable",
+					Width:     wizard.FieldWidthNumber,
 					Required:  true,
+					PairKey:   "data_disks",
 					Validate:  config.ValidateDataDisk,
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Disks.ControlPlaneDataSizeGB = v }),
 					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Disks.ControlPlaneDataSizeGB }),
@@ -129,76 +159,65 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 }
 
 // NewResourcesStep returns the resources wizard step and its state.
-func NewResourcesStep() (*wizard.DataDrivenStep, *ResourcesStepState) {
+func NewResourcesStep(capacity *WizardCapacitySnapshot) (*wizard.DataDrivenStep, *ResourcesStepState) {
 	step := wizard.NewDataDrivenStep(&ResourcesStepDefinition)
 
 	state := &ResourcesStepState{
-		Step: step,
+		Step:     step,
+		Capacity: capacity,
 	}
-
-	step.WithExtraContentFunc(func(s *wizard.DataDrivenStep, width int) string {
-		return renderResourceSummary(s, state, width)
+	step.WithPinnedFooterFunc(func(s *wizard.DataDrivenStep, width int) string {
+		return renderResourceFooter(s, state, width)
 	})
 
 	return step, state
 }
 
-var resourceSummaryStyles = struct {
-	wrapper lipgloss.Style
-	title   lipgloss.Style
-	value   lipgloss.Style
-	sep     string
-}{
-	wrapper: lipgloss.NewStyle().Padding(1, 2),
-	title:   lipgloss.NewStyle().Foreground(tui.ColorTextDim).Bold(true),
-	value:   lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true),
-	sep:     lipgloss.NewStyle().Foreground(tui.ColorBorder).Render("  ·  "),
+// resourceSummaryStyles builds the totals line's styles fresh per render —
+// an eager package var would freeze its brand and separator tiers at their
+// init-time polarity.
+func resourceSummaryStyles() (value lipgloss.Style, sep string) {
+	return lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true),
+		lipgloss.NewStyle().Foreground(tui.ColorSubtle()).Render("  ·  ")
 }
 
-func renderResourceSummary(step *wizard.DataDrivenStep, state *ResourcesStepState, width int) string {
-	cpCount := 3
-	workerCount := 3
-	if state.Cfg != nil {
-		cpCount = state.Cfg.Topology.ControlPlane.Count
-		workerCount = state.Cfg.Topology.Workers.Count
+func renderResourceFooter(step *wizard.DataDrivenStep, state *ResourcesStepState, width int) string {
+	cfg := state.Cfg
+	if cfg == nil {
+		cfg = config.DefaultConfig()
 	}
-
-	cpCPU := step.ValueInt("cp_vcpus", 4)
-	cpMem := step.ValueInt("cp_memory", 12288)
-	cpDisk := step.ValueInt("cp_disk", 50)
-	workerCPU := step.ValueInt("worker_vcpus", 8)
-	workerMem := step.ValueInt("worker_memory", 20480)
-	workerDisk := step.ValueInt("worker_disk", 50)
-	workerDataDisk := step.ValueInt("worker_data_disk", 500)
-	cpDataDisk := step.ValueInt("cp_data_disk", 0)
-
-	totalCPU := (cpCPU * cpCount) + (workerCPU * workerCount)
-	totalMem := (cpMem * cpCount) + (workerMem * workerCount)
-	totalOSDisk := (cpDisk * cpCount) + (workerDisk * workerCount)
-	totalDataDisk := (workerDataDisk * workerCount) + (cpDataDisk * cpCount)
-
-	boxContentWidth := max(width-8, 30)
-
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(tui.ColorBorder).
-		Padding(0, 1).
-		Width(boxContentWidth)
-
-	sep := resourceSummaryStyles.sep
-
-	var storageStr string
-	if totalDataDisk >= 1000 {
-		storageStr = fmt.Sprintf("%.1f tb storage", float64(totalDataDisk)/1000)
-	} else {
-		storageStr = fmt.Sprintf("%d gb storage", totalDataDisk)
+	keys := []string{"cp_vcpus", "cp_memory", "cp_disk", "worker_vcpus", "worker_memory", "worker_disk", "worker_data_disk", "cp_data_disk"}
+	values := make(map[string]int, len(keys))
+	for _, key := range keys {
+		value, err := strconv.Atoi(step.Value(key))
+		if err != nil {
+			return tui.Truncate("resource totals pending · enter valid values", width)
+		}
+		values[key] = value
 	}
-
-	summary := resourceSummaryStyles.title.Render("total resources required") + "\n\n" +
-		resourceSummaryStyles.value.Render(fmt.Sprintf("%d vcpus", totalCPU)) + sep +
-		resourceSummaryStyles.value.Render(fmt.Sprintf("%d gb ram", totalMem/1024)) + sep +
-		resourceSummaryStyles.value.Render(fmt.Sprintf("%d gb os", totalOSDisk)) + sep +
-		resourceSummaryStyles.value.Render(storageStr)
-
-	return resourceSummaryStyles.wrapper.Render(boxStyle.Render(summary))
+	in := EffectiveResourceInputsFromConfig(cfg)
+	in.ControlPlaneCPU, in.ControlPlaneMemoryMB, in.ControlPlaneDiskGB = values["cp_vcpus"], values["cp_memory"], values["cp_disk"]
+	in.WorkerCPU, in.WorkerMemoryMB, in.WorkerDiskGB = values["worker_vcpus"], values["worker_memory"], values["worker_disk"]
+	in.WorkerDataDiskGB, in.ControlPlaneDataDiskGB = values["worker_data_disk"], values["cp_data_disk"]
+	// The bootstrap VM runs alongside the control plane during installation;
+	// ComputeEffectiveResourceTotals falls back to control-plane sizing when
+	// cfg carries no explicit bootstrap cpu/memory of its own.
+	totals := ComputeEffectiveResourceTotals(&in)
+	totalCPU, totalMemoryMB, totalDiskGB := totals.CPU, totals.MemoryMB, totals.OSDiskGB+totals.DataDiskGB
+	label := fmt.Sprintf("%d vcpu · %d gb ram · %d gb disk", totalCPU, totalMemoryMB/1024, totalDiskGB)
+	capacity := state.Capacity.OnlineTotals()
+	over := (capacity.CPUsKnown && totalCPU > capacity.CPUs) ||
+		(capacity.MemoryKnown && totalMemoryMB > capacity.MemoryGB*1024)
+	if over {
+		label += fmt.Sprintf(" · exceeds online capacity (%dc/%dg)", capacity.CPUs, capacity.MemoryGB)
+	}
+	label = tui.Truncate(label, width)
+	value, _ := resourceSummaryStyles()
+	if over {
+		return lipgloss.NewStyle().Foreground(tui.ColorWarning()).Bold(true).Render(label)
+	}
+	if state.Capacity != nil && state.Capacity.discovery != nil && (!capacity.CPUsKnown || !capacity.MemoryKnown) {
+		label = tui.Truncate(label+" · online capacity unknown", width)
+	}
+	return value.Render(strings.TrimSpace(label))
 }

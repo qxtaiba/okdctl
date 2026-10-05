@@ -1,0 +1,48 @@
+                                                                                                                                                                                    
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L                                                                                                                                                                  │  
+  │ operation parameters                                                                                                                op · target · params · plan · run · done │  
+  │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
+  │                                                                                                        │  PROGRESS                                                           │  
+  │    ● disruption                                                                                        │  ✓ operation                                                        │  
+  │                                                                                                        │  ✓ target                                                           │  
+  │    drain mode                                                                                          │  ● parameters                                                       │  
+  │    ╭────────────────────────────────────────╮                                                          │  ○ plan preview                                                     │  
+  │    │ ◂ skip drain — restart pods in place ▸ │                                                          │                                                                     │  
+  │    ╰────────────────────────────────────────╯                                                          │  CONFIGURED                                                         │  
+  │    how pods leave the node                                                                             │  operation: remove                                                  │  
+  │                                                                                                        │                                                                     │  
+  │    drain timeout                                                                                       │                                                                     │  
+  │    ╭──────────────────────────────────────╮                                                            │                                                                     │  
+  │    │ 10m                                  │                                                            │                                                                     │  
+  │    ╰──────────────────────────────────────╯                                                            │                                                                     │  
+  │    ignored — skip-drain selected                                                                       │                                                                     │  
+  │                                                                                                        │                                                                     │  
+  │    force storage                                                                                       │                                                                     │  
+  │    ╭────────────────╮                                                                                  │                                                                     │  
+  │    │ ● no  ○ yes    │ default                                                                          │                                                                     │  
+  │    ╰────────────────╯                                                                                  │                                                                     │  
+  │                                                                                                        │                                                                     │  
+  │    ⚠ skip-drain: the node is destroyed without evacuating pods —                                       │                                                                     │  
+  │      they die with the vm and reschedule onto the remaining nodes.                                     │                                                                     │  
+  │      use when a memory-saturated cluster cannot reschedule evictions.                                  │                                                                     │  
+  │      the ceph health gate still runs.                                                                  │                                                                     │  
+  │                                                                                                        │                                                                     │  
+  │                                                                                                        │                                                                     │  
+  │                                                                                                        │                                                                     │  
+  │                                                                                                        │                                                                     │  
+  │                                                                                                        │                                                                     │  
+  │                                                                                                        │                                                                     │  
+  │                                                                                                        │                                                                     │  
+  │                                                                                                        │                                                                     │  
+  │                                                                                                        │                                                                     │  
+  │                                                                                                        │                                                                     │  
+  │                                                                                                        │                                                                     │  
+  │                                                                                                        │                                                                     │  
+  │                                                                                                        │                                                                     │  
+  │                                                                                                        │                                                                     │  
+  │                                                                                                                                                                              │  
+  │─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
+  │  ↑↓/tab navigate • ← → change value • enter continue • esc back • ctrl+c quit • ? help                                                                                       │  
+  ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
+                                                                                                                                                                                    

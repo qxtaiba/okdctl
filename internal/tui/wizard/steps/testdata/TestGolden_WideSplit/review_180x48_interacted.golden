@@ -1,0 +1,48 @@
+                                                                                                                                                                                    
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L                                                                                                                                                                  │  
+  │ review your configuration                                                                                                                connect · cluster · extras · review │  
+  │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
+  │  bootstrap node  pve                                                                                   │  PREFLIGHT · 1 passed · 0 warnings · 2 failed · 0 not checked       │  
+  │  bridge          vmbr0                                                                                 │  ✗ pull secret · not configured                                     │  
+  │  storage         local-lvm                                                                             │  ✗ ssh public key · not configured                                  │  
+  │  iso storage     local                                                                                 │  ✓ CIDR ranges · no overlap · 192.168.1.0/24 · 10.128.0.0/14 ·      │  
+  │                                                                                                        │    172.30.0.0/16                                                    │  
+  │  [3] networking                                                                                        │                                                                     │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  CONFIG CHANGES                                                     │  
+  │  machine cidr     192.168.1.0/24                                                                       │  new configuration                                                  │  
+  │  gateway          192.168.1.1                                                                          │                                                                     │  
+  │  upstream dns     192.168.1.1                                                                          │  DEPLOY PLAN                                                        │  
+  │  bastion          192.168.1.20                                                                         │  role      vms vcpu   ram os disk                                   │  
+  │  api vip          192.168.1.10 (auto)                                                                  │  bootstrap   1    4  8 gb   50 gb                                   │  
+  │  host prefix      23                                                                                   │  masters     3    4 12 gb   50 gb                                   │  
+  │  pod cidr         10.128.0.0/14                                                                        │  workers     3    8 20 gb   50 gb                                   │  
+  │  service cidr     172.30.0.0/16                                                                        │                                                                     │  
+  │  static ip start  192.168.1.140                                                                        │  WRITES                                                             │  
+  │  interface        ens18                                                                                │  okdctl.yaml                                                        │  
+  │  netmask          255.255.255.0 (from cidr)                                                            │                                                                     │  
+  │  vm dns           192.168.1.20 (bastion/dnsmasq)                                                       │  HEADLESS                                                           │  
+  │                                                                                                        │  okdctl deploy --config 'okdctl.yaml' --yes --confirm-cluster       │  
+  │  [4] compute                                                                                           │  'mycluster'                                                        │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │                                                                     │  
+  │  control plane     3 × (4 vcpu, 12 GB RAM, 50 GB os disk)                                              │  p preview install-config.yaml                                      │  
+  │  workers           3 × (8 vcpu, 20 GB RAM, 50 GB os disk)                                              │                                                                     │  
+  │  worker data disk  500 gb per worker (1500 gb total)                                                   │                                                                     │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │                                                                     │  
+  │  total             40 vcpu, 104 gb ram, 1850 gb disk                                                   │                                                                     │  
+  │                                                                                                        │                                                                     │  
+  │  [5] files & ignition                                                                                  │                                                                     │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │                                                                     │  
+  │  ignition server  https://192.168.1.20                                                                 │                                                                     │  
+  │  web root         /var/www/html                                                                        │                                                                     │  
+  │                                                                                                        │                                                                     │  
+  │  [6] advanced                                                                                          │                                                                     │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │                                                                     │  
+  │  vm id base             6000                                                                           │                                                                     │  
+  │  timeouts               bootstrap 60m, install 120m                                                    │                                                                     │  
+  │  terraform environment  production                                                                     │                                                                     │  
+  │                                                                                                                                                                              │  
+  │────────────────────────────────────────────────────────────── ↑ ↓  scroll up for more ────────────────────────────────────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
+  │  ○ deploy now   ● save and exit            p preview install config • ←/→ choose • enter confirm • esc back • 1-9 jump to section • pgup/pgdn scroll • ctrl+c quit • ? help  │  
+  ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
+                                                                                                                                                                                    

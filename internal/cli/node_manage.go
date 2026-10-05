@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -20,6 +21,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/tui/logview"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/lifecycle"
 	"github.com/qxtaiba/okdctl/internal/workspace"
@@ -50,7 +52,7 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 		return &errtypes.UsageError{Msg: "node manage needs a terminal; use 'okdctl node resize/add/remove' for automation"}
 	}
 
-	cfg, err := loadConfig(cfgFile)
+	cfg, err := lifecycleConfig()
 	if err != nil {
 		return err
 	}
@@ -59,32 +61,100 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 	// render beneath the AltScreen.
 	logutil.SetProgressBarsEnabled(false)
 
-	env, err := prepareNodeOpsEnv(ctx, cfg, true)
+	sess, err := newLifecycleSession(cmd, cfg)
 	if err != nil {
 		return err
 	}
-	defer env.close()
+	defer sess.close()
+
+	result, err := wizard.RunFlow(ctx, sess.steps, cfg, lifecycle.Chrome())
+	if err != nil {
+		return lifecycleRunFlowErr(err, sess.state)
+	}
+	return reportLifecycleOutcome(cmd, result, sess.state)
+}
+
+// lifecycleRunFlowErr maps a wizard.RunFlow failure — most commonly a
+// renderer/terminal crash — to the error runNodeManage returns: one that hit
+// mid-execution (started, not yet executed) must still surface the resume
+// marker, exactly like a graceful cancel, not read as a configuration
+// problem the operator would otherwise retry blind.
+func lifecycleRunFlowErr(err error, st *lifecycle.State) error {
+	if st.Started && !st.Executed {
+		return &errtypes.ClusterError{Msg: lifecycleInterruptedMsg, Err: err}
+	}
+	return (&errtypes.ConfigError{Msg: "lifecycle wizard failed", Err: err}).
+		WithHint("try again, or use 'okdctl node resize/add/remove' instead")
+}
+
+// lifecycleConfig resolves the config the Cluster Lifecycle flow runs against:
+// the static demo identity under OKDCTL_WIZARD_DEMO, whose cluster name matches
+// lifecycle.DemoHooks' fixture, or the saved configuration otherwise.
+func lifecycleConfig() (*config.Config, error) {
+	if os.Getenv(wizardDemoEnv) != "" {
+		return demoConfig(), nil
+	}
+	return loadConfig(cfgFile)
+}
+
+// lifecycleSession is an assembled Cluster Lifecycle flow: its steps, the state
+// they write into, and the teardown its environment needs.
+type lifecycleSession struct {
+	steps []wizard.WizardStep
+	state *lifecycle.State
+	// close zeroizes credentials and cancels the op context; it must run only
+	// after the wizard exits, since the hooks the steps call hold both.
+	close func()
+}
+
+// newLifecycleSession assembles the Cluster Lifecycle flow against cfg, driven
+// by the same hooks okdctl node manage builds — or lifecycle.DemoHooks' static
+// six-node fixture under OKDCTL_WIZARD_DEMO. Shared with the hero-hub's
+// manage-nodes verb, which swaps this flow in mid-session, so the two entry
+// points can never drift into different guards.
+func newLifecycleSession(cmd *cobra.Command, cfg *config.Config) (*lifecycleSession, error) {
+	if os.Getenv(wizardDemoEnv) != "" {
+		st := &lifecycle.State{Cfg: cfg}
+		return &lifecycleSession{
+			steps: lifecycle.NewSteps(st, lifecycle.DemoHooks(demoExecStepDelay)),
+			state: st,
+			close: func() {},
+		}, nil
+	}
+
+	ctx := cmd.Context()
+	env, err := prepareNodeOpsEnv(ctx, cfg, true)
+	if err != nil {
+		return nil, err
+	}
 
 	cl, err := clusterstatus.NewClient(env.projectRoot)
 	if err != nil {
-		return err
+		env.close()
+		return nil, err
 	}
 
 	marker, err := node.ReadOpMarker(workspace.WorkDir(env.projectRoot), cfg.Cluster.Name)
 	if err != nil {
-		return err
+		env.close()
+		return nil, err
 	}
 
 	// opCtx is cancelled by the execution screen's graceful-cancel path (first
 	// ctrl+c); the backend unwinds and leaves its resume marker.
 	opCtx, cancelOp := context.WithCancel(ctx)
-	defer cancelOp()
+
+	// The ring tees the human log stream into the exec screen's log surface
+	// on its way to the run log, so terraform applies, drains, and
+	// power-cycles stream onto the screen instead of running blind.
+	ring := logview.NewRing(logview.DefaultCap)
+	lg := ringSlog(ring)
 
 	st := &lifecycle.State{Cfg: cfg, Marker: marker}
 	hooks := lifecycle.Hooks{
 		ListNodes: func(visit context.Context) ([]cluster.NodeDetail, error) { return cl.ListNodes(visit) },
 		DryRun: func(visit context.Context, s *lifecycle.State) (*node.OpPlan, error) {
-			rc, err := env.newRunner(cmd, cfg, "manage", nodeConsent{dryRun: true}, fileOnlySlog(), subprocSink())
+			rc, err := env.newRunner(cmd, cfg, "manage", nodeConsent{dryRun: true}, lg, subprocSink())
 			if err != nil {
 				return nil, err
 			}
@@ -98,27 +168,22 @@ func runNodeManage(cmd *cobra.Command, _ []string) error {
 			return captured, nil
 		},
 		CancelOp: cancelOp,
+		Logs:     ring,
+		LogPath:  runLogPath,
+		Done:     opCtx.Done(),
 		Execute: func(s *lifecycle.State, events chan<- lifecycle.ExecEvent) error {
-			return executeLifecycleOp(opCtx, cmd, cfg, env, s, events)
+			return executeLifecycleOp(opCtx, cmd, cfg, env, s, events, lg)
 		},
 	}
 
-	// Swaps the context badge to the cluster name — the lifecycle flow operates
-	// an existing cluster, not a distribution choice.
-	chrome := wizard.FlowChrome{
-		Tagline: "okd over proxmox, the easy way",
-		Badge:   func(c *config.Config) string { return c.Cluster.Name },
-	}
-	result, err := wizard.RunFlow(ctx, lifecycle.NewSteps(st, hooks), cfg, chrome)
-	if err != nil {
-		// A tea failure mid-execution must still surface the resume marker, not
-		// read as a configuration problem.
-		if st.Started && !st.Executed {
-			return &errtypes.ClusterError{Msg: lifecycleInterruptedMsg, Err: err}
-		}
-		return &errtypes.ConfigError{Msg: "lifecycle wizard", Err: err}
-	}
-	return reportLifecycleOutcome(cmd, result, st)
+	return &lifecycleSession{
+		steps: lifecycle.NewSteps(st, hooks),
+		state: st,
+		close: func() {
+			cancelOp()
+			env.close()
+		},
+	}, nil
 }
 
 // reportLifecycleOutcome maps wizard terminal state to a truthful exit; an
@@ -131,7 +196,7 @@ func reportLifecycleOutcome(cmd *cobra.Command, result wizard.Result, st *lifecy
 	case st.Executed && st.Result != nil:
 		return st.Result
 	case st.Executed:
-		fmt.Fprint(cmd.OutOrStdout(), render.NodeOpComplete(st.Plan, st.Elapsed))
+		printLifecycleRecap(cmd, st)
 		return nil
 	case result.Outcome == wizard.OutcomeCancelled || !st.Proceed:
 		logutil.Info("no changes made")
@@ -141,11 +206,28 @@ func reportLifecycleOutcome(cmd *cobra.Command, result wizard.Result, st *lifecy
 	}
 }
 
+// printLifecycleRecap prints a short plain-text recap of the finished op:
+// the wizard's AltScreen already cleared the done card from scrollback on
+// exit, leaving no durable record of what happened, so this reprints a
+// one-line summary plus the operator's next-step commands (RULING —
+// reversing the earlier prints-nothing-on-success ruling; does NOT reprint
+// the box itself, that reversal was ruled in the refit and stands). Gated
+// on the caller: runNodeManage already refuses to start without a TTY, so
+// this print is TTY-gated transitively rather than re-checking here.
+func printLifecycleRecap(cmd *cobra.Command, st *lifecycle.State) {
+	if st.Plan == nil {
+		return
+	}
+	for _, line := range render.NodeOpRecapLines(st.Plan, st.Elapsed) {
+		fmt.Fprintln(cmd.OutOrStdout(), line)
+	}
+}
+
 // executeLifecycleOp runs the wizard-approved op inside the AltScreen;
 // ConfirmFunc only cross-checks the world still matches the plan already
 // approved on the preview screen.
-func executeLifecycleOp(opCtx context.Context, cmd *cobra.Command, cfg *config.Config, env *nodeOpsEnv, st *lifecycle.State, events chan<- lifecycle.ExecEvent) error {
-	rc, err := env.newRunner(cmd, cfg, "manage", nodeConsent{}, fileOnlySlog(), subprocSink())
+func executeLifecycleOp(opCtx context.Context, cmd *cobra.Command, cfg *config.Config, env *nodeOpsEnv, st *lifecycle.State, events chan<- lifecycle.ExecEvent, lg *slog.Logger) error {
+	rc, err := env.newRunner(cmd, cfg, "manage", nodeConsent{}, lg, subprocSink())
 	if err != nil {
 		return err
 	}
@@ -157,13 +239,13 @@ func executeLifecycleOp(opCtx context.Context, cmd *cobra.Command, cfg *config.C
 	}
 	rc.runner.Reporter = func(desc string) func() {
 		start := time.Now()
-		sendLifecycleEvent(opCtx, events, &lifecycle.ExecEvent{Desc: desc})
+		sendExecEvent(opCtx, events, &lifecycle.ExecEvent{Desc: desc})
 		return func() {
-			sendLifecycleEvent(opCtx, events, &lifecycle.ExecEvent{Desc: desc, Done: true, Took: time.Since(start)})
+			sendExecEvent(opCtx, events, &lifecycle.ExecEvent{Desc: desc, Done: true, Took: time.Since(start)})
 		}
 	}
 	rc.runner.OnStep = func(target string, step node.Step) {
-		sendLifecycleEvent(opCtx, events, &lifecycle.ExecEvent{Node: target, Step: step})
+		sendExecEvent(opCtx, events, &lifecycle.ExecEvent{Node: target, Step: step})
 	}
 	if err := runLifecycleOp(opCtx, rc, st); err != nil {
 		if errors.Is(err, node.ErrDeclined) {
@@ -183,17 +265,40 @@ func subprocSink() io.Writer {
 	return runLogSink
 }
 
-// fileOnlySlog writes only to the okdctl.log sink, never stderr, which the
-// AltScreen wizard owns during execution.
-func fileOnlySlog() *slog.Logger {
-	if runLogSink == nil {
-		return logutil.NopLogger
+// ringSlog tees the session's log stream into the exec screen's log ring on
+// its way to the okdctl.log sink, never stderr, which the AltScreen wizard
+// owns during execution; redaction wraps the tee, so the on-screen pane
+// only ever sees scrubbed records. The sink leg honors the configured
+// --log-level via tui.NewLogHandler rather than a hardcoded Info-only
+// handler, so a debug run sees debug lines in both the ring and the file;
+// the format is pinned to text (never logFormat) to match buildSinkLogger's
+// own persistent-sink policy — one physical okdctl.log must never mix text
+// and json lines depending on which writer last touched it.
+func ringSlog(ring *logview.Ring) *slog.Logger {
+	var next slog.Handler
+	if runLogSink != nil {
+		if handler, err := tui.NewLogHandler(effectiveLogLevel(), tui.FormatText, runLogSink); err == nil {
+			next = handler
+		}
 	}
-	handler, err := tui.NewLogHandler(effectiveLogLevel(), logFormat, runLogSink)
-	if err != nil {
-		return logutil.NopLogger
+	return slog.New(logutil.NewRedactHandler(ring.Handler(next)))
+}
+
+// sendExecEvent delivers ev, abandoning it only once the op's context is
+// gone AND the feed cannot accept it — a chatty unwind after a force-quit
+// must never strand the runner goroutine (holding the run lock and a
+// terraform subprocess) on a feed nobody drains. Delivery is biased: the
+// graceful cancel cancels this very context, and a uniform select would
+// drop events the exec screen is still draining.
+func sendExecEvent(ctx context.Context, events chan<- lifecycle.ExecEvent, ev *lifecycle.ExecEvent) {
+	select {
+	case events <- *ev:
+	default:
+		select {
+		case <-ctx.Done():
+		case events <- *ev:
+		}
 	}
-	return slog.New(handler)
 }
 
 // runLifecycleOp dispatches the wizard-collected op onto the runner, merging
@@ -229,9 +334,43 @@ func addOptsFromWizard(rc *nodeRunnerCtx, st *lifecycle.State) node.AddOptions {
 	return opts
 }
 
-func sendLifecycleEvent(ctx context.Context, events chan<- lifecycle.ExecEvent, event *lifecycle.ExecEvent) {
-	select {
-	case events <- *event:
-	case <-ctx.Done():
+// lifecycleSlot hands the manage-nodes session between the goroutine that
+// builds it and the main path that closes it, so whichever of the two arrives
+// second — a raced quit or the finished probe — owns the one close.
+type lifecycleSlot struct {
+	mu      sync.Mutex
+	session *lifecycleSession
+	taken   bool
+}
+
+// put registers sess as the session to close, or closes it immediately itself
+// when take has already run, reporting whether it was accepted.
+func (s *lifecycleSlot) put(sess *lifecycleSession) (accepted bool) {
+	s.mu.Lock()
+	if s.taken {
+		s.mu.Unlock()
+		// The main path has already looked and moved on, so no one else will
+		// ever close this. Closing it here, off the lock, is the only thing
+		// standing between a raced quit and live credentials on the heap.
+		sess.close()
+		return false
 	}
+	prev := s.session
+	s.session = sess
+	s.mu.Unlock()
+
+	// The flow prev backed was escaped out of; only one can be live at a time.
+	if prev != nil {
+		prev.close()
+	}
+	return true
+}
+
+// take closes the slot to further registrations and returns whatever session it
+// holds; every put after it closes its own session.
+func (s *lifecycleSlot) take() *lifecycleSession {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.taken = true
+	return s.session
 }

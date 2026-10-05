@@ -11,23 +11,29 @@ import (
 )
 
 // SelectField is a dropdown-style field that cycles options with left/right
-// keys, rendered in InputField's bordered box style.
+// keys, rendered in the shared field box.
 type SelectField struct {
-	Label   string
-	Help    string
-	Options []string
+	Label          string
+	Help           string
+	Note           string
+	Options        []string
+	displayOptions []string
 
-	selected  int
-	focused   bool
-	width     int
-	isDefault bool
+	selected   int
+	injected   int // index of the option SetValue injected for an off-list value, or -1
+	focused    bool
+	width      int
+	boxWidth   int
+	isDefault  bool
+	hasDefault bool // set by SetDefault, never cleared — see boxOuterWidth
 }
 
 // NewSelectField builds a SelectField with the given label and option list.
 func NewSelectField(label string, options []string) *SelectField {
 	return &SelectField{
-		Label:   label,
-		Options: options,
+		Label:    label,
+		Options:  options,
+		injected: -1,
 	}
 }
 
@@ -39,8 +45,26 @@ func (f *SelectField) Value() string {
 	return ""
 }
 
+// SetDisplayOptions annotates choices in the view while preserving their values.
+func (f *SelectField) SetDisplayOptions(options []string) {
+	if len(options) != len(f.Options) {
+		f.displayOptions = nil
+		return
+	}
+	f.displayOptions = append(f.displayOptions[:0], options...)
+}
+
+// FieldLabel returns the field's label.
+func (f *SelectField) FieldLabel() string { return f.Label }
+
+// FieldHelp returns the field's help text.
+func (f *SelectField) FieldHelp() string { return f.Help }
+
 // SetValue selects the first option equal to value and marks the field as
-// user-modified. Unknown values are silently ignored.
+// user-modified. A non-empty value outside Options is injected as a
+// synthetic option (rendered with a "current" tag) and selected, so a valid
+// config value the option list doesn't offer round-trips through edit-config
+// instead of being silently coerced to whatever the cursor sat on.
 func (f *SelectField) SetValue(value string) {
 	for i, opt := range f.Options {
 		if opt == value {
@@ -49,17 +73,47 @@ func (f *SelectField) SetValue(value string) {
 			return
 		}
 	}
+	if value == "" {
+		return
+	}
+	if f.injected < 0 {
+		f.Options = append(f.Options, "")
+		f.injected = len(f.Options) - 1
+	}
+	f.Options[f.injected] = value
+	f.selected = f.injected
+	f.isDefault = false
 }
 
 // SetDefault sets the starting selection and marks the field as unchanged.
+// hasDefault latches permanently — unlike isDefault, it never clears — so
+// the box keeps reserving the "default" tag's room for the field's whole
+// life; see boxOuterWidth.
 func (f *SelectField) SetDefault(value string) {
 	f.isDefault = true
+	f.hasDefault = true
 	for i, opt := range f.Options {
 		if opt == value {
 			f.selected = i
 			return
 		}
 	}
+}
+
+// HasDefaultTag reports whether the field has ever carried a default value
+// — pairing uses this to decide whether a column pair needs a symmetric
+// "default" tag reserve, matching boxOuterWidth's own hasDefault check.
+func (f *SelectField) HasDefaultTag() bool {
+	return f.hasDefault
+}
+
+// IsBoolean reports whether Options is exactly {"yes", "no"} in either order.
+func (f *SelectField) IsBoolean() bool {
+	if len(f.Options) != 2 {
+		return false
+	}
+	a, b := f.Options[0], f.Options[1]
+	return (a == "yes" && b == "no") || (a == "no" && b == "yes")
 }
 
 // Focus gives the field focus so arrow keys cycle options.
@@ -73,35 +127,52 @@ func (f *SelectField) Blur() {
 	f.focused = false
 }
 
-// SetWidth records the rendering width used when drawing the bordered box.
+// SetWidth records the width available to the field's box, help, and note
+// rows.
 func (f *SelectField) SetWidth(width int) {
 	f.width = width
 }
 
-// Validate always returns nil because selection is constrained to Options.
-func (f *SelectField) Validate() error {
+// SetBoxWidth sets the field's explicit box width, overriding the width
+// SelectField would otherwise compute from its options; the box still
+// clamps to min(boxWidth, the width from SetWidth).
+func (f *SelectField) SetBoxWidth(outer int) {
+	f.boxWidth = outer
+}
+
+// Check always returns nil because selection is constrained to Options.
+func (f *SelectField) Check() error {
 	return nil
 }
 
-// Update handles left/right and h/l key presses to cycle through Options.
+// Validate always returns nil because selection is constrained to Options.
+func (f *SelectField) Validate() error {
+	return f.Check()
+}
+
+// Update handles left/right and h/l key presses to cycle through Options,
+// clearing the default tag only when the selected index actually moves to a
+// different option — a single-option field's arrows are inert and keep it.
 func (f *SelectField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 	if !f.focused || len(f.Options) == 0 {
 		return f, nil
 	}
 
 	if msg, ok := msg.(tea.KeyPressMsg); ok {
+		prev := f.selected
 		switch {
 		case key.Matches(msg, key.NewBinding(key.WithKeys("left", "h"))):
 			f.selected--
 			if f.selected < 0 {
 				f.selected = len(f.Options) - 1
 			}
-			f.isDefault = false
 		case key.Matches(msg, key.NewBinding(key.WithKeys("right", "l"))):
 			f.selected++
 			if f.selected >= len(f.Options) {
 				f.selected = 0
 			}
+		}
+		if f.selected != prev {
 			f.isDefault = false
 		}
 	}
@@ -109,50 +180,106 @@ func (f *SelectField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 	return f, nil
 }
 
-// View renders the field with its label and a bordered box showing the
-// current option, optionally flanked by cycle indicators when focused.
+// View renders the field's label, a bordered box (a radio pair for boolean
+// fields, cycle arrows otherwise), and — depending on state — a default
+// tag beside the box, a help row (focused only), and a Note row.
 func (f *SelectField) View() string {
-	labelStyle := lipgloss.NewStyle().Foreground(tui.ColorText)
-	hintStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim)
+	label := labelStyle.Render(f.Label)
 
-	labelText := strings.ToLower(f.Label)
-	labelLine := labelStyle.Render(labelText)
+	content := f.arrowContent()
+	if f.IsBoolean() {
+		content = f.booleanContent()
+	}
+
+	box := fieldBox(content, f.boxOuterWidth(), f.focused, false, false)
+	if f.isDefault {
+		box = lipgloss.JoinHorizontal(lipgloss.Center, box, " "+tagStyle.Render("default"))
+	}
+
+	out := label + "\n" + box
 	if f.focused && f.Help != "" {
-		labelLine += " " + hintStyle.Render("("+strings.ToLower(f.Help)+")")
+		out += "\n" + helpStyle.Width(f.width).Render(f.Help)
 	}
-	if f.isDefault && f.Value() != "" {
-		defaultIndicator := lipgloss.NewStyle().
-			Foreground(tui.ColorTextDim).
-			Italic(true).
-			Render(" (default)")
-		labelLine += defaultIndicator
+	if f.Note != "" {
+		out += "\n" + f.Note
 	}
+	return out
+}
 
-	if !f.focused {
-		return labelLine + ": " + f.Value()
+// nominalBoxWidth returns the field's box width before clamping to the
+// available width: an explicit SetBoxWidth value, else 18 for a boolean
+// field, else the widest option plus room for arrows, padding, and border.
+func (f *SelectField) nominalBoxWidth() int {
+	if f.boxWidth > 0 {
+		return f.boxWidth
 	}
-	contentWidth := f.width - 4
-	if contentWidth < 20 {
-		contentWidth = 40
+	if f.IsBoolean() {
+		return 18
 	}
+	widest := 0
+	for i, opt := range f.Options {
+		if len(f.displayOptions) == len(f.Options) {
+			opt = f.displayOptions[i]
+		}
+		w := lipgloss.Width(opt)
+		if i == f.injected {
+			w += lipgloss.Width(" current")
+		}
+		widest = max(widest, w)
+	}
+	return max(widest+8, 14)
+}
 
-	borderColor := tui.ColorBorder
-	if f.focused {
-		borderColor = tui.ColorPrimary
+// boxOuterWidth returns the box's render width: min(nominalBoxWidth, the
+// width from SetWidth), minus defaultTagReserve once the field has ever
+// carried a default value (hasDefault, not isDefault) — so the box
+// reserves the "default" tag's room for its whole life and never resizes
+// when the user's first change drops the tag.
+func (f *SelectField) boxOuterWidth() int {
+	avail := f.width
+	if f.hasDefault {
+		avail -= defaultTagReserve
 	}
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(borderColor).
-		Padding(0, 1).
-		Width(contentWidth)
+	return min(f.nominalBoxWidth(), max(avail, 0))
+}
 
-	val := f.Value()
-	var content string
-	if f.focused && len(f.Options) > 1 {
-		content = "◂ " + val + " ▸"
-	} else {
-		content = "> " + val
+// arrowContent renders the current value (a dim "none" when it's blank, so
+// the field never shows an empty gap between the arrows) flanked by cycle
+// arrows, shown even while blurred; a lone option has nothing to cycle to,
+// so it renders bare rather than implying an interaction that doesn't exist.
+// The option SetValue injected for an off-list config value carries a
+// "current" tag so the operator can tell it apart from the offered list.
+func (f *SelectField) arrowContent() string {
+	value := f.Value()
+	if f.selected >= 0 && f.selected < len(f.displayOptions) && len(f.displayOptions) == len(f.Options) {
+		value = f.displayOptions[f.selected]
 	}
+	if f.selected == f.injected && f.injected >= 0 {
+		value += " " + tagStyle.Render("current")
+	}
+	if len(f.Options) < 2 {
+		return value
+	}
+	arrow := lipgloss.NewStyle().Foreground(tui.ColorPrimary())
+	if value == "" {
+		value = tagStyle.Render("none")
+	}
+	return arrow.Render(tui.IconCaretLeft) + " " + value + " " + arrow.Render(tui.IconCaretRight)
+}
 
-	return labelLine + "\n" + boxStyle.Render(content)
+// booleanContent renders both options as a radio pair, lighting the
+// selected side in ColorPrimary() and dimming the other to the faint tier.
+func (f *SelectField) booleanContent() string {
+	active := lipgloss.NewStyle().Foreground(tui.ColorPrimary())
+	inactive := lipgloss.NewStyle().Foreground(tui.ColorTextFaint())
+
+	parts := make([]string, len(f.Options))
+	for i, opt := range f.Options {
+		if i == f.selected {
+			parts[i] = active.Render(tui.IconActive + " " + opt)
+		} else {
+			parts[i] = inactive.Render(tui.IconPending + " " + opt)
+		}
+	}
+	return strings.Join(parts, "  ")
 }

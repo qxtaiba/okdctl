@@ -1,0 +1,50 @@
+---
+# The saved configuration run.sh drops into every screenshot cwd, so the
+# hero-hub renders its five-verb menu and save-slot line instead of the
+# blank-slate menu. Cluster name matches lifecycle.DemoClusterName, so the
+# lifecycle fixture's node names line up with this config. Nothing here is a
+# credential, and nothing here is ever deployed — run.sh's tapes escape out
+# before any apply.
+#
+# One YAML document, schemaVersion inline: config.Loader unmarshals the file
+# as a single document, so the `---`-separated header the configs/examples
+# files carry would leave every field below it unread.
+schemaVersion: "v2"
+cluster:
+  name: homelab
+  domain: lab.example.com
+distribution:
+  type: okd
+  version: "4.20.1-okd-scos.7"
+provider:
+  type: proxmox
+  proxmox:
+    host: 127.0.0.1:8006
+    node: pve1
+    storage: local-lvm
+    iso_storage: local
+    bridge: vmbr0
+topology:
+  control_plane:
+    count: 3
+    cpu: 4
+    memory_mb: 12288
+    disk_gb: 50
+  workers:
+    count: 3
+    cpu: 8
+    memory_mb: 20480
+    disk_gb: 50
+networking:
+  machine_cidr: 192.168.1.0/24
+  pod_cidr: 10.128.0.0/14
+  service_cidr: 172.30.0.0/16
+  gateway: 192.168.1.1
+  dns:
+    - 192.168.1.1
+  static_ip:
+    start: 192.168.1.140
+    interface: ens18
+addons:
+  flux:
+    enabled: false

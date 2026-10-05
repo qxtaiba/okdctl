@@ -1,0 +1,24 @@
+                                                                                
+  ╭──────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L                                                              │  
+  │ resizing masters                op · target · params · plan · run · done │  
+  │──────────────────────────────────────────────────────────────────────────│  
+  │  resizing masters  2 / 3                              elapsed 1m15s      │  
+  │  ✓ homelab-master0                                             1m0s      │  
+  │  ● homelab-master1                                                       │  
+  │      ✓ etcd health gate (pre)                                     —      │  
+  │      ✓ cordon + drain                                             —      │  
+  │      ⣾ terraform apply (in-place update)                        15s      │  
+  │      ○ power-cycle vm                                                    │  
+  │      ○ wait for node ready                                               │  
+  │      ○ etcd health gate (post)                                           │  
+  │      ○ uncordon + ceph health gate                                       │  
+  │  ○ homelab-master2                                                       │  
+  │                                                                          │  
+  │  LOG · ▸ /ceph (0/24)                                                    │  
+  │  no log line matches this filter                                         │  
+  │                                                                          │  
+  │────────────────── ↑ ↓  scroll down for more ────────────────── ▸ homelab │  
+  │  ctrl+c cancel (twice to force-quit) • ? help                            │  
+  ╰──────────────────────────────────────────────────────────────────────────╯  
+                                                                                

@@ -1,0 +1,45 @@
+                                                                                                                                                      
+  ╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L                                                                                                                                    │  
+  │ confirm removal                                                                                    op · target · params · plan · run ●○ · done │  
+  │────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
+  │                                                                                                        │  PROGRESS                             │  
+  │                                                                                                        │  ✓ operation                          │  
+  │                                                                                                        │  ✓ target                             │  
+  │                                                                                                        │  ✓ parameters                         │  
+  │                                                                                                        │  ✓ plan preview                       │  
+  │                                                                                                        │  ● confirm                            │  
+  │                                                                                                        │  ○ execute                            │  
+  │                                                                                                        │  ○ done                               │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │  CONFIGURED                           │  
+  │                                                                                                        │  operation: remove                    │  
+  │                                                                                                        │  node: homelab-worker2 (worker)       │  
+  │                       ⚠ confirm irreversible removal                                                   │  storage: 1 ceph osd(s) destroyed     │  
+  │                                                                                                        │  ingress: 1 router pod(s) here        │  
+  │                       irreversible: destroys homelab-worker2 and its data disk;                        │                                       │  
+  │                       removed data cannot be recovered                                                 │                                       │  
+  │                                                                                                        │                                       │  
+  │                       type the cluster name "homelab" to confirm                                       │                                       │  
+  │                       cluster name                                                                     │                                       │  
+  │                       ╭──────────────────────────────────────╮                                         │                                       │  
+  │                       │ homela                               │                                         │                                       │  
+  │                       ╰──────────────────────────────────────╯                                         │                                       │  
+  │                       ✗ must match "homelab"                                                           │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                        │                                       │  
+  │                                                                                                                                                │  
+  │───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
+  │  enter confirm • esc back • ctrl+c quit • ? help                                                                                               │  
+  ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
+                                                                                                                                                      

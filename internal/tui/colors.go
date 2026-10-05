@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"image/color"
 	"os"
 
 	"charm.land/lipgloss/v2"
@@ -9,103 +10,58 @@ import (
 // ColorTheme selects between the default palette and a high-contrast variant.
 type ColorTheme int
 
-// Scaffolding: exported for a future 'okdctl theme' CLI verb; setTheme is
-// the only current caller.
+// Scaffolding: exported for a future 'okdctl theme' CLI verb; ResolveTheme is
+// the only current consumer.
 const (
 	ThemeDefault ColorTheme = iota
 	ThemeHighContrast
-	ThemeLight
 )
 
-// Palette — literal hex values kept stable across themes; setTheme
-// swaps the semantic aliases below.
-var (
-	ColorPurple600 = lipgloss.Color("#9333EA")
-	ColorPurple800 = lipgloss.Color("#6B21A8")
-	ColorPrimary   = ColorPurple600
-	// ColorPrimaryDim tints box borders with the brand (not slate) so every
-	// box reads as okdctl.
-	ColorPrimaryDim = ColorPurple800
+// LogoGradient is the six-color gradient painted left to right across the
+// welcome hero's OKDCTL block letters.
+var LogoGradient = [6]color.Color{
+	lipgloss.Color("#C084FC"),
+	lipgloss.Color("#A78BFA"),
+	lipgloss.Color("#8B8CF6"),
+	lipgloss.Color("#67A6F0"),
+	lipgloss.Color("#4CC0E8"),
+	lipgloss.Color("#22D3EE"),
+}
 
-	ColorGreen500 = lipgloss.Color("#22C55E")
-	ColorSuccess  = ColorGreen500
-
-	ColorAmber500 = lipgloss.Color("#F59E0B")
-	ColorWarning  = ColorAmber500
-
-	ColorRed500 = lipgloss.Color("#EF4444")
-	ColorError  = ColorRed500
-
-	ColorBlue500 = lipgloss.Color("#3B82F6")
-	ColorInfo    = ColorBlue500
-
-	ColorCyan400 = lipgloss.Color("#22D3EE")
-	ColorCyan500 = lipgloss.Color("#06B6D4")
-
-	ColorSlate100 = lipgloss.Color("#F1F5F9")
-	ColorSlate300 = lipgloss.Color("#CBD5E1")
-	ColorSlate400 = lipgloss.Color("#94A3B8")
-	ColorSlate500 = lipgloss.Color("#64748B")
-	ColorSlate600 = lipgloss.Color("#475569")
-	ColorSlate700 = lipgloss.Color("#334155")
-	ColorSlate900 = lipgloss.Color("#0F172A")
-
-	ColorSurface = ColorSlate900
-	ColorText    = ColorSlate100
-	ColorTextDim = ColorSlate400
-	ColorBorder  = ColorSlate600
-	ColorAccent  = ColorCyan500
-)
-
-var (
-	hcColorPrimary = lipgloss.Color("#FF00FF")
-	hcColorSuccess = lipgloss.Color("#00FF00")
-	hcColorWarning = lipgloss.Color("#FFFF00")
-	hcColorError   = lipgloss.Color("#FF0000")
-	hcColorInfo    = lipgloss.Color("#00FFFF")
-	hcColorText    = lipgloss.Color("#FFFFFF")
-	hcColorTextDim = lipgloss.Color("#AAAAAA")
-)
-
-func setTheme(theme ColorTheme) {
-	switch theme {
-	case ThemeHighContrast:
-		ColorSurface = lipgloss.Color("#000000")
-		ColorPrimary = hcColorPrimary
-		ColorPrimaryDim = hcColorPrimary
-		ColorSuccess = hcColorSuccess
-		ColorWarning = hcColorWarning
-		ColorError = hcColorError
-		ColorInfo = hcColorInfo
-		ColorText = hcColorText
-		ColorTextDim = hcColorTextDim
-		ColorBorder = hcColorTextDim
-		ColorAccent = hcColorInfo
-	case ThemeLight:
-		ColorSurface = lipgloss.Color("#FFFFFF")
-		ColorPrimary = ColorPurple600
-		ColorPrimaryDim = ColorPurple800
-		ColorSuccess = lipgloss.Color("#15803D")
-		ColorWarning = lipgloss.Color("#92400E")
-		ColorError = lipgloss.Color("#B91C1C")
-		ColorInfo = lipgloss.Color("#1D4ED8")
-		ColorText = ColorSlate900
-		ColorTextDim = ColorSlate700
-		ColorBorder = ColorSlate500
-		ColorAccent = lipgloss.Color("#0E7490")
-	default:
-		ColorSurface = ColorSlate900
-		ColorBorder = ColorSlate600
-		ColorAccent = ColorCyan500
-		ColorPrimary = ColorPurple600
-		ColorPrimaryDim = ColorPurple800
-		ColorSuccess = ColorGreen500
-		ColorWarning = ColorAmber500
-		ColorError = ColorRed500
-		ColorInfo = ColorBlue500
-		ColorText = ColorSlate100
-		ColorTextDim = ColorSlate400
+// SuccessGradient returns n colors from the active success tier to the logo
+// gradient's cyan end.
+func SuccessGradient(n int) []color.Color {
+	if n < 1 {
+		return nil
 	}
+	from, to := ColorSuccess(), LogoGradient[len(LogoGradient)-1]
+	if n == 1 {
+		return []color.Color{from}
+	}
+	ramp := make([]color.Color, n)
+	for i := range ramp {
+		ramp[i] = BlendAt(from, to, float64(i)/float64(n-1))
+	}
+	return ramp
+}
+
+// BlendAt returns the color t of the way from a to b (t clamped to [0, 1]),
+// interpolating in RGB space; the install instrument paints its gradient
+// fill with it.
+func BlendAt(a, b color.Color, t float64) color.Color {
+	t = min(max(t, 0), 1)
+	fromR, fromG, fromB, _ := a.RGBA()
+	toR, toG, toB, _ := b.RGBA()
+	lerp := func(x, y uint32) uint8 {
+		return uint8(uint32(float64(x>>8) + (float64(y>>8)-float64(x>>8))*t)) //nolint:gosec // G115: 8-bit channel values
+	}
+	return color.RGBA{R: lerp(fromR, toR), G: lerp(fromG, toG), B: lerp(fromB, toB), A: 0xFF}
+}
+
+// Lighten returns c moved amount of the way toward white (amount clamped to
+// [0, 1]); the progress bar's drifting highlight band renders with it.
+func Lighten(c color.Color, amount float64) color.Color {
+	return BlendAt(c, color.RGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF}, amount)
 }
 
 func highContrastRequested() bool {
@@ -113,11 +69,16 @@ func highContrastRequested() bool {
 	return v == "1" || v == "true"
 }
 
+// IsDarkBackground reports whether the terminal is currently treated as dark-background.
+func IsDarkBackground() bool {
+	return CurrentTheme().Dark
+}
+
+// SetDarkBackground re-resolves the active theme for a light- or dark-background terminal and rebuilds the base styles; the theme swap itself is atomic, but the style caches are not — call it before rendering starts.
+func SetDarkBackground(dark bool) {
+	resolveActiveTheme(dark)
+}
+
 func init() {
-	if os.Getenv("OKDCTL_THEME") == "light" {
-		setTheme(ThemeLight)
-	}
-	if highContrastRequested() {
-		setTheme(ThemeHighContrast)
-	}
+	resolveActiveTheme(true)
 }

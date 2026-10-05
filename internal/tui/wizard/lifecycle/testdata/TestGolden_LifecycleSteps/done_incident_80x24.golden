@@ -1,0 +1,24 @@
+                                                                                
+  ╭──────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L                                                              │  
+  │ done                            op · target · params · plan · run · done │  
+  │──────────────────────────────────────────────────────────────────────────│  
+  │  ✓ homelab-master0                                             1m0s      │  
+  │  ✗ homelab-master1                                                       │  
+  │      ✓ etcd health gate (pre)                                     —      │  
+  │      ✓ cordon + drain                                             —      │  
+  │      ✗ terraform apply (in-place update)                        30s      │  
+  │      ○ power-cycle vm                                                    │  
+  │      ○ wait for node ready                                               │  
+  │      ○ etcd health gate (post)                                           │  
+  │      ○ uncordon + ceph health gate                                       │  
+  │  ○ homelab-master2                                                       │  
+  │                                                                          │  
+  │  ╭────────────────────────────── ERROR ───────────────────────────────╮  │  
+  │  │                                                                    │  │  
+  │  │  ✗  resize failed                                                  │  │  
+  │                                                                          │  
+  │────────────────── ↑ ↓  scroll down for more ────────────────── ▸ homelab │  
+  │  / filter the log • l lock the log here • f full-screen log … • ? help   │  
+  ╰──────────────────────────────────────────────────────────────────────────╯  
+                                                                                

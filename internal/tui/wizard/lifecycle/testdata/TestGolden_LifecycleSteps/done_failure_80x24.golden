@@ -1,0 +1,24 @@
+                                                                                
+  ╭──────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L                                                              │  
+  │ done                            op · target · params · plan · run · done │  
+  │──────────────────────────────────────────────────────────────────────────│  
+  │  ╭────────────────────────────── ERROR ───────────────────────────────╮  │  
+  │  │                                                                    │  │  
+  │  │  ✗  resize failed                                                  │  │  
+  │  │                                                                    │  │  
+  │  │  etcd health gate (post-master0) failed: quorum lost               │  │  
+  │  │                                                                    │  │  
+  │  ╰────────────────────────────────────────────────────────────────────╯  │  
+  │                                                                          │  
+  │  operation ..... resize                                                  │  
+  │  elapsed ....... 1m30s                                                   │  
+  │  cause ......... etcd health gate (post-master0) failed                  │  
+  │                                                                          │  
+  │  NEXT MOVES                                                              │  
+  │  f   open the full log, filter it, jump between errors                   │  
+  │                                                                          │  
+  │────────────────── ↑ ↓  scroll down for more ────────────────── ▸ homelab │  
+  │  / filter the log • l lock the log here • f full-screen log … • ? help   │  
+  ╰──────────────────────────────────────────────────────────────────────────╯  
+                                                                                

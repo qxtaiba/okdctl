@@ -1,10 +1,13 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -15,6 +18,9 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/render"
+	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/version"
 )
 
 // tripwire: pflag embeds flag values in error text (unscrubbed UsageError.Msg);
@@ -39,6 +45,33 @@ func TestNoRegisteredFlagNameLooksLikeCredential(t *testing.T) {
 		t.Errorf("credential-named flag(s) registered; pflag embeds flag values in "+
 			"error text that becomes UsageError.Msg unscrubbed — scrub before Msg "+
 			"or rename: %v", offenders)
+	}
+}
+
+// TestHighestTrafficCommandsCarryExamples guards E-C7: root plus the
+// highest-traffic leaves each carry a non-empty Example, so `--help` shows
+// an EXAMPLES section (installHelp's usage template only renders one when
+// .HasExample is true) — node resize is the model this list follows.
+func TestHighestTrafficCommandsCarryExamples(t *testing.T) {
+	want := []string{
+		"okdctl",
+		"okdctl deploy",
+		"okdctl destroy",
+		"okdctl status",
+		"okdctl node manage",
+		"okdctl config validate",
+	}
+	for _, path := range want {
+		t.Run(path, func(t *testing.T) {
+			args := strings.Fields(path)[1:] // drop the leading "okdctl"
+			cmd, _, err := rootCmd.Find(args)
+			if err != nil {
+				t.Fatalf("Find(%v) = %v", args, err)
+			}
+			if strings.TrimSpace(cmd.Example) == "" {
+				t.Errorf("%s has no Example; --help would show no EXAMPLES section", path)
+			}
+		})
 	}
 }
 
@@ -188,6 +221,55 @@ func TestShouldAnnounceFailure(t *testing.T) {
 	}
 }
 
+// TestShouldRenderErrorBox guards item 7 of the second-cut safety findings:
+// colorOff (NO_COLOR/--no-color) used to flip progressBars, which
+// announceFailure gated on, so NO_COLOR degraded the boxed error to the
+// flat "[ERROR]" line — box drawing is structure, not color. The gate keeps
+// its TTY/json/presented checks but takes no color signal at all, so this
+// table exhaustively covers stderr/stdout TTY-ness and format without ever
+// mentioning NO_COLOR — its absence from the signature is the fix.
+func TestShouldRenderErrorBox(t *testing.T) {
+	plain := errors.New("boom")
+	cases := []struct {
+		name                 string
+		stderrTTY, stdoutTTY bool
+		format               string
+		err                  error
+		want                 bool
+	}{
+		{"both TTY, text format renders the box", true, true, tui.FormatText, plain, true},
+		{"piped stderr gets the flat line", false, true, tui.FormatText, plain, false},
+		{"piped stdout gets the flat line", true, false, tui.FormatText, plain, false},
+		{"json format gets the flat line", true, true, tui.FormatJSON, plain, false},
+		{"already-presented error gets the flat line", true, true, tui.FormatText, render.Presented(plain), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := shouldRenderErrorBox(tc.stderrTTY, tc.stdoutTTY, tc.format, tc.err); got != tc.want {
+				t.Errorf("shouldRenderErrorBox(%v, %v, %q, err) = %v, want %v", tc.stderrTTY, tc.stdoutTTY, tc.format, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestErrorSummaryANSIFreeUnderNoColor proves the other half of item 7's
+// claim: once shouldRenderErrorBox lets a NO_COLOR run through, the box it
+// renders is genuinely color-free (Downsampled) while still carrying its
+// box-drawing structure — NO_COLOR strips color, not the box.
+func TestErrorSummaryANSIFreeUnderNoColor(t *testing.T) {
+	tui.SetColorProfileFor(&bytes.Buffer{}) // a buffer is never a TTY
+	t.Cleanup(func() { tui.SetColorProfileFor(&bytes.Buffer{}) })
+
+	out := render.ErrorSummary(&errtypes.ConfigError{Msg: "bad yaml"}, 2, "run-123")
+
+	if strings.Contains(out, "\x1b[") {
+		t.Errorf("ErrorSummary leaked ANSI escapes under a no-color profile:\n%q", out)
+	}
+	if !strings.Contains(out, "╭") || !strings.Contains(out, "╯") {
+		t.Errorf("ErrorSummary must still draw its box structure under NO_COLOR:\n%s", out)
+	}
+}
+
 func TestSignalExitCode(t *testing.T) {
 	storeSignal := func(sig os.Signal) *atomic.Value {
 		var v atomic.Value
@@ -298,5 +380,134 @@ func TestWrapArgValidators(t *testing.T) {
 	err = handRolled.Args(handRolled, nil)
 	if !errors.As(err, &usageErr) || usageErr.Msg != "expected exactly one name" {
 		t.Fatalf("hand-rolled UsageError must pass through unwrapped, got %v", err)
+	}
+}
+
+func installLogBuffer(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	logutil.InstallHandler(slog.NewTextHandler(&buf, nil))
+	t.Cleanup(func() { logutil.InstallHandler(slog.NewTextHandler(os.Stderr, nil)) })
+	return &buf
+}
+
+func TestFlagErrorFuncReturnsUsageErrorWithHelpHint(t *testing.T) {
+	buf := installLogBuffer(t)
+
+	err := rootCmd.FlagErrorFunc()(nodeResizeCmd, errors.New("unknown flag: --bogus"))
+
+	var usageErr *errtypes.UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("want *errtypes.UsageError, got %T: %v", err, err)
+	}
+	if got := exitCodeFor(err); got != 64 {
+		t.Fatalf("exitCodeFor = %d, want 64", got)
+	}
+	d, ok := errtypes.Describe(err)
+	if !ok {
+		t.Fatalf("errtypes.Describe failed to classify %v", err)
+	}
+	if !strings.Contains(d.Hint, "okdctl node resize --help") {
+		t.Fatalf("hint = %q, want it to contain %q", d.Hint, "okdctl node resize --help")
+	}
+	if buf.Len() != 0 {
+		t.Fatalf("FlagErrorFunc must not log directly; buffer = %q", buf.String())
+	}
+}
+
+func TestPrintUpdateNoticeNoANSIUnderNoColor(t *testing.T) {
+	prevQuiet, prevFormat := logQuiet, logFormat
+	logQuiet, logFormat = false, outputText
+	t.Cleanup(func() { logQuiet, logFormat = prevQuiet, prevFormat })
+
+	tui.SetColorProfileFor(&bytes.Buffer{}) // a buffer is never a TTY
+	t.Cleanup(func() { tui.SetColorProfileFor(&bytes.Buffer{}) })
+
+	ch := make(chan version.CheckResult, 1)
+	ch <- version.CheckResult{LatestTag: "v9.9.9"}
+
+	var out bytes.Buffer
+	printUpdateNotice(&out, ch)
+
+	if strings.Contains(out.String(), "\x1b[") {
+		t.Errorf("printUpdateNotice leaked ANSI escapes under a no-color profile:\n%q", out.String())
+	}
+	if !strings.Contains(out.String(), "v9.9.9") {
+		t.Errorf("printUpdateNotice output missing latest tag:\n%s", out.String())
+	}
+}
+
+func TestNoColorFlagIsLongFormOnly(t *testing.T) {
+	f := rootCmd.PersistentFlags().Lookup(flagNoColor)
+	if f == nil {
+		t.Fatal("--no-color flag not registered")
+	}
+	if f.Shorthand != "" {
+		t.Fatalf("--no-color has shorthand %q, want none (shorthand allowlist is closed)", f.Shorthand)
+	}
+}
+
+// Regression guard: the bare "okdctl --version" flag short-circuits inside
+// cobra's execute() before PersistentPreRunE/configureLogging ever runs, so
+// --no-color must be honored by versionText itself.
+func TestVersionFlagRespectsNoColor(t *testing.T) {
+	// registered before t.Setenv so LIFO cleanup restores CLICOLOR_FORCE
+	// first and only then re-detects the profile with a clean environment;
+	// the reverse order left the package profile forced-colourful for later
+	// tests
+	t.Cleanup(func() { tui.SetColorProfileFor(&bytes.Buffer{}) })
+	t.Setenv("CLICOLOR_FORCE", "1") // forces color even for a non-TTY writer
+
+	tui.SetColorProfileFor(&bytes.Buffer{})
+
+	if got := tui.Downsample(tui.SuccessStyle.Render("x")); !strings.Contains(got, "\x1b[") {
+		t.Fatalf("test setup failed to force a colourful profile: %q", got)
+	}
+
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetArgs([]string{"--no-color", "--version"})
+	t.Cleanup(func() {
+		rootCmd.SetOut(nil)
+		rootCmd.SetArgs(nil)
+		noColor = false
+	})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("rootCmd.Execute(--no-color --version) = %v", err)
+	}
+	if strings.Contains(out.String(), "\x1b[") {
+		t.Errorf("--version leaked ANSI under --no-color: %q", out.String())
+	}
+}
+
+func TestMutatesStateClassification(t *testing.T) {
+	cases := []struct {
+		cmd  *cobra.Command
+		want bool
+	}{
+		{deployCmd, true},
+		{destroyCmd, true},
+		{cleanupCmd, true},
+		{updateIngressCmd, true},
+		{nodeAddCmd, true},
+		{nodeRemoveCmd, true},
+		{nodeResizeCmd, true},
+		{clusterStopCmd, true},
+		{addonUninstallCmd, true},
+		{versionCmd, false},
+		{statusCmd, false},
+		{nodeListCmd, false},
+		{describeNodeCmd, false},
+		{releasesListCmd, false},
+		{addonListCmd, false},
+		{addonVerifyCmd, false},
+		{doctorCmd, false},
+		{planCmd, false},
+	}
+	for _, tc := range cases {
+		if got := mutatesState(tc.cmd); got != tc.want {
+			t.Errorf("mutatesState(%s) = %v, want %v", tc.cmd.CommandPath(), got, tc.want)
+		}
 	}
 }

@@ -11,13 +11,16 @@ import (
 	"golang.org/x/term"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
 )
 
 const (
-	minWidth  = 80
-	minHeight = 24
+	minTerminalWidth  = 60
+	minTerminalHeight = 20
 
-	headerHeight = 3 // logo + tagline + step indicator
+	headerHeight = 3 // brand row + title/trail row + bottom rule
+	statusHeight = 1
 	// footer is 2 rows: the scroll-indicator line (also the top divider) + the help bar.
 	footerHeight         = 2
 	outerVerticalPadding = 4 // wizard border (2) + outer padding (2)
@@ -28,8 +31,54 @@ const (
 	// wizardBorderHorizontal: WizardBorderStyle.Border() = 1 left + 1 right.
 	wizardBorderHorizontal = 2
 
-	fixedLayoutOverhead = headerHeight + footerHeight + outerVerticalPadding
+	fixedLayoutOverhead = headerHeight + statusHeight + footerHeight + outerVerticalPadding
+
+	// wideSplitWidth is the terminal width at and above which the wizard
+	// splits into a form column and a dim context pane; below it the frame
+	// stays a single column.
+	wideSplitWidth = 150
+
+	// singleFormMaxWidth caps the single-column tier's form measure — the
+	// frame itself always spans the terminal, so a wide-but-unsplit terminal
+	// keeps a readable column inside the full-width frame rather than
+	// stretching the form; at and above wideSplitWidth the surplus becomes
+	// the context pane instead.
+	singleFormMaxWidth = 110
+
+	// formMaxWidth caps the split layout's form column measure.
+	formMaxWidth = 104
+
+	// paneRuleWidth is the single-column divider between the form and the
+	// context pane.
+	paneRuleWidth = 1
+
+	// paneGutterWidth is the breathing room between the pane rule and the
+	// pane's first content column; paneEdgeWidth keeps one blank column
+	// between the pane's last content column and the frame border.
+	paneGutterWidth = 2
+	paneEdgeWidth   = 1
+
+	// paneMinWidth floors the split layout's context pane; the pane has no
+	// ceiling — it absorbs everything the form column's cap leaves over.
+	paneMinWidth = 28
+
+	// paneStepsHeaderRows is the PROGRESS section's own header row, counted
+	// separately from its one-row-per-step body in splitMinHeight.
+	paneStepsHeaderRows = 1
 )
+
+// splitMinHeight is the terminal height at and above which a stepCount-step
+// wizard's context pane has room for its PROGRESS section — the header plus one
+// row per step — without truncating it: fixedLayoutOverhead's fixed chrome
+// rows, plus the header, plus stepCount. Below it, splitLayout falls back to
+// the capped single-column tier rather than splitting into an unusably
+// short pane; at or above it, renderContextPane may still drop CONFIGURED and
+// FOCUSED FIELD (and, defensively, truncate the step list itself) if their
+// content doesn't fit — the PROGRESS section's own minimum is the one thing
+// this floor guarantees room for.
+func splitMinHeight(stepCount int) int {
+	return fixedLayoutOverhead + paneStepsHeaderRows + stepCount
+}
 
 type earlyExiter interface {
 	ShouldExitEarly() bool
@@ -43,8 +92,30 @@ type centerable interface {
 	IsCentered() bool
 }
 
-// displayTitler is implemented by steps with prompt text above the content;
-// empty DisplayTitle skips rendering.
+// heroRenderer is implemented by steps that draw the product wordmark
+// themselves, so the frame drops its own header — brand row, tagline, progress
+// trail — entirely.
+type heroRenderer interface {
+	RendersHero() bool
+}
+
+// splitSuppressor is implemented by steps that own the frame's whole width
+// however wide the terminal is — a centered launcher, where the context pane
+// would be chrome describing work the screen isn't doing.
+type splitSuppressor interface {
+	SuppressesSplit() bool
+}
+
+// paneRenderer is implemented by steps that fill the split layout's right pane
+// themselves, in place of the context pane — a live log beside the work it
+// narrates says more than a step list the screen isn't walking. The same height
+// clamp the context pane obeys applies: content must fit the rows it is given.
+type paneRenderer interface {
+	PaneContent(width, height int) string
+}
+
+// displayTitler is implemented by steps with a header prompt distinct from
+// their Title(); an empty DisplayTitle falls back to Title() instead.
 type displayTitler interface {
 	DisplayTitle() string
 }
@@ -63,21 +134,124 @@ type Model struct {
 	viewport viewport.Model
 	ready    bool
 
+	// contentRows[i] is the viewport row the active step's View line i starts
+	// on; a step line wider than the content column wraps into several rows,
+	// so the two index spaces differ. Length is line count + 1. Valid only
+	// for non-centered steps: a centered step's content is re-rendered with
+	// PaddingTop first, so the rows describe the shifted lines instead.
+	contentRows []int
+
 	steps       []WizardStep
 	currentStep int
+
+	// suspended is the flow SwapFlow put aside — the hub — restored when the
+	// swapped-in flow's first screen is escaped. One level deep by design: the
+	// hub is the only screen that swaps, and a sub-flow never swaps again.
+	suspended *suspendedFlow
 
 	// returnToReview: set on a review jump (JumpToStepMsg), cleared on confirm/escape;
 	// while set, next/previous route to review.
 	returnToReview bool
 
-	config *config.Config
-	chrome FlowChrome
+	config          *config.Config
+	chrome          FlowChrome
+	draftSaver      func(*config.Config, StepID, string) error
+	draftStateSaver func(*config.Config, StepID, string, map[string][]string) error
+
+	// theme is the resolved Theme this frame renders with, injected at
+	// construction and re-resolved once when the terminal reports its
+	// background — the exemplar for per-surface theme injection.
+	theme tui.Theme
+
+	// The shared frame clock (see motion.go): motion is the resolved dial,
+	// frame the monotonic counter, clockGen/clockRunning the identity and
+	// liveness of the single tea.Tick chain.
+	motion       tui.MotionMode
+	frame        uint64
+	clockGen     uint64
+	clockRunning bool
+	// blurred is away mode's flag: the terminal reported losing focus, so
+	// the clock idles at 1Hz and cosmetic animators stand suspended.
+	blurred bool
 
 	quitting bool
 	result   Result
 	err      error
 
 	keyMap KeyMap
+
+	// helpOpen: the "?" help overlay is showing over the viewport region.
+	// While true every key but ctrl+c (still the global quit guard), esc,
+	// and "?" itself (both close it) is inert — the overlay owns input.
+	helpOpen bool
+
+	paletteOpen     bool
+	paletteQuery    string
+	paletteSelected int
+	paletteMatches  []paletteMatch
+
+	// pendingG: a lone "g" is held one keystroke, completing the vim gg
+	// chord if the next key is "g" again and clearing otherwise.
+	pendingG bool
+}
+
+// suspendedFlow is a flow SwapFlow put aside: its steps, its chrome, and the
+// screen the operator was on, so restoring it lands exactly where they left.
+type suspendedFlow struct {
+	steps       []WizardStep
+	chrome      FlowChrome
+	currentStep int
+}
+
+// SwapFlow replaces the live step set and chrome with another flow's inside the
+// same program, suspending the current flow so escaping the new flow's first
+// screen returns to it. The caller passes freshly built steps on every entry:
+// the swapped-out instances are dropped on return, so nothing a sub-flow
+// collected can bleed into the next entry.
+func (m *Model) SwapFlow(steps []WizardStep, chrome FlowChrome) tea.Cmd {
+	// A second swap is refused outright: accepting it would overwrite the
+	// single suspended return target with the sub-flow being displaced,
+	// leaving esc with nowhere correct to land.
+	if len(steps) == 0 || m.suspended != nil {
+		return nil
+	}
+	if f, ok := m.CurrentStep().(FocusableStep); ok {
+		f.SetFocused(false)
+	}
+
+	m.suspended = &suspendedFlow{steps: m.steps, chrome: m.chrome, currentStep: m.currentStep}
+	m.steps, m.chrome = steps, chrome
+	m.returnToReview = false
+	m.err = nil
+
+	_, cmd := m.focusStep(0)
+	return cmd
+}
+
+// restoreFlow returns to the flow SwapFlow suspended, discarding the swapped-in
+// flow's steps so the next entry rebuilds them.
+func (m *Model) restoreFlow() (tea.Model, tea.Cmd) {
+	prev := m.suspended
+	if prev == nil {
+		return m, nil
+	}
+	if f, ok := m.CurrentStep().(FocusableStep); ok {
+		f.SetFocused(false)
+	}
+
+	m.suspended = nil
+	m.steps, m.chrome = prev.steps, prev.chrome
+	m.returnToReview = false
+	m.err = nil
+
+	return m.focusStep(min(prev.currentStep, len(prev.steps)-1))
+}
+
+// SwapFlowMsg asks the wizard to replace its live step set and chrome with
+// another flow's, in the same program and the same terminal session.
+type SwapFlowMsg struct {
+	Steps  []WizardStep
+	Chrome FlowChrome
 }
 
 // Result is what the wizard returns when it exits.
@@ -107,14 +281,24 @@ const (
 )
 
 // KeyMap binds wizard-level actions (quit, back, scroll) to keystrokes;
-// everything else is handled inside the active step.
+// everything else is handled inside the active step. The Vim* bindings are
+// footer-silent additions listed only in the "?" overlay's vim group.
 type KeyMap struct {
-	Back     key.Binding
-	Quit     key.Binding
-	PageUp   key.Binding
-	PageDown key.Binding
-	Home     key.Binding
-	End      key.Binding
+	Back        key.Binding
+	Quit        key.Binding
+	Help        key.Binding
+	PageUp      key.Binding
+	PageDown    key.Binding
+	Home        key.Binding
+	End         key.Binding
+	Up          key.Binding
+	Down        key.Binding
+	VimUp       key.Binding
+	VimDown     key.Binding
+	VimHalfUp   key.Binding
+	VimHalfDown key.Binding
+	VimTop      key.Binding
+	VimBottom   key.Binding
 }
 
 func defaultKeyMap() KeyMap {
@@ -126,6 +310,10 @@ func defaultKeyMap() KeyMap {
 		Quit: key.NewBinding(
 			key.WithKeys("ctrl+c"),
 			key.WithHelp("ctrl+c", "quit"),
+		),
+		Help: key.NewBinding(
+			key.WithKeys(HelpQuestion),
+			key.WithHelp(HelpQuestion, HelpOverlay),
 		),
 		PageUp: key.NewBinding(
 			key.WithKeys("pgup"),
@@ -143,6 +331,20 @@ func defaultKeyMap() KeyMap {
 			key.WithKeys("ctrl+end"),
 			key.WithHelp("ctrl+end", "bottom"),
 		),
+		Up: key.NewBinding(
+			key.WithKeys("up"),
+			key.WithHelp("↑", "scroll up"),
+		),
+		Down: key.NewBinding(
+			key.WithKeys("down"),
+			key.WithHelp("↓", "scroll down"),
+		),
+		VimUp:       key.NewBinding(key.WithKeys("k")),
+		VimDown:     key.NewBinding(key.WithKeys("j")),
+		VimHalfUp:   key.NewBinding(key.WithKeys("ctrl+u")),
+		VimHalfDown: key.NewBinding(key.WithKeys("ctrl+d")),
+		VimTop:      key.NewBinding(key.WithKeys("g")),
+		VimBottom:   key.NewBinding(key.WithKeys("G", "shift+g")),
 	}
 }
 
@@ -164,14 +366,13 @@ func NewFlowModel(steps []WizardStep, cfg *config.Config, chrome FlowChrome) *Mo
 		currentStep: 0,
 		config:      cfg,
 		chrome:      chrome,
+		theme:       tui.CurrentTheme(),
+		motion:      tui.Motion(),
 		keyMap:      defaultKeyMap(),
 	}
 
 	if len(steps) > 0 {
-		contentWidth, contentHeight := m.contentDimensions()
-		if r, ok := steps[0].(ResizableStep); ok {
-			r.SetSize(contentWidth, contentHeight)
-		}
+		m.sizeCurrentStep()
 		if f, ok := steps[0].(FocusableStep); ok {
 			f.SetFocused(true)
 		}
@@ -181,35 +382,67 @@ func NewFlowModel(steps []WizardStep, cfg *config.Config, chrome FlowChrome) *Mo
 }
 
 func getTerminalSize() (width, height int) {
-	w, h, err := term.GetSize(int(os.Stdout.Fd()))
+	_, h, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil {
-		return minWidth, minHeight
+		h = 24
 	}
-	return w, h
+	return tui.TerminalWidth(), h
 }
 
-// Init implements tea.Model; it fires the first step's Init command.
+// Init implements tea.Model; it fires the first step's Init command
+// alongside a terminal background-color request and, when that first step
+// is already animating, the frame clock.
 func (m *Model) Init() tea.Cmd {
+	var stepCmd tea.Cmd
 	if len(m.steps) > 0 {
 		m.beginVisit()
-		return m.ownCommand(m.steps[m.currentStep].Init())
+		stepCmd = m.ownCommand(m.steps[m.currentStep].Init())
 	}
-	return nil
+	return tea.Batch(tea.RequestBackgroundColor, stepCmd, m.armClock())
 }
 
-// Update processes wizard-level messages (navigation, resize, quit) and
-// delegates the rest to the currently-active step.
+// Update processes wizard-level messages (navigation, resize, quit),
+// delegates the rest to the currently-active step, and keeps the frame
+// clock armed exactly while the active step animates.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if tick, ok := msg.(clockTickMsg); ok {
+		return m.handleClockTick(tick)
+	}
+	m.trackFocus(msg)
 	if result, ok := msg.(visitResult); ok {
 		if result.generation != m.generation || !m.currentStepMatches(result.step) {
 			return m, nil
 		}
 		msg = result.message
 	}
-	return m.updateCurrent(msg)
+	model, cmd := m.update(msg)
+	if clockCmd := m.armClock(); clockCmd != nil {
+		cmd = tea.Batch(cmd, clockCmd)
+	}
+	return model, cmd
 }
 
-func (m *Model) updateCurrent(msg tea.Msg) (tea.Model, tea.Cmd) {
+// trackFocus keeps the away-mode state: a blur drops the shared clock to
+// 1Hz (the running chain finishes its pending tick at the old cadence), and
+// a focus retires the pending slow tick so the full-cadence chain — and the
+// step's catch-up sweep riding on it — re-arms immediately. Both messages
+// still reach the active step through the normal delegation below.
+func (m *Model) trackFocus(msg tea.Msg) {
+	switch msg.(type) {
+	case tea.BlurMsg:
+		m.blurred = true
+	case tea.FocusMsg:
+		m.blurred = false
+		if m.clockRunning {
+			m.clockGen++
+			m.clockRunning = false
+		}
+	}
+}
+
+// update is Update's body, split out so handleClockTick can route a frame
+// through the same step-delegation path without re-entering the clock.
+func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
@@ -217,32 +450,27 @@ func (m *Model) updateCurrent(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.handleResize(msg)
 		return m, nil
 
+	case tea.BackgroundColorMsg:
+		// SetDarkBackground must be called exactly once, not concurrently
+		// with itself: Init fires RequestBackgroundColor alongside the first
+		// step's Init, and this case is the wizard's only call site, so the
+		// terminal's one reply lands here as the sole caller, early — before
+		// the user has had any chance to act on the rendered wizard.
+		tui.SetDarkBackground(msg.IsDark())
+		m.theme = tui.CurrentTheme()
+		rebuildWizardStyles()
+		components.RebuildStyles()
+		return m, nil
+
 	case tea.KeyPressMsg:
-		m.err = nil
-
-		if key.Matches(msg, m.keyMap.Quit) {
-			if len(m.steps) > 0 && m.currentStep < len(m.steps) {
-				if g, ok := m.steps[m.currentStep].(QuitGuard); ok && g.InterceptQuit() {
-					return m, nil
-				}
-			}
-			m.quitting = true
-			m.result = Result{Outcome: OutcomeCancelled}
-			return m, tea.Quit
-		}
-
-		if m.handleScrollKey(msg) {
-			return m, nil
-		}
-
-		if m.shouldGoBack(msg) {
-			if g, ok := m.steps[m.currentStep].(BackGuard); ok && g.InterceptBack() {
-				return m, nil
-			}
-			return m.goToPreviousStep()
+		if model, cmd, handled := m.handleWizardKey(msg); handled {
+			return model, cmd
 		}
 
 	case StepCompleteMsg:
+		// A late async completion from a step the user has already left
+		// (esc, SwapFlow) must not advance — and Apply — whichever step is
+		// current now.
 		if !m.currentStepMatches(msg.StepID) {
 			return m, nil
 		}
@@ -251,30 +479,42 @@ func (m *Model) updateCurrent(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case StepBackMsg:
 		return m.goToPreviousStep()
 
+	case LayoutChangedMsg:
+		if m.ready {
+			m.sizeCurrentStep()
+			m.resizeViewport()
+			m.syncViewportContent()
+			m.notifyIfAtBottom()
+		}
+		return m, nil
+
+	case SwapFlowMsg:
+		cmd := m.SwapFlow(msg.Steps, msg.Chrome)
+		return m, cmd
+
 	case JumpToStepMsg:
 		return m.jumpToStep(msg.StepID)
+
+	case DraftResumeMsg:
+		return m.resumeDraft(msg)
 
 	case ErrorSetMsg:
 		m.setError(msg.Error)
 		return m, nil
 
 	case FocusChangedMsg:
+		// Resync first: the focus move may itself have changed the step's
+		// content (an expanded dropdown, a new validation row), so spans
+		// recorded by the previous render would point at stale lines.
 		if m.ready {
 			m.syncViewportContent()
-			m.autoScrollToField(msg.FieldIndex, msg.TotalFields)
+			m.scrollToFocusedField()
+			m.autoScrollToField(0, 0)
 		}
 		return m, nil
 
 	case ConfigSyncMsg:
-		if !m.currentStepMatches(msg.StepID) {
-			return m, nil
-		}
-		if len(m.steps) > 0 && m.currentStep >= 0 && m.currentStep < len(m.steps) {
-			if a, ok := m.steps[m.currentStep].(ConfigApplier); ok {
-				_ = a.Apply(m.config)
-			}
-		}
-		return m, nil
+		return m.handleConfigSync(msg)
 	}
 
 	if len(m.steps) > 0 && m.currentStep < len(m.steps) {
@@ -287,11 +527,106 @@ func (m *Model) updateCurrent(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if m.ready {
 			m.syncViewportContent()
+			m.notifyIfAtBottom()
 			m.followEditedFocus(msg)
 		}
 	}
 
 	return m, tea.Batch(cmds...)
+}
+
+// handleConfigSync applies a step's ConfigSyncMsg to the shared config and,
+// for draft-eligible steps, persists the draft. Split out of update so that
+// function stays under the linter's statement budget.
+func (m *Model) handleConfigSync(msg ConfigSyncMsg) (tea.Model, tea.Cmd) {
+	if !m.currentStepMatches(msg.StepID) {
+		return m, nil
+	}
+	if len(m.steps) > 0 && m.currentStep >= 0 && m.currentStep < len(m.steps) {
+		if a, ok := m.steps[m.currentStep].(ConfigApplier); ok {
+			if err := a.Apply(m.config); err != nil {
+				m.err = err
+				return m, nil
+			}
+		}
+	}
+	if isConfigDraftStep(msg.StepID) {
+		fieldKey := ""
+		if cursor, ok := m.steps[m.currentStep].(interface{ DraftFieldKey() string }); ok {
+			fieldKey = cursor.DraftFieldKey()
+		}
+		m.saveDraft(msg.StepID, fieldKey)
+	}
+	return m, nil
+}
+
+// handleWizardKey processes the wizard-level key bindings (quit, the help
+// overlay, scroll, back) ahead of the active step. handled reports whether
+// it fully handled msg — model/cmd are then Update's result — or whether
+// the caller should fall through to the step's own Update instead.
+func (m *Model) handleWizardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
+	m.err = nil
+
+	if key.Matches(msg, m.keyMap.Quit) {
+		if len(m.steps) > 0 && m.currentStep < len(m.steps) {
+			if g, ok := m.steps[m.currentStep].(QuitGuard); ok && g.InterceptQuit() {
+				// The guard's own feedback (e.g. "press again to
+				// force-quit") renders in the viewport region the
+				// overlay would otherwise cover.
+				m.helpOpen = false
+				return m, nil, true
+			}
+		}
+		m.quitting = true
+		m.result = Result{Outcome: OutcomeCancelled}
+		return m, tea.Quit, true
+	}
+
+	if m.helpOpen {
+		if key.Matches(msg, m.keyMap.Help) || key.Matches(msg, m.keyMap.Back) {
+			m.helpOpen = false
+		}
+		return m, nil, true
+	}
+
+	if m.paletteOpen {
+		return m.handlePaletteKey(msg)
+	}
+
+	if msg.Code == 'k' && msg.Mod&tea.ModCtrl != 0 {
+		m.openPalette()
+		return m, nil, true
+	}
+
+	if key.Matches(msg, m.keyMap.Help) && !m.currentStepConsumesTextInput() {
+		m.helpOpen = true
+		return m, nil, true
+	}
+
+	if m.handleScrollKey(msg) {
+		return m, nil, true
+	}
+
+	if key.Matches(msg, m.keyMap.Back) {
+		if owner, ok := m.CurrentStep().(interface{ OwnsKey(tea.KeyPressMsg) bool }); ok && owner.OwnsKey(msg) {
+			return m, nil, false
+		}
+		if g, ok := m.CurrentStep().(BackGuard); ok && g.InterceptBack() {
+			return m, nil, true
+		}
+		if m.currentStep > 0 {
+			model, cmd := m.goToPreviousStep()
+			return model, cmd, true
+		}
+		// Escaping a swapped-in flow's first screen leaves the sub-flow and
+		// returns to the hub that launched it.
+		if m.suspended != nil {
+			model, cmd := m.restoreFlow()
+			return model, cmd, true
+		}
+	}
+
+	return m, nil, false
 }
 
 func stepShouldShow(step WizardStep, cfg *config.Config) bool {
@@ -306,6 +641,55 @@ func stepAutoCompletes(step WizardStep) bool {
 		return a.AutoCompletes()
 	}
 	return false
+}
+
+// currentStepConsumesTextInput reports whether the active step's focused
+// field would consume a "?" keypress as literal typed text — see
+// TextInputConsumer. A step that doesn't implement the interface (no text
+// fields to speak for) always reports false, so "?" opens the help overlay
+// there.
+func (m *Model) currentStepConsumesTextInput() bool {
+	if len(m.steps) == 0 || m.currentStep < 0 || m.currentStep >= len(m.steps) {
+		return false
+	}
+	tc, ok := m.steps[m.currentStep].(TextInputConsumer)
+	return ok && tc.ConsumesTextInput()
+}
+
+// arrowScroller is implemented by steps that opt in to ↑/↓ scrolling the
+// frame's viewport one line — read-only screens with no field for the arrows
+// to drive; a form or list step keeps the keys for its own navigation.
+type arrowScroller interface {
+	ScrollsWithArrows() bool
+}
+
+// currentStepScrollsWithArrows reports whether the active step has opted its
+// viewport into line-by-line arrow scrolling, mirroring the
+// currentStepConsumesTextInput opt-in: an unimplemented interface leaves the
+// arrows to the step's own Update.
+func (m *Model) currentStepScrollsWithArrows() bool {
+	if len(m.steps) == 0 || m.currentStep < 0 || m.currentStep >= len(m.steps) {
+		return false
+	}
+	a, ok := m.steps[m.currentStep].(arrowScroller)
+	return ok && a.ScrollsWithArrows()
+}
+
+// logPager is implemented by steps that page a log region of their own with
+// pgup/pgdn; while it reports true the frame leaves those keys to the step
+// instead of scrolling the viewport.
+type logPager interface {
+	ConsumesPaging() bool
+}
+
+// currentStepConsumesPaging reports whether the active step is paging a log
+// region of its own right now.
+func (m *Model) currentStepConsumesPaging() bool {
+	if len(m.steps) == 0 || m.currentStep < 0 || m.currentStep >= len(m.steps) {
+		return false
+	}
+	p, ok := m.steps[m.currentStep].(logPager)
+	return ok && p.ConsumesPaging()
 }
 
 // Result returns the wizard's terminal state. Valid only after tea.Quit.
@@ -343,14 +727,4 @@ func (m *Model) followEditedFocus(msg tea.Msg) {
 	if _, editing := msg.(tea.KeyPressMsg); editing {
 		m.autoScrollToField(0, 0)
 	}
-}
-
-func (m *Model) shouldGoBack(msg tea.KeyPressMsg) bool {
-	if !key.Matches(msg, m.keyMap.Back) || m.currentStep == 0 {
-		return false
-	}
-	if owner, ok := m.CurrentStep().(interface{ OwnsKey(tea.KeyPressMsg) bool }); ok && owner.OwnsKey(msg) {
-		return false
-	}
-	return true
 }

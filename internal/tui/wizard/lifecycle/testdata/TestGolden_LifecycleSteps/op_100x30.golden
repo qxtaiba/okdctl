@@ -1,18 +1,17 @@
                                                                                                     
   ╭──────────────────────────────────────────────────────────────────────────────────────────────╮  
-  │ O K D C T L                                                                                  │  
-  │ okd over proxmox, the easy way                                           ●─○─○─○ step 1 of 4 │  
+  │ O K D C T L  day-2 node operations                                                           │  
+  │ choose an operation                                 op · target · params · plan · run · done │  
   │──────────────────────────────────────────────────────────────────────────────────────────────│  
   │                                                                                              │  
   │                                                                                              │  
   │                                                                                              │  
   │                     cluster lifecycle                                                        │  
-  │                                                                                              │  
   │                     manage nodes on cluster "mycluster"                                      │  
   │                                                                                              │  
   │                     ● resize nodes                                                           │  
-  │                       change per-role cpu/memory, rolled out one node                        │  
-  │                       at a time behind etcd/ceph health gates                                │  
+  │                       change per-role cpu/memory, rolled out one node at                     │  
+  │                       a time behind etcd/ceph health gates                                   │  
   │                                                                                              │  
   │                     ○ add workers                                                            │  
   │                       build + upload a per-node iso, revive the ignition                     │  
@@ -24,7 +23,8 @@
   │                                                                                              │  
   │                                                                                              │  
   │                                                                                              │  
+  │                                                                                              │  
   │───────────────────────────────────────────────────────────────────────────────── ▸ mycluster │  
-  │   ↑↓  select    enter  confirm    ctrl+c  quit                                               │  
+  │  ↑↓ select • enter confirm • ctrl+c quit • ? help                                            │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                     

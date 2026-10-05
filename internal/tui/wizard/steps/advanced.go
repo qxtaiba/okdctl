@@ -24,9 +24,10 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:       "vm_id_base",
-					Label:     "vm id base",
+					Label:     labelVMIDBase,
 					Default:   "6000",
 					Help:      "starting vm id in proxmox (e.g., 6000, 6001, ...)",
+					Width:     wizard.FieldWidthNumber,
 					Required:  true,
 					Validate:  config.ValidateVMID,
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.VMIDBase = v }),
@@ -39,7 +40,7 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:     "cpu_type",
-					Label:   "cpu type",
+					Label:   labelCPUType,
 					Default: cpuTypeHost,
 					Help:    "host gives best performance, x86-64-v2 or kvm64 allow live migration",
 					Type:    wizard.FieldTypeSelect,
@@ -81,7 +82,7 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 					Key:     "ha_enabled",
 					Label:   "enable ha anti-affinity",
 					Default: valNo,
-					Help:    "spread master vms across proxmox nodes via ha-manager anti-affinity — requires pve 9+ AND a multi-node pve cluster (a single host cannot satisfy the anti-affinity rule); once enabled, ha supersedes the per-vm startup{} ordering on any ha-triggered relocation",
+					Help:    "spread master vms across proxmox nodes via ha-manager anti-affinity — see docs/architecture/wizard.md for requirements",
 					Type:    wizard.FieldTypeSelect,
 					Options: []string{valNo, valYes},
 					ConfigSet: wizard.SetBool(func(c *config.Config, v bool) {
@@ -102,13 +103,14 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 			Title: "clock synchronization",
 			Fields: []wizard.FieldDefinition{
 				{
-					Key:       "ntp_server",
-					Label:     "ntp server",
-					Default:   "",
-					Help:      "chrony source for master/worker nodes — blank uses the bastion's ignition server ip",
-					Validate:  config.ValidateNTPServer,
-					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.NTPServer = v }),
-					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.NTPServer }),
+					Key:         "ntp_server",
+					Label:       labelNTPServer,
+					Default:     "",
+					Placeholder: "pool.ntp.org",
+					Help:        "hostname or ip of the chrony source for master/worker nodes, e.g. pool.ntp.org — blank uses the bastion's ignition server ip",
+					Validate:    config.ValidateNTPServer,
+					ConfigSet:   wizard.SetString(func(c *config.Config, v string) { c.Networking.NTPServer = v }),
+					ConfigGet:   wizard.GetString(func(c *config.Config) string { return c.Networking.NTPServer }),
 				},
 			},
 		},
@@ -120,6 +122,7 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 					Label:     "bootstrap timeout",
 					Default:   "3600",
 					Help:      "seconds to wait for bootstrap (default: 1 hour)",
+					Width:     wizard.FieldWidthNumber,
 					Required:  true,
 					Validate:  config.ValidateTimeout,
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Deployment.BootstrapTimeout = v }),
@@ -130,6 +133,7 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 					Label:     "install timeout",
 					Default:   "7200",
 					Help:      "seconds to wait for install (default: 2 hours)",
+					Width:     wizard.FieldWidthNumber,
 					Required:  true,
 					Validate:  config.ValidateTimeout,
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Deployment.InstallTimeout = v }),
@@ -141,17 +145,19 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 			Title: "deployment options",
 			Fields: []wizard.FieldDefinition{
 				{
-					Key:       "terraform_env",
-					Label:     "terraform environment",
-					Default:   "",
-					Help:      "selects a directory under infrastructure/terraform/environments/ — leave blank to use the default (production)",
-					Validate:  config.ValidateTerraformEnv,
-					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Deployment.TerraformEnv = v }),
-					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Deployment.TerraformEnv }),
+					Key:         "terraform_env",
+					Label:       labelTerraformEnvironment,
+					Default:     "",
+					Placeholder: "production",
+					Help:        "directory name under infrastructure/terraform/environments/, e.g. production — blank uses the default (production)",
+					Width:       wizard.FieldWidthPath,
+					Validate:    config.ValidateTerraformEnv,
+					ConfigSet:   wizard.SetString(func(c *config.Config, v string) { c.Deployment.TerraformEnv = v }),
+					ConfigGet:   wizard.GetString(func(c *config.Config) string { return c.Deployment.TerraformEnv }),
 				},
 				{
 					Key:       "auto_approve",
-					Label:     "auto approve",
+					Label:     labelAutoApprove,
 					Default:   valNo,
 					Help:      "skip terraform apply confirmation prompts — use with care",
 					Type:      wizard.FieldTypeSelect,
@@ -165,20 +171,23 @@ var AdvancedStepDefinition = wizard.StepDefinition{
 					},
 				},
 				{
-					Key:       "bin_dir",
-					Label:     "bin dir",
-					Default:   "",
-					Help:      "absolute path to install oc, openshift-install and tools; ~/ is expanded. blank = /usr/local/bin",
-					Validate:  config.ValidateBinDir,
-					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Deployment.BinDir = v }),
-					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Deployment.BinDir }),
+					Key:         "bin_dir",
+					Label:       "bin dir",
+					Default:     "",
+					Placeholder: "/usr/local/bin",
+					Help:        "absolute path to install oc, openshift-install and tools; ~/ is expanded. blank = /usr/local/bin",
+					Width:       wizard.FieldWidthPath,
+					Validate:    config.ValidateBinDir,
+					ConfigSet:   wizard.SetString(func(c *config.Config, v string) { c.Deployment.BinDir = v }),
+					ConfigGet:   wizard.GetString(func(c *config.Config) string { return c.Deployment.BinDir }),
 				},
 			},
 		},
 	},
+	ExtraContentTitle: "notes",
 	ExtraContent: func(values map[string]string, _ int) string {
 		return lipgloss.NewStyle().
-			Foreground(tui.ColorTextDim).
+			Foreground(tui.ColorTextDim()).
 			Italic(true).
 			Render(fmt.Sprintf("current: vm ids from %s · cpu %s · HA %s\nbootstrap timeout %s · install timeout %s · auto approve %s", values["vm_id_base"], values["cpu_type"], values["ha_enabled"], values["bootstrap_timeout"], values["install_timeout"], values["auto_approve"]))
 	},

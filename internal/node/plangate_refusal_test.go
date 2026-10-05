@@ -65,6 +65,14 @@ func TestResizeDryRunSurfacesReplaceRefusal(t *testing.T) {
 	if err == nil {
 		t.Fatal("dry-run must surface the replace refusal, not preview it as safe")
 	}
+	// Source-side regression guard (item 3, second-cut safety findings):
+	// planTargeted folds the plan gate's specific reason into ClusterError's
+	// Msg, not just Err — Msg is the only part Error() surfaces. Pinning the
+	// substring here catches a revert to the old bare "plan safety gate
+	// refused the change" even with the rest of the suite green.
+	if !strings.Contains(err.Error(), "but plan has") {
+		t.Errorf("refusal must carry the specific gate reason, not just the generic prefix: %v", err)
+	}
 	if fc.cordon != 0 || fc.drain != 0 || ftf.applyCalls != 0 || ftf.snapshots != 0 {
 		t.Errorf("dry-run refusal mutated something: cordon=%d drain=%d apply=%d snapshot=%d",
 			fc.cordon, fc.drain, ftf.applyCalls, ftf.snapshots)

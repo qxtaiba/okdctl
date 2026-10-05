@@ -1,6 +1,10 @@
 package okd
 
-import "github.com/qxtaiba/okdctl/internal/nodetypes"
+import (
+	"time"
+
+	"github.com/qxtaiba/okdctl/internal/nodetypes"
+)
 
 // ClusterStatus is a read-only snapshot of an OKD cluster's state.
 type ClusterStatus struct {
@@ -9,6 +13,17 @@ type ClusterStatus struct {
 	Nodes             []NodeStatus  `json:"nodes,omitempty"`
 	DegradedOperators int           `json:"degraded_operators"`
 	Addons            []AddonStatus `json:"addons,omitempty"`
+	// APIAvailable reports whether a cluster client was available for probing.
+	APIAvailable bool `json:"-"`
+	// NodesAvailable reports whether the node list was parsed without truncation.
+	NodesAvailable bool `json:"-"`
+	// OperatorsAvailable reports whether operator data was parsed without truncation.
+	OperatorsAvailable  bool          `json:"-"`
+	APILatencyAvailable bool          `json:"-"`
+	APILatency          time.Duration `json:"-"`
+	LastDeployRunID     string        `json:"-"`
+	LastDeployCluster   string        `json:"-"`
+	LastDeployAt        time.Time     `json:"-"`
 }
 
 // AddonStatus is a health snapshot for a single registered addon.

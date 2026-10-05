@@ -61,6 +61,14 @@ type ResizableStep interface {
 	SetSize(width, height int)
 }
 
+// TerminalSizer is implemented by steps that lay themselves out against the
+// terminal's own dimensions rather than the content box they render into — a
+// gate stated in terminal columns and rows cannot be re-derived from the
+// content width, which the frame's own caps flatten.
+type TerminalSizer interface {
+	SetTerminalSize(width, height int)
+}
+
 // AutoCompletingStep marks steps that complete without user interaction; they
 // are skipped when navigating back with ESC.
 type AutoCompletingStep interface {
@@ -72,10 +80,50 @@ type HelpProvider interface {
 	ShortHelp() []KeyBinding
 }
 
+// OverlayHelpProvider is implemented by steps with a binding that works but
+// is deliberately left out of the footer ribbon, listed instead under the
+// "?" overlay's own screen section alongside ShortHelp's bindings.
+type OverlayHelpProvider interface {
+	OverlayHelp() []KeyBinding
+}
+
 // QuitGuard is implemented by steps that must intercept ctrl+c (e.g. graceful
 // cancel on first press); returning true consumes the keypress, false quits normally.
 type QuitGuard interface {
 	InterceptQuit() bool
+}
+
+// TextInputConsumer is implemented by steps whose currently focused field
+// would consume a "?" keypress as literal typed text rather than the
+// wizard's help-overlay toggle; a step with no text fields need not
+// implement it — an unasserted step never consumes text input, so "?"
+// always opens the overlay there.
+type TextInputConsumer interface {
+	ConsumesTextInput() bool
+}
+
+// PaletteTargetKind distinguishes wizard steps, fields, and actions.
+type PaletteTargetKind string
+
+// PaletteTargetStep, PaletteTargetField, and PaletteTargetAction are command-palette target kinds.
+const (
+	PaletteTargetStep   PaletteTargetKind = "step"
+	PaletteTargetField  PaletteTargetKind = "field"
+	PaletteTargetAction PaletteTargetKind = "action"
+)
+
+// PaletteTarget is a safe navigation destination exposed by a step.
+type PaletteTarget struct {
+	ID     string
+	Kind   PaletteTargetKind
+	Label  string
+	Detail string
+}
+
+// PaletteProvider exposes fields or actions without exposing their values.
+type PaletteProvider interface {
+	PaletteTargets() []PaletteTarget
+	FocusPaletteTarget(id string) tea.Cmd
 }
 
 // BackGuard is implemented by forward-only steps that must intercept esc
@@ -110,7 +158,8 @@ func NewBaseStep(id StepID, title, description string) BaseStep {
 }
 
 // NewBaseStepWithDisplayTitle returns a BaseStep with a separate
-// displayTitle (above the step body) plus title (in the progress indicator).
+// displayTitle (shown in the header) plus title (the progress-indicator
+// fallback used when displayTitle is empty).
 func NewBaseStepWithDisplayTitle(id StepID, title, displayTitle, description string) BaseStep {
 	return BaseStep{
 		id:           id,
@@ -128,8 +177,8 @@ func (b *BaseStep) ID() StepID { return b.id }
 // Title returns the progress-indicator title.
 func (b *BaseStep) Title() string { return b.title }
 
-// DisplayTitle returns the title shown above the step body; an empty
-// string skips title rendering.
+// DisplayTitle returns the title shown in the header; an empty string
+// falls back to Title().
 func (b *BaseStep) DisplayTitle() string { return b.displayTitle }
 
 // IsFocused reports whether the step currently owns input focus.
@@ -173,8 +222,20 @@ type StepCompleteMsg struct {
 	StepID StepID
 }
 
+// DraftResumeMsg resumes the configure flow at a saved step and field.
+type DraftResumeMsg struct {
+	StepID   StepID
+	FieldKey string
+}
+
 // StepBackMsg signals that the wizard should step back one position.
 type StepBackMsg struct{}
+
+// LayoutChangedMsg asks the wizard to re-measure the active step: a step that
+// flips its own layout gate — a full-screen toggle turning SuppressesSplit on —
+// changes the body width without the terminal changing at all, and nothing else
+// resizes the viewport before the next real resize.
+type LayoutChangedMsg struct{}
 
 // ErrorSetMsg signals an error to display in the wizard's status row, emitted
 // on a failed step-level validation or when a ConfigApplier returns an error
@@ -184,15 +245,33 @@ type ErrorSetMsg struct {
 }
 
 // FocusChangedMsg signals that focus has moved within the active step; the
-// wizard uses this to auto-scroll the focused field into view.
-type FocusChangedMsg struct {
-	FieldIndex  int
-	TotalFields int
+// wizard resyncs the viewport and scrolls the focused field into view.
+type FocusChangedMsg struct{}
+
+// LineSpan is an inclusive range of 0-based line indices into a step's
+// View() output.
+type LineSpan struct {
+	Start int
+	End   int
 }
 
-// ConfigSyncMsg requests step.Apply(cfg) on the active step without
-// advancing, so a step can publish a tentative selection (e.g. a status
-// badge) while still focused.
+// SpanProvider is implemented by steps that can report which lines of their
+// View() the focused field occupies; the wizard scrolls that span into view
+// on FocusChangedMsg. Spans are recorded during View, so a step that has
+// not rendered yet reports false.
+type SpanProvider interface {
+	FocusedSpan() (LineSpan, bool)
+}
+
+// BottomNotifiable is implemented by a step that must not trust content
+// below an initial fold until the wizard confirms the viewport has shown
+// its last line at least once — a step has no visibility into the
+// viewport's own scroll offset, so this is the only guarantee it can act on.
+type BottomNotifiable interface {
+	NotifyViewportAtBottom()
+}
+
+// ConfigSyncMsg applies the active step without advancing and persists its draft state.
 type ConfigSyncMsg struct {
 	StepID StepID
 }

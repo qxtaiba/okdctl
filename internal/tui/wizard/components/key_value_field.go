@@ -14,18 +14,21 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-var errKVEmptyKey = errors.New("key cannot be empty")
-
-// KeyValueField edits a key/value table with explicit cell edit and navigation modes.
+// KeyValueField renders an editable key=value table (j/k row, h/l col, a
+// add, d delete, ctrl+e edit). tab/shift+tab are reserved by the host
+// DataDrivenStep; enter commits the active edit (via EnterConsumer) and only
+// submits the step from navigate mode.
 type KeyValueField struct {
 	Label     string
 	Help      string
 	Validator func(string) error
 
-	rows         []kvRow
-	cursor       int
-	col          int
-	editMode     bool
+	rows     []kvRow
+	cursor   int
+	col      int
+	editMode bool
+	// editOriginal is the cell's value when edit mode was entered, restored
+	// on escape so a cancelled edit never leaves a partial keystroke behind.
 	editOriginal string
 	focused      bool
 	err          error
@@ -59,6 +62,19 @@ func NewKeyValueField(label string) *KeyValueField {
 	}
 }
 
+// ConsumesTextInput reports true only mid-edit: navigate mode's keys
+// (j/k/h/l/a/d/ctrl+e) are all single-purpose commands, so a "?" there is
+// inert and free for the wizard's help-overlay toggle.
+func (f *KeyValueField) ConsumesTextInput() bool {
+	return f.focused && f.editMode
+}
+
+// ConsumesEnter reports true mid-edit, when enter commits the cell edit
+// rather than submitting the step.
+func (f *KeyValueField) ConsumesEnter() bool {
+	return f.focused && f.editMode
+}
+
 // Value serializes rows as "k1=v1,k2=v2", omitting rows with a blank key.
 // Values containing a comma will not round-trip through SetValue.
 func (f *KeyValueField) Value() string {
@@ -74,6 +90,12 @@ func (f *KeyValueField) Value() string {
 	}
 	return strings.Join(parts, ",")
 }
+
+// FieldLabel returns the field's label.
+func (f *KeyValueField) FieldLabel() string { return f.Label }
+
+// FieldHelp returns the field's help text.
+func (f *KeyValueField) FieldHelp() string { return f.Help }
 
 // SetValue parses a "k1=v1,k2=v2" string into rows, replacing any current
 // content. Values containing a comma will not round-trip through Value.
@@ -112,33 +134,70 @@ func (f *KeyValueField) SetWidth(width int) {
 	}
 }
 
-// Validate rejects rows with a non-empty value but empty key, then runs the
+// Check rejects rows with a non-empty value but empty key, then runs the
 // field Validator against the serialized Value if one is set.
-func (f *KeyValueField) Validate() error {
+func (f *KeyValueField) Check() error {
 	for i := range f.rows {
 		r := &f.rows[i]
 		if strings.TrimSpace(r.keyInput.Value()) == "" && r.valInput.Value() != "" {
-			f.err = errKVEmptyKey
-			return f.err
+			label := f.Label
+			if label == "" {
+				return errors.New("key cannot be empty — enter a key")
+			}
+			return fmt.Errorf("%s key cannot be empty — enter a key", label)
 		}
 	}
 	if f.Validator != nil {
-		f.err = f.Validator(f.Value())
-		return f.err
+		return f.Validator(f.Value())
 	}
-	f.err = nil
 	return nil
 }
 
-// Update routes messages: ctrl+e toggles edit mode; navigate mode uses
-// j/k/h/l/a/d; edit mode forwards other keys to the active textinput.
+// Validate runs Check and records the result as the field's current error for View to render.
+func (f *KeyValueField) Validate() error {
+	f.err = f.Check()
+	return f.err
+}
+
+// KeyHints returns the field's footer hints, differing between edit and
+// navigate mode.
+func (f *KeyValueField) KeyHints() []KeyHint {
+	if f.editMode {
+		return []KeyHint{{Key: "enter/ctrl+e", Help: "done"}}
+	}
+	return []KeyHint{
+		{Key: "j/k", Help: "row"},
+		{Key: "h/l", Help: "column"},
+		{Key: "a", Help: "add"},
+		{Key: "d", Help: "delete"},
+		{Key: "ctrl+e", Help: "edit"},
+	}
+}
+
+// OwnsKey reserves cell commit and cancel while an editor is active, so the
+// wizard's own Back/navigation handling never intercepts them.
+func (f *KeyValueField) OwnsKey(msg tea.KeyPressMsg) bool {
+	return f.editMode && (msg.Code == tea.KeyEnter || msg.Code == tea.KeyEscape)
+}
+
+// Editing reports whether typing currently changes a table cell.
+func (f *KeyValueField) Editing() bool { return f.editMode }
+
+// Update routes messages: ctrl+e toggles edit mode, enter commits it, and
+// escape cancels it by restoring the cell's pre-edit value; navigate mode
+// uses j/k/h/l/a/d; edit mode otherwise forwards keys to the active
+// textinput.
 func (f *KeyValueField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 	if !f.focused {
 		return f, nil
 	}
 	if keyMsg, isKey := msg.(tea.KeyPressMsg); isKey {
-		if f.OwnsKey(keyMsg) {
-			if keyMsg.Code == tea.KeyEscape && len(f.rows) > 0 {
+		if key.Matches(keyMsg, key.NewBinding(key.WithKeys("ctrl+e"))) {
+			cmd := f.toggleEditMode()
+			return f, cmd
+		}
+		if f.editMode && keyMsg.Code == tea.KeyEscape {
+			if len(f.rows) > 0 {
 				if f.col == 0 {
 					f.rows[f.cursor].keyInput.SetValue(f.editOriginal)
 				} else {
@@ -149,9 +208,10 @@ func (f *KeyValueField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 			f.blurAllInputs()
 			return f, nil
 		}
-		if key.Matches(keyMsg, key.NewBinding(key.WithKeys("ctrl+e"))) {
-			cmd := f.toggleEditMode()
-			return f, cmd
+		if f.editMode && key.Matches(keyMsg, key.NewBinding(key.WithKeys("enter"))) {
+			f.editMode = false
+			f.blurAllInputs()
+			return f, nil
 		}
 		if !f.editMode {
 			return f.updateNavigate(keyMsg)
@@ -223,7 +283,6 @@ func (f *KeyValueField) addRow() tea.Cmd {
 	f.cursor = len(f.rows) - 1
 	f.col = 0
 	f.editMode = true
-	f.editOriginal = ""
 	cmd := f.syncInputFocus()
 	if f.width > 0 {
 		f.SetWidth(f.width)
@@ -259,77 +318,89 @@ func (f *KeyValueField) blurAllInputs() {
 	}
 }
 
-// View renders the label, column header, all data rows, and any validation
-// error. The active row shows live textinputs when in edit mode.
+// View renders the field's card — one row per pair plus an add-row
+// trailer — and an error or help row below it.
 func (f *KeyValueField) View() string {
-	labelStyle := lipgloss.NewStyle().Foreground(tui.ColorText)
-	hintStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim)
-
-	labelLine := labelStyle.Render(strings.ToLower(f.Label))
-	if f.Help != "" {
-		labelLine += " " + hintStyle.Render("("+strings.ToLower(f.Help)+")")
-	}
-	if f.focused && f.editMode {
-		labelLine += " " + hintStyle.Render("(editing — ctrl+e done)")
-	} else if f.focused {
-		labelLine += " " + hintStyle.Render("(j/k rows · h/l col · a add · d del · ctrl+e edit)")
-	}
-
 	colW := f.cellWidth()
-	lines := []string{labelLine, f.viewHeader(colW)}
+
+	rows := make([]string, 0, len(f.rows)+1)
 	for i := range f.rows {
-		lines = append(lines, f.viewRow(i, colW))
+		rows = append(rows, f.viewRow(i, colW))
 	}
-	if f.err != nil {
-		errStyle := lipgloss.NewStyle().Foreground(tui.ColorError)
-		lines = append(lines, errStyle.Render(tui.IconError+" "+strings.ToLower(f.err.Error())))
+	rows = append(rows, f.viewAddRow())
+
+	accent := tui.ColorSubtle()
+	switch {
+	case f.err != nil:
+		accent = tui.ColorError()
+	case f.focused:
+		accent = tui.ColorPrimary()
 	}
-	return strings.Join(lines, "\n")
+
+	out := tui.Card(f.Label, strings.Join(rows, "\n"), f.width, accent)
+	switch {
+	case f.err != nil:
+		out += "\n" + errStyle.Render(tui.IconError+" "+f.err.Error())
+	case f.focused && f.Help != "":
+		out += "\n" + helpStyle.Width(f.width).Render(f.Help)
+	}
+	return out
 }
 
+// cellWidth splits the card's inner width between the key and value
+// columns, reserving 1 column for the cursor prefix and 2 for the gap
+// between them.
 func (f *KeyValueField) cellWidth() int {
-	return max((f.width-8)/2, 10)
+	inner := f.width - 2
+	return max((inner-3)/2, 10)
 }
 
-func (f *KeyValueField) viewHeader(colW int) string {
-	hdrStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim)
-	return hdrStyle.Render(fmt.Sprintf("  %-*s  %-*s", colW, "key", colW, "value"))
-}
-
+// viewRow renders row i as "key  value", dim unless it holds the cursor; in
+// edit mode the cursor row becomes two joined fieldBox cells instead.
 func (f *KeyValueField) viewRow(i, colW int) string {
-	cursorStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true)
-	activeStyle := lipgloss.NewStyle().Foreground(tui.ColorText)
-	dimStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim)
-	boxFocus := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).BorderForeground(tui.ColorPrimary).
-		Padding(0, 1).Width(colW)
-	boxIdle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).BorderForeground(tui.ColorBorder).
-		Padding(0, 1).Width(colW)
+	cursorStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true)
+	activeStyle := lipgloss.NewStyle().Foreground(tui.ColorTextSoft())
+	dimStyle := lipgloss.NewStyle().Foreground(tui.ColorTextFaint())
 
 	r := &f.rows[i]
 	isCursor := f.focused && i == f.cursor
-	cur := "  "
-	if isCursor {
-		cur = cursorStyle.Render("> ")
-	}
 
 	if f.editMode && isCursor {
-		if f.col == 0 {
-			return cur + boxFocus.Render(r.keyInput.View()) + "  " + boxIdle.Render(r.valInput.View())
+		focusedKey := f.col == 0
+		keyCell, valCell := r.keyInput.View(), kvBlurredCell(&r.valInput, colW)
+		if !focusedKey {
+			keyCell, valCell = kvBlurredCell(&r.keyInput, colW), r.valInput.View()
 		}
-		return cur + boxIdle.Render(r.keyInput.View()) + "  " + boxFocus.Render(r.valInput.View())
+		keyBox := fieldBox(keyCell, colW, focusedKey, false, false)
+		valBox := fieldBox(valCell, colW, !focusedKey, false, false)
+		// JoinHorizontal zips the boxes' rows together; "+" concatenation
+		// would instead glue keyBox's last row to valBox's first row.
+		return lipgloss.JoinHorizontal(lipgloss.Top, keyBox, "  ", valBox)
 	}
 
-	kVal := fmt.Sprintf("%-*s", colW, r.keyInput.Value())
-	vVal := fmt.Sprintf("%-*s", colW, r.valInput.Value())
-	if isCursor && f.col == 0 {
-		return cur + activeStyle.Render(kVal) + "  " + dimStyle.Render(vVal)
+	prefix, style := " ", dimStyle
+	if isCursor {
+		prefix, style = cursorStyle.Render(">"), activeStyle
 	}
-	if isCursor && f.col == 1 {
-		return cur + dimStyle.Render(kVal) + "  " + activeStyle.Render(vVal)
-	}
-	return cur + dimStyle.Render(kVal) + "  " + dimStyle.Render(vVal)
+	content := fmt.Sprintf("%-*s  %-*s", colW, r.keyInput.Value(), colW, r.valInput.Value())
+	return prefix + style.Render(content)
+}
+
+// kvBlurredCell renders an unfocused edit cell's prompt and value head
+// directly in the shared blurred text style, bypassing the textinput's
+// cursor path — its parked cursor cell renders through the cursor's own
+// TextStyle (never set on the value path), reading as one odd character in
+// a uniform cell, and its scroll window can hide the value's head: the same
+// family InputField.blurredValueView works around.
+func kvBlurredCell(in *textinput.Model, colW int) string {
+	style := fieldInputStyles(false, false).Blurred.Text
+	budget := max(colW-4-lipgloss.Width(in.Prompt), 1)
+	return style.Render(in.Prompt + tui.Truncate(in.Value(), budget))
+}
+
+// viewAddRow renders the trailing "+ add" row that the 'a' key acts on.
+func (f *KeyValueField) viewAddRow() string {
+	return lipgloss.NewStyle().Foreground(tui.ColorTextFaint()).Render(" + add")
 }
 
 func parseKVString(value string) []kvRow {
@@ -354,11 +425,3 @@ func parseKVString(value string) []kvRow {
 	}
 	return rows
 }
-
-// OwnsKey reserves cell commit and cancel while an editor is active.
-func (f *KeyValueField) OwnsKey(msg tea.KeyPressMsg) bool {
-	return f.editMode && (msg.Code == tea.KeyEnter || msg.Code == tea.KeyEscape)
-}
-
-// Editing reports whether typing currently changes a table cell.
-func (f *KeyValueField) Editing() bool { return f.editMode }
