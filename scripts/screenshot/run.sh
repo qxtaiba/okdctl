@@ -112,7 +112,7 @@ LIFECYCLE_STEP_NAMES=(op target params preview confirm exec "done")
 # Screens in hub.tape.in's capture order; must match the Screenshot
 # filenames baked into that tape. Kept as the single source of truth so the
 # cleanup and the missing-screen check can never drift apart.
-HUB_STEP_NAMES=(hub-deployed cluster-status cluster-status-details hub-manage)
+HUB_STEP_NAMES=(hub-deployed hub-manage)
 
 render_tape() {
   local template="$1" name="$2" w="$3" h="$4" dest="$5"

@@ -14,6 +14,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
+	"github.com/qxtaiba/okdctl/internal/tui/wizard/lifecycle"
 )
 
 // assertNoScrollIndicator fails t if frame's footer shows the viewport
@@ -343,11 +344,11 @@ func resolveCmd(t *testing.T, cmd tea.Cmd) tea.Msg {
 	return nil
 }
 
-// TestGolden_HubReachesClusterStatus drives the hub's cluster-status verb with
+// TestGolden_HubReachesManageNodes drives the hub's manage-nodes verb with
 // real keystrokes: the dim "opening …" notice while the flow is still being
-// assembled, then the read-only status box the swapped-in flow renders with its
-// esc-to-hub ribbon, then the hub again once esc is pressed.
-func TestGolden_HubReachesClusterStatus(t *testing.T) {
+// assembled, then the lifecycle flow's first screen with its esc-to-hub
+// ribbon, then the hub again once esc is pressed.
+func TestGolden_HubReachesManageNodes(t *testing.T) {
 	for _, sz := range []struct{ w, h int }{{80, 24}, {100, 30}} {
 		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
 			forceHeroColor(t)
@@ -358,13 +359,13 @@ func TestGolden_HubReachesClusterStatus(t *testing.T) {
 			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
 			seedHubSaveSlot(m)
 			hub := m.CurrentStep().(*WelcomeStep)
-			hub.SetFlows(HubFlows{ClusterStatus: func() ([]wizard.WizardStep, wizard.FlowChrome, error) {
-				flowSteps, chrome := StatusFlow(StaticStatusSource{Status: statusFixture()})
-				return flowSteps, chrome, nil
+			hub.SetFlows(HubFlows{ManageNodes: func() ([]wizard.WizardStep, wizard.FlowChrome, error) {
+				st := &lifecycle.State{Cfg: m.Config()}
+				return lifecycle.NewSteps(st, lifecycle.DemoHooks(0)), lifecycle.Chrome(), nil
 			}})
 
 			downKey := tea.KeyPressMsg{Code: 'j', Text: "j"}
-			for range 3 {
+			for range 2 {
 				m.Update(downKey)
 			}
 			_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -372,31 +373,27 @@ func TestGolden_HubReachesClusterStatus(t *testing.T) {
 			opening := tuitest.RenderAt(t, m, sz.w, sz.h)
 			tuitest.Golden(t, fmt.Sprintf("hub-opening_%dx%d", sz.w, sz.h), opening)
 			tuitest.AssertFits(t, opening, sz.w, sz.h)
-			if !strings.Contains(tuitest.StripANSI(opening), "opening cluster status") {
+			if !strings.Contains(tuitest.StripANSI(opening), "opening manage nodes") {
 				t.Errorf("the hub must say which flow it is opening, and the notice must fit the body budget:\n%s", opening)
 			}
 			if sz.w == 80 && sz.h == 24 {
 				assertNoScrollIndicator(t, opening)
 			}
 
-			_, initCmd := m.Update(resolveCmd(t, cmd))
-			m.Update(resolveCmd(t, initCmd))
+			m.Update(resolveCmd(t, cmd))
 
 			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
-			tuitest.Golden(t, fmt.Sprintf("cluster-status_%dx%d", sz.w, sz.h), frame)
+			tuitest.Golden(t, fmt.Sprintf("manage-nodes_%dx%d", sz.w, sz.h), frame)
 			tuitest.AssertFits(t, frame, sz.w, sz.h)
 
 			plain := tuitest.StripANSI(frame)
 			if !strings.Contains(plain, "esc hub") {
-				t.Errorf("the status screen must advertise the esc round-trip:\n%s", plain)
-			}
-			if strings.Contains(plain, "PROGRESS") {
-				t.Errorf("the status screen must suppress the wide split:\n%s", plain)
+				t.Errorf("the lifecycle entry screen must advertise the esc round-trip:\n%s", plain)
 			}
 
 			m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 			back := tuitest.StripANSI(tuitest.RenderAt(t, m, sz.w, sz.h))
-			if !strings.Contains(back, "cluster status") || !strings.Contains(back, "prod-cluster") {
+			if !strings.Contains(back, "manage nodes") || !strings.Contains(back, "prod-cluster") {
 				t.Errorf("esc must return to the hub:\n%s", back)
 			}
 			if strings.Contains(back, "opening") {

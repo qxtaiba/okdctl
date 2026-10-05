@@ -106,9 +106,6 @@ func ocLoginCmd(st *State) string {
 // finishBindings omits actions without providers so the ribbon matches the screen.
 func finishBindings(hooks *Hooks) []wizard.KeyBinding {
 	var keys []wizard.KeyBinding
-	if hooks.Finish != nil && hooks.Finish.ClusterStatus != nil {
-		keys = append(keys, wizard.KeyBinding{Key: string(rune(keyClusterStatus)), Help: "cluster status"})
-	}
 	if hooks.Finish != nil && hooks.Finish.ManageNodes != nil {
 		keys = append(keys, wizard.KeyBinding{Key: string(rune(keyManageNodes)), Help: "manage nodes"})
 	}

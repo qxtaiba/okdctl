@@ -7,7 +7,7 @@ fakepve fixture, and screenshots every step, at four terminal sizes:
 80x24, 100x30, 120x40, 180x48. Requires `vhs` (`brew install vhs`) and
 `go`; nothing touches a real hypervisor or deploys.
 
-Output lands in `scripts/screenshot/out/` (gitignored): 24 PNGs per size
+Output lands in `scripts/screenshot/out/` (gitignored): 22 PNGs per size
 (`<size>-<step>.png`, e.g. `80x24-basics.png`), a `<size>.txt`,
 `<size>-hub.txt`, `<size>-distribution-fail.txt`, and
 `<size>-lifecycle.txt` raw terminal capture, and a `calib-<size>.txt`
@@ -31,9 +31,9 @@ calibration readout per size.
   (the human-paced README recording) with sleeps compressed for unattended
   batch rendering.
 - `hub.tape.in` walks the hero-hub's own deployed-state screens: the
-  launcher, `cluster status` and its node-detail drill-in, and the
-  `manage nodes` operation picker, seeded with a fake Terraform state so
-  the hub's save-slot line reads `deployed`.
+  launcher and the `manage nodes` operation picker it swaps into, seeded
+  with a fake Terraform state so the hub's save-slot line reads
+  `deployed`.
 - `distribution-fail.tape.in` captures the distribution step's error state
   under `OKDCTL_DEMO_RELEASES=fail` — the empty state and retry ribbon,
   with no interaction beyond opening the step.

@@ -27,14 +27,14 @@
   │                  beadmin-password                                                                                │  
   │                                                                                                                  │  
   │  NEXT                                                                                                            │  
-  │  s       cluster status                                                                                          │  
   │  n       manage nodes                                                                                            │  
   │  o       open console                                                                                            │  
   │  c       copy the oc login command                                                                               │  
   │  enter   exit                                                                                                    │  
   │                                                                                                                  │  
   │                                                                                                                  │  
+  │                                                                                                                  │  
   │─────────────────────────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
-  │  s cluster status • n manage nodes • o open console • c copy the oc login command • enter exit • ? help          │  
+  │  n manage nodes • o open console • c copy the oc login command • enter exit • ? help                             │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                                         

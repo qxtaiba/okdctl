@@ -1,24 +1,24 @@
                                                                                 
   ╭──────────────────────────────────────────────────────────────────────────╮  
-  │ O K D C T L  read-only cluster snapshot                                  │  
-  │ cluster status                                                           │  
+  │ O K D C T L  day-2 node operations                                       │  
+  │ choose an operation             op · target · params · plan · run · done │  
   │──────────────────────────────────────────────────────────────────────────│  
-  │  CLUSTER STATUS · Running                                                │  
-  │  API ✓ healthy · 42ms   OPERATORS 0 degraded                             │  
-  │  NODES · 6 (3 master · 3 worker)                                         │  
-  │  master                                                                  │  
-  │  >   homelab-master0                                          ready      │  
-  │      homelab-master1                                          ready      │  
-  │      homelab-master2                                          ready      │  
-  │  worker                                                                  │  
-  │      homelab-worker0                                          ready      │  
-  │      homelab-worker1                                          ready      │  
-  │      homelab-worker2                                          ready      │  
-  │  ADD-ONS · ✓ flux · healthy                                              │  
+  │           cluster lifecycle                                              │  
+  │           manage nodes on cluster "prod-cluster"                         │  
   │                                                                          │  
+  │           ● resize nodes                                                 │  
+  │             change per-role cpu/memory, rolled out one node at           │  
+  │             a time behind etcd/ceph health gates                         │  
   │                                                                          │  
+  │           ○ add workers                                                  │  
+  │             build + upload a per-node iso, revive the ignition           │  
+  │             server, join and wait ready                                  │  
+  │                                                                          │  
+  │           ○ remove worker                                                │  
+  │             cordon, drain, destroy the vm, delete the node               │  
+  │             (highest-numbered worker only)                               │  
   │                                                                          │  
   │────────────────────────────────────────────────────────── ▸ prod-cluster │  
-  │  esc hub • r refresh • ↑↓ nodes • enter details • ctrl+c quit • ? help   │  
+  │  ↑↓ select • enter confirm • esc hub • ctrl+c quit • ? help              │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

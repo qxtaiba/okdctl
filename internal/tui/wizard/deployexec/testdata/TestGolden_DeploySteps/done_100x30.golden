@@ -25,6 +25,6 @@
   │  api routing ... kube-vip (192.0.2.10)                                                       │  
   │                                                                                              │  
   │──────────────────────────── ↑ ↓  scroll down for more ──────────────────────────── ▸ homelab │  
-  │  s cluster status • n manage nodes • o open console … • ? help                               │  
+  │  n manage nodes • o open console • c copy the oc login command • enter exit … • ? help       │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                     

@@ -22,7 +22,6 @@
   │                                                                                         oc get nodes                                                                         │  
   │                                                                                                                                                                              │  
   │  NEXT                                                                                                                                                                        │  
-  │  s       cluster status                                                                                                                                                      │  
   │  n       manage nodes                                                                                                                                                        │  
   │  o       open console                                                                                                                                                        │  
   │  c       copy the oc login command                                                                                                                                           │  
@@ -42,7 +41,8 @@
   │                                                                                                                                                                              │  
   │                                                                                                                                                                              │  
   │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
   │─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
-  │  s cluster status • n manage nodes • o open console • c copy the oc login command • enter exit • ? help                                                                      │  
+  │  n manage nodes • o open console • c copy the oc login command • enter exit • ? help                                                                                         │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                                                                                                     

@@ -50,15 +50,12 @@ func (finishTestStep) Update(tea.Msg) (wizard.WizardStep, tea.Cmd) { return fini
 func (finishTestStep) View(int, int) string                        { return "finish test" }
 
 func TestDoneFinishVerbsReachTheirProviders(t *testing.T) {
-	status := func() ([]wizard.WizardStep, wizard.FlowChrome, error) {
-		return []wizard.WizardStep{finishTestStep{}}, wizard.FlowChrome{Tagline: "status"}, nil
-	}
 	manage := func() ([]wizard.WizardStep, wizard.FlowChrome, error) {
 		return []wizard.WizardStep{finishTestStep{}}, wizard.FlowChrome{Tagline: "manage"}, nil
 	}
 	open := false
 	s := NewDoneStep(doneState(), Hooks{
-		Finish: &FinishHooks{ClusterStatus: status, ManageNodes: manage, OpenConsole: func() tea.Cmd {
+		Finish: &FinishHooks{ManageNodes: manage, OpenConsole: func() tea.Cmd {
 			return func() tea.Msg { open = true; return nil }
 		}},
 	})
@@ -66,26 +63,24 @@ func TestDoneFinishVerbsReachTheirProviders(t *testing.T) {
 	for _, key := range []struct {
 		text string
 		want string
-	}{{"s", "cluster status"}, {"n", "manage nodes"}, {"o", "open console"}} {
+	}{{"n", "manage nodes"}, {"o", "open console"}} {
 		if !strings.Contains(strings.ToLower(tuitest.StripANSI(s.View(120, 40))), key.want) {
 			t.Errorf("finish screen omits %q", key.want)
 		}
 	}
 
-	for _, key := range []struct {
-		text string
-		want string
-	}{{"s", "status"}, {"n", "manage"}} {
-		_, cmd := s.Update(tea.KeyPressMsg{Text: key.text})
-		if cmd == nil {
-			t.Fatalf("%q returned no flow command", key.text)
-		}
-		swap, ok := cmd().(wizard.SwapFlowMsg)
-		if !ok || swap.Chrome.Tagline != key.want || len(swap.Steps) != 1 {
-			t.Errorf("%q returned %#v, want the %q flow", key.text, swap, key.want)
-		}
+	_, cmd := s.Update(tea.KeyPressMsg{Text: "n"})
+	if cmd == nil {
+		t.Fatal("n returned no flow command")
 	}
-	_, cmd := s.Update(tea.KeyPressMsg{Text: "o"})
+	swap, ok := cmd().(wizard.SwapFlowMsg)
+	if !ok || swap.Chrome.Tagline != "manage" || len(swap.Steps) != 1 {
+		t.Errorf("n returned %#v, want the manage flow", swap)
+	}
+	if _, cmd := s.Update(tea.KeyPressMsg{Text: "s"}); cmd != nil {
+		t.Errorf("s returned %T; the finish screen offers no cluster-status flow", cmd())
+	}
+	_, cmd = s.Update(tea.KeyPressMsg{Text: "o"})
 	if cmd == nil {
 		t.Fatal("o returned no console command")
 	}

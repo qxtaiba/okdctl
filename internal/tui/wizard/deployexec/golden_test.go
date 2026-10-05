@@ -34,9 +34,6 @@ func goldenHooks() Hooks {
 			ManageNodes: func() ([]wizard.WizardStep, wizard.FlowChrome, error) {
 				return []wizard.WizardStep{finishTestStep{}}, wizard.FlowChrome{}, nil
 			},
-			ClusterStatus: func() ([]wizard.WizardStep, wizard.FlowChrome, error) {
-				return []wizard.WizardStep{finishTestStep{}}, wizard.FlowChrome{}, nil
-			},
 			OpenConsole: func() tea.Cmd { return func() tea.Msg { return nil } },
 		},
 	}

@@ -476,7 +476,7 @@ func (m *Model) footerBindings() []KeyBinding {
 // screen, where esc leaves the sub-flow instead of stepping back within it.
 // The label names where esc actually lands rather than assuming it is
 // always the hub: a flow chained off a non-hub screen (deployexec's finish
-// screen opening cluster status via its "s" key, say) returns esc there,
+// screen opening manage nodes via its "n" key, say) returns esc there,
 // not to the five-verb hub, and the ribbon must not promise what esc does
 // not do. A step's own ShortHelp cannot know which case it is in — its own
 // esc entry (e.g. a hardcoded "hub") is corrected in place rather than left
