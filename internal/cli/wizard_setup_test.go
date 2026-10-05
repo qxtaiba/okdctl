@@ -1,34 +1,15 @@
 package cli
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
-	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/lifecycle"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/steps"
 )
-
-func TestWizardDraftSaveFnTakesTheProjectLock(t *testing.T) {
-	root := t.TempDir()
-	t.Chdir(root)
-	configPath := filepath.Join(root, "okdctl.yaml")
-
-	lock, err := runlock.Acquire(root, "deploy")
-	if err != nil {
-		t.Fatalf("acquire project lock: %v", err)
-	}
-	defer lock.Release()
-
-	save := wizardDraftSaveFn(configPath)
-	if err := save(config.DefaultConfig(), wizard.StepIDBasics, ""); err == nil {
-		t.Fatal("draft save succeeded while another session held the project lock; it must serialize like saveConfig and persistWizardConfig")
-	}
-}
 
 func TestDemoClusterStatusCarriesNoCredentials(t *testing.T) {
 	st := demoClusterStatus()
@@ -92,35 +73,6 @@ func TestReviewDiffBaselineRequiresAnExistingConfig(t *testing.T) {
 				t.Errorf("review diff = %v, want %v", got, tc.wantDiff)
 			}
 		})
-	}
-}
-
-func TestReviewDiffKeepsTheSavedBaselineWhenResumingDraft(t *testing.T) {
-	saved := config.DefaultConfig()
-	saved.Cluster.Domain = "original.example"
-	draft := config.DefaultConfig()
-	draft.Cluster.Domain = "draft.example"
-	wizardCfg := wizard.DefaultConfig()
-	wizardCfg.InitialConfig = draft
-	wizardCfg.ReviewBaseline = saved
-	wizardCfg.ConfigExists = true
-	built, err := buildWizardStepsWithState(wizardCfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var review *steps.ReviewStep
-	for _, step := range built.Steps {
-		if candidate, ok := step.(*steps.ReviewStep); ok {
-			review = candidate
-			break
-		}
-	}
-	if review == nil {
-		t.Fatal("buildWizardStepsWithState returned no review step")
-	}
-	out := strings.ReplaceAll(review.View(100, 100), "\r", "")
-	if !strings.Contains(out, "original.example → draft.example") {
-		t.Fatalf("review omitted the saved-to-draft change:\n%s", out)
 	}
 }
 

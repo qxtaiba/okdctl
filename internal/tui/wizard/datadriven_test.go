@@ -639,7 +639,7 @@ func TestDataDrivenStep_CrossFieldErrorFocusesAndMarksImplicatedField(t *testing
 
 	// Park focus on the first field — standing in for the implicated field
 	// being scrolled out of view when enter is pressed.
-	if cmd := step.form.FocusField(0, 0); cmd != nil {
+	if cmd := step.form.focusAt(0, 0); cmd != nil {
 		cmd()
 	}
 
@@ -661,7 +661,7 @@ func TestDataDrivenStep_CrossFieldErrorFocusesAndMarksImplicatedField(t *testing
 	}
 
 	// Correcting the value clears the stale inline error.
-	if cmd := step.form.FocusField(0, 1); cmd != nil {
+	if cmd := step.form.focusAt(0, 1); cmd != nil {
 		cmd()
 	}
 	_, _ = step.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
@@ -1110,31 +1110,6 @@ func TestRenderInfoCard_FitsWidth(t *testing.T) {
 	}
 }
 
-func TestDataDrivenDraftCursorRestoresSafeFieldAndOmitsCredentialField(t *testing.T) {
-	def := testStepDefinition()
-	def.Sections[0].Fields = append(def.Sections[0].Fields,
-		FieldDefinition{Key: "api_token", Label: "API token", Type: FieldTypePassword},
-	)
-	step := NewDataDrivenStep(def)
-	_ = step.form.Focus()
-	step.form.Update(tea.KeyPressMsg{Code: tea.KeyTab})
-
-	if got := step.DraftFieldKey(); got != "count" {
-		t.Fatalf("DraftFieldKey() = %q, want count", got)
-	}
-	if !step.SetDraftFieldKey("name") {
-		t.Fatal("SetDraftFieldKey(name) = false")
-	}
-	step.SetFocused(true)
-	_ = step.Init()
-	if got := step.DraftFieldKey(); got != "name" {
-		t.Errorf("restored DraftFieldKey() = %q, want name", got)
-	}
-	if step.SetDraftFieldKey("api_token") {
-		t.Fatal("SetDraftFieldKey(api_token) = true, want credential fields rejected")
-	}
-}
-
 // pairedTestDefinition declares two short text fields sharing a PairKey, in
 // a section of their own so the surrounding section head never interferes
 // with the row-join assertions below.
@@ -1172,11 +1147,11 @@ func TestDataDrivenStep_PairedFieldsRenderOnOneRow(t *testing.T) {
 		t.Fatalf("View(100) = %q, want a row containing both paired labels", view)
 	}
 
-	if cmd := step.form.FocusField(0, 0); cmd != nil {
+	if cmd := step.form.focusAt(0, 0); cmd != nil {
 		cmd()
 	}
 	spanA, okA := step.FocusedSpan()
-	if cmd := step.form.FocusField(0, 1); cmd != nil {
+	if cmd := step.form.focusAt(0, 1); cmd != nil {
 		cmd()
 	}
 	spanB, okB := step.FocusedSpan()
@@ -1366,7 +1341,7 @@ func TestDataDrivenStep_CollapsibleSectionExpandsWhenFocusIsInside(t *testing.T)
 	step.setValue("hidden_required", "x")
 	step.SetFocused(true)
 
-	if cmd := step.form.FocusField(1, 0); cmd != nil {
+	if cmd := step.form.focusAt(1, 0); cmd != nil {
 		cmd()
 	}
 	view := tuitest.StripANSI(step.View(100, 24))
@@ -1420,13 +1395,13 @@ func TestDataDrivenStep_CollapsibleSectionEnterStickyExpand(t *testing.T) {
 	step.setValue("hidden_required", "x")
 	step.SetFocused(true)
 
-	if cmd := step.form.FocusField(1, 0); cmd != nil {
+	if cmd := step.form.focusAt(1, 0); cmd != nil {
 		cmd()
 	}
 	if _, cmd := step.Update(tea.KeyPressMsg{Code: tea.KeyEnter}); cmd != nil {
 		cmd()
 	}
-	if cmd := step.form.FocusField(0, 0); cmd != nil {
+	if cmd := step.form.focusAt(0, 0); cmd != nil {
 		cmd()
 	}
 

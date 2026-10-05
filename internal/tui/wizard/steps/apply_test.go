@@ -306,11 +306,13 @@ func TestNetworkingStep_CIDROverlapFocusesAndMarksImplicatedFields(t *testing.T)
 	}
 	_ = cmd()
 
-	if got := step.DraftFieldKey(); got != "machine_cidr" {
-		t.Fatalf("focused field after the overlap error = %q, want machine_cidr (the first implicated field)", got)
+	view := tuitest.StripANSI(step.View(120, 40))
+	lines := strings.Split(view, "\n")
+	span, ok := step.FocusedSpan()
+	if !ok || span.Start >= len(lines) || !strings.Contains(lines[span.Start], labelMachineCIDR) {
+		t.Fatalf("focused span after the overlap error = %+v (ok=%v), want machine_cidr's (the first implicated field):\n%s", span, ok, view)
 	}
 
-	view := tuitest.StripANSI(step.View(120, 40))
 	if n := strings.Count(view, "must not overlap"); n != 2 {
 		t.Fatalf("View() shows the overlap error %d times, want 2 (once at each implicated field):\n%s", n, view)
 	}

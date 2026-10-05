@@ -7,11 +7,9 @@ import (
 // Config is the declarative description of a wizard: which steps run, the
 // seed Config, and whether an existing okdctl.yaml is present.
 type Config struct {
-	Steps          []StepConfig
-	InitialConfig  *config.Config
-	ReviewBaseline *config.Config
-	ConfigExists   bool
-	DraftPresent   bool
+	Steps         []StepConfig
+	InitialConfig *config.Config
+	ConfigExists  bool
 }
 
 // StepConfig declares sequence order; visible steps must validate before advancing.

@@ -198,12 +198,6 @@ type StepCompleteMsg struct {
 	StepID StepID
 }
 
-// DraftResumeMsg resumes the configure flow at a saved step and field.
-type DraftResumeMsg struct {
-	StepID   StepID
-	FieldKey string
-}
-
 // StepBackMsg signals that the wizard should step back one position.
 type StepBackMsg struct{}
 
@@ -247,7 +241,7 @@ type BottomNotifiable interface {
 	NotifyViewportAtBottom()
 }
 
-// ConfigSyncMsg applies the active step without advancing and persists its draft state.
+// ConfigSyncMsg applies the active step without advancing.
 type ConfigSyncMsg struct {
 	StepID StepID
 }

@@ -8,7 +8,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 )
 
-func TestDataDrivenInputEditRequestsDraftSync(t *testing.T) {
+func TestDataDrivenInputEditRequestsConfigSync(t *testing.T) {
 	step := NewDataDrivenStep(&StepDefinition{
 		ID:    StepIDBasics,
 		Title: "basics",

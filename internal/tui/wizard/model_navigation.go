@@ -1,8 +1,6 @@
 package wizard
 
 import (
-	"fmt"
-
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
@@ -389,17 +387,6 @@ func (m *Model) jumpToStep(id StepID) (tea.Model, tea.Cmd) {
 	return m.focusStep(idx)
 }
 
-func (m *Model) resumeDraft(msg DraftResumeMsg) (tea.Model, tea.Cmd) {
-	idx := m.indexOfStepByID(msg.StepID)
-	if idx < 0 || !stepShouldShow(m.steps[idx], m.config) {
-		return m, nil
-	}
-	if field, ok := m.steps[idx].(interface{ SetDraftFieldKey(string) bool }); ok && msg.FieldKey != "" {
-		field.SetDraftFieldKey(msg.FieldKey)
-	}
-	return m.focusStep(idx)
-}
-
 func (m *Model) indexOfStepByID(id StepID) int {
 	for i, s := range m.steps {
 		if s.ID() == id {
@@ -412,7 +399,7 @@ func (m *Model) indexOfStepByID(id StepID) int {
 // focusStep is the shared tail of every step transition: resize, focus, refresh
 // jump targets, resync viewport. It is also the single point every
 // navigation-mutating message (StepCompleteMsg, StepBackMsg, SwapFlowMsg,
-// JumpToStepMsg, DraftResumeMsg) funnels through, so it closes the help
+// JumpToStepMsg) funnels through, so it closes the help
 // overlay first — the overlay gates only tea.KeyPressMsg, so one of those
 // messages can otherwise arrive asynchronously while it is open and move the
 // current step (or replace the whole step set, on SwapFlow) underneath it,
@@ -433,13 +420,6 @@ func (m *Model) focusStep(idx int) (tea.Model, tea.Cmd) {
 	// superseded reply is simply discarded rather than clobbering newer
 	// state, and re-entry never needs to be gated here.
 	cmd := m.ownCommand(m.steps[idx].Init())
-	if m.draftSaver != nil && isConfigDraftStep(m.steps[idx].ID()) {
-		fieldKey := ""
-		if cursor, ok := m.steps[idx].(interface{ DraftFieldKey() string }); ok {
-			fieldKey = cursor.DraftFieldKey()
-		}
-		m.saveDraft(m.steps[idx].ID(), fieldKey)
-	}
 
 	m.syncJumpTargets()
 
@@ -452,26 +432,6 @@ func (m *Model) focusStep(idx int) (tea.Model, tea.Cmd) {
 
 	m.autoScrollToField(0, 0)
 	return m, cmd
-}
-
-func (m *Model) saveDraft(stepID StepID, fieldKey string) {
-	if m.draftSaver == nil {
-		return
-	}
-	if err := m.draftSaver(m.config, stepID, fieldKey); err != nil {
-		m.err = fmt.Errorf("save wizard draft: %w", err)
-	}
-}
-
-func isConfigDraftStep(id StepID) bool {
-	switch id {
-	case StepIDDistribution, StepIDBasics, StepIDProxmox, StepIDNodePlacement,
-		StepIDNetworking, StepIDResources, StepIDAddons, StepIDFiles,
-		StepIDAdvanced, StepIDReview:
-		return true
-	default:
-		return false
-	}
 }
 
 // syncJumpTargets refreshes the review step's digit-jump table, compacting out
