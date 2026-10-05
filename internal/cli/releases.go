@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"slices"
@@ -20,11 +19,7 @@ const (
 	channelAll    = "all"
 )
 
-var (
-	releasesListChannel string
-	releasesListOutput  string
-	releasesShowOutput  string
-)
+var releasesListChannel string
 
 var releasesCmd = &cobra.Command{
 	Use:     "releases",
@@ -42,8 +37,7 @@ By default only stable releases are shown; pass --channel=all to include every
 non-draft release. Results are served from a 1-hour on-disk cache
 (~/.okdctl/cache/okd-versions.json) to avoid repeated network round-trips.`,
 	Example: `  okdctl releases list
-  okdctl releases list --channel all
-  okdctl releases list --output json`,
+  okdctl releases list --channel all`,
 	Args: cobra.NoArgs,
 	RunE: runReleasesList,
 }
@@ -54,9 +48,8 @@ var releasesShowCmd = &cobra.Command{
 	Long: `Print metadata for a single OKD release identified by its full GitHub tag
 (e.g. "4.21.3-okd-scos.0"). The version list is resolved from the disk cache;
 use --channel=all with 'releases list' to discover pre-release tags.`,
-	Example: `  okdctl releases show 4.21.3-okd-scos.0
-  okdctl releases show 4.21.3-okd-scos.0 --output json`,
-	Args: cobra.ExactArgs(1),
+	Example: "  okdctl releases show 4.21.3-okd-scos.0",
+	Args:    cobra.ExactArgs(1),
 	ValidArgsFunction: func(cmd *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		fetcher := releases.NewOKDVersionFetcher()
 		series, err := fetcher.FetchVersions(cmd.Context())
@@ -80,12 +73,6 @@ func init() {
 	_ = releasesListCmd.RegisterFlagCompletionFunc("channel", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		return []string{channelStable, channelAll}, cobra.ShellCompDirectiveNoFileComp
 	})
-	releasesListCmd.Flags().StringVarP(&releasesListOutput, flagOutput, flagOutputShort, outputText,
-		"output format: text|json")
-	registerOutputCompletion(releasesListCmd)
-	releasesShowCmd.Flags().StringVarP(&releasesShowOutput, flagOutput, flagOutputShort, outputText,
-		"output format: text|json")
-	registerOutputCompletion(releasesShowCmd)
 
 	releasesCmd.AddCommand(releasesListCmd)
 	releasesCmd.AddCommand(releasesShowCmd)
@@ -96,10 +83,6 @@ func runReleasesList(cmd *cobra.Command, _ []string) error {
 	if err := validateChannel(releasesListChannel); err != nil {
 		return err
 	}
-	if err := validateFormat(releasesListOutput); err != nil {
-		return err
-	}
-	quietForJSON(releasesListOutput)
 
 	versions, err := fetchFlatVersions(cmd.Context())
 	if err != nil {
@@ -108,19 +91,10 @@ func runReleasesList(cmd *cobra.Command, _ []string) error {
 	if releasesListChannel == channelStable {
 		versions = slices.DeleteFunc(versions, func(v releases.OKDVersion) bool { return !v.Stable })
 	}
-
-	if releasesListOutput == outputJSON {
-		return writeJSON(cmd.OutOrStdout(), versions)
-	}
 	return printVersionList(cmd.OutOrStdout(), versions)
 }
 
 func runReleasesShow(cmd *cobra.Command, args []string) error {
-	if err := validateFormat(releasesShowOutput); err != nil {
-		return err
-	}
-	quietForJSON(releasesShowOutput)
-
 	versions, err := fetchFlatVersions(cmd.Context())
 	if err != nil {
 		return err
@@ -129,10 +103,6 @@ func runReleasesShow(cmd *cobra.Command, args []string) error {
 	v, ok := findVersion(versions, args[0])
 	if !ok {
 		return &errtypes.UsageError{Msg: fmt.Sprintf("version %q not found; try `okdctl releases list --channel all`", args[0])}
-	}
-
-	if releasesShowOutput == outputJSON {
-		return writeJSON(cmd.OutOrStdout(), v)
 	}
 	return printVersionDetail(cmd.OutOrStdout(), v)
 }
@@ -170,15 +140,6 @@ func validateChannel(ch string) error {
 	}
 }
 
-func validateFormat(format string) error {
-	switch format {
-	case outputText, outputJSON:
-		return nil
-	default:
-		return &errtypes.UsageError{Msg: fmt.Sprintf("invalid --output %q (want text|json)", format)}
-	}
-}
-
 func printVersionList(w io.Writer, versions []releases.OKDVersion) error {
 	if len(versions) == 0 {
 		_, err := fmt.Fprintln(w, tui.EmptyState("no releases", "try --channel all"))
@@ -213,10 +174,4 @@ func yesNo(b bool) string {
 		return "yes"
 	}
 	return "no"
-}
-
-func writeJSON(w io.Writer, v any) error {
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	return enc.Encode(v)
 }

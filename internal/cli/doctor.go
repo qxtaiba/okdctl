@@ -21,8 +21,7 @@ import (
 // see docs/cli/exit-codes.md.
 var errDoctorWarn = errors.New("doctor: warnings present, no failures")
 
-// doctorExitErr maps fail/warn tallies to runDoctor's return value; shared by
-// the JSON and text paths so they can't drift on exit code.
+// doctorExitErr maps fail/warn tallies to runDoctor's return value.
 func doctorExitErr(fails, warns int) error {
 	switch {
 	case fails > 0:
@@ -34,30 +33,11 @@ func doctorExitErr(fails, warns int) error {
 	}
 }
 
-// doctorJSONCheck is one entry in the JSON output's checks array; a multi-item
-// check emits one entry per sub-item.
-type doctorJSONCheck struct {
-	Name     string `json:"name"`
-	Severity string `json:"severity"`
-	Detail   string `json:"detail,omitempty"`
-}
-
-// doctorJSONOutput is the top-level envelope emitted by --output=json.
-type doctorJSONOutput struct {
-	Checks []doctorJSONCheck `json:"checks"`
-	Failed int               `json:"failed"`
-	Warned int               `json:"warned"`
-}
-
 func runDoctor(cmd *cobra.Command, _ []string) error {
 	// Runtime gate (not a build tag) keeps the pipeline compiling/testing on darwin dev hosts.
 	if runtime.GOOS != "linux" {
 		return &errtypes.UsageError{Msg: fmt.Sprintf("okdctl doctor is only supported on linux (current: %s)", runtime.GOOS)}
 	}
-	if err := validateFormat(doctorOutput); err != nil {
-		return err
-	}
-	quietForJSON(doctorOutput)
 
 	ctx := cmd.Context()
 
@@ -81,35 +61,6 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 		case doctor.Warn:
 			warns++
 		}
-	}
-
-	if doctorOutput == outputJSON {
-		var jsonChecks []doctorJSONCheck
-		for _, cr := range results {
-			if len(cr.r.Items) > 0 {
-				for _, item := range cr.r.Items {
-					entry := doctorJSONCheck{
-						Name:     cr.c.Name + "/" + item.Name,
-						Severity: item.Sev.String(),
-					}
-					if item.Note != "" {
-						entry.Detail = item.Note
-					}
-					jsonChecks = append(jsonChecks, entry)
-				}
-			} else {
-				jsonChecks = append(jsonChecks, doctorJSONCheck{
-					Name:     cr.c.Name,
-					Severity: cr.r.Sev.String(),
-					Detail:   cr.r.Detail,
-				})
-			}
-		}
-		out := doctorJSONOutput{Checks: jsonChecks, Failed: fails, Warned: warns}
-		if encErr := writeJSON(cmd.OutOrStdout(), out); encErr != nil {
-			return encErr
-		}
-		return doctorExitErr(fails, warns)
 	}
 
 	w := cmd.OutOrStdout()

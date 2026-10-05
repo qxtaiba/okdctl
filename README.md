@@ -118,7 +118,7 @@ okdctl version          print version, git commit, build date
 
 Every command documents its flags under `--help`.
 Exit codes and shell-script idioms: [`docs/cli/exit-codes.md`](docs/cli/exit-codes.md).
-JSON output shapes: [`docs/cli/json-schema.md`](docs/cli/json-schema.md).
+The `okdctl status --output json` shape: [`docs/cli/json-schema.md`](docs/cli/json-schema.md).
 
 ### The working directory
 

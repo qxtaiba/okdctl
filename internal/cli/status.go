@@ -2,7 +2,9 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 
 	"github.com/spf13/cobra"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/deploy"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/clusterstatus"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/render"
@@ -67,6 +70,21 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 		return writeJSON(cmd.OutOrStdout(), cs)
 	}
 	return printClusterStatus(cmd, &cs)
+}
+
+func validateFormat(format string) error {
+	switch format {
+	case outputText, outputJSON:
+		return nil
+	default:
+		return &errtypes.UsageError{Msg: fmt.Sprintf("invalid --output %q (want text|json)", format)}
+	}
+}
+
+func writeJSON(w io.Writer, v any) error {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(v)
 }
 
 // statusLifecycleSources wires phase-derivation signals; credentials load

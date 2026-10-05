@@ -11,7 +11,6 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/addon"
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
@@ -24,8 +23,6 @@ var (
 	addonInstallAll              bool
 	addonUninstallYes            bool
 	addonUninstallConfirmCluster string
-	addonListOutput              string
-	addonVerifyOutput            string
 )
 
 var addonCmd = &cobra.Command{
@@ -113,10 +110,6 @@ See also: addon list`,
 }
 
 func init() {
-	addonListCmd.Flags().StringVarP(&addonListOutput, flagOutput, flagOutputShort, outputText, "output format: text|json")
-	registerOutputCompletion(addonListCmd)
-	addonVerifyCmd.Flags().StringVarP(&addonVerifyOutput, flagOutput, flagOutputShort, outputText, "output format: text|json")
-	registerOutputCompletion(addonVerifyCmd)
 	addonInstallCmd.Flags().BoolVar(&addonInstallAll, "all", false, "install all enabled addons (per-addon continuation on failure)")
 	addonUninstallCmd.Flags().BoolVarP(&addonUninstallYes, "yes", "y", false, "skip confirmation prompt")
 	addonUninstallCmd.Flags().StringVar(&addonUninstallConfirmCluster, "confirm-cluster", "",
@@ -129,41 +122,11 @@ func init() {
 	rootCmd.AddCommand(addonCmd)
 }
 
-type addonListEntry struct {
-	Name        string   `json:"name"`
-	DisplayName string   `json:"display_name"`
-	Deps        []string `json:"deps"`
-	InConfig    bool     `json:"in_config"`
-}
-
 func runAddonList(cmd *cobra.Command, _ []string) error {
-	if err := validateFormat(addonListOutput); err != nil {
-		return err
-	}
-	quietForJSON(addonListOutput)
-
 	cfg, err := loadConfig(cfgFile)
 	if err != nil {
 		return err
 	}
-
-	if addonListOutput == outputJSON {
-		all := addon.All()
-		entries := make([]addonListEntry, 0, len(all))
-		for _, a := range all {
-			info := a.Info()
-			deps := make([]string, 0, len(info.Dependencies))
-			deps = append(deps, info.Dependencies...)
-			entries = append(entries, addonListEntry{
-				Name:        info.Name,
-				DisplayName: info.DisplayName,
-				Deps:        deps,
-				InConfig:    cfg.Addons[info.Name].Enabled,
-			})
-		}
-		return writeJSON(cmd.OutOrStdout(), entries)
-	}
-
 	return printAddonList(cmd.OutOrStdout(), cfg)
 }
 
@@ -230,11 +193,6 @@ func runAddonUninstall(cmd *cobra.Command, args []string) error {
 }
 
 func runAddonVerify(cmd *cobra.Command, _ []string) error {
-	if err := validateFormat(addonVerifyOutput); err != nil {
-		return err
-	}
-	quietForJSON(addonVerifyOutput)
-
 	cfg, err := loadConfig(cfgFile)
 	if err != nil {
 		return err
@@ -245,21 +203,6 @@ func runAddonVerify(cmd *cobra.Command, _ []string) error {
 	}
 	mgr := newAddonManager(cfg, projectRoot)
 	results, vErr := mgr.VerifyAll(cmd.Context())
-
-	if addonVerifyOutput == outputJSON {
-		entries := make([]okd.AddonStatus, 0, len(results))
-		for _, r := range results {
-			e := okd.AddonStatus{Name: r.Name, Healthy: r.Err == nil}
-			if r.Err != nil {
-				e.Error = r.Err.Error()
-			}
-			entries = append(entries, e)
-		}
-		if err := writeJSON(cmd.OutOrStdout(), entries); err != nil {
-			return err
-		}
-		return vErr
-	}
 
 	failed, err := printAddonVerify(cmd.OutOrStdout(), results)
 	if err != nil {

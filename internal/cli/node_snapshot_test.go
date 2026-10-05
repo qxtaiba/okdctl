@@ -3,7 +3,6 @@ package cli
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"strings"
@@ -116,25 +115,6 @@ func TestToNodeSnapshotEntries(t *testing.T) {
 	}
 	if got[1].SnapTime != "" {
 		t.Errorf("zero SnapTime must stay empty, got %q", got[1].SnapTime)
-	}
-}
-
-func TestNodeSnapshotEntryJSONShape(t *testing.T) {
-	e := nodeSnapshotEntry{Name: "pre-upgrade", SnapTime: "2025-01-01T00:00:00Z"}
-	data, err := json.Marshal(e)
-	if err != nil {
-		t.Fatalf("Marshal: %v", err)
-	}
-	s := string(data)
-	for _, want := range []string{`"name":"pre-upgrade"`, `"snap_time":"2025-01-01T00:00:00Z"`} {
-		if !strings.Contains(s, want) {
-			t.Errorf("json output %q missing %q", s, want)
-		}
-	}
-	for _, absent := range []string{"description", "parent"} {
-		if strings.Contains(s, absent) {
-			t.Errorf("json output %q must omit empty %q", s, absent)
-		}
 	}
 }
 
