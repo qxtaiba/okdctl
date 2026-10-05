@@ -28,7 +28,11 @@ func loadConfig(configFile string) (*config.Config, error) {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, errConfigNotFound(configFile)
 		}
-		return nil, &errtypes.ConfigError{Msg: "load configuration", Err: err}
+		cause := err.Error()
+		if d, ok := errtypes.Describe(err); ok {
+			cause = d.Message
+		}
+		return nil, &errtypes.ConfigError{Msg: "load configuration: " + cause, Err: err}
 	}
 	return cfg, nil
 }

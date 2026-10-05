@@ -54,8 +54,12 @@ func TestLoadFile_Rejections(t *testing.T) {
 	}{
 		{"schemaVersion explicitly empty", `schemaVersion: ""` + "\n", SchemaVersionCurrent},
 		{"schemaVersion absent", "cluster:\n  name: mycluster\n", SchemaVersionCurrent},
-		{"unsupported schemaVersion", "schemaVersion: v99\n", ""},
-		{"unknown top-level key", "schemaVersion: v2\nunknownField: oops\n", ""},
+		{"unsupported schemaVersion", "schemaVersion: v99\n", `unsupported schemaVersion "v99" (expected "v2")`},
+		{"unknown top-level key", "schemaVersion: v2\nunknownField: oops\n", `unknown field "unknownField"`},
+		{"unknown nested key", "schemaVersion: v2\ncluster:\n  nickname: oops\n", `unknown field "nickname"`},
+		{"wrong value type", "schemaVersion: v2\ntopology:\n  workers:\n    count: three\n", "topology.workers.count"},
+		{"duplicate key", "schemaVersion: v2\ncluster:\n  name: a\n  name: b\n", `key "name" already set`},
+		{"syntax error", "schemaVersion: v2\ncluster:\n  name: [unterminated\n", "line 3: did not find expected"},
 		{"second document", "schemaVersion: v2\n---\ncluster:\n  name: second\n", "more than one YAML document"},
 		{"leading marker then second document", "---\nschemaVersion: v2\n---\ncluster:\n  name: second\n", "more than one YAML document"},
 		{"empty trailing document", "schemaVersion: v2\n---\n", "more than one YAML document"},
@@ -72,10 +76,97 @@ func TestLoadFile_Rejections(t *testing.T) {
 			if !errors.As(err, &cfgErr) {
 				t.Fatalf("err = %v; want *errtypes.ConfigError", err)
 			}
-			if tc.wantInMsg != "" && !strings.Contains(cfgErr.Msg, tc.wantInMsg) {
+			if !strings.Contains(cfgErr.Msg, tc.wantInMsg) {
 				t.Errorf("ConfigError.Msg = %q; want it to contain %q", cfgErr.Msg, tc.wantInMsg)
 			}
+			if !strings.Contains(cfgErr.Msg, path) {
+				t.Errorf("ConfigError.Msg = %q; want it to name %s", cfgErr.Msg, path)
+			}
 		})
+	}
+}
+
+func TestLoadFile_FilesystemFailureCarriesCause(t *testing.T) {
+	dir := t.TempDir()
+	notADir := filepath.Join(dir, "plain-file")
+	if err := os.WriteFile(notADir, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name      string
+		path      string
+		wantInMsg string
+	}{
+		{"stat under a regular file", filepath.Join(notADir, "okdctl.yaml"), "not a directory"},
+		{"read a directory", dir, "is a directory"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := NewLoader().LoadFile(tc.path)
+			var cfgErr *errtypes.ConfigError
+			if !errors.As(err, &cfgErr) {
+				t.Fatalf("err = %v; want *errtypes.ConfigError", err)
+			}
+			if !strings.Contains(cfgErr.Msg, tc.wantInMsg) || !strings.Contains(cfgErr.Msg, tc.path) {
+				t.Errorf("ConfigError.Msg = %q; want it to contain %q and %s", cfgErr.Msg, tc.wantInMsg, tc.path)
+			}
+		})
+	}
+}
+
+func TestLoadFile_RefusesEnvFileWithoutEchoingItsValues(t *testing.T) {
+	const secret = "hunter2s3cr3t"
+	cases := []struct {
+		name string
+		body string
+	}{
+		{
+			"env file as okdctl writes it",
+			"# Proxmox credentials (managed by okdctl)\n" +
+				"PROXMOX_VE_ENDPOINT=https://192.168.1.100:8006\n" +
+				"PROXMOX_VE_USERNAME=root@pam\n" +
+				"PROXMOX_VE_PASSWORD=" + secret + "\n",
+		},
+		{"token assignment", "PROXMOX_VE_API_TOKEN=root@pam!okdctl=" + secret + "\n"},
+		{"value that parses as a yaml alias", "PROXMOX_VE_PASSWORD=ab: *" + secret + "\n"},
+		{"value that parses as a tagged scalar", "PROXMOX_VE_PASSWORD=ab: !!int " + secret + "\n"},
+		{"alias value ahead of other assignments", "PROXMOX_VE_PASSWORD=ab: *" + secret + "\nPROXMOX_VE_USERNAME=root@pam\n"},
+		{"indented assignment", "  PROXMOX_VE_PASSWORD=ab: *" + secret + "\n"},
+		{"assignment beside a schemaVersion", "schemaVersion: v2\nPROXMOX_VE_PASSWORD=" + secret + ": tail\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "okdctl.env")
+			if err := os.WriteFile(path, []byte(tc.body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			_, err := NewLoader().LoadFile(path)
+			var cfgErr *errtypes.ConfigError
+			if !errors.As(err, &cfgErr) {
+				t.Fatalf("err = %v; want *errtypes.ConfigError", err)
+			}
+			if !strings.Contains(cfgErr.Msg, "credentials env file") || !strings.Contains(cfgErr.Msg, path) {
+				t.Errorf("ConfigError.Msg = %q; want it to call %s a credentials env file", cfgErr.Msg, path)
+			}
+			if strings.Contains(err.Error(), secret) {
+				t.Errorf("error echoes the env value: %q", err.Error())
+			}
+		})
+	}
+}
+
+func TestLoadFile_UnknownSecretKeyIsNamedWithoutItsValue(t *testing.T) {
+	const secret = "hunter2s3cr3t"
+	path := filepath.Join(t.TempDir(), "okdctl.yaml")
+	if err := os.WriteFile(path, []byte("schemaVersion: v2\nPROXMOX_VE_PASSWORD: "+secret+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := NewLoader().LoadFile(path)
+	if err == nil || !strings.Contains(err.Error(), `unknown field "PROXMOX_VE_PASSWORD"`) {
+		t.Fatalf("err = %v; want the unknown key named", err)
+	}
+	if strings.Contains(err.Error(), secret) {
+		t.Errorf("error echoes the value: %q", err.Error())
 	}
 }
 
