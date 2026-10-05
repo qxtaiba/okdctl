@@ -1,6 +1,6 @@
 // Package platform identifies the bastion host from /etc/os-release — only
-// RHEL-family Linux is supported — and holds its fixed Apache names, CoreOS
-// arch keys, and package manager.
+// RHEL-family Linux is supported — and holds its fixed Apache names, tool
+// download arch, and package manager, plus the cluster VMs' architecture.
 package platform
 
 import (
@@ -21,23 +21,23 @@ const (
 	ApacheVhostConfDir = "/etc/httpd/conf.d"
 )
 
+// ClusterArch and ClusterCoreOSArch name the cluster VMs' architecture as the
+// install-config and the CoreOS stream spell it; Proxmox guests are x86_64
+// whatever architecture okdctl itself runs on.
+const (
+	ClusterArch       = "amd64"
+	ClusterCoreOSArch = "x86_64"
+)
+
 // ErrUnsupportedOS marks an os-release that names a non-RHEL-family distribution.
 var ErrUnsupportedOS = errors.New("unsupported host os")
 
-// DownloadArch returns the architecture suffix for tool download URLs.
+// DownloadArch returns the operator host's architecture suffix for tool download URLs.
 func DownloadArch() string {
 	if runtime.GOARCH == archARM64 {
 		return archARM64
 	}
 	return "amd64"
-}
-
-// CoreOSArch returns the CoreOS stream architecture key.
-func CoreOSArch() string {
-	if runtime.GOARCH == archARM64 {
-		return "aarch64"
-	}
-	return "x86_64"
 }
 
 // OS describes the detected host operating system.

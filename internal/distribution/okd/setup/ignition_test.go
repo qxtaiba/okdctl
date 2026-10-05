@@ -70,6 +70,23 @@ func TestGenerateInstallConfig_PullSecretInFileAndZeroed(t *testing.T) {
 	}
 }
 
+func TestGenerateInstallConfig_UsesClusterArchitecture(t *testing.T) {
+	cfg := makeCfgWithFiles(t, `{"auths":{}}`, "ssh-rsa AAAAB3 test@host")
+	outputDir := t.TempDir()
+
+	if err := newTestPhase(t).generateInstallConfig(t.Context(), cfg, outputDir); err != nil {
+		t.Fatalf("generateInstallConfig: %v", err)
+	}
+
+	rendered, err := os.ReadFile(filepath.Join(outputDir, "install-config.yaml"))
+	if err != nil {
+		t.Fatalf("read install-config.yaml: %v", err)
+	}
+	if got := strings.Count(string(rendered), "architecture: amd64\n"); got != 2 {
+		t.Errorf("install-config.yaml sets amd64 on %d of its 2 machine pools:\n%s", got, rendered)
+	}
+}
+
 func TestGenerateInstallConfig_Perms(t *testing.T) {
 	cfg := makeCfgWithFiles(t, `{"auths":{}}`, "ssh-rsa AAAAB3 test@host")
 	outputDir := t.TempDir()

@@ -130,7 +130,7 @@ func installFakeInstaller(t *testing.T, stdout, stderr string, code int) (argvLo
 }
 
 func TestDetectCoreOSVersion_AsksInstallerForItsOwnStream(t *testing.T) {
-	stream := makeStreamJSON(platform.CoreOSArch(), "10.0.20251103-0", "https://example.com/scos.iso", "aabbccdd")
+	stream := makeStreamJSON(platform.ClusterCoreOSArch, "10.0.20251103-0", "https://example.com/scos.iso", "aabbccdd")
 	argvLog := installFakeInstaller(t, string(stream), "", 0)
 
 	info, err := newTestPhase(t).DetectCoreOSVersion(t.Context())
@@ -150,26 +150,18 @@ func TestDetectCoreOSVersion_AsksInstallerForItsOwnStream(t *testing.T) {
 	}
 }
 
-func TestDetectCoreOSVersion_ParsesRealStreamDocument(t *testing.T) {
+func TestDetectCoreOSVersion_PicksClusterArchFromRealStream(t *testing.T) {
 	body, err := os.ReadFile(filepath.Join("testdata", "coreos-stream-4.22.0-okd-scos.10.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	installFakeInstaller(t, string(body), "", 0)
 
-	const base = "https://rhcos.mirror.openshift.com/art/storage/prod/streams/c10s/builds/10.0.20251103-0/"
-	want := map[string]CoreOSInfo{
-		"x86_64": {
-			Version:     "10.0.20251103-0",
-			ISOUrl:      base + "x86_64/scos-10.0.20251103-0-live-iso.x86_64.iso",
-			ISOChecksum: "aff9c4a263d51356584d8334a20f13e24d04803e4eb9b49c2b499e0ad908e94a",
-		},
-		"aarch64": {
-			Version:     "10.0.20251103-0",
-			ISOUrl:      base + "aarch64/scos-10.0.20251103-0-live-iso.aarch64.iso",
-			ISOChecksum: "049e5587b3a31bea57a4d8390b3000bf6bd56867757b3778a2c7195d42fa4962",
-		},
-	}[platform.CoreOSArch()]
+	want := CoreOSInfo{
+		Version:     "10.0.20251103-0",
+		ISOUrl:      "https://rhcos.mirror.openshift.com/art/storage/prod/streams/c10s/builds/10.0.20251103-0/x86_64/scos-10.0.20251103-0-live-iso.x86_64.iso",
+		ISOChecksum: "aff9c4a263d51356584d8334a20f13e24d04803e4eb9b49c2b499e0ad908e94a",
+	}
 
 	info, err := newTestPhase(t).DetectCoreOSVersion(t.Context())
 	if err != nil {
@@ -217,7 +209,7 @@ func TestDetectCoreOSVersion_UnusableInstallerIsOneClearError(t *testing.T) {
 }
 
 func TestDetectCoreOSVersion_RefusesStreamWithoutVerifiableISO(t *testing.T) {
-	arch := platform.CoreOSArch()
+	arch := platform.ClusterCoreOSArch
 	cases := []struct {
 		name   string
 		stream []byte
@@ -253,7 +245,7 @@ func TestEnsureCoreOSISO_VerifiesTheDownloadAgainstTheStreamChecksum(t *testing.
 	isoURL := srv.URL + "/scos-10.0.20251103-0-live-iso.iso"
 
 	t.Run("matching checksum is kept", func(t *testing.T) {
-		installFakeInstaller(t, string(makeStreamJSON(platform.CoreOSArch(), "10.0.20251103-0", isoURL, hex.EncodeToString(sum[:]))), "", 0)
+		installFakeInstaller(t, string(makeStreamJSON(platform.ClusterCoreOSArch, "10.0.20251103-0", isoURL, hex.EncodeToString(sum[:]))), "", 0)
 		workDir := t.TempDir()
 
 		got, err := newTestPhase(t).EnsureCoreOSISO(t.Context(), Options{WorkDir: workDir})
@@ -269,7 +261,7 @@ func TestEnsureCoreOSISO_VerifiesTheDownloadAgainstTheStreamChecksum(t *testing.
 	})
 
 	t.Run("mismatched checksum is refused and removed", func(t *testing.T) {
-		installFakeInstaller(t, string(makeStreamJSON(platform.CoreOSArch(), "10.0.20251103-0", isoURL, strings.Repeat("0", 64))), "", 0)
+		installFakeInstaller(t, string(makeStreamJSON(platform.ClusterCoreOSArch, "10.0.20251103-0", isoURL, strings.Repeat("0", 64))), "", 0)
 		workDir := t.TempDir()
 
 		if _, err := newTestPhase(t).EnsureCoreOSISO(t.Context(), Options{WorkDir: workDir}); err == nil {

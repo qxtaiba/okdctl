@@ -2,9 +2,19 @@ package platform
 
 import (
 	"errors"
+	"runtime"
 	"strings"
 	"testing"
 )
+
+func TestDownloadArch_FollowsOperatorArch(t *testing.T) {
+	if runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64" {
+		t.Skipf("okdctl ships amd64 and arm64 only, not %s", runtime.GOARCH)
+	}
+	if got := DownloadArch(); got != runtime.GOARCH {
+		t.Errorf("DownloadArch() = %q, want the operator's own %q", got, runtime.GOARCH)
+	}
+}
 
 func TestParseOSRelease_AcceptsRHELFamily(t *testing.T) {
 	cases := []struct {

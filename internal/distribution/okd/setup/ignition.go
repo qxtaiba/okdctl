@@ -9,7 +9,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"syscall"
 
@@ -17,6 +16,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/provision"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/platform"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
@@ -92,7 +92,7 @@ func (p *Phase) generateInstallConfig(ctx context.Context, cfg *config.Config, o
 		ServiceCIDR:    cfg.Networking.ServiceCIDR,
 		PullSecret:     string(bytes.TrimSpace(pullSecret)),
 		SSHKey:         strings.TrimSpace(string(sshKey)),
-		Architecture:   runtime.GOARCH,
+		Architecture:   platform.ClusterArch,
 	}
 
 	outputPath := filepath.Join(outputDir, "install-config.yaml")
