@@ -230,8 +230,8 @@ AltScreen TUI's cursor-addressed redraws.
 - **Destroy and cleanup.** The `--yes` flag, combined with
   `--confirm-cluster`, skips the confirmation prompt on both `okdctl
   destroy` and `okdctl cleanup`.
-- **Node lifecycle.** The `okdctl node add`, `remove`, `resize`, `list`,
-  and `snapshot` commands cover the same ground as the wizard's
+- **Node lifecycle.** The `okdctl node add`, `remove`, `resize`, and
+  `list` commands cover the same ground as the wizard's
   manage-nodes flow, each destructive change gated by the same
   `--yes`/`--confirm-cluster` pair. That leaves `okdctl node manage` as
   the one command that still needs a terminal: it refuses outright

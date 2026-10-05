@@ -31,16 +31,13 @@ const (
 // Op identifies which node-lifecycle verb is in flight.
 type Op string
 
-// Node-lifecycle op identifiers recorded in the marker; OpSnapshot is distinct
-// from OpRemove so its bounded cordon/drain can't be mistaken for an in-flight
-// remove.
+// Node-lifecycle op identifiers recorded in the marker.
 const (
-	OpRemove   Op = "remove"
-	OpResize   Op = "resize"
-	OpStop     Op = "stop"
-	OpStart    Op = "start"
-	OpSnapshot Op = "snapshot"
-	OpAdd      Op = "add"
+	OpRemove Op = "remove"
+	OpResize Op = "resize"
+	OpStop   Op = "stop"
+	OpStart  Op = "start"
+	OpAdd    Op = "add"
 )
 
 // Step names the mutating step the marker was written before.
