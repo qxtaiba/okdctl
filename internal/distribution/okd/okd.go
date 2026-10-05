@@ -304,11 +304,17 @@ func (p *Provisioner) DeploySteps(cfg *config.Config) []DeployStep {
 // UpdateIngress re-points haproxy at fresh backend nodes without re-running
 // the full postinstall phase.
 func (p *Provisioner) UpdateIngress(ctx context.Context, cfg *config.Config, opts postinstall.UpdateIngressOptions) (*postinstall.UpdateIngressResult, error) {
+	opts.WorkDir = resolveIngressWorkDir(p.projectRoot, opts.WorkDir)
+	// Unpinned, every oc call follows the ambient $KUBECONFIG or
+	// ~/.kube/config and can delete another cluster's IngressController.
+	installPhase := install.New(phase.WithExecutor(p.executor), phase.WithLogger(p.logger))
+	if err := installPhase.SetupKubeconfig(ctx, workspace.ClusterConfigDir(opts.WorkDir)); err != nil {
+		return nil, err
+	}
 	postPhase := postinstall.New(
 		phase.WithExecutor(p.executor),
 		phase.WithLogger(p.logger),
 	)
-	opts.WorkDir = resolveIngressWorkDir(p.projectRoot, opts.WorkDir)
 	return postPhase.UpdateIngress(ctx, cfg, opts)
 }
 
