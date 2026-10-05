@@ -302,6 +302,17 @@ func TestValidateCIDR(t *testing.T) {
 		})
 }
 
+// TestValidateIP_ErrorNamesFix pins the R4 fix for ValidateIP, the
+// wizard's most-used field validator (gateway, DNS servers, bastion IP,
+// static IP start, VIP — every plain-IP field in the networking step calls
+// it directly): the error must show a valid example, not just say "invalid".
+func TestValidateIP_ErrorNamesFix(t *testing.T) {
+	const want = "invalid ip address (e.g., 192.168.1.10)"
+	if err := ValidateIP("not-an-ip"); err == nil || err.Error() != want {
+		t.Fatalf("ValidateIP(%q) = %v, want %q", "not-an-ip", err, want)
+	}
+}
+
 func TestValidateGatewayInCIDR(t *testing.T) {
 	cases := []struct {
 		gateway string
@@ -585,6 +596,25 @@ func TestValidateEndToEnd(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestValidateNetworking_CIDROverlapNamesFix pins the R4 fix: a CIDR-overlap
+// error must say what to do about it, not just state the overlap.
+func TestValidateNetworking_CIDROverlapNamesFix(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Networking.PodCIDR = cfg.Networking.MachineCIDR
+
+	result := &ValidationResult{}
+	validateNetworking(cfg, result)
+
+	const wantMsg = "overlaps with machine CIDR — widen or move one of the ranges"
+	for _, e := range result.Errors {
+		if e.Field == FieldNetworkingPodCIDR && e.Message == wantMsg {
+			return
+		}
+	}
+	t.Fatalf("validateNetworking(overlapping pod/machine CIDR) errors = %+v, want field %q message %q",
+		result.Errors, FieldNetworkingPodCIDR, wantMsg)
 }
 
 func TestValidateAdditionalNetworks(t *testing.T) {

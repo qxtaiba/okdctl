@@ -31,6 +31,7 @@ type Option struct {
 	Title       string
 	Description string
 	Recommended bool
+	Current     bool // marks the value the loaded config already carries
 	Style       OptionStyle
 	InDropdown  bool // part of the scrollable dropdown region
 }
@@ -42,9 +43,26 @@ type Selector struct {
 	focused              bool
 	dropdownScrollOffset int
 
-	// cachedStyles caches option render styles; safe since tui.Color* only
-	// changes during package init.
-	cachedStyles *optionStyles
+	// maxVisible is the dropdown's per-render row budget; zero means unset,
+	// in which case dropdownBudget falls back to maxDropdownVisible.
+	maxVisible int
+
+	// selectedSpan is the line range the selection occupied in the last View;
+	// spanKnown is false until the selector has rendered at least once.
+	selectedSpan struct{ start, end int }
+	spanKnown    bool
+
+	// cachedStyles caches option render styles; cachedGeneration pins it to
+	// the stylesGeneration it was built from, since every theme role rebinds
+	// on the background flip — getOptionStyles rebuilds once
+	// stylesGeneration has moved on, instead of assuming the cache is
+	// forever valid.
+	cachedStyles     *optionStyles
+	cachedGeneration int
+
+	// DropdownHeader is a dim, non-selectable line shown above the dropdown's
+	// option rows, or nothing when empty.
+	DropdownHeader string
 }
 
 // NewSelector builds a Selector starting focused on the first option.
@@ -98,6 +116,11 @@ func (s *Selector) SetFocused(focused bool) {
 	s.focused = focused
 }
 
+// SetDropdownBudget sets the dropdown's visible-row budget, clamped to a floor of maxDropdownVisible.
+func (s *Selector) SetDropdownBudget(rows int) {
+	s.maxVisible = max(rows, maxDropdownVisible)
+}
+
 // Update handles up/down and j/k key presses to move the selection.
 func (s *Selector) Update(msg tea.Msg) (*Selector, tea.Cmd) {
 	if !s.focused {
@@ -121,37 +144,57 @@ type optionStyles struct {
 	bulletUnselected lipgloss.Style
 	desc             lipgloss.Style
 	recommended      lipgloss.Style
+	current          lipgloss.Style
 	line             lipgloss.Style
 }
 
 func (s *Selector) getOptionStyles() optionStyles {
-	if s.cachedStyles != nil {
+	if s.cachedStyles != nil && s.cachedGeneration == stylesGeneration {
 		return *s.cachedStyles
 	}
 	styles := optionStyles{
-		bulletSelected:   lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true),
-		bulletUnselected: lipgloss.NewStyle().Foreground(tui.ColorBorder),
-		desc:             lipgloss.NewStyle().Foreground(tui.ColorTextDim),
-		recommended:      lipgloss.NewStyle().Foreground(tui.ColorSuccess).Italic(true),
-		line:             lipgloss.NewStyle().Foreground(tui.ColorBorder),
+		bulletSelected:   lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true),
+		bulletUnselected: lipgloss.NewStyle().Foreground(tui.ColorSubtle()),
+		desc:             lipgloss.NewStyle().Foreground(tui.ColorTextFaint()),
+		recommended:      lipgloss.NewStyle().Foreground(tui.ColorSuccess()).Italic(true),
+		current:          lipgloss.NewStyle().Foreground(tui.ColorInfo()).Italic(true),
+		line:             lipgloss.NewStyle().Foreground(tui.ColorRule()),
 	}
 	s.cachedStyles = &styles
+	s.cachedGeneration = stylesGeneration
 	return styles
 }
 
 func (s *Selector) getTitleStyle(style OptionStyle) lipgloss.Style {
 	switch style {
 	case OptionStyleLatestStable:
-		return lipgloss.NewStyle().Foreground(tui.ColorSuccess)
+		return lipgloss.NewStyle().Foreground(tui.ColorSuccess())
 	case OptionStyleStable:
-		return lipgloss.NewStyle().Foreground(tui.ColorAccent)
+		return lipgloss.NewStyle().Foreground(tui.ColorCode())
 	case OptionStylePreview, OptionStyleLatestPreview:
-		return lipgloss.NewStyle().Foreground(tui.ColorWarning)
+		return lipgloss.NewStyle().Foreground(tui.ColorWarning())
 	case OptionStyleLTS:
-		return lipgloss.NewStyle().Foreground(tui.ColorInfo)
+		return lipgloss.NewStyle().Foreground(tui.ColorInfo())
 	default:
-		return lipgloss.NewStyle().Foreground(tui.ColorText)
+		return lipgloss.NewStyle().Foreground(tui.ColorTextSoft())
 	}
+}
+
+// SelectedSpan returns the inclusive line range the selected option occupied
+// in the last View, dropdown entries included, or ok=false when the selector
+// has not rendered or has no options.
+func (s *Selector) SelectedSpan() (start, end int, ok bool) {
+	if !s.spanKnown {
+		return 0, 0, false
+	}
+	return s.selectedSpan.start, s.selectedSpan.end, true
+}
+
+// FocusBounds reports the selected option's rendered rows, satisfying the
+// FocusedBounds interface via the span SelectedSpan already tracks live
+// during the last View.
+func (s *Selector) FocusBounds(_ int) (top, bottom int, ok bool) {
+	return s.SelectedSpan()
 }
 
 // View renders the selector as a vertical list with top-of-list options
@@ -161,8 +204,16 @@ func (s *Selector) View() string {
 
 	dropdownStart, dropdownEnd := s.getDropdownBounds()
 
-	scrollIndicatorStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim)
-	dropdownBorderStyle := lipgloss.NewStyle().Foreground(tui.ColorBorder)
+	scrollIndicatorStyle := lipgloss.NewStyle().Foreground(tui.ColorTextFaint())
+	dropdownBorderStyle := lipgloss.NewStyle().Foreground(tui.ColorRule())
+
+	s.spanKnown = false
+	line := 0
+	record := func(block string) {
+		s.selectedSpan.start = line
+		s.selectedSpan.end = line + lipgloss.Height(block) - 1
+		s.spanKnown = true
+	}
 
 	i := 0
 	for i < len(s.options) {
@@ -173,10 +224,20 @@ func (s *Selector) View() string {
 			isLast := i == len(s.options)-1
 			showConnector := !isLast && !s.options[i+1].InDropdown
 			optView := s.renderOptionWithPrefix(opt, isSelected, showConnector, "")
+			if isSelected {
+				record(optView)
+			}
 			lines = append(lines, optView)
+			line += lipgloss.Height(optView)
 			i++
 		} else {
-			dropdownLines := s.renderDropdownRegion(dropdownStart, dropdownEnd, &scrollIndicatorStyle, &dropdownBorderStyle)
+			dropdownLines, selectedRow := s.renderDropdownRegion(dropdownStart, dropdownEnd, &scrollIndicatorStyle, &dropdownBorderStyle)
+			for j, block := range dropdownLines {
+				if j == selectedRow {
+					record(block)
+				}
+				line += lipgloss.Height(block)
+			}
 			lines = append(lines, dropdownLines...)
 
 			i = dropdownEnd + 1
@@ -204,6 +265,9 @@ func (s *Selector) renderOptionWithPrefix(opt *Option, selected, showConnector b
 	titleLine := prefix + bullet + " " + title
 	if opt.Recommended {
 		titleLine += " " + styles.recommended.Render("(recommended)")
+	}
+	if opt.Current {
+		titleLine += " " + styles.current.Render("(current)")
 	}
 	result = append(result, titleLine)
 
@@ -239,14 +303,17 @@ func NewCompactSelector(options []string) *CompactSelector {
 	}
 }
 
-// Len returns the number of options currently in the selector.
-func (s *CompactSelector) Len() int {
-	return len(s.options)
-}
-
 // SelectedIndex returns the current selection's index.
 func (s *CompactSelector) SelectedIndex() int {
 	return s.selected
+}
+
+// Select moves the pointer to index i, clamped to the option list.
+func (s *CompactSelector) Select(i int) {
+	if len(s.options) == 0 {
+		return
+	}
+	s.selected = min(max(i, 0), len(s.options)-1)
 }
 
 // SetFocused toggles keyboard focus on the selector.
@@ -291,8 +358,8 @@ func (s *CompactSelector) Update(msg tea.Msg) (*CompactSelector, tea.Cmd) {
 func (s *CompactSelector) View() string {
 	var lines []string
 
-	selectedStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true)
-	unselectedStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim)
+	selectedStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true)
+	unselectedStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim())
 
 	for i, opt := range s.options {
 		var line string
@@ -307,18 +374,58 @@ func (s *CompactSelector) View() string {
 	return strings.Join(lines, "\n")
 }
 
-// FocusBounds reports the selected option's rendered rows.
-func (s *Selector) FocusBounds(width int) (top, bottom int, ok bool) {
-	if len(s.options) == 0 {
-		return 0, 0, false
-	}
-	offset := 0
-	for _, line := range strings.Split(s.View(), "\n") {
-		if strings.Contains(line, tui.IconActive) {
-			height := lipgloss.Height(lipgloss.NewStyle().Width(width).Render(s.renderOptionWithPrefix(&s.options[s.selected], true, false, "")))
-			return offset, offset + height, true
+// ViewPointer renders the options one per line as a verb menu: the selection
+// carries a tui.IconCaretRight pointer and every other row is indented to
+// match, so the labels share one left column. Rows are padded to the widest
+// label's own width — the block is a rectangle, so a caller centering it keeps
+// that column intact instead of centering each row on its own.
+func (s *CompactSelector) ViewPointer() string {
+	selectedStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true)
+	unselectedStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim())
+
+	widest := 0
+	for _, opt := range s.options {
+		if w := lipgloss.Width(opt); w > widest {
+			widest = w
 		}
-		offset += lipgloss.Height(lipgloss.NewStyle().Width(width).Render(line))
 	}
-	return 0, 0, false
+
+	lines := make([]string, len(s.options))
+	for i, opt := range s.options {
+		prefix, styled := "  ", unselectedStyle.Render(opt)
+		if i == s.selected {
+			prefix, styled = selectedStyle.Render(tui.IconCaretRight)+" ", selectedStyle.Render(opt)
+		}
+		lines[i] = prefix + styled + strings.Repeat(" ", widest-lipgloss.Width(opt))
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// ViewInline renders the options as a single horizontal row of bulleted radios.
+func (s *CompactSelector) ViewInline() string {
+	selectedStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true)
+	unselectedStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim())
+
+	parts := make([]string, len(s.options))
+	for i, opt := range s.options {
+		if i == s.selected {
+			parts[i] = selectedStyle.Render(tui.IconActive + " " + opt)
+		} else {
+			parts[i] = unselectedStyle.Render(tui.IconPending + " " + opt)
+		}
+	}
+
+	return strings.Join(parts, "   ")
+}
+
+// ArrowsAsVertical remaps a left/right key press to its up/down equivalent so a component built for vertical navigation can drive a horizontally-rendered selector.
+func ArrowsAsVertical(msg tea.KeyPressMsg) tea.KeyPressMsg {
+	switch msg.Code {
+	case tea.KeyLeft:
+		msg.Code = tea.KeyUp
+	case tea.KeyRight:
+		msg.Code = tea.KeyDown
+	}
+	return msg
 }

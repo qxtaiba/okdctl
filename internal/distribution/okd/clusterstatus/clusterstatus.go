@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
+	"time"
 
 	"github.com/qxtaiba/okdctl/internal/addon"
 	"github.com/qxtaiba/okdctl/internal/cluster"
@@ -69,14 +71,20 @@ func projectNode(n *cluster.NodeDetail) okd.NodeStatus {
 // rather than aborting.
 func Collect(ctx context.Context, cl Client, verifier AddonVerifier, src LifecycleSources) okd.ClusterStatus {
 	apiOK := false
+	apiAvailable := cl != nil
+	var apiLatency time.Duration
 	var nodes []okd.NodeStatus
+	nodesAvailable := false
 	degraded := 0
+	operatorsAvailable := false
 	if cl != nil {
+		started := time.Now()
 		if _, ocErr := cl.RawGet(ctx, "/healthz"); ocErr == nil {
 			apiOK = true
 		}
-		nodes = collectNodes(ctx, cl)
-		degraded = countDegraded(ctx, cl)
+		apiLatency = time.Since(started)
+		nodes, nodesAvailable = collectNodes(ctx, cl)
+		degraded, operatorsAvailable = countDegraded(ctx, cl)
 	}
 
 	addonResults, _ := verifier.VerifyAll(ctx)
@@ -89,13 +97,70 @@ func Collect(ctx context.Context, cl Client, verifier AddonVerifier, src Lifecyc
 		addonEntries = append(addonEntries, e)
 	}
 
-	return okd.ClusterStatus{
-		Phase:             derivePhase(ctx, apiOK, nodes, degraded, src),
-		APIReachable:      apiOK,
-		Nodes:             nodes,
-		DegradedOperators: degraded,
-		Addons:            addonEntries,
+	status := okd.ClusterStatus{
+		Phase:               derivePhase(ctx, apiOK, nodes, degraded, src),
+		APIReachable:        apiOK,
+		APIAvailable:        apiAvailable,
+		APILatencyAvailable: apiAvailable,
+		APILatency:          apiLatency,
+		Nodes:               nodes,
+		DegradedOperators:   degraded,
+		Addons:              addonEntries,
+		NodesAvailable:      nodesAvailable,
+		OperatorsAvailable:  operatorsAvailable,
 	}
+	if client, ok := cl.(*cluster.Client); ok {
+		lastRun := readLastDeployRun(client.Kubeconfig, "")
+		status.LastDeployRunID, status.LastDeployCluster, status.LastDeployAt = lastRun.RunID, lastRun.ClusterName, lastRun.At
+	}
+	return status
+}
+
+const (
+	stepHistoryFileName = ".okdctl-step-history.json"
+	stepHistoryVersion  = "v1"
+)
+
+type lastDeployRun struct {
+	RunID       string
+	ClusterName string
+	At          time.Time
+}
+
+type deployHistoryHeader struct {
+	SchemaVersion string    `json:"schema_version"`
+	RunID         string    `json:"run_id"`
+	Timestamp     time.Time `json:"timestamp"`
+	ClusterName   string    `json:"cluster_name"`
+}
+
+func readLastDeployRun(kubeconfig, clusterName string) lastDeployRun {
+	const suffix = "cluster-config/auth/kubeconfig"
+	clean := filepath.Clean(kubeconfig)
+	if !strings.HasSuffix(filepath.ToSlash(clean), "/"+suffix) {
+		return lastDeployRun{}
+	}
+	workDir := filepath.Dir(filepath.Dir(filepath.Dir(clean)))
+	if filepath.Base(workDir) != workspace.WorkDirName {
+		return lastDeployRun{}
+	}
+	path := filepath.Join(workDir, stepHistoryFileName)
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
+		return lastDeployRun{}
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return lastDeployRun{}
+	}
+	var history deployHistoryHeader
+	if json.Unmarshal(data, &history) != nil || history.SchemaVersion != stepHistoryVersion || history.RunID == "" || history.Timestamp.IsZero() || history.ClusterName == "" {
+		return lastDeployRun{}
+	}
+	if clusterName != "" && history.ClusterName != clusterName {
+		return lastDeployRun{}
+	}
+	return lastDeployRun{RunID: history.RunID, ClusterName: history.ClusterName, At: history.Timestamp}
 }
 
 // derivePhase maps lifecycle signals to ClusterPhase, checking cheapest
@@ -161,26 +226,26 @@ func TerraformStateHasResources(projectRoot, tfEnv string) bool {
 	return len(st.Resources) > 0
 }
 
-func collectNodes(ctx context.Context, cl Client) []okd.NodeStatus {
+func collectNodes(ctx context.Context, cl Client) ([]okd.NodeStatus, bool) {
 	observations, err := cl.ListNodes(ctx)
 	if err != nil {
 		logutil.Warn("observe cluster nodes", logutil.LF("err", err))
-		return nil
+		return nil, false
 	}
 	var nodes []okd.NodeStatus
 	for i := range observations {
 		nodes = append(nodes, projectNode(&observations[i]))
 	}
-	return nodes
+	return nodes, true
 }
 
-func countDegraded(ctx context.Context, cl Client) int {
+func countDegraded(ctx context.Context, cl Client) (int, bool) {
 	health, err := cl.ClusterOperatorHealth(ctx)
 	if err != nil {
 		logutil.Warn("observe cluster operators", logutil.LF("err", err))
-		return 0
+		return 0, false
 	}
-	return len(health.Degraded)
+	return len(health.Degraded), true
 }
 
 // NewClient returns an oc-backed cluster client for the deployed cluster, or

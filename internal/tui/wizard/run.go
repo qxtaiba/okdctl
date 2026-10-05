@@ -9,16 +9,26 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 )
 
-// Run starts the bubbletea wizard with the default chrome and blocks until
-// the user completes or cancels the flow.
-func Run(ctx context.Context, steps []WizardStep, cfg *config.Config) (Result, error) {
-	return RunFlow(ctx, steps, cfg, DefaultChrome())
-}
-
 // RunFlow starts the bubbletea wizard with flow-specific chrome and blocks
 // until the user completes or cancels the flow.
 func RunFlow(ctx context.Context, steps []WizardStep, cfg *config.Config, chrome FlowChrome) (Result, error) {
+	return RunFlowWithDraft(ctx, steps, cfg, chrome, nil)
+}
+
+// RunFlowWithDraft runs a wizard and saves its cursor after each step transition.
+func RunFlowWithDraft(ctx context.Context, steps []WizardStep, cfg *config.Config, chrome FlowChrome, save func(*config.Config, StepID, string) error) (Result, error) {
+	return runFlow(ctx, steps, cfg, chrome, save, nil)
+}
+
+// RunFlowWithDraftState runs a wizard and persists cursor and safe field history on edits.
+func RunFlowWithDraftState(ctx context.Context, steps []WizardStep, cfg *config.Config, chrome FlowChrome, save func(*config.Config, StepID, string, map[string][]string) error) (Result, error) {
+	return runFlow(ctx, steps, cfg, chrome, nil, save)
+}
+
+func runFlow(ctx context.Context, steps []WizardStep, cfg *config.Config, chrome FlowChrome, save func(*config.Config, StepID, string) error, saveState func(*config.Config, StepID, string, map[string][]string) error) (Result, error) {
 	model := NewFlowModel(steps, cfg, chrome)
+	model.draftSaver = save
+	model.draftStateSaver = saveState
 	model.flowContext = ctx
 	defer model.shutdown()
 

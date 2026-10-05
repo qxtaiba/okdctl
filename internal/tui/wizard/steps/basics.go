@@ -2,6 +2,7 @@ package steps
 
 import (
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
@@ -29,7 +30,7 @@ var BasicsStepDefinition = wizard.StepDefinition{
 					Key:       fieldDomain,
 					Label:     fieldDomain,
 					Default:   "k8s.local",
-					Help:      "base domain for cluster services",
+					Help:      "dot-separated domain name for cluster services, e.g. example.com",
 					Required:  true,
 					Validate:  config.ValidateDomain,
 					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Cluster.Domain = v }),
@@ -45,6 +46,7 @@ var BasicsStepDefinition = wizard.StepDefinition{
 					Label:     roleLabelControlPlane,
 					Default:   "3",
 					Help:      "number of control plane nodes (odd for etcd quorum)",
+					Width:     wizard.FieldWidthNumber,
 					Type:      wizard.FieldTypeSelect,
 					Options:   []string{"1", "3", "5"},
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.ControlPlane.Count = v }),
@@ -54,7 +56,8 @@ var BasicsStepDefinition = wizard.StepDefinition{
 					Key:       "worker_count",
 					Label:     roleLabelWorkers,
 					Default:   "3",
-					Help:      "number of worker nodes",
+					Help:      "number of worker nodes (0-100)",
+					Width:     wizard.FieldWidthNumber,
 					Required:  true,
 					Validate:  config.ValidateNodeCount,
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.Workers.Count = v }),
@@ -62,6 +65,23 @@ var BasicsStepDefinition = wizard.StepDefinition{
 				},
 			},
 		},
+	},
+
+	Answered: func(values map[string]string) []render.Fact {
+		var facts []render.Fact
+		if v := values["cluster_name"]; v != "" {
+			facts = append(facts, render.Fact{Key: labelCluster, Value: v})
+		}
+		if v := values[fieldDomain]; v != "" {
+			facts = append(facts, render.Fact{Key: fieldDomain, Value: v})
+		}
+		if v := values["control_plane_count"]; v != "" {
+			facts = append(facts, render.Fact{Key: "control plane", Value: v})
+		}
+		if v := values["worker_count"]; v != "" {
+			facts = append(facts, render.Fact{Key: "workers", Value: v})
+		}
+		return facts
 	},
 }
 

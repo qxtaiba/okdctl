@@ -3,10 +3,13 @@ package tui
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/logutil"
 
@@ -92,6 +95,95 @@ func TestStepProgress_CounterPadding(t *testing.T) {
 	sp := newStepProgress(plan, nil, nil)
 	if got := sp.counter(4); got != "[ 4/17]" {
 		t.Errorf("counter(4) = %q, want %q", got, "[ 4/17]")
+	}
+}
+
+// formatElapsed's precision ladder must never let the rendered duration
+// exceed durationCol, even for hour-scale Terraform/bootstrap steps — the
+// boundaries below straddle each rung (just under/over 10m and 1h).
+func TestFormatElapsed_NeverExceedsDurationCol(t *testing.T) {
+	tests := []struct {
+		name string
+		d    time.Duration
+		want string
+	}{
+		{"just under 10m keeps 100ms precision", 9*time.Minute + 59*time.Second + 940*time.Millisecond, "9m59.9s"},
+		{"just over 10m drops to seconds", 10*time.Minute + 500*time.Millisecond, "10m0s"},
+		{"just under 1h keeps seconds", 59*time.Minute + 59*time.Second + 900*time.Millisecond, "59m59s"},
+		{"just over 1h drops to minutes", time.Hour + time.Second, "1h0m"},
+		{"under 10h keeps hours+minutes", 9*time.Hour + 59*time.Minute + 59*time.Second, "9h59m"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := formatElapsed(tc.d)
+			if got != tc.want {
+				t.Errorf("formatElapsed(%s) = %q, want %q", tc.d, got, tc.want)
+			}
+			if w := lipgloss.Width(got); w > durationCol {
+				t.Errorf("formatElapsed(%s) = %q width %d exceeds durationCol %d", tc.d, got, w, durationCol)
+			}
+		})
+	}
+}
+
+// Two labels of very different lengths must still land their glyph in the
+// same visual column, since finalLine pads every label to labelWidth.
+func TestStepProgress_GlyphColumnIsFixed(t *testing.T) {
+	plan := []StepMeta{
+		{ID: "short", Name: "n", Phase: "setup"},
+		{ID: "long", Name: "a considerably longer step name", Phase: "postinstall"},
+	}
+	sp := newStepProgress(plan, nil, nil)
+
+	short := sp.finalLine(&distribution.StepResult{StepID: "short", Success: true, Duration: time.Second}, sp.index["short"])
+	long := sp.finalLine(&distribution.StepResult{StepID: "long", Success: true, Duration: time.Second}, sp.index["long"])
+
+	shortCol := lipgloss.Width(strings.SplitN(short, IconSuccess, 2)[0])
+	longCol := lipgloss.Width(strings.SplitN(long, IconSuccess, 2)[0])
+	if shortCol != longCol {
+		t.Errorf("glyph column drifted: short label col=%d, long label col=%d", shortCol, longCol)
+	}
+}
+
+// A skipped line's glyph and status field must land in the same columns as
+// a success/failure line, and durationCol="skipped" (7 runes) keeps the
+// overall line width identical across every outcome.
+func TestStepProgress_SkippedSharesColumns(t *testing.T) {
+	sp := newStepProgress(threeStepPlan(), nil, nil)
+
+	skip := sp.finalLine(&distribution.StepResult{StepID: "gen-config", Skipped: true, Success: true}, sp.index["gen-config"])
+	ok := sp.finalLine(&distribution.StepResult{StepID: "create-vms", Success: true, Duration: 12 * time.Second}, sp.index["create-vms"])
+
+	skipCol := lipgloss.Width(strings.SplitN(skip, IconSkip, 2)[0])
+	okCol := lipgloss.Width(strings.SplitN(ok, IconSuccess, 2)[0])
+	if skipCol != okCol {
+		t.Errorf("skip glyph column %d != success glyph column %d", skipCol, okCol)
+	}
+	if w1, w2 := lipgloss.Width(skip), lipgloss.Width(ok); w1 != w2 {
+		t.Errorf("skip line width %d != success line width %d", w1, w2)
+	}
+}
+
+// Prefix reflects whichever step is between StepStarted and StepFinished,
+// padded like finalLine's label, and empty between steps.
+func TestStepProgress_PrefixDuringStep(t *testing.T) {
+	var tty, sink bytes.Buffer
+	sp := newStepProgress(threeStepPlan(), &tty, &sink)
+	t.Cleanup(func() { lineReg.release(sp) })
+
+	if got := sp.Prefix(); got != "" {
+		t.Errorf("Prefix before any step started = %q, want empty", got)
+	}
+
+	sp.StepStarted("create-vms")
+	want := fmt.Sprintf("%-*s", sp.labelWidth, sp.label(sp.index["create-vms"]))
+	if got := sp.Prefix(); got != want {
+		t.Errorf("Prefix during step = %q, want %q", got, want)
+	}
+
+	sp.StepFinished(&distribution.StepResult{StepID: "create-vms", Success: true, Duration: time.Second})
+	if got := sp.Prefix(); got != "" {
+		t.Errorf("Prefix after step finished = %q, want empty", got)
 	}
 }
 

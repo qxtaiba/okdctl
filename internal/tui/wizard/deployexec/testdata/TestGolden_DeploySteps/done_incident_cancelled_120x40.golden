@@ -1,0 +1,40 @@
+                                                                                                                        
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L                                                                                                      │  
+  │ done                                                                                              install · done │  
+  │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
+  │  ✓ prep                                                                                             40s          │  
+  │  ⚠ ignition                                                                                                      │  
+  │      ⚠ generate ignition                                                                    interrupted          │  
+  │      ○ build isos                                                                                                │  
+  │  ○ infra                                                                                                         │  
+  │  ○ install                                                                                                       │  
+  │  ○ verify                                                                                                        │  
+  │                                                                                                                  │  
+  │  ╭──────────────────────────────────────── ERROR ─────────────────────────────────────────╮                      │  
+  │  │                                                                                        │                      │  
+  │  │  ✗  deploy interrupted                                                                 │                      │  
+  │  │                                                                                        │                      │  
+  │  │  the operator cancelled this run; nothing beyond the step already in flight was        │                      │  
+  │  │  attempted.                                                                            │                      │  
+  │  │                                                                                        │                      │  
+  │  ╰────────────────────────────────────────────────────────────────────────────────────────╯                      │  
+  │                                                                                                                  │  
+  │  run_id ........ run-01                                                                                          │  
+  │  stopped at .... generate ignition                                                                               │  
+  │  phase ......... ignition                                                                                        │  
+  │  elapsed ....... 45s                                                                                             │  
+  │  cause ......... operator cancelled (ctrl+c)                                                                     │  
+  │                                                                                                                  │  
+  │  NEXT MOVES                                                                                                      │  
+  │  f   open the full log, filter it, jump between errors                                                           │  
+  │  c   copy the run id to the clipboard                                                                            │  
+  │                                                                                                                  │  
+  │  run these yourself:                                                                                             │  
+  │  okdctl deploy           resume from the phase the marker recorded                                               │  
+  │  okdctl deploy --fresh   restart from scratch (wipes cluster credentials)                                        │  
+  │                                                                                                                  │  
+  │────────────────────────────────────── ↑ ↓  scroll down for more ────────────────────────────────────── ▸ homelab │  
+  │  / filter the log • l lock the log here • f full-screen log • c copy the run id • enter exit • ? help            │  
+  ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
+                                                                                                                        

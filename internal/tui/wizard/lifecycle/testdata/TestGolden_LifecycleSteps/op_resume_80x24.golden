@@ -1,0 +1,24 @@
+                                                                                
+  ╭──────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L  day-2 node operations                                       │  
+  │ choose an operation             op · target · params · plan · run · done │  
+  │──────────────────────────────────────────────────────────────────────────│  
+  │          cluster lifecycle                                               │  
+  │          manage nodes on cluster "homelab"                               │  
+  │                                                                          │  
+  │          ⚠ interrupted resize of homelab-master0 — step: power-          │  
+  │          cycle, recorded 2h ago                                          │  
+  │          saved request unavailable; choose a fresh operation             │  
+  │                                                                          │  
+  │          ● resize nodes                                                  │  
+  │            change per-role cpu/memory, rolled out one node at            │  
+  │            a time behind etcd/ceph health gates                          │  
+  │                                                                          │  
+  │          ○ add workers                                                   │  
+  │            build + upload a per-node iso, revive the ignition            │  
+  │            server, join and wait ready                                   │  
+  │                                                                          │  
+  │────────────────── ↑ ↓  scroll down for more ────────────────── ▸ homelab │  
+  │  ↑↓ select • enter confirm • pgup/pgdn scroll • ctrl+c quit • ? help     │  
+  ╰──────────────────────────────────────────────────────────────────────────╯  
+                                                                                

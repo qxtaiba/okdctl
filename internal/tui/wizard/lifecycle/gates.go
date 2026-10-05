@@ -52,7 +52,7 @@ func GateRows(op node.Op, role nodetypes.NodeRole, skipDrain bool, disk DiskMode
 		}
 		return append(rows, "terraform apply (destroy)", "delete kubernetes node", "ceph health gate")
 	case node.OpAdd:
-		return []string{"build iso", "upload iso", "terraform apply (create)", "wait for join + ready"}
+		return []string{rowBuildISO, rowUploadISO, "terraform apply (create)", "wait for join + ready"}
 	default:
 		return nil
 	}

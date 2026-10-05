@@ -12,6 +12,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox/hostssh"
+	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
 // Rows with no stdin wired prove the gate never prompts on that path
@@ -163,8 +164,9 @@ func TestPrintNodeSnapshotListEmpty(t *testing.T) {
 	if err := printNodeSnapshotList(&buf, nil); err != nil {
 		t.Fatalf("printNodeSnapshotList: %v", err)
 	}
-	if got := buf.String(); got != "no snapshots found\n" {
-		t.Errorf("printNodeSnapshotList(nil) = %q, want %q", got, "no snapshots found\n")
+	want := tui.EmptyState("no snapshots found", "create one with 'okdctl node snapshot create <node>'") + "\n"
+	if got := buf.String(); got != want {
+		t.Errorf("printNodeSnapshotList(nil) = %q, want %q", got, want)
 	}
 }
 

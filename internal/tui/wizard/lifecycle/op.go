@@ -11,6 +11,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
+	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
@@ -23,6 +24,12 @@ type opChoice struct {
 	desc   string
 }
 
+// opCardWidth caps the wrap budget for the entry screen's description and
+// banner text: without a cap the text would grow with the frame, widening
+// the step's measured content until the wizard's IsCentered math had no
+// gutter left to center against.
+const opCardWidth = 58
+
 // OpStep is the lifecycle flow's entry screen: pick resize/add/remove, or
 // resume an interrupted op when a marker exists.
 type OpStep struct {
@@ -30,6 +37,7 @@ type OpStep struct {
 	st  *State
 	nav *wizard.SingleSelect
 	ops []opChoice
+	now func() time.Time // overridden in tests for a deterministic marker age
 }
 
 // NewOpStep constructs the operation-select step, pinning a resume option
@@ -41,21 +49,21 @@ func NewOpStep(st *State) *OpStep {
 			op:     st.Marker.Op,
 			resume: true,
 			title:  fmt.Sprintf("resume interrupted %s", st.Marker.Op),
-			desc:   "re-enters at the recorded step; completed nodes\nare skipped via a read-only plan probe",
+			desc:   "re-enters at the recorded step; completed nodes are skipped via a read-only plan probe",
 		})
 	}
 	ops = append(ops,
 		opChoice{
 			op: node.OpResize, title: "resize nodes",
-			desc: "change per-role cpu/memory, rolled out one node\nat a time behind etcd/ceph health gates",
+			desc: "change per-role cpu/memory, rolled out one node at a time behind etcd/ceph health gates",
 		},
 		opChoice{
 			op: node.OpAdd, title: "add workers",
-			desc: "build + upload a per-node iso, revive the ignition\nserver, join and wait ready",
+			desc: "build + upload a per-node iso, revive the ignition server, join and wait ready",
 		},
 		opChoice{
 			op: node.OpRemove, title: "remove worker",
-			desc: "cordon, drain, destroy the vm, delete the node\n(highest-numbered worker only)",
+			desc: "cordon, drain, destroy the vm, delete the node (highest-numbered worker only)",
 		},
 	)
 
@@ -67,10 +75,11 @@ func NewOpStep(st *State) *OpStep {
 	selector.SetWrap(false)
 
 	return &OpStep{
-		BaseStep: wizard.NewBaseStep(StepIDOp, "operation", ""),
+		BaseStep: wizard.NewBaseStepWithDisplayTitle(StepIDOp, "operation", "choose an operation", ""),
 		st:       st,
 		nav:      wizard.NewSingleSelect(StepIDOp, selector, "enter"),
 		ops:      ops,
+		now:      time.Now,
 	}
 }
 
@@ -94,24 +103,37 @@ func (s *OpStep) IsCentered() bool {
 func (s *OpStep) View(width, height int) string {
 	s.SetSize(width, height)
 
-	titleStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true)
-	subtitleStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim).Italic(true)
+	titleStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true)
+	subtitleStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim()).Italic(true)
 
-	content := titleStyle.Render("cluster lifecycle") + "\n\n"
+	// Title and subtitle sit tight against each other (no blank row) — they
+	// read as one header block, and the row it reclaims is what keeps the
+	// 3-option case (no resume banner) fitting an 80x24 terminal without
+	// needing to scroll at all.
+	content := titleStyle.Render("cluster lifecycle") + "\n"
 	content += subtitleStyle.Render(fmt.Sprintf("manage nodes on cluster %q", s.st.Cfg.Cluster.Name)) + "\n\n"
 
 	if s.st.Marker != nil {
-		warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
-		content += warnStyle.Render(fmt.Sprintf("⚠ interrupted %s of %s — step: %s, recorded %s ago",
-			s.st.Marker.Op, s.st.Marker.Target, s.st.Marker.Step,
-			humanAge(time.Since(s.st.Marker.Timestamp)))) + "\n\n"
+		warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning())
+		banner := fmt.Sprintf("%s interrupted %s of %s — step: %s, recorded %s ago",
+			tui.IconWarning, s.st.Marker.Op, s.st.Marker.Target, s.st.Marker.Step,
+			humanAge(s.now().Sub(s.st.Marker.Timestamp)))
+		content += warnStyle.Render(lipgloss.Wrap(banner, min(width, opCardWidth)-4, "")) + "\n"
+
+		noteStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim())
+		note := "choosing anything but resume below abandons this marker — it cannot be resumed afterward"
+		if s.st.Marker.Intent == nil {
+			// No resume option was offered (see NewOpStep): restoreIntent
+			// has nothing to replay, so every available choice already
+			// abandons the marker — there is no "anything but resume" to
+			// warn about, only the fact that resume itself isn't on offer.
+			note = "saved request unavailable; choose a fresh operation"
+		}
+		content += noteStyle.Render(lipgloss.Wrap(note, min(width, opCardWidth)-4, "")) + "\n\n"
 	}
 
-	if s.st.Marker != nil && s.st.Marker.Intent == nil {
-		content += subtitleStyle.Render("saved request unavailable; choose a fresh operation") + "\n\n"
-	}
 	for i, o := range s.ops {
-		content += s.renderOption(&o, i == s.nav.SelectedIndex())
+		content += s.renderOption(&o, i == s.nav.SelectedIndex(), width)
 		if i < len(s.ops)-1 {
 			content += "\n\n"
 		}
@@ -119,21 +141,18 @@ func (s *OpStep) View(width, height int) string {
 	return content
 }
 
-func (s *OpStep) renderOption(o *opChoice, selected bool) string {
+func (s *OpStep) renderOption(o *opChoice, selected bool, width int) string {
 	var bullet, title string
 	if selected {
-		bullet = lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true).Render(tui.IconActive)
-		title = lipgloss.NewStyle().Foreground(tui.ColorText).Bold(true).Render(o.title)
+		bullet = lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true).Render(tui.IconActive)
+		title = lipgloss.NewStyle().Foreground(tui.ColorText()).Bold(true).Render(o.title)
 	} else {
-		bullet = lipgloss.NewStyle().Foreground(tui.ColorBorder).Render(tui.IconPending)
-		title = lipgloss.NewStyle().Foreground(tui.ColorText).Render(o.title)
+		bullet = lipgloss.NewStyle().Foreground(tui.ColorSubtle()).Render(tui.IconPending)
+		title = lipgloss.NewStyle().Foreground(tui.ColorTextSoft()).Render(o.title)
 	}
-	descStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim)
-	out := bullet + " " + title
-	for line := range strings.SplitSeq(o.desc, "\n") {
-		out += "\n  " + descStyle.Render(line)
-	}
-	return out
+	desc := lipgloss.Wrap(o.desc, min(width, opCardWidth)-8, "")
+	descStyle := lipgloss.NewStyle().Foreground(tui.ColorTextFaint()).PaddingLeft(2)
+	return bullet + " " + title + "\n" + descStyle.Render(desc)
 }
 
 // Apply records the chosen operation. Choosing a non-resume op over an
@@ -146,14 +165,16 @@ func (s *OpStep) Apply(_ *config.Config) error {
 	s.st.Ack = s.st.Marker != nil && !c.resume
 	s.st.Scope = node.ResizeScope{}
 	s.st.Target = ""
-
 	if c.resume {
 		s.restoreIntent()
 	}
-
 	return nil
 }
 
+// restoreIntent replays the marker's recorded request parameters — scope,
+// sizing, and disruption options — so a resumed op proceeds with exactly
+// what was originally approved, not just its scope/target. Only called when
+// NewOpStep already confirmed Marker.Intent is non-nil.
 func (s *OpStep) restoreIntent() {
 	intent := s.st.Marker.Intent
 	s.st.MemoryMB, s.st.CPU, s.st.OSDiskGB = 0, 0, 0
@@ -167,6 +188,21 @@ func (s *OpStep) restoreIntent() {
 		s.st.Target = intent.Scope
 	case node.OpAdd:
 		s.st.Count = intent.AddCount
+	}
+}
+
+// Answered surfaces the interrupted-op marker as facts for the split
+// layout's context pane, the one thing worth restating before any operation
+// is chosen; empty with no marker, since nothing is decided yet.
+func (s *OpStep) Answered() []render.Fact {
+	if s.st.Marker == nil {
+		return nil
+	}
+	return []render.Fact{
+		{Key: "interrupted", Value: string(s.st.Marker.Op)},
+		{Key: "target", Value: s.st.Marker.Target},
+		{Key: "stopped at", Value: string(s.st.Marker.Step)},
+		{Key: "recorded", Value: humanAge(s.now().Sub(s.st.Marker.Timestamp)) + " ago"},
 	}
 }
 

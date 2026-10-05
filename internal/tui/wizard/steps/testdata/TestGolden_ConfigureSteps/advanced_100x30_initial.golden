@@ -1,30 +1,30 @@
                                                                                                     
   ╭──────────────────────────────────────────────────────────────────────────────────────────────╮  
   │ O K D C T L                                                                                  │  
-  │ okd over proxmox, the easy way                           ●─●─●─●─●─●─●─●─●─●─○ step 10 of 11 │  
+  │ advanced settings                                    connect · cluster · extras ✓✓● · review │  
   │──────────────────────────────────────────────────────────────────────────────────────────────│  
-  │  advanced settings                                                                           │  
   │                                                                                              │  
   │    ● vm settings                                                                             │  
   │                                                                                              │  
-  │    > vm id base (starting vm id in proxmox (e.g., 6000, 6001, ...))                          │  
-  │    ╭────────────────────────────────────────────────────────────────────────────────╮        │  
-  │    │ > 6000                                                                         │        │  
-  │    ╰────────────────────────────────────────────────────────────────────────────────╯        │  
+  │    vm id base                                                                                │  
+  │    ╭──────────────╮                                                                          │  
+  │    │ 6000         │                                                                          │  
+  │    ╰──────────────╯                                                                          │  
+  │    starting vm id in proxmox (e.g., 6000, 6001, ...)                                         │  
   │                                                                                              │  
   │    ✓ proxmox vm settings                                                                     │  
   │                                                                                              │  
-  │    cpu type: host                                                                            │  
+  │    cpu type                                                                                  │  
+  │    ╭───────────────╮                                                                         │  
+  │    │ ◂ host ▸      │                                                                         │  
+  │    ╰───────────────╯                                                                         │  
   │                                                                                              │  
-  │    enable numa: no                                                                           │  
-  │                                                                                              │  
-  │    enable ha anti-affinity: no                                                               │  
-  │                                                                                              │  
-  │    ✓ clock synchronization                                                                   │  
-  │                                                                                              │  
-  │    ntp server:                                                                               │  
+  │    enable numa                                                                               │  
+  │    ╭────────────────╮                                                                        │  
+  │    │ ● no  ○ yes    │                                                                        │  
+  │    ╰────────────────╯                                                                        │  
   │                                                                                              │  
   │───────────────────── ↑ ↓  scroll down for more ───────────────────── ▸ okd 4.22.0-okd-scos.7 │  
-  │   ↑↓/tab  navigate    enter  continue    esc  back                                           │  
+  │  ↑↓/tab navigate • enter continue • esc back • pgup/pgdn scroll • ctrl+c quit • ? help       │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                     

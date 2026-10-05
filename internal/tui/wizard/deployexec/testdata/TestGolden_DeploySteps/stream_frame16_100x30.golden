@@ -1,0 +1,30 @@
+                                                                                                    
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L  installing okd over proxmox                                                     │  
+  │ deploying homelab                                                             install · done │  
+  │──────────────────────────────────────────────────────────────────────────────────────────────│  
+  │  deploying homelab  2 / 7                                                 elapsed 1m15s      │  
+  │  ███████████████████████│░░░░░░░░░░░░░░░░░░░░░░│░░░░░░░░░░░│░░░░░░░░░░│░░░░░░░░░░░  28%      │  
+  │  ✓ prep                                                                             40s      │  
+  │  ● ignition                                                                                  │  
+  │      ⣟ generate ignition                                                            35s      │  
+  │      ○ build isos                                                                            │  
+  │  ○ infra                                                                                     │  
+  │  ○ install                                                                                   │  
+  │  ○ verify                                                                                    │  
+  │                                                                                              │  
+  │  LOG                                                                                         │  
+  │  · 09:01:59 deploy step started step=step-17 phase=setup                              │      │  
+  │  · 09:02:06 deploy step started step=step-18 phase=setup                              │      │  
+  │  · 09:02:13 deploy step started step=step-19 phase=setup                              │      │  
+  │  · 09:02:20 deploy step started step=step-20 phase=setup                              │      │  
+  │  · 09:02:27 deploy step started step=step-21 phase=setup                              │      │  
+  │  · 09:02:34 deploy step started step=step-22 phase=setup                              ▎      │  
+  │  · 09:02:41 deploy step started step=step-23 phase=setup                              ▎      │  
+  │                                                                                              │  
+  │  full log okd-install/okdctl.log · ctrl+c cancels after the current step                     │  
+  │                                                                                              │  
+  │─────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
+  │  / filter the log • l lock the log here … • ctrl+c cancel (twice to force-quit) • ? help     │  
+  ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
+                                                                                                    

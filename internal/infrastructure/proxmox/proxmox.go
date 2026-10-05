@@ -266,7 +266,7 @@ func (p *Provider) PlanPreview(ctx context.Context, cfg *config.Config, opts Pro
 
 	p.logger.Info("terraform: initializing backend and providers")
 	if err := p.initWithRetry(ctx); err != nil {
-		return nil, &errtypes.ClusterError{Msg: "terraform init failed", Err: err}
+		return nil, p.terraformExec.WithLockHint(&errtypes.ClusterError{Msg: "terraform init failed", Err: err})
 	}
 
 	absPlanFile := filepath.Join(p.terraformExec.WorkDir(), planPreviewFileName)
@@ -277,7 +277,7 @@ func (p *Provider) PlanPreview(ctx context.Context, cfg *config.Config, opts Pro
 
 	hasChanges, err := p.terraformExec.PlanDetailed(ctx, terraform.PlanOptions{OutputPlanFile: planPreviewFileName})
 	if err != nil {
-		return nil, &errtypes.ClusterError{Msg: "terraform plan failed", Err: err}
+		return nil, p.terraformExec.WithLockHint(&errtypes.ClusterError{Msg: "terraform plan failed", Err: err})
 	}
 	if !hasChanges {
 		return nil, nil

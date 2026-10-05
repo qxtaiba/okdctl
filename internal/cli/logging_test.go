@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -64,9 +63,8 @@ func resetLoggingState(t *testing.T) {
 		}
 		logFileCloser = nil
 		runLogPath = ""
-		runLogSink = nil
 		logFile, logFormat, logLevel = prevLogFile, prevFormat, prevLevel
-		if err := tui.ConfigureLoggers("info", "text", os.Stderr, false); err != nil {
+		if err := tui.ConfigureLoggers(tui.LoggerConfig{Level: "info", Format: "text", Stderr: os.Stderr}); err != nil {
 			t.Errorf("restore loggers: %v", err)
 		}
 	})
@@ -190,38 +188,42 @@ func TestConfigureLogging_NoDefaultSinkForReadOnlyCmds(t *testing.T) {
 	}
 }
 
-func TestFileLoggerPolicyAndTerminalFailure(t *testing.T) {
-	oldSink, oldFormat, oldLevel := runLogSink, logFormat, logLevel
+// TestLogFailureToSinkCarriesRunIDAndRespectsQuiet exercises
+// logFailureToSink — the path announceFailure takes when it prints the
+// pretty box straight to stderr instead of going through the logutil
+// facade, so a boxed failure on a TTY still reaches the persistent sink.
+// Secret redaction itself is covered at the logutil.RedactHandler layer
+// (internal/logutil/redact_test.go); this only pins logFailureToSink's own
+// contract — the failure lands with run_id attached, and --quiet (which
+// only raises the effective level to error, per effectiveLogLevel) does
+// NOT swallow it, since it's an Error-level write itself — quiet must
+// never hide the one thing it's reporting. The sink is always text (see
+// ringSlog's and buildSinkLogger's own "never mix text and json in one
+// physical okdctl.log" invariant), not whatever --log-format chose.
+func TestLogFailureToSinkCarriesRunIDAndSurvivesQuiet(t *testing.T) {
+	oldSink, oldLevel := runLogSink, logLevel
 	oldQuiet, oldVerbose := logQuiet, logVerbose
-	oldProgress := logutil.ProgressBarsEnabled()
 	t.Cleanup(func() {
-		runLogSink, logFormat, logLevel = oldSink, oldFormat, oldLevel
+		runLogSink, logLevel = oldSink, oldLevel
 		logQuiet, logVerbose = oldQuiet, oldVerbose
-		logutil.SetProgressBarsEnabled(oldProgress)
 	})
 	var buf bytes.Buffer
-	runLogSink, logFormat, logLevel = &buf, tui.FormatJSON, "debug"
+	runLogSink, logLevel = &buf, "debug"
 	logQuiet, logVerbose = false, false
-	fileOnlySlog().Debug("diagnostic", "password", "hidden-value")
-	var record map[string]any
-	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &record); err != nil {
-		t.Fatal(err)
+
+	logFailureToSink(errors.New("terminal failure"))
+	out := buf.String()
+	if !strings.Contains(out, "command failed") {
+		t.Fatalf("sink missing the failure message: %q", out)
 	}
-	if record["password"] != "[redacted]" || record["run_id"] != logutil.RunID() {
-		t.Fatalf("unexpected record: %v", record)
+	if !strings.Contains(out, logutil.RunID()) {
+		t.Fatalf("sink missing run_id: %q", out)
 	}
+
 	buf.Reset()
 	logQuiet = true
-	fileOnlySlog().Info("suppressed")
-	if buf.Len() != 0 {
-		t.Fatal("quiet logger wrote info")
-	}
-	logutil.SetProgressBarsEnabled(true)
-	announceFailure(errors.New("terminal failure"))
-	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &record); err != nil {
-		t.Fatal(err)
-	}
-	if record["msg"] != "command failed" {
-		t.Fatalf("missing failure: %v", record)
+	logFailureToSink(errors.New("still reported under quiet"))
+	if !strings.Contains(buf.String(), "command failed") {
+		t.Fatalf("quiet swallowed the failure report: %q", buf.String())
 	}
 }

@@ -1,0 +1,5 @@
+LOG
+· 09:00:28 deploy step started step=step-04 phase=setup    │
+· 09:00:35 deploy step started step=step-05 phase=setup    │
+· 09:00:42 deploy step started step=step-06 phase=setup    ▎
+· 09:00:49 deploy step started step=step-07 phase=setup    ▎

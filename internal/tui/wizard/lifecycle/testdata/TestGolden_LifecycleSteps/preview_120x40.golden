@@ -1,40 +1,40 @@
                                                                                                                         
   ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
   │ O K D C T L                                                                                                      │  
-  │ okd over proxmox, the easy way                                                               ●─●─●─● step 4 of 4 │  
+  │ review the plan                                                         op · target · params · plan · run · done │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
-  │  review the plan                                                                                                 │  
-  │                                                                                                                  │  
-  │  [1] operation                                                                                                   │  
+  │  operation                                                                                                       │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
-  │  cluster           homelab                                                                                       │  
-  │  operation         resize masters                                                                                │  
-  │  target memory     12288 → 24576 MiB per node                                                                    │  
-  │  target cpu        unchanged                                                                                     │  
-  │  disruption        each node is drained, then hard power-cycled (stop→start) to realize the change               │  
+  │  cluster        homelab                                                                                          │  
+  │  operation      resize masters                                                                                   │  
+  │  target memory  12288 → 24576 MiB per node                                                                       │  
+  │  target cpu     unchanged                                                                                        │  
+  │  disruption     each node is drained, then hard power-cycled (stop→start) to realize the change                  │  
   │                                                                                                                  │  
-  │  [2] nodes — execution order                                                                                     │  
+  │  nodes — execution order                                                                                         │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
-  │  homelab-master0   master  m.master[0]  [update]                                                                 │  
+  │  NODE             ROLE    ADDRESS      ACTION                                                                    │  
+  │  homelab-master0  master  m.master[0]  update                                                                    │  
   │                                                                                                                  │  
-  │  [3] gates per node                                                                                              │  
+  │  gates per node                                                                                                  │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
-  │  etcd health gate (pre) → cordon + drain → terraform apply (in-place update) → power-cycle vm → wait for node    │  
-  │  ready → etcd health gate (post) → uncordon + ceph health gate                                                   │  
-  │  plan gate: ✓ dry-run passed — the safety gate allows exactly the listed changes                                 │  
-  │                                                                                                                  │  
-  │  ══════════════════════════════════════════════════════════════════════════════════════════════════════════      │  
-  │                                                                                                                  │  
-  │  ● execute resize                                                                                                │  
-  │  ○ back to parameters                                                                                            │  
-  │  ○ exit without changes                                                                                          │  
+  │  1 etcd health gate (pre)             4 power-cycle vm           7 uncordon + ceph health gate                   │  
+  │  2 cordon + drain                     5 wait for node ready                                                      │  
+  │  3 terraform apply (in-place update)  6 etcd health gate (post)                                                  │  
+  │  ✓ plan gate passed — the safety gate allows exactly the listed changes                                          │  
   │                                                                                                                  │  
   │                                                                                                                  │  
   │                                                                                                                  │  
   │                                                                                                                  │  
   │                                                                                                                  │  
   │                                                                                                                  │  
-  │───────────────────────────────────────────────────────────────────────────────────────────────────── ▸ mycluster │  
-  │   ↑↓  select action    enter  confirm    esc  back    ctrl+c  quit                                               │  
+  │                                                                                                                  │  
+  │                                                                                                                  │  
+  │                                                                                                                  │  
+  │                                                                                                                  │  
+  │                                                                                                                  │  
+  │                                                                                                                  │  
+  │─────────────────────────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
+  │  ● execute resize   ○ back to parameters   ○ exit without changes           ←/→ choose … • ctrl+c quit • ? help  │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                                         

@@ -1,24 +1,24 @@
                                                                                 
   ╭──────────────────────────────────────────────────────────────────────────╮  
   │ O K D C T L                                                              │  
-  │ okd over proxmox, the easy way                 ●─●─●─●─●─○─○ step 5 of 7 │  
+  │ confirm removal              op · target · params · plan · run ●○ · done │  
   │──────────────────────────────────────────────────────────────────────────│  
   │                                                                          │  
   │                                                                          │  
-  │        confirm irreversible removal                                      │  
+  │        ⚠ confirm irreversible removal                                    │  
   │                                                                          │  
   │        irreversible: destroys homelab-worker2 and its data disk;         │  
   │        removed data cannot be recovered                                  │  
   │                                                                          │  
-  │        type the cluster name "mycluster" to confirm                      │  
-  │        >                                                                 │  
-  │        ╭──────────────────────────────────────────────╮                  │  
-  │        │ >                                            │                  │  
-  │        ╰──────────────────────────────────────────────╯                  │  
+  │        type the cluster name "homelab" to confirm                        │  
+  │        cluster name                                                      │  
+  │        ╭──────────────────────────────────────╮                          │  
+  │        │                                      │                          │  
+  │        ╰──────────────────────────────────────╯                          │  
   │                                                                          │  
   │                                                                          │  
-  │───────────────────────────────────────────────────────────── ▸ mycluster │  
-  │   enter  confirm (disabled until name matches)    esc  back    ctrl+c    │  
-  │  quit                                                                    │  
+  │                                                                          │  
+  │─────────────────────────────────────────────────────────────── ▸ homelab │  
+  │  enter confirm • esc back • ctrl+c quit • ? help                         │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

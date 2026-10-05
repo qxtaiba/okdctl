@@ -1,24 +1,24 @@
                                                                                 
   ╭──────────────────────────────────────────────────────────────────────────╮  
   │ O K D C T L                                                              │  
-  │ okd over proxmox, the easy way                       ●─●─●─● step 4 of 4 │  
+  │ review the plan                 op · target · params · plan · run · done │  
   │──────────────────────────────────────────────────────────────────────────│  
-  │  homelab-master0   master  m.master[0]  [update]                         │  
+  │  operation                                                               │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
+  │  cluster        homelab                                                  │  
+  │  operation      resize masters                                           │  
+  │  target memory  12288 → 24576 MiB per node                               │  
+  │  target cpu     unchanged                                                │  
+  │  disruption     each node is drained, then hard power-cycled             │  
+  │  (stop→start) to realize the change                                      │  
   │                                                                          │  
-  │  [3] gates per node                                                      │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
-  │  etcd health gate (pre) → cordon + drain → terraform apply (in-place     │  
-  │  update) → power-cycle vm → wait for node ready → etcd health gate       │  
-  │  (post) → uncordon + ceph health gate                                    │  
-  │  plan gate: ✓ dry-run passed — the safety gate allows exactly the        │  
-  │  listed changes                                                          │  
+  │  nodes — execution order                                                 │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
+  │  NODE             ROLE    ADDRESS      ACTION                            │  
+  │  homelab-master0  master  m.master[0]  update                            │  
   │                                                                          │  
-  │  ══════════════════════════════════════════════════════════════════      │  
   │                                                                          │  
-  │  ● execute resize                                                        │  
-  │  ○ back to parameters                                                    │  
-  │  ○ exit without changes                                                  │  
-  │────────────────── ↑ ↓  scroll up for more ────────────────── ▸ mycluster │  
-  │   ↑↓  select action    enter  confirm    esc  back    ctrl+c  quit       │  
+  │────────────────── ↑ ↓  scroll down for more ────────────────── ▸ homelab │  
+  │  scroll to review the plan            esc back … • ctrl+c quit • ? help  │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

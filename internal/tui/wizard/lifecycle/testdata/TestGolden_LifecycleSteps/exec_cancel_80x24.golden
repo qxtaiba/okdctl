@@ -1,0 +1,24 @@
+                                                                                
+  ╭──────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L                                                              │  
+  │ resizing masters                op · target · params · plan · run · done │  
+  │──────────────────────────────────────────────────────────────────────────│  
+  │  resizing masters  1 / 3                                elapsed 30s      │  
+  │  cancel requested — finishing the current terraform/oc call safely…      │  
+  │  ● homelab-master0                                                       │  
+  │      ✓ etcd health gate (pre)                                     —      │  
+  │      ✓ cordon + drain                                             —      │  
+  │      ⣾ terraform apply (in-place update)                        30s      │  
+  │      ○ power-cycle vm                                                    │  
+  │      ○ wait for node ready                                               │  
+  │      ○ etcd health gate (post)                                           │  
+  │      ○ uncordon + ceph health gate                                       │  
+  │  ○ homelab-master1                                                       │  
+  │  ○ homelab-master2                                                       │  
+  │                                                                          │  
+  │  LOG                                                                     │  
+  │                                                                          │  
+  │────────────────── ↑ ↓  scroll down for more ────────────────── ▸ homelab │  
+  │  / filter the log … • ctrl+c cancel (twice to force-quit) • ? help       │  
+  ╰──────────────────────────────────────────────────────────────────────────╯  
+                                                                                

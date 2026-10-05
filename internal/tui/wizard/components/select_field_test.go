@@ -1,0 +1,251 @@
+package components
+
+import (
+	"strings"
+	"testing"
+
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+
+	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
+)
+
+func TestSelectField_ArrowsShownWhenBlurred(t *testing.T) {
+	f := NewSelectField("cpu type", []string{"host", "x86-64-v2", "kvm64"})
+	f.SetWidth(90)
+
+	rows := strings.Split(tuitest.StripANSI(f.View()), "\n")
+	if !strings.Contains(rows[2], "◂") || !strings.Contains(rows[2], "▸") {
+		t.Fatalf("blurred content row = %q, want cycle arrows", rows[2])
+	}
+}
+
+func TestSelectField_DisplayOptionsKeepValues(t *testing.T) {
+	f := NewSelectField("node", []string{"pve1", "pve2"})
+	f.SetDisplayOptions([]string{"pve1 — 8c/32g", "pve2 — 16c/64g (offline)"})
+	f.SetDefault("pve1")
+	f.SetValue("pve2")
+	f.SetWidth(90)
+
+	if got := f.Value(); got != "pve2" {
+		t.Fatalf("Value() = %q, want saved value pve2", got)
+	}
+	if got := tuitest.StripANSI(f.View()); !strings.Contains(got, "pve2 — 16c/64g (offline)") {
+		t.Fatalf("View() = %q, want annotated display value", got)
+	}
+}
+
+func TestSelectField_BooleanRendersRadioPair(t *testing.T) {
+	f := NewSelectField("enable numa", []string{"yes", "no"})
+	f.SetWidth(90)
+
+	rows := strings.Split(tuitest.StripANSI(f.View()), "\n")
+	want := "● yes  ○ no"
+	if !strings.Contains(rows[2], want) {
+		t.Fatalf("content row = %q, want to contain %q", rows[2], want)
+	}
+
+	_ = f.Focus()
+	f.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+	rows = strings.Split(tuitest.StripANSI(f.View()), "\n")
+	want = "○ yes  ● no"
+	if !strings.Contains(rows[2], want) {
+		t.Fatalf("after left, content row = %q, want to contain %q", rows[2], want)
+	}
+}
+
+func TestSelectField_BoxWidthFromWidestOption(t *testing.T) {
+	f := NewSelectField("cpu type", []string{"host", "x86-64-v2", "kvm64"})
+	f.SetWidth(90)
+
+	rows := strings.Split(tuitest.StripANSI(f.View()), "\n")
+	if got := lipgloss.Width(rows[1]); got != 17 {
+		t.Fatalf("box width = %d, want 17: %q", got, rows[1])
+	}
+}
+
+func TestSelectField_MinBoxWidth14(t *testing.T) {
+	f := NewSelectField("mode", []string{"a", "b"})
+	f.SetWidth(90)
+
+	rows := strings.Split(tuitest.StripANSI(f.View()), "\n")
+	if got := lipgloss.Width(rows[1]); got != 14 {
+		t.Fatalf("box width = %d, want 14: %q", got, rows[1])
+	}
+}
+
+func TestSelectField_BoxWidthUsesDisplayWidthNotBytes(t *testing.T) {
+	f := NewSelectField("drain mode", []string{"skip drain — restart pods in place"})
+	f.SetWidth(90)
+
+	rows := strings.Split(tuitest.StripANSI(f.View()), "\n")
+	if got, want := lipgloss.Width(rows[1]), 42; got != want {
+		t.Fatalf("box width = %d, want %d (rune width, not utf-8 byte length): %q", got, want, rows[1])
+	}
+}
+
+func TestSelectField_DefaultTagBesideBox(t *testing.T) {
+	f := NewSelectField("cpu type", []string{"host", "kvm64"})
+	f.SetDefault("host")
+	f.SetWidth(90)
+
+	got := tuitest.StripANSI(f.View())
+	if !strings.Contains(got, "default") {
+		t.Fatalf("View() = %q, want a default tag", got)
+	}
+	if strings.Contains(got, "(default)") {
+		t.Fatalf("View() = %q, want no (default) suffix", got)
+	}
+}
+
+// TestSelectField_DefaultTagFitsAtExplicitWidthNarrowAvail mirrors
+// InputField's secretstore_op_connect_host regression for SelectField: an
+// explicitly wide box (e.g. FieldWidthPath, 64) with a default must reserve
+// room for the " default" tag out of its available width, so box+tag join
+// into exactly avail columns instead of overflowing it by the tag's width.
+func TestSelectField_DefaultTagFitsAtExplicitWidthNarrowAvail(t *testing.T) {
+	f := NewSelectField("git repository", []string{"https://example.com/repo.git"})
+	f.SetBoxWidth(64) // wizard.FieldWidthPath
+	f.SetWidth(70)
+	f.SetDefault("https://example.com/repo.git")
+
+	rows := strings.Split(tuitest.StripANSI(f.View()), "\n")
+	contentRow := rows[2]
+	if got := lipgloss.Width(contentRow); got != 70 {
+		t.Fatalf("box+tag row width = %d, want 70 (62-wide box + 8-wide tag, attached): %q", got, contentRow)
+	}
+	if !strings.Contains(contentRow, "default") {
+		t.Fatalf("content row = %q, want the default tag attached on the same row as the box", contentRow)
+	}
+}
+
+// TestSelectField_BoxWidthStableAcrossDefaultTagDrop pins geometry
+// stability: a field that has ever carried a default reserves the tag's
+// room for its whole life (hasDefault, permanent), so the box itself never
+// widens once the user picks a different option and the (now-cleared)
+// default tag drops.
+func TestSelectField_BoxWidthStableAcrossDefaultTagDrop(t *testing.T) {
+	f := NewSelectField("git repository", []string{"https://example.com/repo.git", "https://example.com/other.git"})
+	f.SetBoxWidth(64)
+	f.SetWidth(70)
+	f.SetDefault("https://example.com/repo.git")
+
+	before := f.boxOuterWidth()
+
+	f.SetValue("https://example.com/other.git")
+	if f.isDefault {
+		t.Fatal("isDefault after SetValue = true, want false")
+	}
+
+	after := f.boxOuterWidth()
+	if before != after {
+		t.Fatalf("box width before the change = %d, after the default tag dropped = %d, want unchanged", before, after)
+	}
+}
+
+func TestSelectField_NoteRendersVerbatim(t *testing.T) {
+	f := NewSelectField("drain mode", []string{"graceful", "force"})
+	f.SetWidth(90)
+	f.Note = "skip-drain leaves workloads running during node removal"
+
+	got := f.View()
+	if !strings.HasSuffix(got, "\n"+f.Note) {
+		t.Fatalf("View() = %q, want to end with note %q", got, f.Note)
+	}
+}
+
+func TestSelectField_SingleOptionHidesArrows(t *testing.T) {
+	f := NewSelectField("proxmox node for bootstrap vm", []string{"pve1"})
+	f.SetWidth(90)
+
+	rows := strings.Split(tuitest.StripANSI(f.View()), "\n")
+	if strings.Contains(rows[2], "◂") || strings.Contains(rows[2], "▸") {
+		t.Fatalf("content row = %q, want no cycle arrows for a single option", rows[2])
+	}
+	if !strings.Contains(rows[2], "pve1") {
+		t.Fatalf("content row = %q, want the bare value %q", rows[2], "pve1")
+	}
+}
+
+func TestSelectField_SingleOptionArrowKeepsDefaultTag(t *testing.T) {
+	f := NewSelectField("proxmox node for bootstrap vm", []string{"pve1"})
+	f.SetDefault("pve1")
+	f.SetWidth(90)
+	_ = f.Focus()
+
+	f.Update(tea.KeyPressMsg{Code: tea.KeyRight})
+
+	if !f.isDefault {
+		t.Fatal("isDefault after a single-option arrow = false, want true (the selection can't change)")
+	}
+}
+
+func TestSelectField_TwoOptionArrowDropsDefaultTag(t *testing.T) {
+	f := NewSelectField("cpu type", []string{"host", "kvm64"})
+	f.SetDefault("host")
+	f.SetWidth(90)
+	_ = f.Focus()
+
+	f.Update(tea.KeyPressMsg{Code: tea.KeyRight})
+
+	if f.isDefault {
+		t.Fatal("isDefault after a two-option arrow = true, want false (the selection changed)")
+	}
+}
+
+// TestSelectField_BlankOptionRendersHonestLabel pins the fcos-iso field's
+// shape (a leading blank option meaning "let okdctl download it"): the
+// blank value must render as a dim "none" between the cycle arrows rather
+// than a bare double space that reads as a rendering glitch.
+func TestSelectField_BlankOptionRendersHonestLabel(t *testing.T) {
+	f := NewSelectField("fcos iso", []string{"", "local:iso/fedora-coreos.iso"})
+	f.SetWidth(90)
+
+	rows := strings.Split(tuitest.StripANSI(f.View()), "\n")
+	if !strings.Contains(rows[2], "◂ none ▸") {
+		t.Fatalf("content row = %q, want the blank option labeled %q", rows[2], "◂ none ▸")
+	}
+}
+
+// TestSelectField_SetValueUnknownInjectsCurrentOption pins the edit-config
+// contract: a configured value outside Options must be injected and
+// selected (rendered with a "current" tag), never silently coerced to
+// whatever the cursor sat on.
+func TestSelectField_SetValueUnknownInjectsCurrentOption(t *testing.T) {
+	f := NewSelectField("control plane nodes", []string{"1", "3", "5"})
+	f.SetWidth(90)
+
+	f.SetValue("7")
+
+	if got := f.Value(); got != "7" {
+		t.Fatalf("Value() after SetValue(7) = %q, want 7", got)
+	}
+	rows := strings.Split(tuitest.StripANSI(f.View()), "\n")
+	if !strings.Contains(rows[2], "7") || !strings.Contains(rows[2], "current") {
+		t.Fatalf("content row = %q, want the injected value with a current tag", rows[2])
+	}
+}
+
+func TestSelectField_SetValueUnknownTwiceReplacesInjectedOption(t *testing.T) {
+	f := NewSelectField("cpu type", []string{"host", "kvm64"})
+
+	f.SetValue("EPYC")
+	f.SetValue("EPYC-v3")
+
+	if got := f.Value(); got != "EPYC-v3" {
+		t.Fatalf("Value() = %q, want EPYC-v3", got)
+	}
+	if got := len(f.Options); got != 3 {
+		t.Fatalf("len(Options) = %d, want 3 (one injected slot, reused)", got)
+	}
+}
+
+func TestSelectField_SetValueEmptyInjectsNothing(t *testing.T) {
+	f := NewSelectField("cpu type", []string{"host", "kvm64"})
+
+	f.SetValue("")
+
+	if got := len(f.Options); got != 2 {
+		t.Fatalf("len(Options) = %d, want 2 (an empty value must not inject)", got)
+	}
+}

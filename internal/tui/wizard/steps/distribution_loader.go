@@ -3,33 +3,66 @@ package steps
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/releases"
-	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
 )
 
 type versionsLoadedMsg struct {
-	series []releases.OKDReleaseSeries
-	err    error
+	generation uint64
+	series     []releases.OKDReleaseSeries
+	err        error
 }
 
-func (s *DistributionStep) fetchVersions() tea.Cmd {
-	parent, fetcher := s.Context(), s.versionFetcher
-	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(parent, 30*time.Second)
-		defer cancel()
+// fetchVersions runs the release fetch synchronously, tagged with the
+// step's current generation; startFetch is the production path that bumps
+// the generation and wraps this fetch in a tea.Cmd closed over immutable
+// snapshots, so it is safe to run on bubbletea's own command goroutine.
+func (s *DistributionStep) fetchVersions() tea.Msg {
+	return doFetchVersions(s.versionFetcher, s.generation)
+}
 
-		series, err := fetcher.FetchVersions(ctx)
-		return versionsLoadedMsg{series: series, err: err}
+// startFetch resets the step into the loading phase and issues a
+// generation-tagged release fetch over a snapshotted fetcher, so the
+// returned tea.Cmd never touches s once it is handed to bubbletea.
+func (s *DistributionStep) startFetch() tea.Cmd {
+	s.phase = phaseVersionLoading
+	s.loadError = nil
+	s.generation++
+	generation := s.generation
+	fetcher := s.versionFetcher
+	return func() tea.Msg {
+		return doFetchVersions(fetcher, generation)
 	}
+}
+
+func doFetchVersions(fetcher VersionFetcher, generation uint64) tea.Msg {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	series, err := fetcher.FetchVersions(ctx)
+	return versionsLoadedMsg{generation: generation, series: series, err: err}
 }
 
 func (s *DistributionStep) updateVersionSelector() {
 	var options []components.Option
+
+	// The bug-1 ruling, extended to the version selector: a configured
+	// version the fetched window no longer offers leads the list as a
+	// selectable row instead of anchoring nothing, and enter confirms it
+	// byte-identical.
+	if s.injectsCurrentVersion() {
+		options = append(options, components.Option{
+			ID:          s.currentVersion,
+			Title:       "okd " + s.currentVersion,
+			Description: "not in the fetched catalog — enter keeps this version",
+			Current:     true,
+		})
+	}
 
 	for i := range s.okdSeries {
 		series := &s.okdSeries[i]
@@ -52,6 +85,7 @@ func (s *DistributionStep) updateVersionSelector() {
 			Title:       fmt.Sprintf("okd %d.%d", series.Major, series.Minor),
 			Description: desc,
 			Recommended: i == 0,
+			Current:     !isExpanded && s.seriesHasCurrent(series),
 			Style:       releaseTypeToOptionStyle(v.Type),
 		})
 
@@ -67,6 +101,7 @@ func (s *DistributionStep) updateVersionSelector() {
 					Title:       "  " + pv.DisplayName(),
 					Description: patchDesc,
 					Recommended: j == 0 && i == 0,
+					Current:     pv.Version == s.currentVersion,
 					Style:       releaseTypeToOptionStyle(pv.Type),
 					InDropdown:  true,
 				})
@@ -85,39 +120,34 @@ func (s *DistributionStep) updateVersionSelector() {
 	s.versionSelector.SetSelectedByID(s.selectedVersion)
 }
 
-func (s *DistributionStep) emitFocusChanged() tea.Cmd {
-	selected := s.versionSelector.Selected()
-
-	if selected.InDropdown {
-		return nil
+// seriesHasCurrent reports whether the loaded config's current version is
+// one of series' patch releases, so a collapsed row can carry the chip its
+// hidden patch would.
+func (s *DistributionStep) seriesHasCurrent(series *releases.OKDReleaseSeries) bool {
+	if s.currentVersion == "" {
+		return false
 	}
-
-	index := s.versionSelector.SelectedIndex()
-	total := s.countVersionOptions()
-
-	if total == 0 {
-		return nil
-	}
-
-	return func() tea.Msg {
-		return wizard.FocusChangedMsg{
-			FieldIndex:  index,
-			TotalFields: total,
+	for _, pv := range series.Versions {
+		if pv.Version == s.currentVersion {
+			return true
 		}
 	}
+	return false
 }
 
-func (s *DistributionStep) countVersionOptions() int {
-	count := len(s.okdSeries)
-	if s.expandedMinor >= 0 {
-		for _, series := range s.okdSeries {
-			if series.Minor == s.expandedMinor {
-				count += len(series.Versions)
-				break
-			}
+// injectsCurrentVersion reports whether the configured current version needs
+// a synthetic row: non-empty, not a series id, and absent from every fetched
+// series.
+func (s *DistributionStep) injectsCurrentVersion() bool {
+	if s.currentVersion == "" || strings.HasPrefix(s.currentVersion, "minor:") || len(s.okdSeries) == 0 {
+		return false
+	}
+	for i := range s.okdSeries {
+		if s.seriesHasCurrent(&s.okdSeries[i]) || s.okdSeries[i].Latest.Version == s.currentVersion {
+			return false
 		}
 	}
-	return count
+	return true
 }
 
 func (s *DistributionStep) getMinorFromOptionID(id string) int {

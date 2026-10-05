@@ -2,6 +2,7 @@ package steps
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"strings"
@@ -9,22 +10,33 @@ import (
 
 	"github.com/luthermonson/go-proxmox"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/httputil"
 	infraproxmox "github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
 )
 
+const proxmoxStatusOnline = "online"
+
 type proxmoxNode struct {
-	Name   string
-	Status string // "online" or "offline"
-	CPUs   int
-	MemGB  int
+	Name         string
+	Status       string // "online" or "offline"
+	CPUs         int
+	CPUsKnown    bool
+	MemGB        int
+	MemKnown     bool
+	Storage      []proxmoxStorage
+	StorageKnown bool
+	Bridges      []proxmoxBridge
+	BridgesKnown bool
 }
 
 type proxmoxStorage struct {
-	Name    string
-	Content string // comma-separated: images, iso, backup, etc.
-	TotalGB int
+	Name       string
+	Content    string // comma-separated: images, iso, backup, etc.
+	TotalGB    int
+	TotalKnown bool
 }
 
 type proxmoxBridge struct {
@@ -37,8 +49,20 @@ type proxmoxDiscovery struct {
 	Storage []proxmoxStorage
 	Bridges []proxmoxBridge
 	ISOs    []string // storage volids of ISO files, e.g. "local:iso/fcos.iso"
+
+	// Heterogeneous reports that online nodes' inventories differed, so
+	// Storage/Bridges/ISOs hold only what every online node shares and the
+	// placement step should say so.
+	Heterogeneous bool
 }
 
+// discoverProxmox queries every online Proxmox node — not just one sampled
+// node — so Storage/Bridges/ISOs reflect what every node actually shares,
+// and cross-checks the config's already-chosen placement (storage/bridge
+// per role) against each node's own reported inventory: a selection valid
+// when it was made can go stale the moment discovery reports a node that
+// doesn't actually carry it. parent bounds the whole fetch to the current
+// wizard visit — leaving the step cancels any request still in flight.
 func discoverProxmox(parent context.Context, cfg *config.Config) (*proxmoxDiscovery, error) {
 	if cfg.Provider.Proxmox == nil {
 		return nil, fmt.Errorf("no proxmox config")
@@ -69,110 +93,158 @@ func discoverProxmox(parent context.Context, cfg *config.Config) (*proxmoxDiscov
 		return nil, classifyError(err)
 	}
 	if len(rawNodes) == 0 {
-		return nil, fmt.Errorf("no nodes found in cluster")
+		return nil, fmt.Errorf("no nodes found in cluster — check that the proxmox cluster has at least one node")
 	}
 
 	nodes := make([]proxmoxNode, 0, len(rawNodes))
 	for _, n := range rawNodes {
 		nodes = append(nodes, proxmoxNode{
-			Name:   n.Node,
-			Status: n.Status,
-			CPUs:   n.MaxCPU,
-			MemGB:  int(n.MaxMem / (1024 * 1024 * 1024)), //nolint:gosec // G115: uint64→int is safe for GB-scale memory
+			Name:      n.Node,
+			Status:    n.Status,
+			CPUs:      n.MaxCPU,
+			CPUsKnown: true,
+			MemGB:     int(n.MaxMem / (1024 * 1024 * 1024)), //nolint:gosec // G115: uint64→int is safe for GB-scale memory
+			MemKnown:  true,
 		})
 	}
 
-	var onlineNames []string
-	for _, n := range nodes {
-		if n.Status == "online" {
-			onlineNames = append(onlineNames, n.Name)
+	online := make([]string, 0, len(nodes))
+	for i := range nodes {
+		n := &nodes[i]
+		if n.Status == proxmoxStatusOnline {
+			online = append(online, n.Name)
 		}
 	}
-	if len(onlineNames) == 0 {
-		onlineNames = []string{nodes[0].Name}
+	if len(online) == 0 {
+		online = []string{nodes[0].Name}
 	}
 
-	// Every online node is a placement candidate (node_placement.go offers
-	// all of them for per-VM assignment), so storage/bridges/isos must be
-	// fetched from ALL of them, not sampled from one — otherwise the wizard
-	// can offer a pool/bridge that only exists on the node it happened to
-	// sample, which a role assigned to a different node can't reach.
-	var failures []error
-	storageSets := make([][]proxmoxStorage, 0, len(onlineNames))
-	bridgeSets := make([][]proxmoxBridge, 0, len(onlineNames))
-	isoSets := make([][]string, 0, len(onlineNames))
-	inventory := make(map[string]config.ProxmoxNodeInventory, len(onlineNames))
-	for _, name := range onlineNames {
-		storage, bridges, isos, detailErr := fetchNodeDetails(ctx, client, name)
-		if detailErr != nil {
-			failures = append(failures, detailErr)
-		}
-		storageSets = append(storageSets, storage)
-		bridgeSets = append(bridgeSets, bridges)
-		isoSets = append(isoSets, isos)
-		inventory[name] = config.ProxmoxNodeInventory{
-			Storage: storageNames(storage),
-			Bridges: bridgeNames(bridges),
+	storage, bridges, isos, heterogeneous, inventories := fetchClusterDetails(ctx, client, online)
+	for i := range nodes {
+		if inventory, ok := inventories[nodes[i].Name]; ok {
+			nodes[i].Storage = inventory.Storage
+			nodes[i].StorageKnown = inventory.StorageKnown
+			nodes[i].Bridges = inventory.Bridges
+			nodes[i].BridgesKnown = inventory.BridgesKnown
 		}
 	}
 
-	commonStorage, storageDiffers := intersectByKey(storageSets, func(s proxmoxStorage) string { return s.Name })
-	commonBridges, bridgesDiffer := intersectByKey(bridgeSets, func(b proxmoxBridge) string { return b.Name })
-	commonISOs, isosDiffer := intersectByKey(isoSets, func(v string) string { return v })
-	if storageDiffers || bridgesDiffer || isosDiffer {
-		failures = append(failures, fmt.Errorf("proxmox nodes report different storage pools, bridges, or isos — offering only what all %d online node(s) share", len(onlineNames)))
+	disc := &proxmoxDiscovery{
+		Nodes:         nodes,
+		Storage:       storage,
+		Bridges:       bridges,
+		ISOs:          isos,
+		Heterogeneous: heterogeneous,
 	}
 
-	if result := config.ValidatePlacementAgainstInventory(cfg, inventory); !result.IsValid() {
-		failures = append(failures, errors.New(result.Error()))
+	// Each node's OWN full inventory (not the cross-node intersection
+	// above) is what placement validity actually depends on — a storage
+	// pool missing from the shared set can still be exactly right for the
+	// one node a role is pinned to.
+	placementInventory := make(map[string]config.ProxmoxNodeInventory, len(inventories))
+	for name, inv := range inventories {
+		placementInventory[name] = config.ProxmoxNodeInventory{
+			Storage: storageNames(inv.Storage),
+			Bridges: bridgeNames(inv.Bridges),
+		}
+	}
+	if result := config.ValidatePlacementAgainstInventory(cfg, placementInventory); !result.IsValid() {
+		return disc, errors.New(result.Error())
 	}
 
-	return &proxmoxDiscovery{
-		Nodes:   nodes,
-		Storage: commonStorage,
-		Bridges: commonBridges,
-		ISOs:    commonISOs,
-	}, errors.Join(failures...)
+	return disc, nil
 }
 
-// intersectByKey returns, in sets[0]'s order, the deduplicated elements
-// whose key appears in every set, plus whether any set's keys weren't
-// shared by all the others.
-func intersectByKey[T any](sets [][]T, key func(T) string) ([]T, bool) {
-	if len(sets) == 0 {
-		return nil, false
+// startDiscovery resets the step into the discovering phase and issues a
+// generation-tagged discovery fetch over a snapshotted cfg, so the returned
+// tea.Cmd never touches s once it is handed to bubbletea. The Proxmox
+// password is cloned via SetBytes rather than a string hop — a string copy
+// would be immutable and unzeroizable for the process lifetime — into a
+// detached SecretBytes the closure (and only the closure) zeroizes once the
+// fetch finishes; ownedPasswords tracks it so Release can still zeroize it
+// if the UI exits before the fetch completes.
+func (s *NodePlacementStep) startDiscovery() tea.Cmd {
+	s.phase = phaseDiscovering
+	s.discoveryErr = nil
+	s.generation++
+	generation := s.generation
+	parent := s.Context()
+	cfg := *s.cfg
+	px := *cfg.Provider.Proxmox
+	px.Password = config.SecretBytes{}
+	px.Password.SetBytes(cfg.Provider.Proxmox.Password.Bytes())
+	cfg.Provider.Proxmox = &px
+	s.ownedPasswords = append(s.ownedPasswords, &px.Password)
+	return func() tea.Msg {
+		defer px.Password.Zeroize()
+		disc, err := discoverProxmox(parent, &cfg)
+		return discoveryCompleteMsg{generation: generation, discovery: disc, err: err}
 	}
-	counts := make(map[string]int)
-	for _, set := range sets {
-		seen := make(map[string]bool, len(set))
-		for _, v := range set {
-			k := key(v)
-			if seen[k] {
-				continue
-			}
-			seen[k] = true
-			counts[k]++
-		}
-	}
-	var common []T
-	seen := make(map[string]bool, len(sets[0]))
-	for _, v := range sets[0] {
-		k := key(v)
-		if counts[k] == len(sets) && !seen[k] {
-			seen[k] = true
-			common = append(common, v)
-		}
-	}
-	differ := false
-	for _, c := range counts {
-		if c != len(sets) {
-			differ = true
-			break
-		}
-	}
-	return common, differ
 }
 
+// fetchClusterDetails pulls storage/bridges/ISOs from every online node and
+// keeps only what all of them share (by name), so the wizard's single
+// cluster-wide pick lists never offer a resource missing on the node a VM
+// lands on; heterogeneous reports whether any two inventories differed. A
+// category whose fetch failed on a node (nil, best-effort) neither narrows
+// the result nor counts as a difference.
+type proxmoxNodeInventory struct {
+	Storage      []proxmoxStorage
+	StorageKnown bool
+	Bridges      []proxmoxBridge
+	BridgesKnown bool
+	ISOs         []string
+}
+
+func fetchClusterDetails(ctx context.Context, client *proxmox.Client, nodeNames []string) (storage []proxmoxStorage, bridges []proxmoxBridge, isos []string, heterogeneous bool, inventories map[string]proxmoxNodeInventory) {
+	inventories = make(map[string]proxmoxNodeInventory, len(nodeNames))
+	first := fetchNodeDetails(ctx, client, nodeNames[0])
+	inventories[nodeNames[0]] = first
+	storage, bridges, isos = first.Storage, first.Bridges, first.ISOs
+
+	for _, nodeName := range nodeNames[1:] {
+		details := fetchNodeDetails(ctx, client, nodeName)
+		inventories[nodeName] = details
+		var differs bool
+		storage, differs = keepShared(storage, details.Storage, func(v proxmoxStorage) string { return v.Name })
+		heterogeneous = heterogeneous || differs
+		bridges, differs = keepShared(bridges, details.Bridges, func(v proxmoxBridge) string { return v.Name })
+		heterogeneous = heterogeneous || differs
+		isos, differs = keepShared(isos, details.ISOs, func(v string) string { return v })
+		heterogeneous = heterogeneous || differs
+	}
+
+	return storage, bridges, isos, heterogeneous, inventories
+}
+
+// keepShared returns the elements of base whose key other also has, plus
+// whether the two sets differed at all; a nil side (that category's fetch
+// errored on that node) never narrows the result and reports no difference,
+// since an unknown inventory is not evidence of a differing one.
+func keepShared[T any](base, other []T, key func(T) string) ([]T, bool) {
+	if other == nil {
+		return base, false
+	}
+	if base == nil {
+		return other, false
+	}
+	seen := make(map[string]bool, len(other))
+	for _, o := range other {
+		seen[key(o)] = true
+	}
+	kept := make([]T, 0, len(base))
+	for _, b := range base {
+		if seen[key(b)] {
+			kept = append(kept, b)
+		}
+	}
+	return kept, len(kept) != len(base) || len(kept) != len(other)
+}
+
+// storageNames and bridgeNames project a node's typed inventory down to the
+// plain names config.ValidatePlacementAgainstInventory compares against.
+// bridgeNames (sanitized display names, which are still valid equality
+// keys here) lives in node_placement.go.
 func storageNames(storage []proxmoxStorage) []string {
 	names := make([]string, len(storage))
 	for i, s := range storage {
@@ -181,37 +253,40 @@ func storageNames(storage []proxmoxStorage) []string {
 	return names
 }
 
-// fetchNodeDetails retains successful observations alongside endpoint failures.
-func fetchNodeDetails(ctx context.Context, client *proxmox.Client, nodeName string) ([]proxmoxStorage, []proxmoxBridge, []string, error) {
+// fetchNodeDetails pulls storage/bridges/ISOs, best-effort — endpoint errors
+// are swallowed to nil slices rather than failing the whole discovery.
+func fetchNodeDetails(ctx context.Context, client *proxmox.Client, nodeName string) proxmoxNodeInventory {
 	node, err := client.Node(ctx, nodeName)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("inspect proxmox node %s: %w", nodeName, err)
+		return proxmoxNodeInventory{}
 	}
 
-	var failures []error
 	var storage []proxmoxStorage
 	var isoStorageNames []string
+	storageKnown := false
 	if stores, err := node.Storages(ctx); err == nil {
+		storageKnown = true
 		storage = make([]proxmoxStorage, 0, len(stores))
 		for _, s := range stores {
 			if s.Enabled == 0 {
 				continue
 			}
 			storage = append(storage, proxmoxStorage{
-				Name:    s.Name,
-				Content: s.Content,
-				TotalGB: int(s.Total / (1024 * 1024 * 1024)), //nolint:gosec // G115: uint64→int is safe for GB-scale storage
+				Name:       s.Name,
+				Content:    s.Content,
+				TotalGB:    int(s.Total / (1024 * 1024 * 1024)), //nolint:gosec // G115: uint64→int is safe for GB-scale storage
+				TotalKnown: true,
 			})
 			if strings.Contains(s.Content, "iso") {
 				isoStorageNames = append(isoStorageNames, s.Name)
 			}
 		}
-	} else {
-		failures = append(failures, fmt.Errorf("list storage: %w", err))
 	}
 
 	var bridges []proxmoxBridge
+	bridgesKnown := false
 	if nets, err := node.Networks(ctx, "bridge"); err == nil {
+		bridgesKnown = true
 		bridges = make([]proxmoxBridge, 0, len(nets))
 		for _, n := range nets {
 			bridges = append(bridges, proxmoxBridge{
@@ -219,20 +294,16 @@ func fetchNodeDetails(ctx context.Context, client *proxmox.Client, nodeName stri
 				CIDR: n.CIDR,
 			})
 		}
-	} else {
-		failures = append(failures, fmt.Errorf("list bridges: %w", err))
 	}
 
 	var isos []string
 	for _, storeName := range isoStorageNames {
 		st, err := node.Storage(ctx, storeName)
 		if err != nil {
-			failures = append(failures, fmt.Errorf("inspect ISO storage %s: %w", storeName, err))
 			continue
 		}
 		contents, err := st.GetContent(ctx)
 		if err != nil {
-			failures = append(failures, fmt.Errorf("list ISOs in %s: %w", storeName, err))
 			continue
 		}
 		for _, c := range contents {
@@ -242,14 +313,43 @@ func fetchNodeDetails(ctx context.Context, client *proxmox.Client, nodeName stri
 		}
 	}
 
-	return storage, bridges, isos, errors.Join(failures...)
+	return proxmoxNodeInventory{
+		Storage: storage, StorageKnown: storageKnown,
+		Bridges: bridges, BridgesKnown: bridgesKnown,
+		ISOs: isos,
+	}
 }
 
+// classifyError turns a raw discovery failure into an actionable message.
+// A TLS trust failure gets its own safe remedy per real cause — install the
+// CA, connect using a name the certificate covers, or renew it — rather
+// than one bucket that nudges the operator toward disabling verification;
+// a TLS failure typed checks can't attribute to a specific cause (or any
+// other untyped x509/tls error) gets an honest generic message instead of a
+// guessed one.
 func classifyError(err error) error {
+	var unknownAuthority x509.UnknownAuthorityError
+	if errors.As(err, &unknownAuthority) {
+		return fmt.Errorf("tls certificate not trusted — install the proxmox host's ca certificate in your system trust store: %w", err)
+	}
+
+	var hostnameErr x509.HostnameError
+	if errors.As(err, &hostnameErr) {
+		return fmt.Errorf("tls certificate name mismatch — connect using a name on the certificate, or reissue the certificate for %q: %w", hostnameErr.Host, err)
+	}
+
+	var certInvalid x509.CertificateInvalidError
+	if errors.As(err, &certInvalid) {
+		if certInvalid.Reason == x509.Expired {
+			return fmt.Errorf("tls certificate expired — renew the proxmox host's certificate: %w", err)
+		}
+		return fmt.Errorf("tls certificate invalid — check the proxmox host's certificate: %w", err)
+	}
+
 	msg := err.Error()
 	switch {
 	case strings.Contains(msg, "x509:") || strings.Contains(msg, "tls:"):
-		return fmt.Errorf("tls certificate verification failed — go back and set \"skip tls verify\" to yes")
+		return fmt.Errorf("tls handshake failed — check the proxmox host's certificate and tls configuration: %w", err)
 	case strings.Contains(msg, "connection refused"):
 		return fmt.Errorf("connection refused — check that the proxmox host and port are correct")
 	case strings.Contains(msg, "no such host"):
@@ -259,6 +359,6 @@ func classifyError(err error) error {
 	case strings.Contains(msg, "status 401") || strings.Contains(msg, "authentication failure"):
 		return fmt.Errorf("authentication failed — check username and password")
 	default:
-		return fmt.Errorf("connection failed: %w", err)
+		return fmt.Errorf("connection failed — check proxmox connectivity and credentials: %w", err)
 	}
 }

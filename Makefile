@@ -106,7 +106,7 @@ docs: ## Regenerate CLI reference pages under docs/cli/
 demo: ## Re-record docs/assets/demo.gif from the committed tape (needs vhs)
 	scripts/demo/record.sh
 
-screenshots: ## Render wizard PNGs at 80x24/100x30/120x40 (needs vhs)
+screenshots: ## Render wizard PNGs at 80x24/100x30/120x40/180x48 (needs vhs)
 	scripts/screenshot/run.sh
 
 docs-check: ## Regenerate CLI reference and fail on drift

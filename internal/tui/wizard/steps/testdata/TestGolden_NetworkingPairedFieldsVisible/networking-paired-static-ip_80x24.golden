@@ -1,0 +1,24 @@
+                                                                                
+  ╭──────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L                                                              │  
+  │ configure cluster networking    connect · cluster ✓✓●○ · extras · review │  
+  │──────────────────────────────────────────────────────────────────────────│  
+  │    ╰────────────╯                                                        │  
+  │                                                                          │  
+  │    ● static ip allocation                                                │  
+  │                                                                          │  
+  │    start ip                           interface                          │  
+  │    ╭─────────────────────╮            ╭─────────────────────╮            │  
+  │    │ 192.168.1.140       │            │ ens18               │            │  
+  │    ╰─────────────────────╯            ╰─────────────────────╯            │  
+  │    ip address where the bootstrap                                        │  
+  │    node boots, e.g. 192.168.1.140                                        │  
+  │    — other nodes follow                                                  │  
+  │    sequentially and the api vip                                          │  
+  │    derives from it                                                       │  
+  │                                                                          │  
+  │                                                                          │  
+  │─────────── ↑ ↓  82% • scroll for more ─────────── ▸ okd 4.22.0-okd-scos.7│  
+  │  ↑↓/tab navigate • enter continue • esc back … • ctrl+c quit • ? help    │  
+  ╰──────────────────────────────────────────────────────────────────────────╯  
+                                                                                

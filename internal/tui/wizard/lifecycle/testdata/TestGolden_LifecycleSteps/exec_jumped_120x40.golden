@@ -1,0 +1,40 @@
+                                                                                                                        
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L                                                                                                      │  
+  │ resizing masters                                                        op · target · params · plan · run · done │  
+  │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
+  │  resizing masters  2 / 3                                                                  elapsed 1m15s          │  
+  │  ✓ homelab-master0                                                                                 1m0s          │  
+  │  ● homelab-master1                                                                                               │  
+  │      ✓ etcd health gate (pre)                                                                         —          │  
+  │      ✓ cordon + drain                                                                                 —          │  
+  │      ⣾ terraform apply (in-place update)                                                            15s          │  
+  │      ○ power-cycle vm                                                                                            │  
+  │      ○ wait for node ready                                                                                       │  
+  │      ○ etcd health gate (post)                                                                                   │  
+  │      ○ uncordon + ceph health gate                                                                               │  
+  │  ○ homelab-master2                                                                                               │  
+  │                                                                                                                  │  
+  │  LOG · 1–5 of 24                                                                                                 │  
+  │  · 09:00:00 terraform apply step=step-00 node=homelab-master0                                         ▎          │  
+  │  · 09:00:07 terraform apply step=step-01 node=homelab-master0                                         ┃          │  
+  │  · 09:00:14 terraform apply step=step-02 node=homelab-master0                                         │          │  
+  │  · 09:00:21 terraform apply step=step-03 node=homelab-master0                                         │          │  
+  │  E 09:00:28 ERROR etcd member 0 refused the join request                                              │          │  
+  │                                                                                                                  │  
+  │  marker okd-install/.okdctl-node-op.json · full log okd-install/okdctl.log · ctrl+c cancels after the            │  
+  │  current gate                                                                                                    │  
+  │                                                                                                                  │  
+  │                                                                                                                  │  
+  │                                                                                                                  │  
+  │                                                                                                                  │  
+  │                                                                                                                  │  
+  │                                                                                                                  │  
+  │                                                                                                                  │  
+  │                                                                                                                  │  
+  │                                                                                                                  │  
+  │                                                                                                                  │  
+  │─────────────────────────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
+  │  l follow the log tail • f full-screen log … • ctrl+c cancel (twice to force-quit) • ? help                      │  
+  ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
+                                                                                                                        

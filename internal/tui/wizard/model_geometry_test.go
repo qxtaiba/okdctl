@@ -45,7 +45,7 @@ func TestFocusedMixedHeightFieldSurvivesResize(t *testing.T) {
 	step.SetFocused(true)
 	step.form.sections[0].Group.SetFocusIndex(2)
 	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
-	m.Update(FocusChangedMsg{FieldIndex: 2, TotalFields: 3})
+	m.Update(FocusChangedMsg{})
 	top, bottom, ok := step.FocusBounds(68, 1000)
 	if !ok || top < m.viewport.YOffset() || bottom > m.viewport.YOffset()+m.viewport.Height() {
 		t.Fatalf("focused bounds [%d,%d) outside [%d,%d)", top, bottom, m.viewport.YOffset(), m.viewport.YOffset()+m.viewport.Height())

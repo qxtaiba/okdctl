@@ -1,0 +1,48 @@
+                                                                                                                                                                                    
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L                                                                                                                                                                  │  
+  │ done                                                                                                                                                          install · done │  
+  │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
+  │  D E P L O Y E D                                                                                                                                                             │  
+  │                                                                                                                                                                              │  
+  │  homelab.lab.example.com                                                                                                                                 run-01 · 42m0s      │  
+  │                                                                                                                                                                              │  
+  │  ACCESS                                                                               STATUS                                                                                 │  
+  │  cluster ....... homelab.lab.example.com                                              bootstrap ..... cleaned up                                                             │  
+  │  console ....... https://console-openshift-console.apps.homelab.lab.example.com       api routing ... kube-vip (192.0.2.10)                                                  │  
+  │  api ........... https://api.homelab.lab.example.com:6443                             ingress routing ... haproxy (bastion)                                                  │  
+  │                                                                                                                                                                              │  
+  │  DNS RECORDS                                                                          STEPS                                                                                  │  
+  │  api.homelab.lab.example.com ... 192.0.2.10 (kube-vip)                                deploy-infrastructure ... ok    1m30s                                                  │  
+  │  *.apps.homelab.lab.example.com ... 192.168.1.20 (haproxy)                            wait-bootstrap ... ok    12m0s                                                         │  
+  │                                                                                       total ......... 13m30s                                                                 │  
+  │  CREDENTIALS                                                                                                                                                                 │  
+  │  username ...... kubeadmin                                                            QUICK START                                                                            │  
+  │  password ...... cat okd-install/cluster-config/auth/kubeadmin-password                 export KUBECONFIG=~/.kube/config                                                     │  
+  │                                                                                         oc get nodes                                                                         │  
+  │                                                                                                                                                                              │  
+  │  NEXT                                                                                                                                                                        │  
+  │  s       cluster status                                                                                                                                                      │  
+  │  n       manage nodes                                                                                                                                                        │  
+  │  o       open console                                                                                                                                                        │  
+  │  c       copy the oc login command                                                                                                                                           │  
+  │  enter   exit                                                                                                                                                                │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
+  │  s cluster status • n manage nodes • o open console • c copy the oc login command • enter exit • ? help                                                                      │  
+  ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
+                                                                                                                                                                                    

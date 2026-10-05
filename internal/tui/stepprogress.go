@@ -5,10 +5,33 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/distribution"
 )
+
+// durationCol is the fixed width of the trailing duration/status field on a
+// finished checklist line and the elapsed field on a prefixed spinner line;
+// 7 runes also fits "skipped" exactly.
+const durationCol = 7
+
+// formatElapsed renders d with a precision ladder that keeps the result
+// within durationCol runes for any realistic step or spinner duration: 100ms
+// precision under 10 minutes ("9m59.9s"), whole seconds from 10 minutes up
+// to an hour ("59m59s"), and hours+minutes with no seconds from an hour up
+// ("9h59m") — a plain Truncate(...).String() keeps a trailing "0s" at that
+// last rung and overflows for multi-digit hours.
+func formatElapsed(d time.Duration) string {
+	switch {
+	case d < 10*time.Minute:
+		return d.Truncate(100 * time.Millisecond).String()
+	case d < time.Hour:
+		return d.Truncate(time.Second).String()
+	default:
+		return fmt.Sprintf("%dh%dm", d/time.Hour, (d%time.Hour)/time.Minute)
+	}
+}
 
 // StepMeta identifies one planned deploy step: ID, display name, and phase
 // label. deploy builds the list from phases that will actually run, so a
@@ -25,10 +48,15 @@ type StepMeta struct {
 // spawned spinner may replace it mid-step, and StepFinished always commits
 // the final line regardless of current owner.
 type StepProgress struct {
-	w       io.Writer
-	logSink io.Writer
-	total   int
-	index   map[distribution.StepID]stepPos
+	w          io.Writer
+	logSink    io.Writer
+	total      int
+	index      map[distribution.StepID]stepPos
+	labelWidth int
+
+	mu      sync.Mutex
+	current stepPos
+	active  bool
 }
 
 type stepPos struct {
@@ -48,7 +76,13 @@ func newStepProgress(plan []StepMeta, w, logSink io.Writer) *StepProgress {
 	for i, m := range plan {
 		index[m.ID] = stepPos{n: i + 1, meta: m}
 	}
-	return &StepProgress{w: w, logSink: logSink, total: len(plan), index: index}
+	sp := &StepProgress{w: w, logSink: logSink, total: len(plan), index: index}
+	for _, pos := range index {
+		if width := len(sp.label(pos)); width > sp.labelWidth {
+			sp.labelWidth = width
+		}
+	}
+	return sp
 }
 
 // SuppressStepLog reports that the orchestrator's per-step Info lines are
@@ -63,12 +97,28 @@ func (s *StepProgress) StepStarted(id distribution.StepID) {
 	if !ok {
 		return
 	}
+	s.mu.Lock()
+	s.current = pos
+	s.active = true
+	s.mu.Unlock()
+
 	s.writeSink("step: started " + s.label(pos))
 	lineReg.register(s)
 	line := MutedStyle.Render(s.label(pos))
 	lineReg.paint(s, func() {
 		_, _ = fmt.Fprint(s.w, "\r\x1b[2K"+line)
 	})
+}
+
+// Prefix returns the padded "[N/T] name · phase" label for whichever step is
+// mid-execution (between StepStarted and StepFinished), or "" between steps.
+func (s *StepProgress) Prefix() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.active {
+		return ""
+	}
+	return fmt.Sprintf("%-*s", s.labelWidth, s.label(s.current))
 }
 
 // StepFinished rewrites r's step line with its duration and a ✓/✗/skip
@@ -79,6 +129,10 @@ func (s *StepProgress) StepFinished(r *distribution.StepResult) {
 	if !ok {
 		return
 	}
+	s.mu.Lock()
+	s.active = false
+	s.mu.Unlock()
+
 	s.writeSink(s.plainStatus(r, pos))
 	final := s.finalLine(r, pos)
 	// Clears any leftover spinner/checklist line first so the commit never
@@ -107,17 +161,19 @@ func (s *StepProgress) label(pos stepPos) string {
 	return fmt.Sprintf("%s %s · %s", s.counter(pos.n), pos.meta.Name, pos.meta.Phase)
 }
 
+// finalLine renders r's committed checklist line: the label padded to
+// labelWidth so every step's glyph lands in the same column, followed by a
+// durationCol-wide status field so "skipped" and elapsed durations share it too.
 func (s *StepProgress) finalLine(r *distribution.StepResult, pos stepPos) string {
-	dur := r.Duration.Truncate(time.Millisecond).String()
+	label := fmt.Sprintf("%-*s", s.labelWidth, s.label(pos))
+	dur := fmt.Sprintf("%*s", durationCol, formatElapsed(r.Duration))
 	switch {
 	case r.Skipped:
-		return MutedStyle.Render(fmt.Sprintf("%s %s %s", s.label(pos), IconSkip, "skipped"))
+		return MutedStyle.Render(fmt.Sprintf("%s  %s %*s", label, IconSkip, durationCol, "skipped"))
 	case r.Success:
-		return fmt.Sprintf("%s  %s (%s)",
-			TextStyle.Render(s.label(pos)), SuccessStyle.Render(IconSuccess), dur)
+		return fmt.Sprintf("%s  %s %s", TextStyle.Render(label), SuccessStyle.Render(IconSuccess), dur)
 	default:
-		return fmt.Sprintf("%s  %s (%s)",
-			TextStyle.Render(s.label(pos)), ErrorStyle.Render(IconError), dur)
+		return fmt.Sprintf("%s  %s %s", TextStyle.Render(label), ErrorStyle.Render(IconError), dur)
 	}
 }
 

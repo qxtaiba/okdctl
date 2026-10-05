@@ -276,6 +276,36 @@ func TestProvider_PlanPreview(t *testing.T) {
 			t.Errorf("plan file not cleaned up: %v", statErr)
 		}
 	})
+
+	// TestProvider_PlanPreview/plan_failure_under_a_held_state_lock_gets_the_force-unlock_hint
+	// pins the fix: PlanPreview is now wired through tf.WithLockHint like
+	// every other terraform call site (destroy.go's dry-run is the
+	// reference), so a plan failure while .terraform.tfstate.lock.info is
+	// present surfaces the same "terraform force-unlock" guidance those
+	// sites already give.
+	t.Run("plan failure under a held state lock gets the force-unlock hint", func(t *testing.T) {
+		root := setupWorkDir(t)
+		installFakeTerraformDispatch(t, 1, "") // init exits 0 (hardcoded); plan exits 1 (a real failure, not 0/2)
+		tfDir := filepath.Join(root, "infrastructure", "terraform", "environments", "production")
+		lockFile := filepath.Join(tfDir, ".terraform.tfstate.lock.info")
+		if err := os.WriteFile(lockFile, []byte(`{"ID":"abc-123"}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		p := New()
+		p.connected = true
+		_, err := p.PlanPreview(context.Background(), &config.Config{}, ProvisionOptions{ProjectRoot: root, TerraformEnv: "production"})
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		display, ok := errtypes.Describe(err)
+		if !ok {
+			t.Fatalf("errtypes.Describe(%v) ok=false, want a typed error", err)
+		}
+		if !strings.Contains(display.Hint, "terraform force-unlock") {
+			t.Errorf("hint = %q, want to mention terraform force-unlock", display.Hint)
+		}
+	})
 }
 
 // installFakeTerraformBackupOrder records, for every terraform invocation

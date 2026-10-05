@@ -14,6 +14,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
+	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
@@ -30,6 +31,18 @@ const (
 	defaultDrainTimeout = "10m"
 	// okdMinMemoryMB mirrors the resources step's OKD minimum for node memory.
 	okdMinMemoryMB = 8192
+
+	// keepsCurrentNote is a resize sizing field's always-visible reminder
+	// that 0 means "leave this dimension alone" rather than "set it to
+	// zero" — rendered via InputField.Note so it stays on screen whether or
+	// not the field is focused (the fuller help text with the actual
+	// current value is focus-only).
+	keepsCurrentNote = "0 keeps current"
+
+	// timeoutIgnoredNote explains why the drain-timeout field reads
+	// disabled once skip-drain is selected: the value is collected but
+	// never consulted, since skip-drain never drains.
+	timeoutIgnoredNote = "ignored — skip-drain selected"
 )
 
 // ParamsStep collects the per-op parameters: memory/cpu and drain mode for
@@ -73,6 +86,18 @@ func (s *ParamsStep) Init() tea.Cmd {
 	return s.inner.Init()
 }
 
+// PaletteTargets exposes operation parameters without their values.
+func (s *ParamsStep) PaletteTargets() []wizard.PaletteTarget {
+	s.ensureForm()
+	return s.inner.PaletteTargets()
+}
+
+// FocusPaletteTarget moves focus to one of the operation's parameters.
+func (s *ParamsStep) FocusPaletteTarget(id string) tea.Cmd {
+	s.ensureForm()
+	return s.inner.FocusPaletteTarget(id)
+}
+
 func (s *ParamsStep) ensureForm() {
 	if s.inner == nil || s.builtFor != s.st.Op {
 		s.buildForm()
@@ -88,7 +113,7 @@ func (s *ParamsStep) buildForm() {
 	switch s.st.Op {
 	case node.OpAdd:
 		s.countField = components.NewInputField("workers to add", "1")
-		s.countField.Help = "number of workers created in this batch"
+		s.countField.Help = "number of workers created in this batch (at least 1)"
 		s.countField.SetValue("1")
 		s.countField.Validator = validatePositiveInt
 		sections = append(sections, wizard.FormSection{
@@ -110,14 +135,17 @@ func (s *ParamsStep) buildForm() {
 			current = s.st.Cfg.Topology.ControlPlane
 		}
 		s.memField = components.NewInputField("memory (mb)", strconv.Itoa(current.MemoryMB))
-		s.memField.Help = fmt.Sprintf("per-node memory — current: %d, 0 keeps current", current.MemoryMB)
+		s.memField.Help = fmt.Sprintf("per-node memory — okd minimum: %d mb, current: %d", okdMinMemoryMB, current.MemoryMB)
+		s.memField.Note = tui.MutedStyle.Render(keepsCurrentNote)
 		s.memField.Validator = validateMemoryMB
 		s.cpuField = components.NewInputField("vcpus", strconv.Itoa(current.CPU))
-		s.cpuField.Help = fmt.Sprintf("per-node cpu cores — current: %d, 0 keeps current", current.CPU)
+		s.cpuField.Help = fmt.Sprintf("per-node cpu cores — current: %d", current.CPU)
+		s.cpuField.Note = tui.MutedStyle.Render(keepsCurrentNote)
 		s.cpuField.SetValue("0")
 		s.cpuField.Validator = validateNonNegativeInt
 		s.diskField = components.NewInputField("os disk (gb)", strconv.Itoa(current.DiskGB))
-		s.diskField.Help = fmt.Sprintf("per-node os disk — current: %d, grow-only, 0 keeps current; disk-only resizes are live (no power-cycle)", current.DiskGB)
+		s.diskField.Help = fmt.Sprintf("per-node os disk — current: %d, grow-only; disk-only resizes are live (no power-cycle)", current.DiskGB)
+		s.diskField.Note = tui.MutedStyle.Render(keepsCurrentNote)
 		s.diskField.SetValue("0")
 		s.diskField.Validator = validateNonNegativeInt
 		sections = append(sections, wizard.FormSection{
@@ -138,9 +166,26 @@ func (s *ParamsStep) buildDisruptionFields() {
 	s.drainModeField.Help = "how pods leave the node"
 	s.drainModeField.SetDefault(drainModeDefault)
 	s.timeoutField = components.NewInputField("drain timeout", defaultDrainTimeout)
-	s.timeoutField.Help = "per-node"
+	s.timeoutField.Help = "per-node drain limit, a duration like 10m or 1h"
 	s.timeoutField.SetValue(defaultDrainTimeout)
 	s.timeoutField.Validator = validateDuration
+}
+
+// syncTimeoutFieldDisabled dims the drain-timeout field and explains why
+// once skip-drain is selected — Tesler's law: the operator shouldn't have
+// to submit the form to learn an edit here was silently ignored. Re-run on
+// every View so a live drain-mode change (no rebuild) toggles it back.
+func (s *ParamsStep) syncTimeoutFieldDisabled() {
+	if s.timeoutField == nil || s.drainModeField == nil {
+		return
+	}
+	skipping := s.drainModeField.Value() == drainModeSkip
+	s.timeoutField.Disabled = skipping
+	if skipping {
+		s.timeoutField.Note = tui.MutedStyle.Render(timeoutIgnoredNote)
+	} else {
+		s.timeoutField.Note = ""
+	}
 }
 
 func (s *ParamsStep) resizeRole() nodetypes.NodeRole {
@@ -232,20 +277,51 @@ func (s *ParamsStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 // View renders the form plus the amber skip-drain note when selected.
 func (s *ParamsStep) View(width, height int) string {
 	s.SetSize(width, height)
-	if s.inner == nil {
-		return "loading parameters..."
-	}
+	s.ensureForm()
+	s.syncTimeoutFieldDisabled()
 	out := s.inner.View(width)
 	if s.drainModeField != nil && s.drainModeField.Value() == drainModeSkip {
-		warn := lipgloss.NewStyle().Foreground(tui.ColorWarning).PaddingLeft(2)
-		out += "\n" + warn.Render(strings.Join([]string{
-			"⚠ skip-drain: the node is power-cycled without evacuating pods —",
-			"  they die with the vm and restart in place on the resized node.",
-			"  use when a memory-saturated cluster cannot reschedule evictions.",
-			"  the etcd and ceph health gates still run.",
-		}, "\n"))
+		warn := lipgloss.NewStyle().Foreground(tui.ColorWarning()).PaddingLeft(2)
+		out += "\n" + warn.Render(strings.Join(s.skipDrainWarning(), "\n"))
 	}
 	return out
+}
+
+// skipDrainWarning returns the amber skip-drain copy for the current op,
+// matching what GateRows actually runs: remove destroys the vm (pods
+// reschedule elsewhere, only the ceph gate runs), while resize power-cycles
+// it (pods restart in place, the etcd and ceph gates run).
+func (s *ParamsStep) skipDrainWarning() []string {
+	if s.st.Op == node.OpRemove {
+		return []string{
+			tui.IconWarning + " skip-drain: the node is destroyed without evacuating pods —",
+			"  they die with the vm and reschedule onto the remaining nodes.",
+			"  use when a memory-saturated cluster cannot reschedule evictions.",
+			"  the ceph health gate still runs.",
+		}
+	}
+	return []string{
+		tui.IconWarning + " skip-drain: the node is power-cycled without evacuating pods —",
+		"  they die with the vm and restart in place on the resized node.",
+		"  use when a memory-saturated cluster cannot reschedule evictions.",
+		"  the etcd and ceph health gates still run.",
+	}
+}
+
+// FocusedSpan reports the focused field's lines; View renders the inner form
+// from its own line 0 and only appends below it, so no offset applies.
+func (s *ParamsStep) FocusedSpan() (wizard.LineSpan, bool) {
+	if s.inner == nil {
+		return wizard.LineSpan{}, false
+	}
+	return s.inner.FocusedSpan()
+}
+
+// Answered recaps the operation and target the op and target screens already
+// committed, for the split layout's context pane — the one thing worth
+// restating while this screen's own fields are still being edited.
+func (s *ParamsStep) Answered() []render.Fact {
+	return []render.Fact{{Key: factKeyOperation, Value: operationLabel(s.st)}}
 }
 
 // Apply writes the collected parameters into the shared state.
@@ -290,7 +366,17 @@ func (s *ParamsStep) ShortHelp() []wizard.KeyBinding {
 		{Key: "← →", Help: "change value"},
 		{Key: wizard.HelpEnter, Help: wizard.HelpContinue},
 		{Key: wizard.HelpEsc, Help: wizard.HelpBack},
+		{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
 	}
+}
+
+// ConsumesTextInput reports whether the focused field is mid-text-entry,
+// per wizard.TextInputConsumer.
+func (s *ParamsStep) ConsumesTextInput() bool {
+	if s.inner == nil {
+		return false
+	}
+	return s.inner.ConsumesTextInput()
 }
 
 func intValue(f *components.InputField) int {

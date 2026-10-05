@@ -1,11 +1,12 @@
 package steps
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
 
-	"charm.land/bubbles/v2/spinner"
+	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -35,8 +36,9 @@ const (
 )
 
 type discoveryCompleteMsg struct {
-	discovery *proxmoxDiscovery
-	err       error
+	generation uint64
+	discovery  *proxmoxDiscovery
+	err        error
 }
 
 // NodePlacementStep discovers Proxmox infrastructure and presents
@@ -47,9 +49,24 @@ type NodePlacementStep struct {
 	cfg   *config.Config
 	phase placementPhase
 
-	loadingSpinner spinner.Model
-	discovery      *proxmoxDiscovery
-	discoveryErr   error
+	frame        uint64
+	discovery    *proxmoxDiscovery
+	discoveryErr error
+	capacity     *WizardCapacitySnapshot
+
+	// generation increments on every discovery fetch this step issues; a
+	// discoveryCompleteMsg carrying a stale generation is a superseded
+	// fetch's reply and Update discards it unapplied, so a slow first
+	// fetch can never clobber a newer one's result.
+	generation uint64
+
+	// header caches the last View's rendered discoveryHeader, so headerOffset
+	// doesn't need the render width again.
+	header string
+
+	// ownedPasswords tracks every detached SecretBytes a startDiscovery
+	// fetch clones the Proxmox password into, so Release can zeroize one
+	// whose fetch never got the chance to (the UI exited mid-flight).
 	ownedPasswords []*config.SecretBytes
 
 	// inner is the post-discovery form; fields below alias into it, nil if
@@ -69,20 +86,25 @@ type NodePlacementStep struct {
 
 // NewNodePlacementStep constructs the node placement wizard step.
 func NewNodePlacementStep() *NodePlacementStep {
-	sp := spinner.New()
-	sp.Spinner = spinner.Dot
-	sp.Style = lipgloss.NewStyle().Foreground(tui.ColorPrimary)
-
 	return &NodePlacementStep{
 		BaseStep: wizard.NewBaseStepWithDisplayTitle(
 			wizard.StepIDNodePlacement,
-			"proxmox infrastructure",
-			"configure proxmox infrastructure",
+			"node placement",
+			"configure node placement",
 			"auto-discovered from your proxmox cluster",
 		),
-		loadingSpinner: sp,
-		phase:          phaseDiscovering,
+		phase: phaseDiscovering,
 	}
+}
+
+func (s *NodePlacementStep) withCapacity(snapshot *WizardCapacitySnapshot) *NodePlacementStep {
+	s.capacity = snapshot
+	return s
+}
+
+// Animating reports whether the discovery indicator needs frame ticks.
+func (s *NodePlacementStep) Animating() bool {
+	return s.phase == phaseDiscovering
 }
 
 // ShouldShow shows this step only when the Proxmox provider is selected.
@@ -91,34 +113,27 @@ func (s *NodePlacementStep) ShouldShow(cfg *config.Config) bool {
 		return false
 	}
 	s.cfg = cfg
+	if s.capacity != nil {
+		s.capacity.cfg = cfg
+	}
 	return true
 }
 
-// Init kicks off the Proxmox discovery fetch and spins the loading indicator.
+// Init starts discovery, reusing an already-discovered inventory on
+// re-entry instead of re-hitting the Proxmox API; a failed attempt is never
+// cached and retries automatically. With no Proxmox provider configured it
+// settles immediately into an explanatory error instead of spinning forever
+// on a fetch that was never issued.
 func (s *NodePlacementStep) Init() tea.Cmd {
-	if s.cfg == nil || s.cfg.Provider.Proxmox == nil {
+	if s.phase == phasePlacing && s.discoveryErr == nil {
 		return nil
 	}
-	s.phase = phaseDiscovering
-	return tea.Batch(s.loadingSpinner.Tick, s.fetchDiscovery())
-}
-
-func (s *NodePlacementStep) fetchDiscovery() tea.Cmd {
-	parent := s.Context()
-	cfg := *s.cfg
-	px := *cfg.Provider.Proxmox
-	px.Password = config.SecretBytes{}
-	// SetBytes copies the bytes directly; a string hop would leave an
-	// immutable, unzeroizable copy of the password on the heap for the
-	// process lifetime.
-	px.Password.SetBytes(cfg.Provider.Proxmox.Password.Bytes())
-	cfg.Provider.Proxmox = &px
-	s.ownedPasswords = append(s.ownedPasswords, &px.Password)
-	return func() tea.Msg {
-		defer px.Password.Zeroize()
-		disc, err := discoverProxmox(parent, &cfg)
-		return discoveryCompleteMsg{discovery: disc, err: err}
+	if s.cfg == nil || s.cfg.Provider.Proxmox == nil {
+		s.phase = phasePlacing
+		s.discoveryErr = errors.New("no proxmox provider configured — complete the proxmox step first")
+		return nil
 	}
+	return s.startDiscovery()
 }
 
 // buildInnerStep builds the form's dropdowns, retaining typed field pointers so
@@ -127,7 +142,7 @@ func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, nodeNames []s
 	px := s.cfg.Provider.Proxmox
 	clusterName := s.cfg.Cluster.Name
 	if clusterName == "" {
-		clusterName = "cluster"
+		clusterName = labelCluster
 	}
 
 	var sections []wizard.FormSection
@@ -160,6 +175,7 @@ func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, nodeNames []s
 			s.fcosField = newSelectField("fcos iso",
 				"pre-uploaded coreos iso — blank to let okdctl download and upload it",
 				isoOptions, firstMatch(disc.ISOs, px.FCOSIso, ""), px.FCOSIso)
+			s.fcosField.SetDisplayOptions(sanitizeNames(isoOptions))
 			infraFields = append(infraFields, s.fcosField)
 		}
 
@@ -169,12 +185,20 @@ func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, nodeNames []s
 				Group: components.NewInputGroup(infraFields...),
 			})
 		}
+		for _, field := range []*components.SelectField{s.osStorageField, s.dataStorageField, s.isoStorageField} {
+			if field != nil {
+				field.SetDisplayOptions(storageDisplayOptions(disc, field.Options))
+			}
+		}
 	}
 
 	defaultNode := nodeNames[0]
 
 	s.bootstrapField = newSelectField(clusterName+"-bootstrap", "proxmox node for bootstrap vm",
 		nodeNames, defaultNode, px.Node)
+	if disc != nil {
+		s.bootstrapField.SetDisplayOptions(nodeDisplayOptions(disc.Nodes, nodeNames))
+	}
 	sections = append(sections, wizard.FormSection{
 		Title: "bootstrap",
 		Group: components.NewInputGroup(s.bootstrapField),
@@ -182,6 +206,9 @@ func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, nodeNames []s
 
 	if cpCount := s.cfg.Topology.ControlPlane.Count; cpCount > 0 {
 		s.controlPlaneFields = nodeSelectFields(fieldPrefixMaster, clusterName, cpCount, px.ControlPlaneNodes, defaultNode, nodeNames)
+		if disc != nil {
+			setNodeDisplayOptions(s.controlPlaneFields, disc.Nodes, nodeNames)
+		}
 		sections = append(sections, wizard.FormSection{
 			Title: roleLabelControlPlane,
 			Group: selectFieldGroup(s.controlPlaneFields),
@@ -190,6 +217,9 @@ func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, nodeNames []s
 
 	if wCount := s.cfg.Topology.Workers.Count; wCount > 0 {
 		s.workerFields = nodeSelectFields(fieldPrefixWorker, clusterName, wCount, px.WorkerNodes, defaultNode, nodeNames)
+		if disc != nil {
+			setNodeDisplayOptions(s.workerFields, disc.Nodes, nodeNames)
+		}
 		sections = append(sections, wizard.FormSection{
 			Title: roleLabelWorkers,
 			Group: selectFieldGroup(s.workerFields),
@@ -238,21 +268,22 @@ func selectFieldGroup(fields []*components.SelectField) *components.InputGroup {
 // input to the built inner form once discovery completes.
 func (s *NodePlacementStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyPressMsg:
-		if msg.String() == "r" && s.phase == phasePlacing {
-			cmd := s.Init()
-			return s, cmd
-		}
 	case discoveryCompleteMsg:
+		if msg.generation != s.generation {
+			return s, nil
+		}
 		s.discovery = msg.discovery
 		s.discoveryErr = msg.err
 		s.phase = phasePlacing
+		if s.capacity != nil {
+			s.capacity.discovery = msg.discovery
+		}
 
 		var nodeNames []string
 		if msg.discovery != nil && len(msg.discovery.Nodes) > 0 {
 			nodeNames = make([]string, len(msg.discovery.Nodes))
-			for i, n := range msg.discovery.Nodes {
-				nodeNames[i] = n.Name
+			for i := range msg.discovery.Nodes {
+				nodeNames[i] = msg.discovery.Nodes[i].Name
 			}
 		} else {
 			fallback := s.cfg.Provider.Proxmox.Node
@@ -265,21 +296,28 @@ func (s *NodePlacementStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		s.buildInnerStep(s.discovery, nodeNames)
 		return s, s.inner.Init()
 
-	case spinner.TickMsg:
-		if s.phase == phaseDiscovering {
-			var cmd tea.Cmd
-			s.loadingSpinner, cmd = s.loadingSpinner.Update(msg)
-			return s, cmd
-		}
+	case wizard.FrameMsg:
+		s.frame = msg.Frame
 	}
 
 	if s.phase == phasePlacing && s.inner != nil {
+		// 'r' forces a refresh of the discovered inventory; footer-silent
+		// like the vim scroll vocabulary (model_navigation.go's
+		// handleVimScrollKey) — Init() otherwise reuses a prior successful
+		// discovery on re-entry instead of re-hitting the Proxmox API.
+		if keyMsg, ok := msg.(tea.KeyPressMsg); ok && key.Matches(keyMsg, key.NewBinding(key.WithKeys("r"))) {
+			cmd := s.startDiscovery()
+			return s, cmd
+		}
+
 		cmd, enterPressed := s.inner.Update(msg)
 		if !enterPressed {
 			return s, cmd
 		}
-		if err := s.inner.Validate(); err != nil {
-			return s, func() tea.Msg { return wizard.ErrorSetMsg{Error: err} }
+
+		s.inner.TouchAll()
+		if errs := s.inner.Validate(); len(errs) > 0 {
+			return s, tea.Batch(s.inner.FocusFirstInvalid(), func() tea.Msg { return wizard.ErrorSetMsg{Error: wizard.ErrFixHighlighted} })
 		}
 		return s, func() tea.Msg {
 			return wizard.StepCompleteMsg{StepID: s.ID()}
@@ -289,15 +327,200 @@ func (s *NodePlacementStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	return s, nil
 }
 
+// discoveryHeader renders the discovery summary (or its failure) shown above
+// the placement form, wrapped to width-2 to match the form's section rows,
+// without the blank row that separates the two.
+func (s *NodePlacementStep) discoveryHeader(width int) string {
+	noteStyle := lipgloss.NewStyle().Foreground(tui.ColorTextFaint()).Italic(true).PaddingLeft(2)
+	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning()).PaddingLeft(2)
+
+	switch {
+	case s.discoveryErr != nil:
+		return warnStyle.Width(width - 2).Render(tui.SanitizeTerminalEscapes(s.discoveryErr.Error()))
+	case s.discovery != nil:
+		header := noteStyle.Width(width - 2).Render(fmt.Sprintf("discovered %d node(s), %d storage pool(s), %d bridge(s)",
+			len(s.discovery.Nodes), len(s.discovery.Storage), len(s.discovery.Bridges)))
+		for nodeIndex := range s.discovery.Nodes {
+			node := &s.discovery.Nodes[nodeIndex]
+			cpu, memory := "?c", "?g"
+			if node.CPUsKnown {
+				cpu = fmt.Sprintf("%dc", node.CPUs)
+			}
+			if node.MemKnown {
+				memory = fmt.Sprintf("%dg", node.MemGB)
+			}
+			status := lipgloss.NewStyle().Foreground(tui.ColorSuccess()).Render(tui.IconSuccess + " online")
+			if node.Status != proxmoxStatusOnline {
+				status = lipgloss.NewStyle().Foreground(tui.ColorWarning()).Render("offline")
+			}
+			header += "\n" + noteStyle.Width(width-2).Render(fmt.Sprintf("%s %s · %s · %s", tui.SanitizeTerminalEscapes(node.Name), status, cpu, memory))
+		}
+		if demand := s.assignmentDemand(width - 2); demand != "" {
+			header += "\n" + demand
+		}
+		if s.discovery.Heterogeneous {
+			header += "\n" + warnStyle.Width(width-2).
+				Render(tui.IconWarning+" node inventories differ — offering only storage, bridges, and isos every online node shares")
+		}
+		return header
+	default:
+		return ""
+	}
+}
+
+func nodeDisplayOptions(nodes []proxmoxNode, values []string) []string {
+	byName := make(map[string]*proxmoxNode, len(nodes))
+	for nodeIndex := range nodes {
+		node := &nodes[nodeIndex]
+		byName[node.Name] = node
+	}
+	display := make([]string, len(values))
+	for i, name := range values {
+		node, ok := byName[name]
+		if !ok {
+			display[i] = tui.SanitizeTerminalEscapes(name)
+			continue
+		}
+		cpu, memory := "?c", "?g"
+		if node.CPUsKnown {
+			cpu = fmt.Sprintf("%dc", node.CPUs)
+		}
+		if node.MemKnown {
+			memory = fmt.Sprintf("%dg", node.MemGB)
+		}
+		display[i] = fmt.Sprintf("%s — %s/%s", tui.SanitizeTerminalEscapes(name), cpu, memory)
+		if node.Status != proxmoxStatusOnline {
+			display[i] += " " + lipgloss.NewStyle().Foreground(tui.ColorWarning()).Render("offline")
+		}
+	}
+	return display
+}
+
+func setNodeDisplayOptions(fields []*components.SelectField, nodes []proxmoxNode, values []string) {
+	options := nodeDisplayOptions(nodes, values)
+	for _, field := range fields {
+		field.SetDisplayOptions(options)
+	}
+}
+
+func storageDisplayOptions(discovery *proxmoxDiscovery, values []string) []string {
+	display := make([]string, len(values))
+	for i, name := range values {
+		safeName := tui.SanitizeTerminalEscapes(name)
+		parts := make([]string, 0, len(discovery.Nodes))
+		for nodeIndex := range discovery.Nodes {
+			node := &discovery.Nodes[nodeIndex]
+			if node.Status != proxmoxStatusOnline {
+				continue
+			}
+			safeNode := tui.SanitizeTerminalEscapes(node.Name)
+			if !node.StorageKnown {
+				parts = append(parts, safeNode+" ?")
+				continue
+			}
+			for _, pool := range node.Storage {
+				if pool.Name == name {
+					parts = append(parts, safeNode+" "+formatStorageGB(pool.TotalGB, pool.TotalKnown))
+					break
+				}
+			}
+		}
+		if len(parts) == 0 {
+			display[i] = safeName + " — capacity unknown"
+		} else {
+			display[i] = safeName + " — " + strings.Join(parts, " · ")
+		}
+	}
+	return display
+}
+
+func formatStorageGB(gigabytes int, known bool) string {
+	if !known {
+		return "?"
+	}
+	if gigabytes >= 1000 {
+		return fmt.Sprintf("%.1ftb", float64(gigabytes)/1000)
+	}
+	return fmt.Sprintf("%dgb", gigabytes)
+}
+
+func (s *NodePlacementStep) assignmentDemand(width int) string {
+	if s.cfg == nil || s.discovery == nil {
+		return ""
+	}
+	demand := make(map[string][3]int)
+	add := func(node string, cpu, memory, disk int) {
+		current := demand[node]
+		current[0] += cpu
+		current[1] += memory
+		current[2] += disk
+		demand[node] = current
+	}
+	bootstrap := s.cfg.Topology.Bootstrap
+	if bootstrap.CPU == 0 && bootstrap.MemoryMB == 0 {
+		bootstrap.CPU = s.cfg.Topology.ControlPlane.CPU
+		bootstrap.MemoryMB = s.cfg.Topology.ControlPlane.MemoryMB
+	}
+	if bootstrap.DiskGB == 0 {
+		bootstrap.DiskGB = s.cfg.Topology.ControlPlane.DiskGB
+	}
+	if s.bootstrapField != nil {
+		add(s.bootstrapField.Value(), bootstrap.CPU, bootstrap.MemoryMB/1024, bootstrap.DiskGB)
+	}
+	for i, field := range s.controlPlaneFields {
+		if i < s.cfg.Topology.ControlPlane.Count {
+			add(field.Value(), s.cfg.Topology.ControlPlane.CPU, s.cfg.Topology.ControlPlane.MemoryMB/1024,
+				s.cfg.Topology.ControlPlane.DiskGB+s.cfg.Disks.ControlPlaneDataSizeGB)
+		}
+	}
+	for i, field := range s.workerFields {
+		if i < s.cfg.Topology.Workers.Count {
+			add(field.Value(), s.cfg.Topology.Workers.CPU, s.cfg.Topology.Workers.MemoryMB/1024,
+				s.cfg.Topology.Workers.DiskGB+s.cfg.Disks.WorkerDataSizeGB)
+		}
+	}
+	rows := make([]string, 0, len(demand))
+	for nodeIndex := range s.discovery.Nodes {
+		node := &s.discovery.Nodes[nodeIndex]
+		used, assigned := demand[node.Name]
+		if !assigned {
+			continue
+		}
+		row := fmt.Sprintf("%s: %dc/%dg/%dgb", tui.SanitizeTerminalEscapes(node.Name), used[0], used[1], used[2])
+		if (node.CPUsKnown && used[0] > node.CPUs) || (node.MemKnown && used[1] > node.MemGB) {
+			row = lipgloss.NewStyle().Foreground(tui.ColorWarning()).Render(row + " · oversubscribed")
+		}
+		rows = append(rows, row)
+	}
+	if len(rows) == 0 {
+		return ""
+	}
+	text := tui.Truncate("assigned demand · "+strings.Join(rows, " · "), max(1, width-2))
+	return lipgloss.NewStyle().PaddingLeft(2).Render(text)
+}
+
+// headerOffset is how many lines View prepends before the inner form's own
+// line 0, so the form's spans can be rebased onto the step's View.
+func (s *NodePlacementStep) headerOffset() int {
+	if s.header == "" {
+		return 0
+	}
+	return lipgloss.Height(s.header) + 1
+}
+
 // View renders either the loading spinner or the inner placement form.
 func (s *NodePlacementStep) View(width, height int) string {
 	s.SetSize(width, height)
 
 	if s.phase == phaseDiscovering {
-		return s.loadingSpinner.View() + " discovering proxmox infrastructure..."
+		return wizard.Spinner(s.frame) + " discovering proxmox infrastructure..."
 	}
 
-	header := s.discoveryHeader()
+	s.header = s.discoveryHeader(width)
+	header := s.header
+	if header != "" {
+		header += "\n\n"
+	}
 
 	if s.inner != nil {
 		return header + s.inner.View(width)
@@ -305,7 +528,9 @@ func (s *NodePlacementStep) View(width, height int) string {
 	return header
 }
 
-// SetSize propagates the viewport width to the placement fields.
+// SetSize propagates the viewport width to the placement fields, so a
+// zero-arg FocusBounds/FocusedSpan call downstream measures against the
+// width the form last rendered at.
 func (s *NodePlacementStep) SetSize(width, height int) {
 	s.BaseStep.SetSize(width, height)
 	if s.inner != nil {
@@ -319,23 +544,22 @@ func (s *NodePlacementStep) FocusBounds(_, _ int) (top, bottom int, ok bool) {
 		return 0, 0, false
 	}
 	top, bottom, ok = s.inner.FocusBounds()
-	offset := strings.Count(s.discoveryHeader(), "\n")
+	offset := s.headerOffset()
 	return top + offset, bottom + offset, ok
 }
 
-func (s *NodePlacementStep) discoveryHeader() string {
-	noteStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim).Italic(true).PaddingLeft(2)
-	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning).PaddingLeft(2)
-
-	var header string
-	if s.discoveryErr != nil {
-		header = warnStyle.Render(s.discoveryErr.Error()) + "\n\n"
-	} else if s.discovery != nil {
-		header = noteStyle.Render(fmt.Sprintf("discovered %d node(s), %d storage pool(s), %d bridge(s)",
-			len(s.discovery.Nodes), len(s.discovery.Storage), len(s.discovery.Bridges))) + "\n\n"
+// FocusedSpan rebases the inner form's span onto this step's View, which
+// prepends the discovery header.
+func (s *NodePlacementStep) FocusedSpan() (wizard.LineSpan, bool) {
+	if s.inner == nil || s.phase != phasePlacing {
+		return wizard.LineSpan{}, false
 	}
-
-	return header
+	span, ok := s.inner.FocusedSpan()
+	if !ok {
+		return wizard.LineSpan{}, false
+	}
+	offset := s.headerOffset()
+	return wizard.LineSpan{Start: span.Start + offset, End: span.End + offset}, true
 }
 
 // Apply writes each retained field's value into cfg; controlPlaneFields[i]/
@@ -399,25 +623,82 @@ func (s *NodePlacementStep) SetFocused(focused bool) {
 	s.inner.Blur()
 }
 
-// ShortHelp returns the step's help bar or nil while discovering.
-func (s *NodePlacementStep) ShortHelp() []wizard.KeyBinding {
-	if s.phase == phaseDiscovering {
+// PaletteTargets exposes discovered placement fields without their values.
+func (s *NodePlacementStep) PaletteTargets() []wizard.PaletteTarget {
+	if s.inner == nil {
 		return nil
 	}
-	return []wizard.KeyBinding{
-		{Key: "↑↓", Help: wizard.HelpNavigate},
-		{Key: "← →", Help: "change value"},
-		{Key: wizard.HelpEnter, Help: wizard.HelpConfirm},
-		{Key: wizard.HelpEsc, Help: wizard.HelpBack},
-	}
+	return s.inner.PaletteTargets()
 }
 
+// FocusPaletteTarget moves focus to a discovered placement field.
+func (s *NodePlacementStep) FocusPaletteTarget(id string) tea.Cmd {
+	if s.inner == nil {
+		return nil
+	}
+	return s.inner.FocusPaletteTarget(id)
+}
+
+// ShortHelp returns the step's help bar — {esc back, ctrl+c quit} while
+// discovering, else the placement form's bindings plus any key hints the
+// focused field contributes.
+func (s *NodePlacementStep) ShortHelp() []wizard.KeyBinding {
+	if s.phase == phaseDiscovering {
+		return []wizard.KeyBinding{
+			{Key: wizard.HelpEsc, Help: wizard.HelpBack},
+			{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
+		}
+	}
+	help := []wizard.KeyBinding{
+		{Key: "↑↓", Help: wizard.HelpNavigate},
+		{Key: "← →", Help: "change value"},
+		{Key: wizard.HelpEnter, Help: wizard.HelpContinue},
+		{Key: wizard.HelpEsc, Help: wizard.HelpBack},
+		{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
+	}
+	if s.inner == nil {
+		return help
+	}
+	if h, ok := s.inner.FocusedField().(components.KeyHinter); ok {
+		for _, hint := range h.KeyHints() {
+			help = append(help, wizard.KeyBinding{Key: hint.Key, Help: hint.Help})
+		}
+	}
+	return help
+}
+
+// OverlayHelp lists the footer-silent "r" refresh for the "?" overlay, once
+// discovery has settled into a built form — success or error alike, since
+// 'r' re-issues discovery either way (Update's phasePlacing branch).
+func (s *NodePlacementStep) OverlayHelp() []wizard.KeyBinding {
+	if s.phase != phasePlacing || s.inner == nil {
+		return nil
+	}
+	return []wizard.KeyBinding{{Key: "r", Help: helpRefresh}}
+}
+
+// bridgeNames returns bridges' names sanitized for display: unlike the node
+// and storage pick lists, a bridge's dropdown option is also its selected
+// value (no SetDisplayOptions overlay exists here, and components.
+// MultiSelectField — additionalNetworks' type — offers none at all), so
+// this is the one place that can keep a tampered bridge name off the screen.
 func bridgeNames(bridges []proxmoxBridge) []string {
 	names := make([]string, len(bridges))
 	for i, b := range bridges {
-		names[i] = b.Name
+		names[i] = tui.SanitizeTerminalEscapes(b.Name)
 	}
 	return names
+}
+
+// sanitizeNames returns names with every element passed through
+// tui.SanitizeTerminalEscapes, for display-only option lists built from
+// Proxmox-reported data.
+func sanitizeNames(names []string) []string {
+	out := make([]string, len(names))
+	for i, n := range names {
+		out[i] = tui.SanitizeTerminalEscapes(n)
+	}
+	return out
 }
 
 func additionalNetworksBridges(nets []config.AdditionalNetwork) string {
@@ -456,6 +737,13 @@ func parseAdditionalNetworks(v string, existing []config.AdditionalNetwork) []co
 	return nets
 }
 
+// filterStorageByContent returns the raw, unsanitized pool names: unlike
+// bridgeNames, every caller pairs this list with a SetDisplayOptions(
+// storageDisplayOptions(...)) override of the same length immediately after
+// building the field (see buildInnerStep), so the raw name here is never
+// what reaches the screen — only storageDisplayOptions's sanitized copy is.
+// Sanitizing it here too would corrupt the real pool name Apply writes to
+// cfg for no added safety.
 func filterStorageByContent(storage []proxmoxStorage, content string) []string {
 	var names []string
 	for _, st := range storage {
