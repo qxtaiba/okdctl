@@ -9,7 +9,6 @@ const (
 	IconPending    = "○"
 	IconActive     = "●"
 	IconPointer    = "→"
-	IconTextCursor = "▏"
 	IconCaretLeft  = "◂"
 	IconCaretRight = "▸"
 	IconBar        = "┃"

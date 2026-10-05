@@ -65,25 +65,6 @@ func TestGolden_HelpOverlayWideSplit(t *testing.T) {
 	tuitest.AssertFits(t, frame, 180, 48)
 }
 
-// TestGolden_PaletteOpen pins the command palette's modal claim, the help
-// overlay's sibling: it replaces the whole body region at the capped
-// single-column tier and, on the split tier, centers over the full content
-// width rather than sitting beside a now-irrelevant context pane.
-func TestGolden_PaletteOpen(t *testing.T) {
-	for _, sz := range []struct{ w, h int }{{100, 30}, {180, 48}} {
-		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
-			steps, _ := newNavTestSteps([]StepID{StepIDBasics, StepIDProxmox, StepIDNetworking})
-			m := NewModel(steps, config.DefaultConfig())
-			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
-
-			mm, _ := m.Update(tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl})
-			frame := mm.(*Model).View().Content
-			tuitest.Golden(t, fmt.Sprintf("palette_open_%dx%d", sz.w, sz.h), frame)
-			tuitest.AssertFits(t, frame, sz.w, sz.h)
-		})
-	}
-}
-
 func TestGolden_ChromeThemeVariants(t *testing.T) {
 	t.Setenv("NO_COLOR", "")
 	t.Cleanup(func() {

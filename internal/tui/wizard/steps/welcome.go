@@ -231,31 +231,6 @@ func (s *WelcomeStep) SelectedVerb() HubVerb {
 	return s.entries[i].verb
 }
 
-// PaletteTargets exposes hub actions without dispatching them.
-func (s *WelcomeStep) PaletteTargets() []wizard.PaletteTarget {
-	targets := make([]wizard.PaletteTarget, 0, len(s.entries))
-	for _, entry := range s.entries {
-		targets = append(targets, wizard.PaletteTarget{
-			ID:     strconv.Itoa(int(entry.verb)),
-			Kind:   wizard.PaletteTargetAction,
-			Label:  entry.label,
-			Detail: "Select hub action",
-		})
-	}
-	return targets
-}
-
-// FocusPaletteTarget highlights a hub action without confirming it.
-func (s *WelcomeStep) FocusPaletteTarget(id string) tea.Cmd {
-	for i, entry := range s.entries {
-		if strconv.Itoa(int(entry.verb)) == id {
-			s.nav.Select(i)
-			break
-		}
-	}
-	return nil
-}
-
 // Init starts the live snapshot and its cancellable refresh timer when enabled.
 func (s *WelcomeStep) Init() tea.Cmd {
 	if s.opsSource == nil {

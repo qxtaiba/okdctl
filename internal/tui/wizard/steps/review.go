@@ -972,25 +972,6 @@ func (s *ReviewStep) GetSelectedAction() wizard.Action {
 	}
 }
 
-// PaletteTargets exposes review actions without dispatching them.
-func (s *ReviewStep) PaletteTargets() []wizard.PaletteTarget {
-	return []wizard.PaletteTarget{
-		{ID: labelDeploy, Kind: wizard.PaletteTargetAction, Label: "deploy now", Detail: "Select review action"},
-		{ID: "save", Kind: wizard.PaletteTargetAction, Label: "save and exit", Detail: "Select review action"},
-	}
-}
-
-// FocusPaletteTarget highlights a review action without confirming it.
-func (s *ReviewStep) FocusPaletteTarget(id string) tea.Cmd {
-	switch id {
-	case labelDeploy:
-		s.actions.Select(0)
-	case "save":
-		s.actions.Select(1)
-	}
-	return nil
-}
-
 // FocusBounds keeps review actions visible beneath the configuration summary.
 func (s *ReviewStep) FocusBounds(width, height int) (top, bottom int, ok bool) {
 	if s.cfg == nil {

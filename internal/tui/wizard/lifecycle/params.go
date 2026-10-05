@@ -86,18 +86,6 @@ func (s *ParamsStep) Init() tea.Cmd {
 	return s.inner.Init()
 }
 
-// PaletteTargets exposes operation parameters without their values.
-func (s *ParamsStep) PaletteTargets() []wizard.PaletteTarget {
-	s.ensureForm()
-	return s.inner.PaletteTargets()
-}
-
-// FocusPaletteTarget moves focus to one of the operation's parameters.
-func (s *ParamsStep) FocusPaletteTarget(id string) tea.Cmd {
-	s.ensureForm()
-	return s.inner.FocusPaletteTarget(id)
-}
-
 func (s *ParamsStep) ensureForm() {
 	if s.inner == nil || s.builtFor != s.st.Op {
 		s.buildForm()

@@ -349,47 +349,6 @@ func (f *MultiSectionForm) FocusField(section, field int) tea.Cmd {
 	return group.Focus()
 }
 
-// PaletteTargets exposes visible field labels without their values.
-func (f *MultiSectionForm) PaletteTargets() []PaletteTarget {
-	var targets []PaletteTarget
-	for sectionIndex := range f.sections {
-		section := &f.sections[sectionIndex]
-		if !section.isVisible() || section.Group == nil {
-			continue
-		}
-		for fieldIndex, field := range section.Group.Fields() {
-			labeled, ok := field.(components.LabeledField)
-			if !ok {
-				continue
-			}
-			targets = append(targets, PaletteTarget{
-				ID:     fmt.Sprintf("%d.%d", sectionIndex, fieldIndex),
-				Kind:   PaletteTargetField,
-				Label:  labeled.FieldLabel(),
-				Detail: section.Title,
-			})
-		}
-	}
-	return targets
-}
-
-// FocusPaletteTarget moves focus to a visible field by its section and field indexes.
-func (f *MultiSectionForm) FocusPaletteTarget(id string) tea.Cmd {
-	sectionText, fieldText, ok := strings.Cut(id, ".")
-	if !ok {
-		return nil
-	}
-	section, err := strconv.Atoi(sectionText)
-	if err != nil {
-		return nil
-	}
-	field, err := strconv.Atoi(fieldText)
-	if err != nil {
-		return nil
-	}
-	return f.FocusField(section, field)
-}
-
 // Focus resets navigation to the first visible section and focuses it.
 func (f *MultiSectionForm) Focus() tea.Cmd {
 	f.currentSection = f.firstVisible()
@@ -857,16 +816,6 @@ type DataDrivenStep struct {
 	customExtraContent      func(width int) string
 	customExtraContentTitle string
 	customPinnedFooter      func(width int) string
-}
-
-// PaletteTargets exposes the step's visible field labels without their values.
-func (s *DataDrivenStep) PaletteTargets() []PaletteTarget {
-	return s.form.PaletteTargets()
-}
-
-// FocusPaletteTarget moves focus to one of the step's visible fields.
-func (s *DataDrivenStep) FocusPaletteTarget(id string) tea.Cmd {
-	return s.form.FocusPaletteTarget(id)
 }
 
 // NewDataDrivenStep builds a DataDrivenStep from a StepDefinition.
