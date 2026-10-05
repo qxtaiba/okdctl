@@ -270,9 +270,10 @@ func (m *Model) goToNextStep() (tea.Model, tea.Cmd) {
 					action = ag.GetSelectedAction()
 				}
 				m.result = Result{
-					Outcome: OutcomeCompleted,
-					Config:  m.config,
-					Action:  action,
+					Outcome:  OutcomeCompleted,
+					Config:   m.config,
+					Action:   action,
+					ExitStep: m.steps[m.currentStep].ID(),
 				}
 				return m, tea.Quit
 			}
@@ -297,16 +298,19 @@ func (m *Model) goToNextStep() (tea.Model, tea.Cmd) {
 
 	if nextStep >= len(m.steps) {
 		action := ActionExit
+		var exitStep StepID
 		if len(m.steps) > 0 {
 			currentStep := m.steps[m.currentStep]
+			exitStep = currentStep.ID()
 			if ag, ok := currentStep.(actionGetter); ok {
 				action = ag.GetSelectedAction()
 			}
 		}
 		m.result = Result{
-			Outcome: OutcomeCompleted,
-			Config:  m.config,
-			Action:  action,
+			Outcome:  OutcomeCompleted,
+			Config:   m.config,
+			Action:   action,
+			ExitStep: exitStep,
 		}
 		return m, tea.Quit
 	}

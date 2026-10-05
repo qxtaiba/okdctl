@@ -172,3 +172,33 @@ func TestWizardAssemblyRejectsUnknownAndDuplicateSteps(t *testing.T) {
 		}
 	}
 }
+
+func TestSessionVerb(t *testing.T) {
+	deployHighlighted := func() *steps.WelcomeStep {
+		hub := steps.NewWelcomeStep()
+		hub.SetExistingConfig(config.DefaultConfig(), steps.SaveSlotConfigured)
+		if hub.SelectedVerb() != steps.HubVerbDeploy {
+			t.Fatalf("hub highlights %v; want the deploy row", hub.SelectedVerb())
+		}
+		return hub
+	}
+
+	cases := []struct {
+		name string
+		hub  *steps.WelcomeStep
+		exit wizard.StepID
+		want steps.HubVerb
+	}{
+		{"hub ended the session on its highlighted verb", deployHighlighted(), wizard.StepIDWelcome, steps.HubVerbDeploy},
+		{"review ended the session under a stale deploy highlight", deployHighlighted(), wizard.StepIDReview, steps.HubVerbGetStarted},
+		{"no hub in the flow", nil, wizard.StepIDReview, steps.HubVerbGetStarted},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := sessionVerb(wizard.Result{Outcome: wizard.OutcomeCompleted, ExitStep: c.exit}, c.hub)
+			if got != c.want {
+				t.Errorf("sessionVerb = %v; want %v", got, c.want)
+			}
+		})
+	}
+}
