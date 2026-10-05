@@ -3,12 +3,14 @@ package node
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
 
@@ -160,5 +162,24 @@ func TestStopRefusesForeignMarkerWithoutAck(t *testing.T) {
 	}
 	if fc.cordon != 4 || fp.shutdownCalls != 4 {
 		t.Errorf("acknowledged stop should run the full sequence: cordon=%d shutdown=%d", fc.cordon, fp.shutdownCalls)
+	}
+}
+
+func TestNamesByIndexOrdersAscendingAndDropsUnindexed(t *testing.T) {
+	nodes := []cluster.NodeDetail{
+		{Name: "worker0", Role: nodetypes.RoleWorker},
+		{Name: "worker2", Role: nodetypes.RoleWorker},
+		{Name: "worker1", Role: nodetypes.RoleWorker},
+		{Name: "spare", Role: nodetypes.RoleWorker},
+		{Name: "master1", Role: nodetypes.RoleMaster},
+		{Name: "master0", Role: nodetypes.RoleMaster},
+	}
+	workers := namesByIndex(nodes, nodetypes.RoleWorker, logutil.NopLogger)
+	if want := []string{"worker0", "worker1", "worker2"}; !slices.Equal(workers, want) {
+		t.Fatalf("workers = %v, want %v", workers, want)
+	}
+	masters := namesByIndex(nodes, nodetypes.RoleMaster, logutil.NopLogger)
+	if want := []string{"master0", "master1"}; !slices.Equal(masters, want) {
+		t.Fatalf("masters = %v, want %v", masters, want)
 	}
 }

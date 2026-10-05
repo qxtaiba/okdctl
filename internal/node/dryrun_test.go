@@ -1,13 +1,10 @@
 package node
 
 import (
-	"bytes"
 	"context"
 	"errors"
-	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -35,14 +32,10 @@ type fakeCluster struct {
 	uncordon       int
 	uncordonErr    error
 	deleteNode     int
-	setSched       int
-	applied        int
 	schedulable    bool
 	etcdHealthy    bool
 	cephApplicable bool
 	cephHealthy    bool
-	// drainFailsAtCall makes the Nth Drain call (1-based) fail; 0 never fails.
-	drainFailsAtCall int
 
 	approveCalls   int
 	approveCount   int
@@ -140,14 +133,11 @@ func (f *fakeCluster) Drain(_ context.Context, node string, _ cluster.DrainOptio
 	f.drain++
 	f.drainedNodes = append(f.drainedNodes, node)
 	f.record("drain")
-	if f.drainFailsAtCall != 0 && f.drain == f.drainFailsAtCall {
-		return errors.New("drain timed out")
-	}
 	return nil
 }
 
 // DeleteNode drops the node from the fake's node list so a subsequent ListNodes
-// reflects the removal, letting a multi-worker compact loop run realistically.
+// reflects the removal.
 func (f *fakeCluster) DeleteNode(_ context.Context, name string) error {
 	f.deleteNode++
 	kept := f.nodes[:0]
@@ -183,11 +173,6 @@ func (f *fakeCluster) CephHealthy(context.Context) (cluster.CephHealth, error) {
 
 func (f *fakeCluster) MastersSchedulable(context.Context) (bool, error) { return f.schedulable, nil }
 
-func (f *fakeCluster) SetMastersSchedulable(context.Context, bool) error {
-	f.setSched++
-	return nil
-}
-
 func (f *fakeCluster) PodsForSelector(_ context.Context, namespace, selector string) ([]cluster.PodPlacement, error) {
 	f.podsForSelectorCalls++
 	if selector == "app=rook-ceph-osd" {
@@ -198,7 +183,6 @@ func (f *fakeCluster) PodsForSelector(_ context.Context, namespace, selector str
 	}
 	return nil, nil
 }
-func (f *fakeCluster) Apply(context.Context, []byte) error { f.applied++; return nil }
 
 func (f *fakeCluster) ApprovePendingCSRs(context.Context, ...cluster.CSRIdentity) (int, error) {
 	f.approveCalls++
@@ -811,182 +795,6 @@ func TestRemoveDryRunPreviewIsTruthfulAndInert(t *testing.T) {
 	}
 	assertUnchanged(t, tfvars, "SENTINEL_TFVARS\n")
 	assertUnchanged(t, cfgPath, "SENTINEL_CONFIG\n")
-}
-
-func compactNodes() []cluster.NodeDetail {
-	return []cluster.NodeDetail{
-		{Name: "worker0", Role: nodetypes.RoleWorker},
-		{Name: "worker1", Role: nodetypes.RoleWorker},
-		{Name: "master0", Role: nodetypes.RoleMaster},
-	}
-}
-
-func TestCompactDryRunPreviewsEveryWorkerAndMakesNoMutation(t *testing.T) {
-	fc := &fakeCluster{
-		nodes: []cluster.NodeDetail{
-			{Name: "worker0", Role: nodetypes.RoleWorker},
-			{Name: "worker1", Role: nodetypes.RoleWorker},
-			{Name: "worker2", Role: nodetypes.RoleWorker},
-			{Name: "master0", Role: nodetypes.RoleMaster},
-		},
-		schedulable: true,
-		etcdHealthy: true,
-	}
-	ftf := &fakeTF{action: terraform.PlanActionDelete}
-	cfg := config.DefaultConfig()
-	cfg.Topology.Workers.Count = 3
-
-	r, tfvars, cfgPath := seedRunner(t, fc, ftf, cfg)
-
-	if err := r.Compact(context.Background(), CompactOptions{IngressReplicas: 2}); err != nil {
-		t.Fatalf("dry-run compact: %v", err)
-	}
-
-	// Zero mutation: no control-plane change, no ingress apply, no cluster ops.
-	if fc.setSched != 0 || fc.applied != 0 {
-		t.Errorf("dry-run compact mutated the control plane: setSched=%d applied=%d", fc.setSched, fc.applied)
-	}
-	if fc.cordon != 0 || fc.drain != 0 || fc.deleteNode != 0 {
-		t.Errorf("dry-run compact mutated the cluster: cordon=%d drain=%d deleteNode=%d", fc.cordon, fc.drain, fc.deleteNode)
-	}
-	if ftf.applyCalls != 0 || ftf.snapshots != 0 {
-		t.Errorf("dry-run compact applied terraform: apply=%d snapshot=%d", ftf.applyCalls, ftf.snapshots)
-	}
-	// One real delete plan gate per worker.
-	if ftf.planCalls != 3 {
-		t.Errorf("dry-run compact must plan-gate every worker: planCalls=%d want 3", ftf.planCalls)
-	}
-	// Last gate is worker0: worker[0] leaves when worker_count drops to 0. The
-	// bootstrap/start-workers invariants are asserted by the remove/resize
-	// dry-run tests; every gate flows through the same nodeOpPlanVars helper.
-	if ftf.lastVars["worker_count"] != "0" {
-		t.Errorf("compact plan gate did not decrement worker_count per worker: vars=%v", ftf.lastVars)
-	}
-	assertUnchanged(t, tfvars, "SENTINEL_TFVARS\n")
-	assertUnchanged(t, cfgPath, "SENTINEL_CONFIG\n")
-	if _, err := os.Stat(filepath.Join(r.workDir, OpMarkerFileName)); !os.IsNotExist(err) {
-		t.Error("dry-run compact wrote an op marker")
-	}
-}
-
-// TestCompactDryRunAgainstDegradedEtcdStillPreviews locks the fix that makes
-// the pre-flight etcd gate non-blocking under --dry-run: a degraded quorum must
-// not hang the preview, and the verdict is surfaced as a line rather than a
-// failure.
-func TestCompactDryRunAgainstDegradedEtcdStillPreviews(t *testing.T) {
-	fc := &fakeCluster{
-		nodes: []cluster.NodeDetail{
-			{Name: "worker0", Role: nodetypes.RoleWorker},
-			{Name: "worker1", Role: nodetypes.RoleWorker},
-			{Name: "master0", Role: nodetypes.RoleMaster},
-		},
-		schedulable: true,
-		etcdHealthy: false, // degraded: the real gate would block up to 10m
-	}
-	ftf := &fakeTF{action: terraform.PlanActionDelete}
-	cfg := config.DefaultConfig()
-	cfg.Topology.Workers.Count = 2
-
-	dir := t.TempDir()
-	var buf bytes.Buffer
-	r := &Runner{
-		Cluster:         fc,
-		TF:              ftf,
-		Cfg:             cfg,
-		ConfigPath:      filepath.Join(dir, "okdctl.yaml"),
-		workDir:         dir,
-		envDir:          dir,
-		RunID:           "test-run",
-		DryRun:          true,
-		EtcdGateTimeout: DefaultEtcdGateTimeout,
-		Log:             slog.New(slog.NewTextHandler(&buf, nil)),
-	}
-
-	if err := r.Compact(context.Background(), CompactOptions{IngressReplicas: 2}); err != nil {
-		t.Fatalf("dry-run compact against degraded etcd must not fail: %v", err)
-	}
-
-	out := buf.String()
-	if !strings.Contains(out, "compact plan") {
-		t.Errorf("preview did not print against degraded etcd:\n%s", out)
-	}
-	if !strings.Contains(out, "etcd: UNHEALTHY") || !strings.Contains(out, "wait_up_to=10m0s") {
-		t.Errorf("preview missing the etcd verdict line:\n%s", out)
-	}
-
-	// Zero mutation despite the degraded quorum.
-	if fc.setSched != 0 || fc.applied != 0 || fc.cordon != 0 || fc.drain != 0 || fc.deleteNode != 0 {
-		t.Errorf("dry-run compact mutated the cluster: setSched=%d applied=%d cordon=%d drain=%d delete=%d",
-			fc.setSched, fc.applied, fc.cordon, fc.drain, fc.deleteNode)
-	}
-	if ftf.applyCalls != 0 || ftf.snapshots != 0 {
-		t.Errorf("dry-run compact applied terraform: apply=%d snapshot=%d", ftf.applyCalls, ftf.snapshots)
-	}
-}
-
-func TestCompactPreflightsStorageGuardBeforeControlPlaneMutation(t *testing.T) {
-	fc := &fakeCluster{
-		nodes:       compactNodes(),
-		schedulable: true,
-		etcdHealthy: true,
-		// An OSD on the first worker to be removed must block the whole compact.
-		osdPods: []cluster.PodPlacement{{Name: "osd-0", Namespace: "rook-ceph", NodeName: "worker1"}},
-	}
-	ftf := &fakeTF{action: terraform.PlanActionDelete}
-	cfg := config.DefaultConfig()
-	cfg.Topology.Workers.Count = 2
-
-	r, tfvars, cfgPath := seedRunner(t, fc, ftf, cfg)
-	r.DryRun = false
-
-	err := r.Compact(context.Background(), CompactOptions{IngressReplicas: 2})
-	if err == nil {
-		t.Fatal("want storage-guard refusal before any mutation")
-	}
-	if !strings.Contains(err.Error(), "rook-ceph OSD") {
-		t.Errorf("refusal should name the storage guard: %v", err)
-	}
-	// The refusal must precede SetMastersSchedulable and the ingress apply.
-	if fc.setSched != 0 || fc.applied != 0 {
-		t.Errorf("guard refusal mutated the control plane: setSched=%d applied=%d", fc.setSched, fc.applied)
-	}
-	if fc.cordon != 0 || fc.drain != 0 || fc.deleteNode != 0 || ftf.applyCalls != 0 {
-		t.Errorf("guard refusal mutated cluster/terraform: cordon=%d drain=%d delete=%d apply=%d", fc.cordon, fc.drain, fc.deleteNode, ftf.applyCalls)
-	}
-	assertUnchanged(t, tfvars, "SENTINEL_TFVARS\n")
-	assertUnchanged(t, cfgPath, "SENTINEL_CONFIG\n")
-}
-
-func TestCompactHybridStateReportedOnMidLoopFailure(t *testing.T) {
-	fc := &fakeCluster{
-		nodes:            compactNodes(),
-		schedulable:      true,
-		etcdHealthy:      true,
-		drainFailsAtCall: 2, // first worker drains; the second's drain fails
-	}
-	ftf := &fakeTF{action: terraform.PlanActionDelete}
-	cfg := config.DefaultConfig()
-	cfg.Topology.Workers.Count = 2
-
-	r, _, _ := seedRunner(t, fc, ftf, cfg)
-	r.DryRun = false
-
-	err := r.Compact(context.Background(), CompactOptions{IngressReplicas: 2})
-	if err == nil {
-		t.Fatal("want a hybrid-state error when a mid-loop removal fails")
-	}
-	msg := err.Error()
-	if !strings.Contains(msg, "1 of 2") || !strings.Contains(msg, "re-run") {
-		t.Errorf("hybrid error must report how many removed and how to proceed: %v", err)
-	}
-	// The failure is post-mutation: the control plane was already made schedulable
-	// and the first worker was removed before the second's drain failed.
-	if fc.setSched != 1 || fc.applied != 1 {
-		t.Errorf("compact should have mutated the control plane before the failure: setSched=%d applied=%d", fc.setSched, fc.applied)
-	}
-	if fc.deleteNode != 1 {
-		t.Errorf("exactly one worker should have been removed before the failure: deleteNode=%d", fc.deleteNode)
-	}
 }
 
 const testWorkerAddress = "module.okd_cluster.proxmox_virtual_environment_vm.worker[2]"

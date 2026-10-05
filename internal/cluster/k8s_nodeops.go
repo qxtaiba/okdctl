@@ -70,18 +70,6 @@ func (c *Client) DeleteNode(ctx context.Context, node string) error {
 	return nil
 }
 
-// SetMastersSchedulable patches the cluster Scheduler so control-plane nodes
-// accept (or stop accepting) regular workloads — required before draining the
-// last workers in a compaction.
-func (c *Client) SetMastersSchedulable(ctx context.Context, schedulable bool) error {
-	patch := fmt.Sprintf(`{"spec":{"mastersSchedulable":%t}}`, schedulable)
-	if err := c.runCheck(ctx, "patch", "schedulers.config.openshift.io", "cluster",
-		"--type=merge", "-p", patch); err != nil {
-		return &errtypes.ClusterError{Msg: "patch scheduler mastersSchedulable", Err: err}
-	}
-	return nil
-}
-
 // MastersSchedulable reports the cluster Scheduler's spec.mastersSchedulable.
 func (c *Client) MastersSchedulable(ctx context.Context) (bool, error) {
 	data, err := c.getJSONChecked(ctx, "get scheduler", "get", "schedulers.config.openshift.io", "cluster", "-o", "json")

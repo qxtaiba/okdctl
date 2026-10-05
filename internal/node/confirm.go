@@ -27,16 +27,14 @@ type PlanNode struct {
 // OpPlan is the read-only summary a node op hands to confirm/preview hooks before any mutation.
 // Nodes are in execution order.
 type OpPlan struct {
-	Op                 Op
-	Cluster            string
-	Nodes              []PlanNode
-	DrainTimeout       string
-	MemoryMB           int
-	CPU                int
-	OSDiskGB           int
-	ResizeMode         ResizeMode
-	GrowMasterMemoryMB int
-	IngressReplicas    int
+	Op           Op
+	Cluster      string
+	Nodes        []PlanNode
+	DrainTimeout string
+	MemoryMB     int
+	CPU          int
+	OSDiskGB     int
+	ResizeMode   ResizeMode
 }
 
 // ResizeMode describes the disruption required to realize a resize.
@@ -68,12 +66,7 @@ type ConfirmFunc func(ctx context.Context, plan *OpPlan) (bool, error)
 // PreviewFunc renders a dry-run summary of plan; it never gates and never runs outside dry-run.
 type PreviewFunc func(plan *OpPlan)
 
-// confirm suppresses the gate when preConsented (set by a composing op like
-// compact), avoiding re-prompts mid-teardown.
 func (r *Runner) confirm(ctx context.Context, plan *OpPlan) (bool, error) {
-	if r.preConsented {
-		return true, nil
-	}
 	if r.Confirm == nil {
 		return true, nil
 	}

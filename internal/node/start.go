@@ -14,8 +14,7 @@ import (
 // StartOptions tunes a cluster start.
 type StartOptions struct {
 	// Acknowledge overrides a stranded marker from any in-flight op; start is
-	// non-resumable and composes nothing, unlike compact (see
-	// refuseForeignMarker).
+	// non-resumable (see refuseForeignMarker).
 	Acknowledge bool
 }
 

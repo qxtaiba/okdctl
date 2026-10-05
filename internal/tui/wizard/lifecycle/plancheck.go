@@ -11,8 +11,7 @@ func PlansEquivalent(a, b *node.OpPlan) bool {
 	}
 	if a.Op != b.Op || a.Cluster != b.Cluster || len(a.Nodes) != len(b.Nodes) ||
 		a.MemoryMB != b.MemoryMB || a.CPU != b.CPU || a.OSDiskGB != b.OSDiskGB ||
-		a.ResizeMode != b.ResizeMode || a.DrainTimeout != b.DrainTimeout ||
-		a.GrowMasterMemoryMB != b.GrowMasterMemoryMB || a.IngressReplicas != b.IngressReplicas {
+		a.ResizeMode != b.ResizeMode || a.DrainTimeout != b.DrainTimeout {
 		return false
 	}
 	for i := range a.Nodes {

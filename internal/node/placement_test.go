@@ -51,22 +51,6 @@ func TestPlacementCapacityUsesEachHostAndObservedOwner(t *testing.T) {
 	}
 }
 
-func TestCompactCannotSpendMemoryFreedOnAnotherHost(t *testing.T) {
-	cfg := config.DefaultConfig()
-	cfg.Provider.Proxmox.Node = "pve1"
-	cfg.Provider.Proxmox.WorkerNodes = []string{"pve2"}
-	r := &Runner{Cfg: cfg, Capacity: func(_ context.Context, host, _ string) (HostCapacity, error) {
-		if host == "pve1" {
-			return HostCapacity{TotalMiB: 32768, AllocatedMiB: 32000}, nil
-		}
-		return HostCapacity{TotalMiB: 65536, AllocatedMiB: 8192}, nil
-	}}
-	err := r.projectCompactPlacement(t.Context(), []string{"worker0"}, []string{"master0"}, CompactOptions{GrowMasterMemoryMB: cfg.Topology.ControlPlane.MemoryMB + 4096})
-	if err == nil {
-		t.Fatal("cross-host freed memory funded master growth")
-	}
-}
-
 func TestAddChecksSeparateDataDatastore(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Provider.Proxmox.Storage = "os"

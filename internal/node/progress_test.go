@@ -165,41 +165,6 @@ func TestReporterInvokedDuringRemoveWorker(t *testing.T) {
 	}
 }
 
-func TestReporterInvokedDuringCompact(t *testing.T) {
-	fc := &fakeCluster{
-		nodes:       compactNodes(),
-		schedulable: true,
-		etcdHealthy: true,
-	}
-	ftf := &fakeTF{action: terraform.PlanActionDelete}
-	cfg := config.DefaultConfig()
-	cfg.Topology.Workers.Count = 2
-
-	r, _, _ := seedRunner(t, fc, ftf, cfg)
-	r.DryRun = false
-	r.Power = &fakePower{}
-	rr := &recordingReporter{}
-	r.Reporter = rr.reporter()
-
-	if err := r.Compact(context.Background(), CompactOptions{IngressReplicas: 2}); err != nil {
-		t.Fatalf("compact: %v", err)
-	}
-
-	// compact-preflight etcd gate, the N-worker plan-gate preflight span, two
-	// workers each with cordon/drain + targeted apply + post-remove ceph gate,
-	// and the compact-final etcd + ceph gates.
-	const want = 1 + 1 + 2*3 + 2
-	if got := rr.starCount(); got != want {
-		t.Errorf("want %d reporter starts, got %d: %v", want, got, rr.starts)
-	}
-	if rr.stops != rr.starCount() {
-		t.Errorf("every started span must stop: starts=%d stops=%d", rr.starCount(), rr.stops)
-	}
-	if rr.maxActive > 1 {
-		t.Errorf("reporter spans must be serial, never nested: maxActive=%d", rr.maxActive)
-	}
-}
-
 func TestReporterSilentOnDryRun(t *testing.T) {
 	t.Run("resize", func(t *testing.T) {
 		fc := &fakeCluster{
@@ -243,30 +208,6 @@ func TestReporterSilentOnDryRun(t *testing.T) {
 		}
 		if got := rr.starCount(); got != 0 {
 			t.Errorf("dry-run remove must not invoke the reporter, got %d calls: %v", got, rr.starts)
-		}
-	})
-
-	t.Run("compact", func(t *testing.T) {
-		fc := &fakeCluster{
-			nodes:       compactNodes(),
-			schedulable: true,
-			etcdHealthy: true,
-		}
-		ftf := &fakeTF{action: terraform.PlanActionDelete}
-		cfg := config.DefaultConfig()
-		cfg.Topology.Workers.Count = 2
-
-		r, _, _ := seedRunner(t, fc, ftf, cfg) // DryRun: true
-		rr := &recordingReporter{}
-		r.Reporter = rr.reporter()
-
-		// Compact's etcd preflight gate runs even under --dry-run, ahead of the
-		// dry-run branch check — it must stay silent too.
-		if err := r.Compact(context.Background(), CompactOptions{IngressReplicas: 2}); err != nil {
-			t.Fatalf("dry-run compact: %v", err)
-		}
-		if got := rr.starCount(); got != 0 {
-			t.Errorf("dry-run compact must not invoke the reporter, got %d calls: %v", got, rr.starts)
 		}
 	})
 }

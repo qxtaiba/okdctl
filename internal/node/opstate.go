@@ -1,5 +1,5 @@
-// Package node implements okdctl's node-lifecycle primitives — removal, resize,
-// and compaction — atop terraform.Executor and cluster.Client.
+// Package node implements okdctl's node-lifecycle primitives — add, removal,
+// resize, and cluster stop/start — atop terraform.Executor and cluster.Client.
 // Every mutating step is guarded and recorded in an on-disk marker so an
 // interrupted op is safe to re-run.
 package node
@@ -37,7 +37,6 @@ type Op string
 const (
 	OpRemove   Op = "remove"
 	OpResize   Op = "resize"
-	OpCompact  Op = "compact"
 	OpStop     Op = "stop"
 	OpStart    Op = "start"
 	OpSnapshot Op = "snapshot"
