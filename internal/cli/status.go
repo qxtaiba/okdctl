@@ -6,20 +6,16 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/qxtaiba/okdctl/internal/addon"
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/credentials"
 	"github.com/qxtaiba/okdctl/internal/deploy"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/clusterstatus"
-	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
-
-const colName = "name"
 
 var statusOutput string
 
@@ -35,54 +31,10 @@ health, and addon status for the deployed cluster.`,
 	RunE: runStatus,
 }
 
-var describeCmd = &cobra.Command{
-	Use:   "describe",
-	Short: "Show details for a cluster node or addon",
-	Long:  "Show detailed information for a specific cluster node or registered addon.",
-}
-
-var describeNodeCmd = &cobra.Command{
-	Use:   "node <name>",
-	Short: "Show detail for a cluster node",
-	Long: `Show the name, role (master/worker), and readiness condition for a
-single cluster node retrieved via oc. Use 'okdctl node list' to see every
-node at once (with terraform index and sizing-drift), or 'okdctl status' for
-a cluster-wide summary.`,
-	Example: "  okdctl describe node master-0",
-	Args:    cobra.ExactArgs(1),
-	RunE:    runDescribeNode,
-}
-
-var describeAddonCmd = &cobra.Command{
-	Use:   "addon <name>",
-	Short: "Show detail for a registered addon",
-	Long: `Show metadata (display name, description, category) and live health for
-a registered addon by running its Verify() probe against the cluster.
-Use 'okdctl addon list' to see all available addon names.`,
-	Example: "  okdctl describe addon flux",
-	Args:    cobra.ExactArgs(1),
-	RunE:    runDescribeAddon,
-	ValidArgsFunction: func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
-		return addon.Names(), cobra.ShellCompDirectiveNoFileComp
-	},
-}
-
-var (
-	describeNodeOutput  string
-	describeAddonOutput string
-)
-
 func init() {
 	statusCmd.Flags().StringVarP(&statusOutput, flagOutput, flagOutputShort, outputText, "output format: text|json")
 	registerOutputCompletion(statusCmd)
-	describeNodeCmd.Flags().StringVarP(&describeNodeOutput, flagOutput, flagOutputShort, outputText, "output format: text|json")
-	registerOutputCompletion(describeNodeCmd)
-	describeAddonCmd.Flags().StringVarP(&describeAddonOutput, flagOutput, flagOutputShort, outputText, "output format: text|json")
-	registerOutputCompletion(describeAddonCmd)
-	describeCmd.AddCommand(describeNodeCmd)
-	describeCmd.AddCommand(describeAddonCmd)
 	rootCmd.AddCommand(statusCmd)
-	rootCmd.AddCommand(describeCmd)
 }
 
 func runStatus(cmd *cobra.Command, _ []string) error {
@@ -169,109 +121,4 @@ func (p *proxmoxPowerProber) VMStates(ctx context.Context) (map[int]nodetypes.VM
 func printClusterStatus(cmd *cobra.Command, st *okd.ClusterStatus) error {
 	_, err := fmt.Fprintln(cmd.OutOrStdout(), render.ClusterStatusBox(st))
 	return err
-}
-
-func runDescribeNode(cmd *cobra.Command, args []string) error {
-	if err := validateFormat(describeNodeOutput); err != nil {
-		return err
-	}
-	quietForJSON(describeNodeOutput)
-
-	projectRoot, err := resolveProjectRootOrDie()
-	if err != nil {
-		return err
-	}
-
-	cl, err := clusterstatus.NewClient(projectRoot)
-	if err != nil {
-		return err
-	}
-
-	name := args[0]
-
-	n, err := cl.GetNode(cmd.Context(), name)
-	if err != nil {
-		return &errtypes.ClusterError{Msg: fmt.Sprintf("describe node %s", name), Err: err}
-	}
-
-	if describeNodeOutput == outputJSON {
-		payload := map[string]any{
-			colName: n.Name,
-			"role":  n.Role,
-			"ready": n.Ready,
-		}
-		return writeJSON(cmd.OutOrStdout(), payload)
-	}
-
-	return printLeaders(cmd.OutOrStdout(), [][2]string{
-		{colName, n.Name},
-		{"role", string(n.Role)},
-		{"ready", yesNo(n.Ready)},
-	})
-}
-
-func runDescribeAddon(cmd *cobra.Command, args []string) error {
-	if err := validateFormat(describeAddonOutput); err != nil {
-		return err
-	}
-	quietForJSON(describeAddonOutput)
-
-	cfg, err := loadConfig(cfgFile)
-	if err != nil {
-		return err
-	}
-
-	projectRoot, err := resolveProjectRootOrDie()
-	if err != nil {
-		return err
-	}
-
-	name := args[0]
-	a := addon.Get(name)
-	if a == nil {
-		return &errtypes.ConfigError{Msg: fmt.Sprintf("addon %q not registered; run 'okdctl addon list' to see available addons", name)}
-	}
-
-	info := a.Info()
-	mgr := newAddonManager(cfg, projectRoot)
-	results, _ := mgr.VerifyAll(cmd.Context())
-
-	as := okd.AddonStatus{}
-	for _, r := range results {
-		if r.Name == name {
-			as = okd.AddonStatus{Name: r.Name, Healthy: r.Err == nil}
-			if r.Err != nil {
-				as.Error = r.Err.Error()
-			}
-			break
-		}
-	}
-	// JSON emits the structured healthy bool + optional error, not the
-	// flattened display string, so state is discoverable (see
-	// docs/cli/json-schema.md).
-	if describeAddonOutput == outputJSON {
-		payload := map[string]any{
-			colName:        info.Name,
-			"display_name": info.DisplayName,
-			"description":  info.Description,
-			"category":     info.Category,
-			"healthy":      as.Healthy,
-		}
-		if as.Error != "" {
-			payload["error"] = as.Error
-		}
-		return writeJSON(cmd.OutOrStdout(), payload)
-	}
-
-	health := as.Label()
-	if !as.Healthy && as.Error != "" {
-		health += ": " + as.Error
-	}
-	return printLeaders(cmd.OutOrStdout(), [][2]string{
-		{colName, info.Name},
-		{"display-name", info.DisplayName},
-		{"description", info.Description},
-		{"category", info.Category},
-		{"health", health},
-	})
 }

@@ -203,28 +203,6 @@ Single release detail — same `OKDVersion` shape as an element of
 }
 ```
 
-## `okdctl describe node <name> --output=json`
-
-```json
-{
-  "name": "master-0",
-  "role": "master",
-  "ready": true
-}
-```
-
-## `okdctl describe addon <name> --output=json`
-
-```json
-{
-  "name": "flux",
-  "display_name": "Flux GitOps",
-  "description": "GitOps toolkit for declarative cluster reconciliation",
-  "category": "gitops",
-  "health": "healthy"
-}
-```
-
 ## `okdctl addon list --output=json`
 
 Flat array of registered addons with their config-file state.

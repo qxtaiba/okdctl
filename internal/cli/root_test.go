@@ -498,7 +498,6 @@ func TestMutatesStateClassification(t *testing.T) {
 		{versionCmd, false},
 		{statusCmd, false},
 		{nodeListCmd, false},
-		{describeNodeCmd, false},
 		{releasesListCmd, false},
 		{addonListCmd, false},
 		{addonVerifyCmd, false},

@@ -110,7 +110,6 @@ okdctl completion       generate shell completion script
 okdctl config           inspect okdctl configuration
 okdctl debug-bundle     collect a support bundle for troubleshooting
 okdctl deploy           deploy a Kubernetes cluster
-okdctl describe         show details for a cluster node or addon
 okdctl destroy          destroy a Kubernetes cluster
 okdctl doctor           check that your environment is ready to deploy a cluster
 okdctl kubeconfig       print or export the cluster kubeconfig
