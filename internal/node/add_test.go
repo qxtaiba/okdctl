@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -347,6 +348,57 @@ func TestAddWorkersMutatingSequenceOrder(t *testing.T) {
 	}
 	if cfg.Topology.Workers.Count != 4 {
 		t.Errorf("batch add must persist the widened worker count: got %d want 4", cfg.Topology.Workers.Count)
+	}
+}
+
+func wantWorkerNamesVar(count int) string {
+	names := make([]string, count)
+	for i := range names {
+		names[i] = fmt.Sprintf("%q", fmt.Sprintf("%s-worker%d", addTestClusterName, i))
+	}
+	return "[" + strings.Join(names, ", ") + "]"
+}
+
+func TestAddWorkersPlansWidenWorkerNamesWithWorkerCount(t *testing.T) {
+	cases := []struct {
+		name       string
+		dryRun     bool
+		wantCounts []string
+	}{
+		{name: "dry run previews the batch total", dryRun: true, wantCounts: []string{"4", "4"}},
+		{name: "real add grows one worker per plan", dryRun: false, wantCounts: []string{"3", "4"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fc := &fakeCluster{
+				nodes:               addExistingWorkers(),
+				workersAppearAtCall: 2,
+				appearingWorkers:    addAppearingWorkers(2, 2),
+			}
+			h := seedAddTest(t, fc, addTestConfig(2, 16384))
+			writeIgnitionArtifacts(t, h.r)
+			h.r.DryRun = tc.dryRun
+
+			if err := h.r.AddWorkers(context.Background(), AddOptions{Count: 2}); err != nil {
+				t.Fatalf("add: %v", err)
+			}
+
+			if len(h.ftf.planVars) != len(tc.wantCounts) {
+				t.Fatalf("got %d plans, want %d", len(h.ftf.planVars), len(tc.wantCounts))
+			}
+			for i, vars := range h.ftf.planVars {
+				if vars["worker_count"] != tc.wantCounts[i] {
+					t.Errorf("plan %d worker_count = %q, want %q", i, vars["worker_count"], tc.wantCounts[i])
+				}
+				count, err := strconv.Atoi(vars["worker_count"])
+				if err != nil {
+					t.Fatalf("plan %d worker_count = %q: %v", i, vars["worker_count"], err)
+				}
+				if want := wantWorkerNamesVar(count); vars["worker_names"] != want {
+					t.Errorf("plan %d worker_names = %q, want %q for worker_count %d", i, vars["worker_names"], want, count)
+				}
+			}
+		})
 	}
 }
 

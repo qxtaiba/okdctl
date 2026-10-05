@@ -185,6 +185,7 @@ type fakeTF struct {
 	applyCalls int
 	snapshots  int
 	lastVars   map[string]string
+	planVars   []map[string]string
 	lastTarget string
 	action     terraform.PlanAction
 	// emptyPlan makes ShowPlanChanges report no changes, simulating a
@@ -210,6 +211,7 @@ func (f *fakeTF) Init(context.Context) error { return nil }
 func (f *fakeTF) Plan(_ context.Context, opts terraform.PlanOptions) error {
 	f.planCalls++
 	f.lastVars = opts.Vars
+	f.planVars = append(f.planVars, opts.Vars)
 	if len(opts.Targets) > 0 {
 		f.lastTarget = opts.Targets[0]
 	}

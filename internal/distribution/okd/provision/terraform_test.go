@@ -248,6 +248,35 @@ func TestWorkerISOsPlanVar(t *testing.T) {
 	}
 }
 
+func TestWorkerNamesPlanVar(t *testing.T) {
+	cases := []struct {
+		name        string
+		workerCount int
+		want        string
+	}{
+		{name: "single worker", workerCount: 1, want: `["lab-worker0"]`},
+		{name: "three workers", workerCount: 3, want: `["lab-worker0", "lab-worker1", "lab-worker2"]`},
+		{name: "zero workers", workerCount: 0, want: `[]`},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := WorkerNamesPlanVar("lab", tt.workerCount); got != tt.want {
+				t.Errorf("WorkerNamesPlanVar(%q, %d) = %q, want %q", "lab", tt.workerCount, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestWorkerNamesPlanVar_MatchesRenderedTfvars(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Cluster.Name = "lab"
+	cfg.Topology.Workers.Count = 4
+	rendered := buildTerraformVarsData(cfg)
+	if got, want := WorkerNamesPlanVar("lab", 4), "["+rendered.WorkerNames+"]"; got != want {
+		t.Errorf("WorkerNamesPlanVar = %q; want the list terraform.tfvars renders, %q", got, want)
+	}
+}
+
 func TestReadTerraformVarsSizing_MissingKeyErrors(t *testing.T) {
 	envDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(envDir, "terraform.tfvars"), []byte("master_cpu_cores = 4\n"), 0o600); err != nil {

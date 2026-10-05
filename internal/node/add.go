@@ -136,14 +136,16 @@ func (r *Runner) AddWorkers(ctx context.Context, opts AddOptions) error {
 		}
 	}
 
-	// Every per-node preview widens worker_count/worker_isos together to the
-	// batch's final total — the module asserts length(worker_isos) >= worker_count.
+	// Every per-node preview widens worker_count/worker_isos/worker_names
+	// together to the batch's final total — the module validates both lists
+	// against worker_count.
 	if r.DryRun {
 		r.preview(&plan)
 		total := startIdx + opts.Count
 		planVars := map[string]string{
 			tfVarWorkerCount: strconv.Itoa(total),
 			"worker_isos":    provision.WorkerISOsPlanVar(r.Cfg.Provider.Proxmox.ISOStorage, total),
+			"worker_names":   provision.WorkerNamesPlanVar(r.Cfg.Cluster.Name, total),
 		}
 		for i := range plan.Nodes {
 			if err := r.targetedApply(ctx, plan.Nodes[i].TFAddress, terraform.PlanActionCreate, planVars, resuming); err != nil {
@@ -244,6 +246,7 @@ func (r *Runner) addOneWorker(ctx context.Context, idx int, marker *OpMarker) er
 	planVars := map[string]string{
 		tfVarWorkerCount: strconv.Itoa(total),
 		"worker_isos":    provision.WorkerISOsPlanVar(r.Cfg.Provider.Proxmox.ISOStorage, total),
+		"worker_names":   provision.WorkerNamesPlanVar(r.Cfg.Cluster.Name, total),
 	}
 	resuming := marker != nil
 
