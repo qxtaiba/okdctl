@@ -229,8 +229,8 @@ func scrubStderrText(s string) string {
 
 // ScrubSecrets masks credential-shaped values in s with the same shape-based
 // coverage as scrubStderrText. Exported for writer-side scrubbing of streamed
-// subprocess output (the install log debug-bundle archives) that never
-// passes through RedactHandler.
+// subprocess output (the install log) that never passes through
+// RedactHandler.
 func ScrubSecrets(s string) string {
 	return scrubStderrText(s)
 }

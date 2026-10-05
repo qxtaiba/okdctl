@@ -316,7 +316,7 @@ func announceFailure(err error) {
 	}
 	logutil.Error("command failed", logutil.LF("err", err))
 	if runLogPath != "" {
-		logutil.Info("full run log persisted; attach it to bug reports or run 'okdctl debug-bundle'",
+		logutil.Info("full run log persisted; attach it to bug reports",
 			logutil.LF("path", runLogPath))
 	}
 }
@@ -324,7 +324,7 @@ func announceFailure(err error) {
 // logFailureToSink records the failure in the persistent run-log sink even
 // when announceFailure prints the pretty box straight to stderr instead of
 // going through the logutil facade — otherwise a boxed failure on a TTY
-// would never appear in okdctl.log or a pulled debug-bundle.
+// would never appear in okdctl.log.
 func logFailureToSink(err error) {
 	if runLogSink == nil {
 		return

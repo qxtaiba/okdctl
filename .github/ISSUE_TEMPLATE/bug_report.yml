@@ -8,9 +8,9 @@ body:
     attributes:
       value: |
         Thanks for taking the time to file a bug report. The fastest path
-        to a fix is `okdctl debug-bundle` — one command that captures
-        redacted config, recent logs, doctor results, and system metadata
-        into a tarball that is safe to attach here.
+        to a fix is the `okdctl.log` that `deploy`, `destroy`, and
+        `cleanup` write next to your config — credentials in it are
+        redacted, so it is safe to attach here.
   - type: textarea
     id: version
     attributes:
@@ -68,11 +68,11 @@ body:
     validations:
       required: true
   - type: textarea
-    id: bundle
+    id: log
     attributes:
-      label: Debug bundle
+      label: Run log
       description: >-
-        Run `okdctl debug-bundle` and drag the generated `okdctl-debug-*.tgz` into this field. Credentials are redacted and the raw terraform state is never included, so the bundle is safe to attach publicly. Add `--skip-must-gather` if the cluster is unreachable or the bundle is too large.
+        Drag the `okdctl.log` from your working directory (or the file you passed to `--log-file`) into this field. Credentials are redacted, so the log is safe to attach publicly.
     validations:
       required: false
   - type: checkboxes
