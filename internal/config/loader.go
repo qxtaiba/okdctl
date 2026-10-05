@@ -1,9 +1,13 @@
 package config
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 
+	yamlv2 "go.yaml.in/yaml/v2"
 	"sigs.k8s.io/yaml"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
@@ -22,8 +26,8 @@ func NewLoader() *Loader { return &Loader{} }
 // a later Save never materializes a value the operator did not write;
 // callers needing resolved topology values must call Effective. The static
 // netmask is the one field derived eagerly here (see DeriveStaticNetmask).
-// World/group-writable files are rejected, and unknown keys or the wrong
-// schemaVersion error instead of silently defaulting.
+// World/group-writable files are rejected, and unknown keys, a second YAML
+// document, or the wrong schemaVersion error instead of silently defaulting.
 func (l *Loader) LoadFile(path string) (*Config, error) {
 	fi, err := os.Stat(path)
 	if err != nil {
@@ -41,16 +45,44 @@ func (l *Loader) LoadFile(path string) (*Config, error) {
 		return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("read config file %s", path), Err: err}
 	}
 
+	if err := rejectMultipleDocuments(data, path); err != nil {
+		return nil, err
+	}
 	if err := checkSchemaVersion(data, path); err != nil {
 		return nil, err
 	}
 
 	cfg := fileDefaults()
 	if err := yaml.UnmarshalStrict(data, cfg); err != nil {
-		return nil, &errtypes.ConfigError{Msg: "parse config", Err: err}
+		return nil, parseError(err)
 	}
 	_ = DeriveStaticNetmask(cfg) // invalid/IPv6 CIDR is left for validators
 	return cfg, nil
+}
+
+func parseError(err error) error {
+	return &errtypes.ConfigError{Msg: "parse config", Err: err}
+}
+
+// rejectMultipleDocuments exists because yaml.Unmarshal reads only the first
+// document and would silently drop everything after a "---" separator.
+func rejectMultipleDocuments(data []byte, path string) error {
+	dec := yamlv2.NewDecoder(bytes.NewReader(data))
+	var doc any
+	if err := dec.Decode(&doc); err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		return parseError(err)
+	}
+	err := dec.Decode(&doc)
+	if errors.Is(err, io.EOF) {
+		return nil
+	}
+	if err != nil {
+		return parseError(err)
+	}
+	return &errtypes.ConfigError{Msg: fmt.Sprintf(`config file %s contains more than one YAML document; merge them into one and remove the "---" separator`, path)}
 }
 
 // checkSchemaVersion runs before the strict unmarshal so a bad schema fails
@@ -60,7 +92,7 @@ func checkSchemaVersion(data []byte, path string) error {
 		SchemaVersion string `json:"schemaVersion"`
 	}
 	if err := yaml.Unmarshal(data, &probe); err != nil {
-		return &errtypes.ConfigError{Msg: "parse config", Err: err}
+		return parseError(err)
 	}
 	switch probe.SchemaVersion {
 	case SchemaVersionCurrent:

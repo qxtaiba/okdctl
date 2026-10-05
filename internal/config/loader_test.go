@@ -56,6 +56,9 @@ func TestLoadFile_Rejections(t *testing.T) {
 		{"schemaVersion absent", "cluster:\n  name: mycluster\n", SchemaVersionCurrent},
 		{"unsupported schemaVersion", "schemaVersion: v99\n", ""},
 		{"unknown top-level key", "schemaVersion: v2\nunknownField: oops\n", ""},
+		{"second document", "schemaVersion: v2\n---\ncluster:\n  name: second\n", "more than one YAML document"},
+		{"leading marker then second document", "---\nschemaVersion: v2\n---\ncluster:\n  name: second\n", "more than one YAML document"},
+		{"empty trailing document", "schemaVersion: v2\n---\n", "more than one YAML document"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -71,6 +74,53 @@ func TestLoadFile_Rejections(t *testing.T) {
 			}
 			if tc.wantInMsg != "" && !strings.Contains(cfgErr.Msg, tc.wantInMsg) {
 				t.Errorf("ConfigError.Msg = %q; want it to contain %q", cfgErr.Msg, tc.wantInMsg)
+			}
+		})
+	}
+}
+
+func TestLoadFile_AcceptsLeadingDocumentMarker(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "okdctl.yaml")
+	if err := os.WriteFile(path, []byte("---\nschemaVersion: v2\ncluster:\n  name: marked\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := NewLoader().LoadFile(path)
+	if err != nil {
+		t.Fatalf("LoadFile: %v", err)
+	}
+	if cfg.Cluster.Name != "marked" {
+		t.Errorf("Cluster.Name = %q; want %q", cfg.Cluster.Name, "marked")
+	}
+}
+
+func TestExampleConfigs_LoadValidateAndKeepClusterName(t *testing.T) {
+	wantName := map[string]string{
+		"media-server.yaml": "grappleberry",
+		"minimal.yaml":      "minimal",
+		"production.yaml":   "production",
+	}
+	paths, err := filepath.Glob(filepath.Join("..", "..", "configs", "examples", "*.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) != len(wantName) {
+		t.Fatalf("found %d example configs %v; want %d", len(paths), paths, len(wantName))
+	}
+	for _, path := range paths {
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			want, ok := wantName[filepath.Base(path)]
+			if !ok {
+				t.Fatalf("no expected cluster.name recorded for %s", path)
+			}
+			cfg, err := NewLoader().LoadFile(path)
+			if err != nil {
+				t.Fatalf("LoadFile: %v", err)
+			}
+			if cfg.Cluster.Name != want {
+				t.Errorf("Cluster.Name = %q; want %q", cfg.Cluster.Name, want)
+			}
+			if result := cfg.Validate(); !result.IsValid() {
+				t.Errorf("Validate: %v", result)
 			}
 		})
 	}
