@@ -3,8 +3,6 @@
   │ O K D C T L                                                                                                      │  
   │ configure cluster addons                                                 connect · cluster · extras ●○○ · review │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
-  │    ╰────────────────╯                                                                                            │  
-  │                                                                                                                  │  
   │    ✓ secret store settings                                                                                       │  
   │                                                                                                                  │  
   │    provider                                                                                                      │  
@@ -16,6 +14,8 @@
   │    ╭────────────────────────────────────────────────────────────────────────────────────────────╮                │  
   │    │ automation/config/secrets                                                                  │                │  
   │    ╰────────────────────────────────────────────────────────────────────────────────────────────╯                │  
+  │                                                                                                                  │  
+  │    ⚠ secretstore requires sops — install before deploying                                                        │  
   │                                                                                                                  │  
   │    ● secret store (onepassword)                                                                                  │  
   │      requires: sops-encrypted 1password-credentials.json and 1password-token.txt + age key on bastion            │  
@@ -34,7 +34,7 @@
   │    name=priority pairs, e.g. homelab=1,shared=2                                                                  │  
   │                                                                                                                  │  
   │                                                                                                                  │  
-  │────────────────────────────── ↑ ↓  80% • scroll for more ─────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
+  │────────────────────────────── ↑ ↓  82% • scroll for more ─────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
   │  ↑↓/tab navigate • enter continue • esc back • enter/ctrl+e done • pgup/pgdn scroll • ctrl+c quit • ? help       │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                                         

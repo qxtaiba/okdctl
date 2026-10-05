@@ -4,8 +4,6 @@
   │ configure cluster addons                                                 connect · cluster · extras ●○○ · review │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
   │                                                                                                                  │  
-  │    ✓ secret store settings                                                                                       │  
-  │                                                                                                                  │  
   │    provider                                                                                                      │  
   │    ╭─────────────────╮                                                                                           │  
   │    │ ◂ onepassword ▸ │                                                                                           │  
@@ -15,6 +13,8 @@
   │    ╭────────────────────────────────────────────────────────────────────────────────────────────╮                │  
   │    │ automation/config/secrets                                                                  │                │  
   │    ╰────────────────────────────────────────────────────────────────────────────────────────────╯                │  
+  │                                                                                                                  │  
+  │    ⚠ secretstore requires sops — install before deploying                                                        │  
   │                                                                                                                  │  
   │    ✓ secret store (onepassword)                                                                                  │  
   │      requires: sops-encrypted 1password-credentials.json and 1password-token.txt + age key on bastion            │  

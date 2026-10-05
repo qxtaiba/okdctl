@@ -846,6 +846,7 @@ func TestGolden_DistributionErrorState(t *testing.T) {
 // (flux's 4, secretstore common's 3, connect host) so it's focused and
 // scrolled into view, then ctrl+e enters edit mode.
 func TestGolden_AddonsVaultsEditMode(t *testing.T) {
+	pinSopsOnPath(t, false)
 	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
 	rightKey := tea.KeyPressMsg{Code: tea.KeyRight}
 	ctrlE := tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl}
@@ -927,6 +928,7 @@ func TestGolden_AddonsFluxWarning(t *testing.T) {
 // sit below onepassword's own unfolded fields, with nothing focusable to
 // tab the viewport toward.
 func TestGolden_AddonsProviderAbsenceNotes(t *testing.T) {
+	pinSopsOnPath(t, false)
 	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
 	rightKey := tea.KeyPressMsg{Code: tea.KeyRight}
 	bottomKey := tea.KeyPressMsg{Code: 'G', Text: "G"}
@@ -1234,4 +1236,13 @@ func TestGolden_ProxmoxEnterHighlightsInvalidFields(t *testing.T) {
 	frame = tuitest.RenderAt(t, m, 100, 30)
 	tuitest.Golden(t, "proxmox-enter-invalid_100x30_after", frame)
 	tuitest.AssertFits(t, frame, 100, 30)
+}
+
+// pinSopsOnPath fixes the sops lookup so golden frames do not depend on
+// whether the machine running the test happens to have sops installed.
+func pinSopsOnPath(t *testing.T, found bool) {
+	t.Helper()
+	prev := sopsOnPath
+	sopsOnPath = func() bool { return found }
+	t.Cleanup(func() { sopsOnPath = prev })
 }

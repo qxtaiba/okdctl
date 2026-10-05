@@ -1,3 +1,4 @@
+---
 # The saved configuration run.sh drops into every screenshot cwd, so the
 # hero-hub renders its five-verb menu and save-slot line instead of the
 # blank-slate menu. Cluster name matches lifecycle.DemoClusterName, so the
