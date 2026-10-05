@@ -307,3 +307,22 @@ func TestRenderLogPaneWrapKeepsWholeLinesAndHonestCoordinates(t *testing.T) {
 		t.Errorf("header must carry the stream total:\n%s", rows[0])
 	}
 }
+
+func TestSurfacePagesByWhicheverWindowRenderedLast(t *testing.T) {
+	s := Surface{Src: seededRing(60), ViewCol: 60}
+
+	side := tuitest.StripANSI(s.RenderSide(70, 21))
+	if rows := strings.Split(side, "\n"); len(rows) != 21 || !strings.Contains(rows[0], "LOG") || !strings.Contains(rows[20], "step-59") {
+		t.Fatalf("side column = %d rows, want the header plus the newest 20 lines:\n%s", len(rows), side)
+	}
+	if got := s.PageSize(); got != 20 {
+		t.Errorf("PageSize() after the side column rendered = %d, want its 20 lines", got)
+	}
+
+	if tail := s.RenderTail(60, NarrowTailRows); len(tail) != NarrowTailRows+1 {
+		t.Fatalf("tail = %d rows, want the header plus %d lines", len(tail), NarrowTailRows)
+	}
+	if got := s.PageSize(); got != NarrowTailRows {
+		t.Errorf("PageSize() after the tail rendered = %d, want its %d lines", got, NarrowTailRows)
+	}
+}

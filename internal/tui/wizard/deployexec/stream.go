@@ -353,8 +353,8 @@ func (s *StreamStep) handleLogKey(msg tea.KeyPressMsg) tea.Cmd {
 }
 
 // ConsumesPaging reports whether pgup/pgdn page the log window itself — the
-// full-screen log always, a locked tail too — so the frame leaves the keys
-// to the step instead of scrolling the checklist viewport.
+// full-screen log always, a locked side column or tail too — so the frame
+// leaves the keys to the step instead of scrolling the checklist viewport.
 func (s *StreamStep) ConsumesPaging() bool {
 	return s.log.ConsumesPaging()
 }
@@ -366,10 +366,10 @@ func (s *StreamStep) ScrollsWithArrows() bool {
 	return s.hooks.Logs == nil || !s.log.Full()
 }
 
-// OwnsFrameWidth hands the log the whole frame while `f` has it full-screen;
-// the checklist comes back the moment it is toggled off.
+// OwnsFrameWidth hands the log the whole frame while `f` has it full-screen,
+// and takes it for the checklist and the log side by side on a wide terminal.
 func (s *StreamStep) OwnsFrameWidth() bool {
-	return s.log.Full() && s.hooks.Logs != nil
+	return s.log.Full() && s.hooks.Logs != nil || s.SideLog(&s.log)
 }
 
 // applyEvent updates phase/row state for ev: a phase change closes out the
@@ -549,6 +549,10 @@ func (s *StreamStep) InterceptQuit() bool {
 // pending bullet. The height argument is the frame's fixed 1000-row scratch
 // budget, never the body's real height — SetSize records that.
 func (s *StreamStep) View(width, _ int) string {
+	frameWidth, side := width, s.SideLog(&s.log)
+	if side {
+		width = wizard.SideLogBodyWidth
+	}
 	col := max(width-4, 1)
 	s.log.ViewCol = col
 	s.updateETAShown()
@@ -593,20 +597,22 @@ func (s *StreamStep) View(width, _ int) string {
 		clauses = append(clauses, "ctrl+c cancels after the current step")
 	}
 
-	// The tail's budget is whatever body rows the checklist and the
-	// chrome around the tail (its blank row, the LOG header, and the
-	// clauses block) leave over, floored at logview.NarrowTailRows —
-	// slack becomes evidence instead of blank rows.
 	s.tailRendered = false
-	chrome := 2
-	if len(clauses) > 0 {
-		chrome += 2
-	}
-	budget := max(logview.NarrowTailRows, s.BodyHeight()-len(lines)-chrome)
-	if tail := s.log.RenderTail(col, budget); len(tail) > 0 {
-		lines = append(lines, "")
-		lines = append(lines, tail...)
-		s.tailRendered = true
+	if !side {
+		// The tail's budget is whatever body rows the checklist and the
+		// chrome around the tail (its blank row, the LOG header, and the
+		// clauses block) leave over, floored at logview.NarrowTailRows —
+		// slack becomes evidence instead of blank rows.
+		chrome := 2
+		if len(clauses) > 0 {
+			chrome += 2
+		}
+		budget := max(logview.NarrowTailRows, s.BodyHeight()-len(lines)-chrome)
+		if tail := s.log.RenderTail(col, budget); len(tail) > 0 {
+			lines = append(lines, "")
+			lines = append(lines, tail...)
+			s.tailRendered = true
+		}
 	}
 
 	if len(clauses) > 0 {
@@ -614,6 +620,9 @@ func (s *StreamStep) View(width, _ int) string {
 	}
 
 	content := strings.Join(lines, "\n")
+	if side {
+		content = s.WithSideLog(content, &s.log, frameWidth)
+	}
 	s.lastLine = strings.Count(content, "\n")
 	return content
 }

@@ -254,8 +254,8 @@ func (s *ExecStep) handleLogKey(msg tea.KeyPressMsg) tea.Cmd {
 }
 
 // ConsumesPaging reports whether pgup/pgdn page the log window itself — the
-// full-screen log always, a locked tail too — so the frame leaves the keys
-// to the step instead of scrolling the checklist viewport.
+// full-screen log always, a locked side column or tail too — so the frame
+// leaves the keys to the step instead of scrolling the checklist viewport.
 func (s *ExecStep) ConsumesPaging() bool {
 	return s.log.ConsumesPaging()
 }
@@ -267,10 +267,10 @@ func (s *ExecStep) ScrollsWithArrows() bool {
 	return s.hooks.Logs == nil || !s.log.Full()
 }
 
-// OwnsFrameWidth hands the log the whole frame while `f` has it
-// full-screen; the checklist comes back the moment it is toggled off.
+// OwnsFrameWidth hands the log the whole frame while `f` has it full-screen,
+// and takes it for the checklist and the log side by side on a wide terminal.
 func (s *ExecStep) OwnsFrameWidth() bool {
-	return s.log.Full() && s.hooks.Logs != nil
+	return s.log.Full() && s.hooks.Logs != nil || s.SideLog(&s.log)
 }
 
 // applyEvent updates node/row state for ev: a node change closes out the
@@ -456,6 +456,10 @@ func (s *ExecStep) InterceptQuit() bool {
 // right-aligned durations and a live elapsed reading, and untouched nodes
 // show a bare pending bullet.
 func (s *ExecStep) View(width, _ int) string {
+	frameWidth, side := width, s.SideLog(&s.log)
+	if side {
+		width = wizard.SideLogBodyWidth
+	}
 	col := max(width-4, 1)
 	s.log.ViewCol = col
 	if s.log.Full() {
@@ -494,21 +498,26 @@ func (s *ExecStep) View(width, _ int) string {
 		footnote += " · ctrl+c cancels after the current gate"
 	}
 
-	// The tail's budget is whatever body rows the checklist and the
-	// chrome around the tail (its blank row, the LOG header, and the
-	// footnote block) leave over, floored at logview.NarrowTailRows —
-	// slack becomes evidence instead of blank rows.
 	s.tailRendered = false
-	budget := max(logview.NarrowTailRows, s.BodyHeight()-len(lines)-4)
-	if tail := s.log.RenderTail(col, budget); len(tail) > 0 {
-		lines = append(lines, "")
-		lines = append(lines, tail...)
-		s.tailRendered = true
+	if !side {
+		// The tail's budget is whatever body rows the checklist and the
+		// chrome around the tail (its blank row, the LOG header, and the
+		// footnote block) leave over, floored at logview.NarrowTailRows —
+		// slack becomes evidence instead of blank rows.
+		budget := max(logview.NarrowTailRows, s.BodyHeight()-len(lines)-4)
+		if tail := s.log.RenderTail(col, budget); len(tail) > 0 {
+			lines = append(lines, "")
+			lines = append(lines, tail...)
+			s.tailRendered = true
+		}
 	}
 
 	lines = append(lines, "", s.Styles().Dim.Render(lipgloss.Wrap(footnote, col, "")))
 
 	content := strings.Join(lines, "\n")
+	if side {
+		content = s.WithSideLog(content, &s.log, frameWidth)
+	}
 	s.lastLine = strings.Count(content, "\n")
 	return content
 }

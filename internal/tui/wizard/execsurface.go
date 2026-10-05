@@ -1,6 +1,8 @@
 package wizard
 
 import (
+	"strings"
+
 	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/tui"
@@ -83,11 +85,30 @@ func LogHelp(s *logview.Surface, trailing ...KeyBinding) []KeyBinding {
 	return append(keys, trailing...)
 }
 
-// FrameSize records the body box the frame gives an exec step, which View's
-// own arguments do not report, since the frame calls View with a fixed
-// 1000-row scratch budget.
+const (
+	// sideLogMinWidth is the terminal width from which an exec screen puts
+	// its log beside its body instead of under it.
+	sideLogMinWidth = 150
+	sideLogInset    = 2
+	sideLogGutter   = 2
+
+	// SideLogBodyWidth is the width an exec screen renders its own body at
+	// while the log sits beside it.
+	SideLogBodyWidth = 100
+)
+
+// FrameSize records the terminal width an exec step is laid out against and
+// the body box the frame gives it — neither of which View's own arguments
+// report, since the frame calls View with a fixed 1000-row scratch budget
+// and a width its caps have already flattened.
 type FrameSize struct {
+	termWidth  int
 	bodyHeight int
+}
+
+// SetTerminalSize records the terminal's own width, which gates the side log.
+func (f *FrameSize) SetTerminalSize(width, _ int) {
+	f.termWidth = width
 }
 
 // SetBodyHeight records the rows the frame gave the step's body.
@@ -99,4 +120,33 @@ func (f *FrameSize) SetBodyHeight(height int) {
 // step at least once.
 func (f *FrameSize) BodyHeight() int {
 	return f.bodyHeight
+}
+
+// SideLog reports whether log sits beside the step's body as a column of its
+// own: the terminal is wide enough, and the log is neither absent nor
+// full-screen. A step for which it holds must own the frame's width.
+func (f *FrameSize) SideLog(log *logview.Surface) bool {
+	return f.termWidth >= sideLogMinWidth && log.Src != nil && !log.Full()
+}
+
+// WithSideLog joins body, rendered at SideLogBodyWidth, with a rule and the
+// log as a column of the body box's height, filling width columns. A body
+// taller than the box scrolls the log column with it.
+func (f *FrameSize) WithSideLog(body string, log *logview.Surface, width int) string {
+	rows := max(lipgloss.Height(body), f.bodyHeight)
+	logHeight := f.bodyHeight
+	if logHeight < 1 {
+		logHeight = rows
+	}
+	bodyWidth := SideLogBodyWidth + sideLogInset
+	logWidth := max(width-bodyWidth-lipgloss.Width(tui.IconBarSegment)-sideLogGutter, 1)
+
+	rule := lipgloss.NewStyle().Foreground(tui.ColorRule()).
+		Render(strings.TrimSuffix(strings.Repeat(tui.IconBarSegment+"\n", rows), "\n"))
+	return lipgloss.JoinHorizontal(lipgloss.Top,
+		lipgloss.NewStyle().Width(bodyWidth).Render(body),
+		rule,
+		strings.Repeat(" ", sideLogGutter),
+		log.RenderSide(logWidth, logHeight),
+	)
 }

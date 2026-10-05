@@ -41,8 +41,9 @@ type Surface struct {
 	// committed is the filter that was live before the input opened, restored
 	// when the operator escapes out of it.
 	committed filter
-	// Recorded heights, one per window mode, stamped by the render methods.
-	fullH, tailH int
+	// Recorded heights, one per window mode, stamped by the render methods;
+	// sideH is zero unless the side column was the window rendered last.
+	fullH, tailH, sideH int
 }
 
 // Full reports whether the log has taken the whole frame.
@@ -169,9 +170,9 @@ func (s *Surface) Filtered() bool {
 }
 
 // ConsumesPaging reports whether pgup/pgdn page the log window itself — the
-// full-screen log always, a locked tail too, and an open filter input
-// where they must stand still — so the frame leaves the keys to the step
-// instead of scrolling its own viewport.
+// full-screen log always, a locked side column or tail too, and an open
+// filter input where they must stand still — so the frame leaves the keys to
+// the step instead of scrolling its own viewport.
 func (s *Surface) ConsumesPaging() bool {
 	return s.Src != nil && (s.v.full || s.v.locked || s.v.filter.typing)
 }
@@ -190,20 +191,31 @@ func (s *Surface) PageSize() int {
 	return visibleLines(s.Src, s.v, w, h, wrap)
 }
 
-// geometry names the active log window: the full-screen box or the tail
-// under the step's own body.
+// geometry names the active log window: the full-screen box, the column
+// beside the step's own body, or the tail under it.
 func (s *Surface) geometry() (width, height int, wrap bool) {
-	if s.v.full {
+	switch {
+	case s.v.full:
 		return max(s.ViewCol, 1), max(s.fullH, 2), true
+	case s.sideH > 0:
+		return max(s.ViewCol, 1), max(s.sideH, 2), false
+	default:
+		return max(s.ViewCol, 1), max(s.tailH, NarrowTailRows) + 1, false
 	}
-	return max(s.ViewCol, 1), max(s.tailH, NarrowTailRows) + 1, false
+}
+
+// RenderSide renders the log as a column of height rows beside the step's
+// own body and records the height the paging keys move by.
+func (s *Surface) RenderSide(width, height int) string {
+	s.sideH = height
+	return renderPane(s.Src, s.v, width, height, false)
 }
 
 // RenderTail renders the rows that ride under the step's own body — the
 // same stamped rows, led by the dim LOG header — and records the tail
 // budget; nil when the ring is still empty.
 func (s *Surface) RenderTail(width, budget int) []string {
-	s.tailH = budget
+	s.tailH, s.sideH = budget, 0
 	return renderTail(s.Src, s.v, width, budget)
 }
 
