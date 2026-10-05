@@ -25,7 +25,7 @@ func TestWizardDraftSaveFnTakesTheProjectLock(t *testing.T) {
 	defer lock.Release()
 
 	save := wizardDraftSaveFn(configPath)
-	if err := save(config.DefaultConfig(), wizard.StepIDBasics, "", nil); err == nil {
+	if err := save(config.DefaultConfig(), wizard.StepIDBasics, ""); err == nil {
 		t.Fatal("draft save succeeded while another session held the project lock; it must serialize like saveConfig and persistWizardConfig")
 	}
 }

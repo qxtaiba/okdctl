@@ -125,84 +125,15 @@ func TestInputField_HelpOnlyWhenFocused(t *testing.T) {
 	}
 }
 
-func TestInputField_HistoryChooserAndUndo(t *testing.T) {
+func TestInputField_UndoRestoresValueAtFocus(t *testing.T) {
 	f := NewInputField("host", "")
 	f.SetWidth(60)
-	f.SetHistory(NewFieldHistory(3), "proxmox.host")
-	f.SetValue("pve-old")
-	f.Focus()
 	f.SetValue("pve-current")
-	f.Blur()
 	f.Focus()
-
-	f.Update(tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl})
-	if !f.HistoryChooserOpen() || !strings.Contains(tuitest.StripANSI(f.View()), "pve-old") {
-		t.Fatalf("history chooser did not expose the prior value: %s", tuitest.StripANSI(f.View()))
-	}
-	f.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if got := f.Value(); got != "pve-old" {
-		t.Fatalf("history selection = %q, want pve-old", got)
-	}
+	f.Update(tea.KeyPressMsg{Code: 'x', Text: "x"})
 	f.Update(tea.KeyPressMsg{Code: 'z', Mod: tea.ModCtrl})
 	if got := f.Value(); got != "pve-current" {
 		t.Fatalf("undo = %q, want value at focus", got)
-	}
-}
-
-func TestInputField_UndoAfterHistoryRecallRestoresFocusValue(t *testing.T) {
-	f := NewInputField("host", "")
-	f.SetWidth(60)
-	history := NewFieldHistory(3)
-	history.Record("proxmox.host", "v1")
-	f.SetHistory(history, "proxmox.host")
-	f.SetValue("v2")
-	f.Focus()
-
-	// Edit the field without blurring it.
-	f.Update(tea.KeyPressMsg{Code: tea.KeyEnd})
-	for range len("v2") {
-		f.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
-	}
-	for _, r := range "typed-value" {
-		f.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
-	}
-	if got := f.Value(); got != "typed-value" {
-		t.Fatalf("setup: value = %q, want typed-value", got)
-	}
-
-	f.Update(tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl})
-	f.Update(tea.KeyPressMsg{Code: tea.KeyDown})
-	f.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if got := f.Value(); got != "v1" {
-		t.Fatalf("setup: recalled value = %q, want v1", got)
-	}
-
-	f.Update(tea.KeyPressMsg{Code: 'z', Mod: tea.ModCtrl})
-	if got := f.Value(); got != "v2" {
-		t.Fatalf("undo after a history recall = %q, want v2 (the value at focus)", got)
-	}
-}
-
-func TestInputField_HistoryIsBoundedAndPasswordIsExcluded(t *testing.T) {
-	history := NewFieldHistory(2)
-	f := NewInputField("host", "")
-	f.SetHistory(history, "network.host")
-	for _, value := range []string{"one", "two", "three"} {
-		f.Focus()
-		f.SetValue(value)
-		f.Blur()
-	}
-	if got := history.get("network.host"); len(got) != 2 || got[0] != "two" || got[1] != "one" {
-		t.Fatalf("bounded history = %v, want [two one]", got)
-	}
-
-	password := NewPasswordField("api token", "")
-	password.SetHistory(history, "proxmox.password")
-	password.Focus()
-	password.SetValue("secret-value")
-	password.Blur()
-	if got := history.get("proxmox.password"); len(got) != 0 {
-		t.Fatalf("password history = %v, want empty", got)
 	}
 }
 
