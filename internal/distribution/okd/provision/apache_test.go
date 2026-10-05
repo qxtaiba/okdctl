@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -71,7 +72,7 @@ func TestTeardownIgnitionServer_StopsUnconditionallyAndVerifies(t *testing.T) {
 	callLog := fakeSystemctl(t, "case \"$1\" in is-active) exit 1;; *) exit 0;; esac")
 
 	p := newTestPhase(t)
-	if err := p.TeardownIgnitionServer(context.Background()); err != nil {
+	if err := p.TeardownIgnitionServer(context.Background(), apacheCfg(t.TempDir())); err != nil {
 		t.Fatalf("clean teardown must return nil: %v", err)
 	}
 
@@ -88,12 +89,99 @@ func TestTeardownIgnitionServer_ReportsStillActive(t *testing.T) {
 	fakeSystemctl(t, "exit 0")
 
 	p := newTestPhase(t)
-	err := p.TeardownIgnitionServer(context.Background())
+	err := p.TeardownIgnitionServer(context.Background(), apacheCfg(t.TempDir()))
 	if err == nil {
 		t.Fatal("teardown must return an error when httpd is still active after the stop")
 	}
 	if !strings.Contains(err.Error(), "still active") {
 		t.Errorf("error must name the still-active service: %v", err)
+	}
+}
+
+func seedPublishedIgnition(t *testing.T, webRoot string, names ...string) {
+	t.Helper()
+	dir := filepath.Join(webRoot, "ignition")
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	writeIgnitionFixture(t, dir, names...)
+}
+
+func TestTeardownIgnitionServer_UnpublishesWorkerIgnitionEvenWhenStopFails(t *testing.T) {
+	fakeSystemctl(t, "exit 1")
+	webRoot := t.TempDir()
+	seedPublishedIgnition(t, webRoot, "worker.ign")
+
+	p := newTestPhase(t)
+	if err := p.TeardownIgnitionServer(t.Context(), apacheCfg(webRoot)); err == nil {
+		t.Fatal("teardown must report that httpd could not be stopped")
+	}
+	if got := publishedIgnitionFiles(t, webRoot); len(got) != 0 {
+		t.Errorf("published ignition files after teardown = %v; want none", got)
+	}
+}
+
+func TestTeardownIgnitionServer_CleanStopUnpublishesWorkerIgnition(t *testing.T) {
+	if runtime.GOOS != goosLinux {
+		t.Skip("systemctl branches are linux-only; darwin takes the GOOS gate")
+	}
+	fakeSystemctl(t, "case \"$1\" in is-active) exit 1;; *) exit 0;; esac")
+	webRoot := t.TempDir()
+	seedPublishedIgnition(t, webRoot, "worker.ign")
+
+	p := newTestPhase(t)
+	if err := p.TeardownIgnitionServer(t.Context(), apacheCfg(webRoot)); err != nil {
+		t.Fatalf("clean teardown must return nil: %v", err)
+	}
+	if got := publishedIgnitionFiles(t, webRoot); len(got) != 0 {
+		t.Errorf("published ignition files after teardown = %v; want none", got)
+	}
+}
+
+func publishedIgnitionFiles(t *testing.T, webRoot string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(filepath.Join(webRoot, "ignition"))
+	if err != nil {
+		t.Fatalf("read published ignition dir: %v", err)
+	}
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		names = append(names, entry.Name())
+	}
+	return names
+}
+
+func TestPublishWorkerIgnition_LeavesBootstrapAndMasterOutOfTheWebRoot(t *testing.T) {
+	clusterDir, webRoot := t.TempDir(), t.TempDir()
+	writeIgnitionFixture(t, clusterDir, IgnitionFilenames...)
+
+	p := newTestPhase(t)
+	if err := p.publishWorkerIgnition(t.Context(), apacheCfg(webRoot), clusterDir); err != nil {
+		t.Fatalf("publishWorkerIgnition: %v", err)
+	}
+	if got, want := publishedIgnitionFiles(t, webRoot), []string{"worker.ign"}; !slices.Equal(got, want) {
+		t.Errorf("published ignition files = %v; want %v", got, want)
+	}
+}
+
+func TestReviveIgnitionServer_PublishesOnlyWorkerIgnition(t *testing.T) {
+	if runtime.GOOS != goosLinux {
+		t.Skip("systemctl branches are linux-only; darwin takes the GOOS gate")
+	}
+	redirectVhostDir(t)
+	fakeSystemctl(t, "exit 0")
+
+	clusterDir, webRoot := t.TempDir(), t.TempDir()
+	writeIgnitionFixture(t, clusterDir, IgnitionFilenames...)
+	cfg := apacheCfg(webRoot)
+	cfg.HTTPServer.IgnitionServerIP = "127.0.0.1"
+
+	p := newTestPhase(t)
+	if err := p.ReviveIgnitionServer(t.Context(), cfg, "/root/okd", clusterDir); err != nil {
+		t.Fatalf("ReviveIgnitionServer: %v", err)
+	}
+	if got, want := publishedIgnitionFiles(t, webRoot), []string{"worker.ign"}; !slices.Equal(got, want) {
+		t.Errorf("published ignition files = %v; want %v", got, want)
 	}
 }
 

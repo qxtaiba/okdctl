@@ -90,7 +90,7 @@ type isoProvisioner interface {
 // it loudly.
 type ignitionServer interface {
 	ReviveIgnitionServer(ctx context.Context, cfg *config.Config, projectRoot, clusterDir string) error
-	TeardownIgnitionServer(ctx context.Context) error
+	TeardownIgnitionServer(ctx context.Context, cfg *config.Config) error
 }
 
 // Runner drives node-lifecycle ops against one cluster: TF mutates VMs, Cluster

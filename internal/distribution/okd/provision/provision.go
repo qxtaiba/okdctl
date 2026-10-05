@@ -12,9 +12,11 @@ import (
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
+const workerIgnition = "worker.ign"
+
 // IgnitionFilenames is the canonical list openshift-install emits into
 // clusterDir and the ignition server deploys to the web root.
-var IgnitionFilenames = []string{"bootstrap.ign", "master.ign", "worker.ign"}
+var IgnitionFilenames = []string{"bootstrap.ign", "master.ign", workerIgnition}
 
 // Options carries the on-disk roots provisioning operations resolve artifacts from.
 type Options struct {
