@@ -2,12 +2,10 @@ package steps
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -408,11 +406,9 @@ func TestGolden_HubReachesClusterStatus(t *testing.T) {
 	}
 }
 
-// TestGolden_HubWideTiers pins the hub against the owner's dead-space
-// grievance at wide/tall terminals: a blank-slate launcher must earn a
-// genuine second column instead of sitting as a lone centered menu in an
-// otherwise empty frame, and an existing-config hub's live ops dashboard
-// must hold the same way.
+// TestGolden_HubWideTiers pins the blank-slate hub at wide/tall terminals:
+// the launcher earns a second column instead of sitting as a lone centered
+// menu in an otherwise empty frame.
 func TestGolden_HubWideTiers(t *testing.T) {
 	for _, sz := range []struct{ w, h int }{{150, 24}, {180, 48}} {
 		t.Run(fmt.Sprintf("blank-slate_%dx%d", sz.w, sz.h), func(t *testing.T) {
@@ -429,87 +425,6 @@ func TestGolden_HubWideTiers(t *testing.T) {
 			for _, want := range []string{"get started", "GET STARTED", "connect", "cluster", "extras", "review"} {
 				if !strings.Contains(plain, want) {
 					t.Errorf("blank-slate hub at %dx%d is missing %q — it should earn its space, not sit in a void:\n%s", sz.w, sz.h, want, plain)
-				}
-			}
-		})
-
-		t.Run(fmt.Sprintf("existing-config_%dx%d", sz.w, sz.h), func(t *testing.T) {
-			forceHeroColor(t)
-			tui.SetTerminalWidth(sz.w)
-			t.Cleanup(func() { tui.SetTerminalWidth(0) })
-
-			m := newGoldenModel(t)
-			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
-			seedHubSaveSlot(m)
-			hub := m.CurrentStep().(*WelcomeStep)
-			hub.SetOpsDashboard(StaticStatusSource{Status: statusFixture()})
-			hub.opsCtx, hub.opsCancel = context.WithCancel(context.Background())
-			t.Cleanup(hub.opsCancel)
-			hub.opsActive = true
-			hub.opsGeneration = 1
-			hub.Update(hub.probeOps(1)())
-			hub.opsStatus.updated = time.Date(2026, time.January, 2, 15, 4, 5, 0, time.UTC)
-			hub.opsStatus.latency = 42 * time.Millisecond
-			hub.opsStatus.latencyAvailable = true
-			hub.opsStatus.latencyHistory = fullOpsLatencyHistory()
-
-			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
-			tuitest.Golden(t, fmt.Sprintf("hub-existing-config_%dx%d", sz.w, sz.h), frame)
-			tuitest.AssertFits(t, frame, sz.w, sz.h)
-
-			plain := tuitest.StripANSI(frame)
-			for _, want := range []string{"6/6 ready", "prod-cluster"} {
-				if !strings.Contains(plain, want) {
-					t.Errorf("existing-config hub at %dx%d is missing %q:\n%s", sz.w, sz.h, want, plain)
-				}
-			}
-		})
-	}
-}
-
-func TestGolden_HubOperationsDashboard(t *testing.T) {
-	for _, sz := range []struct{ w, h int }{{80, 24}, {100, 30}, {120, 40}, {140, 40}, {180, 48}} {
-		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
-			forceHeroColor(t)
-			tui.SetTerminalWidth(sz.w)
-			t.Cleanup(func() { tui.SetTerminalWidth(0) })
-			m := newGoldenModel(t)
-			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
-			seedHubSaveSlot(m)
-			hub := m.CurrentStep().(*WelcomeStep)
-			hub.SetOpsDashboard(StaticStatusSource{Status: statusFixture()})
-			hub.opsCtx, hub.opsCancel = context.WithCancel(context.Background())
-			t.Cleanup(hub.opsCancel)
-			hub.opsActive = true
-			hub.opsGeneration = 1
-			msg := hub.probeOps(1)()
-			hub.Update(msg)
-			hub.opsStatus.updated = time.Date(2026, time.January, 2, 15, 4, 5, 0, time.UTC)
-			hub.opsStatus.latency = 82 * time.Millisecond
-			hub.opsStatus.latencyAvailable = true
-			hub.opsStatus.latencyHistory = fullOpsLatencyHistory()
-			hub.opsStatus.status.LastDeployRunID = "run-demo-123"
-			hub.opsStatus.status.LastDeployCluster = "prod-cluster"
-			hub.opsStatus.status.LastDeployAt = hub.opsStatus.updated.Add(-2 * time.Hour)
-
-			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
-			tuitest.Golden(t, fmt.Sprintf("hub-operations_%dx%d", sz.w, sz.h), frame)
-			tuitest.AssertFits(t, frame, sz.w, sz.h)
-			assertNoScrollIndicator(t, frame)
-			plain := tuitest.StripANSI(frame)
-			wants := []string{"6/6 ready", "0 degraded", "homelab-master0", "homelab-worker2", "destroy"}
-			switch sz.w {
-			case 180, 140:
-				wants = append(wants, "CLUSTER OPERATIONS", "CLUSTER PHASE", "RTT 82ms", "NODE FLEET", "ADD-ONS & OPERATORS", "HUB ACTIONS", "apply the saved cluster configuration")
-			case 80, 100, 120:
-				// Below the frame's effective ~122-column wide threshold (the
-				// 112 cutoff plus the viewport's fixed 10-column inset), the
-				// hub stays in the compact, card-free layout even at 120.
-				wants = append(wants, "API reachable", "RTT 82ms", "ACTIONS · ↑↓ choose · enter open")
-			}
-			for _, want := range wants {
-				if !strings.Contains(plain, want) {
-					t.Errorf("operations dashboard is missing %q:\n%s", want, plain)
 				}
 			}
 		})

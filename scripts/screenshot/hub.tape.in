@@ -1,6 +1,6 @@
 # Template for the deployed-state hub and its cluster-status round-trip.
 # @W@/@H@/@NAME@ are substituted by scripts/screenshot/run.sh.
-Output out/@NAME@-hub-dashboard.txt
+Output out/@NAME@-hub.txt
 Set Shell zsh
 Set FontSize 14
 Set Padding 0
@@ -19,7 +19,7 @@ Sleep 450ms
 Enter
 Wait+Screen@10s /cluster status/
 Sleep 500ms
-Screenshot out/@NAME@-hub-dashboard.png
+Screenshot out/@NAME@-hub-deployed.png
 Sleep 300ms
 Type "s"
 Wait+Screen@10s /CLUSTER STATUS · Running/

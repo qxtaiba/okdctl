@@ -69,9 +69,6 @@ func runWizardWithMode(cmd *cobra.Command, cfg *config.Config, configExists bool
 	var slot lifecycleSlot
 	if hub != nil {
 		hub.SetFlows(hubFlows(cmd, cfg, &slot))
-		if configExists && saveSlotState(cfg) == steps.SaveSlotDeployed {
-			hub.SetOpsDashboard(newHubStatusSource(cfg))
-		}
 	}
 
 	result, err := runHubSession(cmd, built.Steps, cfg)
