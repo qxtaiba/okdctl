@@ -199,11 +199,16 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 // wizard must never re-implement behind a menu entry.
 const destroyHandoff = "run: okdctl destroy"
 
+// statusHandoff is the line the hub's cluster-status verb prints once the TUI
+// has released the terminal; okdctl status owns the probe and its report.
+const statusHandoff = "run: okdctl status"
+
 // runHubVerb handles the hub verbs that never walk the configure flow,
 // reporting whether verb was one of them so the caller can skip the save
 // pipeline entirely. deploy runs the configuration already on disk untouched;
 // destroy prints its handoff and lets okdctl destroy's own confirm ladder be
-// the guard; the day-2 verbs ran in-process and have already reported.
+// the guard; cluster status prints its handoff too; manage nodes ran
+// in-process and has already reported.
 func runHubVerb(ctx context.Context, cmd *cobra.Command, verb steps.HubVerb, cfg *config.Config, out io.Writer) (handled bool, err error) {
 	switch verb {
 	case steps.HubVerbDeploy:
@@ -214,7 +219,10 @@ func runHubVerb(ctx context.Context, cmd *cobra.Command, verb steps.HubVerb, cfg
 	case steps.HubVerbQuit:
 		logutil.Info("no changes made")
 		return true, nil
-	case steps.HubVerbManageNodes, steps.HubVerbClusterStatus:
+	case steps.HubVerbClusterStatus:
+		fmt.Fprintln(out, statusHandoff)
+		return true, nil
+	case steps.HubVerbManageNodes:
 		return true, nil
 	default:
 		return false, nil

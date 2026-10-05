@@ -15,13 +15,12 @@ import (
 
 // The keys the terminal screen answers to: the surface's full-screen log on a
 // failure, the clipboard action both endings offer (the run id on a failure,
-// the login command on a success), and the flows a finished deploy chains into.
+// the login command on a success), and the flow a finished deploy chains into.
 const (
-	keyFullLog       = logview.KeyFull
-	keyCopy          = 'c'
-	keyOpenConsole   = 'o'
-	keyClusterStatus = 's'
-	keyManageNodes   = 'n'
+	keyFullLog     = logview.KeyFull
+	keyCopy        = 'c'
+	keyOpenConsole = 'o'
+	keyManageNodes = 'n'
 )
 
 // DoneStep is the terminal screen: the wizard-native rendering of the CLI
@@ -143,11 +142,6 @@ func (s *DoneStep) finishKey(msg tea.KeyPressMsg) tea.Cmd {
 		if s.hooks.Finish != nil && s.hooks.Finish.OpenConsole != nil {
 			return s.hooks.Finish.OpenConsole()
 		}
-	case msg.Text == string(rune(keyClusterStatus)):
-		if s.hooks.Finish == nil {
-			return nil
-		}
-		return openFlow(s.hooks.Finish.ClusterStatus)
 	case msg.Text == string(rune(keyManageNodes)):
 		if s.hooks.Finish == nil {
 			return nil

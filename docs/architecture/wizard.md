@@ -2,10 +2,11 @@
 
 The wizard is the interactive TUI behind every hands-on okdctl operation:
 a hero hub screen offering five verbs, the data-driven configure flow
-underneath its `deploy`/`edit config` verbs, and the day-two flows those
-verbs swap into in the same program. In particular, this is not a
-deploy-only walkthrough — the hub is a first-class entry point in its own
-right, and `okdctl node manage` deep-links straight into one of its flows.
+underneath its `deploy`/`edit config` verbs, and the day-two flow its
+`manage nodes` verb swaps into in the same program. In particular, this
+is not a deploy-only walkthrough — the hub is a first-class entry point
+in its own right, and `okdctl node manage` deep-links straight into that
+flow.
 
 ## The hub: one program, five verbs
 
@@ -23,17 +24,19 @@ That five-verb menu resolves one of three ways. The `deploy` and `edit
 config` verbs, plus `get started` on the blank slate, continue forward
 into the data-driven configure flow described below, in the same
 program, on the step-list diagram further down this page. The `manage
-nodes` and `cluster status` verbs instead swap the wizard onto a
-different flow in-process, through `Model.SwapFlow`: the live step set
-and chrome are replaced, the hub's own steps and position are held in a
-single `suspendedFlow`, and escaping the swapped-in flow's first screen
-restores the hub exactly where the operator left it. That single-
-suspension rule is deliberate: `SwapFlow` accepts only one suspended flow
-at a time, since the hub is the only screen that swaps, and a sub-flow it
-swaps into never swaps again. The `destroy` verb resolves to neither: the
-hub reports it back to the CLI, which prints a handoff line and leaves
-`okdctl destroy`'s own confirmation ladder as the guard, rather than
-reimplementing it behind a menu entry.
+nodes` verb instead swaps the wizard onto a different flow in-process,
+through `Model.SwapFlow`: the live step set and chrome are replaced, the
+hub's own steps and position are held in a single `suspendedFlow`, and
+escaping the swapped-in flow's first screen restores the hub exactly
+where the operator left it. That single-suspension rule is deliberate:
+`SwapFlow` accepts only one suspended flow at a time, since the hub is
+the only screen that swaps, and a sub-flow it swaps into never swaps
+again. The `cluster status` and `destroy` verbs resolve to neither: the
+hub reports them back to the CLI, which prints a handoff line once the
+TUI has released the terminal — `run: okdctl status` or `run: okdctl
+destroy`. That leaves `okdctl status` as the one place cluster health is
+probed and rendered, and `okdctl destroy`'s own confirmation ladder as
+the guard, rather than reimplementing either behind a menu entry.
 
 That said, `okdctl node manage` is a direct deep-link into the
 manage-nodes flow, not a hub verb: it builds the same Cluster Lifecycle

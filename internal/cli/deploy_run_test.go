@@ -426,6 +426,44 @@ func TestRunDeploy_HubDestroyVerbPrintsHandoffAndDestroysNothing(t *testing.T) {
 	}
 }
 
+func TestRunDeploy_HubClusterStatusVerbPrintsHandoffAndChangesNothing(t *testing.T) {
+	resetDeployState(t)
+	isolateProxmoxEnv(t)
+	t.Chdir(t.TempDir())
+	seedDeployConfig(t)
+	forbidExecute(t)
+
+	before, err := os.ReadFile("okdctl.yaml")
+	if err != nil {
+		t.Fatalf("read seeded config: %v", err)
+	}
+
+	var out bytes.Buffer
+	deployCmd.SetOut(&out)
+	stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCompleted}, steps.HubVerbClusterStatus, nil)
+
+	if err := runDeploy(deployCmd, nil); err != nil {
+		t.Fatalf("runDeploy: %v", err)
+	}
+
+	if !strings.Contains(out.String(), "run: okdctl status") {
+		t.Errorf("cluster status verb must print the handoff line %q:\n%s", "run: okdctl status", out.String())
+	}
+	after, err := os.ReadFile("okdctl.yaml")
+	if err != nil {
+		t.Fatalf("read config after: %v", err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Error("the cluster status verb must not run the save pipeline over the on-disk config")
+	}
+	if _, err := os.Stat("okdctl.env"); !os.IsNotExist(err) {
+		t.Errorf("the cluster status verb must not write a credential sidecar, got stat err %v", err)
+	}
+	if _, err := os.Stat(workspace.WorkDirName); err == nil {
+		t.Error("the cluster status verb must not touch the work directory")
+	}
+}
+
 func TestRunDeploy_HubQuitVerbChangesNothing(t *testing.T) {
 	resetDeployState(t)
 	isolateProxmoxEnv(t)

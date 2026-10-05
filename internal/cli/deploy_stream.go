@@ -130,8 +130,7 @@ func deployFollowOnHooks(cmd *cobra.Command, cfg *config.Config, slot *lifecycle
 	flows := hubFlows(cmd, cfg, slot)
 	hooks := deployexec.Hooks{
 		Finish: &deployexec.FinishHooks{
-			ManageNodes:   deployexec.NextFlow(flows.ManageNodes),
-			ClusterStatus: deployexec.NextFlow(flows.ClusterStatus),
+			ManageNodes: deployexec.NextFlow(flows.ManageNodes),
 		},
 	}
 	if url := deployConsoleURL(cfg); url != "" {

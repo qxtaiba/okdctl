@@ -14,11 +14,11 @@
   │                                                                                              │  
   │                                       [d] deploy                                             │  
   │                                       [e] edit config                                        │  
-  │                                       [n] manage nodes                                       │  
-  │                                     ▸ [s] cluster status                                     │  
+  │                                     ▸ [n] manage nodes                                       │  
+  │                                       [s] cluster status                                     │  
   │                                           destroy                                            │  
   │                                                                                              │  
-  │                                  ⣾  opening cluster status…                                  │  
+  │                                   ⣾  opening manage nodes…                                   │  
   │                                                                                              │  
   │                                                                                              │  
   │                                                                                              │  

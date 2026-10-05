@@ -70,8 +70,8 @@ var hubFreshVerbs = []hubEntry{
 	{HubVerbQuit, "quit", ""},
 }
 
-// HubFlow builds one of the flows a hub verb swaps into. Building is deferred
-// to the moment the verb is confirmed: the manage-nodes flow's hooks load
+// HubFlow builds the flow a hub verb swaps into. Building is deferred to the
+// moment the verb is confirmed: the manage-nodes flow's hooks load
 // credentials and probe the Proxmox host, work no plain `okdctl deploy` should
 // pay for unless the operator asks for it.
 type HubFlow func() ([]wizard.WizardStep, wizard.FlowChrome, error)
@@ -79,8 +79,7 @@ type HubFlow func() ([]wizard.WizardStep, wizard.FlowChrome, error)
 // HubFlows are the in-process flows the hub's verbs reach; a nil provider
 // leaves its verb to the CLI, which handles it after the wizard exits.
 type HubFlows struct {
-	ManageNodes   HubFlow
-	ClusterStatus HubFlow
+	ManageNodes HubFlow
 }
 
 // errEmptyHubFlow reports a hub flow provider that produced no screens.
@@ -212,8 +211,7 @@ func (s *WelcomeStep) Init() tea.Cmd {
 	return nil
 }
 
-// SetFlows wires the in-process flows the manage-nodes and cluster-status verbs
-// swap into.
+// SetFlows wires the in-process flow the manage-nodes verb swaps into.
 func (s *WelcomeStep) SetFlows(flows HubFlows) {
 	s.flows = flows
 }
@@ -298,14 +296,10 @@ func (s *WelcomeStep) acceleratedEntry(text string) (int, bool) {
 
 // flowFor returns the in-process flow behind verb, or nil when the verb has none.
 func (s *WelcomeStep) flowFor(verb HubVerb) HubFlow {
-	switch verb {
-	case HubVerbManageNodes:
+	if verb == HubVerbManageNodes {
 		return s.flows.ManageNodes
-	case HubVerbClusterStatus:
-		return s.flows.ClusterStatus
-	default:
-		return nil
 	}
+	return nil
 }
 
 // labelFor returns verb's menu label.

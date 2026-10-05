@@ -1,19 +1,15 @@
 package cli
 
 import (
-	"context"
 	"errors"
-	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/deploy"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/clusterstatus"
 	"github.com/qxtaiba/okdctl/internal/logutil"
-	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/lifecycle"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/steps"
@@ -113,10 +109,10 @@ func runHubSession(cmd *cobra.Command, flowSteps []wizard.WizardStep, cfg *confi
 	return wizard.RunFlow(cmd.Context(), flowSteps, cfg, steps.Chrome())
 }
 
-// hubFlows builds the hub's in-process flow providers. Each is called at the
+// hubFlows builds the hub's in-process flow provider. It is called at the
 // moment its verb is confirmed — on a bubbletea command goroutine, not the main
-// path — so a `okdctl deploy` that never leaves the configure flow pays for
-// neither. The manage-nodes session is published through slot, which decides
+// path — so a `okdctl deploy` that never leaves the configure flow does not pay
+// for it. The manage-nodes session is published through slot, which decides
 // who closes it: the main path if the wizard is still running, or this
 // goroutine if the wizard has already exited underneath it.
 func hubFlows(cmd *cobra.Command, cfg *config.Config, slot *lifecycleSlot) steps.HubFlows {
@@ -133,74 +129,7 @@ func hubFlows(cmd *cobra.Command, cfg *config.Config, slot *lifecycleSlot) steps
 			}
 			return sess.steps, lifecycle.Chrome(), nil
 		},
-		ClusterStatus: func() ([]wizard.WizardStep, wizard.FlowChrome, error) {
-			flowSteps, chrome := steps.StatusFlow(newHubStatusSource(cfg))
-			return flowSteps, chrome, nil
-		},
 	}
-}
-
-// newHubStatusSource returns the status seam the hub's cluster-status screen
-// reads: the same clusterstatus.Collect okdctl status runs, or a credential-free
-// fixture under OKDCTL_WIZARD_DEMO.
-func newHubStatusSource(cfg *config.Config) steps.StatusSource {
-	if os.Getenv(wizardDemoEnv) != "" {
-		return steps.StaticStatusSource{Status: demoClusterStatus()}
-	}
-	return steps.StatusSource(&collectedStatusSource{cfg: cfg})
-}
-
-// demoClusterStatus is the snapshot the hub's status screen renders under
-// OKDCTL_WIZARD_DEMO: lifecycle.DemoHooks' same six nodes, all ready, on a
-// healthy cluster. Deliberately credential-free — no endpoint, no token, no
-// hostname — since it renders into screenshots.
-func demoClusterStatus() *okd.ClusterStatus {
-	nodes := make([]okd.NodeStatus, 0, 6)
-	for i := range 3 {
-		nodes = append(nodes, okd.NodeStatus{
-			Name: fmt.Sprintf("%s-master%d", lifecycle.DemoClusterName, i), Role: nodetypes.RoleMaster, Ready: true,
-		})
-	}
-	for i := range 3 {
-		nodes = append(nodes, okd.NodeStatus{
-			Name: fmt.Sprintf("%s-worker%d", lifecycle.DemoClusterName, i), Role: nodetypes.RoleWorker, Ready: true,
-		})
-	}
-	return &okd.ClusterStatus{
-		Phase:              okd.PhaseRunning,
-		APIReachable:       true,
-		APIAvailable:       true,
-		NodesAvailable:     true,
-		OperatorsAvailable: true,
-		Nodes:              nodes,
-		Addons:             []okd.AddonStatus{{Name: "flux", Healthy: true}},
-	}
-}
-
-// collectedStatusSource collects live cluster status for the hub's status
-// screen, resolving the workspace and loading credentials per probe so a
-// refresh reflects whatever is on disk now. Credentials are zeroized before
-// each probe returns.
-type collectedStatusSource struct {
-	cfg *config.Config
-}
-
-func (s *collectedStatusSource) ClusterStatus(ctx context.Context) (*okd.ClusterStatus, error) {
-	projectRoot, err := resolveProjectRootOrDie()
-	if err != nil {
-		return nil, err
-	}
-
-	var cl clusterstatus.Client
-	if c, clErr := clusterstatus.NewClient(projectRoot); clErr == nil {
-		cl = c
-	}
-
-	src, cleanup := statusLifecycleSources(s.cfg, projectRoot)
-	defer cleanup()
-
-	cs := clusterstatus.Collect(ctx, cl, newAddonManager(s.cfg, projectRoot), src)
-	return &cs, nil
 }
 
 func buildWizardStepsWithState(wizardCfg wizard.Config) (wizard.BuiltSteps, error) {

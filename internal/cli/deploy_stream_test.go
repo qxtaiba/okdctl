@@ -44,8 +44,8 @@ func TestDeployFollowOnHooksBuildTheHubFlows(t *testing.T) {
 	cfg := demoConfig()
 	slot := &lifecycleSlot{}
 	hooks := deployFollowOnHooks(deployCmd, cfg, slot)
-	if hooks.Finish == nil || hooks.Finish.ManageNodes == nil || hooks.Finish.ClusterStatus == nil || hooks.Finish.OpenConsole == nil {
-		t.Fatal("successful deploy must expose status, manage, and console actions")
+	if hooks.Finish == nil || hooks.Finish.ManageNodes == nil || hooks.Finish.OpenConsole == nil {
+		t.Fatal("successful deploy must expose manage and console actions")
 	}
 
 	manage, _, err := hooks.Finish.ManageNodes()
@@ -54,10 +54,6 @@ func TestDeployFollowOnHooksBuildTheHubFlows(t *testing.T) {
 	}
 	if sess := slot.take(); sess != nil {
 		sess.close()
-	}
-	status, _, err := hooks.Finish.ClusterStatus()
-	if err != nil || len(status) == 0 {
-		t.Fatalf("status flow = %d steps, %v", len(status), err)
 	}
 }
 

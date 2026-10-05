@@ -78,9 +78,8 @@ type NextFlow func() ([]wizard.WizardStep, wizard.FlowChrome, error)
 
 // FinishHooks groups the optional actions available after deployment.
 type FinishHooks struct {
-	ManageNodes   NextFlow
-	ClusterStatus NextFlow
-	OpenConsole   func() tea.Cmd
+	ManageNodes NextFlow
+	OpenConsole func() tea.Cmd
 }
 
 // Hooks are the CLI-supplied closures the deploy steps call into, so this
