@@ -4,8 +4,7 @@ package logutil
 import "log/slog"
 
 // DefaultLogFileName is the per-workspace log file that deploy, destroy,
-// and cleanup append to by default (<workspace>/okdctl.log). debug-bundle
-// falls back to it when --log-file was not set on the failing run.
+// and cleanup append to by default (<workspace>/okdctl.log).
 const DefaultLogFileName = "okdctl.log"
 
 // NopLogger discards all records after RedactHandler, so a future accidental

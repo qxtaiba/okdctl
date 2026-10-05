@@ -22,7 +22,7 @@ func (p *Phase) defaultStartMonitorCmd(ctx context.Context, clusterDir string) (
 // timeoutNextSteps names diagnosis surfaces embedded in timeout error messages
 // — the message text is the contract.
 func timeoutNextSteps(clusterDir string) string {
-	return fmt.Sprintf("check %s, inspect the cluster with 'oc --kubeconfig %s get clusteroperators', or collect diagnostics with 'okdctl debug-bundle'",
+	return fmt.Sprintf("check %s, or inspect the cluster with 'oc --kubeconfig %s get clusteroperators'",
 		filepath.Join(clusterDir, ".openshift_install.log"), workspace.KubeconfigPath(clusterDir))
 }
 

@@ -82,7 +82,6 @@ func TestWantsDefaultLogSink(t *testing.T) {
 		{cleanupCmd, true},
 		{versionCmd, false},
 		{statusCmd, false},
-		{debugBundleCmd, false},
 		{rootCmd, false},
 	}
 	for _, tc := range cases {

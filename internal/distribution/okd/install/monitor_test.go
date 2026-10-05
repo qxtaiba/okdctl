@@ -122,13 +122,11 @@ func TestMonitorInstallation_DeadlineExceeded(t *testing.T) {
 	assertTimeoutDiagnostics(t, err, clusterDir)
 }
 
-// assertTimeoutDiagnostics checks the message names the install log, an oc probe, and debug-bundle.
 func assertTimeoutDiagnostics(t *testing.T, err error, clusterDir string) {
 	t.Helper()
 	for _, want := range []string{
 		filepath.Join(clusterDir, ".openshift_install.log"),
 		"oc --kubeconfig " + workspace.KubeconfigPath(clusterDir) + " get clusteroperators",
-		"okdctl debug-bundle",
 	} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("timeout error missing %q: %v", want, err)

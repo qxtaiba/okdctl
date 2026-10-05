@@ -108,7 +108,6 @@ okdctl cleanup          remove OKD cluster artifacts without destroying infrastr
 okdctl cluster          cluster-wide lifecycle operations
 okdctl completion       generate shell completion script
 okdctl config           inspect okdctl configuration
-okdctl debug-bundle     collect a support bundle for troubleshooting
 okdctl deploy           deploy a Kubernetes cluster
 okdctl destroy          destroy a Kubernetes cluster
 okdctl doctor           check that your environment is ready to deploy a cluster
@@ -144,12 +143,11 @@ state under `infrastructure/terraform/environments/`.
 `deploy`, `destroy`, and `cleanup` append their full log to `okdctl.log`
 next to the config, with credentials redacted and one `run_id` per
 invocation. A failed deploy stays diagnosable after the scrollback is
-gone: `okdctl debug-bundle` picks the log up automatically, and
-`--log-file` redirects it.
+gone, and `--log-file` redirects the log.
 
 Later runs reuse the existing config. The commands that operate on an
-existing cluster (`status`, `destroy`, `kubeconfig`, `debug-bundle`) must
-run from the same directory. For multiple clusters, use one directory per
+existing cluster (`status`, `destroy`, `kubeconfig`) must run from the
+same directory. For multiple clusters, use one directory per
 cluster; `--config other.yaml` selects an alternate config within one.
 
 If the work directory holds a completed cluster, run `okdctl destroy`
@@ -402,8 +400,8 @@ Install [lefthook](https://github.com/evilmartians/lefthook) and run
 messages follow conventional commits (`type(scope): description`,
 lowercase, imperative).
 
-For bugs, use the issue forms. They ask for the `okdctl version`,
-`okdctl doctor`, and `okdctl debug-bundle` output I need to reproduce.
+For bugs, use the issue forms. They ask for the `okdctl version` and
+`okdctl doctor` output and the `okdctl.log` I need to reproduce.
 
 ## License
 
