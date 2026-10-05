@@ -1,12 +1,10 @@
 package steps
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -96,20 +94,11 @@ type hubFlowFailedMsg struct {
 // WelcomeStep is okdctl's hub for cluster operations and configuration flows.
 type WelcomeStep struct {
 	wizard.BaseStep
-	configExists  bool
-	saveSlot      string
-	entries       []hubEntry
-	nav           *components.CompactSelector
-	flows         HubFlows
-	opsSource     StatusSource
-	opsStatus     *opsSnapshot
-	opsLatency    []opsLatencySample
-	opsErr        error
-	opsLoading    bool
-	opsActive     bool
-	opsGeneration uint64
-	opsCtx        context.Context
-	opsCancel     context.CancelFunc
+	configExists bool
+	saveSlot     string
+	entries      []hubEntry
+	nav          *components.CompactSelector
+	flows        HubFlows
 
 	// opening names the flow being assembled off the update loop, so a verb
 	// whose hooks take a moment to build says so instead of looking wedged.
@@ -218,24 +207,9 @@ func (s *WelcomeStep) SelectedVerb() HubVerb {
 	return s.entries[i].verb
 }
 
-// Init starts the live snapshot and its cancellable refresh timer when enabled.
+// Init returns nil; the hub has no async startup work.
 func (s *WelcomeStep) Init() tea.Cmd {
-	if s.opsSource == nil {
-		return nil
-	}
-	if s.opsCancel != nil {
-		s.opsCancel()
-	}
-	// The hub owns its polling context and cancels it when focus leaves the hub.
-	s.opsCtx, s.opsCancel = context.WithCancel(context.Background())
-	s.opsActive = true
-	s.opsGeneration++
-	return tea.Batch(s.probeOps(s.opsGeneration), s.scheduleOpsRefresh(s.opsGeneration))
-}
-
-// SetOpsDashboard enables the live snapshot for a locally established cluster.
-func (s *WelcomeStep) SetOpsDashboard(src StatusSource) {
-	s.opsSource = src
+	return nil
 }
 
 // SetFlows wires the in-process flows the manage-nodes and cluster-status verbs
@@ -248,38 +222,6 @@ func (s *WelcomeStep) SetFlows(flows HubFlows) {
 // selector's vertical bindings) and confirms on enter or space.
 func (s *WelcomeStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	switch msg := msg.(type) {
-	case opsSnapshotMsg:
-		if !s.opsActive || msg.generation != s.opsGeneration {
-			return s, nil
-		}
-		s.opsLoading = false
-		s.opsErr = msg.err
-		s.opsLatency = appendOpsLatency(s.opsLatency, opsLatencySample{
-			duration:  msg.latency,
-			available: msg.latencyAvailable,
-		})
-		if msg.err == nil {
-			s.opsStatus = &opsSnapshot{
-				status:           msg.status,
-				updated:          time.Now(),
-				latency:          msg.latency,
-				latencyAvailable: msg.latencyAvailable,
-				latencyHistory:   append([]opsLatencySample(nil), s.opsLatency...),
-			}
-		} else if s.opsStatus != nil {
-			s.opsStatus.latencyAvailable = false
-			s.opsStatus.latencyHistory = append([]opsLatencySample(nil), s.opsLatency...)
-		}
-		return s, nil
-	case opsRefreshMsg:
-		if !s.opsActive || msg.generation != s.opsGeneration {
-			return s, nil
-		}
-		if !s.opsLoading {
-			return s, tea.Batch(s.probeOps(msg.generation), s.scheduleOpsRefresh(msg.generation))
-		}
-		cmd := s.scheduleOpsRefresh(msg.generation)
-		return s, cmd
 	case hubFlowFailedMsg:
 		s.opening = ""
 		err := msg.err
@@ -382,30 +324,21 @@ func (s *WelcomeStep) SetFocused(focused bool) {
 	s.BaseStep.SetFocused(focused)
 	if focused {
 		s.opening = ""
-	} else if s.opsActive {
-		s.opsActive = false
-		s.opsGeneration++
-		s.opsLoading = false
-		if s.opsCancel != nil {
-			s.opsCancel()
-			s.opsCancel = nil
-			s.opsCtx = nil
-		}
 	}
 }
 
-// IsCentered keeps the launcher centered and gives a live dashboard the full viewport.
+// IsCentered keeps the launcher centered in the frame.
 func (s *WelcomeStep) IsCentered() bool {
-	return s.opsSource == nil
+	return true
 }
 
 // RendersHero returns true so the hub owns its screen identity and the frame
-// gives the launcher or operations dashboard the reclaimed header rows.
+// gives the launcher the reclaimed header rows.
 func (s *WelcomeStep) RendersHero() bool {
 	return true
 }
 
-// SuppressesSplit gives the hub's launcher or dashboard the frame's full width.
+// SuppressesSplit gives the hub's launcher the frame's full width.
 func (s *WelcomeStep) SuppressesSplit() bool {
 	return true
 }
@@ -419,34 +352,6 @@ func (s *WelcomeStep) SetTerminalSize(width, height int) {
 // View renders the blank-slate launcher or the existing-configuration hub.
 func (s *WelcomeStep) View(width, height int) string {
 	s.SetSize(width, height)
-	if s.opsSource != nil {
-		compact := width < 112 || s.termHeight < 30
-		parts := []string{}
-		if compact {
-			if s.saveSlot != "" {
-				parts = append(parts, tui.MutedStyle.Render(s.saveSlot))
-			}
-			parts = append(parts,
-				renderOpsDashboard(s.opsStatus, s.opsLoading, s.opsErr, width, s.termHeight),
-				"ACTIONS · ↑↓ choose · enter open",
-				s.nav.ViewPointer(),
-			)
-		} else {
-			if s.saveSlot != "" {
-				parts = append(parts, tui.MutedStyle.Render(s.saveSlot), "")
-			}
-			parts = append(parts,
-				renderOpsDashboard(s.opsStatus, s.opsLoading, s.opsErr, width, s.termHeight),
-				"",
-				tui.Card("HUB ACTIONS", renderOpsActionRows(s, width, s.termHeight)+"\n↑↓ choose · enter open", width, tui.ColorPrimary()),
-			)
-		}
-		if s.opening != "" {
-			parts = append(parts, "", wizard.Spinner(s.frame)+" "+tui.MutedStyle.Render("opening "+s.opening+"…"))
-		}
-		return lipgloss.JoinVertical(lipgloss.Left, parts...)
-	}
-
 	parts := []string{renderHero(s.termWidth, s.termHeight, tui.ColorEnabled()), ""}
 	if s.saveSlot != "" {
 		parts = append(parts, tui.MutedStyle.Render(s.saveSlot), "")
@@ -459,8 +364,7 @@ func (s *WelcomeStep) View(width, height int) string {
 
 	// The "get started" panel only describes what's ahead for a truly
 	// blank slate (s.saveSlot == ""); a config already on disk reaches
-	// this same centered layout too (no live cluster to probe yet), where
-	// that copy would be wrong.
+	// this same centered layout too, where that copy would be wrong.
 	if width < hubGetStartedPanelMinWidth || s.saveSlot != "" {
 		return launcher
 	}

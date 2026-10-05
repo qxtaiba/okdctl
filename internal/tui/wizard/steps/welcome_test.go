@@ -4,7 +4,6 @@ import (
 	"errors"
 	"strings"
 	"testing"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -149,29 +148,23 @@ func TestHubFreshSlateHasNoSaveSlotLine(t *testing.T) {
 	if !s.IsCentered() {
 		t.Error("blank-slate hub should retain its centered launcher")
 	}
-	if view := s.View(70, 14); strings.Contains(view, "CLUSTER OPERATIONS") {
-		t.Errorf("blank-slate hub should not show an operations dashboard:\n%s", view)
-	}
 }
 
-func TestHubDeployedViewUsesDashboardAndKeepsActionsVisible(t *testing.T) {
+func TestHubDeployedViewKeepsSummaryLineAndActionMenu(t *testing.T) {
 	s := NewWelcomeStep()
 	s.SetExistingConfig(hubConfig(), SaveSlotDeployed)
-	s.SetOpsDashboard(StaticStatusSource{Status: statusFixture()})
-	s.opsStatus = &opsSnapshot{status: statusFixture(), updated: time.Date(2026, 1, 2, 15, 4, 5, 0, time.UTC)}
 	s.SetTerminalSize(180, 48)
 
-	if s.IsCentered() {
-		t.Fatal("deployed dashboard should use the available viewport")
+	if !s.IsCentered() {
+		t.Fatal("deployed hub should keep the centered launcher")
 	}
 	view := tuitest.StripANSI(s.View(172, 41))
 	for _, want := range []string{
-		"CLUSTER OPERATIONS", "CLUSTER PHASE", "NODE FLEET", "homelab-master0",
-		"ADD-ONS & OPERATORS", "HUB ACTIONS", "deploy", "edit config",
+		s.saveSlot, "deployed", "deploy", "edit config",
 		"manage nodes", "cluster status", "destroy",
 	} {
 		if !strings.Contains(view, want) {
-			t.Errorf("deployed dashboard is missing %q:\n%s", want, view)
+			t.Errorf("deployed hub is missing %q:\n%s", want, view)
 		}
 	}
 }
@@ -211,7 +204,7 @@ func TestHubGetStartedWalksTheConfigureFlow(t *testing.T) {
 	}
 }
 
-func TestHubDashboardShortcutOpensNativeClusterStatus(t *testing.T) {
+func TestHubShortcutOpensNativeClusterStatus(t *testing.T) {
 	s := NewWelcomeStep()
 	s.SetExistingConfig(hubConfig(), SaveSlotDeployed)
 	want := []wizard.WizardStep{NewStatusStep(StaticStatusSource{Status: statusFixture()})}
@@ -220,11 +213,11 @@ func TestHubDashboardShortcutOpensNativeClusterStatus(t *testing.T) {
 	}})
 	_, cmd := s.Update(tea.KeyPressMsg{Code: 's', Text: "s"})
 	if cmd == nil {
-		t.Fatal("pressing the dashboard's s shortcut produced no status flow")
+		t.Fatal("pressing the hub's s shortcut produced no status flow")
 	}
 	swap, ok := resolveCmd(t, cmd).(wizard.SwapFlowMsg)
 	if !ok || len(swap.Steps) != 1 || swap.Steps[0].ID() != StepIDClusterStatus {
-		t.Fatalf("dashboard shortcut opened %#v, want the native one-screen status flow", swap)
+		t.Fatalf("hub shortcut opened %#v, want the native one-screen status flow", swap)
 	}
 }
 

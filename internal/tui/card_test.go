@@ -43,8 +43,7 @@ func TestCard_OverLongLineNeverWidensBorder(t *testing.T) {
 
 // TestCard_OverLongStyledLineNeverWidensBorder pins the same invariant for a
 // body line that already carries its own ANSI styling, mirroring how
-// callers like the hub dashboard pre-style tile content before handing it
-// to Card.
+// callers pre-style card content before handing it to Card.
 func TestCard_OverLongStyledLineNeverWidensBorder(t *testing.T) {
 	styled := lipgloss.NewStyle().Bold(true).Foreground(ColorWarning()).
 		Render("this styled body line is far longer than the card width")

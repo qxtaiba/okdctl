@@ -56,7 +56,9 @@ seed_cwd() {
   cp "$OKDCTL_DEMO_HOME/.ssh/id_ed25519.pub" "$1/d/k"
 }
 
-seed_dashboard_cwd() {
+# seed_deployed_cwd adds terraform state holding a resource, which is what
+# makes the hub's save-slot line read "deployed" rather than "configured".
+seed_deployed_cwd() {
   seed_cwd "$1"
   local state="$1/infrastructure/terraform/environments/production/terraform.tfstate"
   mkdir -p "$(dirname "$state")"
@@ -107,11 +109,10 @@ STEP_NAMES=(welcome distribution proxmox basics node-placement networking resour
 # baked into lifecycle.tape.in.
 LIFECYCLE_STEP_NAMES=(op target params preview confirm exec "done")
 
-# Screens in hub-dashboard.tape.in's capture order; must match the
-# Screenshot filenames baked into that tape. Kept as the single source of
-# truth so the cleanup and the missing-screen check can never drift apart
-# the way they once did (one tracked a since-removed draft-error capture).
-HUB_DASHBOARD_STEP_NAMES=(hub-dashboard cluster-status cluster-status-details hub-manage)
+# Screens in hub.tape.in's capture order; must match the Screenshot
+# filenames baked into that tape. Kept as the single source of truth so the
+# cleanup and the missing-screen check can never drift apart.
+HUB_STEP_NAMES=(hub-deployed cluster-status cluster-status-details hub-manage)
 
 render_tape() {
   local template="$1" name="$2" w="$3" h="$4" dest="$5"
@@ -242,36 +243,36 @@ render_distribution_fail() {
   return 1
 }
 
-render_hub_dashboard() {
+render_hub() {
   local name="$1" w="$2" h="$3"
   local attempt
   local screen
-  for screen in "${HUB_DASHBOARD_STEP_NAMES[@]}"; do
+  for screen in "${HUB_STEP_NAMES[@]}"; do
     rm -f "$OUT_DIR/$name-$screen.png"
   done
   for attempt in 1 2 3; do
-    local cwd="$WORK/cwd-dashboard-$name-$attempt"
-    seed_dashboard_cwd "$cwd"
-    local tape="$WORK/hub-dashboard-$name.tape"
-    render_tape "$SCREENSHOT_DIR/hub-dashboard.tape.in" "$name" "$w" "$h" "$tape"
+    local cwd="$WORK/cwd-hub-$name-$attempt"
+    seed_deployed_cwd "$cwd"
+    local tape="$WORK/hub-$name.tape"
+    render_tape "$SCREENSHOT_DIR/hub.tape.in" "$name" "$w" "$h" "$tape"
 
-    echo "rendering $name hub dashboard (attempt $attempt)..."
-    local log="$WORK/vhs-$name-hub-dashboard.log"
+    echo "rendering $name hub (attempt $attempt)..."
+    local log="$WORK/vhs-$name-hub.log"
     (cd "$SCREENSHOT_DIR" && OKDCTL_DEMO_CWD="$cwd" vhs "$tape" >"$log" 2>&1) || true
 
     local missing=()
-    for screen in "${HUB_DASHBOARD_STEP_NAMES[@]}"; do
+    for screen in "${HUB_STEP_NAMES[@]}"; do
       [ -s "$OUT_DIR/$name-$screen.png" ] || missing+=("$screen")
     done
     if [ "${#missing[@]}" -eq 0 ]; then
-      echo "rendered $name hub dashboard: ${#HUB_DASHBOARD_STEP_NAMES[@]}/${#HUB_DASHBOARD_STEP_NAMES[@]} screenshots"
+      echo "rendered $name hub: ${#HUB_STEP_NAMES[@]}/${#HUB_STEP_NAMES[@]} screenshots"
       return 0
     fi
     echo "  missing after attempt $attempt: ${missing[*]}"
     cat "$log" >&2
   done
 
-  echo "failed to render the hub dashboard for $name after 3 attempts; missing: ${missing[*]}" >&2
+  echo "failed to render the hub for $name after 3 attempts; missing: ${missing[*]}" >&2
   return 1
 }
 
@@ -279,7 +280,7 @@ for preset in "${PRESETS[@]}"; do
   IFS=':' read -r name cols rows w h <<< "$preset"
   calibrate "$name" "$cols" "$rows" "$w" "$h"
   render_wizard "$name" "$w" "$h"
-  render_hub_dashboard "$name" "$w" "$h"
+  render_hub "$name" "$w" "$h"
   render_distribution_fail "$name" "$w" "$h"
   render_lifecycle "$name" "$w" "$h"
 done

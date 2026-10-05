@@ -1,7 +1,7 @@
 # Wizard screenshots
 
 `make screenshots` (or `scripts/screenshot/run.sh` directly) renders the
-11-step `okdctl deploy` wizard, the hero-hub's live cluster dashboard, a
+11-step `okdctl deploy` wizard, the hero-hub over a deployed cluster, a
 distribution-step failure, and the Cluster Lifecycle wizard against the
 fakepve fixture, and screenshots every step, at four terminal sizes:
 80x24, 100x30, 120x40, 180x48. Requires `vhs` (`brew install vhs`) and
@@ -9,7 +9,7 @@ fakepve fixture, and screenshots every step, at four terminal sizes:
 
 Output lands in `scripts/screenshot/out/` (gitignored): 24 PNGs per size
 (`<size>-<step>.png`, e.g. `80x24-basics.png`), a `<size>.txt`,
-`<size>-hub-dashboard.txt`, `<size>-distribution-fail.txt`, and
+`<size>-hub.txt`, `<size>-distribution-fail.txt`, and
 `<size>-lifecycle.txt` raw terminal capture, and a `calib-<size>.txt`
 calibration readout per size.
 
@@ -30,10 +30,10 @@ calibration readout per size.
   step and advance to the next. Keystrokes mirror `docs/assets/demo.tape`
   (the human-paced README recording) with sleeps compressed for unattended
   batch rendering.
-- `hub-dashboard.tape.in` walks the hero-hub's own deployed-state screens:
-  the live dashboard, `cluster status` and its node-detail drill-in, and
-  the `manage nodes` operation picker, seeded with a fake Terraform state
-  so the hub renders its rich dashboard rather than the plain launcher.
+- `hub.tape.in` walks the hero-hub's own deployed-state screens: the
+  launcher, `cluster status` and its node-detail drill-in, and the
+  `manage nodes` operation picker, seeded with a fake Terraform state so
+  the hub's save-slot line reads `deployed`.
 - `distribution-fail.tape.in` captures the distribution step's error state
   under `OKDCTL_DEMO_RELEASES=fail` — the empty state and retry ribbon,
   with no interaction beyond opening the step.
