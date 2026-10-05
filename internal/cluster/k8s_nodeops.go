@@ -121,15 +121,6 @@ func (c *Client) ListNodes(ctx context.Context) ([]NodeDetail, error) {
 	return parseNodeList(data)
 }
 
-// GetNode observes one node and rejects incomplete command output.
-func (c *Client) GetNode(ctx context.Context, name string) (NodeDetail, error) {
-	data, err := c.getJSONChecked(ctx, "get node", "get", "node", name, "-o", "json")
-	if err != nil {
-		return NodeDetail{}, err
-	}
-	return ParseNode(data)
-}
-
 // ParseNode preserves the full Ready condition, defaulting absent readiness to Unknown.
 func ParseNode(data []byte) (NodeDetail, error) {
 	var n corev1.Node
