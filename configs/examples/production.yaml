@@ -1,6 +1,5 @@
 ---
 schemaVersion: "v2"
----
 cluster:
   name: production
   domain: k8s.local
