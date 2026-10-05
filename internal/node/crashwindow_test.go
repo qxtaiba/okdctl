@@ -307,22 +307,6 @@ func TestDryRunPreviewsPastForeignMarker(t *testing.T) {
 		}
 	})
 
-	t.Run("snapshot create", func(t *testing.T) {
-		fc := &fakeCluster{nodes: []cluster.NodeDetail{{Name: "worker0", Role: nodetypes.RoleWorker, Ready: true}}}
-		fsc := &fakeSnapshotClient{}
-		cfg := config.DefaultConfig()
-		cfg.Provider.Proxmox.Node = testProxmoxNode
-		r := seedSnapshotRunner(t, fc, fsc, cfg) // DryRun defaults true
-		seedMarker(t, r, OpRemove, "worker5", StepDrain)
-
-		if _, err := r.CreateSnapshot(context.Background(), "worker0", SnapshotCreateOptions{Name: testSnapshotName}); err != nil {
-			t.Fatalf("dry-run snapshot create past foreign marker must preview, not refuse: %v", err)
-		}
-		if fc.cordon != 0 || fc.drain != 0 || fsc.createCalls != 0 {
-			t.Errorf("dry-run must make zero mutation: cordon=%d drain=%d create=%d", fc.cordon, fc.drain, fsc.createCalls)
-		}
-	})
-
 	t.Run("cluster stop", func(t *testing.T) {
 		fc := stopTestCluster()
 		r, _, _ := seedRunner(t, fc, &fakeTF{}, config.DefaultConfig()) // DryRun defaults true

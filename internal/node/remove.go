@@ -160,13 +160,7 @@ func (r *Runner) cordonAndDrain(ctx context.Context, op Op, node, timeout string
 			Force:            force,
 			Timeout:          timeout,
 		}); err != nil {
-			// snapshot refuses its own marker as foreign, so its retry advice
-			// must name --acknowledge-interrupted-op.
-			retry := "re-run to retry"
-			if op == OpSnapshot {
-				retry = "re-run with --acknowledge-interrupted-op to retry"
-			}
-			return &errtypes.ClusterError{Msg: fmt.Sprintf("drain %s (node left cordoned; %s)", node, retry), Err: err}
+			return &errtypes.ClusterError{Msg: fmt.Sprintf("drain %s (node left cordoned; re-run to retry)", node), Err: err}
 		}
 		return nil
 	})

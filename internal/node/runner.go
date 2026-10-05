@@ -13,7 +13,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/provision"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox/hostssh"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
@@ -31,9 +30,6 @@ const (
 	// DefaultClusterReadyTimeout bounds cluster start's Ready wait, ticking
 	// ApprovePendingCSRs each poll so cert rotation doesn't stall it.
 	DefaultClusterReadyTimeout = 30 * time.Minute
-	// DefaultSnapshotTaskTimeout bounds a snapshot create/rollback/delete's
-	// wait for its async pvesh task.
-	DefaultSnapshotTaskTimeout = 5 * time.Minute
 	// hostMemoryReserveMiB is hypervisor headroom (ZFS ARC, host services) the
 	// memory-budget guard keeps free.
 	hostMemoryReserveMiB = 2048
@@ -68,45 +64,6 @@ type vmPowerCycler interface {
 // disk resize up front rather than applying a grow the guest never realizes.
 type diskGrower interface {
 	GrowOSDisk(ctx context.Context, node string) error
-}
-
-// snapshotClient mirrors hostssh's pvesh-backed snapshot primitives as an
-// interface, so tests can substitute a call-recording fake.
-type snapshotClient interface {
-	CreateSnapshot(ctx context.Context, p *hostssh.RemoteISOParams, vmid int, name, description string, timeout time.Duration) error
-	ListSnapshots(ctx context.Context, p *hostssh.RemoteISOParams, vmid int) ([]hostssh.SnapshotInfo, error)
-	RollbackSnapshot(ctx context.Context, p *hostssh.RemoteISOParams, vmid int, name string, timeout time.Duration) error
-	DeleteSnapshot(ctx context.Context, p *hostssh.RemoteISOParams, vmid int, name string, timeout time.Duration) error
-	VMAgentEnabled(ctx context.Context, p *hostssh.RemoteISOParams, vmid int) (bool, error)
-}
-
-// HostsshSnapshotClient is the production snapshotClient, delegating to package
-// hostssh's pvesh primitives.
-type HostsshSnapshotClient struct{}
-
-// CreateSnapshot implements snapshotClient via hostssh.CreateSnapshot.
-func (HostsshSnapshotClient) CreateSnapshot(ctx context.Context, p *hostssh.RemoteISOParams, vmid int, name, description string, timeout time.Duration) error {
-	return hostssh.CreateSnapshot(ctx, p, vmid, name, description, timeout)
-}
-
-// ListSnapshots implements snapshotClient via hostssh.ListSnapshots.
-func (HostsshSnapshotClient) ListSnapshots(ctx context.Context, p *hostssh.RemoteISOParams, vmid int) ([]hostssh.SnapshotInfo, error) {
-	return hostssh.ListSnapshots(ctx, p, vmid)
-}
-
-// RollbackSnapshot implements snapshotClient via hostssh.RollbackSnapshot.
-func (HostsshSnapshotClient) RollbackSnapshot(ctx context.Context, p *hostssh.RemoteISOParams, vmid int, name string, timeout time.Duration) error {
-	return hostssh.RollbackSnapshot(ctx, p, vmid, name, timeout)
-}
-
-// DeleteSnapshot implements snapshotClient via hostssh.DeleteSnapshot.
-func (HostsshSnapshotClient) DeleteSnapshot(ctx context.Context, p *hostssh.RemoteISOParams, vmid int, name string, timeout time.Duration) error {
-	return hostssh.DeleteSnapshot(ctx, p, vmid, name, timeout)
-}
-
-// VMAgentEnabled implements snapshotClient via hostssh.VMAgentEnabled.
-func (HostsshSnapshotClient) VMAgentEnabled(ctx context.Context, p *hostssh.RemoteISOParams, vmid int) (bool, error) {
-	return hostssh.VMAgentEnabled(ctx, p, vmid)
 }
 
 // terraformExec is the slice of terraform.Executor node ops drive; an interface
@@ -162,17 +119,6 @@ type Runner struct {
 
 	// Disk realizes an OS-disk grow inside the guest; nil fails disk resizes closed, mirroring Power.
 	Disk diskGrower
-
-	// Proxmox carries the pvesh-over-SSH params snapshot ops use; nil fails
-	// closed the same way Power does for resize.
-	Proxmox *hostssh.RemoteISOParams
-
-	// Snapshot is the pvesh-backed client snapshot ops drive; an interface so
-	// tests can record calls without a live hypervisor.
-	Snapshot snapshotClient
-
-	// SnapshotTaskTimeout bounds a snapshot create/rollback/delete's wait for its async pvesh task.
-	SnapshotTaskTimeout time.Duration
 
 	// ISO/Ignition drive node add's ISO build/upload and ignition-server revive
 	// (zero/nil for every other op); Provision carries their artifact roots.
@@ -238,12 +184,10 @@ func NewRunner(cl *cluster.Client, tf *terraform.Executor, cfg *config.Config, o
 		TF:                  tf,
 		Cfg:                 cfg,
 		Reporter:            logutil.NopProgressReporter,
-		Snapshot:            HostsshSnapshotClient{},
 		NodeReadyTimeout:    DefaultNodeReadyTimeout,
 		EtcdGateTimeout:     DefaultEtcdGateTimeout,
 		CephGateTimeout:     DefaultCephGateTimeout,
 		ClusterReadyTimeout: DefaultClusterReadyTimeout,
-		SnapshotTaskTimeout: DefaultSnapshotTaskTimeout,
 	}
 	for _, opt := range opts {
 		opt(r)
@@ -460,39 +404,6 @@ func (r *Runner) vmTarget(role nodetypes.NodeRole, index int) (node string, vmid
 	return nodetypes.ProxmoxNode(r.Cfg, role, index), nodetypes.VMID(r.Cfg, role, index)
 }
 
-// resolveVMID resolves target's node name to vmid/role/Ready via ListNodes, so
-// snapshot ops address the right VM without re-deriving the tf index.
-func (r *Runner) resolveVMID(ctx context.Context, target string) (vmid int, role nodetypes.NodeRole, ready bool, err error) {
-	nodes, err := r.Cluster.ListNodes(ctx)
-	if err != nil {
-		return 0, "", false, &errtypes.ClusterError{Msg: msgListNodes, Err: err}
-	}
-	for i := range nodes {
-		n := &nodes[i]
-		if n.Name != target {
-			continue
-		}
-		idx, ok := cluster.NodeIndex(n.Name)
-		if !ok {
-			return 0, "", false, &errtypes.ConfigError{Msg: fmt.Sprintf("cannot derive a terraform index from node name %q", n.Name)}
-		}
-		_, vmid := r.vmTarget(n.Role, idx)
-		if observer, ok := r.Snapshot.(interface {
-			VMOwner(context.Context, *hostssh.RemoteISOParams, int) (string, error)
-		}); ok && r.Proxmox != nil {
-			owner, err := observer.VMOwner(ctx, r.Proxmox, vmid)
-			if err != nil {
-				return 0, "", false, err
-			}
-			remote := *r.Proxmox
-			remote.Node = owner
-			r.Proxmox = &remote
-		}
-		return vmid, n.Role, n.Ready, nil
-	}
-	return 0, "", false, &errtypes.ConfigError{Msg: fmt.Sprintf("node %q not found in cluster; run 'okdctl node list' to list nodes", target)}
-}
-
 // powerCycleVM stops→starts the VM so the config-only memory change takes
 // effect; the node stays as the current step left it, so errors must not assume
 // a cordon.
@@ -567,9 +478,4 @@ func (r *Runner) waitNodeReady(ctx context.Context, node string) error {
 		return &errtypes.ClusterError{Msg: fmt.Sprintf("node %s did not become Ready", node), Err: err}
 	}
 	return nil
-}
-
-// VMOwner resolves snapshot routing before any drain or mutation.
-func (HostsshSnapshotClient) VMOwner(ctx context.Context, p *hostssh.RemoteISOParams, vmid int) (string, error) {
-	return hostssh.VMOwner(ctx, p, vmid)
 }

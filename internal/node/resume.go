@@ -140,7 +140,7 @@ func (r *Runner) refuseForeignMarker(ack bool) error {
 	if !ack {
 		return &errtypes.ConfigError{Msg: strandedMarkerMsg(marker)}
 	}
-	// Consumed here (not left for markStep): stop/start/snapshot can finish without writing their own.
+	// Consumed here (not left for markStep): stop/start can finish without writing their own.
 	r.Log.Warn("node: discarding stranded op marker",
 		"op", string(marker.Op), "node", marker.Target, "step", string(marker.Step))
 	if cerr := clearOpMarker(r.marker()); cerr != nil {

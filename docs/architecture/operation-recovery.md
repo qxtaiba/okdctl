@@ -8,7 +8,7 @@ Addon installation distinguishes validation from attempted mutation. A failed pa
 
 ## Proxmox placement
 
-Per-role placement lists use Terraform's node index ordering and fall back to the default node for missing entries. Existing VM power and snapshot operations resolve current ownership from the Proxmox cluster inventory, including after HA migration. Unknown or ambiguous ownership fails before disruption.
+Per-role placement lists use Terraform's node index ordering and fall back to the default node for missing entries. Existing VM power operations resolve current ownership from the Proxmox cluster inventory, including after HA migration. Unknown or ambiguous ownership fails before disruption.
 
 Day-2 capacity checks query each destination host and the relevant OS/data datastore. Same-store disk demand is combined; a shared datastore must fit the total demand across destination hosts. These are observations, not reservations against concurrent external allocation.
 
