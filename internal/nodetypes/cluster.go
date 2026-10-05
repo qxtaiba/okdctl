@@ -38,7 +38,17 @@ func (n ClusterNode) PrefixedName(clusterName string) string {
 func ClusterNodes(cfg *config.Config) ([]ClusterNode, error) {
 	startIP := cfg.Networking.StaticIP.Start
 
-	total := 1 + cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count
+	// Bounded here rather than left to validateResources: the deploy gate runs
+	// a narrower scope, so a hand-edited count can reach this sum unchecked and
+	// overflow it into a negative make capacity.
+	masters, workers := cfg.Topology.ControlPlane.Count, cfg.Topology.Workers.Count
+	if masters < 0 || masters > config.MaxNodeCount || workers < 0 || workers > config.MaxNodeCount {
+		return nil, (&errtypes.ConfigError{
+			Msg: fmt.Sprintf("node count out of range: %d control plane, %d workers", masters, workers),
+		}).WithHint(fmt.Sprintf("set each count between 0 and %d", config.MaxNodeCount))
+	}
+
+	total := 1 + masters + workers
 	if cfg.Networking.MachineCIDR != "" {
 		if err := netutil.ValidateIPRangeInCIDR(startIP, total, cfg.Networking.MachineCIDR); err != nil {
 			return nil, &errtypes.ConfigError{Msg: "static IP range does not fit in machine CIDR", Err: err}
@@ -48,7 +58,7 @@ func ClusterNodes(cfg *config.Config) ([]ClusterNode, error) {
 	nodes := make([]ClusterNode, 0, total)
 	nodes = append(nodes, ClusterNode{Role: RoleBootstrap, IP: startIP})
 
-	for i := range cfg.Topology.ControlPlane.Count {
+	for i := range masters {
 		ip, err := netutil.CalculateVMIP(startIP, 1+i)
 		if err != nil {
 			return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("calculate %s%d IP", RoleMaster, i), Err: err}
@@ -56,8 +66,8 @@ func ClusterNodes(cfg *config.Config) ([]ClusterNode, error) {
 		nodes = append(nodes, ClusterNode{Role: RoleMaster, Index: i, IP: ip})
 	}
 
-	workerOffset := 1 + cfg.Topology.ControlPlane.Count
-	for i := range cfg.Topology.Workers.Count {
+	workerOffset := 1 + masters
+	for i := range workers {
 		ip, err := netutil.CalculateVMIP(startIP, workerOffset+i)
 		if err != nil {
 			return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("calculate %s%d IP", RoleWorker, i), Err: err}

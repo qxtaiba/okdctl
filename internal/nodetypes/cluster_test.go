@@ -2,6 +2,7 @@ package nodetypes
 
 import (
 	"errors"
+	"math"
 	"strings"
 	"testing"
 
@@ -79,5 +80,33 @@ func TestClusterNodes_RangeOutsideCIDR(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "static IP range does not fit in machine CIDR") {
 		t.Errorf("error = %q; want CIDR-fit message", err)
+	}
+}
+
+func TestClusterNodes_RejectsOutOfRangeCounts(t *testing.T) {
+	cases := []struct {
+		name             string
+		masters, workers int
+	}{
+		{"masters overflow the sum", math.MaxInt, 0},
+		{"workers overflow the sum", 0, math.MaxInt},
+		{"negative masters", -1, 0},
+		{"negative workers", 0, -1},
+		{"masters above the cap", config.MaxNodeCount + 1, 0},
+		{"workers above the cap", 0, config.MaxNodeCount + 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// An empty machine CIDR skips ValidateIPRangeInCIDR, so the count
+			// guard is the only thing left that can reject this input.
+			_, err := ClusterNodes(clusterCfg("192.168.1.20", "", tc.masters, tc.workers))
+			if err == nil {
+				t.Fatal("ClusterNodes accepted an out-of-range node count")
+			}
+			var cfgErr *errtypes.ConfigError
+			if !errors.As(err, &cfgErr) {
+				t.Fatalf("error = %T; want *errtypes.ConfigError", err)
+			}
+		})
 	}
 }
