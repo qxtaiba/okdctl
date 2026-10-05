@@ -316,7 +316,11 @@ func (s *ReviewStep) renderInstallConfigPreview(width int) string {
 	}
 	lines := []string{"INSTALL-CONFIG PREVIEW · secrets redacted · p or esc to return"}
 	for _, source := range strings.Split(strings.TrimSuffix(content, "\n"), "\n") {
-		lines = append(lines, tui.WrapLines(source, width)...)
+		// WrapLines rebuilds the line from its words, dropping the YAML indentation.
+		indent := source[:len(source)-len(strings.TrimLeft(source, " "))]
+		for _, line := range tui.WrapLines(source, width-len(indent)) {
+			lines = append(lines, indent+line)
+		}
 	}
 	return strings.Join(lines, "\n")
 }

@@ -5,8 +5,10 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
@@ -259,6 +261,46 @@ func TestReviewStep_PreviewShowsRedactedInstallConfigAndEscReturns(t *testing.T)
 	}
 	if !s.InterceptBack() || s.showPreview {
 		t.Fatal("esc did not close the preview without leaving the review step")
+	}
+}
+
+func previewKeyColumn(t *testing.T, frame, key string) int {
+	t.Helper()
+	for _, line := range strings.Split(frame, "\n") {
+		if before, _, ok := strings.Cut(line, key); ok {
+			return lipgloss.Width(before)
+		}
+	}
+	t.Fatalf("preview frame has no %q:\n%s", key, frame)
+	return 0
+}
+
+func TestReviewStep_PreviewKeepsYAMLIndentation(t *testing.T) {
+	tui.SetTerminalWidth(120)
+	t.Cleanup(func() { tui.SetTerminalWidth(0) })
+	m := newGoldenModel(t)
+	_ = tuitest.RenderAt(t, m, 120, 40)
+	m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDReview})
+	m.CurrentStep().(*ReviewStep).SetConfig(m.Config())
+	m.Update(tea.KeyPressMsg{Code: 'p', Text: "p"})
+	frame := tuitest.StripANSI(tuitest.RenderAt(t, m, 120, 40))
+
+	for _, tc := range []struct {
+		parent, child string
+		indent        int
+	}{
+		{"compute:", "hyperthreading:", 2},
+		{"controlPlane:", "replicas: 3", 2},
+		{"networking:", "clusterNetwork:", 2},
+		{"clusterNetwork:", "hostPrefix:", 2},
+	} {
+		got := previewKeyColumn(t, frame, tc.child) - previewKeyColumn(t, frame, tc.parent)
+		if got != tc.indent {
+			t.Errorf("%q sits %d columns right of %q, want %d", tc.child, got, tc.parent, tc.indent)
+		}
+	}
+	if t.Failed() {
+		t.Logf("frame:\n%s", frame)
 	}
 }
 
