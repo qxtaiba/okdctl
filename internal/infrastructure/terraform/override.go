@@ -104,7 +104,7 @@ func WithPreventDestroyHint(err error, moduleDir string) error {
 
 // PreviewDestroy temporarily disables the master guard for a destroy-only plan.
 // The caller must hold the workspace run lock; existing overrides are refused.
-func (t *Executor) PreviewDestroy(ctx context.Context, moduleDir string, targets []string) (err error) {
+func (t *Executor) PreviewDestroy(ctx context.Context, moduleDir string) (err error) {
 	path := DestroyOverridePath(moduleDir)
 	if _, statErr := os.Lstat(path); statErr == nil {
 		return &errtypes.ConfigError{Msg: "destroy preview refuses existing override: " + path}
@@ -115,5 +115,5 @@ func (t *Executor) PreviewDestroy(ctx context.Context, moduleDir string, targets
 		return err
 	}
 	defer func() { err = errors.Join(err, RemoveDestroyOverride(moduleDir)) }()
-	return t.PlanStreamed(ctx, PlanOptions{Destroy: true, Targets: targets})
+	return t.PlanStreamed(ctx, PlanOptions{Destroy: true})
 }

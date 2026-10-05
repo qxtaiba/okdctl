@@ -13,7 +13,7 @@ to use in scripts that branch on failure type.
 | 5    | —            | auth error (proxmox token rejected, insecure file perms)     |
 | 6    | —            | `doctor` preflight warn-only: one or more checks reported `[warn]` and none reported `[fail]` |
 | 7    | —            | `plan` found drift: a create/update/replace/delete is pending against the current configuration |
-| 64   | EX_USAGE     | unknown flag, wrong argument count, or an invalid flag combination detected at runtime (e.g. `--target` without `--confirm-cluster`) |
+| 64   | EX_USAGE     | unknown flag, wrong argument count, or an invalid flag combination detected at runtime (e.g. `--dry-run` with a `--skip-*` flag) |
 | 65   | EX_DATAERR   | pull secret file exists but is not valid JSON                |
 | 66   | EX_NOINPUT   | configuration file not found on disk                         |
 | 70   | EX_SOFTWARE  | internal error: a panic was caught at top level (a bug in okdctl — the stack trace goes to stderr and the run log) |
@@ -90,10 +90,9 @@ deployed cluster's kubeconfig is found; pre-deploy runs are unaffected.
 Code 64 (UsageError) covers problems with the command line itself: an
 unknown flag, a wrong number of positional arguments (e.g. `okdctl node
 remove` without a node name), or a flag combination that is individually valid
-but not sensible together — `--target`/`--only` without `--confirm-cluster`,
-`--dry-run` combined with a `--skip-*` flag. Rule of thumb: if the fix is
-"edit your YAML", it's ConfigError; if the fix is "change your command
-line", it's UsageError.
+but not sensible together — `--dry-run` combined with a `--skip-*` flag.
+Rule of thumb: if the fix is "edit your YAML", it's ConfigError; if the fix
+is "change your command line", it's UsageError.
 
 ## Examples
 

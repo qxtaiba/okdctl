@@ -5,8 +5,6 @@
 // providers, and the CLI can all import it without creating upward edges.
 package nodetypes
 
-import "fmt"
-
 // NodeRole is the cluster-role assignment for an OKD node. Values are lowercase
 // strings that openshift-install, HAProxy templates, and ignition URLs expect
 // verbatim — change carefully.
@@ -20,16 +18,5 @@ const (
 	RoleWorker    NodeRole = "worker"
 	RoleUnknown   NodeRole = "unknown"
 )
-
-// ParseNodeRole is NodeRole.String()'s deserialization counterpart;
-// case-sensitive to match openshift-install output.
-func ParseNodeRole(s string) (NodeRole, error) {
-	switch NodeRole(s) {
-	case RoleBootstrap, RoleMaster, RoleWorker:
-		return NodeRole(s), nil
-	default:
-		return "", fmt.Errorf("unknown node role %q (want bootstrap|master|worker)", s)
-	}
-}
 
 func (r NodeRole) String() string { return string(r) }
