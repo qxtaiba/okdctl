@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
+	"strings"
 
 	yamlv2 "go.yaml.in/yaml/v2"
 	"sigs.k8s.io/yaml"
@@ -31,7 +33,7 @@ func NewLoader() *Loader { return &Loader{} }
 func (l *Loader) LoadFile(path string) (*Config, error) {
 	fi, err := os.Stat(path)
 	if err != nil {
-		return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("stat config file %s", path), Err: err}
+		return nil, &errtypes.ConfigError{Msg: err.Error(), Err: err}
 	}
 	if perm := fi.Mode().Perm(); perm&0o022 != 0 {
 		return nil, &errtypes.AuthError{
@@ -42,9 +44,12 @@ func (l *Loader) LoadFile(path string) (*Config, error) {
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("read config file %s", path), Err: err}
+		return nil, &errtypes.ConfigError{Msg: err.Error(), Err: err}
 	}
 
+	if envFileAssignment.Match(data) {
+		return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("config file %s is a credentials env file (it assigns PROXMOX_VE_* variables), not a YAML config", path)}
+	}
 	if err := rejectMultipleDocuments(data, path); err != nil {
 		return nil, err
 	}
@@ -54,14 +59,23 @@ func (l *Loader) LoadFile(path string) (*Config, error) {
 
 	cfg := fileDefaults()
 	if err := yaml.UnmarshalStrict(data, cfg); err != nil {
-		return nil, parseError(err)
+		return nil, parseError(path, err)
 	}
 	_ = DeriveStaticNetmask(cfg) // invalid/IPv6 CIDR is left for validators
 	return cfg, nil
 }
 
-func parseError(err error) error {
-	return &errtypes.ConfigError{Msg: "parse config", Err: err}
+// envFileAssignment matches a line of okdctl.env; decoder errors can quote
+// the file, so one passed as the config is refused before any decoding.
+var envFileAssignment = regexp.MustCompile(`(?m)^[ \t]*PROXMOX_VE_[A-Z_]+[ \t]*=`)
+
+func parseError(path string, err error) error {
+	cause := err
+	for inner := errors.Unwrap(cause); inner != nil; inner = errors.Unwrap(cause) {
+		cause = inner
+	}
+	detail := strings.Join(strings.Fields(strings.TrimPrefix(cause.Error(), "json: ")), " ")
+	return &errtypes.ConfigError{Msg: fmt.Sprintf("parse config file %s: %s", path, detail), Err: err}
 }
 
 // rejectMultipleDocuments exists because yaml.Unmarshal reads only the first
@@ -73,14 +87,14 @@ func rejectMultipleDocuments(data []byte, path string) error {
 		if errors.Is(err, io.EOF) {
 			return nil
 		}
-		return parseError(err)
+		return parseError(path, err)
 	}
 	err := dec.Decode(&doc)
 	if errors.Is(err, io.EOF) {
 		return nil
 	}
 	if err != nil {
-		return parseError(err)
+		return parseError(path, err)
 	}
 	return &errtypes.ConfigError{Msg: fmt.Sprintf(`config file %s contains more than one YAML document; merge them into one and remove the "---" separator`, path)}
 }
@@ -92,7 +106,7 @@ func checkSchemaVersion(data []byte, path string) error {
 		SchemaVersion string `json:"schemaVersion"`
 	}
 	if err := yaml.Unmarshal(data, &probe); err != nil {
-		return parseError(err)
+		return parseError(path, err)
 	}
 	switch probe.SchemaVersion {
 	case SchemaVersionCurrent:
