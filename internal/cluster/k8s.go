@@ -94,7 +94,7 @@ func validateKubeconfigEnv(path string) error {
 		return fmt.Errorf("kubeconfig path outside allowed prefixes ($HOME, /etc)")
 	}
 
-	fi, err := os.Lstat(clean)
+	fi, err := os.Lstat(clean) //nolint:gosec // G703: clean is allowlist-confined above, and $KUBECONFIG is the invoking user's own path — okdctl crosses no privilege boundary here.
 	if err != nil {
 		return fmt.Errorf("kubeconfig path inaccessible: %w", err)
 	}
