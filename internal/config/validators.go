@@ -902,6 +902,11 @@ func ValidateCIDR(value string) error {
 	return nil
 }
 
+// MaxNodeCount caps the per-role node count. Callers that size an allocation
+// from a count compare against it directly, so a config that never reached
+// validateResources cannot overflow the sum.
+const MaxNodeCount = 100
+
 // intBounds is the single [lo, hi] range shared by wizard and file-load
 // validators so the two surfaces can't drift.
 type intBounds struct {
@@ -932,7 +937,7 @@ var (
 	memoryBounds    = intBounds{1024, 1048576, " (in mb)"}
 	osDiskBounds    = intBounds{20, 1000, " (in gb)"}
 	dataDiskBounds  = intBounds{0, 5000, " (in gb)"}
-	nodeCountBounds = intBounds{0, 100, " (nodes)"}
+	nodeCountBounds = intBounds{0, MaxNodeCount, " (nodes)"}
 	vmidBounds      = intBounds{100, 999999999, ""}
 	timeoutBounds   = intBounds{60, 86400, " (seconds)"}
 )
