@@ -31,6 +31,14 @@ func (n ClusterNode) PrefixedName(clusterName string) string {
 	return clusterName + "-" + n.Name()
 }
 
+// countOutOfRange reports a per-role count outside the bound that keeps the
+// node total small enough to size a slice from.
+func countOutOfRange(role string, n int) error {
+	return (&errtypes.ConfigError{
+		Msg: fmt.Sprintf("%s count %d out of range", role, n),
+	}).WithHint(fmt.Sprintf("set it between 0 and %d", config.MaxNodeCount))
+}
+
 // ClusterNodes enumerates cfg's topology in provisioning order (bootstrap,
 // masters, workers) with IPs offset sequentially from the static-IP start. The
 // machine CIDR, when configured, is validated up front so callers fail before
@@ -41,11 +49,13 @@ func ClusterNodes(cfg *config.Config) ([]ClusterNode, error) {
 	// Bounded here rather than left to validateResources: the deploy gate runs
 	// a narrower scope, so a hand-edited count can reach this sum unchecked and
 	// overflow it into a negative make capacity.
-	masters, workers := cfg.Topology.ControlPlane.Count, cfg.Topology.Workers.Count
-	if masters < 0 || masters > config.MaxNodeCount || workers < 0 || workers > config.MaxNodeCount {
-		return nil, (&errtypes.ConfigError{
-			Msg: fmt.Sprintf("node count out of range: %d control plane, %d workers", masters, workers),
-		}).WithHint(fmt.Sprintf("set each count between 0 and %d", config.MaxNodeCount))
+	masters := cfg.Topology.ControlPlane.Count
+	if masters < 0 || masters > config.MaxNodeCount {
+		return nil, countOutOfRange(string(RoleMaster), masters)
+	}
+	workers := cfg.Topology.Workers.Count
+	if workers < 0 || workers > config.MaxNodeCount {
+		return nil, countOutOfRange(string(RoleWorker), workers)
 	}
 
 	total := 1 + masters + workers
