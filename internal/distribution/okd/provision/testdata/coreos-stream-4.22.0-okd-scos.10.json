@@ -1,0 +1,53 @@
+{
+  "stream": "c10s",
+  "metadata": {
+    "last-modified": "2025-11-05T23:46:18Z",
+    "generator": "plume cosa2stream 82410e1"
+  },
+  "architectures": {
+    "aarch64": {
+      "artifacts": {
+        "metal": {
+          "release": "10.0.20251103-0",
+          "formats": {
+            "iso": {
+              "disk": {
+                "location": "https://rhcos.mirror.openshift.com/art/storage/prod/streams/c10s/builds/10.0.20251103-0/aarch64/scos-10.0.20251103-0-live-iso.aarch64.iso",
+                "sha256": "049e5587b3a31bea57a4d8390b3000bf6bd56867757b3778a2c7195d42fa4962"
+              }
+            },
+            "raw.gz": {
+              "disk": {
+                "location": "https://rhcos.mirror.openshift.com/art/storage/prod/streams/c10s/builds/10.0.20251103-0/aarch64/scos-10.0.20251103-0-metal.aarch64.raw.gz",
+                "sha256": "a04816c73b53be631b5beedb426354ab089f20da9054de6a2ed010403d8b4af8",
+                "uncompressed-sha256": "4be08d490830b8013e098f6c133f8be1f59141b542f6019d9b4d9fd1d8675cd4"
+              }
+            }
+          }
+        }
+      }
+    },
+    "x86_64": {
+      "artifacts": {
+        "metal": {
+          "release": "10.0.20251103-0",
+          "formats": {
+            "iso": {
+              "disk": {
+                "location": "https://rhcos.mirror.openshift.com/art/storage/prod/streams/c10s/builds/10.0.20251103-0/x86_64/scos-10.0.20251103-0-live-iso.x86_64.iso",
+                "sha256": "aff9c4a263d51356584d8334a20f13e24d04803e4eb9b49c2b499e0ad908e94a"
+              }
+            },
+            "raw.gz": {
+              "disk": {
+                "location": "https://rhcos.mirror.openshift.com/art/storage/prod/streams/c10s/builds/10.0.20251103-0/x86_64/scos-10.0.20251103-0-metal.x86_64.raw.gz",
+                "sha256": "4e21aecb724a84a8e4d89035874be920c9f7bc03cdb67a476bf899e55a416391",
+                "uncompressed-sha256": "c0c6601f24cdd7a671fcc94da6658f4c8a26ae33d2bc74bfbe08ccbe7de54e3d"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
