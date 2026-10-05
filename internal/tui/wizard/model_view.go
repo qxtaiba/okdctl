@@ -72,9 +72,6 @@ func (m *Model) View() tea.View {
 	if m.helpOpen {
 		body = m.renderHelpOverlay()
 	}
-	if m.paletteOpen {
-		body = m.renderPalette()
-	}
 
 	var content strings.Builder
 
@@ -582,7 +579,6 @@ func (m *Model) renderHelpOverlay() string {
 		components.KeyHint{Key: "j/k", Help: "scroll"},
 		components.KeyHint{Key: "ctrl+d/u", Help: "half page"},
 		components.KeyHint{Key: "gg/G", Help: "top/bottom"},
-		components.KeyHint{Key: "ctrl+k", Help: "jump to a step, field, or action"},
 	)
 
 	return components.RenderHelpOverlay(hints, width, height)

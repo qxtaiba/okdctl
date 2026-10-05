@@ -72,20 +72,6 @@ type fakeReviewStep struct {
 	targets []JumpTarget
 }
 
-type paletteFakeStep struct {
-	fakeStep
-	selected string
-}
-
-func (s *paletteFakeStep) PaletteTargets() []PaletteTarget {
-	return []PaletteTarget{{ID: "host", Kind: PaletteTargetField, Label: "Proxmox host", Detail: "Connection"}}
-}
-
-func (s *paletteFakeStep) FocusPaletteTarget(id string) tea.Cmd {
-	s.selected = id
-	return nil
-}
-
 func (r *fakeReviewStep) JumpOrder() []StepID           { return r.order }
 func (r *fakeReviewStep) SetJumpTargets(t []JumpTarget) { r.targets = t }
 
@@ -137,160 +123,33 @@ func TestModel_JumpFromReview_ConfirmReturnsToReview(t *testing.T) {
 	}
 }
 
-func TestCommandPaletteSearchesAndJumpsToField(t *testing.T) {
-	fieldStep := &paletteFakeStep{fakeStep: fakeStep{id: StepIDProxmox}}
-	m := NewModel([]WizardStep{&fakeStep{id: StepIDBasics}, fieldStep, &fakeStep{id: StepIDReview}}, config.DefaultConfig())
-	tuitest.RenderAt(t, m, 100, 30)
-
-	m = update(t, m, tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl})
-	if !m.paletteOpen {
-		t.Fatal("ctrl+k must open the command palette")
-	}
-	for _, r := range "host" {
-		m = update(t, m, tea.KeyPressMsg{Code: r, Text: string(r)})
-	}
-	if len(m.paletteMatches) != 1 || m.paletteMatches[0].target.ID != "host" || m.paletteMatches[0].stepIndex != 1 {
-		t.Fatalf("matches = %#v, want the Proxmox host field", m.paletteMatches)
-	}
-	m = update(t, m, tea.KeyPressMsg{Code: tea.KeyEnter})
-	if m.paletteOpen || m.CurrentStep().ID() != StepIDProxmox || fieldStep.selected != "host" {
-		t.Fatalf("palette result = open:%v step:%q target:%q", m.paletteOpen, m.CurrentStep().ID(), fieldStep.selected)
-	}
-}
-
-func TestCommandPaletteFitsCommonTerminalSizes(t *testing.T) {
-	for _, size := range [][2]int{{80, 24}, {100, 30}, {180, 48}} {
-		m := NewModel([]WizardStep{&paletteFakeStep{fakeStep: fakeStep{id: StepIDProxmox}}}, config.DefaultConfig())
-		tuitest.RenderAt(t, m, size[0], size[1])
-		m.openPalette()
-		tuitest.AssertFits(t, m.renderPalette(), m.contentWidth(), m.viewport.Height())
-	}
-}
-
-func TestCommandPaletteKeepsSelectedResultVisiblePastFirstPage(t *testing.T) {
-	steps := make([]WizardStep, 12)
-	for i := range steps {
-		steps[i] = &fakeStep{id: StepID(fmt.Sprintf("step-%02d", i))}
-	}
-	m := NewModel(steps, config.DefaultConfig())
-	tuitest.RenderAt(t, m, 100, 30)
-	m.openPalette()
-	for range 9 {
-		m = update(t, m, tea.KeyPressMsg{Code: tea.KeyDown})
-	}
-	if m.paletteSelected != 9 {
-		t.Fatalf("selected = %d, want 9", m.paletteSelected)
-	}
-	view := tuitest.StripANSI(m.renderPalette())
-	if !strings.Contains(view, "step-09") {
-		t.Fatalf("selected result is not visible after scrolling: %s", view)
-	}
-}
-
-// TestPaletteClosesWhenAsyncStepCompleteMovesCurrentStepUnderneath is the
-// reviewer's exact repro: the palette gates tea.KeyPressMsg but not
-// StepCompleteMsg, which can arrive asynchronously (a step's own Cmd) while
-// the palette is open. Before the fix, currentStep advanced 0->1 with the
-// palette still open and rendering matches computed against the old step;
-// activating one could jump to the wrong step. The fix closes the palette
-// outright, so there is no rendered modal left whose targets could be stale.
-func TestPaletteClosesWhenAsyncStepCompleteMovesCurrentStepUnderneath(t *testing.T) {
+func TestModel_ReviewCompletionNamesReviewAsExitStep(t *testing.T) {
 	steps, _ := newNavTestSteps([]StepID{StepIDBasics, StepIDProxmox, StepIDNetworking})
 	m := NewModel(steps, &config.Config{})
-	tuitest.RenderAt(t, m, 100, 30)
+	m = advanceToReview(t, m)
 
-	m = update(t, m, tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl})
-	if !m.paletteOpen {
-		t.Fatal("ctrl+k must open the command palette")
+	m = update(t, m, StepCompleteMsg{StepID: StepIDReview})
+
+	res := m.Result()
+	if res.Outcome != OutcomeCompleted {
+		t.Fatalf("Outcome = %v, want completed", res.Outcome)
 	}
-
-	// A late async completion for the step the palette was opened over,
-	// exactly as a step's own Cmd would deliver it.
-	m = update(t, m, StepCompleteMsg{StepID: StepIDBasics})
-
-	if got := m.CurrentStep().ID(); got != StepIDProxmox {
-		t.Fatalf("CurrentStep() = %v, want proxmox (navigation must still occur)", got)
-	}
-	if m.paletteOpen {
-		t.Fatal("palette must close when navigation moves the current step underneath it")
+	if res.ExitStep != StepIDReview {
+		t.Errorf("ExitStep = %q, want %q", res.ExitStep, StepIDReview)
 	}
 }
 
-// TestNavigationMessagesCloseAnOpenModal exercises every navigation-mutating
-// message the wizard switches on (model.go's update()) against an open
-// palette, confirming each funnels through the same close point (focusStep)
-// rather than leaving the palette open over a step it does not describe.
-func TestNavigationMessagesCloseAnOpenModal(t *testing.T) {
-	t.Run("StepBackMsg", func(t *testing.T) {
+func TestNavigationMessagesCloseTheHelpOverlay(t *testing.T) {
+	navModel := func(t *testing.T) *Model {
+		t.Helper()
 		steps, _ := newNavTestSteps([]StepID{StepIDBasics, StepIDProxmox, StepIDNetworking})
 		m := NewModel(steps, &config.Config{})
 		tuitest.RenderAt(t, m, 100, 30)
-		m = update(t, m, StepCompleteMsg{StepID: StepIDBasics}) // off step 0, palette untouched
-		m.openPalette()
+		return m
+	}
 
-		m = update(t, m, StepBackMsg{})
-
-		if got := m.CurrentStep().ID(); got != StepIDBasics {
-			t.Fatalf("CurrentStep() = %v, want basics", got)
-		}
-		if m.paletteOpen {
-			t.Fatal("palette must close when StepBackMsg moves the current step underneath it")
-		}
-	})
-
-	t.Run("JumpToStepMsg", func(t *testing.T) {
-		steps, _ := newNavTestSteps([]StepID{StepIDBasics, StepIDProxmox, StepIDNetworking})
-		m := NewModel(steps, &config.Config{})
-		tuitest.RenderAt(t, m, 100, 30)
-		m.openPalette()
-
-		m = update(t, m, JumpToStepMsg{StepID: StepIDProxmox})
-
-		if got := m.CurrentStep().ID(); got != StepIDProxmox {
-			t.Fatalf("CurrentStep() = %v, want proxmox", got)
-		}
-		if m.paletteOpen {
-			t.Fatal("palette must close when JumpToStepMsg moves the current step underneath it")
-		}
-	})
-
-	t.Run("DraftResumeMsg", func(t *testing.T) {
-		steps, _ := newNavTestSteps([]StepID{StepIDBasics, StepIDProxmox, StepIDNetworking})
-		m := NewModel(steps, &config.Config{})
-		tuitest.RenderAt(t, m, 100, 30)
-		m.openPalette()
-
-		m = update(t, m, DraftResumeMsg{StepID: StepIDProxmox})
-
-		if got := m.CurrentStep().ID(); got != StepIDProxmox {
-			t.Fatalf("CurrentStep() = %v, want proxmox", got)
-		}
-		if m.paletteOpen {
-			t.Fatal("palette must close when DraftResumeMsg moves the current step underneath it")
-		}
-	})
-
-	t.Run("SwapFlowMsg", func(t *testing.T) {
-		m, hub := swapModel(t)
-		m.openPalette()
-
-		hub.builds++
-		flow := hub.build()
-		m2, _ := m.Update(SwapFlowMsg{Steps: flow, Chrome: FlowChrome{Tagline: "sub-flow"}})
-		m = m2.(*Model)
-
-		if got := m.CurrentStep().ID(); got != "sub-first" {
-			t.Fatalf("CurrentStep() = %v, want sub-first", got)
-		}
-		if m.paletteOpen {
-			t.Fatal("palette must close when SwapFlowMsg replaces the step set underneath it")
-		}
-	})
-
-	t.Run("StepCompleteMsg closes the help overlay too", func(t *testing.T) {
-		steps, _ := newNavTestSteps([]StepID{StepIDBasics, StepIDProxmox, StepIDNetworking})
-		m := NewModel(steps, &config.Config{})
-		tuitest.RenderAt(t, m, 100, 30)
+	t.Run("StepCompleteMsg", func(t *testing.T) {
+		m := navModel(t)
 		m.helpOpen = true
 
 		m = update(t, m, StepCompleteMsg{StepID: StepIDBasics})
@@ -299,31 +158,68 @@ func TestNavigationMessagesCloseAnOpenModal(t *testing.T) {
 			t.Fatalf("CurrentStep() = %v, want proxmox", got)
 		}
 		if m.helpOpen {
-			t.Fatal("help overlay must close when navigation moves the current step underneath it")
+			t.Fatal("help overlay must close when StepCompleteMsg moves the current step underneath it")
 		}
 	})
-}
 
-func TestPaletteScoreOrdersExactPrefixSubstringAndFuzzy(t *testing.T) {
-	queries := []struct {
-		query string
-		label string
-		want  int
-	}{
-		{"networking", "networking", 0},
-		{"net", "networking", 1},
-		{"work", "networking", 2},
-		{"nwr", "networking", 3},
-	}
-	for _, tt := range queries {
-		got, ok := paletteScore(tt.query, tt.label)
-		if !ok || got != tt.want {
-			t.Errorf("paletteScore(%q, %q) = %d, %v; want %d, true", tt.query, tt.label, got, ok, tt.want)
+	t.Run("StepBackMsg", func(t *testing.T) {
+		m := navModel(t)
+		m = update(t, m, StepCompleteMsg{StepID: StepIDBasics})
+		m.helpOpen = true
+
+		m = update(t, m, StepBackMsg{})
+
+		if got := m.CurrentStep().ID(); got != StepIDBasics {
+			t.Fatalf("CurrentStep() = %v, want basics", got)
 		}
-	}
-	if _, ok := paletteScore("missing", "networking"); ok {
-		t.Error("unmatched query must not produce a result")
-	}
+		if m.helpOpen {
+			t.Fatal("help overlay must close when StepBackMsg moves the current step underneath it")
+		}
+	})
+
+	t.Run("JumpToStepMsg", func(t *testing.T) {
+		m := navModel(t)
+		m.helpOpen = true
+
+		m = update(t, m, JumpToStepMsg{StepID: StepIDProxmox})
+
+		if got := m.CurrentStep().ID(); got != StepIDProxmox {
+			t.Fatalf("CurrentStep() = %v, want proxmox", got)
+		}
+		if m.helpOpen {
+			t.Fatal("help overlay must close when JumpToStepMsg moves the current step underneath it")
+		}
+	})
+
+	t.Run("DraftResumeMsg", func(t *testing.T) {
+		m := navModel(t)
+		m.helpOpen = true
+
+		m = update(t, m, DraftResumeMsg{StepID: StepIDProxmox})
+
+		if got := m.CurrentStep().ID(); got != StepIDProxmox {
+			t.Fatalf("CurrentStep() = %v, want proxmox", got)
+		}
+		if m.helpOpen {
+			t.Fatal("help overlay must close when DraftResumeMsg moves the current step underneath it")
+		}
+	})
+
+	t.Run("SwapFlowMsg", func(t *testing.T) {
+		m, hub := swapModel(t)
+		m.helpOpen = true
+
+		hub.builds++
+		flow := hub.build()
+		m = update(t, m, SwapFlowMsg{Steps: flow, Chrome: FlowChrome{Tagline: "sub-flow"}})
+
+		if got := m.CurrentStep().ID(); got != "sub-first" {
+			t.Fatalf("CurrentStep() = %v, want sub-first", got)
+		}
+		if m.helpOpen {
+			t.Fatal("help overlay must close when SwapFlowMsg replaces the step set underneath it")
+		}
+	})
 }
 
 func TestModel_JumpFromReview_EscReturnsToReview(t *testing.T) {

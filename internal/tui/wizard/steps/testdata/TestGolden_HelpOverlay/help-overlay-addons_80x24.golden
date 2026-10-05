@@ -3,6 +3,7 @@
   │ O K D C T L                                                              │  
   │ configure cluster addons         connect · cluster · extras ●○○ · review │  
   │──────────────────────────────────────────────────────────────────────────│  
+  │                                                                          │  
   │      ╭────────────────────────────────────────────────────────────╮      │  
   │      │ key bindings                                               │      │  
   │      │                                                            │      │  
@@ -12,7 +13,6 @@
   │      │                                                            │      │  
   │      │ vim     j/k scroll • ctrl+d/u half page • gg/G top/bottom  │      │  
   │      │ global  esc back • ctrl+c quit • pgup/pgdn scroll • ? help │      │  
-  │      │         ctrl+k jump to a step, field, or action            │      │  
   │      │                                                            │      │  
   │      │ esc or ? closes                                            │      │  
   │      ╰────────────────────────────────────────────────────────────╯      │  

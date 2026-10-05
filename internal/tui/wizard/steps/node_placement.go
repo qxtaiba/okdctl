@@ -623,22 +623,6 @@ func (s *NodePlacementStep) SetFocused(focused bool) {
 	s.inner.Blur()
 }
 
-// PaletteTargets exposes discovered placement fields without their values.
-func (s *NodePlacementStep) PaletteTargets() []wizard.PaletteTarget {
-	if s.inner == nil {
-		return nil
-	}
-	return s.inner.PaletteTargets()
-}
-
-// FocusPaletteTarget moves focus to a discovered placement field.
-func (s *NodePlacementStep) FocusPaletteTarget(id string) tea.Cmd {
-	if s.inner == nil {
-		return nil
-	}
-	return s.inner.FocusPaletteTarget(id)
-}
-
 // ShortHelp returns the step's help bar — {esc back, ctrl+c quit} while
 // discovering, else the placement form's bindings plus any key hints the
 // focused field contributes.

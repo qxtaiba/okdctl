@@ -517,38 +517,6 @@ func TestHubDraftResumeIsFirstAndTargetsSavedCursor(t *testing.T) {
 	}
 }
 
-func TestPaletteJumpPastHubEndsOnReview(t *testing.T) {
-	m := newGoldenModel(t)
-	_ = tuitest.RenderAt(t, m, 120, 40)
-	seedHubSaveSlot(m)
-	hub := m.CurrentStep().(*WelcomeStep)
-	if hub.SelectedVerb() != HubVerbDeploy {
-		t.Fatalf("hub highlights %v; want the deploy row this test jumps past", hub.SelectedVerb())
-	}
-
-	m.Update(tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl})
-	for _, r := range "review" {
-		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
-	}
-	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	review, ok := m.CurrentStep().(*ReviewStep)
-	if !ok {
-		t.Fatalf("palette jump landed on %T; want the review step", m.CurrentStep())
-	}
-	review.SetConfig(m.Config())
-	m.Update(tea.KeyPressMsg{Code: tea.KeyRight})
-	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	pumpCmd(m, cmd)
-
-	res := m.Result()
-	if res.Outcome != wizard.OutcomeCompleted || res.Action != wizard.ActionExit {
-		t.Fatalf("result = outcome %v action %q; want a completed save-and-exit", res.Outcome, res.Action)
-	}
-	if res.ExitStep != wizard.StepIDReview {
-		t.Errorf("ExitStep = %q; want %q", res.ExitStep, wizard.StepIDReview)
-	}
-}
-
 func TestHubConfirmEndsOnWelcome(t *testing.T) {
 	m := newGoldenModel(t)
 	_ = tuitest.RenderAt(t, m, 120, 40)

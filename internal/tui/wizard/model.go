@@ -185,11 +185,6 @@ type Model struct {
 	// and "?" itself (both close it) is inert — the overlay owns input.
 	helpOpen bool
 
-	paletteOpen     bool
-	paletteQuery    string
-	paletteSelected int
-	paletteMatches  []paletteMatch
-
 	// pendingG: a lone "g" is held one keystroke, completing the vim gg
 	// chord if the next key is "g" again and clearing otherwise.
 	pendingG bool
@@ -588,15 +583,6 @@ func (m *Model) handleWizardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) 
 		if key.Matches(msg, m.keyMap.Help) || key.Matches(msg, m.keyMap.Back) {
 			m.helpOpen = false
 		}
-		return m, nil, true
-	}
-
-	if m.paletteOpen {
-		return m.handlePaletteKey(msg)
-	}
-
-	if msg.Code == 'k' && msg.Mod&tea.ModCtrl != 0 {
-		m.openPalette()
 		return m, nil, true
 	}
 

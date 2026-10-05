@@ -124,30 +124,6 @@ func TestDataDrivenStep_FieldHistoryUsesStableIDsAndExcludesCredentials(t *testi
 	}
 }
 
-func TestDataDrivenStep_PaletteExposesVisibleLabelsAndFocusesField(t *testing.T) {
-	def := testStepDefinition()
-	def.Sections = append(def.Sections, SectionDefinition{
-		Title:   "hidden credentials",
-		Visible: func(map[string]string) bool { return false },
-		Fields:  []FieldDefinition{{Key: "hidden_secret", Label: "hidden secret"}},
-	})
-	step := NewDataDrivenStep(def)
-	step.setValue("name", "cluster-secret-value")
-	targets := step.PaletteTargets()
-	if len(targets) != 3 {
-		t.Fatalf("PaletteTargets() = %+v, want only the three visible fields", targets)
-	}
-	for _, target := range targets {
-		if target.Label == "hidden secret" || strings.Contains(target.Label, "cluster-secret-value") || strings.Contains(target.Detail, "cluster-secret-value") {
-			t.Fatalf("palette exposed a hidden field or field value: %+v", target)
-		}
-	}
-	step.FocusPaletteTarget("0.1")
-	if got := step.form.FocusedField().(components.LabeledField).FieldLabel(); got != "count" {
-		t.Fatalf("focused field = %q, want count", got)
-	}
-}
-
 func TestDataDrivenStep_FocusedFieldHelp(t *testing.T) {
 	def := testStepDefinition()
 	def.Sections[0].Fields[0].Help = "cluster name help"

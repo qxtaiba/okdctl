@@ -114,7 +114,7 @@ func runWizardWithMode(cmd *cobra.Command, cfg *config.Config, configExists bool
 
 // sessionVerb returns the hub verb that ended the session. A session the
 // review step ended ran the configure flow whatever row the hub still
-// highlights: a palette jump leaves the hub without confirming one.
+// highlights.
 func sessionVerb(result wizard.Result, hub *steps.WelcomeStep) steps.HubVerb {
 	if hub == nil || result.ExitStep == wizard.StepIDReview {
 		return steps.HubVerbGetStarted
