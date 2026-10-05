@@ -122,7 +122,7 @@ okdctl update-ingress   switch ingress DNS from HAProxy to LoadBalancer IPs
 okdctl version          print version, git commit, build date
 ```
 
-Full command reference: [`docs/cli/okdctl.md`](docs/cli/okdctl.md).
+Every command documents its flags under `--help`.
 Exit codes and shell-script idioms: [`docs/cli/exit-codes.md`](docs/cli/exit-codes.md).
 JSON output shapes: [`docs/cli/json-schema.md`](docs/cli/json-schema.md).
 
@@ -401,9 +401,7 @@ make lint         # golangci-lint (installed on first run)
 Install [lefthook](https://github.com/evilmartians/lefthook) and run
 `lefthook install` to get the same checks as git hooks. The commit
 messages follow conventional commits (`type(scope): description`,
-lowercase, imperative). If you add or change CLI commands or flags, run
-`make docs` and commit the regenerated pages under `docs/cli/`; CI fails
-on drift.
+lowercase, imperative).
 
 For bugs, use the issue forms. They ask for the `okdctl version`,
 `okdctl doctor`, and `okdctl debug-bundle` output I need to reproduce.

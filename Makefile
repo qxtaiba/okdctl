@@ -19,7 +19,7 @@ LDFLAGS := -ldflags "-s -w \
 
 .DEFAULT_GOAL := help
 
-.PHONY: all build build-all clean test test-short test-cover coverage-floors lint fmt vet check deps deps-update run dev install docs docs-check demo screenshots help
+.PHONY: all build build-all clean test test-short test-cover coverage-floors lint fmt vet check deps deps-update run dev install demo screenshots help
 
 all: deps lint test build ## Run all checks and build
 
@@ -100,23 +100,11 @@ clean: ## Clean build artifacts
 clean-all: clean ## Clean everything including dependencies
 	@rm -rf vendor
 
-docs: ## Regenerate CLI reference pages under docs/cli/
-	$(GOCMD) run -tags docs ./cmd/okdctl-gen-docs
-
 demo: ## Re-record docs/assets/demo.gif from the committed tape (needs vhs)
 	scripts/demo/record.sh
 
 screenshots: ## Render wizard PNGs at 80x24/100x30/120x40/180x48 (needs vhs)
 	scripts/screenshot/run.sh
-
-docs-check: ## Regenerate CLI reference and fail on drift
-	$(GOCMD) run -tags docs ./cmd/okdctl-gen-docs
-	@if ! git diff --quiet docs/cli/ || \
-	    [ -n "$$(git ls-files --others --exclude-standard docs/cli/)" ]; then \
-	  echo "CLI reference is out of date. Commit docs/cli/."; \
-	  git status docs/cli/; \
-	  exit 1; \
-	fi
 
 help: ## Show this help
 	@echo "okdctl build targets"
