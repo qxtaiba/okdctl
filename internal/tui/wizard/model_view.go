@@ -203,6 +203,10 @@ func renderPaneRule(height int) string {
 // statusRow is always exactly one row so the frame never grows; blank when clear.
 func (m *Model) statusRow() string {
 	width := m.contentWidth()
+	if m.discardPending {
+		style := lipgloss.NewStyle().Foreground(tui.ColorWarning()).Inline(true)
+		return "  " + style.Render(truncateTitle(tui.IconWarning+" "+discardPrompt, width-2))
+	}
 	if m.err == nil {
 		return ""
 	}

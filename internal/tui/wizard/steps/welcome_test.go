@@ -2,7 +2,6 @@ package steps
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -226,27 +225,6 @@ func TestHubDashboardShortcutOpensNativeClusterStatus(t *testing.T) {
 	swap, ok := resolveCmd(t, cmd).(wizard.SwapFlowMsg)
 	if !ok || len(swap.Steps) != 1 || swap.Steps[0].ID() != StepIDClusterStatus {
 		t.Fatalf("dashboard shortcut opened %#v, want the native one-screen status flow", swap)
-	}
-}
-
-func TestHubDraftChipIsAnActionableResumeEntry(t *testing.T) {
-	s := NewWelcomeStep()
-	s.SetConfigExists(true)
-	s.SetDraftResume(wizard.StepIDNetworking, "machine_cidr", "resume draft · at networking · 5m ago")
-	if got := s.entries[0]; got.verb != HubVerbResumeDraft || !strings.Contains(got.label, "at networking") {
-		t.Fatalf("first entry = %+v, want the saved draft as the first action", got)
-	}
-	view := s.View(80, 24)
-	if !strings.Contains(view, "resume draft") || !strings.Contains(view, "5m ago") {
-		t.Errorf("draft chip is missing its resume target or age:\n%s", view)
-	}
-	_, cmd := s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if cmd == nil {
-		t.Fatal("confirming the draft chip produced no resume command")
-	}
-	msg, ok := resolveCmd(t, cmd).(wizard.DraftResumeMsg)
-	if !ok || msg.StepID != wizard.StepIDNetworking || msg.FieldKey != "machine_cidr" {
-		t.Fatalf("draft command = %#v, want networking/machine_cidr resume", msg)
 	}
 }
 
@@ -488,32 +466,6 @@ func TestHubMenuRendersAcceleratorHints(t *testing.T) {
 	fresh.SetConfigExists(false)
 	if view := tuitest.StripANSI(fresh.View(70, 14)); strings.Contains(view, "[") {
 		t.Errorf("blank-slate menu must carry no accelerator brackets:\n%s", view)
-	}
-}
-
-func TestHubDraftResumeIsFirstAndTargetsSavedCursor(t *testing.T) {
-	for _, exists := range []bool{false, true} {
-		t.Run(fmt.Sprintf("config-exists-%t", exists), func(t *testing.T) {
-			s := NewWelcomeStep()
-			s.SetConfigExists(exists)
-			label := "resume draft · at networking · edited 2h ago"
-			s.SetDraftResume(wizard.StepIDNetworking, "machine_cidr", label)
-			if got := s.SelectedVerb(); got != HubVerbResumeDraft {
-				t.Fatalf("SelectedVerb() = %v, want HubVerbResumeDraft", got)
-			}
-			s.SetTerminalSize(100, 30)
-			if body := s.View(90, 20); !strings.Contains(body, label) {
-				t.Errorf("hub view does not show the resume affordance:\n%s", body)
-			}
-			_, cmd := s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-			if cmd == nil {
-				t.Fatal("confirming resume draft returned no command")
-			}
-			msg, ok := resolveCmd(t, cmd).(wizard.DraftResumeMsg)
-			if !ok || msg.StepID != wizard.StepIDNetworking || msg.FieldKey != "machine_cidr" {
-				t.Fatalf("resume command = %#v, want networking/machine_cidr", resolveCmd(t, cmd))
-			}
-		})
 	}
 }
 

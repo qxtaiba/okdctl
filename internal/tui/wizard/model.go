@@ -2,6 +2,7 @@ package wizard
 
 import (
 	"context"
+	"crypto/sha256"
 	"os"
 	"sync"
 
@@ -153,9 +154,13 @@ type Model struct {
 	// while set, next/previous route to review.
 	returnToReview bool
 
-	config     *config.Config
-	chrome     FlowChrome
-	draftSaver func(*config.Config, StepID, string) error
+	config *config.Config
+	chrome FlowChrome
+
+	// savedDigest fingerprints the config the flow opened with; discardPending
+	// is the open question a first ctrl+c raises once the live config differs.
+	savedDigest    [sha256.Size]byte
+	discardPending bool
 
 	// theme is the resolved Theme this frame renders with, injected at
 	// construction and re-resolved once when the terminal reports its
@@ -362,6 +367,7 @@ func NewFlowModel(steps []WizardStep, cfg *config.Config, chrome FlowChrome) *Mo
 		currentStep: 0,
 		config:      cfg,
 		chrome:      chrome,
+		savedDigest: configDigest(cfg),
 		theme:       tui.CurrentTheme(),
 		motion:      tui.Motion(),
 		keyMap:      defaultKeyMap(),
@@ -491,9 +497,6 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case JumpToStepMsg:
 		return m.jumpToStep(msg.StepID)
 
-	case DraftResumeMsg:
-		return m.resumeDraft(msg)
-
 	case ErrorSetMsg:
 		m.setError(msg.Error)
 		return m, nil
@@ -531,9 +534,7 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// handleConfigSync applies a step's ConfigSyncMsg to the shared config and,
-// for draft-eligible steps, persists the draft. Split out of update so that
-// function stays under the linter's statement budget.
+// handleConfigSync applies a step's ConfigSyncMsg to the shared config.
 func (m *Model) handleConfigSync(msg ConfigSyncMsg) (tea.Model, tea.Cmd) {
 	if !m.currentStepMatches(msg.StepID) {
 		return m, nil
@@ -546,18 +547,11 @@ func (m *Model) handleConfigSync(msg ConfigSyncMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 	}
-	if isConfigDraftStep(msg.StepID) {
-		fieldKey := ""
-		if cursor, ok := m.steps[m.currentStep].(interface{ DraftFieldKey() string }); ok {
-			fieldKey = cursor.DraftFieldKey()
-		}
-		m.saveDraft(msg.StepID, fieldKey)
-	}
 	return m, nil
 }
 
-// handleWizardKey processes the wizard-level key bindings (quit, the help
-// overlay, scroll, back) ahead of the active step. handled reports whether
+// handleWizardKey processes the wizard-level key bindings (quit, the discard
+// question, the help overlay, scroll, back) ahead of the active step. handled reports whether
 // it fully handled msg — model/cmd are then Update's result — or whether
 // the caller should fall through to the step's own Update instead.
 func (m *Model) handleWizardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
@@ -573,9 +567,16 @@ func (m *Model) handleWizardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) 
 				return m, nil, true
 			}
 		}
-		m.quitting = true
-		m.result = Result{Outcome: OutcomeCancelled}
-		return m, tea.Quit, true
+		if !m.discardPending && m.asksBeforeDiscarding() {
+			m.discardPending = true
+			m.helpOpen = false
+			return m, nil, true
+		}
+		return m.cancel()
+	}
+
+	if m.discardPending {
+		return m.handleDiscardKey(msg)
 	}
 
 	if m.helpOpen {

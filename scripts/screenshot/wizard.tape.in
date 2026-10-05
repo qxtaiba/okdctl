@@ -298,5 +298,9 @@ Up
 Sleep 350ms
 Up
 Sleep 500ms
+# The walkthrough's edits are unsaved, so the first ctrl+c asks before
+# discarding them and the second quits.
+Ctrl+C
+Sleep 300ms
 Ctrl+C
 Sleep 500ms

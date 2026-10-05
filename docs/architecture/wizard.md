@@ -44,44 +44,28 @@ scripted or automation-adjacent entry: `okdctl node manage` refuses
 outright without a terminal, naming `okdctl node resize/add/remove` as
 the alternative, while `okdctl deploy` always opens on the hub first.
 
-## Draft persistence: resuming the configure flow
+## Unsaved edits: nothing persists until review
 
-The configure flow autosaves its progress to a sidecar file as the
-operator moves between steps, so a session that gets interrupted —
-closed, crashed, or simply quit — can be resumed later. That sidecar
-lives beside the config file the deploy command targets, at
-`<config-path>.draft.json` (`wizarddraft.New`, `internal/wizarddraft/store.go`);
-for a plain `okdctl deploy`, that path is `okdctl.yaml.draft.json`. The
-draft is a sidecar only — it is never written into `okdctl.yaml` itself,
-since only `persistWizardConfig` and `saveConfig` touch that file, and
-only once the configure flow finishes and the operator's chosen action
-is confirmed. That active draft also surfaces as a sixth hub entry,
-`resume draft`, ahead of the usual five or two, labelled with the step
-it left off at and how long ago (`WelcomeStep.SetDraftResume`).
+The configure flow keeps its progress in memory only. That progress is
+the `*config.Config` the steps write into: every keystroke in a form
+field applies the active step to it (`ConfigSyncMsg`), so a step left
+with escape — back to the review step after a digit jump, say — has
+already written what was typed. The config file itself is written
+exactly once, by `persistWizardConfig`, after the review step's action
+is confirmed; a session closed or quit before then leaves `okdctl.yaml`
+as it was.
 
-That sidecar strips credentials before it ever reaches disk. The config
-clone `Save` marshals has its Proxmox username, password, API token, and
-token ID cleared, and any addon setting whose key looks sensitive
-dropped, before it is written (`safeConfig`). That same filtering
-reaches the resume cursor saved alongside it: a field whose key itself
-reads as a secret is never recorded as the field to return to
-(`safeFieldKey`).
-
-This persistence is scoped to the configure flow proper, not the whole
-wizard: `supportedStep` recognizes only the ten data-driven steps from
-distribution through review, so a cursor sitting on the hub or on a
-read-only utility screen like cluster status is never saved, and never
-resumed into.
-
-In particular, a draft is only trusted when it is strictly newer than
-the config file it would resume (`loadWizardDraft`,
-`internal/cli/wizard_draft.go`). That is deliberate: a draft timestamped
-at or before the config's own mtime is treated as stale and silently
-ignored, on the reasoning that the config already on disk is then the
-more recent, authoritative state. That staleness check, together with a
-schema-version gate on both the draft document and the config value it
-embeds, keeps an old or foreign draft from resurrecting outdated or
-incompatible values into a fresh session.
+That is why quitting asks first. The first ctrl+c on a configure step —
+distribution through review — whose live config no longer matches the
+one the session opened with raises a one-line question in the status
+row; a second ctrl+c or `y` discards the edits and quits, and any other
+key returns to the form without reaching it. That comparison is a digest
+of the config as `config.Effective` resolves it, plus the credential
+fields that never serialize (`configDigest`), so an edit typed and then
+typed back is no edit at all, and ctrl+c with nothing changed quits
+immediately. This applies to the configure flow only: the hub and the
+day-two flows quit as before, and the screens that run an operation keep
+their own `QuitGuard`.
 
 ## Data-driven, not code-driven
 

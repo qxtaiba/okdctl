@@ -130,10 +130,7 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 
 	if deployWriteConfig {
 		return withProjectLock(projectRoot, "deploy --write-config", func() error {
-			if err := saveConfig(cfg, deployOutputFile, out); err != nil {
-				return err
-			}
-			return clearWizardDraft(deployOutputFile)
+			return saveConfig(cfg, deployOutputFile, out)
 		})
 	}
 
@@ -149,10 +146,7 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 		if err := confirmClusterMatches(true, deployConfirmCluster, cfg.Cluster.Name, "deploy"); err != nil {
 			return err
 		}
-		if err := runFullDeployment(ctx, cmd, cfg, out); err != nil {
-			return err
-		}
-		return clearWizardDraftLocked(projectRoot, deployOutputFile)
+		return runFullDeployment(ctx, cmd, cfg, out)
 	}
 
 	outcome, err := runWizardFn(cmd, cfg, configExists)
@@ -174,9 +168,6 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 	}
 
 	if handled, verbErr := runHubVerb(ctx, cmd, outcome.Verb, cfg, out); handled {
-		if outcome.Verb == steps.HubVerbDeploy && verbErr == nil {
-			return clearWizardDraftLocked(projectRoot, deployOutputFile)
-		}
 		return verbErr
 	}
 
@@ -185,10 +176,7 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 	defer clearConfigCredentials(cfg)
 
 	if err := withProjectLock(projectRoot, "deploy", func() error {
-		if err := persistWizardConfig(cfg, deployOutputFile, out); err != nil {
-			return err
-		}
-		return clearWizardDraft(deployOutputFile)
+		return persistWizardConfig(cfg, deployOutputFile, out)
 	}); err != nil {
 		return err
 	}

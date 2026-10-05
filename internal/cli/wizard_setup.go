@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/spf13/cobra"
 
@@ -18,7 +17,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/lifecycle"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/steps"
-	"github.com/qxtaiba/okdctl/internal/wizarddraft"
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
@@ -52,25 +50,13 @@ type hubOutcome struct {
 }
 
 func runWizardWithMode(cmd *cobra.Command, cfg *config.Config, configExists bool) (hubOutcome, error) {
-	reviewBaseline := cfg
-	configPath := wizardDraftPath(deployOutputFile)
-	draft, hasDraft := loadWizardDraft(configPath)
-	if hasDraft {
-		cfg = draft.Config
-	}
-
 	wizardCfg := wizard.DefaultConfig()
 	wizardCfg.InitialConfig = cfg
-	wizardCfg.ReviewBaseline = reviewBaseline
 	wizardCfg.ConfigExists = configExists
-	wizardCfg.DraftPresent = hasDraft
 
 	built, err := buildWizardStepsWithState(wizardCfg)
 	if err != nil {
 		return hubOutcome{}, err
-	}
-	if hasDraft {
-		configureDraftResume(built, draft, time.Now())
 	}
 
 	var hub *steps.WelcomeStep
@@ -88,7 +74,7 @@ func runWizardWithMode(cmd *cobra.Command, cfg *config.Config, configExists bool
 		}
 	}
 
-	result, err := runHubSessionWithDraftState(cmd, built.Steps, cfg, wizardDraftSaveFn(configPath))
+	result, err := runHubSession(cmd, built.Steps, cfg)
 
 	// take before anything else reads it: a quit can land while the manage
 	// verb's session is still being assembled on a command goroutine, and take
@@ -121,29 +107,13 @@ func sessionVerb(result wizard.Result, hub *steps.WelcomeStep) steps.HubVerb {
 	return hub.SelectedVerb()
 }
 
-// wizardDraftSaveFn returns the interactive wizard's per-step draft saver,
-// wrapped in the project lock so a concurrent `okdctl deploy` in the same
-// project can't clobber an in-progress draft — the same serialization
-// saveConfig and persistWizardConfig already give the final config write.
-func wizardDraftSaveFn(configPath string) func(*config.Config, wizard.StepID, string) error {
-	return func(cfg *config.Config, stepID wizard.StepID, fieldKey string) error {
-		projectRoot, err := resolveWorkspaceRoot()
-		if err != nil {
-			return err
-		}
-		return withProjectLock(projectRoot, "save wizard draft", func() error {
-			return wizarddraft.New(configPath).Save(cfg, wizarddraft.Cursor{StepID: stepID, FieldKey: fieldKey}, time.Now())
-		})
-	}
-}
-
-func runHubSessionWithDraftState(cmd *cobra.Command, flowSteps []wizard.WizardStep, cfg *config.Config, save func(*config.Config, wizard.StepID, string) error) (wizard.Result, error) {
+func runHubSession(cmd *cobra.Command, flowSteps []wizard.WizardStep, cfg *config.Config) (wizard.Result, error) {
 	restoreLogs := logutil.Redirect(subprocSink())
 	defer restoreLogs()
 	progressBars := logutil.ProgressBarsEnabled()
 	logutil.SetProgressBarsEnabled(false)
 	defer logutil.SetProgressBarsEnabled(progressBars)
-	return wizard.RunFlowWithDraft(cmd.Context(), flowSteps, cfg, steps.Chrome(), save)
+	return wizard.RunFlow(cmd.Context(), flowSteps, cfg, steps.Chrome())
 }
 
 // hubFlows builds the hub's in-process flow providers. Each is called at the
@@ -249,9 +219,9 @@ func buildWizardStepsWithState(wizardCfg wizard.Config) (wizard.BuiltSteps, erro
 
 	if wizardCfg.InitialConfig != nil {
 		if os.Getenv(wizardDemoEnv) == "" {
-			initializeStepsFromConfig(built, wizardCfg.InitialConfig, wizardCfg.ConfigExists || wizardCfg.DraftPresent)
+			initializeStepsFromConfig(built, wizardCfg.InitialConfig, wizardCfg.ConfigExists)
 		}
-		configureReviewStep(built, wizardCfg.InitialConfig, wizardCfg.ConfigExists, wizardCfg.ReviewBaseline)
+		configureReviewStep(built, wizardCfg.InitialConfig, wizardCfg.ConfigExists)
 	}
 
 	return built, nil
@@ -313,7 +283,7 @@ func configureDemoVersionFetcher(built wizard.BuiltSteps) {
 	}
 }
 
-func configureReviewStep(built wizard.BuiltSteps, cfg *config.Config, configExists bool, baseline *config.Config) {
+func configureReviewStep(built wizard.BuiltSteps, cfg *config.Config, configExists bool) {
 	for _, step := range built.Steps {
 		rs, ok := step.(*steps.ReviewStep)
 		if !ok {
@@ -325,10 +295,7 @@ func configureReviewStep(built wizard.BuiltSteps, cfg *config.Config, configExis
 			rs.SetCapacity(capacity)
 		}
 		if configExists {
-			if baseline == nil {
-				baseline = cfg
-			}
-			rs.SetSavedConfig(baseline)
+			rs.SetSavedConfig(cfg)
 		}
 		break
 	}

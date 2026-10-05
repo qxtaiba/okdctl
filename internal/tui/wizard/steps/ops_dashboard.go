@@ -319,7 +319,6 @@ func renderOpsActionRows(s *WelcomeStep, width, height int) string {
 		HubVerbManageNodes:   "add or remove cluster nodes",
 		HubVerbClusterStatus: "inspect live health details",
 		HubVerbDestroy:       "remove cluster resources",
-		HubVerbResumeDraft:   "continue the saved configuration draft",
 	}
 	lines := strings.Split(s.nav.ViewPointer(), "\n")
 	rows := make([]string, 0, len(lines)*2)

@@ -191,20 +191,6 @@ func TestNavigationMessagesCloseTheHelpOverlay(t *testing.T) {
 		}
 	})
 
-	t.Run("DraftResumeMsg", func(t *testing.T) {
-		m := navModel(t)
-		m.helpOpen = true
-
-		m = update(t, m, DraftResumeMsg{StepID: StepIDProxmox})
-
-		if got := m.CurrentStep().ID(); got != StepIDProxmox {
-			t.Fatalf("CurrentStep() = %v, want proxmox", got)
-		}
-		if m.helpOpen {
-			t.Fatal("help overlay must close when DraftResumeMsg moves the current step underneath it")
-		}
-	})
-
 	t.Run("SwapFlowMsg", func(t *testing.T) {
 		m, hub := swapModel(t)
 		m.helpOpen = true
@@ -601,63 +587,4 @@ func (s *recordingTextStep) ConsumesTextInput() bool { return true }
 func (s *recordingTextStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 	s.received = append(s.received, msg)
 	return s, nil
-}
-
-type draftCursorStep struct {
-	fakeStep
-	fieldKey string
-	pending  string
-}
-
-func (s *draftCursorStep) DraftFieldKey() string { return s.fieldKey }
-func (s *draftCursorStep) SetDraftFieldKey(key string) bool {
-	s.pending = key
-	return true
-}
-
-func TestModelSavesDraftAfterStepTransition(t *testing.T) {
-	target := &draftCursorStep{fakeStep: fakeStep{id: StepIDBasics}, fieldKey: "cluster_name"}
-	m := NewModel([]WizardStep{&fakeStep{id: StepIDWelcome}, target}, config.DefaultConfig())
-	var gotID StepID
-	var gotField string
-	m.draftSaver = func(_ *config.Config, id StepID, fieldKey string) error {
-		gotID, gotField = id, fieldKey
-		return nil
-	}
-
-	_ = update(t, m, StepCompleteMsg{StepID: StepIDWelcome})
-	if gotID != StepIDBasics || gotField != "cluster_name" {
-		t.Fatalf("saved cursor = %s/%s, want basics/cluster_name", gotID, gotField)
-	}
-}
-
-func TestModelSkipsDraftSaveForSwappedUtilityFlow(t *testing.T) {
-	status := &fakeStep{id: StepID("cluster-status")}
-	m := NewModel([]WizardStep{&fakeStep{id: StepIDWelcome}, status}, config.DefaultConfig())
-	saves := 0
-	m.draftSaver = func(*config.Config, StepID, string) error {
-		saves++
-		return nil
-	}
-
-	_ = update(t, m, StepCompleteMsg{StepID: StepIDWelcome})
-	if saves != 0 {
-		t.Fatalf("draft saves = %d after entering cluster status, want none", saves)
-	}
-}
-
-func TestModelResumesDraftAtStepAndField(t *testing.T) {
-	target := &draftCursorStep{fakeStep: fakeStep{id: StepIDNetworking}}
-	m := NewModel([]WizardStep{&fakeStep{id: StepIDWelcome}, target}, config.DefaultConfig())
-	m = update(t, m, DraftResumeMsg{StepID: StepIDNetworking, FieldKey: "machine_cidr"})
-
-	if got := m.CurrentStep().ID(); got != StepIDNetworking {
-		t.Fatalf("CurrentStep() = %s, want networking", got)
-	}
-	if target.pending != "machine_cidr" {
-		t.Errorf("pending field = %q, want machine_cidr", target.pending)
-	}
-	if m.returnToReview {
-		t.Error("draft resume must use ordinary wizard back/next navigation")
-	}
 }

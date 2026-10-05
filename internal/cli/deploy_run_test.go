@@ -23,7 +23,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/testutil"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/steps"
-	"github.com/qxtaiba/okdctl/internal/wizarddraft"
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
@@ -304,10 +303,6 @@ func TestRunDeploy_WizardSaveExitPersistsConfigAndSidecar(t *testing.T) {
 	t.Chdir(t.TempDir())
 	forbidExecute(t)
 
-	draftStore := wizarddraft.New("okdctl.yaml")
-	if err := draftStore.Save(config.DefaultConfig(), wizarddraft.Cursor{StepID: wizard.StepIDBasics}, time.Now()); err != nil {
-		t.Fatal(err)
-	}
 	wizardCfg := config.DefaultConfig()
 	wizardCfg.Cluster.Name = "wizarded"
 	wizardCfg.Provider.Proxmox.Username = "root@pam"
@@ -338,9 +333,6 @@ func TestRunDeploy_WizardSaveExitPersistsConfigAndSidecar(t *testing.T) {
 	}
 	if !wizardCfg.Provider.Proxmox.Password.IsEmpty() {
 		t.Error("in-memory password must be cleared after the save pipeline")
-	}
-	if _, err := os.Stat(draftStore.Path()); !os.IsNotExist(err) {
-		t.Errorf("saved configuration must clear its draft, got stat err %v", err)
 	}
 }
 

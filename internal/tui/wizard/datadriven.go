@@ -334,20 +334,6 @@ func (f *MultiSectionForm) prevVisible(i int) int {
 	return -1
 }
 
-// FocusField moves focus to a visible field by its section and field indexes.
-func (f *MultiSectionForm) FocusField(section, field int) tea.Cmd {
-	if section < 0 || section >= len(f.sections) || !f.sections[section].isVisible() {
-		return nil
-	}
-	group := f.sections[section].Group
-	if group == nil || group.Field(field) == nil {
-		return nil
-	}
-	f.currentSection = section
-	group.SetFocusIndex(field)
-	return group.Focus()
-}
-
 // Focus resets navigation to the first visible section and focuses it.
 func (f *MultiSectionForm) Focus() tea.Cmd {
 	f.currentSection = f.firstVisible()
@@ -798,9 +784,8 @@ type fieldLocation struct {
 type DataDrivenStep struct {
 	BaseStep
 
-	definition    *StepDefinition
-	draftFocusKey string
-	fieldKeys     map[string]fieldLocation
+	definition *StepDefinition
+	fieldKeys  map[string]fieldLocation
 
 	form *MultiSectionForm
 
@@ -1062,13 +1047,7 @@ func (s *DataDrivenStep) PinnedFooter(width int) string {
 
 // Init focuses the first input group so the user can type immediately.
 func (s *DataDrivenStep) Init() tea.Cmd {
-	if s.draftFocusKey == "" {
-		return s.form.Init()
-	}
-	loc := s.fieldKeys[s.draftFocusKey]
-	cmd := s.form.FocusField(loc.section, loc.field)
-	s.draftFocusKey = ""
-	return cmd
+	return s.form.Init()
 }
 
 // SetFocused toggles step focus; when re-focused, focus returns to the
@@ -1243,50 +1222,6 @@ func (s *DataDrivenStep) Apply(cfg *config.Config) error {
 		return s.definition.Apply(s, cfg)
 	}
 	return nil
-}
-
-// DraftFieldKey returns the focused field key when it does not identify a credential.
-func (s *DataDrivenStep) DraftFieldKey() string {
-	section := s.form.currentSection
-	group := s.form.currentGroup()
-	if group == nil {
-		return ""
-	}
-	index := group.FocusIndex()
-	for key, loc := range s.fieldKeys {
-		if loc.section == section && loc.field == index && s.draftSafeField(key) {
-			return key
-		}
-	}
-	return ""
-}
-
-// SetDraftFieldKey queues a safe field to focus when this step is resumed.
-func (s *DataDrivenStep) SetDraftFieldKey(fieldKey string) bool {
-	loc, ok := s.fieldKeys[fieldKey]
-	if !ok || !s.draftSafeField(fieldKey) || !s.form.sections[loc.section].isVisible() {
-		return false
-	}
-	s.draftFocusKey = fieldKey
-	return true
-}
-
-func (s *DataDrivenStep) draftSafeField(fieldKey string) bool {
-	lower := strings.ToLower(fieldKey)
-	for _, sensitive := range []string{"password", "secret", "token", "credential", "username"} {
-		if strings.Contains(lower, sensitive) {
-			return false
-		}
-	}
-	for sectionIdx := range s.definition.Sections {
-		for fieldIdx := range s.definition.Sections[sectionIdx].Fields {
-			field := &s.definition.Sections[sectionIdx].Fields[fieldIdx]
-			if field.Key == fieldKey {
-				return field.Type != FieldTypePassword
-			}
-		}
-	}
-	return false
 }
 
 // FocusedSpan reports the line range the focused field occupied in the last
