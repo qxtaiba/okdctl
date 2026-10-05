@@ -9,7 +9,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
-	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
 
@@ -184,23 +183,5 @@ func TestResizeDiskOnlyIsAccepted(t *testing.T) {
 	}
 	if got := ftf.lastVars["master_os_disk_size_gb"]; got != "100" {
 		t.Fatalf("plan vars missing disk size, got %q", got)
-	}
-}
-
-func TestCompactOrdering(t *testing.T) {
-	nodes := []cluster.NodeDetail{
-		{Name: "worker0", Role: nodetypes.RoleWorker},
-		{Name: "worker2", Role: nodetypes.RoleWorker},
-		{Name: "worker1", Role: nodetypes.RoleWorker},
-		{Name: "master0", Role: nodetypes.RoleMaster},
-		{Name: "master1", Role: nodetypes.RoleMaster},
-	}
-	desc := workersByIndexDesc(nodes, logutil.NopLogger)
-	if len(desc) != 3 || desc[0] != "worker2" || desc[2] != "worker0" {
-		t.Fatalf("workers must be removed top-down: %v", desc)
-	}
-	asc := mastersByIndexAsc(nodes, logutil.NopLogger)
-	if len(asc) != 2 || asc[0] != "master0" || asc[1] != "master1" {
-		t.Fatalf("masters must grow low-to-high: %v", asc)
 	}
 }

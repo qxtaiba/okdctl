@@ -174,11 +174,6 @@ func TestClientArgvShapes(t *testing.T) {
 			want: "delete node worker0 --ignore-not-found",
 		},
 		{
-			name: "set masters schedulable",
-			call: func(ctx context.Context, c *Client) error { return c.SetMastersSchedulable(ctx, true) },
-			want: `patch schedulers.config.openshift.io cluster --type=merge -p {"spec":{"mastersSchedulable":true}}`,
-		},
-		{
 			name:   "pods for selector all namespaces",
 			stdout: `{"items":[]}`,
 			call: func(ctx context.Context, c *Client) error {
@@ -221,7 +216,6 @@ func TestClientNonZeroExitWrapsClusterError(t *testing.T) {
 		{"Uncordon", func(ctx context.Context, c *Client) error { return c.Uncordon(ctx, "worker0") }},
 		{"Drain", func(ctx context.Context, c *Client) error { return c.Drain(ctx, "worker0", DrainOptions{}) }},
 		{"DeleteNode", func(ctx context.Context, c *Client) error { return c.DeleteNode(ctx, "worker0") }},
-		{"SetMastersSchedulable", func(ctx context.Context, c *Client) error { return c.SetMastersSchedulable(ctx, false) }},
 		{"ListNodes", func(ctx context.Context, c *Client) error { _, err := c.ListNodes(ctx); return err }},
 		{"PodsForSelector", func(ctx context.Context, c *Client) error { _, err := c.PodsForSelector(ctx, "", ""); return err }},
 		{"Apply", func(ctx context.Context, c *Client) error { return c.Apply(ctx, []byte(`{}`)) }},

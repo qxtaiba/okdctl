@@ -50,9 +50,7 @@ type clusterClient interface {
 	EtcdHealthy(ctx context.Context) (cluster.EtcdHealth, error)
 	CephHealthy(ctx context.Context) (cluster.CephHealth, error)
 	MastersSchedulable(ctx context.Context) (bool, error)
-	SetMastersSchedulable(ctx context.Context, schedulable bool) error
 	PodsForSelector(ctx context.Context, namespace, selector string) ([]cluster.PodPlacement, error)
-	Apply(ctx context.Context, manifest []byte) error
 	ApprovePendingCSRs(ctx context.Context, identities ...cluster.CSRIdentity) (int, error)
 	SignerNotAfter(ctx context.Context) (time.Time, error)
 }
@@ -193,11 +191,6 @@ type Runner struct {
 	// never flow back.
 	OnStep func(target string, step Step)
 
-	// preConsented suppresses the confirm gate for ops composed under a
-	// higher-level consent (compact's inner RemoveWorker/Resize calls); see
-	// Compact.
-	preConsented bool
-
 	NodeReadyTimeout    time.Duration
 	EtcdGateTimeout     time.Duration
 	CephGateTimeout     time.Duration
@@ -271,9 +264,8 @@ func (r *Runner) mark(op Op, target string, step Step) error {
 	return markStep(r.marker(), op, target, step, r.RunID, r.Cfg.Cluster.Name, r.intent)
 }
 
-// startProgress starts r.Reporter for desc unless dry-run (also silences gates
-// ahead of the dry-run branch, e.g. compact's preflight etcd check); nil-safe
-// for direct Runner values.
+// startProgress starts r.Reporter for desc unless dry-run; nil-safe for direct
+// Runner values.
 func (r *Runner) startProgress(desc string) (stop func()) {
 	if r.DryRun {
 		return func() {}

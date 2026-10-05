@@ -85,34 +85,6 @@ func (r *Runner) checkDatastoreCapacity(ctx context.Context, hosts map[string]in
 	return nil
 }
 
-func (r *Runner) projectCompactPlacement(ctx context.Context, workers, masters []string, opts CompactOptions) error {
-	masterHosts, err := r.targetHosts(ctx, nodetypes.RoleMaster, masters, true)
-	if err != nil {
-		return err
-	}
-	workerHosts, err := r.targetHosts(ctx, nodetypes.RoleWorker, workers, true)
-	if err != nil {
-		return err
-	}
-	if opts.GrowMasterMemoryMB <= 0 {
-		return nil
-	}
-	if r.Capacity == nil {
-		for host := range workerHosts {
-			if _, ok := masterHosts[host]; !ok {
-				masterHosts[host] = 0
-			}
-		}
-		if len(masterHosts) > 1 {
-			return &errtypes.ConfigError{Msg: "multi-host compaction requires a capacity probe for each destination"}
-		}
-		return r.projectCompactMemory(len(workers), len(masters), opts)
-	}
-	// Reserve all master growth up front; worker removal on another host frees no local memory.
-	delta := max(0, opts.GrowMasterMemoryMB-r.Cfg.Topology.ControlPlane.MemoryMB)
-	return r.checkPlacementCapacity(ctx, masterHosts, delta, 0)
-}
-
 func (r *Runner) checkAddCapacity(ctx context.Context, hosts map[string]int) error {
 	px := r.Cfg.Provider.Proxmox
 	osDisk, dataDisk := r.Cfg.Topology.Workers.DiskGB, r.Cfg.Disks.WorkerDataSizeGB

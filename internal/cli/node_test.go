@@ -144,12 +144,11 @@ func TestNodeConfirmHookYesPrintsBoxSkipsGate(t *testing.T) {
 // downgrade the gate because every site consults this map.
 func TestDestroyGradeVerbPolicy(t *testing.T) {
 	want := map[string]bool{
-		"remove":  true,
-		"compact": true,
-		"resize":  false,
-		"add":     false,
-		"stop":    false,
-		"start":   false,
+		"remove": true,
+		"resize": false,
+		"add":    false,
+		"stop":   false,
+		"start":  false,
 	}
 	for verb, exp := range want {
 		if got := destroyGradeVerbs[verb]; got != exp {
@@ -163,7 +162,7 @@ func TestDestroyGradeVerbPolicy(t *testing.T) {
 // "y" cannot satisfy the typed-cluster-name stage the destroy-grade gate
 // puts ahead of the y/N prompt.
 func TestDestroyGradeVerbsDenyBareYes(t *testing.T) {
-	for _, verb := range []string{"remove", "compact"} {
+	for _, verb := range []string{"remove"} {
 		t.Run(verb, func(t *testing.T) {
 			if !destroyGradeVerbs[verb] {
 				t.Fatalf("%s must be a destroy-grade verb for this test to be meaningful", verb)

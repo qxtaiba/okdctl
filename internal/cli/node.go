@@ -197,8 +197,7 @@ type nodeConsent struct {
 // destroy-grade gate, so a downgrade can't happen via an inline literal at a
 // RunE call site.
 var destroyGradeVerbs = map[string]bool{
-	"remove":  true,
-	"compact": true,
+	"remove": true,
 }
 
 // nodeRunnerCtx bundles disposable node-op resources so RunE can defer a

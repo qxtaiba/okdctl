@@ -1,8 +1,11 @@
 package node
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
@@ -41,8 +44,8 @@ func (r *Runner) Stop(ctx context.Context, opts StopOptions) error {
 	if err != nil {
 		return &errtypes.ClusterError{Msg: msgListNodes, Err: err}
 	}
-	workers := namesByIndex(nodes, nodetypes.RoleWorker, true, r.Log)
-	masters := mastersByIndexAsc(nodes, r.Log)
+	workers := namesByIndex(nodes, nodetypes.RoleWorker, r.Log)
+	masters := namesByIndex(nodes, nodetypes.RoleMaster, r.Log)
 
 	if _, err := r.targetHosts(ctx, nodetypes.RoleWorker, workers, true); err != nil {
 		return err
@@ -85,6 +88,34 @@ func (r *Runner) Stop(ctx context.Context, opts StopOptions) error {
 	}
 	r.Log.Info("node: cluster stopped", "workers", len(workers), "masters", len(masters))
 	return nil
+}
+
+// namesByIndex returns role's node names in ascending index order, dropping
+// (with a warning each) nodes whose name has no numeric suffix to order by.
+func namesByIndex(nodes []cluster.NodeDetail, role nodetypes.NodeRole, log *slog.Logger) []string {
+	type ni struct {
+		name string
+		idx  int
+	}
+	var items []ni
+	for i := range nodes {
+		n := &nodes[i]
+		if n.Role != role {
+			continue
+		}
+		idx, ok := cluster.NodeIndex(n.Name)
+		if !ok {
+			log.Warn("node: skipping node with no numeric suffix", "node", n.Name, "role", string(role))
+			continue
+		}
+		items = append(items, ni{name: n.Name, idx: idx})
+	}
+	slices.SortFunc(items, func(a, b ni) int { return cmp.Compare(a.idx, b.idx) })
+	names := make([]string, len(items))
+	for i, it := range items {
+		names[i] = it.name
+	}
+	return names
 }
 
 // clusterPowerPlan builds the read-only plan shared by stop/start (PlanActionNoop

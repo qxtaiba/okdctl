@@ -2,7 +2,6 @@ package node
 
 import (
 	"fmt"
-	"slices"
 
 	"github.com/qxtaiba/okdctl/internal/cluster"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
@@ -118,10 +117,9 @@ func strandedMarkerMsg(m *OpMarker) string {
 	return msg
 }
 
-// refuseForeignMarker refuses (unless ack) any marker for an op the caller
-// doesn't compose. compact passes allowResumable=OpRemove,OpResize since its
-// own inner marker is indistinguishable from its in-flight call (see Compact).
-func (r *Runner) refuseForeignMarker(ack bool, allowResumable ...Op) error {
+// refuseForeignMarker refuses (unless ack) any recorded marker, for ops that
+// never resume one.
+func (r *Runner) refuseForeignMarker(ack bool) error {
 	marker, err := ReadOpMarker(r.workDir, r.Cfg.Cluster.Name)
 	if err != nil {
 		if !ack {
@@ -133,7 +131,7 @@ func (r *Runner) refuseForeignMarker(ack bool, allowResumable ...Op) error {
 		}
 		return nil
 	}
-	if marker == nil || slices.Contains(allowResumable, marker.Op) {
+	if marker == nil {
 		return nil
 	}
 	if r.sweepCompletedAddMarker(marker) {

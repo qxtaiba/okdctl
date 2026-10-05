@@ -10,7 +10,7 @@ Addon installation distinguishes validation from attempted mutation. A failed pa
 
 Per-role placement lists use Terraform's node index ordering and fall back to the default node for missing entries. Existing VM power and snapshot operations resolve current ownership from the Proxmox cluster inventory, including after HA migration. Unknown or ambiguous ownership fails before disruption.
 
-Day-2 capacity checks query each destination host and the relevant OS/data datastore. Same-store disk demand is combined; a shared datastore must fit the total demand across destination hosts. Compaction reserves requested master growth before removing workers; it does not count memory freed on another host. These are observations, not reservations against concurrent external allocation.
+Day-2 capacity checks query each destination host and the relevant OS/data datastore. Same-store disk demand is combined; a shared datastore must fit the total demand across destination hosts. These are observations, not reservations against concurrent external allocation.
 
 Multi-host provisioning requires NFS, CIFS or CephFS ISO storage with ISO content enabled and active on every selected node. Upload uses SSH argv mode and the configured fingerprint policy, resolves the real storage path, and checks required volumes from every destination. A directory's `shared` flag alone does not establish this contract. Unsupported layouts fail before provisioning; no automatic per-host ISO replication is performed.
 

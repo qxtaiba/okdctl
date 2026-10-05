@@ -92,30 +92,6 @@ func storageGuardVerdict(node string, osds []string, force bool, log *slog.Logge
 	)}
 }
 
-// projectCompactPeakMiB simulates compact's remove-then-grow sequence and
-// returns peak host memory; growTargetMiB==0 models a grow-free compact.
-func projectCompactPeakMiB(allocatedMiB, workerMiB, masterCurMiB, growTargetMiB, numWorkers, numMasters int) int {
-	masterDelta := 0
-	if growTargetMiB > 0 {
-		masterDelta = growTargetMiB - masterCurMiB
-	}
-	peak := allocatedMiB
-	grows := 0
-	for range numWorkers {
-		allocatedMiB -= workerMiB
-		if growTargetMiB > 0 && grows < numMasters {
-			allocatedMiB += masterDelta
-			grows++
-		}
-		peak = max(peak, allocatedMiB)
-	}
-	for ; growTargetMiB > 0 && grows < numMasters; grows++ {
-		allocatedMiB += masterDelta
-		peak = max(peak, allocatedMiB)
-	}
-	return peak
-}
-
 // ingressPodsOnWorkers returns router pods on any worker; non-empty with an
 // unschedulable control plane means draining would strand ingress.
 func ingressPodsOnWorkers(routerPods []cluster.PodPlacement, workers map[string]bool) []cluster.PodPlacement {

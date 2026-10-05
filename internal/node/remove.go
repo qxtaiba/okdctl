@@ -128,8 +128,8 @@ func (r *Runner) RemoveWorker(ctx context.Context, target string, opts RemoveOpt
 		return err
 	}
 
-	// Destroying an OSD's disk triggers a rebalance; wait for Ceph health so a
-	// compact loop never drains mid-recovery.
+	// Destroying an OSD's disk triggers a rebalance; wait for Ceph health so
+	// the next removal never drains mid-recovery.
 	if err := r.waitCephHealthy(ctx, "post-remove-"+target); err != nil {
 		return err
 	}
@@ -209,7 +209,7 @@ func (r *Runner) checkIngressGuard(ctx context.Context, nodes []cluster.NodeDeta
 		return nil
 	}
 	return &errtypes.ConfigError{Msg: fmt.Sprintf(
-		"router pods run on worker nodes (%s) and the control plane is not schedulable; draining %s would leave ingress nowhere to reschedule. Set mastersSchedulable=true and apply the compact IngressController first (see 'okdctl cluster compact'), or move ingress off workers.",
+		"router pods run on worker nodes (%s) and the control plane is not schedulable; draining %s would leave ingress nowhere to reschedule. Set mastersSchedulable=true and schedule the IngressController onto the control plane first, or move ingress off workers.",
 		joinPodNames(onWorkers), target,
 	)}
 }

@@ -18,8 +18,6 @@ type confirmSnapshot struct {
 	cordon     int
 	drain      int
 	deleteNode int
-	setSched   int
-	applied    int
 	tfApply    int
 }
 
@@ -71,50 +69,6 @@ func TestRemoveConfirmRunsAfterGuardsBeforeMutation(t *testing.T) {
 	if fc.cordon != 0 || fc.drain != 0 || fc.deleteNode != 0 || ftf.applyCalls != 0 {
 		t.Errorf("declined remove mutated: cordon=%d drain=%d delete=%d apply=%d",
 			fc.cordon, fc.drain, fc.deleteNode, ftf.applyCalls)
-	}
-}
-
-func TestCompactConfirmRunsAfterPreflightBeforeControlPlane(t *testing.T) {
-	fc := &fakeCluster{
-		nodes:       compactNodes(),
-		schedulable: true,
-		etcdHealthy: true,
-	}
-	ftf := &fakeTF{action: terraform.PlanActionDelete}
-	cfg := config.DefaultConfig()
-	cfg.Topology.Workers.Count = 2
-
-	r, _, _ := seedRunner(t, fc, ftf, cfg)
-	r.DryRun = false
-	r.Power = &fakePower{}
-
-	var snap confirmSnapshot
-	r.Confirm = func(_ context.Context, plan *OpPlan) (bool, error) {
-		snap.fired = true
-		snap.plan = *plan
-		snap.setSched, snap.applied = fc.setSched, fc.applied
-		snap.deleteNode = fc.deleteNode
-		snap.tfApply = ftf.applyCalls
-		return false, nil
-	}
-
-	if err := r.Compact(context.Background(), CompactOptions{IngressReplicas: 2}); !errors.Is(err, ErrDeclined) {
-		t.Fatalf("declined compact should return ErrDeclined: %v", err)
-	}
-
-	if !snap.fired {
-		t.Fatal("confirm hook never fired")
-	}
-	if len(snap.plan.Nodes) != 2 {
-		t.Errorf("compact plan should carry both workers; got %d", len(snap.plan.Nodes))
-	}
-	if snap.setSched != 0 || snap.applied != 0 || snap.deleteNode != 0 {
-		t.Errorf("control plane mutated before confirm: setSched=%d applied=%d delete=%d",
-			snap.setSched, snap.applied, snap.deleteNode)
-	}
-	if fc.setSched != 0 || fc.applied != 0 || fc.deleteNode != 0 {
-		t.Errorf("declined compact mutated the control plane: setSched=%d applied=%d delete=%d",
-			fc.setSched, fc.applied, fc.deleteNode)
 	}
 }
 
@@ -231,48 +185,5 @@ func TestClusterPowerConfirmGate(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestCompactConsentFiresExactlyOnceThroughLoop(t *testing.T) {
-	fc := &fakeCluster{
-		nodes:       compactNodes(),
-		schedulable: true,
-		etcdHealthy: true,
-	}
-	ftf := &fakeTF{action: terraform.PlanActionDelete}
-	cfg := config.DefaultConfig()
-	cfg.Topology.Workers.Count = 2
-
-	r, _, _ := seedRunner(t, fc, ftf, cfg)
-	r.DryRun = false
-	r.Power = &fakePower{}
-
-	var fires int
-	var lastPlan OpPlan
-	r.Confirm = func(_ context.Context, plan *OpPlan) (bool, error) {
-		fires++
-		lastPlan = *plan
-		return true, nil
-	}
-
-	if err := r.Compact(context.Background(), CompactOptions{IngressReplicas: 2}); err != nil {
-		t.Fatalf("approved compact should complete: %v", err)
-	}
-
-	if fires != 1 {
-		t.Errorf("consent gate fired %d time(s); want exactly 1 for the whole compact", fires)
-	}
-	if lastPlan.Op != OpCompact {
-		t.Errorf("completion box would render %q plan, want the compact plan", lastPlan.Op)
-	}
-	if len(lastPlan.Nodes) != 2 {
-		t.Errorf("compact plan should carry both workers; got %d", len(lastPlan.Nodes))
-	}
-	if fc.deleteNode != 2 {
-		t.Errorf("both workers should be removed; deleteNode=%d", fc.deleteNode)
-	}
-	if fc.setSched != 1 || fc.applied != 1 {
-		t.Errorf("control plane enabled once; setSched=%d applied=%d", fc.setSched, fc.applied)
 	}
 }

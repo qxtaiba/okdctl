@@ -144,9 +144,6 @@ func nodeOpDetails(sb *Builder, plan *node.OpPlan) {
 		}
 		sb.KV("disruption", ResizeDisruption(plan.ResizeMode))
 	}
-	if plan.GrowMasterMemoryMB > 0 {
-		sb.KV("grow masters to", fmt.Sprintf("%d MiB", plan.GrowMasterMemoryMB))
-	}
 	if plan.Op == node.OpAdd {
 		sb.KV("ignition server", "revived for the join window, then torn down")
 	}
@@ -207,7 +204,7 @@ func NodeOpNextSteps(plan *node.OpPlan) []string {
 			"  /etc/haproxy/haproxy.cfg, validate with 'haproxy -c -f ...', then restart it",
 			"verify the new node(s) joined with 'okdctl node list' or 'okdctl status'",
 		}
-	case node.OpRemove, node.OpCompact:
+	case node.OpRemove:
 		return []string{
 			"if haproxy fronts this cluster, drop the removed worker 'server' lines from",
 			"  /etc/haproxy/haproxy.cfg, validate with 'haproxy -c -f ...', then restart it",
@@ -273,8 +270,6 @@ func opHeadline(op node.Op) string {
 		return "confirm node add"
 	case node.OpRemove:
 		return "confirm worker removal"
-	case node.OpCompact:
-		return "confirm cluster compaction"
 	case node.OpResize:
 		return "confirm node resize"
 	case node.OpStop:
@@ -292,8 +287,6 @@ func opTitle(op node.Op) string {
 		return "node add"
 	case node.OpRemove:
 		return "node remove"
-	case node.OpCompact:
-		return "cluster compact"
 	case node.OpResize:
 		return "node resize"
 	case node.OpStop:
@@ -311,8 +304,6 @@ func opComplete(op node.Op) string {
 		return "worker(s) added"
 	case node.OpRemove:
 		return "worker removed"
-	case node.OpCompact:
-		return "cluster compacted"
 	case node.OpResize:
 		return "resize complete"
 	case node.OpStop:

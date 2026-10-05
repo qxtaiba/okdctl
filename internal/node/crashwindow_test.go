@@ -262,40 +262,6 @@ func TestNodeCommandRefusesForeignMarkerWithoutAcknowledgment(t *testing.T) {
 	}
 }
 
-func TestCompactRefusesGenuinelyForeignMarkerBeforeControlPlaneMutation(t *testing.T) {
-	fc := &fakeCluster{
-		nodes: []cluster.NodeDetail{
-			{Name: "worker0", Role: nodetypes.RoleWorker},
-			{Name: "master0", Role: nodetypes.RoleMaster},
-		},
-		schedulable: true,
-		etcdHealthy: true,
-	}
-	ftf := &fakeTF{action: terraform.PlanActionDelete}
-	cfg := config.DefaultConfig()
-	cfg.Topology.Workers.Count = 1
-
-	r, _, _ := seedRunner(t, fc, ftf, cfg)
-	r.DryRun = false
-	seedMarker(t, r, Op("stop"), "master0", StepDrain)
-
-	err := r.Compact(context.Background(), CompactOptions{IngressReplicas: 2, Acknowledge: false})
-	var cfgErr *errtypes.ConfigError
-	if !errors.As(err, &cfgErr) {
-		t.Fatalf("want *errtypes.ConfigError refusing the foreign marker, got %v", err)
-	}
-	if !strings.Contains(cfgErr.Error(), "stop") {
-		t.Errorf("refusal must name the stranded op: %q", cfgErr.Error())
-	}
-	if fc.setSched != 0 || fc.applied != 0 {
-		t.Errorf("foreign-marker refusal must not touch the control plane: setSched=%d applied=%d", fc.setSched, fc.applied)
-	}
-	if fc.cordon != 0 || fc.drain != 0 || fc.deleteNode != 0 || ftf.applyCalls != 0 {
-		t.Errorf("foreign-marker refusal must make zero mutation: cordon=%d drain=%d delete=%d apply=%d",
-			fc.cordon, fc.drain, fc.deleteNode, ftf.applyCalls)
-	}
-}
-
 func TestDryRunPreviewsPastForeignMarker(t *testing.T) {
 	t.Run("remove", func(t *testing.T) {
 		fc := &fakeCluster{
@@ -319,29 +285,6 @@ func TestDryRunPreviewsPastForeignMarker(t *testing.T) {
 		if fc.cordon != 0 || fc.drain != 0 || fc.deleteNode != 0 || ftf.applyCalls != 0 {
 			t.Errorf("dry-run must make zero mutation: cordon=%d drain=%d delete=%d apply=%d",
 				fc.cordon, fc.drain, fc.deleteNode, ftf.applyCalls)
-		}
-	})
-
-	t.Run("compact", func(t *testing.T) {
-		fc := &fakeCluster{
-			nodes: []cluster.NodeDetail{
-				{Name: "worker0", Role: nodetypes.RoleWorker},
-				{Name: "master0", Role: nodetypes.RoleMaster},
-			},
-			schedulable: true, etcdHealthy: true,
-		}
-		ftf := &fakeTF{action: terraform.PlanActionDelete}
-		cfg := config.DefaultConfig()
-		cfg.Topology.Workers.Count = 1
-		r, _, _ := seedRunner(t, fc, ftf, cfg)             // DryRun defaults true
-		seedMarker(t, r, Op("stop"), "master0", StepDrain) // genuinely foreign, yet previews under dry-run
-
-		if err := r.Compact(context.Background(), CompactOptions{IngressReplicas: 2}); err != nil {
-			t.Fatalf("dry-run compact past foreign marker must preview, not refuse: %v", err)
-		}
-		if fc.setSched != 0 || fc.applied != 0 || fc.deleteNode != 0 || ftf.applyCalls != 0 {
-			t.Errorf("dry-run compact must make zero mutation: setSched=%d applied=%d delete=%d apply=%d",
-				fc.setSched, fc.applied, fc.deleteNode, ftf.applyCalls)
 		}
 	})
 

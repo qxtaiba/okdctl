@@ -479,10 +479,9 @@ func (r *Runner) resizeOneNode(ctx context.Context, t resizeTarget, role nodetyp
 				return err
 			}
 
-			// A worker (or a compacted master) may host OSDs; the power-cycle took
+			// A worker (or a schedulable master) may host OSDs; the power-cycle took
 			// them down and triggered a rebalance. Wait for structural Ceph health
-			// before the op returns so a compact loop never drains the next node
-			// mid-recovery.
+			// before the op returns so the next node is never drained mid-recovery.
 			return r.waitCephHealthy(ctx, "post-"+t.name)
 		}); err != nil {
 			return err

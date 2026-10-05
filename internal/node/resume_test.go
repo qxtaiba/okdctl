@@ -116,7 +116,7 @@ func TestRefuseForeignMarkerNoMarkerRunsFresh(t *testing.T) {
 	}
 }
 
-func TestRefuseForeignMarkerAnyMarkerRefusedWithoutAllowlist(t *testing.T) {
+func TestRefuseForeignMarkerAnyMarkerRefused(t *testing.T) {
 	r, _, _ := seedRunner(t, &fakeCluster{}, &fakeTF{}, config.DefaultConfig())
 	seedMarker(t, r, OpRemove, testWorkerNode, StepDrain)
 
@@ -124,16 +124,6 @@ func TestRefuseForeignMarkerAnyMarkerRefusedWithoutAllowlist(t *testing.T) {
 	var cfgErr *errtypes.ConfigError
 	if !errors.As(err, &cfgErr) {
 		t.Fatalf("want *errtypes.ConfigError, got %v", err)
-	}
-}
-
-// proves allowResumable is the same composition seam compact uses, not a special case.
-func TestRefuseForeignMarkerAllowsListedOps(t *testing.T) {
-	r, _, _ := seedRunner(t, &fakeCluster{}, &fakeTF{}, config.DefaultConfig())
-	seedMarker(t, r, OpResize, testMasterNode, StepPowerCycle)
-
-	if err := r.refuseForeignMarker(false, OpRemove, OpResize); err != nil {
-		t.Errorf("marker's op is in allowResumable, must not refuse: %v", err)
 	}
 }
 
