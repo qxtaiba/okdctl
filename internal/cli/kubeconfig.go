@@ -1,14 +1,10 @@
 package cli
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
-	"sigs.k8s.io/yaml"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
@@ -16,26 +12,20 @@ import (
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
-var (
-	kubeconfigOutput string
-	kubeconfigMerge  bool
-)
+var kubeconfigOutput string
 
 var kubeconfigCmd = &cobra.Command{
 	Use:   "kubeconfig",
 	Short: "Print or export the cluster kubeconfig",
-	Long: `Print the cluster kubeconfig to stdout, write it to a file,
-or merge it into an existing kubeconfig.`,
+	Long:  "Print the cluster kubeconfig to stdout or write it to a file.",
 	Example: `  okdctl kubeconfig                       # print to stdout
-  okdctl kubeconfig --output-file ~/.kube/okd.cfg    # write to file
-  okdctl kubeconfig --merge               # merge into $KUBECONFIG`,
+  okdctl kubeconfig --output-file ~/.kube/okd.cfg    # write to file`,
 	Args: cobra.NoArgs,
 	RunE: runKubeconfig,
 }
 
 func init() {
 	kubeconfigCmd.Flags().StringVar(&kubeconfigOutput, flagOutputFile, "-", "write kubeconfig to file, overwriting it if present ('-' for stdout)")
-	kubeconfigCmd.Flags().BoolVar(&kubeconfigMerge, "merge", false, "merge into $KUBECONFIG or ~/.kube/config (non-destructive: existing entries preserved)")
 	rootCmd.AddCommand(kubeconfigCmd)
 }
 
@@ -61,10 +51,6 @@ func runKubeconfig(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("read kubeconfig: %w", err)
 	}
 
-	if kubeconfigMerge {
-		return mergeKubeconfig(data)
-	}
-
 	if kubeconfigOutput == "" || kubeconfigOutput == "-" {
 		_, err = cmd.OutOrStdout().Write(data)
 		return err
@@ -78,133 +64,4 @@ func runKubeconfig(cmd *cobra.Command, _ []string) error {
 	}
 	logutil.Info("kubeconfig written", logutil.LF("path", kubeconfigOutput))
 	return nil
-}
-
-// mergeKubeconfig merges by name into $KUBECONFIG (or ~/.kube/config) without
-// overwriting existing entries; current-context is set from src only if unset.
-func mergeKubeconfig(srcData []byte) error {
-	dest := mergeTargetPath()
-
-	var srcMap map[string]any
-	if err := yaml.Unmarshal(srcData, &srcMap); err != nil {
-		return fmt.Errorf("parse source kubeconfig: %w", err)
-	}
-
-	var destMap map[string]any
-	if system.FileExists(dest) {
-		raw, err := os.ReadFile(dest)
-		if err != nil {
-			return fmt.Errorf("read destination kubeconfig %s: %w", dest, err)
-		}
-		if err := yaml.Unmarshal(raw, &destMap); err != nil {
-			return fmt.Errorf("parse destination kubeconfig %s: %w", dest, err)
-		}
-	}
-	if destMap == nil {
-		destMap = map[string]any{}
-	}
-
-	for _, key := range []string{"clusters", "users", "contexts"} {
-		merged := mergeNamedList(toKubeEntries(destMap[key]), toKubeEntries(srcMap[key]))
-		destMap[key] = fromKubeEntries(merged)
-	}
-
-	if cc, ok := srcMap["current-context"]; ok {
-		if existing, _ := destMap["current-context"].(string); existing == "" {
-			destMap["current-context"] = cc
-		}
-	}
-
-	out, err := yaml.Marshal(destMap)
-	if err != nil {
-		return fmt.Errorf("marshal merged kubeconfig: %w", err)
-	}
-
-	if err := system.EnsureDirForFile(dest); err != nil {
-		return fmt.Errorf("create .kube directory: %w", err)
-	}
-	if err := system.AtomicWrite(dest, out, 0o600); err != nil {
-		return fmt.Errorf("write merged kubeconfig: %w", err)
-	}
-	logutil.Info("kubeconfig merged", logutil.LF("path", dest))
-	return nil
-}
-
-func mergeTargetPath() string {
-	if kc := os.Getenv("KUBECONFIG"); kc != "" {
-		if first, _, found := strings.Cut(kc, string(filepath.ListSeparator)); found {
-			return first
-		}
-		return kc
-	}
-	home, err := system.InvokingUserHomeDir()
-	if err != nil {
-		home, _ = os.UserHomeDir()
-	}
-	return filepath.Join(home, ".kube", "config")
-}
-
-// kubeEntry is one element of a kubeconfig named list; RawMessage values
-// preserve all fields (incl. unknown keys) through marshal→merge→marshal.
-type kubeEntry = map[string]json.RawMessage
-
-// toKubeEntries converts sigs.k8s.io/yaml's raw []any into a typed slice via a
-// JSON round-trip so each field is captured verbatim.
-func toKubeEntries(v any) []kubeEntry {
-	if v == nil {
-		return nil
-	}
-	b, err := json.Marshal(v)
-	if err != nil {
-		return nil
-	}
-	var entries []kubeEntry
-	if err := json.Unmarshal(b, &entries); err != nil {
-		return nil
-	}
-	return entries
-}
-
-// fromKubeEntries converts a typed slice back to []any for marshalling by sigs.k8s.io/yaml.
-func fromKubeEntries(entries []kubeEntry) any {
-	if entries == nil {
-		return nil
-	}
-	b, err := json.Marshal(entries)
-	if err != nil {
-		return entries
-	}
-	var out []any
-	if err := json.Unmarshal(b, &out); err != nil {
-		return entries
-	}
-	return out
-}
-
-func namedEntries(items []kubeEntry) map[string]struct{} {
-	result := make(map[string]struct{}, len(items))
-	for _, item := range items {
-		var name string
-		if raw, ok := item["name"]; ok && json.Unmarshal(raw, &name) == nil {
-			result[name] = struct{}{}
-		}
-	}
-	return result
-}
-
-// mergeNamedList appends src entries into dest, skipping names already present in dest.
-func mergeNamedList(dest, src []kubeEntry) []kubeEntry {
-	if len(src) == 0 {
-		return dest
-	}
-	existing := namedEntries(dest)
-	for _, item := range src {
-		var name string
-		if raw, ok := item["name"]; ok && json.Unmarshal(raw, &name) == nil {
-			if _, exists := existing[name]; !exists {
-				dest = append(dest, item)
-			}
-		}
-	}
-	return dest
 }
