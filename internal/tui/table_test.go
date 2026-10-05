@@ -51,6 +51,18 @@ func TestTruncateRuneSafe(t *testing.T) {
 	}
 }
 
+func TestTruncateFoldsInvalidUTF8(t *testing.T) {
+	if got, want := Truncate("abc\xffdef\xfeghi", 5), "abc�…"; got != want {
+		t.Errorf("Truncate = %q, want %q", got, want)
+	}
+}
+
+func TestTruncateKeepsEscapeSequencesWhole(t *testing.T) {
+	if got, want := Truncate("\x1b[1;31mred bold text\x1b[0m", 8), "\x1b[1;31mred bol…\x1b[0m"; got != want {
+		t.Errorf("Truncate = %q, want %q", got, want)
+	}
+}
+
 func TestTableRowStylePaintsSelectedRow(t *testing.T) {
 	lines := Table(
 		[]string{"NAME", "READY"},

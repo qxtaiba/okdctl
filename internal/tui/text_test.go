@@ -56,6 +56,20 @@ func TestTruncateMiddleIsRuneSafe(t *testing.T) {
 	})
 }
 
+func TestTruncateMiddleDropsAWideCellStraddlingTheTailCut(t *testing.T) {
+	input := "abcdefghij" + strings.Repeat("中", 15) + "tail"
+
+	if got, want := truncateMiddle(input, 19), "abcdefghi…中中tail"; got != want {
+		t.Errorf("truncateMiddle = %q, want %q", got, want)
+	}
+}
+
+func TestTruncateMiddleFoldsInvalidUTF8(t *testing.T) {
+	if got, want := truncateMiddle("abc\xffdef\xfeghi", 8), "abc…�ghi"; got != want {
+		t.Errorf("truncateMiddle = %q, want %q", got, want)
+	}
+}
+
 func TestPromptLine(t *testing.T) {
 	got := PromptLine("proceed with destroy? [y/N]")
 	if !strings.Contains(got, IconPointer) {
