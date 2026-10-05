@@ -19,6 +19,7 @@ func TestResourceSummaryRebindsOnPolarityFlip(t *testing.T) {
 	t.Cleanup(func() { tui.SetDarkBackground(true) })
 
 	step, state := NewResourcesStep(nil)
+	state.Cfg = config.DefaultConfig()
 	tui.SetDarkBackground(false)
 
 	out := renderResourceFooter(step, state, 120)

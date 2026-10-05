@@ -623,8 +623,7 @@ func (s *ReviewStep) renderCompute(st *wizard.SectionStyles, width int) string {
 	var b strings.Builder
 	b.WriteString(s.renderComputeSpecs(&fitted))
 
-	inputs := EffectiveResourceInputsFromConfig(s.cfg)
-	totals := ComputeEffectiveResourceTotals(&inputs)
+	totals := ComputeEffectiveResourceTotals(&s.cfg.Topology, &s.cfg.Disks)
 	totalMemGB := totals.MemoryMB / 1024
 
 	b.WriteString(fitted.Separator)

@@ -147,6 +147,11 @@ func buildWizardStepsWithState(wizardCfg wizard.Config) (wizard.BuiltSteps, erro
 		if os.Getenv(wizardDemoEnv) == "" {
 			initializeStepsFromConfig(built, wizardCfg.InitialConfig, wizardCfg.ConfigExists)
 		}
+		// Demo mode skips seeding the fields but still edits this config, so
+		// the resources totals read it in every mode, as the review does.
+		if state, ok := built.States[wizard.StepTypeResources].(*steps.ResourcesStepState); ok {
+			state.Cfg = wizardCfg.InitialConfig
+		}
 		configureReviewStep(built, wizardCfg.InitialConfig, wizardCfg.ConfigExists)
 	}
 
@@ -249,9 +254,5 @@ func initializeStepsFromConfig(built wizard.BuiltSteps, cfg *config.Config, conf
 		if ds, ok := step.(*wizard.DataDrivenStep); ok {
 			ds.LoadFromConfig(cfg, configExists)
 		}
-	}
-
-	if state, ok := built.States[wizard.StepTypeResources].(*steps.ResourcesStepState); ok {
-		state.Cfg = cfg
 	}
 }

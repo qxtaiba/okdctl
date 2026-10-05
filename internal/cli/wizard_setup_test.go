@@ -1,10 +1,13 @@
 package cli
 
 import (
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/steps"
 )
@@ -84,6 +87,44 @@ func TestWizardAssemblySeedsConfiguredOrder(t *testing.T) {
 	state, ok := built.States[wizard.StepTypeResources].(*steps.ResourcesStepState)
 	if !ok || state.Cfg != cfg {
 		t.Fatal("resource preview lost seeded config")
+	}
+}
+
+func TestWizardAssemblyResourcesAndReviewTotalsAgree(t *testing.T) {
+	totals := regexp.MustCompile(`(\d+) vcpu\D+(\d+) gb ram\D+(\d+) gb disk`)
+	for _, tc := range []struct{ name, demo string }{{"interactive", ""}, {"demo mode", "1"}} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(wizardDemoEnv, tc.demo)
+			cfg := config.DefaultConfig()
+			cfg.Topology.Bootstrap = config.NodeConfig{}
+			spec := wizard.DefaultConfig()
+			spec.InitialConfig = cfg
+			spec.ConfigExists = true
+			built, err := buildWizardStepsWithState(spec)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			var footer, review string
+			for _, step := range built.Steps {
+				switch s := step.(type) {
+				case *wizard.DataDrivenStep:
+					if s.ID() == wizard.StepIDResources {
+						footer = tuitest.StripANSI(s.PinnedFooter(120))
+					}
+				case *steps.ReviewStep:
+					review = tuitest.StripANSI(s.View(120, 100))
+				}
+			}
+
+			got, want := totals.FindStringSubmatch(footer), totals.FindStringSubmatch(review)
+			if got == nil || want == nil {
+				t.Fatalf("totals missing: resources footer %q, review:\n%s", footer, review)
+			}
+			if !slices.Equal(got[1:], want[1:]) {
+				t.Errorf("resources footer totals %v, review totals %v (vcpu, gb ram, gb disk)", got[1:], want[1:])
+			}
+		})
 	}
 }
 
