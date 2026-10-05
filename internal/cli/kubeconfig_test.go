@@ -2,272 +2,15 @@ package cli
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
-	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/workspace"
 	"github.com/spf13/cobra"
-	"sigs.k8s.io/yaml"
 )
-
-func TestMergeNamedList(t *testing.T) {
-	mk := func(kv ...string) kubeEntry {
-		e := kubeEntry{}
-		for i := 0; i+1 < len(kv); i += 2 {
-			b, _ := json.Marshal(kv[i+1])
-			e[kv[i]] = b
-		}
-		return e
-	}
-	entryName := func(e kubeEntry) string {
-		var s string
-		_ = json.Unmarshal(e["name"], &s)
-		return s
-	}
-
-	t.Run("nil src returns dest unchanged", func(t *testing.T) {
-		dest := []kubeEntry{mk("name", "a")}
-		got := mergeNamedList(dest, nil)
-		if len(got) != 1 || entryName(got[0]) != "a" {
-			t.Errorf("got %v, want one entry 'a'", got)
-		}
-	})
-
-	t.Run("src entry with same name is NOT appended (no-clobber)", func(t *testing.T) {
-		dest := []kubeEntry{mk("name", "prod")}
-		src := []kubeEntry{mk("name", "prod")}
-		got := mergeNamedList(dest, src)
-		if len(got) != 1 {
-			t.Fatalf("len = %d, want 1 (src must be dropped)", len(got))
-		}
-		if entryName(got[0]) != "prod" {
-			t.Errorf("existing entry lost: %v", got[0])
-		}
-	})
-
-	t.Run("mix: one collides, one does not", func(t *testing.T) {
-		dest := []kubeEntry{mk("name", "prod")}
-		src := []kubeEntry{mk("name", "prod"), mk("name", "staging")}
-		got := mergeNamedList(dest, src)
-		if len(got) != 2 {
-			t.Fatalf("len = %d, want 2", len(got))
-		}
-		names := []string{entryName(got[0]), entryName(got[1])}
-		want := []string{"prod", "staging"}
-		if !reflect.DeepEqual(names, want) {
-			t.Errorf("names = %v, want %v", names, want)
-		}
-	})
-
-	t.Run("entries without a name key are skipped silently", func(t *testing.T) {
-		noName := kubeEntry{"cluster": json.RawMessage(`"no-name-key"`)}
-		dest := []kubeEntry{}
-		src := []kubeEntry{mk("name", "good"), noName}
-		got := mergeNamedList(dest, src)
-		if len(got) != 1 {
-			t.Errorf("len = %d, want 1 (only named entry survives)", len(got))
-		}
-	})
-}
-
-// mergeIntoTemp: an empty destYAML leaves dest absent (no pre-existing kubeconfig).
-func mergeIntoTemp(t *testing.T, destYAML string, src []byte) (merged map[string]any, dest string) {
-	t.Helper()
-	dest = filepath.Join(t.TempDir(), "config")
-	if destYAML != "" {
-		if err := os.WriteFile(dest, []byte(destYAML), 0o600); err != nil {
-			t.Fatalf("seed dest kubeconfig: %v", err)
-		}
-	}
-	t.Setenv("KUBECONFIG", dest)
-	if err := mergeKubeconfig(src); err != nil {
-		t.Fatalf("mergeKubeconfig: %v", err)
-	}
-	raw, err := os.ReadFile(dest)
-	if err != nil {
-		t.Fatalf("read merged dest: %v", err)
-	}
-	if err := yaml.Unmarshal(raw, &merged); err != nil {
-		t.Fatalf("parse merged kubeconfig: %v", err)
-	}
-	return merged, dest
-}
-
-func wantMode0600(t *testing.T, path string) {
-	t.Helper()
-	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatalf("stat %s: %v", path, err)
-	}
-	if got := info.Mode().Perm(); got != 0o600 {
-		t.Errorf("mode = %04o, want 0600", got)
-	}
-}
-
-func TestMergeKubeconfig_Perms(t *testing.T) {
-	existingKubeconfig := `apiVersion: v1
-kind: Config
-users:
-- name: existing-user
-  user:
-    token: real-token
-clusters: []
-contexts: []
-current-context: ""
-`
-	srcKubeconfig := []byte(`apiVersion: v1
-kind: Config
-users:
-- name: new-user
-  user:
-    token: new-token
-clusters: []
-contexts: []
-current-context: new-context
-`)
-
-	_, dest := mergeIntoTemp(t, existingKubeconfig, srcKubeconfig)
-	wantMode0600(t, dest)
-
-	merged, err := os.ReadFile(dest)
-	if err != nil {
-		t.Fatalf("read dest: %v", err)
-	}
-	mergedStr := string(merged)
-
-	if !strings.Contains(mergedStr, "real-token") {
-		t.Errorf("original token not preserved in merged kubeconfig:\n%s", mergedStr)
-	}
-	if !strings.Contains(mergedStr, "new-token") {
-		t.Errorf("src user token not appended in merged kubeconfig:\n%s", mergedStr)
-	}
-
-	leftovers, err := filepath.Glob(filepath.Join(filepath.Dir(dest), ".tmp-*"))
-	if err != nil {
-		t.Fatalf("glob .tmp-*: %v", err)
-	}
-	if len(leftovers) != 0 {
-		t.Errorf("AtomicWrite left temp artifacts: %v", leftovers)
-	}
-
-	if err := os.Remove(dest); err != nil {
-		t.Errorf("remove dest: %v", err)
-	}
-}
-
-func TestMergeKubeconfig_PreservesCurrentContext(t *testing.T) {
-	destYAML := `apiVersion: v1
-kind: Config
-clusters:
-- name: prod
-  cluster:
-    server: https://prod.example
-users: []
-contexts: []
-current-context: prod
-`
-	srcData := []byte(`apiVersion: v1
-kind: Config
-clusters:
-- name: okd-test
-  cluster:
-    server: https://okd-test.example
-- name: dev
-  cluster:
-    server: https://dev.example
-users: []
-contexts: []
-current-context: okd-test
-`)
-
-	merged, dest := mergeIntoTemp(t, destYAML, srcData)
-
-	if got, _ := merged["current-context"].(string); got != "prod" {
-		t.Errorf("current-context = %q, want %q", got, "prod")
-	}
-
-	clusters, _ := merged["clusters"].([]any)
-	wantNames := []string{"prod", "okd-test", "dev"}
-	if len(clusters) != len(wantNames) {
-		t.Fatalf("clusters len = %d, want %d: %+v", len(clusters), len(wantNames), clusters)
-	}
-	for i, wantName := range wantNames {
-		m, _ := clusters[i].(map[string]any)
-		if got, _ := m["name"].(string); got != wantName {
-			t.Errorf("clusters[%d].name = %q, want %q", i, got, wantName)
-		}
-	}
-
-	wantMode0600(t, dest)
-}
-
-func TestMergeKubeconfig_EmptyDestTakesSrcCurrentContext(t *testing.T) {
-	srcData := []byte(`apiVersion: v1
-kind: Config
-clusters:
-- name: okd-test
-  cluster:
-    server: https://okd-test.example
-users:
-- name: admin
-  user:
-    token: some-token
-contexts:
-- name: okd-test
-  context:
-    cluster: okd-test
-    user: admin
-current-context: okd-test
-`)
-
-	merged, dest := mergeIntoTemp(t, "", srcData)
-
-	if got, _ := merged["current-context"].(string); got != "okd-test" {
-		t.Errorf("current-context = %q, want %q", got, "okd-test")
-	}
-
-	clusters, _ := merged["clusters"].([]any)
-	if len(clusters) != 1 {
-		t.Fatalf("clusters len = %d, want 1: %+v", len(clusters), clusters)
-	}
-	m, _ := clusters[0].(map[string]any)
-	if got, _ := m["name"].(string); got != "okd-test" {
-		t.Errorf("clusters[0].name = %q, want %q", got, "okd-test")
-	}
-
-	wantMode0600(t, dest)
-}
-
-func TestMergeKubeconfig_PreservesUnknownFields(t *testing.T) {
-	srcData := []byte(`apiVersion: v1
-kind: Config
-clusters:
-- name: okd-test
-  cluster:
-    server: https://okd-test.example
-  x-custom-extension: preserved-value
-users: []
-contexts: []
-current-context: okd-test
-`)
-
-	merged, _ := mergeIntoTemp(t, "", srcData)
-
-	clusters, _ := merged["clusters"].([]any)
-	if len(clusters) != 1 {
-		t.Fatalf("clusters len = %d, want 1", len(clusters))
-	}
-	entry, _ := clusters[0].(map[string]any)
-	if entry["x-custom-extension"] != "preserved-value" {
-		t.Errorf("x-custom-extension not preserved after merge: entry = %v", entry)
-	}
-}
 
 func seedKubeconfigWorkspace(t *testing.T) []byte {
 	t.Helper()
@@ -287,17 +30,17 @@ func seedKubeconfigWorkspace(t *testing.T) []byte {
 	return want
 }
 
-func setKubeconfigFlags(t *testing.T, output string, merge bool) {
+func setKubeconfigOutput(t *testing.T, output string) {
 	t.Helper()
-	origOut, origMerge := kubeconfigOutput, kubeconfigMerge
-	t.Cleanup(func() { kubeconfigOutput, kubeconfigMerge = origOut, origMerge })
-	kubeconfigOutput, kubeconfigMerge = output, merge
+	orig := kubeconfigOutput
+	t.Cleanup(func() { kubeconfigOutput = orig })
+	kubeconfigOutput = output
 }
 
 func TestRunKubeconfig_OutputFilePerms(t *testing.T) {
 	want := seedKubeconfigWorkspace(t)
 	dest := filepath.Join(t.TempDir(), "sub", "okd.kubeconfig")
-	setKubeconfigFlags(t, dest, false)
+	setKubeconfigOutput(t, dest)
 
 	cmd := &cobra.Command{}
 	var stdout bytes.Buffer
@@ -328,7 +71,7 @@ func TestRunKubeconfig_OutputFilePerms(t *testing.T) {
 
 func TestRunKubeconfig_StdoutDefault(t *testing.T) {
 	want := seedKubeconfigWorkspace(t)
-	setKubeconfigFlags(t, "-", false)
+	setKubeconfigOutput(t, "-")
 
 	cmd := &cobra.Command{}
 	var stdout bytes.Buffer
@@ -352,7 +95,7 @@ func TestRunKubeconfig_MissingSourceIsConfigError(t *testing.T) {
 		t.Fatal(err)
 	}
 	dest := filepath.Join(t.TempDir(), "okd.kubeconfig")
-	setKubeconfigFlags(t, dest, false)
+	setKubeconfigOutput(t, dest)
 
 	err := runKubeconfig(&cobra.Command{}, nil)
 	if !errors.Is(err, errtypes.ErrConfigMissing) {
