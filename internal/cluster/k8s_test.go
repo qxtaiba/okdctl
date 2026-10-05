@@ -60,6 +60,10 @@ func TestValidateKubeconfigEnv(t *testing.T) {
 		{name: "missing_path_rejected", path: filepath.Join(tmpHome, "does-not-exist", "kubeconfig"), wantErr: true, wantSubstr: "inaccessible"},
 		// /etcd/foo shares the '/etc' prefix but not '/etc/'; sep-guard rejects it.
 		{name: "prefix_spoof_etcd_rejected", path: "/etcd/foo", wantErr: true},
+		// A missing path outside the allowlist must fail the prefix check, not
+		// the stat: "inaccessible" here would mean the stat ran first and the
+		// error reported whether an arbitrary path exists.
+		{name: "outside_prefix_rejected_before_stat", path: "/nonexistent-prefix/kubeconfig", wantErr: true, wantSubstr: "outside allowed prefixes"},
 		{name: "perm_0600_accepted", path: writeKubeconfig("config-0600", 0o600)},
 		{name: "perm_0644_rejected", path: writeKubeconfig("config-0644", 0o644), wantErr: true, wantSubstr: "insecure permissions"},
 		{name: "perm_0620_rejected", path: writeKubeconfig("config-0620", 0o620), wantErr: true, wantSubstr: "insecure permissions"},

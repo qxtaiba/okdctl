@@ -73,10 +73,26 @@ func WithEnvFallback() Option {
 	}
 }
 
-// validateKubeconfigEnv rejects symlinks (avoids a TOCTOU race) and paths
-// outside the $HOME/etc allowlist.
+// validateKubeconfigEnv rejects paths outside the $HOME/etc allowlist, then
+// symlinks (avoids a TOCTOU race) and group- or world-accessible permissions.
 func validateKubeconfigEnv(path string) error {
 	clean := filepath.Clean(path)
+
+	// The allowlist is checked before any filesystem call so an arbitrary path
+	// is refused without being stat-ed: the errors below would otherwise report
+	// whether it exists and how it is permissioned.
+	home, _ := os.UserHomeDir()
+	sep := string(filepath.Separator)
+	allowed := false
+	for _, prefix := range []string{home, "/etc"} {
+		if prefix != "" && strings.HasPrefix(clean, prefix+sep) {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		return fmt.Errorf("kubeconfig path outside allowed prefixes ($HOME, /etc)")
+	}
 
 	fi, err := os.Lstat(clean)
 	if err != nil {
@@ -89,14 +105,7 @@ func validateKubeconfigEnv(path string) error {
 		return fmt.Errorf("kubeconfig %q has insecure permissions %#o; run 'chmod 600 <path>' to fix", clean, perm)
 	}
 
-	home, _ := os.UserHomeDir()
-	sep := string(filepath.Separator)
-	for _, prefix := range []string{home, "/etc"} {
-		if prefix != "" && strings.HasPrefix(clean, prefix+sep) {
-			return nil
-		}
-	}
-	return fmt.Errorf("kubeconfig path outside allowed prefixes ($HOME, /etc)")
+	return nil
 }
 
 // New builds a Client applying the supplied options in order. It does not
