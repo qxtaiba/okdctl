@@ -259,6 +259,8 @@ type Result struct {
 	Outcome Outcome
 	Config  *config.Config
 	Action  Action
+	// ExitStep is the step that completed the flow; empty when cancelled.
+	ExitStep StepID
 }
 
 // Outcome identifies how the wizard terminated.

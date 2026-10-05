@@ -39,7 +39,7 @@ var errWizardExited = errors.New("open flow: the wizard has already exited")
 type hubOutcome struct {
 	// Result is the wizard's own terminal state.
 	Result wizard.Result
-	// Verb is the hub verb the operator last confirmed.
+	// Verb is the hub verb that ended the session; see sessionVerb.
 	Verb steps.HubVerb
 	// DayTwoRan reports that a day-2 flow the hub swapped into began executing,
 	// so that op — not the configure flow's save pipeline — is what this
@@ -99,10 +99,7 @@ func runWizardWithMode(cmd *cobra.Command, cfg *config.Config, configExists bool
 		defer manage.close()
 	}
 
-	outcome := hubOutcome{Result: result, Verb: steps.HubVerbGetStarted}
-	if hub != nil {
-		outcome.Verb = hub.SelectedVerb()
-	}
+	outcome := hubOutcome{Result: result, Verb: sessionVerb(result, hub)}
 	// Only a day-2 flow that actually began executing has an outcome to report:
 	// one the operator previewed and escaped out of changed nothing, and
 	// reporting on it would print a recap over a session that went on to do
@@ -113,6 +110,16 @@ func runWizardWithMode(cmd *cobra.Command, cfg *config.Config, configExists bool
 	}
 
 	return outcome, err
+}
+
+// sessionVerb returns the hub verb that ended the session. A session the
+// review step ended ran the configure flow whatever row the hub still
+// highlights: a palette jump leaves the hub without confirming one.
+func sessionVerb(result wizard.Result, hub *steps.WelcomeStep) steps.HubVerb {
+	if hub == nil || result.ExitStep == wizard.StepIDReview {
+		return steps.HubVerbGetStarted
+	}
+	return hub.SelectedVerb()
 }
 
 func configureDraftHistory(built wizard.BuiltSteps, history map[string][]string) {
