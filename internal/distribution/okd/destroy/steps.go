@@ -114,8 +114,8 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 	sk := t.buildSkips(ctx, cfg, opts, fw)
 	return []distribution.StepDef{
 		{
-			ID: StepDestroyInfra, Name: "destroy infrastructure", ReRunSafe: distribution.ReRunSafeYes,
 			// destroy on already-destroyed infra exits cleanly, so re-runs are safe.
+			ID: StepDestroyInfra, Name: "destroy infrastructure",
 			NonFatal:       true, // orchestrator continues through cleanup steps on TF failure
 			SkipWhen:       sk.tf,
 			SkipReasonFunc: sk.tfReason,
@@ -129,7 +129,7 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 			OnError: track(labelTerraformDestroy),
 		},
 		{
-			ID: StepRemoveRemoteISO, Name: "remove remote ISO", ReRunSafe: distribution.ReRunSafeYes,
+			ID: StepRemoveRemoteISO, Name: "remove remote ISO",
 			NonFatal:       true,
 			SkipWhen:       sk.iso,
 			SkipReasonFunc: sk.isoReason,
@@ -154,7 +154,7 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 			OnError: track("iso removal"),
 		},
 		{
-			ID: StepCleanupFiles, Name: "cleanup files", ReRunSafe: distribution.ReRunSafeYes,
+			ID: StepCleanupFiles, Name: "cleanup files",
 			NonFatal:       true,
 			SkipWhen:       sk.cleanup,
 			SkipReasonFunc: sk.cleanupReason,
@@ -180,7 +180,7 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 			OnError: track("file cleanup"),
 		},
 		{
-			ID: StepCleanupFirewall, Name: "cleanup firewall", ReRunSafe: distribution.ReRunSafeYes,
+			ID: StepCleanupFirewall, Name: "cleanup firewall",
 			NonFatal:       true,
 			SkipWhen:       sk.firewall,
 			SkipReasonFunc: sk.fwReason,
@@ -194,7 +194,7 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 			OnError: track("firewall cleanup"),
 		},
 		{
-			ID: StepPrintSummary, Name: "print summary", ReRunSafe: distribution.ReRunSafeYes,
+			ID: StepPrintSummary, Name: "print summary",
 			NonFatal: false,
 			Exec: func(_ context.Context) error {
 				errs, failures, skipped := t.errs, t.failures, t.skipped

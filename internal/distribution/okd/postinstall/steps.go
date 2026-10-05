@@ -34,7 +34,6 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 	return []distribution.StepDef{
 		{
 			ID: StepVerifyHealth, Name: StepNames[StepVerifyHealth],
-			ReRunSafe:  distribution.ReRunSafeYes,
 			SkipWhen:   func() bool { return opts.SkipClusterHealth },
 			SkipReason: "cluster health verification skipped by user",
 			Exec: func(ctx context.Context) error {
@@ -51,7 +50,6 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 		},
 		{
 			ID: StepVerifyKubeVIP, Name: StepNames[StepVerifyKubeVIP],
-			ReRunSafe:  distribution.ReRunSafeYes,
 			NonFatal:   true,
 			SkipWhen:   func() bool { return opts.SkipKubeVIP },
 			SkipReason: "kube-vip verification skipped by user",
@@ -73,7 +71,6 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 		// kube-vip is confirmed, unless the operator explicitly skipped verification.
 		{
 			ID: StepCleanupBootstrap, Name: StepNames[StepCleanupBootstrap],
-			ReRunSafe: distribution.ReRunSafeYes,
 			SkipWhen: func() bool {
 				return !pctx.Get().KubeVIPVerified && !opts.SkipKubeVIP
 			},
@@ -90,7 +87,6 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 		},
 		{
 			ID: StepDeployProductionDNS, Name: StepNames[StepDeployProductionDNS],
-			ReRunSafe:  distribution.ReRunSafeYes,
 			NonFatal:   true,
 			SkipWhen:   func() bool { return !pctx.Get().KubeVIPVerified },
 			SkipReason: "kube-vip not verified, keeping bootstrap dns",
@@ -109,10 +105,9 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 			OnError: phase.WarnOnError(p.Log, "dns: production dns deployment failed"),
 		},
 		{
-			ID: StepInstallAddons, Name: StepNames[StepInstallAddons],
 			// helm upgrade --install / kubectl apply semantics: re-applying is a safe no-op.
-			ReRunSafe: distribution.ReRunSafeYes,
-			NonFatal:  true,
+			ID: StepInstallAddons, Name: StepNames[StepInstallAddons],
+			NonFatal: true,
 			Exec: func(ctx context.Context) error {
 				if err := p.verifyAPIHealthCheck(ctx); err != nil {
 					p.Log.Warn("addons: api health check failed before addon install", "err", err)
@@ -126,7 +121,6 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 		},
 		{
 			ID: StepDisableRHDefaults, Name: StepNames[StepDisableRHDefaults],
-			ReRunSafe:  distribution.ReRunSafeYes,
 			NonFatal:   true,
 			SkipWhen:   func() bool { return opts.KeepRedHatCatalogs },
 			SkipReason: "kept by --keep-redhat-catalogs",
