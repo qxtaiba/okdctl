@@ -2,13 +2,16 @@ package cli
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/platform"
 )
 
 func newCmd(name string) *cobra.Command {
@@ -88,6 +91,7 @@ func TestEnsureRoot_SudoNotFound(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("only meaningful when test process is non-root")
 	}
+	stubHostSupported(t, nil)
 	orig := lookPath
 	t.Cleanup(func() { lookPath = orig })
 	lookPath = func(_ string) (string, error) { return "", exec.ErrNotFound }
@@ -100,6 +104,58 @@ func TestEnsureRoot_SudoNotFound(t *testing.T) {
 	}
 	if !errors.Is(err, errtypes.ErrSudoMissing) {
 		t.Fatalf("want errtypes.ErrSudoMissing in chain; exitCodeFor would return 5 instead of 71")
+	}
+}
+
+func stubHostSupported(t *testing.T, err error) {
+	t.Helper()
+	orig := hostSupportedFn
+	hostSupportedFn = func() error { return err }
+	t.Cleanup(func() { hostSupportedFn = orig })
+}
+
+func unsupportedHostErr() error {
+	return fmt.Errorf("%w %q: okdctl deploys from rhel-family bastions only", platform.ErrUnsupportedOS, "ubuntu")
+}
+
+func TestEnsureRoot_DeployRefusesUnsupportedHostBeforeSudo(t *testing.T) {
+	t.Setenv(wizardDemoEnv, "")
+	stubHostSupported(t, unsupportedHostErr())
+	orig := lookPath
+	t.Cleanup(func() { lookPath = orig })
+	lookPath = func(_ string) (string, error) {
+		t.Error("sudo lookup reached on an unsupported host")
+		return "", exec.ErrNotFound
+	}
+
+	for _, cmd := range []*cobra.Command{newCmd("deploy"), newDryRunCmd("deploy")} {
+		err := ensureRoot(cmd)
+		var cfgErr *errtypes.ConfigError
+		if !errors.As(err, &cfgErr) || !errors.Is(err, platform.ErrUnsupportedOS) {
+			t.Fatalf("want ConfigError wrapping ErrUnsupportedOS, got %T: %v", err, err)
+		}
+		if !strings.Contains(err.Error(), `"ubuntu"`) || !strings.Contains(err.Error(), "rhel-family bastions only") {
+			t.Errorf("refusal must name the host and the supported family: %v", err)
+		}
+	}
+}
+
+func TestEnsureRoot_TeardownIsNotHostGated(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("only meaningful when test process is non-root")
+	}
+	t.Setenv(wizardDemoEnv, "")
+	stubHostSupported(t, unsupportedHostErr())
+	orig := lookPath
+	t.Cleanup(func() { lookPath = orig })
+	lookPath = func(_ string) (string, error) { return "", exec.ErrNotFound }
+
+	err := ensureRoot(newCmd("destroy"))
+	if errors.Is(err, platform.ErrUnsupportedOS) {
+		t.Fatalf("destroy must stay usable from any host, got: %v", err)
+	}
+	if !errors.Is(err, errtypes.ErrSudoMissing) {
+		t.Fatalf("want the sudo stage to be reached, got: %v", err)
 	}
 }
 

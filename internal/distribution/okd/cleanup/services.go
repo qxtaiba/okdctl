@@ -23,8 +23,7 @@ var (
 
 func removePackage(ctx context.Context, pkg string, logger *slog.Logger) {
 	logger = logutil.OrNop(logger)
-	pm := detectPackageManager(logger)
-	if err := pm.Remove(ctx, []string{pkg}); err != nil {
+	if err := platform.NewPackageManager(logger).Remove(ctx, []string{pkg}); err != nil {
 		logger.Warn("cleanup: could not remove package", "pkg", pkg, "err", err)
 	}
 }
@@ -55,17 +54,13 @@ func HAProxy(ctx context.Context, haproxyConfig, vip string, logger *slog.Logger
 	return nil
 }
 
-// Apache stops the httpd service and removes the apache package using platform-appropriate names.
+// Apache stops the httpd service and removes the httpd package.
 func Apache(ctx context.Context, logger *slog.Logger) error {
 	logger = logutil.OrNop(logger)
 	logger.Info("cleanup: apache httpd service")
 
-	detectedOS := platform.DetectOrDefault(logger)
-	svcName := detectedOS.ApacheServiceName()
-	pkgName := detectedOS.ApachePackageName()
-
-	phase.StopAndDisableService(ctx, svcName, logger)
-	removePackage(ctx, pkgName, logger)
+	phase.StopAndDisableService(ctx, platform.ApacheService, logger)
+	removePackage(ctx, platform.ApachePackage, logger)
 
 	logger.Info("cleanup: apache httpd completed")
 

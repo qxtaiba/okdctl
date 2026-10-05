@@ -1,5 +1,5 @@
-// Package firewall manages host firewall rules required for OKD provisioning,
-// abstracting over firewalld, ufw, and iptables backends.
+// Package firewall manages the firewalld rules OKD provisioning needs on the
+// bastion host.
 package firewall
 
 import (
@@ -9,8 +9,6 @@ import (
 	"os/exec"
 	"runtime"
 	"slices"
-	"strconv"
-	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/executor"
@@ -24,8 +22,6 @@ type Backend string
 // Backend values recognised by DetectBackend.
 const (
 	Firewalld Backend = "firewalld"
-	UFW       Backend = "ufw"
-	IPTables  Backend = "iptables"
 	None      Backend = "none"
 )
 
@@ -102,57 +98,36 @@ func New(opts ...Option) *Firewall {
 	return f
 }
 
-// DetectBackend returns the active firewall backend, preferring firewalld,
-// then ufw, then iptables. Returns None on non-Linux hosts or when no
-// backend is present.
+// DetectBackend returns Firewalld when firewall-cmd is present and the
+// service is active, else None (always None off Linux).
 func (f *Firewall) DetectBackend(ctx context.Context) Backend {
 	if goos != "linux" {
 		return None
 	}
-
-	if _, err := exec.LookPath("firewall-cmd"); err == nil {
-		if isServiceActiveFn(ctx, "firewalld") {
-			return Firewalld
-		}
+	if _, err := exec.LookPath("firewall-cmd"); err == nil && isServiceActiveFn(ctx, "firewalld") {
+		return Firewalld
 	}
-
-	if _, err := exec.LookPath("ufw"); err == nil {
-		if output, err := executor.OutputCaptured(ctx, "ufw", "status"); err == nil {
-			if strings.Contains(string(output), "Status: active") {
-				return UFW
-			}
-		} else {
-			f.logger.Debug("ufw probe failed, falling through to next backend", "err", err, "backend", "ufw")
-		}
-	}
-
-	if _, err := exec.LookPath("iptables"); err == nil {
-		return IPTables
-	}
-
 	return None
 }
 
-// Configure opens each port in ports on the active backend; permanent
-// persists firewalld rules across reloads, and a None backend no-ops.
+// Configure opens each port in ports in firewalld; permanent persists the
+// rules across reloads, and an inactive firewalld no-ops.
 func (f *Firewall) Configure(ctx context.Context, ports []Port, permanent bool) error {
-	backend := f.DetectBackend(ctx)
-
-	if backend == None {
-		f.logger.Info("firewall: no active backend detected, skipping configuration")
+	if f.DetectBackend(ctx) == None {
+		f.logger.Info("firewall: firewalld not active, skipping configuration")
 		return nil
 	}
 
-	f.logger.Info("firewall: configuring", "backend", backend)
+	f.logger.Info("firewall: configuring", "backend", Firewalld)
 
 	for _, port := range ports {
-		if err := modifyPort(ctx, backend, port, permanent, actionAdd); err != nil {
+		if err := modifyPort(ctx, port, permanent, actionAdd); err != nil {
 			return fmt.Errorf("open port %d: %w", port.Number, err)
 		}
 		f.logger.Info("firewall: opened port", "port", port.Number, "proto", port.Protocol, "desc", port.Description)
 	}
 
-	if backend == Firewalld && permanent {
+	if permanent {
 		if err := executor.RunCaptured(ctx, "firewall-cmd", "--reload"); err != nil {
 			return fmt.Errorf("reload firewall: %w", err)
 		}
@@ -175,24 +150,22 @@ func validatePort(port Port) error {
 	return nil
 }
 
-// RemoveRules deletes each port in ports from the active backend. Missing
-// rules are logged as warnings rather than returned as errors.
+// RemoveRules deletes each port in ports from firewalld. Missing rules are
+// logged as warnings rather than returned as errors.
 func (f *Firewall) RemoveRules(ctx context.Context, ports []Port, permanent bool) error {
-	backend := f.DetectBackend(ctx)
-
-	if backend == None {
+	if f.DetectBackend(ctx) == None {
 		return nil
 	}
 
 	f.logger.Info("firewall: removing rules")
 
 	for _, port := range ports {
-		if err := modifyPort(ctx, backend, port, permanent, actionRemove); err != nil {
+		if err := modifyPort(ctx, port, permanent, actionRemove); err != nil {
 			f.logger.Warn("firewall: could not remove port", "port", port.Number, "err", err)
 		}
 	}
 
-	if backend == Firewalld && permanent {
+	if permanent {
 		// A failed reload leaves removed rules live in the runtime set; warn
 		// but stay best-effort since teardown must not fail.
 		if err := executor.RunCaptured(ctx, "firewall-cmd", "--reload"); err != nil {
@@ -203,61 +176,23 @@ func (f *Firewall) RemoveRules(ctx context.Context, ports []Port, permanent bool
 	return nil
 }
 
-// modifyPort adds or removes a single firewall rule. action is actionAdd or actionRemove.
-func modifyPort(ctx context.Context, backend Backend, port Port, permanent bool, action string) error {
+// modifyPort adds or removes a single firewalld rule. action is actionAdd or actionRemove.
+func modifyPort(ctx context.Context, port Port, permanent bool, action string) error {
 	if err := validatePort(port); err != nil {
 		return err
 	}
 
-	portStr := fmt.Sprintf("%d/%s", port.Number, port.Protocol)
-
-	switch backend {
-	case Firewalld:
-		flag := "--add-port="
-		if action == actionRemove {
-			flag = "--remove-port="
-		}
-		args := []string{"firewall-cmd", flag + portStr}
-		if permanent {
-			args = append(args, "--permanent")
-		}
-		// Port/protocol validated by validatePort above; args are an argv
-		// slice (no shell interpolation).
-		return executor.RunCaptured(ctx, args[0], args[1:]...)
-
-	case UFW:
-		if action == actionRemove {
-			return executor.RunCaptured(ctx, "ufw", "delete", "allow", portStr)
-		}
-		return executor.RunCaptured(ctx, "ufw", "allow", portStr)
-
-	case IPTables:
-		return modifyIptablesRule(ctx, port, action)
-	}
-
-	return nil
-}
-
-// modifyIptablesRule makes iptables idempotent: -I would duplicate and -D
-// removes only one, so a -C probe gates add and a -D loop drains remove;
-// argv is pre-validated by validatePort (no shell).
-func modifyIptablesRule(ctx context.Context, port Port, action string) error {
-	rule := []string{"INPUT", "-p", port.Protocol, "--dport", strconv.Itoa(port.Number), "-j", "ACCEPT"}
-	exists := func() bool {
-		return executor.RunCaptured(ctx, "iptables", append([]string{"-C"}, rule...)...) == nil
-	}
+	flag := "--add-port="
 	if action == actionRemove {
-		for exists() {
-			if err := executor.RunCaptured(ctx, "iptables", append([]string{"-D"}, rule...)...); err != nil {
-				return err
-			}
-		}
-		return nil
+		flag = "--remove-port="
 	}
-	if exists() {
-		return nil
+	args := []string{flag + fmt.Sprintf("%d/%s", port.Number, port.Protocol)}
+	if permanent {
+		args = append(args, "--permanent")
 	}
-	return executor.RunCaptured(ctx, "iptables", append([]string{"-I"}, rule...)...)
+	// Port/protocol validated by validatePort above; args are an argv
+	// slice (no shell interpolation).
+	return executor.RunCaptured(ctx, "firewall-cmd", args...)
 }
 
 // ConfigureOKD opens all ports in OKDRequiredPorts.

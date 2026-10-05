@@ -35,8 +35,7 @@ func NewBaseOptions(cfg *config.Config, projectRoot string) BaseOptions {
 // KubeAPIPort is the kube-apiserver port served by HAProxy and kube-vip.
 const KubeAPIPort = 6443
 
-// Default paths for bastion-phase artifacts; Debian-family paths route
-// through platform.OS helpers instead.
+// Default paths for bastion-phase artifacts.
 const (
 	// DefaultHAProxyConfigPath is where HAProxy reads its live config.
 	DefaultHAProxyConfigPath = "/etc/haproxy/haproxy.cfg"

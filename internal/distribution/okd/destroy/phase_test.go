@@ -154,7 +154,7 @@ func TestDestroySteps_StepListAndSkipWiring(t *testing.T) {
 }
 
 // installFakeTerraformArgv points PATH at an argv-logging fake terraform,
-// which incidentally makes DetectBackend report None (no firewall-cmd/ufw/iptables on PATH).
+// which incidentally makes DetectBackend report None (no firewall-cmd on PATH).
 func installFakeTerraformArgv(t *testing.T) string {
 	t.Helper()
 	if runtime.GOOS == "windows" {

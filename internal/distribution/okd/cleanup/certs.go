@@ -14,8 +14,7 @@ import (
 // removal is safe between runs.
 func IgnitionCerts(ctx context.Context, projectRoot string, logger *slog.Logger) error {
 	certDir := filepath.Join(projectRoot, "certs", "ignition")
-	osInfo := platform.DetectOrDefault(logger)
-	confPath := filepath.Join(osInfo.ApacheVhostConfDir(), "ignition-ssl.conf")
+	confPath := filepath.Join(platform.ApacheVhostConfDir, "ignition-ssl.conf")
 
 	errs := []error{
 		SafeRemoveWithLogger(ctx, certDir, "ignition TLS certs", logger),

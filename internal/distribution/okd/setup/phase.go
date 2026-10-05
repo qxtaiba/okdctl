@@ -60,15 +60,13 @@ type Phase struct {
 	BinDir string
 }
 
-// New constructs a setup Phase with the given options; host-OS detection
-// populates OS and Pkg, falling back to RHEL/dnf on error.
+// New constructs a setup Phase with the given options.
 func New(opts ...phase.BasePhaseOption) *Phase {
 	bp := phase.NewBasePhase(opts...)
 	bp.Log = bp.Log.With("phase", "setup")
-	detectedOS := platform.DetectOrDefault(bp.Log)
 	return &Phase{
-		Provisioner: provision.Provisioner{BasePhase: bp, OS: detectedOS},
-		Pkg:         platform.NewPackageManager(detectedOS, bp.Log),
+		Provisioner: provision.Provisioner{BasePhase: bp},
+		Pkg:         platform.NewPackageManager(bp.Log),
 	}
 }
 
