@@ -108,6 +108,7 @@ scripts/screenshot/out/
 # agent-workflow artifacts — local only, never shipped
 .claude/
 docs/superpowers/
+.superpowers/
 
 # local-only maintainer docs — kept on disk, not published
 CLAUDE.md
