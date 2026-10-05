@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // Align selects a column's horizontal cell alignment.
@@ -219,8 +220,8 @@ func padLeftCells(s string, w int) string {
 	return s
 }
 
-// Truncate rune-safely clips s to fit within maxW visible columns, appending
-// "…" when it clips.
+// Truncate grapheme-safely clips s to fit within maxW visible columns,
+// appending "…" when it clips.
 func Truncate(s string, maxW int) string {
 	if maxW <= 0 {
 		return ""
@@ -228,12 +229,5 @@ func Truncate(s string, maxW int) string {
 	if lipgloss.Width(s) <= maxW {
 		return s
 	}
-	runes := []rune(s)
-	for i := len(runes) - 1; i > 0; i-- {
-		candidate := string(runes[:i]) + "…"
-		if lipgloss.Width(candidate) <= maxW {
-			return candidate
-		}
-	}
-	return "…"
+	return ansi.Truncate(foldInvalidUTF8(s), maxW, "…")
 }

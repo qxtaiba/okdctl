@@ -2,9 +2,9 @@ package tui
 
 import (
 	"strings"
-	"unicode"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // WrapLines reformats text as space-joined words wrapped to width, breaking
@@ -82,10 +82,14 @@ func truncateMiddle(s string, maxW int) string {
 	}
 	keep := maxW - 1
 	headW, tailW := keep/2, keep-keep/2
-	runes := []rune(s)
-	head := takeWidth(runes, headW)
-	tail := takeWidthFromEnd(runes, tailW)
-	return string(head) + "…" + string(tail)
+	s = foldInvalidUTF8(s)
+	return ansi.Truncate(s, headW, "") + "…" + takeWidthFromEnd(s, tailW)
+}
+
+// foldInvalidUTF8 replaces each invalid byte with U+FFFD: the ansi truncation
+// helpers copy invalid bytes through, even from beyond the cut.
+func foldInvalidUTF8(s string) string {
+	return string([]rune(s))
 }
 
 // takeWidth returns the longest prefix of runes whose combined lipgloss.Width
@@ -102,29 +106,13 @@ func takeWidth(runes []rune, w int) []rune {
 	return runes
 }
 
-// takeWidthFromEnd returns the longest suffix of runes whose combined
-// lipgloss.Width is at most w; the cut never lands on a bare combining mark,
-// since a zero-width mark always "fits" the backward scan on its own and
-// would otherwise strand at the front of the suffix once its base rune is
-// excluded.
-func takeWidthFromEnd(runes []rune, w int) []rune {
-	width := 0
-	for i := len(runes) - 1; i >= 0; i-- {
-		rw := lipgloss.Width(string(runes[i]))
-		if width+rw > w {
-			return dropLeadingMarks(runes[i+1:])
-		}
-		width += rw
+// takeWidthFromEnd returns the longest suffix of s at most w columns wide.
+func takeWidthFromEnd(s string, w int) string {
+	drop := ansi.StringWidth(s) - w
+	tail := ansi.TruncateLeft(s, drop, "")
+	// TruncateLeft keeps a wide cell that straddles the cut; drop that cell too.
+	if ansi.StringWidth(tail) > w {
+		tail = ansi.TruncateLeft(s, drop+1, "")
 	}
-	return runes
-}
-
-// dropLeadingMarks strips combining marks left with no base rune at the
-// front of runes.
-func dropLeadingMarks(runes []rune) []rune {
-	i := 0
-	for i < len(runes) && unicode.IsMark(runes[i]) {
-		i++
-	}
-	return runes[i:]
+	return tail
 }
