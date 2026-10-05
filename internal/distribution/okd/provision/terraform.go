@@ -43,6 +43,15 @@ func WorkerISOsPlanVar(isoStorage string, workerCount int) string {
 	return "[" + strings.Join(isos, ", ") + "]"
 }
 
+// WorkerNamesPlanVar renders the plan-time -var override for worker_names
+// widened to workerCount entries. It must accompany every worker_count
+// override that grows the cluster, or the module's worker_count <=
+// length(worker_names) validation fails the plan.
+func WorkerNamesPlanVar(clusterName string, workerCount int) string {
+	names := buildNodeNames(clusterName, nodetypes.RoleWorker, workerCount)
+	return "[" + strings.Join(names, ", ") + "]"
+}
+
 func buildNodeNames(clusterName string, role nodetypes.NodeRole, count int) []string {
 	names := make([]string, count)
 	for i := range count {
