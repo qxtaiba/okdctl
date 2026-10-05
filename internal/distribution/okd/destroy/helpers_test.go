@@ -229,27 +229,17 @@ func TestWarnTopologyDrift(t *testing.T) {
 	cases := []struct {
 		name     string
 		present  []string
-		scoped   bool
 		wantWarn bool
 		wantMsg  string
 	}{
 		{
 			name:     "no drift stays silent",
 			present:  nil,
-			scoped:   true,
 			wantWarn: false,
 		},
 		{
-			name:     "scoped drift warns about surviving vms",
+			name:     "drift warns about orphan isos",
 			present:  []string{workerPastEnd},
-			scoped:   true,
-			wantWarn: true,
-			wantMsg:  "unscoped destroy",
-		},
-		{
-			name:     "unscoped drift warns about orphan isos",
-			present:  []string{workerPastEnd},
-			scoped:   false,
 			wantWarn: true,
 			wantMsg:  "iso removal",
 		},
@@ -261,7 +251,7 @@ func TestWarnTopologyDrift(t *testing.T) {
 			p := newPhaseWithCapture(h)
 			tf := terraform.New(t.TempDir(), terraform.WithLogger(logutil.NopLogger))
 
-			p.warnTopologyDrift(context.Background(), tf, driftConfig(3, 2), tc.scoped)
+			p.warnTopologyDrift(context.Background(), tf, driftConfig(3, 2))
 
 			if got := h.HasLevel(slog.LevelWarn); got != tc.wantWarn {
 				t.Fatalf("warn logged = %v; want %v", got, tc.wantWarn)
@@ -282,7 +272,7 @@ func TestWarnTopologyDrift_ProbeFailureNeverBlocks(t *testing.T) {
 	p := newPhaseWithCapture(h)
 	tf := terraform.New(t.TempDir(), terraform.WithLogger(logutil.NopLogger))
 
-	p.warnTopologyDrift(context.Background(), tf, driftConfig(1, 1), true)
+	p.warnTopologyDrift(context.Background(), tf, driftConfig(1, 1))
 
 	rec, ok := h.Last()
 	if !ok {

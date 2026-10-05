@@ -166,7 +166,7 @@ func TestPreviewDestroyRestoresGuard(t *testing.T) {
 			envDir, moduleDir := seedWorkspaceLayout(t)
 			installRecordingTerraform(t, fail)
 			e := New(envDir)
-			err := e.PreviewDestroy(t.Context(), moduleDir, []string{masterAddr})
+			err := e.PreviewDestroy(t.Context(), moduleDir)
 			if (err != nil) != (fail != "") {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -174,7 +174,7 @@ func TestPreviewDestroyRestoresGuard(t *testing.T) {
 				t.Fatalf("guard not restored: %v", err)
 			}
 			argv := strings.Join(recordedArgv(t, envDir), "\n")
-			if !strings.Contains(argv, "-destroy") || !strings.Contains(argv, masterAddr) || strings.Contains(argv, "apply") {
+			if !strings.Contains(argv, "-destroy") || strings.Contains(argv, "apply") {
 				t.Fatalf("unexpected command: %s", argv)
 			}
 		})
@@ -188,7 +188,7 @@ func TestPreviewDestroyPreservesExistingOverride(t *testing.T) {
 		t.Fatal(err)
 	}
 	e := New(envDir)
-	if err := e.PreviewDestroy(t.Context(), moduleDir, nil); err == nil {
+	if err := e.PreviewDestroy(t.Context(), moduleDir); err == nil {
 		t.Fatal("accepted stale override")
 	}
 	if _, err := os.Stat(path); err != nil {

@@ -16,12 +16,10 @@ const (
 	flagNoColor     = "no-color"
 	flagNoMotion    = "no-motion"
 	flagNoTUI       = "no-tui"
-	flagOnly        = "only"
 	flagOutput      = "output"
 	flagOutputFile  = "output-file"
 	flagOutputShort = "o"
 	flagQuiet       = "quiet"
-	flagTarget      = "target"
 	flagVerbose     = "verbose"
 )
 

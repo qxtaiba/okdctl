@@ -46,7 +46,7 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, cfg *config.Config, o
 			return tf.WithLockHint(&errtypes.ClusterError{Msg: "terraform init failed", Err: err})
 		}
 
-		p.warnTopologyDrift(ctx, tf, cfg, len(opts.TerraformTargets) > 0)
+		p.warnTopologyDrift(ctx, tf, cfg)
 
 		// prevent_destroy on the master resource is lifted for exactly this
 		// destroy via a transient module override, removed on every exit path.
@@ -68,7 +68,6 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, cfg *config.Config, o
 		if err := tf.Destroy(ctx, terraform.DestroyOptions{
 			AutoApprove: opts.AutoApprove,
 			Parallelism: opts.Parallelism,
-			Targets:     opts.TerraformTargets,
 			UsePlan:     true, // use safer plan-then-apply approach
 		}); err != nil {
 			return err
@@ -89,7 +88,7 @@ func (p *Phase) destroyInfrastructure(ctx context.Context, cfg *config.Config, o
 // warnTopologyDrift probes the state for a master/worker instance one past
 // the config's topology count, warning of a config/state mismatch without
 // ever blocking the destroy.
-func (p *Phase) warnTopologyDrift(ctx context.Context, tf *terraform.Executor, cfg *config.Config, scoped bool) {
+func (p *Phase) warnTopologyDrift(ctx context.Context, tf *terraform.Executor, cfg *config.Config) {
 	probes := []struct {
 		role  nodetypes.NodeRole
 		count int
@@ -108,13 +107,8 @@ func (p *Phase) warnTopologyDrift(ctx context.Context, tf *terraform.Executor, c
 		if !present {
 			continue
 		}
-		if scoped {
-			p.Log.Warn("destroy: config topology drifted from deployed state; a scoped destroy expanded from config counts leaves higher-index vms running — run an unscoped destroy to remove them",
-				"role", string(probe.role), "config_count", probe.count)
-		} else {
-			p.Log.Warn("destroy: config topology drifted from deployed state; custom iso removal may miss per-node isos beyond the config count",
-				"role", string(probe.role), "config_count", probe.count)
-		}
+		p.Log.Warn("destroy: config topology drifted from deployed state; custom iso removal may miss per-node isos beyond the config count",
+			"role", string(probe.role), "config_count", probe.count)
 	}
 }
 

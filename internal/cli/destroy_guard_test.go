@@ -21,53 +21,24 @@ import (
 func resetDestroyFlags(t *testing.T) {
 	t.Helper()
 	savedYes, savedKeepISOs, savedDryRun := destroyYes, destroyKeepISOs, destroyDryRun
-	savedConfirm, savedOnly := destroyConfirmCluster, destroyOnly
+	savedConfirm := destroyConfirmCluster
 	savedSkipTF, savedSkipCleanup, savedSkipFW := destroySkipTerraform, destroySkipCleanup, destroySkipFirewall
-	savedTargets := destroyTargets
 	t.Cleanup(func() {
 		destroyYes, destroyKeepISOs, destroyDryRun = savedYes, savedKeepISOs, savedDryRun
-		destroyConfirmCluster, destroyOnly = savedConfirm, savedOnly
+		destroyConfirmCluster = savedConfirm
 		destroySkipTerraform, destroySkipCleanup, destroySkipFirewall = savedSkipTF, savedSkipCleanup, savedSkipFW
-		destroyTargets = savedTargets
 	})
 	destroyYes, destroyKeepISOs, destroyDryRun = false, false, false
-	destroyConfirmCluster, destroyOnly = "", ""
+	destroyConfirmCluster = ""
 	destroySkipTerraform, destroySkipCleanup, destroySkipFirewall = false, false, false
-	destroyTargets = nil
 }
 
-const (
-	guardTestCluster = "prod"
-	guardTestTarget  = "module.okd_cluster.proxmox_virtual_environment_vm.worker[1]"
-)
+const guardTestCluster = "prod"
 
 func guardConfig() *config.Config {
 	cfg := config.DefaultConfig()
 	cfg.Cluster.Name = guardTestCluster
 	return cfg
-}
-
-func TestValidateDestroyFlagCombos_TargetedRequiresConfirmCluster(t *testing.T) {
-	resetDestroyFlags(t)
-	cfg := guardConfig()
-	destroyTargets = []string{guardTestTarget}
-
-	err := validateDestroyFlagCombos(cfg)
-	if err == nil {
-		t.Fatal("targeted destroy without --confirm-cluster must be refused")
-	}
-	var usageErr *errtypes.UsageError
-	if !errors.As(err, &usageErr) {
-		t.Errorf("want *errtypes.UsageError (exit 64), got %T: %v", err, err)
-	}
-	if !strings.Contains(err.Error(), `"prod"`) {
-		t.Errorf("refusal should name the cluster the operator must confirm: %v", err)
-	}
-
-	destroyConfirmCluster = guardTestCluster
-	if err := validateDestroyFlagCombos(cfg); err != nil {
-		t.Errorf("targeted destroy with --confirm-cluster must pass: %v", err)
-	}
 }
 
 func TestValidateDestroyFlagCombos_DryRunRejectsSkipFlags(t *testing.T) {
@@ -111,7 +82,7 @@ func TestValidateDestroyFlagCombos_DryRunAloneAndPlainDestroyPass(t *testing.T) 
 	cfg := guardConfig()
 
 	if err := validateDestroyFlagCombos(cfg); err != nil {
-		t.Errorf("unscoped destroy with no flags must pass: %v", err)
+		t.Errorf("destroy with no flags must pass: %v", err)
 	}
 	destroyDryRun = true
 	if err := validateDestroyFlagCombos(cfg); err != nil {
@@ -119,25 +90,7 @@ func TestValidateDestroyFlagCombos_DryRunAloneAndPlainDestroyPass(t *testing.T) 
 	}
 }
 
-func TestBuildDestroyOptions_ScopedForcesBastionTeardownOff(t *testing.T) {
-	resetDestroyFlags(t)
-	cfg := guardConfig()
-	destroyTargets = []string{guardTestTarget}
-
-	opts := buildDestroyOptions(cfg, t.TempDir())
-	if !opts.SkipCleanup || !opts.SkipFirewall || !opts.KeepISOs {
-		t.Errorf("scoped destroy must force cleanup/firewall/iso off: SkipCleanup=%v SkipFirewall=%v KeepISOs=%v",
-			opts.SkipCleanup, opts.SkipFirewall, opts.KeepISOs)
-	}
-	if len(opts.TerraformTargets) != 1 || opts.TerraformTargets[0] != guardTestTarget {
-		t.Errorf("targets must pass through to the destroy phase: %v", opts.TerraformTargets)
-	}
-	if !opts.AutoApprove {
-		t.Error("CLI-confirmed destroy must auto-approve terraform (confirmation already happened)")
-	}
-}
-
-func TestBuildDestroyOptions_UnscopedPassesFlagsThrough(t *testing.T) {
+func TestBuildDestroyOptions_PassesFlagsThrough(t *testing.T) {
 	resetDestroyFlags(t)
 	cfg := guardConfig()
 	destroySkipFirewall = true
@@ -145,13 +98,13 @@ func TestBuildDestroyOptions_UnscopedPassesFlagsThrough(t *testing.T) {
 
 	opts := buildDestroyOptions(cfg, t.TempDir())
 	if opts.SkipCleanup {
-		t.Error("unscoped destroy must not force SkipCleanup")
+		t.Error("destroy must not force SkipCleanup")
 	}
 	if !opts.SkipFirewall || !opts.KeepISOs {
 		t.Errorf("operator flags must pass through: SkipFirewall=%v KeepISOs=%v", opts.SkipFirewall, opts.KeepISOs)
 	}
-	if len(opts.TerraformTargets) != 0 {
-		t.Errorf("unscoped destroy must carry no targets: %v", opts.TerraformTargets)
+	if !opts.AutoApprove {
+		t.Error("CLI-confirmed destroy must auto-approve terraform (confirmation already happened)")
 	}
 }
 
@@ -171,25 +124,19 @@ func (r *lineReader) Read(p []byte) (int, error) {
 func TestConfirmDestroyInteractive(t *testing.T) {
 	cases := []struct {
 		name    string
-		scoped  bool
 		input   []string
 		proceed bool
 	}{
-		{"wrong cluster name refuses", false, []string{"prod-oops\n"}, false},
-		{"bare y at name stage refuses", false, []string{"y\n"}, false},
-		{"exact name then yes proceeds", false, []string{"prod\n", "y\n"}, true},
-		{"exact name then no aborts", false, []string{"prod\n", "n\n"}, false},
-		{"exact name then default-empty aborts", false, []string{"prod\n", "\n"}, false},
-		{"case-mismatched name refuses", false, []string{"PROD\n", "y\n"}, false},
-		{"scoped skips name stage", true, []string{"y\n"}, true},
-		{"scoped still requires the y", true, []string{"n\n"}, false},
+		{"wrong cluster name refuses", []string{"prod-oops\n"}, false},
+		{"bare y at name stage refuses", []string{"y\n"}, false},
+		{"exact name then yes proceeds", []string{"prod\n", "y\n"}, true},
+		{"exact name then no aborts", []string{"prod\n", "n\n"}, false},
+		{"exact name then default-empty aborts", []string{"prod\n", "\n"}, false},
+		{"case-mismatched name refuses", []string{"PROD\n", "y\n"}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			resetDestroyFlags(t)
-			if tc.scoped {
-				destroyTargets = []string{guardTestTarget}
-			}
 			testStdinReader = &lineReader{lines: tc.input}
 			t.Cleanup(func() { testStdinReader = nil })
 

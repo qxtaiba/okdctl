@@ -42,10 +42,7 @@ func TestExecutor_Destroy_UsePlanPlansThenAppliesSavedPlan(t *testing.T) {
 	tfvars := mustWriteFile(t, workDir, "terraform.tfvars", "x = 1\n")
 
 	e := New(workDir)
-	if err := e.Destroy(context.Background(), DestroyOptions{
-		UsePlan: true,
-		Targets: []string{masterAddr},
-	}); err != nil {
+	if err := e.Destroy(context.Background(), DestroyOptions{UsePlan: true}); err != nil {
 		t.Fatalf("Destroy: %v", err)
 	}
 
@@ -54,7 +51,7 @@ func TestExecutor_Destroy_UsePlanPlansThenAppliesSavedPlan(t *testing.T) {
 		t.Fatalf("expected exactly plan+apply invocations, got %d: %v", len(lines), lines)
 	}
 	planFile := filepath.Join(workDir, "destroy.tfplan")
-	wantPlan := "plan -lock-timeout=120s -var-file=" + tfvars + " -destroy -out=" + planFile + " -target=" + masterAddr
+	wantPlan := "plan -lock-timeout=120s -var-file=" + tfvars + " -destroy -out=" + planFile
 	if lines[0] != wantPlan {
 		t.Errorf("destroy plan argv drifted:\n got %q\nwant %q", lines[0], wantPlan)
 	}
@@ -95,7 +92,6 @@ func TestExecutor_DestroyDirect_ArgvShape(t *testing.T) {
 	if err := e.Destroy(context.Background(), DestroyOptions{
 		AutoApprove: true,
 		Parallelism: 4,
-		Targets:     []string{masterAddr},
 	}); err != nil {
 		t.Fatalf("Destroy: %v", err)
 	}
@@ -104,7 +100,7 @@ func TestExecutor_DestroyDirect_ArgvShape(t *testing.T) {
 	if len(lines) != 1 {
 		t.Fatalf("direct destroy must be a single invocation, got %d: %v", len(lines), lines)
 	}
-	want := "destroy -lock-timeout=120s -var-file=" + tfvars + " -auto-approve -parallelism=4 -target=" + masterAddr
+	want := "destroy -lock-timeout=120s -var-file=" + tfvars + " -auto-approve -parallelism=4"
 	if lines[0] != want {
 		t.Errorf("direct destroy argv drifted:\n got %q\nwant %q", lines[0], want)
 	}
