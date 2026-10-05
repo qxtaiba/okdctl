@@ -7,7 +7,6 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -92,10 +91,7 @@ var rootCmd = &cobra.Command{
 	Long: `okdctl provisions OKD clusters on Proxmox VE from an interactive wizard.
 It's for the homelab operator with one or two Proxmox nodes who wants a
 real Kubernetes cluster without hand-rolling Terraform, Ignition, and
-bootstrap glue.
-
-Release builds check api.github.com for a newer release (at most once
-per 24h, cached locally); set OKDCTL_NO_UPDATE_CHECK=1 to disable.`,
+bootstrap glue.`,
 	Example: `  okdctl deploy
   okdctl status
   okdctl node manage
@@ -212,8 +208,6 @@ func execute() (code int) {
 	defer close(mainDone)
 	go signalLoop(sigCh, cancel, &caughtSig, os.Exit, mainDone, secondSignalGrace)
 
-	updateCh := version.BackgroundCheck(ctx)
-
 	err := rootCmd.ExecuteContext(ctx)
 	if err != nil {
 		if sigCode, handled := signalExitCode(&caughtSig, err); handled {
@@ -225,7 +219,6 @@ func execute() (code int) {
 		return exitCodeFor(err)
 	}
 
-	printUpdateNotice(os.Stderr, updateCh)
 	return 0
 }
 
@@ -276,31 +269,6 @@ func signalLoop(sigCh <-chan os.Signal, cancel context.CancelFunc, caughtSig *at
 	case <-time.After(grace):
 		exit(code)
 	}
-}
-
-// printUpdateNotice writes the update-available banner to w, downsampling
-// every styled line so it stays plain under NO_COLOR/--no-color.
-func printUpdateNotice(w io.Writer, ch <-chan version.CheckResult) {
-	if logQuiet || logFormat == tui.FormatJSON {
-		return
-	}
-	var result version.CheckResult
-	t := time.NewTimer(100 * time.Millisecond)
-	defer t.Stop()
-	select {
-	case result = <-ch:
-	case <-t.C:
-		return
-	}
-	if result.LatestTag == "" {
-		return
-	}
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, tui.Downsample(tui.WarningStyle.Render("update available:")+" "+
-		tui.MutedStyle.Render(version.Version)+" → "+
-		tui.HighlightStyle.Render(result.LatestTag)))
-	fmt.Fprintln(w, tui.Downsample(tui.MutedStyle.Render("  to upgrade (sha256 + cosign verified):")))
-	fmt.Fprintln(w, tui.Downsample(tui.MutedStyle.Render("  curl -sSfL https://raw.githubusercontent.com/qxtaiba/okdctl/develop/scripts/install.sh | bash")))
 }
 
 // announceFailure renders the boxed ErrorSummary on a TTY, else logs "command

@@ -20,7 +20,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui"
-	"github.com/qxtaiba/okdctl/internal/version"
 )
 
 // tripwire: pflag embeds flag values in error text (unscrubbed UsageError.Msg);
@@ -331,7 +330,6 @@ func TestSignalExitCode(t *testing.T) {
 }
 
 func TestExecutePanicExitsSoftware(t *testing.T) {
-	t.Setenv("OKDCTL_NO_UPDATE_CHECK", "1")
 	t.Setenv(wizardDemoEnv, "1")
 
 	panicCmd := &cobra.Command{
@@ -412,28 +410,6 @@ func TestFlagErrorFuncReturnsUsageErrorWithHelpHint(t *testing.T) {
 	}
 	if buf.Len() != 0 {
 		t.Fatalf("FlagErrorFunc must not log directly; buffer = %q", buf.String())
-	}
-}
-
-func TestPrintUpdateNoticeNoANSIUnderNoColor(t *testing.T) {
-	prevQuiet, prevFormat := logQuiet, logFormat
-	logQuiet, logFormat = false, outputText
-	t.Cleanup(func() { logQuiet, logFormat = prevQuiet, prevFormat })
-
-	tui.SetColorProfileFor(&bytes.Buffer{}) // a buffer is never a TTY
-	t.Cleanup(func() { tui.SetColorProfileFor(&bytes.Buffer{}) })
-
-	ch := make(chan version.CheckResult, 1)
-	ch <- version.CheckResult{LatestTag: "v9.9.9"}
-
-	var out bytes.Buffer
-	printUpdateNotice(&out, ch)
-
-	if strings.Contains(out.String(), "\x1b[") {
-		t.Errorf("printUpdateNotice leaked ANSI escapes under a no-color profile:\n%q", out.String())
-	}
-	if !strings.Contains(out.String(), "v9.9.9") {
-		t.Errorf("printUpdateNotice output missing latest tag:\n%s", out.String())
 	}
 }
 
