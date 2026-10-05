@@ -83,18 +83,11 @@ func LogHelp(s *logview.Surface, trailing ...KeyBinding) []KeyBinding {
 	return append(keys, trailing...)
 }
 
-// FrameSize records the terminal an exec step is laid out against plus the
-// body box the frame gives it — neither of which View's own arguments
-// report, since the frame calls View with a fixed 1000-row scratch budget
-// and a width its caps have already flattened.
+// FrameSize records the body box the frame gives an exec step, which View's
+// own arguments do not report, since the frame calls View with a fixed
+// 1000-row scratch budget.
 type FrameSize struct {
-	termWidth, termHeight int
-	bodyHeight            int
-}
-
-// SetTerminalSize records the terminal's own dimensions.
-func (f *FrameSize) SetTerminalSize(width, height int) {
-	f.termWidth, f.termHeight = width, height
+	bodyHeight int
 }
 
 // SetBodyHeight records the rows the frame gave the step's body.
@@ -106,11 +99,4 @@ func (f *FrameSize) SetBodyHeight(height int) {
 // step at least once.
 func (f *FrameSize) BodyHeight() int {
 	return f.bodyHeight
-}
-
-// SplitsFrame reports whether this terminal gives a stepCount-step flow a
-// right-hand pane; the flow passes its own screen count, the one part of the
-// gate that is not shared.
-func (f *FrameSize) SplitsFrame(stepCount int) bool {
-	return SplitsFrame(f.termWidth, f.termHeight, stepCount)
 }

@@ -12,7 +12,6 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/releases"
-	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
@@ -438,15 +437,6 @@ func (s *DistributionStep) Apply(cfg *config.Config) error {
 	cfg.Distribution.Type = config.DistributionOKD
 	cfg.Distribution.Version = s.selectedVersion
 	return nil
-}
-
-// Answered summarizes the selected version as a fact, or reports nothing
-// before a version is chosen.
-func (s *DistributionStep) Answered() []render.Fact {
-	if s.selectedVersion == "" {
-		return nil
-	}
-	return []render.Fact{{Key: "version", Value: s.selectedVersion}}
 }
 
 // ShortHelp returns the step's help bar, which differs by phase: the select

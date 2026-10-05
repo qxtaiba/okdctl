@@ -64,7 +64,7 @@ func ringWithErrorAt(n, at int) *Ring {
 // still follows the tail.
 func TestLogMinimapMarksAnOffScreenErrorPosition(t *testing.T) {
 	const width, height = 60, 10
-	out := tuitest.StripANSI(renderPane(ringWithErrorAt(60, 6), view{}, width, height, false))
+	out := tuitest.StripANSI(tailFrame(ringWithErrorAt(60, 6), view{}, width, height))
 
 	rows := strings.Split(out, "\n")
 	var marked []int
@@ -89,7 +89,7 @@ func TestLogMinimapMarksAnOffScreenErrorPosition(t *testing.T) {
 // TestLogMinimapMarksTheVisibleWindowApart keeps the lane orienting: the
 // cells the window covers read differently from the track around them.
 func TestLogMinimapMarksTheVisibleWindowApart(t *testing.T) {
-	out := tuitest.StripANSI(renderPane(seededRing(60), view{}, 60, 10, false))
+	out := tuitest.StripANSI(tailFrame(seededRing(60), view{}, 60, 10))
 	rows := strings.Split(out, "\n")
 
 	var thumb, track int
@@ -109,7 +109,7 @@ func TestLogMinimapMarksTheVisibleWindowApart(t *testing.T) {
 // TestLogMinimapYieldsTheColumnWhenNothingIsOffScreen keeps the lane out of
 // a window already showing the whole stream: there is no target to scroll to.
 func TestLogMinimapYieldsTheColumnWhenNothingIsOffScreen(t *testing.T) {
-	out := tuitest.StripANSI(renderPane(ringWithErrorAt(6, 1), view{}, 60, 10, false))
+	out := tuitest.StripANSI(tailFrame(ringWithErrorAt(6, 1), view{}, 60, 10))
 	for _, row := range strings.Split(out, "\n") {
 		if strings.HasSuffix(row, tui.IconBar) || strings.HasSuffix(row, tui.IconBarSegment) {
 			t.Errorf("a fully-visible stream still drew a lane cell: %q", row)
@@ -120,7 +120,7 @@ func TestLogMinimapYieldsTheColumnWhenNothingIsOffScreen(t *testing.T) {
 // TestLogMinimapYieldsTheColumnOnANarrowWindow keeps the lane from eating
 // message text where there is none to spare.
 func TestLogMinimapYieldsTheColumnOnANarrowWindow(t *testing.T) {
-	out := tuitest.StripANSI(renderPane(ringWithErrorAt(60, 6), view{}, minimapMinWidth-1, 8, false))
+	out := tuitest.StripANSI(tailFrame(ringWithErrorAt(60, 6), view{}, minimapMinWidth-1, 8))
 	for _, row := range strings.Split(out, "\n") {
 		if strings.HasSuffix(row, tui.IconBar) || strings.HasSuffix(row, tui.IconBarSegment) {
 			t.Errorf("narrow window still drew a lane cell: %q", row)
@@ -144,7 +144,7 @@ func TestLogMinimapHonorsSparseFilterSpan(t *testing.T) {
 		r.Append(Line{At: logBase.Add(time.Duration(i) * time.Second), Level: "INFO", Text: text})
 	}
 
-	out := tuitest.StripANSI(renderPane(r, view{filter: filter{text: "needle"}}, 60, 10, false))
+	out := tuitest.StripANSI(tailFrame(r, view{filter: filter{text: "needle"}}, 60, 10))
 	rows := strings.Split(out, "\n")[1:] // drop the header
 
 	if len(rows) != 3 {
@@ -162,7 +162,7 @@ func TestLogMinimapHonorsSparseFilterSpan(t *testing.T) {
 // attached: every row stays within the pane's columns, never one over.
 func TestLogPaneRowsFitTheWidthWithTheLane(t *testing.T) {
 	const width, height = 52, 9
-	out := renderPane(ringWithErrorAt(80, 3), view{}, width, height, false)
+	out := tailFrame(ringWithErrorAt(80, 3), view{}, width, height)
 	for i, row := range strings.Split(tuitest.StripANSI(out), "\n") {
 		if w := lipgloss.Width(row); w > width {
 			t.Errorf("row %d is %d cols, want <= %d: %q", i, w, width, row)
@@ -170,8 +170,8 @@ func TestLogPaneRowsFitTheWidthWithTheLane(t *testing.T) {
 	}
 }
 
-// TestLogTailCarriesTheGutterAndLane pins the narrow tier: the rows riding
-// under a step's own body get the same instrument the pane does.
+// TestLogTailCarriesTheGutterAndLane pins the tail: the rows riding under a
+// step's own body get the same instrument the full-screen log does.
 func TestLogTailCarriesTheGutterAndLane(t *testing.T) {
 	rows := renderTail(ringWithErrorAt(60, 6), view{}, 60, NarrowTailRows)
 	if len(rows) < 2 {

@@ -13,7 +13,7 @@ import (
 )
 
 // streamModel builds the deploy flow on the stream screen with a seeded log
-// ring, sized to the split tier.
+// ring.
 func streamModel(t *testing.T) *wizard.Model {
 	t.Helper()
 	tui.SetTerminalWidth(120)

@@ -15,7 +15,6 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
 )
@@ -63,8 +62,8 @@ type FieldWidth int
 
 // formFieldChrome is the section indent and field-row padding a box's
 // preferred width must clear beneath formMaxWidth (model.go), so
-// FieldWidthAuto and FieldWidthPath track the form column's own measure
-// instead of a bigger guessed constant each time a box falls short of it.
+// FieldWidthAuto and FieldWidthPath track one measure instead of a bigger
+// guessed constant each time a box falls short of it.
 const formFieldChrome = 8
 
 // Field width classes for data-driven step definitions.
@@ -77,8 +76,7 @@ const (
 
 // Cols resolves w to a concrete box width in columns, clamped to avail;
 // FieldWidthFull always returns avail itself, and FieldWidthAuto derives
-// from formMaxWidth rather than a bare literal so a wide form column
-// doesn't leave the box stranded short of the space it was given.
+// from formMaxWidth rather than a bare literal.
 func (w FieldWidth) Cols(avail int) int {
 	if w == FieldWidthFull {
 		return avail
@@ -159,11 +157,6 @@ type StepDefinition struct {
 	ShouldShow        func(*config.Config) bool
 	ExtraContent      func(values map[string]string, width int) string
 	ExtraContentTitle string // info card title used when ExtraContent renders non-empty content
-
-	// Answered, when set, summarizes the step's current values as facts for
-	// the wide-terminal context pane's CONFIGURED section; a definition that
-	// leaves it nil contributes nothing there.
-	Answered func(values map[string]string) []render.Fact
 }
 
 // FormSection pairs a titled section with its built InputGroup — the
@@ -583,10 +576,9 @@ var pairGapStr = strings.Repeat(" ", pairGap)
 // insets, once (the form section's own 4-column padding is still to come;
 // comparing against View's width rather than the further-reduced innerWidth
 // keeps this one constant stable across that one extra layer of
-// subtraction). See formPaneWidths before changing this: past 150 columns
-// the split layout's form column is fixed at formMaxWidth, so a wider
-// terminal does not widen a pair's columns further. Below it (the 60-79
-// "compact" tier) every declared pair falls back to single column.
+// subtraction). Past the body's singleFormMaxWidth cap a wider terminal
+// does not widen a pair's columns further. Below it (the 60-79 "compact"
+// tier) every declared pair falls back to single column.
 const pairMinWidth = 70
 
 // pairDefaultTagged is implemented by a paired field that may carry a
@@ -1228,30 +1220,6 @@ func (s *DataDrivenStep) Apply(cfg *config.Config) error {
 // View; the form's blocks start at the step's own line 0, so no offset applies.
 func (s *DataDrivenStep) FocusedSpan() (LineSpan, bool) {
 	return s.form.FocusedSpan()
-}
-
-// Answered summarizes the step's current values via the definition's
-// Answered hook, or reports nothing when the definition leaves it nil.
-func (s *DataDrivenStep) Answered() []render.Fact {
-	if s.definition.Answered == nil {
-		return nil
-	}
-	return s.definition.Answered(s.values())
-}
-
-// FocusedFieldHelp reports the form's currently focused field's label and
-// help text, or ok=false when there is no focused field or it carries no
-// help text.
-func (s *DataDrivenStep) FocusedFieldHelp() (label, help string, ok bool) {
-	field := s.form.FocusedField()
-	if field == nil {
-		return "", "", false
-	}
-	lf, isLabeled := field.(components.LabeledField)
-	if !isLabeled || lf.FieldHelp() == "" {
-		return "", "", false
-	}
-	return lf.FieldLabel(), lf.FieldHelp(), true
 }
 
 // ShouldShow reports whether this step is visible given the current cfg.

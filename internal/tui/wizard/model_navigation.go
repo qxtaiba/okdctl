@@ -43,7 +43,7 @@ func (m *Model) sizeCurrentStep() {
 // resizeViewport re-fits the scrollable viewport to the active step's body
 // width and the frame's fixed height budget, constructing it on first call.
 // Called on every step transition as well as every terminal resize: a
-// splitSuppressor step changes the body width without the terminal changing at
+// frameWidthOwner step changes the body width without the terminal changing at
 // all.
 func (m *Model) resizeViewport() {
 	width, height := m.viewportDimensions()

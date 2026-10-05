@@ -5,13 +5,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
-// flowStepCount is how many screens NewSteps assembles, the step count the
-// frame's split gate is evaluated against. The frame counts only visible
-// steps, but above the wizard's 20-row floor both gates agree at every
-// count this flow can show; TestLifecycleFlowStepCountMatchesNewSteps pins
-// the constant.
-const flowStepCount = 7
-
 // NewSteps assembles the Cluster Lifecycle flow's ordered steps. Direct
 // construction instead of a StepBuilder registry: the registry's
 // indirection earns its keep only with multiple assembly sites.

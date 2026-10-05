@@ -140,9 +140,8 @@ func configureScenarios() []configureScenario {
 			interact: endKey,
 		},
 		{
-			// A saved baseline identical to the current config: the pane
-			// must say so honestly ("no edits since load · 0"), not stay
-			// silent or claim a brand-new, never-loaded configuration.
+			// A saved baseline identical to the current config renders no
+			// config-changes block.
 			name: "review-no-changes",
 			id:   wizard.StepIDReview,
 			seed: func(m *wizard.Model) {
@@ -440,11 +439,9 @@ func heroBlockRows(frame string) int {
 	return rows
 }
 
-// TestGolden_HubWideTerminals pins the hub on the two wide tiers goldenSizes
-// doesn't cover: 140x40, where the hero draws at double scale inside a
-// single-column frame, and 180x48, where the ≥150-col split would engage for
-// any other step — the hub declines it, so no context pane may appear beside a
-// centered launcher.
+// TestGolden_HubWideTerminals pins the hub on the two wide sizes goldenSizes
+// doesn't cover, 140x40 and 180x48, where the hero draws at double scale and
+// the launcher centers across the frame's whole width.
 func TestGolden_HubWideTerminals(t *testing.T) {
 	for _, sz := range []struct{ w, h int }{{140, 40}, {180, 48}} {
 		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
@@ -463,28 +460,17 @@ func TestGolden_HubWideTerminals(t *testing.T) {
 			if got, want := heroBlockRows(frame), tui.WordmarkRows*heroScale; got != want {
 				t.Errorf("hero occupies %d rows at %dx%d, want the double-scale %d", got, sz.w, sz.h, want)
 			}
-			if strings.Contains(tuitest.StripANSI(frame), "STEPS") {
-				t.Errorf("the hub must suppress the wide split, got a context pane:\n%s", frame)
-			}
 		})
 	}
 }
 
-// wideSplitScenarios are the configureScenarios names TestGolden_WideSplit
-// pins at 180x48: proxmox (a short form, so the split's idle vertical space
-// below the form is visible) and review (a long one, so the split survives
-// a scrolling body).
-var wideSplitScenarios = map[string]bool{"proxmox": true, "review": true, "review-edited": true, "node-placement": true, "review-no-changes": true}
+var wideTerminalScenarios = map[string]bool{"proxmox": true, "node-placement": true, "review": true, "review-edited": true, "review-with-8-targets": true}
 
-// TestGolden_WideSplit pins the ≥150-col split layout — form column, rule,
-// context pane — at 180x48 for wideSplitScenarios; every other scenario
-// keeps the same goldenSizes coverage TestGolden_ConfigureSteps already
-// pins, so the split layout isn't re-pinned for every step.
-func TestGolden_WideSplit(t *testing.T) {
+func TestGolden_WideTerminal(t *testing.T) {
 	const w, h = 180, 48
 
 	for _, sc := range configureScenarios() {
-		if !wideSplitScenarios[sc.name] {
+		if !wideTerminalScenarios[sc.name] {
 			continue
 		}
 		t.Run(fmt.Sprintf("%s_%dx%d", sc.name, w, h), func(t *testing.T) {
@@ -513,87 +499,12 @@ func TestGolden_WideSplit(t *testing.T) {
 	}
 }
 
-// TestModel_HeightGateAtReproSizes pins the exact sizes a real overflow was
-// reproduced at (150x20/24/30, on the proxmox step, whose Answered() and
-// FocusedFieldHelp() both contribute pane content): every one must render
-// exactly the requested rows now, whether or not the split actually engages.
-// 150x20 sits one row below the 11-step wizard's height floor (22, see
-// splitMinHeight in the wizard package) so it must fall back to the
-// single-column tier — the other two sit at/above the floor, so the split
-// stays on and the pane itself squeezes instead.
-func TestModel_HeightGateAtReproSizes(t *testing.T) {
-	const w = 150
-	cases := []struct {
-		h         int
-		wantSplit bool
-	}{
-		{20, false},
-		{24, true},
-		{30, true},
-	}
-
-	for _, c := range cases {
-		t.Run(fmt.Sprintf("%dx%d", w, c.h), func(t *testing.T) {
-			tui.SetTerminalWidth(w)
-			t.Cleanup(func() { tui.SetTerminalWidth(0) })
-
-			m := newGoldenModel(t)
-			_ = tuitest.RenderAt(t, m, w, c.h)
-			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDProxmox})
-			m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
-
-			frame := tuitest.RenderAt(t, m, w, c.h)
-			tuitest.AssertFits(t, frame, w, c.h)
-
-			plain := tuitest.StripANSI(frame)
-			if got := strings.Count(plain, "\n") + 1; got != c.h {
-				t.Errorf("%dx%d: frame = %d rows, want exactly %d", w, c.h, got, c.h)
-			}
-			if hasSplit := strings.Contains(plain, "PROGRESS"); hasSplit != c.wantSplit {
-				t.Errorf("%dx%d: split active = %v, want %v", w, c.h, hasSplit, c.wantSplit)
-			}
-		})
-	}
-}
-
-// TestGolden_WideSplitSqueezed pins the squeezed-pane visual state: 150x24
-// sits just above the 11-step wizard's split-layout height floor (22), so
-// the split stays on but there's only room for the PROGRESS section —
-// CONFIGURED and FOCUSED FIELD both drop rather than overflowing the frame.
-func TestGolden_WideSplitSqueezed(t *testing.T) {
-	const w, h = 150, 24
-
-	tui.SetTerminalWidth(w)
-	t.Cleanup(func() { tui.SetTerminalWidth(0) })
-
-	m := newGoldenModel(t)
-	_ = tuitest.RenderAt(t, m, w, h)
-	m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDProxmox})
-	m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
-
-	frame := tuitest.RenderAt(t, m, w, h)
-	tuitest.Golden(t, fmt.Sprintf("proxmox-squeezed_%dx%d", w, h), frame)
-	tuitest.AssertFits(t, frame, w, h)
-
-	plain := tuitest.StripANSI(frame)
-	if !strings.Contains(plain, "PROGRESS") {
-		t.Fatal("squeezed pane must still show PROGRESS")
-	}
-	if strings.Contains(plain, "CONFIGURED") || strings.Contains(plain, "FOCUSED FIELD") {
-		t.Errorf("squeezed pane at 150x24 should have dropped CONFIGURED and FOCUSED FIELD:\n%s", plain)
-	}
-}
-
-// TestModel_PasswordNeverLeaksIntoContextPane drives real keystrokes typing
-// a sentinel password into the proxmox password field one character at a
+// TestModel_PasswordNeverLeaksIntoTheFrame drives real keystrokes typing a
+// sentinel password into the proxmox password field one character at a
 // time, rendering the full composed frame after every keystroke: neither
 // the sentinel nor any prefix of it 3 characters or longer may ever appear
-// anywhere in the output. This proves the credential-exclusion guarantee
-// end-to-end, through the real form/focus/pane pipeline, rather than only
-// at the StepDefinition.Answered() layer
-// TestProxmoxStepDefinition_AnsweredExcludesCredentials (apply_test.go)
-// already pins on its own.
-func TestModel_PasswordNeverLeaksIntoContextPane(t *testing.T) {
+// anywhere in the output.
+func TestModel_PasswordNeverLeaksIntoTheFrame(t *testing.T) {
 	const w, h = 180, 48
 	const sentinel = "hunter2sentinel"
 
@@ -650,11 +561,10 @@ func TestGolden_HelpOverlay(t *testing.T) {
 }
 
 // TestGolden_DistributionHelpOverlay pins the "?" overlay for the
-// distribution step's select phase, at the narrowest single-column tier and
-// the widest split tier: its new footer-silent "r refresh" entry (the
-// loaded phase's reuse of the key the error phase already binds as "r
-// retry", see handleKeyMsg) now appears in the overlay's screen section at
-// both extremes.
+// distribution step's select phase, at the narrowest tier and a wide
+// terminal: its footer-silent "r refresh" entry (the loaded phase's reuse of
+// the key the error phase already binds as "r retry", see handleKeyMsg)
+// appears in the overlay's screen section at both extremes.
 func TestGolden_DistributionHelpOverlay(t *testing.T) {
 	questionMark := tea.KeyPressMsg{Code: '?', Text: "?"}
 

@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/colorprofile"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -51,33 +50,14 @@ func TestGolden_ChromeOnly(t *testing.T) {
 	})
 }
 
-// TestGolden_HelpOverlayWideSplit pins the overlay's modal claim on the
-// split tier: centered over the full content width, no pane beside it.
-func TestGolden_HelpOverlayWideSplit(t *testing.T) {
-	cfg := config.DefaultConfig()
-	cfg.Cluster.Name = "homelab"
-	m := NewFlowModel([]WizardStep{newNopStep()}, cfg, DefaultChrome())
-	_ = tuitest.RenderAt(t, m, 180, 48)
-
-	mm, _ := m.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
-	frame := mm.(*Model).View().Content
-	tuitest.Golden(t, "help_overlay_180x48", frame)
-	tuitest.AssertFits(t, frame, 180, 48)
-}
-
 func TestGolden_ChromeThemeVariants(t *testing.T) {
 	t.Setenv("NO_COLOR", "")
 	t.Cleanup(func() {
 		tui.SetColorProfileFor(&bytes.Buffer{})
 		resetPackageColorState()
 	})
-	// 150x30 is the split tier (SplitsFrame needs width >= wideSplitWidth):
-	// the context pane reads theme fields through an injected *tui.Theme
-	// rather than the package's style vars, so a light/dark regression there
-	// needs its own width — 100x30 alone never renders that surface at all.
 	sizes := []struct{ w, h int }{
 		{100, 30},
-		{150, 30},
 	}
 	for _, tc := range []struct {
 		name string

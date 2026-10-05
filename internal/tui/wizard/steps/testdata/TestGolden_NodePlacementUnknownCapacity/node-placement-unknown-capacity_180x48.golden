@@ -3,44 +3,44 @@
   │ O K D C T L                                                                                                                                                                  │  
   │ configure node placement                                                                                                            connect · cluster ✓●○○ · extras · review │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
-  │    discovered 1 node(s), 2 storage pool(s), 2 bridge(s)                                                │  PROGRESS                                                           │  
-  │    pve1 ✓ online · ?c · ?g                                                                             │  ✓ welcome                                                          │  
-  │    assigned demand · pve1: 40c/104g/1850gb                                                             │  ✓ okd version                                                      │  
-  │                                                                                                        │  ✓ proxmox configuration                                            │  
-  │                                                                                                        │  ✓ cluster basics                                                   │  
-  │    ✓ infrastructure                                                                                    │  ● node placement                                                   │  
-  │                                                                                                        │  ○ network configuration                                            │  
-  │    bridge                                                                                              │  ○ node resources                                                   │  
-  │    ╭────────────╮                                                                                      │  ○ cluster addons                                                   │  
-  │    │ ◂ vmbr0 ▸  │                                                                                      │  ○ files & ignition                                                 │  
-  │    ╰────────────╯                                                                                      │  ○ advanced settings                                                │  
-  │                                                                                                        │  ○ review & deploy                                                  │  
-  │    additional networks                                                                                 │                                                                     │  
-  │    ╭──────────────────────────────────────────────────────────────────────────────────────────────╮    │                                                                     │  
-  │    │   [ ] vmbr0    [ ] vmbr1                                                                     │    │                                                                     │  
-  │    ╰──────────────────────────────────────────────────────────────────────────────────────────────╯    │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │    os storage                                                                                          │                                                                     │  
-  │    ╭────────────────────────────────────╮                                                              │                                                                     │  
-  │    │ ◂ local-lvm — pve1 500gb ▸         │                                                              │                                                                     │  
-  │    ╰────────────────────────────────────╯                                                              │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │    data storage                                                                                        │                                                                     │  
-  │    ╭────────────────────────────────────╮                                                              │                                                                     │  
-  │    │ ◂ orphan-pool — capacity unknown ▸ │                                                              │                                                                     │  
-  │    ╰────────────────────────────────────╯                                                              │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │    ● bootstrap                                                                                         │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │    mycluster-bootstrap                                                                                 │                                                                     │  
-  │    ╭──────────────────╮                                                                                │                                                                     │  
-  │    │ pve1 — ?c/?g     │ default                                                                        │                                                                     │  
-  │    ╰──────────────────╯                                                                                │                                                                     │  
-  │    proxmox node for bootstrap vm                                                                       │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │    ✓ control plane                                                                                     │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │    mycluster-master0                                                                                   │                                                                     │  
+  │    discovered 1 node(s), 2 storage pool(s), 2 bridge(s)                                                                                                                      │  
+  │    pve1 ✓ online · ?c · ?g                                                                                                                                                   │  
+  │    assigned demand · pve1: 40c/104g/1850gb                                                                                                                                   │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │    ✓ infrastructure                                                                                                                                                          │  
+  │                                                                                                                                                                              │  
+  │    bridge                                                                                                                                                                    │  
+  │    ╭────────────╮                                                                                                                                                            │  
+  │    │ ◂ vmbr0 ▸  │                                                                                                                                                            │  
+  │    ╰────────────╯                                                                                                                                                            │  
+  │                                                                                                                                                                              │  
+  │    additional networks                                                                                                                                                       │  
+  │    ╭────────────────────────────────────────────────────────────────────────────────────────────────────╮                                                                    │  
+  │    │   [ ] vmbr0    [ ] vmbr1                                                                           │                                                                    │  
+  │    ╰────────────────────────────────────────────────────────────────────────────────────────────────────╯                                                                    │  
+  │                                                                                                                                                                              │  
+  │    os storage                                                                                                                                                                │  
+  │    ╭────────────────────────────────────╮                                                                                                                                    │  
+  │    │ ◂ local-lvm — pve1 500gb ▸         │                                                                                                                                    │  
+  │    ╰────────────────────────────────────╯                                                                                                                                    │  
+  │                                                                                                                                                                              │  
+  │    data storage                                                                                                                                                              │  
+  │    ╭────────────────────────────────────╮                                                                                                                                    │  
+  │    │ ◂ orphan-pool — capacity unknown ▸ │                                                                                                                                    │  
+  │    ╰────────────────────────────────────╯                                                                                                                                    │  
+  │                                                                                                                                                                              │  
+  │    ● bootstrap                                                                                                                                                               │  
+  │                                                                                                                                                                              │  
+  │    mycluster-bootstrap                                                                                                                                                       │  
+  │    ╭──────────────────╮                                                                                                                                                      │  
+  │    │ pve1 — ?c/?g     │ default                                                                                                                                              │  
+  │    ╰──────────────────╯                                                                                                                                                      │  
+  │    proxmox node for bootstrap vm                                                                                                                                             │  
+  │                                                                                                                                                                              │  
+  │    ✓ control plane                                                                                                                                                           │  
+  │                                                                                                                                                                              │  
+  │    mycluster-master0                                                                                                                                                         │  
   │                                                                                                                                                                              │  
   │───────────────────────────────────────────────────────────── ↑ ↓  scroll down for more ───────────────────────────────────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
   │  ↑↓ navigate • ← → change value • enter continue • esc back • pgup/pgdn scroll • ctrl+c quit • ? help                                                                        │  

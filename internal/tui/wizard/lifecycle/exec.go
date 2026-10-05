@@ -244,7 +244,7 @@ func (s *ExecStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 // screen below the fold. With no Logs hook every key is inert — an empty
 // full-screen log would blank the whole body.
 func (s *ExecStep) handleLogKey(msg tea.KeyPressMsg) tea.Cmd {
-	switch relayout, moved := s.log.HandleKey(msg, s.paneCarriesLog()); {
+	switch relayout, moved := s.log.HandleKey(msg); {
 	case relayout:
 		return func() tea.Msg { return wizard.LayoutChangedMsg{} }
 	case moved:
@@ -254,8 +254,8 @@ func (s *ExecStep) handleLogKey(msg tea.KeyPressMsg) tea.Cmd {
 }
 
 // ConsumesPaging reports whether pgup/pgdn page the log window itself — the
-// full-screen log always, a locked pane or tail too — so the frame leaves
-// the keys to the step instead of scrolling the checklist viewport.
+// full-screen log always, a locked tail too — so the frame leaves the keys
+// to the step instead of scrolling the checklist viewport.
 func (s *ExecStep) ConsumesPaging() bool {
 	return s.log.ConsumesPaging()
 }
@@ -267,22 +267,10 @@ func (s *ExecStep) ScrollsWithArrows() bool {
 	return s.hooks.Logs == nil || !s.log.Full()
 }
 
-// SuppressesSplit hands the log the whole frame while `f` has it
+// OwnsFrameWidth hands the log the whole frame while `f` has it
 // full-screen; the checklist comes back the moment it is toggled off.
-func (s *ExecStep) SuppressesSplit() bool {
+func (s *ExecStep) OwnsFrameWidth() bool {
 	return s.log.Full() && s.hooks.Logs != nil
-}
-
-// PaneContent fills the split layout's right pane with the live log, in
-// place of the context pane's step list.
-func (s *ExecStep) PaneContent(width, height int) string {
-	return s.log.RenderPane(width, height)
-}
-
-// paneCarriesLog reports whether the log has a pane of its own, in which
-// case the checklist body carries no tail.
-func (s *ExecStep) paneCarriesLog() bool {
-	return s.hooks.Logs != nil && !s.log.Full() && s.SplitsFrame(flowStepCount)
 }
 
 // applyEvent updates node/row state for ev: a node change closes out the
@@ -506,18 +494,16 @@ func (s *ExecStep) View(width, _ int) string {
 		footnote += " · ctrl+c cancels after the current gate"
 	}
 
+	// The tail's budget is whatever body rows the checklist and the
+	// chrome around the tail (its blank row, the LOG header, and the
+	// footnote block) leave over, floored at logview.NarrowTailRows —
+	// slack becomes evidence instead of blank rows.
 	s.tailRendered = false
-	if !s.paneCarriesLog() {
-		// The tail's budget is whatever body rows the checklist and the
-		// chrome around the tail (its blank row, the LOG header, and the
-		// footnote block) leave over, floored at logview.NarrowTailRows —
-		// slack becomes evidence instead of blank rows.
-		budget := max(logview.NarrowTailRows, s.BodyHeight()-len(lines)-4)
-		if tail := s.log.RenderTail(col, budget); len(tail) > 0 {
-			lines = append(lines, "")
-			lines = append(lines, tail...)
-			s.tailRendered = true
-		}
+	budget := max(logview.NarrowTailRows, s.BodyHeight()-len(lines)-4)
+	if tail := s.log.RenderTail(col, budget); len(tail) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, tail...)
+		s.tailRendered = true
 	}
 
 	lines = append(lines, "", s.Styles().Dim.Render(lipgloss.Wrap(footnote, col, "")))

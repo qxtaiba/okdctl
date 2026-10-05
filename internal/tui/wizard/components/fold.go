@@ -58,12 +58,6 @@ func (f *FoldToggleField) Value() string { return "" }
 // SetValue is a no-op — the fold carries no bindable value.
 func (f *FoldToggleField) SetValue(string) {}
 
-// FieldLabel returns the fold's label.
-func (f *FoldToggleField) FieldLabel() string { return f.Label }
-
-// FieldHelp always returns "" — the fold has no focused-field help text.
-func (f *FoldToggleField) FieldHelp() string { return "" }
-
 // Focus gives the fold keyboard focus so enter can toggle it.
 func (f *FoldToggleField) Focus() tea.Cmd {
 	f.focused = true

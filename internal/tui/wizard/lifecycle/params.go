@@ -14,7 +14,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/node"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
-	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
@@ -303,13 +302,6 @@ func (s *ParamsStep) FocusedSpan() (wizard.LineSpan, bool) {
 		return wizard.LineSpan{}, false
 	}
 	return s.inner.FocusedSpan()
-}
-
-// Answered recaps the operation and target the op and target screens already
-// committed, for the split layout's context pane — the one thing worth
-// restating while this screen's own fields are still being edited.
-func (s *ParamsStep) Answered() []render.Fact {
-	return []render.Fact{{Key: factKeyOperation, Value: operationLabel(s.st)}}
 }
 
 // Apply writes the collected parameters into the shared state.

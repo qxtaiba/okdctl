@@ -15,20 +15,20 @@
   │                                                                                                                                                                              │  
   │                                                                                                                                                                              │  
   │                                                                                                                                                                              │  
-  │                                                        ╭───────────────────────────────────────────────────────────╮                                                         │  
-  │                                                        │ key bindings                                              │                                                         │  
-  │                                                        │                                                           │                                                         │  
-  │                                                        │ screen                                                    │                                                         │  
-  │                                                        │   ↑↓ select                                               │                                                         │  
-  │                                                        │   tab expand/collapse                                     │                                                         │  
-  │                                                        │   enter confirm                                           │                                                         │  
-  │                                                        │   r refresh                                               │                                                         │  
-  │                                                        │                                                           │                                                         │  
-  │                                                        │ vim     j/k scroll • ctrl+d/u half page • gg/G top/bottom │                                                         │  
-  │                                                        │ global  esc back • ctrl+c quit • ? help                   │                                                         │  
-  │                                                        │                                                           │                                                         │  
-  │                                                        │ esc or ? closes                                           │                                                         │  
-  │                                                        ╰───────────────────────────────────────────────────────────╯                                                         │  
+  │                        ╭───────────────────────────────────────────────────────────╮                                                                                         │  
+  │                        │ key bindings                                              │                                                                                         │  
+  │                        │                                                           │                                                                                         │  
+  │                        │ screen                                                    │                                                                                         │  
+  │                        │   ↑↓ select                                               │                                                                                         │  
+  │                        │   tab expand/collapse                                     │                                                                                         │  
+  │                        │   enter confirm                                           │                                                                                         │  
+  │                        │   r refresh                                               │                                                                                         │  
+  │                        │                                                           │                                                                                         │  
+  │                        │ vim     j/k scroll • ctrl+d/u half page • gg/G top/bottom │                                                                                         │  
+  │                        │ global  esc back • ctrl+c quit • ? help                   │                                                                                         │  
+  │                        │                                                           │                                                                                         │  
+  │                        │ esc or ? closes                                           │                                                                                         │  
+  │                        ╰───────────────────────────────────────────────────────────╯                                                                                         │  
   │                                                                                                                                                                              │  
   │                                                                                                                                                                              │  
   │                                                                                                                                                                              │  

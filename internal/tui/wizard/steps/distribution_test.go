@@ -31,19 +31,6 @@ func TestDistributionStep_Apply(t *testing.T) {
 	}
 }
 
-func TestDistributionStep_Answered(t *testing.T) {
-	s := NewDistributionStep()
-	if facts := s.Answered(); facts != nil {
-		t.Fatalf("Answered() before selection = %+v, want nil", facts)
-	}
-
-	s.SetSelectedVersion("4.18.0-okd-scos.10")
-	facts := s.Answered()
-	if len(facts) != 1 || facts[0].Key != "version" || facts[0].Value != "4.18.0-okd-scos.10" {
-		t.Fatalf("Answered() = %+v", facts)
-	}
-}
-
 func TestDistributionStep_GetMinorFromOptionID(t *testing.T) {
 	s := NewDistributionStep()
 	cases := map[string]int{

@@ -19,18 +19,6 @@ func TestExecStyleCacheRebuildsOnThemeFlip(t *testing.T) {
 	}
 }
 
-func TestFrameSizeSplitsOnlyTheWideTier(t *testing.T) {
-	var f FrameSize
-	f.SetTerminalSize(180, 48)
-	if !f.SplitsFrame(2) {
-		t.Error("180x48 must give a 2-step flow its pane")
-	}
-	f.SetTerminalSize(80, 24)
-	if f.SplitsFrame(2) {
-		t.Error("80x24 must stay a single column")
-	}
-}
-
 func TestFrameSizeReportsTheBodyBox(t *testing.T) {
 	var f FrameSize
 	if got := f.BodyHeight(); got != 0 {

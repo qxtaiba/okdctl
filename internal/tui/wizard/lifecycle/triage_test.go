@@ -13,7 +13,7 @@ import (
 )
 
 // execModel builds the lifecycle flow on the exec screen with a seeded log
-// ring, sized to the split tier — deployexec's streamModel, for this flow.
+// ring — deployexec's streamModel, for this flow.
 func execModel(t *testing.T) *wizard.Model {
 	t.Helper()
 	tui.SetTerminalWidth(120)

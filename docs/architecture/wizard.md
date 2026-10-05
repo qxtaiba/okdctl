@@ -16,8 +16,8 @@ over an existing `okdctl.yaml` (`deploy`, `edit config`, `manage nodes`,
 `cluster status`, `destroy`) or two on a blank slate (`get started`,
 `quit`). The hub is a hand-written `WizardStep`, not a `StepDefinition`,
 since a launcher has no fields to declare; it also implements
-`heroRenderer` and `splitSuppressor`, so the frame drops its own header
-chrome and never puts a context pane beside it — the block-letter
+`heroRenderer` and `frameWidthOwner`, so the frame drops its own header
+chrome and gives it the frame's whole width — the block-letter
 wordmark is the whole screen's identity.
 
 That five-verb menu resolves one of three ways. The `deploy` and `edit
@@ -202,77 +202,28 @@ in). The wizard's own floor is 60×20; below it neither the wizard nor a
 screenshot renders reliably, so `contentWidth` clamps to 54 rather than
 shrinking further.
 
-That `W − 4` frame also has a ceiling: below 150 columns it's capped at
-112, so a wide-but-not-split terminal doesn't stretch the form edge to
-edge just because there's room. `OuterContainerStyle` still renders at
-the full terminal width — the cap's leftover columns become blank
-right-hand margin, never a partial row for AltScreen to leave dirty.
+That frame always spans the terminal, but the body inside it has a
+ceiling: a step's content renders in one column capped at 110
+(`singleFormMaxWidth`), so a wide terminal doesn't stretch the form edge
+to edge just because there's room. That cap's leftover columns become
+blank right-hand margin inside the frame, never a partial row for
+AltScreen to leave dirty, and it holds at every width — there is no wider
+tier that adds a second column. The one exemption is a step that owns the
+frame's width (`frameWidthOwner`: the hub, a full-screen log, the deploy
+done screen), which renders across the whole content width instead.
 
-| Terminal      | Outer width (frame) | Content width | Viewport height (H−10) |
-| ------------- | -------------------- | -------------- | ----------------------- |
-| 60×20 (floor) | 56                    | 54              | 10                       |
-| 80×24         | 76                    | 74              | 14                       |
-| 100×30        | 96                    | 94              | 20                       |
-| 120×40        | 112                   | 110             | 30                       |
-| 149×40        | 112                   | 110             | 30                       |
+| Terminal      | Outer width (frame) | Content width | Body width | Viewport height (H−10) |
+| ------------- | -------------------- | -------------- | ----------- | ----------------------- |
+| 60×20 (floor) | 56                    | 54              | 54          | 10                       |
+| 80×24         | 76                    | 74              | 74          | 14                       |
+| 100×30        | 96                    | 94              | 94          | 20                       |
+| 120×40        | 116                   | 114             | 110         | 30                       |
+| 180×48        | 176                   | 174             | 110         | 38                       |
 
 In particular, the same 10-row overhead applies whether the terminal
-sits at the floor or at 149×40, since every row in the budget is a fixed
+sits at the floor or at 180×48, since every row in the budget is a fixed
 chrome row rather than one that scales with terminal size — only the
 viewport's own height absorbs the difference.
-
-## Layout: the wide-terminal split
-
-At and above 150 columns the frame stops growing the form and splits
-instead: a form column capped at 104, a 1-column rule, and a dim context
-pane that takes whatever's left after the rule, clamped to 28–44 columns.
-The form (and every `ResizableStep`) is sized to just the form column,
-not the full frame — `bodyWidth`, not `contentWidth` — while the header,
-status row, and footer still span the whole frame, form and pane both.
-
-| Terminal | Form | Rule | Pane | Content width |
-| -------- | ---- | ---- | ---- | -------------- |
-| 150×48   | 104  | 1    | 39   | 144             |
-| 151×48   | 104  | 1    | 40   | 145             |
-| 180×48   | 104  | 1    | 44   | 149             |
-
-180 is wide enough that the pane hits its 44-column ceiling; the
-remaining width past 104+1+44 becomes idle margin rather than stretching
-the pane further, the same way the sub-150 cap keeps the form itself from
-stretching. See `internal/tui/wizard/contextpane.go` for what the pane
-renders — a dim, unfocusable summary of the step list, the current step's
-answered facts, and the focused field's help text.
-
-The split is also gated on height, not width alone: `splitLayout`
-compares the terminal against `splitMinHeight(stepCount)`, defined as
-`fixedLayoutOverhead + paneStepsHeaderRows + stepCount` — the pane's
-STEPS section needs one row per step plus its own header row, on top of
-the same fixed chrome the single-column layout already pays for. That
-floor scales with the flow's own step count, so a longer flow needs a
-taller terminal before it splits at all; below it, even a terminal at or
-past `wideSplitWidth` takes the capped single-column tier instead of
-splitting into a pane too short to hold the step list.
-
-This is what fills the pane once that height floor is cleared:
-`renderContextPane` renders up to three sections in a strict priority
-order — STEPS, then SO FAR, then FOCUSED FIELD — and a height squeeze
-sacrifices them from the bottom of that order upward. The first section
-to go is FOCUSED FIELD: it renders only once SO FAR's own attempt has
-succeeded or had nothing to show, and even then only if its own lines
-still fit whatever rows remain. The next to go is SO FAR, once the pane
-is squeezed tighter still: when its lines do not fit the rows STEPS left
-behind, `renderContextPane` drops it, and that drop alone vetoes FOCUSED
-FIELD too, regardless of whether FOCUSED FIELD's own content would have
-fit on its own. That leaves STEPS itself, which turns to its
-`…`-truncation fallback — keeping rows around the current step and
-marking the rest with a trailing ellipsis — only as a defensive floor
-below the guarantee `splitMinHeight` already gives it; `splitLayout`'s own
-gate keeps that floor unreached in practice. That veto is a real
-distinction: a section absent because its step does not implement the
-relevant interface — no `answeredStep`, no `focusedFieldStep`, or a
-`focusedFieldStep` with nothing currently focused — never counts as a
-drop and never vetoes what comes after it. In particular, only a section
-that had content and did not fit silences the rest of the cascade.
 
 ## The status row
 
@@ -405,18 +356,12 @@ The stream groups the install engine's own setup/install/postinstall
 phases into five coarser, human-facing ones — `prep`, `ignition`,
 `infra`, `install`, `verify`, the order `deployexec.PhaseOrder` runs and
 collapses them in — each a checklist section of the steps it owns. That
-checklist shares its screen with a live log pane, in one of three tiers
-depending on how much room the terminal gives it: the wide-split tier
-renders the log as the frame's own right-hand pane (`StreamStep`
-implements `paneRenderer`, filling the same slot the context pane
-otherwise occupies, live rather than static), a narrower terminal instead
-gets a fixed six-line tail riding under the checklist, and either tier
-can be swapped to a third, full-screen view with the `f` key. The `l` key
-locks the visible window in place rather than following the newest line,
-useful for reading a burst of output before it scrolls away. This is the
-same `SplitsFrame` gate the configure flow's context pane uses, evaluated
-against the stream's own two-screen step count rather than the configure
-flow's.
+checklist shares its screen with a live log: a tail of at least six
+lines rides under the checklist, taking whatever rows the checklist
+leaves, and the `f` key swaps it to a full-screen view across the
+frame's whole width. The `l` key locks the visible window in place rather
+than following the newest line, useful for reading a burst of output
+before it scrolls away.
 
 ## Why not huh, survey, or promptui
 

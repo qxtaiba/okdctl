@@ -28,8 +28,8 @@ type lifecycleScenario struct {
 }
 
 // goldenHooks is the seeded feed the exec and done goldens render against:
-// no backend, a fixed log ring, and a fixed sink path so the pane, the
-// narrow tail, and the full-log pointers are deterministic.
+// no backend, a fixed log ring, and a fixed sink path so the log tail and
+// the full-log pointers are deterministic.
 func goldenHooks() Hooks {
 	return Hooks{Logs: seededRing(24), LogPath: "okd-install/okdctl.log"}
 }
@@ -354,8 +354,7 @@ func lifecycleScenarios() []lifecycleScenario {
 		{
 			// Mid-run: m0 collapsed with its total, m1 expanded with a
 			// spinner row and right-aligned durations, m2 still pending;
-			// the log tail rides under the checklist (or in the pane on
-			// the split tier).
+			// the log tail rides under the checklist.
 			name: "exec",
 			id:   StepIDExec,
 			build: func() (*State, Hooks) {
@@ -542,7 +541,6 @@ var lifecycleGoldenSizes = []struct {
 	{80, 24, true},
 	{100, 30, true},
 	{120, 40, true},
-	{150, 45, true},
 	{180, 48, true},
 }
 

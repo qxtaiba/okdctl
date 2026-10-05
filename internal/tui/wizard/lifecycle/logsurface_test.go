@@ -35,12 +35,6 @@ func seededRing(n int) *logview.Ring {
 	return r
 }
 
-func TestLifecycleFlowStepCountMatchesNewSteps(t *testing.T) {
-	if got := len(NewSteps(threeMasterState(), Hooks{})); got != flowStepCount {
-		t.Errorf("NewSteps builds %d screens, flowStepCount says %d", got, flowStepCount)
-	}
-}
-
 // TestExecNarrowFrameCarriesTheTailUnderTheChecklist pins proposal 3's core
 // claim on the lifecycle flow: terraform applies and drains stream into the
 // same instrument the deploy flow has, instead of running behind a blind
@@ -48,20 +42,11 @@ func TestLifecycleFlowStepCountMatchesNewSteps(t *testing.T) {
 func TestExecNarrowFrameCarriesTheTailUnderTheChecklist(t *testing.T) {
 	s := NewExecStep(threeMasterState(), Hooks{Logs: seededRing(20)})
 	s.buildRows()
-	s.SetTerminalSize(120, 40)
 	s.SetSize(104, 30)
 
 	body := tuitest.StripANSI(s.View(104, 1000))
 	if !strings.Contains(body, "step-19") {
 		t.Errorf("a narrow frame must carry the log tail:\n%s", body)
-	}
-
-	s.SetTerminalSize(180, 48)
-	if strings.Contains(tuitest.StripANSI(s.View(100, 1000)), "step-19") {
-		t.Error("a frame with a log pane must not repeat the tail in the body")
-	}
-	if !strings.Contains(tuitest.StripANSI(s.PaneContent(44, 8)), "step-19") {
-		t.Error("the pane must carry the live log on the split tier")
 	}
 }
 
@@ -72,7 +57,6 @@ func TestExecLockAndFullKeys(t *testing.T) {
 	s := NewExecStep(threeMasterState(), Hooks{Logs: seededRing(10)})
 	s.buildRows()
 	s.SetSize(100, 20)
-	s.SetTerminalSize(180, 48)
 
 	_, lockCmd := s.Update(tea.KeyPressMsg{Code: logview.KeyLock, Text: "l"})
 	if lockCmd == nil {
@@ -84,11 +68,11 @@ func TestExecLockAndFullKeys(t *testing.T) {
 	if !s.log.Locked() {
 		t.Fatal("l must lock the log")
 	}
-	if got := tuitest.StripANSI(s.PaneContent(44, 6)); !strings.Contains(got, "LOG · 6–10 of 10") {
-		t.Errorf("a locked pane must name its window position:\n%s", got)
+	if got := tuitest.StripANSI(strings.Join(s.log.RenderTail(44, 5), "\n")); !strings.Contains(got, "LOG · 6–10 of 10") {
+		t.Errorf("a locked tail must name its window position:\n%s", got)
 	}
 	if !s.ConsumesPaging() {
-		t.Error("a locked pane must claim the paging keys")
+		t.Error("a locked tail must claim the paging keys")
 	}
 	s.Update(tea.KeyPressMsg{Code: logview.KeyLock, Text: "l"})
 
@@ -99,7 +83,7 @@ func TestExecLockAndFullKeys(t *testing.T) {
 	if _, ok := cmd().(wizard.LayoutChangedMsg); !ok {
 		t.Errorf("f emitted %T, want LayoutChangedMsg", cmd())
 	}
-	if !s.SuppressesSplit() {
+	if !s.OwnsFrameWidth() {
 		t.Error("a full-screen log must claim the whole frame")
 	}
 	body := tuitest.StripANSI(s.View(104, 1000))
@@ -139,14 +123,12 @@ func TestExecShortHelpAdvertisesTheLogKeys(t *testing.T) {
 }
 
 // TestLifecycleDoneFailureKeepsTheLastLogLinesOnScreen pins the failure
-// card carrying its evidence: the ring's tail rides under the error card on
-// a narrow frame, the pane carries it on the split tier, and the sink line
-// names the file that keeps every byte.
+// card carrying its evidence: the ring's tail rides under the error card,
+// and the sink line names the file that keeps every byte.
 func TestLifecycleDoneFailureKeepsTheLastLogLinesOnScreen(t *testing.T) {
 	st := doneState()
 	st.Result = errLifecycleFailed
 	s := NewDoneStep(st, Hooks{Logs: seededRing(20), LogPath: "okd-install/okdctl.log"})
-	s.SetTerminalSize(100, 30)
 
 	out := tuitest.StripANSI(s.View(96, 1000))
 	if !strings.Contains(out, "step-19") {
@@ -154,14 +136,6 @@ func TestLifecycleDoneFailureKeepsTheLastLogLinesOnScreen(t *testing.T) {
 	}
 	if !strings.Contains(out, "full log okd-install/okdctl.log") {
 		t.Errorf("failure view must name the sink that keeps every byte:\n%s", out)
-	}
-
-	s.SetTerminalSize(180, 48)
-	if strings.Contains(tuitest.StripANSI(s.View(96, 1000)), "step-19") {
-		t.Error("a frame with a log pane must not repeat the tail under the card")
-	}
-	if !strings.Contains(tuitest.StripANSI(s.PaneContent(44, 8)), "step-19") {
-		t.Error("the pane must carry the tail on the completion screen too")
 	}
 }
 
@@ -195,7 +169,6 @@ func TestExecFinalSendAbortsOnACancelledRun(t *testing.T) {
 func TestExecFootnoteNamesTheResolvedSinkPath(t *testing.T) {
 	s := NewExecStep(threeMasterState(), Hooks{Logs: seededRing(4), LogPath: "/srv/lab/okdctl.log"})
 	s.buildRows()
-	s.SetTerminalSize(120, 40)
 
 	body := tuitest.StripANSI(s.View(104, 1000))
 	if !strings.Contains(body, "full log /srv/lab/okdctl.log") {
@@ -207,7 +180,6 @@ func TestExecFootnoteNamesTheResolvedSinkPath(t *testing.T) {
 
 	bare := NewExecStep(threeMasterState(), Hooks{})
 	bare.buildRows()
-	bare.SetTerminalSize(120, 40)
 	if body := tuitest.StripANSI(bare.View(104, 1000)); strings.Contains(body, "full log") {
 		t.Errorf("with no sink open the footnote must not invent one:\n%s", body)
 	}
@@ -218,7 +190,7 @@ func TestExecFootnoteNamesTheResolvedSinkPath(t *testing.T) {
 func TestDemoHooksCarryALogStream(t *testing.T) {
 	h := DemoHooks(0)
 	if h.Logs == nil {
-		t.Fatal("demo hooks must carry a log source for the pane")
+		t.Fatal("demo hooks must carry a log source for the log surface")
 	}
 	if h.Done == nil {
 		t.Fatal("demo hooks must carry the cancel channel for the final send")

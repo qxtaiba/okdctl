@@ -34,9 +34,9 @@ func mixedRing() *Ring {
 }
 
 func typeFilter(s *Surface, text string) {
-	s.HandleKey(tea.KeyPressMsg{Code: KeyFilter, Text: "/"}, false)
+	s.HandleKey(tea.KeyPressMsg{Code: KeyFilter, Text: "/"})
 	for _, r := range text {
-		s.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)}, false)
+		s.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
 }
 
@@ -46,9 +46,9 @@ func TestFilterSelectsOnlyMatchingRowsWithoutTouchingTheRing(t *testing.T) {
 	r := mixedRing()
 	s := &Surface{Src: r}
 	typeFilter(s, "etcd")
-	s.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter}, false)
+	s.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 
-	out := tuitest.StripANSI(s.RenderPane(70, 8))
+	out := tuitest.StripANSI(tailFrame(s.Src, s.v, 70, 8))
 	for _, row := range strings.Split(out, "\n")[1:] {
 		if !strings.Contains(row, "etcd") {
 			t.Errorf("filtered window shows a non-matching row: %q", row)
@@ -67,12 +67,12 @@ func TestFilterChipCountsMatchesOutOfTheStream(t *testing.T) {
 	s := &Surface{Src: mixedRing()}
 	typeFilter(s, "etcd")
 
-	out := tuitest.StripANSI(s.RenderPane(70, 8))
+	out := tuitest.StripANSI(tailFrame(s.Src, s.v, 70, 8))
 	if !strings.Contains(out, "/etcd (11/40)") {
 		t.Errorf("typing chip must count matches out of the stream:\n%s", out)
 	}
-	s.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter}, false)
-	if out := tuitest.StripANSI(s.RenderPane(70, 8)); !strings.Contains(out, "filter: etcd (11/40)") {
+	s.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if out := tuitest.StripANSI(tailFrame(s.Src, s.v, 70, 8)); !strings.Contains(out, "filter: etcd (11/40)") {
 		t.Errorf("committed chip must name the pattern:\n%s", out)
 	}
 }
@@ -81,9 +81,9 @@ func TestFilterChipCountsMatchesOutOfTheStream(t *testing.T) {
 func TestFilterNegationInvertsTheSelection(t *testing.T) {
 	s := &Surface{Src: mixedRing()}
 	typeFilter(s, "!etcd")
-	s.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter}, false)
+	s.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 
-	out := tuitest.StripANSI(s.RenderPane(70, 8))
+	out := tuitest.StripANSI(tailFrame(s.Src, s.v, 70, 8))
 	if !strings.Contains(out, "filter: !etcd (29/40)") {
 		t.Errorf("negated chip must count the complement:\n%s", out)
 	}
@@ -99,17 +99,17 @@ func TestFilterNegationInvertsTheSelection(t *testing.T) {
 func TestFilterInputEditsAndCancels(t *testing.T) {
 	s := &Surface{Src: mixedRing()}
 	typeFilter(s, "etcd")
-	s.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter}, false)
+	s.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	typeFilter(s, "xyz")
-	s.HandleKey(tea.KeyPressMsg{Code: tea.KeyBackspace}, false)
-	if out := tuitest.StripANSI(s.RenderPane(70, 8)); !strings.Contains(out, "/xy (0/40)") {
+	s.HandleKey(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	if out := tuitest.StripANSI(tailFrame(s.Src, s.v, 70, 8)); !strings.Contains(out, "/xy (0/40)") {
 		t.Errorf("backspace must shorten the pattern:\n%s", out)
 	}
 	if !s.CancelFilter() {
 		t.Fatal("CancelFilter must report closing an open input")
 	}
-	if out := tuitest.StripANSI(s.RenderPane(70, 8)); !strings.Contains(out, "filter: etcd (11/40)") {
+	if out := tuitest.StripANSI(tailFrame(s.Src, s.v, 70, 8)); !strings.Contains(out, "filter: etcd (11/40)") {
 		t.Errorf("esc must restore the committed pattern:\n%s", out)
 	}
 	if s.CancelFilter() {
@@ -122,14 +122,14 @@ func TestFilterInputEditsAndCancels(t *testing.T) {
 func TestFilterCommittedEmptyPatternClearsTheFilter(t *testing.T) {
 	s := &Surface{Src: mixedRing()}
 	typeFilter(s, "etcd")
-	s.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter}, false)
+	s.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	typeFilter(s, "")
-	s.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter}, false)
+	s.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	if s.Filtered() {
 		t.Error("an empty committed pattern must clear the filter")
 	}
-	if out := tuitest.StripANSI(s.RenderPane(70, 8)); strings.Contains(out, "filter:") {
+	if out := tuitest.StripANSI(tailFrame(s.Src, s.v, 70, 8)); strings.Contains(out, "filter:") {
 		t.Errorf("cleared filter must drop its chip:\n%s", out)
 	}
 }
@@ -138,7 +138,7 @@ func TestFilterCommittedEmptyPatternClearsTheFilter(t *testing.T) {
 // help keys out of a filter the operator is typing.
 func TestFilterInputConsumesTheFrameKeys(t *testing.T) {
 	s := &Surface{Src: mixedRing()}
-	s.HandleKey(tea.KeyPressMsg{Code: KeyFilter, Text: "/"}, false)
+	s.HandleKey(tea.KeyPressMsg{Code: KeyFilter, Text: "/"})
 	if !s.Filtering() {
 		t.Fatal("the filter key must open the input")
 	}
@@ -146,13 +146,13 @@ func TestFilterInputConsumesTheFrameKeys(t *testing.T) {
 		t.Error("an open filter input must hold pgup/pgdn still")
 	}
 	for _, r := range []rune{'j', 'k', 'G', '?', 'l', 'f'} {
-		s.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)}, false)
+		s.HandleKey(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
-	s.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter}, false)
+	s.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if s.Full() || s.Locked() {
 		t.Error("keys typed into the filter must not reach the lock or full-screen toggles")
 	}
-	if out := tuitest.StripANSI(s.RenderPane(70, 8)); !strings.Contains(out, "filter: jkG?lf") {
+	if out := tuitest.StripANSI(tailFrame(s.Src, s.v, 70, 8)); !strings.Contains(out, "filter: jkG?lf") {
 		t.Errorf("every typed key must land in the pattern:\n%s", out)
 	}
 }
@@ -163,25 +163,25 @@ func TestFilterInputConsumesTheFrameKeys(t *testing.T) {
 func TestFilterComposesWithThePagerContract(t *testing.T) {
 	s := &Surface{Src: mixedRing()}
 	typeFilter(s, "etcd")
-	s.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter}, false)
+	s.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 
-	s.RenderPane(70, 6)
-	s.HandleKey(tea.KeyPressMsg{Code: tea.KeyPgUp}, true)
+	tailFrame(s.Src, s.v, 70, 6)
+	s.HandleKey(tea.KeyPressMsg{Code: tea.KeyPgUp})
 	if !s.Locked() {
 		t.Fatal("paging up a filtered window must engage the lock")
 	}
-	out := tuitest.StripANSI(s.RenderPane(70, 6))
+	out := tuitest.StripANSI(tailFrame(s.Src, s.v, 70, 6))
 	if !strings.Contains(out, "match 2–6 of 11") {
 		t.Errorf("a locked filtered window must count in matches:\n%s", out)
 	}
 
 	at := s.LockPoint()
 	typeFilter(s, "")
-	s.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter}, false)
+	s.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if s.LockPoint() != at {
 		t.Errorf("clearing the filter moved the lock from %d to %d", at, s.LockPoint())
 	}
-	if out := tuitest.StripANSI(s.RenderPane(70, 6)); !strings.Contains(out, "of 40") {
+	if out := tuitest.StripANSI(tailFrame(s.Src, s.v, 70, 6)); !strings.Contains(out, "of 40") {
 		t.Errorf("an unfiltered locked window counts absolute lines:\n%s", out)
 	}
 }
@@ -190,21 +190,21 @@ func TestFilterComposesWithThePagerContract(t *testing.T) {
 // the lane shows an error is back there, and N walks to it.
 func TestJumpStopsOnWarningsAndErrorsWithNoFilter(t *testing.T) {
 	s := &Surface{Src: mixedRing()}
-	s.RenderPane(70, 6)
+	tailFrame(s.Src, s.v, 70, 6)
 
-	s.HandleKey(tea.KeyPressMsg{Code: KeyPrevMatch, Text: "N"}, true)
+	s.HandleKey(tea.KeyPressMsg{Code: KeyPrevMatch, Text: "N"})
 	if got := s.LockPoint(); got != 31 {
 		t.Fatalf("first N landed at %d, want the error at index 30", got)
 	}
-	if out := tuitest.StripANSI(s.RenderPane(70, 6)); !strings.Contains(out, "terraform apply failed") {
+	if out := tuitest.StripANSI(tailFrame(s.Src, s.v, 70, 6)); !strings.Contains(out, "terraform apply failed") {
 		t.Errorf("the jump target must be on screen:\n%s", out)
 	}
 
-	s.HandleKey(tea.KeyPressMsg{Code: KeyPrevMatch, Text: "N"}, true)
+	s.HandleKey(tea.KeyPressMsg{Code: KeyPrevMatch, Text: "N"})
 	if got := s.LockPoint(); got != 6 {
 		t.Fatalf("second N landed at %d, want the warning at index 5", got)
 	}
-	s.HandleKey(tea.KeyPressMsg{Code: KeyNextMatch, Text: "n"}, true)
+	s.HandleKey(tea.KeyPressMsg{Code: KeyNextMatch, Text: "n"})
 	if got := s.LockPoint(); got != 31 {
 		t.Fatalf("n landed at %d, want back to the error at index 30", got)
 	}
@@ -215,10 +215,10 @@ func TestJumpStopsOnWarningsAndErrorsWithNoFilter(t *testing.T) {
 func TestJumpStepsMatchesWhileFilteringKeepsTheKeysOneVocabulary(t *testing.T) {
 	s := &Surface{Src: mixedRing()}
 	typeFilter(s, "etcd")
-	s.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter}, false)
-	s.RenderPane(70, 6)
+	s.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	tailFrame(s.Src, s.v, 70, 6)
 
-	s.HandleKey(tea.KeyPressMsg{Code: KeyPrevMatch, Text: "N"}, true)
+	s.HandleKey(tea.KeyPressMsg{Code: KeyPrevMatch, Text: "N"})
 	if got := s.LockPoint(); got != 37 {
 		t.Fatalf("N under a filter landed at %d, want the etcd line at index 36", got)
 	}
@@ -233,21 +233,21 @@ func TestJumpStepsMatchesWhileFilteringKeepsTheKeysOneVocabulary(t *testing.T) {
 // unless HandleKey says so apart from the layout-toggle report KeyFull uses.
 func TestHandleKeyReportsMovedOnLockAndJump(t *testing.T) {
 	s := &Surface{Src: mixedRing()}
-	s.RenderPane(70, 6)
+	tailFrame(s.Src, s.v, 70, 6)
 
-	if _, moved := s.HandleKey(tea.KeyPressMsg{Code: KeyLock, Text: "l"}, true); !moved {
+	if _, moved := s.HandleKey(tea.KeyPressMsg{Code: KeyLock, Text: "l"}); !moved {
 		t.Error("locking the window must report moved")
 	}
-	if _, moved := s.HandleKey(tea.KeyPressMsg{Code: KeyLock, Text: "l"}, true); !moved {
+	if _, moved := s.HandleKey(tea.KeyPressMsg{Code: KeyLock, Text: "l"}); !moved {
 		t.Error("releasing the lock must report moved too")
 	}
-	if _, moved := s.HandleKey(tea.KeyPressMsg{Code: KeyPrevMatch, Text: "N"}, true); !moved {
+	if _, moved := s.HandleKey(tea.KeyPressMsg{Code: KeyPrevMatch, Text: "N"}); !moved {
 		t.Error("N must report moved")
 	}
-	if _, moved := s.HandleKey(tea.KeyPressMsg{Code: KeyNextMatch, Text: "n"}, true); !moved {
+	if _, moved := s.HandleKey(tea.KeyPressMsg{Code: KeyNextMatch, Text: "n"}); !moved {
 		t.Error("n must report moved")
 	}
-	if relayout, moved := s.HandleKey(tea.KeyPressMsg{Code: KeyFull, Text: "f"}, true); !relayout || moved {
+	if relayout, moved := s.HandleKey(tea.KeyPressMsg{Code: KeyFull, Text: "f"}); !relayout || moved {
 		t.Errorf("f must report relayout alone, got relayout=%v moved=%v", relayout, moved)
 	}
 }
@@ -278,8 +278,8 @@ func TestLockedFilteredWindowIgnoresLinesThatArriveAfterTheLock(t *testing.T) {
 	r := mixedRing()
 	s := &Surface{Src: r}
 	typeFilter(s, "etcd")
-	s.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter}, false)
-	s.HandleKey(tea.KeyPressMsg{Code: KeyLock, Text: "l"}, false)
+	s.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	s.HandleKey(tea.KeyPressMsg{Code: KeyLock, Text: "l"})
 	if !s.Locked() || !s.Filtered() {
 		t.Fatal("setup: window must be both filtered and locked")
 	}
@@ -301,9 +301,9 @@ func TestLockedFilteredWindowIgnoresLinesThatArriveAfterTheLock(t *testing.T) {
 func TestJumpWithNothingToFindLeavesTheWindowAlone(t *testing.T) {
 	r := seededRing(20)
 	s := &Surface{Src: r}
-	s.RenderPane(70, 6)
+	tailFrame(s.Src, s.v, 70, 6)
 
-	s.HandleKey(tea.KeyPressMsg{Code: KeyPrevMatch, Text: "N"}, true)
+	s.HandleKey(tea.KeyPressMsg{Code: KeyPrevMatch, Text: "N"})
 	if s.Locked() {
 		t.Error("a stream with no warning or error must leave the window following")
 	}

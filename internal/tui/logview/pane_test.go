@@ -36,7 +36,7 @@ func TestLogPaneFollowsTheTailWithinItsHeight(t *testing.T) {
 	// Wide enough that a row's step id survives truncation once the level
 	// gutter and the minimap lane have taken their columns.
 	const width, height = 47, 8
-	out := renderPane(seededRing(40), view{}, width, height, false)
+	out := tailFrame(seededRing(40), view{}, width, height)
 	lines := strings.Split(tuitest.StripANSI(out), "\n")
 
 	if len(lines) > height {
@@ -63,7 +63,7 @@ func TestLogPaneFollowsTheTailWithinItsHeight(t *testing.T) {
 }
 
 func TestLogPaneEmptyRingSaysSoInsteadOfRenderingBlank(t *testing.T) {
-	out := tuitest.StripANSI(renderPane(NewRing(8), view{}, 40, 6, false))
+	out := tuitest.StripANSI(renderFull(NewRing(8), view{}, 40, 6))
 	if !strings.Contains(out, "waiting for the first log line") {
 		t.Errorf("an empty ring must say so:\n%s", out)
 	}
@@ -108,6 +108,11 @@ func TestLogWindowLockOlderThanTheRingFallsBackToWhatIsLeft(t *testing.T) {
 	if len(w) == 0 {
 		t.Fatal("a lock the ring has outrun must still show what it holds")
 	}
+}
+
+// tailFrame renders the tail window as one frame of at most height rows.
+func tailFrame(src Source, v view, width, height int) string {
+	return strings.Join(renderTail(src, v, width, height-1), "\n")
 }
 
 // TestLogRowsCarryTextualLevelTags pins bug 24's minimal fix: warn and
@@ -172,7 +177,7 @@ func TestGolden_LogSurfaceTheme(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tui.UseTheme(tui.ResolveTheme(colorprofile.TrueColor, tc.dark, tui.ThemeDefault))
-			frame := renderPane(seededRing(8), view{}, 60, 5, false)
+			frame := tailFrame(seededRing(8), view{}, 60, 5)
 			if !strings.Contains(frame, tc.ansi) {
 				t.Errorf("log header = %q, want Accent %s", frame, tc.ansi)
 			}
@@ -189,7 +194,7 @@ func TestLogSurfaceHonorsNoColor(t *testing.T) {
 	})
 	t.Setenv("NO_COLOR", "1")
 	tui.SetColorProfileFor(io.Discard)
-	frame := renderPane(seededRing(8), view{}, 60, 5, false)
+	frame := tailFrame(seededRing(8), view{}, 60, 5)
 	frame = tui.Downsample(frame)
 	if strings.Contains(frame, "\x1b[") {
 		t.Fatalf("log surface emitted ANSI with NO_COLOR: %q", frame)
@@ -263,7 +268,7 @@ func TestLogPaneHeaderNamesTheLockedWindowPosition(t *testing.T) {
 	r := seededRing(40)
 	v := view{locked: true, lockAt: 30}
 
-	out := tuitest.StripANSI(renderPane(r, v, 60, 6, false))
+	out := tuitest.StripANSI(tailFrame(r, v, 60, 6))
 	if !strings.Contains(out, "LOG · 26–30 of 40") {
 		t.Errorf("locked pane header must name its window position, got:\n%s", out)
 	}
@@ -287,7 +292,7 @@ func TestRenderLogPaneWrapKeepsWholeLinesAndHonestCoordinates(t *testing.T) {
 		r.Append(Line{At: logBase, Level: "INFO", Text: text})
 	}
 
-	out := tuitest.StripANSI(renderPane(r, view{locked: true, lockAt: 8}, 60, 8, true))
+	out := tuitest.StripANSI(renderFull(r, view{locked: true, lockAt: 8}, 60, 8))
 	if strings.Contains(out, "…") {
 		t.Errorf("full-screen mode must wrap, never …-clip:\n%s", out)
 	}

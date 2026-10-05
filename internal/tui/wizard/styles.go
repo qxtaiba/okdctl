@@ -106,8 +106,7 @@ func init() {
 }
 
 // RenderStepProgress renders the step dots — ✓ completed, ● current, ○
-// pending — the context pane's own glyph vocabulary, so state never rides
-// on color alone.
+// pending — so state never rides on color alone.
 func RenderStepProgress(current, total int) string {
 	var parts []string
 	for i := range total {

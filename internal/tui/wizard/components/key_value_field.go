@@ -91,12 +91,6 @@ func (f *KeyValueField) Value() string {
 	return strings.Join(parts, ",")
 }
 
-// FieldLabel returns the field's label.
-func (f *KeyValueField) FieldLabel() string { return f.Label }
-
-// FieldHelp returns the field's help text.
-func (f *KeyValueField) FieldHelp() string { return f.Help }
-
 // SetValue parses a "k1=v1,k2=v2" string into rows, replacing any current
 // content. Values containing a comma will not round-trip through Value.
 func (f *KeyValueField) SetValue(value string) {

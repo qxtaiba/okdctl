@@ -90,8 +90,8 @@ type Hooks struct {
 	Execute func(st *State, events chan<- Event) error
 	// CancelDeploy requests a graceful cancel of the run in flight.
 	CancelDeploy func()
-	// Logs is the human log stream the log pane reads; nil leaves the pane to
-	// the wizard's own context pane.
+	// Logs is the human log stream the log surface reads; nil leaves the
+	// screens without a log tail or full-screen log.
 	Logs logview.Source
 	// LogPath is the resolved path of the run-log sink that keeps every byte
 	// the ring evicts; empty when no file sink is open, and no screen may then
@@ -103,11 +103,6 @@ type Hooks struct {
 	Done   <-chan struct{}
 	Finish *FinishHooks
 }
-
-// flowStepCount is how many screens NewSteps assembles, the step count the
-// frame's split gate is evaluated against; TestFlowStepCountMatchesNewSteps
-// pins it.
-const flowStepCount = 2
 
 // NewSteps assembles the deploy flow's ordered steps. Direct construction
 // instead of a StepBuilder registry: the registry's indirection earns its keep

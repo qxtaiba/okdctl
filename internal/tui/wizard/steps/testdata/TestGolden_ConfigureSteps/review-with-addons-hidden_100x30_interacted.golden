@@ -3,18 +3,6 @@
   │ O K D C T L                                                                                  │  
   │ review your configuration                                connect · cluster · extras · review │  
   │──────────────────────────────────────────────────────────────────────────────────────────────│  
-  │  vm dns           192.168.1.20 (bastion/dnsmasq)                                             │  
-  │                                                                                              │  
-  │  [5] compute                                                                                 │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
-  │  control plane     3 × (4 vcpu, 12 GB RAM, 50 GB os disk)                                    │  
-  │  workers           3 × (8 vcpu, 20 GB RAM, 50 GB os disk)                                    │  
-  │  worker data disk  500 gb per worker (1500 gb total)                                         │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
-  │  total             40 vcpu, 104 gb ram, 1850 gb disk                                         │  
-  │                                                                                              │  
-  │  [6] files & ignition                                                                        │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
   │  ignition server  https://192.168.1.20                                                       │  
   │  web root         /var/www/html                                                              │  
   │                                                                                              │  
@@ -23,6 +11,18 @@
   │  vm id base             6000                                                                 │  
   │  timeouts               bootstrap 60m, install 120m                                          │  
   │  terraform environment  production                                                           │  
+  │                                                                                              │  
+  │  DEPLOY PLAN                                                                                 │  
+  │  role      vms vcpu   ram os disk                                                            │  
+  │  bootstrap   1    4  8 gb   50 gb                                                            │  
+  │  masters     3    4 12 gb   50 gb                                                            │  
+  │  workers     3    8 20 gb   50 gb                                                            │  
+  │                                                                                              │  
+  │  WRITES                                                                                      │  
+  │  okdctl.yaml                                                                                 │  
+  │                                                                                              │  
+  │  HEADLESS                                                                                    │  
+  │  okdctl deploy --config 'okdctl.yaml' --yes --confirm-cluster 'mycluster'                    │  
   │                                                                                              │  
   │────────────────────── ↑ ↓  scroll up for more ────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
   │  ● deploy now   ○ save and exit           p preview install config … • ctrl+c quit • ? help  │  

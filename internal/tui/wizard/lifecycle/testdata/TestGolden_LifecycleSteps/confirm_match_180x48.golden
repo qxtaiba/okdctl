@@ -3,44 +3,44 @@
   │ O K D C T L                                                                                                                                                                  │  
   │ confirm removal                                                                                                                  op · target · params · plan · run ●○ · done │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
-  │                                                                                                        │  PROGRESS                                                           │  
-  │                                                                                                        │  ✓ operation                                                        │  
-  │                                                                                                        │  ✓ target                                                           │  
-  │                                                                                                        │  ✓ parameters                                                       │  
-  │                                                                                                        │  ✓ plan preview                                                     │  
-  │                                                                                                        │  ● confirm                                                          │  
-  │                                                                                                        │  ○ execute                                                          │  
-  │                                                                                                        │  ○ done                                                             │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │  CONFIGURED                                                         │  
-  │                                                                                                        │  operation: remove                                                  │  
-  │                                                                                                        │  node: homelab-worker2 (worker)                                     │  
-  │                                                                                                        │  storage: 1 ceph osd(s) destroyed                                   │  
-  │                       ⚠ confirm irreversible removal                                                   │  ingress: 1 router pod(s) here                                      │  
-  │                                                                                                        │                                                                     │  
-  │                       irreversible: destroys homelab-worker2 and its data disk;                        │                                                                     │  
-  │                       removed data cannot be recovered                                                 │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                       type the cluster name "homelab" to confirm                                       │                                                                     │  
-  │                       cluster name                                                                     │                                                                     │  
-  │                       ╭──────────────────────────────────────╮                                         │                                                                     │  
-  │                       │ homelab                              │                                         │                                                                     │  
-  │                       ╰──────────────────────────────────────╯                                         │                                                                     │  
-  │                       ✓ matches — press enter                                                          │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                          ⚠ confirm irreversible removal                                                                                                                      │  
+  │                                                                                                                                                                              │  
+  │                          irreversible: destroys homelab-worker2 and its data disk;                                                                                           │  
+  │                          removed data cannot be recovered                                                                                                                    │  
+  │                                                                                                                                                                              │  
+  │                          type the cluster name "homelab" to confirm                                                                                                          │  
+  │                          cluster name                                                                                                                                        │  
+  │                          ╭──────────────────────────────────────╮                                                                                                            │  
+  │                          │ homelab                              │                                                                                                            │  
+  │                          ╰──────────────────────────────────────╯                                                                                                            │  
+  │                          ✓ matches — press enter                                                                                                                             │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
   │                                                                                                                                                                              │  
   │─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
   │  enter confirm • esc back • ctrl+c quit • ? help                                                                                                                             │  

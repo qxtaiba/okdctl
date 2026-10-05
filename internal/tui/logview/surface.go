@@ -21,8 +21,7 @@ const (
 	KeyPrevMatch = 'N'
 )
 
-// NarrowTailRows is how many log lines ride under a step's own body when the
-// frame is too narrow to give the log a pane of its own.
+// NarrowTailRows is the fewest log lines that ride under a step's own body.
 const NarrowTailRows = 6
 
 // Surface is one screen's log viewport: the source it reads, the
@@ -43,7 +42,7 @@ type Surface struct {
 	// when the operator escapes out of it.
 	committed filter
 	// Recorded heights, one per window mode, stamped by the render methods.
-	fullH, tailH, paneW, paneH int
+	fullH, tailH int
 }
 
 // Full reports whether the log has taken the whole frame.
@@ -71,10 +70,9 @@ func (s *Surface) LockPoint() int64 {
 // KeyPrevMatch) moved the window without any layout change: on the narrow
 // tail the window rides below the step's own body, so the owning step must
 // still nudge the outer viewport toward it, or the newly-locked or
-// newly-jumped-to line can sit off screen below the fold. paneCarries names
-// the window the geometry keys move by: the split pane when the frame gives
-// the log one, the tail otherwise. With a nil Src every key is inert.
-func (s *Surface) HandleKey(msg tea.KeyPressMsg, paneCarries bool) (relayout, moved bool) {
+// newly-jumped-to line can sit off screen below the fold. With a nil Src
+// every key is inert.
+func (s *Surface) HandleKey(msg tea.KeyPressMsg) (relayout, moved bool) {
 	if s.Src == nil {
 		return false, false
 	}
@@ -104,16 +102,16 @@ func (s *Surface) HandleKey(msg tea.KeyPressMsg, paneCarries bool) (relayout, mo
 		jump(&s.v, s.Src, -1)
 		return false, true
 	case msg.Code == tea.KeyPgUp:
-		s.ScrollBy(-s.PageSize(paneCarries), paneCarries)
+		s.ScrollBy(-s.PageSize())
 	case msg.Code == tea.KeyPgDown:
-		s.ScrollBy(s.PageSize(paneCarries), paneCarries)
+		s.ScrollBy(s.PageSize())
 	case msg.Code == tea.KeyUp:
 		if s.v.full {
-			s.ScrollBy(-1, paneCarries)
+			s.ScrollBy(-1)
 		}
 	case msg.Code == tea.KeyDown:
 		if s.v.full {
-			s.ScrollBy(1, paneCarries)
+			s.ScrollBy(1)
 		}
 	}
 	return false, false
@@ -171,7 +169,7 @@ func (s *Surface) Filtered() bool {
 }
 
 // ConsumesPaging reports whether pgup/pgdn page the log window itself — the
-// full-screen log always, a locked pane or tail too, and an open filter input
+// full-screen log always, a locked tail too, and an open filter input
 // where they must stand still — so the frame leaves the keys to the step
 // instead of scrolling its own viewport.
 func (s *Surface) ConsumesPaging() bool {
@@ -180,36 +178,25 @@ func (s *Surface) ConsumesPaging() bool {
 
 // ScrollBy moves the log window n lines through the ring at the geometry
 // last rendered, flooring at the stream's oldest full window.
-func (s *Surface) ScrollBy(n int, paneCarries bool) {
-	w, h, wrap := s.geometry(paneCarries)
+func (s *Surface) ScrollBy(n int) {
+	w, h, wrap := s.geometry()
 	scroll(&s.v, s.Src, n, topLines(s.Src, s.v, w, h, wrap))
 }
 
 // PageSize is how many lines one pgup/pgdn moves: exactly the lines the
 // active window is showing, so a page never skips past unread ones.
-func (s *Surface) PageSize(paneCarries bool) int {
-	w, h, wrap := s.geometry(paneCarries)
+func (s *Surface) PageSize() int {
+	w, h, wrap := s.geometry()
 	return visibleLines(s.Src, s.v, w, h, wrap)
 }
 
-// geometry names the active log window: the full-screen box, the split
-// pane, or the narrow tail under the step's own body.
-func (s *Surface) geometry(paneCarries bool) (width, height int, wrap bool) {
-	switch {
-	case s.v.full:
+// geometry names the active log window: the full-screen box or the tail
+// under the step's own body.
+func (s *Surface) geometry() (width, height int, wrap bool) {
+	if s.v.full {
 		return max(s.ViewCol, 1), max(s.fullH, 2), true
-	case paneCarries:
-		return max(s.paneW, 1), max(s.paneH, 2), false
-	default:
-		return max(s.ViewCol, 1), max(s.tailH, NarrowTailRows) + 1, false
 	}
-}
-
-// RenderPane renders the log into a split layout's right pane and records
-// the pane geometry the paging keys move by.
-func (s *Surface) RenderPane(width, height int) string {
-	s.paneW, s.paneH = width, height
-	return renderPane(s.Src, s.v, width, height, false)
+	return max(s.ViewCol, 1), max(s.tailH, NarrowTailRows) + 1, false
 }
 
 // RenderTail renders the rows that ride under the step's own body — the
@@ -229,8 +216,7 @@ func (s *Surface) RenderFull(width, height int) string {
 
 // FailureTail renders the log's last lines for the region under an error
 // card: a failure's evidence is the chatter that led up to it. Empty with
-// no source or nothing captured; the caller decides when a pane already
-// carries the log instead.
+// no source or nothing captured.
 func (s *Surface) FailureTail(col int) string {
 	if s.Src == nil {
 		return ""

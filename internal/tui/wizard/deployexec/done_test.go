@@ -331,14 +331,12 @@ func TestDoneFailureCarriesTheSinkPath(t *testing.T) {
 	st := doneState()
 	st.Result = errStreamFailed
 	s := NewDoneStep(st, Hooks{Logs: seededRing(8), LogPath: "okd-install/okdctl.log"})
-	s.SetTerminalSize(100, 30)
 
 	if out := tuitest.StripANSI(s.View(96, 1000)); !strings.Contains(out, "full log okd-install/okdctl.log") {
 		t.Errorf("failure view must name the sink path:\n%s", out)
 	}
 
 	bare := NewDoneStep(st, Hooks{Logs: seededRing(8)})
-	bare.SetTerminalSize(100, 30)
 	if out := tuitest.StripANSI(bare.View(96, 1000)); strings.Contains(out, "full log okd-install") {
 		t.Errorf("with no sink open there is no path to point at:\n%s", out)
 	}
