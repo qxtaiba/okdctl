@@ -57,7 +57,9 @@ Sleep 450ms
 Wait+Screen@10s /connect ✓●○ · cluster · extras · review/
 Screenshot out/@NAME@-distribution.png
 Sleep 300ms
-Enter
+# Tab expands the highlighted minor into its patch releases; enter would
+# confirm the step.
+Tab
 Sleep 650ms
 Down
 Sleep 450ms
@@ -78,8 +80,6 @@ Sleep 450ms
 Wait+Screen@10s /connect ✓✓● · cluster · extras · review/
 Screenshot out/@NAME@-proxmox.png
 Sleep 300ms
-Shift+Tab
-Shift+Tab
 Type "127.0.0.1:@PVEPORT@"
 Wait+Screen@2s /127.0.0.1:@PVEPORT@/
 Sleep 450ms
