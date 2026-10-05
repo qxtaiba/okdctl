@@ -51,6 +51,7 @@ type fakeIgnition struct {
 	teardownCalls       int
 	teardownErrAtCall   error
 	teardownHadDeadline bool
+	teardownCfg         *config.Config
 	events              *[]string
 }
 
@@ -62,8 +63,9 @@ func (f *fakeIgnition) ReviveIgnitionServer(context.Context, *config.Config, str
 	return nil
 }
 
-func (f *fakeIgnition) TeardownIgnitionServer(ctx context.Context) error {
+func (f *fakeIgnition) TeardownIgnitionServer(ctx context.Context, cfg *config.Config) error {
 	f.teardownCalls++
+	f.teardownCfg = cfg
 	f.teardownErrAtCall = ctx.Err()
 	_, f.teardownHadDeadline = ctx.Deadline()
 	if f.events != nil {
@@ -424,6 +426,21 @@ func TestAddWorkersTeardownOnJoinTimeout(t *testing.T) {
 	if fiso.buildCalls != 1 || ftf.applyCalls != 1 {
 		t.Errorf("the node must have been built and applied before the join wait: build=%d apply=%d",
 			fiso.buildCalls, ftf.applyCalls)
+	}
+}
+
+func TestAddWorkersTeardownGetsTheRunnerConfig(t *testing.T) {
+	fc := &fakeCluster{nodes: addExistingWorkers()}
+	h := seedAddTest(t, fc, addTestConfig(2, 16384))
+	writeIgnitionArtifacts(t, h.r)
+	h.r.DryRun = false
+	h.r.NodeReadyTimeout = 50 * time.Millisecond
+
+	if err := h.r.AddWorkers(context.Background(), AddOptions{Count: 1}); err == nil {
+		t.Fatal("want a join-timeout error when the new worker never becomes Ready")
+	}
+	if h.fign.teardownCfg != h.r.Cfg {
+		t.Errorf("teardown got config %p; want the runner's %p so it unpublishes from the right web root", h.fign.teardownCfg, h.r.Cfg)
 	}
 }
 

@@ -154,8 +154,8 @@ func (p *Provisioner) ConfigureApache(ctx context.Context, cfg *config.Config, p
 }
 
 // ReviveIgnitionServer reopens the ignition join window for node add: the
-// same vhost/dir setup as ConfigureApache, plus a re-deploy of ignition
-// payloads into the web root. The service is started WITHOUT being
+// same vhost/dir setup as ConfigureApache, plus a re-deploy of worker.ign
+// alone into the web root. The service is started WITHOUT being
 // enabled, so a crash mid-add can't resurrect the pull-secret server
 // across reboots.
 func (p *Provisioner) ReviveIgnitionServer(ctx context.Context, cfg *config.Config, projectRoot, clusterDir string) error {
@@ -176,15 +176,21 @@ func (p *Provisioner) ReviveIgnitionServer(ctx context.Context, cfg *config.Conf
 	}
 	p.verifyApacheListening(ctx, bindIP)
 
-	return p.DeployToWebServer(ctx, cfg, clusterDir)
+	return p.publishWorkerIgnition(ctx, cfg, clusterDir)
+}
+
+// publishWorkerIgnition leaves out bootstrap.ign and master.ign, which a worker join never fetches.
+func (p *Provisioner) publishWorkerIgnition(ctx context.Context, cfg *config.Config, clusterDir string) error {
+	return p.deployIgnitionFiles(ctx, cfg, clusterDir, []string{workerIgnition})
 }
 
 // TeardownIgnitionServer stops and disables httpd once a node-add join
-// window closes, verifying the stop took; the stop runs unconditionally
-// (not gated on an is-active probe) since teardown runs under a detached
-// post-cancel context. A non-nil return means httpd may still be serving
-// ignition payloads — the caller must surface that loudly.
-func (p *Provisioner) TeardownIgnitionServer(ctx context.Context) error {
+// window closes, verifying the stop took, then removes the worker.ign that
+// ReviveIgnitionServer published; the stop runs unconditionally (not gated
+// on an is-active probe) since teardown runs under a detached post-cancel
+// context. A non-nil return means httpd may still be serving ignition
+// payloads — the caller must surface that loudly.
+func (p *Provisioner) TeardownIgnitionServer(ctx context.Context, cfg *config.Config) error {
 	svc := platform.ApacheService
 	var errs []error
 	if err := system.ManageService(ctx, system.ServiceStop, svc); err != nil {
@@ -196,6 +202,15 @@ func (p *Provisioner) TeardownIgnitionServer(ctx context.Context) error {
 	if system.IsServiceActive(ctx, svc) {
 		errs = append(errs, fmt.Errorf("%s still active after stop", svc))
 	}
+
+	webRoot := cfg.HTTPServer.Root
+	if webRoot == "" {
+		webRoot = phase.DefaultHTTPServerRoot
+	}
+	published := filepath.Join(webRoot, "ignition", workerIgnition)
+	if err := os.Remove(published); err != nil && !errors.Is(err, os.ErrNotExist) {
+		errs = append(errs, fmt.Errorf("remove %s: %w", published, err))
+	}
 	return errors.Join(errs...)
 }
 
@@ -204,6 +219,10 @@ func (p *Provisioner) TeardownIgnitionServer(ctx context.Context) error {
 // intentionally not copied — they must never be placed under the apache
 // DocumentRoot.
 func (p *Provisioner) DeployToWebServer(ctx context.Context, cfg *config.Config, clusterDir string) error {
+	return p.deployIgnitionFiles(ctx, cfg, clusterDir, IgnitionFilenames)
+}
+
+func (p *Provisioner) deployIgnitionFiles(ctx context.Context, cfg *config.Config, clusterDir string, files []string) error {
 	webRoot := cfg.HTTPServer.Root
 	if webRoot == "" {
 		webRoot = phase.DefaultHTTPServerRoot
@@ -214,7 +233,7 @@ func (p *Provisioner) DeployToWebServer(ctx context.Context, cfg *config.Config,
 		return err
 	}
 
-	for _, file := range IgnitionFilenames {
+	for _, file := range files {
 		srcPath := filepath.Join(clusterDir, file)
 		if !system.FileExists(srcPath) {
 			continue

@@ -177,7 +177,7 @@ func (r *Runner) AddWorkers(ctx context.Context, opts AddOptions) error {
 	defer func() {
 		tctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ignitionTeardownTimeout)
 		defer cancel()
-		if terr := r.Ignition.TeardownIgnitionServer(tctx); terr != nil {
+		if terr := r.Ignition.TeardownIgnitionServer(tctx, r.Cfg); terr != nil {
 			r.Log.Warn("node: ignition server teardown failed — the cluster pull secret may still be served on port 443; stop it manually ('systemctl stop httpd') and verify with 'systemctl status httpd'",
 				"err", terr)
 		}
