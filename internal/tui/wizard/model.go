@@ -2,7 +2,6 @@ package wizard
 
 import (
 	"context"
-	"crypto/sha256"
 	"os"
 	"sync"
 
@@ -111,9 +110,9 @@ type Model struct {
 	config *config.Config
 	chrome FlowChrome
 
-	// savedDigest fingerprints the config the flow opened with; discardPending
-	// is the open question a first ctrl+c raises once the live config differs.
-	savedDigest    [sha256.Size]byte
+	// saved is the config the flow opened with; discardPending is the open
+	// question a first ctrl+c raises once the live config differs from it.
+	saved          savedState
 	discardPending bool
 
 	// The shared frame clock (see motion.go): motion is the resolved dial,
@@ -316,7 +315,7 @@ func NewFlowModel(steps []WizardStep, cfg *config.Config, chrome FlowChrome) *Mo
 		currentStep: 0,
 		config:      cfg,
 		chrome:      chrome,
-		savedDigest: configDigest(cfg),
+		saved:       newSavedState(cfg),
 		motion:      tui.Motion(),
 		keyMap:      defaultKeyMap(),
 	}

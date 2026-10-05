@@ -275,3 +275,35 @@ func deliver(m *Model, cmd tea.Cmd) {
 	}
 	m.Update(msg)
 }
+
+func TestShutdownClearsTheSavedCredentials(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Provider.Proxmox.Password.Set("hunter2")
+	cfg.Provider.Proxmox.APIToken.Set("token-value")
+	m := NewModel([]WizardStep{&fakeStep{id: StepIDBasics}}, cfg)
+	password, apiToken := m.saved.password, m.saved.apiToken
+	if string(password) != "hunter2" || string(apiToken) != "token-value" {
+		t.Fatalf("saved credentials = %q, %q; want the ones the flow opened with", password, apiToken)
+	}
+
+	m.shutdown()
+
+	for _, b := range append(password, apiToken...) {
+		if b != 0 {
+			t.Fatal("shutdown left a saved credential byte in memory")
+		}
+	}
+}
+
+func TestSavedCredentialsDoNotAliasTheLiveConfig(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Provider.Proxmox.Password.Set("hunter2")
+	m := NewModel([]WizardStep{&fakeStep{id: StepIDBasics}}, cfg)
+
+	live := cfg.Provider.Proxmox.Password.Bytes()
+	live[0] = 'X'
+
+	if string(m.saved.password) != "hunter2" {
+		t.Errorf("saved password = %q; an edit to the live config reached it", m.saved.password)
+	}
+}

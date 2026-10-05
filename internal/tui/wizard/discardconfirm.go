@@ -1,7 +1,9 @@
 package wizard
 
 import (
+	"bytes"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/json"
 	"strings"
 
@@ -12,23 +14,56 @@ import (
 
 const discardPrompt = "discard unsaved changes? ctrl+c or y quits · any other key stays"
 
-// configDigest hashes cfg's effective form plus the credentials that never
-// serialize, so the model compares edits without keeping a copy of a secret.
+// savedState is the config a flow opened with: a digest of everything that
+// serializes, and the credentials themselves, which never do. A password
+// must not go through a fast hash, so credentials are compared directly.
+type savedState struct {
+	digest   [sha256.Size]byte
+	username string
+	password []byte
+	apiToken []byte
+}
+
+func newSavedState(cfg *config.Config) savedState {
+	username, password, apiToken := credentialsOf(cfg)
+	return savedState{
+		digest:   configDigest(cfg),
+		username: username,
+		password: bytes.Clone(password),
+		apiToken: bytes.Clone(apiToken),
+	}
+}
+
+func (s *savedState) matches(cfg *config.Config) bool {
+	username, password, apiToken := credentialsOf(cfg)
+	return configDigest(cfg) == s.digest &&
+		username == s.username &&
+		subtle.ConstantTimeCompare(password, s.password) == 1 &&
+		subtle.ConstantTimeCompare(apiToken, s.apiToken) == 1
+}
+
+func (s *savedState) release() {
+	clear(s.password)
+	clear(s.apiToken)
+}
+
+func credentialsOf(cfg *config.Config) (username string, password, apiToken []byte) {
+	if cfg == nil || cfg.Provider.Proxmox == nil {
+		return "", nil, nil
+	}
+	p := cfg.Provider.Proxmox
+	return p.Username, p.Password.Bytes(), p.APIToken.Bytes()
+}
+
 func configDigest(cfg *config.Config) [sha256.Size]byte {
-	h := sha256.New()
 	if cfg == nil {
-		return [sha256.Size]byte(h.Sum(nil))
+		return sha256.Sum256(nil)
 	}
-	if data, err := json.Marshal(config.Effective(cfg)); err == nil {
-		h.Write(data)
+	data, err := json.Marshal(config.Effective(cfg))
+	if err != nil {
+		return sha256.Sum256(nil)
 	}
-	if p := cfg.Provider.Proxmox; p != nil {
-		for _, credential := range [][]byte{[]byte(p.Username), p.Password.Bytes(), p.APIToken.Bytes()} {
-			h.Write([]byte{0})
-			h.Write(credential)
-		}
-	}
-	return [sha256.Size]byte(h.Sum(nil))
+	return sha256.Sum256(data)
 }
 
 func isConfigureStep(id StepID) bool {
@@ -44,7 +79,7 @@ func isConfigureStep(id StepID) bool {
 
 func (m *Model) asksBeforeDiscarding() bool {
 	step := m.CurrentStep()
-	return step != nil && isConfigureStep(step.ID()) && configDigest(m.config) != m.savedDigest
+	return step != nil && isConfigureStep(step.ID()) && !m.saved.matches(m.config)
 }
 
 func (m *Model) handleDiscardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
