@@ -46,9 +46,10 @@ func countOutOfRange(role string, n int) error {
 func ClusterNodes(cfg *config.Config) ([]ClusterNode, error) {
 	startIP := cfg.Networking.StaticIP.Start
 
-	// Bounded here rather than left to validateResources: the deploy gate runs
-	// a narrower scope, so a hand-edited count can reach this sum unchecked and
-	// overflow it into a negative make capacity.
+	// Bounded here rather than left to validateResources: the deploy gate runs a
+	// narrower scope, so a hand-edited count reaches this function unchecked,
+	// where it overflows the range-check sum and drives the loops below for
+	// effectively forever.
 	masters := cfg.Topology.ControlPlane.Count
 	if masters < 0 || masters > config.MaxNodeCount {
 		return nil, countOutOfRange(string(RoleMaster), masters)
@@ -58,15 +59,17 @@ func ClusterNodes(cfg *config.Config) ([]ClusterNode, error) {
 		return nil, countOutOfRange(string(RoleWorker), workers)
 	}
 
-	total := 1 + masters + workers
 	if cfg.Networking.MachineCIDR != "" {
+		total := 1 + masters + workers
 		if err := netutil.ValidateIPRangeInCIDR(startIP, total, cfg.Networking.MachineCIDR); err != nil {
 			return nil, &errtypes.ConfigError{Msg: "static IP range does not fit in machine CIDR", Err: err}
 		}
 	}
 
-	nodes := make([]ClusterNode, 0, total)
-	nodes = append(nodes, ClusterNode{Role: RoleBootstrap, IP: startIP})
+	// Grown by append rather than pre-sized: a capacity taken from config
+	// arithmetic is what overflowed here, and the guarded ceiling of 201 nodes
+	// makes the growth too cheap to trade that back for.
+	nodes := []ClusterNode{{Role: RoleBootstrap, IP: startIP}}
 
 	for i := range masters {
 		ip, err := netutil.CalculateVMIP(startIP, 1+i)
