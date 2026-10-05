@@ -92,7 +92,7 @@ func TestLogRingHandlerSanitizesHostileAttrValue(t *testing.T) {
 	log := slog.New(r.Handler(nil))
 	log.Error("discovery failed", "err", errors.New("dial proxmox"+payload))
 
-	frame := renderPane(r, view{}, 80, 5, false)
+	frame := tailFrame(r, view{}, 80, 5)
 	if strings.Contains(frame, payload) {
 		t.Fatalf("rendered pane carries the raw osc payload:\n%q", frame)
 	}

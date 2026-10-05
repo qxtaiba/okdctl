@@ -117,25 +117,6 @@ func TestReviewStep_ShowsChangesFromSavedConfig(t *testing.T) {
 			t.Errorf("View() missing config change %q:\n%s", want, out)
 		}
 	}
-	pane := tuitest.StripANSI(s.PaneContent(70, 30))
-	for _, want := range []string{"CHANGED SINCE LOAD · 5", "domain  k8s.local → prod.example", "control plane vcpus  4 → 8", "bootstrap vcpus  4 → 8"} {
-		if !strings.Contains(pane, want) {
-			t.Errorf("PaneContent() missing loaded-config delta %q:\n%s", want, pane)
-		}
-	}
-}
-
-func TestReviewStepKeepsPreflightVisibleWhenWideTerminalIsTooShortToSplit(t *testing.T) {
-	cfg := reviewTestConfig()
-	cfg.Provider.Type = config.ProviderProxmox
-	cfg.Distribution.Type = config.DistributionOKD
-	s := NewReviewStep()
-	s.SetConfig(cfg)
-	s.SetTerminalSize(180, 20)
-
-	if out := tuitest.StripANSI(s.View(100, 20)); !strings.Contains(out, "PREFLIGHT") {
-		t.Fatalf("review omitted preflight when the terminal height disables the pane:\n%s", out)
-	}
 }
 
 func TestReviewStep_ShowsNewProviderValues(t *testing.T) {
@@ -171,8 +152,8 @@ func TestReviewStep_ShowsNewProviderValues(t *testing.T) {
 // name (as it would arrive stored in cfg.Provider.Proxmox after a hostile
 // discovery response was selected in the node placement step) through both
 // renderProxmox/renderNodePlacement and the config-changes diff path
-// (reviewConfigSnapshot's downstream renderConfigChanges/
-// renderChangeSummary), which read the same field independently.
+// (reviewConfigSnapshot's downstream renderConfigChanges), which read the
+// same field independently.
 func TestReviewStep_SanitizesHostileProxmoxFieldText(t *testing.T) {
 	const payload = "\x1b[2J\x1b[H"
 
@@ -192,14 +173,6 @@ func TestReviewStep_SanitizesHostileProxmoxFieldText(t *testing.T) {
 	if !strings.Contains(frame, "�") {
 		t.Fatalf("View() shows no sanitization marker for the tampered node/bridge:\n%q", frame)
 	}
-
-	pane := s.PaneContent(70, 30)
-	if strings.Contains(pane, payload) {
-		t.Fatalf("PaneContent() carries the raw clear-screen/cursor-home payload:\n%q", pane)
-	}
-	if !strings.Contains(pane, "�") {
-		t.Fatalf("PaneContent() shows no sanitization marker for the tampered node:\n%q", pane)
-	}
 }
 
 func TestReviewStep_PreflightChecksSelectedNodeCapacity(t *testing.T) {
@@ -217,8 +190,8 @@ func TestReviewStep_PreflightChecksSelectedNodeCapacity(t *testing.T) {
 	s.SetConfig(cfg)
 	s.SetCapacity(snapshot)
 
-	frame := s.PaneContent(70, 30)
-	tuitest.AssertFits(t, frame, 70, 30)
+	frame := s.View(70, 100)
+	tuitest.AssertFits(t, frame, 70, 100)
 	out := tuitest.StripANSI(frame)
 	for _, want := range []string{"selected capacity", "pve1 over capacity", "pve2 fits", "missing unavailable"} {
 		if !strings.Contains(out, want) {
@@ -230,7 +203,7 @@ func TestReviewStep_PreflightChecksSelectedNodeCapacity(t *testing.T) {
 // TestReviewStep_PreflightSanitizesHostileCapacityNodeText drives a
 // tampered Proxmox node name — both a node present in the discovery
 // snapshot and one assigned but missing from it — through the capacity
-// preflight check's real PaneContent path.
+// preflight check's real View path.
 func TestReviewStep_PreflightSanitizesHostileCapacityNodeText(t *testing.T) {
 	const payload = "\x1b[2J\x1b[H"
 
@@ -247,12 +220,12 @@ func TestReviewStep_PreflightSanitizesHostileCapacityNodeText(t *testing.T) {
 	s.SetConfig(cfg)
 	s.SetCapacity(snapshot)
 
-	frame := s.PaneContent(70, 30)
+	frame := s.View(70, 100)
 	if strings.Contains(frame, payload) {
-		t.Fatalf("PaneContent() carries the raw clear-screen/cursor-home payload:\n%q", frame)
+		t.Fatalf("View() carries the raw clear-screen/cursor-home payload:\n%q", frame)
 	}
 	if !strings.Contains(frame, "�") {
-		t.Fatalf("PaneContent() shows no sanitization marker:\n%q", frame)
+		t.Fatalf("View() shows no sanitization marker:\n%q", frame)
 	}
 }
 
@@ -293,21 +266,27 @@ func TestReviewPlanIncludesHeadlessCommandAndConfigPath(t *testing.T) {
 	s := NewReviewStep()
 	s.SetConfig(reviewTestConfig())
 	s.SetConfigPath("/tmp/qa cluster.yaml")
-	frame := tuitest.StripANSI(s.PaneContent(70, 30))
-	tuitest.AssertFits(t, frame, 70, 30)
-	for _, want := range []string{"PREFLIGHT", "pull secret", "CIDR ranges"} {
-		if !strings.Contains(frame, want) {
-			t.Fatalf("review pane omitted concrete preflight item %q:\n%s", want, frame)
+	for _, width := range []int{70, 106, 170} {
+		frame := tuitest.StripANSI(s.View(width, 100))
+		tuitest.AssertFits(t, frame, width, 100)
+		for _, want := range []string{"PREFLIGHT", "pull secret", "CIDR ranges"} {
+			if !strings.Contains(frame, want) {
+				t.Fatalf("review at width %d omitted concrete preflight item %q:\n%s", width, want, frame)
+			}
 		}
-	}
-	for _, want := range []string{"DEPLOY PLAN", "WRITES", "/tmp/qa", "HEADLESS", `--config '/tmp/qa cluster.yaml'`, "--confirm-cluster"} {
-		if !strings.Contains(frame, want) {
-			t.Errorf("review pane omitted %q:\n%s", want, frame)
+		for _, want := range []string{
+			"DEPLOY PLAN", "bootstrap", "masters", "workers",
+			"WRITES", "/tmp/qa cluster.yaml",
+			"HEADLESS", `--config '/tmp/qa cluster.yaml'`, "--confirm-cluster",
+		} {
+			if !strings.Contains(frame, want) {
+				t.Errorf("review at width %d omitted %q:\n%s", width, want, frame)
+			}
 		}
 	}
 }
 
-func TestReviewPaneShowsAddonPreflightAndLoadedDiff(t *testing.T) {
+func TestReviewShowsAddonPreflightAndLoadedDiff(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	cfg := reviewTestConfig()
 	cfg.Cluster.Domain = "k8s.local"
@@ -318,14 +297,14 @@ func TestReviewPaneShowsAddonPreflightAndLoadedDiff(t *testing.T) {
 	cfg.Cluster.Domain = "prod.example"
 	s.SetConfig(cfg)
 
-	pane := tuitest.StripANSI(s.PaneContent(70, 30))
-	for _, want := range []string{"flux deploy key", "~/.ssh/flux-deploy-key", "sops", "not found", "CHANGED SINCE LOAD · 1", "k8s.local → prod.example"} {
-		if !strings.Contains(pane, want) {
-			t.Errorf("review pane omitted %q:\n%s", want, pane)
+	out := tuitest.StripANSI(s.View(70, 100))
+	for _, want := range []string{"flux deploy key", "~/.ssh/flux-deploy-key", "sops", "not found", "CONFIG CHANGES · 1", "k8s.local → prod.example"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("review omitted %q:\n%s", want, out)
 		}
 	}
-	if strings.Contains(pane, "api-secret") || strings.Contains(pane, "never-render") {
-		t.Fatalf("review pane exposed a credential:\n%s", pane)
+	if strings.Contains(out, "api-secret") || strings.Contains(out, "never-render") {
+		t.Fatalf("review exposed a credential:\n%s", out)
 	}
 }
 

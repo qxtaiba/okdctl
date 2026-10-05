@@ -49,13 +49,6 @@ func (s *DoneStep) SetSize(width, height int) {
 	s.SetBodyHeight(height)
 }
 
-// PaneContent keeps the live log in the split layout's right pane on the
-// completion screen too: the run just ended, and its last lines are what an
-// operator reads next.
-func (s *DoneStep) PaneContent(width, height int) string {
-	return s.log.RenderPane(width, height)
-}
-
 // InterceptBack keeps the flow forward-only: esc from the done screen
 // would re-enter the finished execution step and softlock on its drained
 // event channel. Closing an open filter input is the one thing the key does
@@ -101,7 +94,7 @@ func (s *DoneStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	if keyMsg.Code == tea.KeyEnter && !s.log.Filtering() {
 		return s, func() tea.Msg { return wizard.StepCompleteMsg{StepID: StepIDDone} }
 	}
-	switch relayout, moved := s.log.HandleKey(keyMsg, s.SplitsFrame(flowStepCount)); {
+	switch relayout, moved := s.log.HandleKey(keyMsg); {
 	case relayout:
 		return s, func() tea.Msg { return wizard.LayoutChangedMsg{} }
 	case moved:
@@ -116,9 +109,9 @@ func (s *DoneStep) ConsumesTextInput() bool {
 	return s.log.Filtering()
 }
 
-// SuppressesSplit hands the log the whole frame while the failure report has
+// OwnsFrameWidth hands the log the whole frame while the failure report has
 // it full-screen.
-func (s *DoneStep) SuppressesSplit() bool {
+func (s *DoneStep) OwnsFrameWidth() bool {
 	return s.log.Full() && s.hooks.Logs != nil
 }
 
@@ -174,13 +167,10 @@ func (s *DoneStep) fullLog(col int) string {
 	return strings.Join(head, "\n") + "\n" + s.log.RenderFull(col, max(s.BodyHeight()-len(head), 2))
 }
 
-// evidence renders the log's last lines under the report on a frame with no
-// pane to carry them. A failure's evidence is the chatter that led up to it;
-// a success needs none — its completion box is the record.
+// evidence renders the log's last lines under the report. A failure's
+// evidence is the chatter that led up to it; a success needs none — its
+// completion box is the record.
 func (s *DoneStep) evidence(col int) []string {
-	if s.SplitsFrame(flowStepCount) {
-		return nil
-	}
 	tail := s.log.FailureTail(col)
 	if tail == "" {
 		return nil

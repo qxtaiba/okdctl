@@ -54,12 +54,6 @@ func (f *SelectField) SetDisplayOptions(options []string) {
 	f.displayOptions = append(f.displayOptions[:0], options...)
 }
 
-// FieldLabel returns the field's label.
-func (f *SelectField) FieldLabel() string { return f.Label }
-
-// FieldHelp returns the field's help text.
-func (f *SelectField) FieldHelp() string { return f.Help }
-
 // SetValue selects the first option equal to value and marks the field as
 // user-modified. A non-empty value outside Options is injected as a
 // synthetic option (rendered with a "current" tag) and selected, so a valid

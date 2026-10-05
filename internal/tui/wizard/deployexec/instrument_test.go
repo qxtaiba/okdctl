@@ -327,36 +327,3 @@ func TestBarStaysTextIdenticalWhileTheBandDrifts(t *testing.T) {
 		t.Errorf("the drifting band must be color-only:\n%q\n%q", bar0, bar3)
 	}
 }
-
-// TestPhaseDurationBarsFillTheDeadRows pins the checklist's lower rows on
-// the split tier: per-phase duration bars with the last-run tick.
-func TestPhaseDurationBarsFillTheDeadRows(t *testing.T) {
-	st := streamState()
-	st.History = seededHistory()
-	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	cur := base
-	s := newSeededStreamStep(st, &cur)
-	s.hooks.Logs = seededRing(4)
-	s.log.Src = s.hooks.Logs
-	s.SetTerminalSize(180, 48)
-	s.SetSize(100, 34)
-	for _, m := range st.Plan[:2] {
-		s.applyEvent(&Event{StepID: m.ID})
-		cur = cur.Add(30 * time.Second)
-		s.applyEvent(&Event{StepID: m.ID, Done: true, Took: 30 * time.Second})
-	}
-
-	out := tuitest.StripANSI(s.View(100, 1000))
-	if !strings.Contains(out, "PHASES") {
-		t.Fatalf("the split tier's dead rows must carry the phase duration bars:\n%s", out)
-	}
-	if !strings.Contains(out, tui.IconBarTick) {
-		t.Errorf("phase bars must carry the last-run tick:\n%s", out)
-	}
-
-	// A narrow frame spends its slack on the log tail instead.
-	s.SetTerminalSize(120, 40)
-	if out := tuitest.StripANSI(s.View(104, 1000)); strings.Contains(out, "PHASES") {
-		t.Errorf("the narrow tier's slack belongs to the log tail:\n%s", out)
-	}
-}

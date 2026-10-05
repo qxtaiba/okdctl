@@ -263,7 +263,7 @@ Up
 Sleep 4s
 Enter
 
-# deploy stream — the phase checklist and log pane run against the scripted
+# deploy stream — the phase checklist and log tail run against the scripted
 # feed, then hand off to the done box.
 Wait+Screen@10s /deploying homelab/
 Sleep 3s

@@ -2,7 +2,6 @@ package steps
 
 import (
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
@@ -137,19 +136,6 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 	Apply: func(_ *wizard.DataDrivenStep, cfg *config.Config) error {
 		cfg.Provider.Type = config.ProviderProxmox
 		return nil
-	},
-
-	// Answered echoes only host and username: password and token_id are
-	// both credential material and must never reach the context pane.
-	Answered: func(values map[string]string) []render.Fact {
-		var facts []render.Fact
-		if v := values[fieldHost]; v != "" {
-			facts = append(facts, render.Fact{Key: "host", Value: v})
-		}
-		if v := values[fieldUsername]; v != "" {
-			facts = append(facts, render.Fact{Key: fieldUsername, Value: v})
-		}
-		return facts
 	},
 }
 

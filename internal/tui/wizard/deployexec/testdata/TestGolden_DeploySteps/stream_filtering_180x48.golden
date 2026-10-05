@@ -3,44 +3,44 @@
   │ O K D C T L  installing okd over proxmox                                                                                                                                     │  
   │ deploying homelab                                                                                                                                             install · done │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
-  │  deploying homelab  2 / 7                                                           elapsed 1m15s      │  LOG · ▸ /step-2 (4/24)                                             │  
-  │  ██████████████████████████│░░░░░░░░░░░░░░░░░░░░░░░░░│░░░░░░░░░░░░│░░░░░░░░░░░░│░░░░░░░░░░░░  28%      │  · 09:02:20 deploy step started step=step-20 phase=setup          │ │  
-  │  ✓ prep                                                                                       40s      │  · 09:02:27 deploy step started step=step-21 phase=setup          │ │  
-  │  ● ignition                                                                                            │  · 09:02:34 deploy step started step=step-22 phase=setup          │ │  
-  │      ⣾ generate ignition                                                                      35s      │  · 09:02:41 deploy step started step=step-23 phase=setup          ▎ │  
-  │      ○ build isos                                                                                      │                                                                     │  
-  │  ○ infra                                                                                               │                                                                     │  
-  │  ○ install                                                                                             │                                                                     │  
-  │  ○ verify                                                                                              │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │  PHASES                                                                                                │                                                                     │  
-  │  prep      ████████████████████████                                                           40s      │                                                                     │  
-  │  ignition  █████████████████████                                                              35s      │                                                                     │  
-  │  infra                                                                                                 │                                                                     │  
-  │  install                                                                                               │                                                                     │  
-  │  verify                                                                                                │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │  full log okd-install/okdctl.log · ctrl+c cancels after the current step                               │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
+  │  deploying homelab  2 / 7                                                                 elapsed 1m15s                                                                      │  
+  │  ████████████████████████████│░░░░░░░░░░░░░░░░░░░░░░░░░░│░░░░░░░░░░░░░│░░░░░░░░░░░░░│░░░░░░░░░░░░░  28%                                                                      │  
+  │  ✓ prep                                                                                             40s                                                                      │  
+  │  ● ignition                                                                                                                                                                  │  
+  │      ⣾ generate ignition                                                                            35s                                                                      │  
+  │      ○ build isos                                                                                                                                                            │  
+  │  ○ infra                                                                                                                                                                     │  
+  │  ○ install                                                                                                                                                                   │  
+  │  ○ verify                                                                                                                                                                    │  
+  │                                                                                                                                                                              │  
+  │  LOG · ▸ /step-2 (4/24)                                                                                                                                                      │  
+  │  · 09:02:20 deploy step started step=step-20 phase=setup                                              │                                                                      │  
+  │  · 09:02:27 deploy step started step=step-21 phase=setup                                              │                                                                      │  
+  │  · 09:02:34 deploy step started step=step-22 phase=setup                                              │                                                                      │  
+  │  · 09:02:41 deploy step started step=step-23 phase=setup                                              ▎                                                                      │  
+  │                                                                                                                                                                              │  
+  │  full log okd-install/okdctl.log · ctrl+c cancels after the current step                                                                                                     │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
+  │                                                                                                                                                                              │  
   │                                                                                                                                                                              │  
   │─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
   │  enter commit the filter • esc cancel it • ctrl+c cancel (twice to force-quit) • ? help                                                                                      │  

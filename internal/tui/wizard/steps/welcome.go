@@ -332,8 +332,8 @@ func (s *WelcomeStep) RendersHero() bool {
 	return true
 }
 
-// SuppressesSplit gives the hub's launcher the frame's full width.
-func (s *WelcomeStep) SuppressesSplit() bool {
+// OwnsFrameWidth gives the hub's launcher the frame's full width.
+func (s *WelcomeStep) OwnsFrameWidth() bool {
 	return true
 }
 
@@ -368,8 +368,8 @@ func (s *WelcomeStep) View(width, height int) string {
 // hubGetStartedPanelMinWidth is the content width at and above which the
 // blank-slate hub earns a second column instead of sitting as a lone
 // centered menu in an otherwise empty frame — chosen so a 150-column
-// terminal (the frame's own form+pane split threshold, wizard.SplitsFrame)
-// clears it once the outer frame's own padding and border are subtracted.
+// terminal clears it once the outer frame's own padding and border are
+// subtracted.
 const hubGetStartedPanelMinWidth = 140
 
 const (

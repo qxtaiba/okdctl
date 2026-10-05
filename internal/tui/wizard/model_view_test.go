@@ -16,8 +16,7 @@ import (
 )
 
 // TestModel_FrameWidthIsTerminalMinusFour pins the full-width frame at every
-// tier and at both a capped-single-column and a split-layout height: the
-// bordered box always spans terminal width minus the outer padding — a
+// width: the bordered box always spans terminal width minus the outer padding — a
 // capped form measure lives inside it, never as a shrunken frame — and every
 // rendered row still spans the terminal exactly, the surplus becoming blank
 // right-hand margin rather than a partial row AltScreen would leave dirty.
@@ -46,14 +45,17 @@ func TestModel_FrameWidthIsTerminalMinusFour(t *testing.T) {
 	}
 }
 
-func TestModel_BodyWidthCapsBelowSplitThreshold(t *testing.T) {
+func TestModel_BodyWidthCapsAtTheFormMeasure(t *testing.T) {
 	cases := []struct{ w, want int }{
 		{80, 74},
 		{100, 94},
 		{116, 110}, // cap boundary: uncapped and capped agree
 		{117, 110}, // cap engages one column past the boundary
 		{120, 110},
-		{149, 110}, // widest terminal that still doesn't split
+		{149, 110},
+		{150, 110},
+		{180, 110},
+		{240, 110},
 	}
 	for _, c := range cases {
 		m := NewModel([]WizardStep{newNopStep()}, config.DefaultConfig())
@@ -63,104 +65,6 @@ func TestModel_BodyWidthCapsBelowSplitThreshold(t *testing.T) {
 		}
 		if got, want := m.contentWidth(), c.w-outerHorizontalPadding-wizardBorderHorizontal; got != want {
 			t.Errorf("w=%d contentWidth() = %d, want the full frame interior %d", c.w, got, want)
-		}
-	}
-}
-
-func TestModel_SplitLayoutEngagesAt150(t *testing.T) {
-	m := NewModel([]WizardStep{newNopStep()}, config.DefaultConfig())
-
-	tuitest.RenderAt(t, m, 149, 40)
-	if m.splitLayout() {
-		t.Fatal("149 cols should not split")
-	}
-
-	tuitest.RenderAt(t, m, 150, 40)
-	if !m.splitLayout() {
-		t.Fatal("150 cols should split")
-	}
-}
-
-func TestSplitMinHeight_Derivation(t *testing.T) {
-	cases := []struct{ stepCount, want int }{
-		{1, 12},  // fixedLayoutOverhead(10) + header(1) + 1
-		{7, 18},  // the lifecycle flow's step count
-		{11, 22}, // the configure wizard's step count
-	}
-	for _, c := range cases {
-		if got := splitMinHeight(c.stepCount); got != c.want {
-			t.Errorf("splitMinHeight(%d) = %d, want %d", c.stepCount, got, c.want)
-		}
-	}
-}
-
-// TestModel_SplitLayoutGatedByHeight pins the exact boundary splitMinHeight
-// derives for an 11-step wizard (floor 22, per TestSplitMinHeight_Derivation):
-// one row short of it, the layout must not split no matter how wide the
-// terminal is — a wide-enough-but-short terminal falls back to the capped
-// single-column tier rather than a pane with no room for its own PROGRESS list.
-func TestModel_SplitLayoutGatedByHeight(t *testing.T) {
-	steps := make([]WizardStep, 11)
-	for i := range steps {
-		steps[i] = newNopStep()
-	}
-
-	m := NewModel(steps, config.DefaultConfig())
-	tuitest.RenderAt(t, m, 150, 21)
-	if m.splitLayout() {
-		t.Fatal("150x21 (one row below the 11-step floor of 22) should not split")
-	}
-	if got := m.bodyWidth(); got != singleFormMaxWidth {
-		t.Errorf("150x21: bodyWidth()=%d, want the single-column measure %d — split layout leaked into a gated frame", got, singleFormMaxWidth)
-	}
-
-	m2 := NewModel(steps, config.DefaultConfig())
-	tuitest.RenderAt(t, m2, 150, 22)
-	if !m2.splitLayout() {
-		t.Fatal("150x22 (exactly the 11-step floor) should split")
-	}
-}
-
-// TestModel_SplitLayoutHeightGateFrameFitsExactly confirms that when the
-// height gate falls back to the single-column tier, the frame still renders
-// exactly the requested rows — the same guarantee TestModel_TooSmallRendersNotice
-// pins for the width floor, now covering the height floor too.
-func TestModel_SplitLayoutHeightGateFrameFitsExactly(t *testing.T) {
-	steps := make([]WizardStep, 11)
-	for i := range steps {
-		steps[i] = newNopStep()
-	}
-	m := NewModel(steps, config.DefaultConfig())
-	frame := tuitest.StripANSI(tuitest.RenderAt(t, m, 150, 21))
-	tuitest.AssertFits(t, frame, 150, 21)
-	if got := strings.Count(frame, "\n") + 1; got != 21 {
-		t.Errorf("150x21 frame = %d rows, want exactly 21", got)
-	}
-}
-
-// TestModel_SplitLayoutFormPaneInvariant pins the form/rule/gutter/pane
-// budget arithmetic: form + rule + the two-column gutter + pane + the
-// one-column edge margin sum to exactly contentWidth, the form never
-// exceeds formMaxWidth, and the pane absorbs the entire remainder — no
-// ceiling, only the paneMinWidth floor — so a wider terminal widens the
-// pane instead of leaving idle margin.
-func TestModel_SplitLayoutFormPaneInvariant(t *testing.T) {
-	for _, w := range []int{150, 151, 180, 200} {
-		m := NewModel([]WizardStep{newNopStep()}, config.DefaultConfig())
-		tuitest.RenderAt(t, m, w, 48)
-
-		form, pane := m.formPaneWidths()
-		if got, want := form+paneRuleWidth+paneGutterWidth+pane+paneEdgeWidth, m.contentWidth(); got != want {
-			t.Errorf("w=%d: form(%d)+rule+gutter+pane(%d)+edge=%d, want contentWidth()=%d", w, form, pane, got, want)
-		}
-		if form > formMaxWidth {
-			t.Errorf("w=%d: form=%d exceeds formMaxWidth=%d", w, form, formMaxWidth)
-		}
-		if want := w - outerHorizontalPadding - wizardBorderHorizontal - formMaxWidth - paneRuleWidth - paneGutterWidth - paneEdgeWidth; pane != want {
-			t.Errorf("w=%d: pane=%d, want the full remainder %d", w, pane, want)
-		}
-		if pane < paneMinWidth {
-			t.Errorf("w=%d: pane=%d below paneMinWidth=%d", w, pane, paneMinWidth)
 		}
 	}
 }

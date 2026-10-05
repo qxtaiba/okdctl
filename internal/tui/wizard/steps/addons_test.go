@@ -56,12 +56,11 @@ func TestAddonsStep_CrossFieldErrorFocusesVaultServerField(t *testing.T) {
 		t.Fatal("Update(enter) with a cross-field error did not emit FocusChangedMsg")
 	}
 
-	label, _, ok := step.FocusedFieldHelp()
-	if !ok || label != "server url" {
-		t.Fatalf("FocusedFieldHelp() label = %q, ok=%v, want the vault server field focused", label, ok)
-	}
-
 	view := tuitest.StripANSI(step.View(100, 30))
+	span, ok := step.FocusedSpan()
+	if focused := strings.Split(view, "\n"); !ok || !strings.Contains(focused[span.Start], "server url") {
+		t.Fatalf("FocusedSpan() = %+v, ok=%v, want the vault server field focused", span, ok)
+	}
 	if !strings.Contains(view, "vault server url is required") {
 		t.Fatalf("View() after a cross-field error = %q, want the inline error visible", view)
 	}

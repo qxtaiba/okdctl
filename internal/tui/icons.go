@@ -21,14 +21,12 @@ const (
 // house's text separator — so spell it from here by discipline.
 const IconLevelInfo = "·"
 
-// Progress-bar glyphs: the filled cell, the empty track, the phase-boundary
-// separator, the last-run tick, and the eighth-block ramp that renders a
-// fractional final cell. The log minimap reuses IconBarTick as its window
+// Progress-bar glyphs: the filled cell, the empty track, and the
+// phase-boundary separator. The log minimap uses IconBarTick as its window
 // thumb and IconBarSegment as its track, with IconBar marking a severity.
 const (
 	IconBarFill    = "█"
 	IconBarTrack   = "░"
 	IconBarSegment = "│"
 	IconBarTick    = "▎"
-	IconBarEighths = "▏▎▍▌▋▊▉"
 )

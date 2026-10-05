@@ -63,12 +63,7 @@ func (m *Model) View() tea.View {
 	}
 
 	body := m.viewport.View()
-	if m.splitLayout() {
-		body = m.composeWideBody(body)
-	}
-	// The overlay is a modal moment: it replaces the whole body region —
-	// on a split tier it centers over the full content width rather than
-	// sitting in the form column beside a still-rendered pane.
+	// The overlay is a modal moment: it replaces the whole body region.
 	if m.helpOpen {
 		body = m.renderHelpOverlay()
 	}
@@ -109,51 +104,11 @@ func (m *Model) contentWidth() int {
 	return width
 }
 
-// splitLayout reports whether the terminal is both wide enough and tall
-// enough to split the frame into a form column and a context pane — width
-// alone isn't sufficient: below splitMinHeight's floor the pane's own PROGRESS
-// section wouldn't have room to render without truncating, so the frame
-// falls back to the capped single-column tier instead of splitting into
-// something unusably short. A splitSuppressor step declines the split at any
-// size.
-func (m *Model) splitLayout() bool {
-	if s, ok := m.CurrentStep().(splitSuppressor); ok && s.SuppressesSplit() {
-		return false
-	}
-	return SplitsFrame(m.width, m.height, m.countVisibleSteps())
-}
-
-// SplitsFrame reports whether a width×height terminal gives a stepCount-step
-// flow a right-hand pane. Exported for the steps that render one thing beside a
-// pane and another without it, so they ask the frame's own gate instead of
-// re-deriving it from a body width the caps have already flattened.
-func SplitsFrame(width, height, stepCount int) bool {
-	return width >= wideSplitWidth && height >= splitMinHeight(stepCount)
-}
-
-// formPaneWidths returns the split layout's form column width (capped at
-// formMaxWidth) and context pane width — the entire remainder after the
-// rule column, the two-column gutter, and the one-column frame-edge margin,
-// floored at paneMinWidth; the pane wraps its content to whatever width the
-// terminal hands it rather than idling surplus as margin.
-func (m *Model) formPaneWidths() (form, pane int) {
-	form = formMaxWidth
-	pane = m.contentWidth() - form - paneRuleWidth - paneGutterWidth - paneEdgeWidth
-	if pane < paneMinWidth {
-		pane = paneMinWidth
-	}
-	return form, pane
-}
-
-// bodyWidth is the width a step's own content renders at: the form column
-// once the layout splits, the whole frame for a step that owns the full
-// width (splitSuppressor), and the capped single-column measure otherwise.
+// bodyWidth is the width a step's own content renders at: the whole frame
+// for a step that owns the full width (frameWidthOwner), and the capped form
+// measure otherwise.
 func (m *Model) bodyWidth() int {
-	if m.splitLayout() {
-		form, _ := m.formPaneWidths()
-		return form
-	}
-	if s, ok := m.CurrentStep().(splitSuppressor); ok && s.SuppressesSplit() {
+	if s, ok := m.CurrentStep().(frameWidthOwner); ok && s.OwnsFrameWidth() {
 		return m.contentWidth()
 	}
 	width := m.contentWidth()
@@ -161,43 +116,6 @@ func (m *Model) bodyWidth() int {
 		width = singleFormMaxWidth
 	}
 	return width
-}
-
-// composeWideBody joins the step's rendered form with a dim 1-column rule,
-// a two-column gutter, and the context pane, leaving one blank column
-// before the frame edge.
-func (m *Model) composeWideBody(form string) string {
-	_, paneWidth := m.formPaneWidths()
-	height := m.viewport.Height()
-
-	rule := renderPaneRule(height)
-	gutter := lipgloss.NewStyle().Width(paneGutterWidth).Height(height).Render("")
-	pane := lipgloss.NewStyle().Width(paneWidth).Height(height).Render(m.paneBody(paneWidth, height))
-
-	return lipgloss.JoinHorizontal(lipgloss.Top, form, rule, gutter, pane)
-}
-
-// paneBody renders the split layout's right pane: the active step's own content
-// when it fills the pane itself, the context pane otherwise. An empty string
-// from a paneRenderer falls back too, so a step with nothing to show yet keeps
-// the pane useful rather than blank.
-func (m *Model) paneBody(width, height int) string {
-	if p, ok := m.CurrentStep().(paneRenderer); ok {
-		if content := p.PaneContent(width, height); content != "" {
-			return content
-		}
-	}
-	return m.renderContextPane(width, height)
-}
-
-// renderPaneRule draws the dim vertical divider between the form and the
-// context pane, height rows tall.
-func renderPaneRule(height int) string {
-	if height < 1 {
-		height = 1
-	}
-	style := lipgloss.NewStyle().Foreground(tui.ColorRule())
-	return style.Render(strings.Repeat("│\n", height-1) + "│")
 }
 
 // statusRow is always exactly one row so the frame never grows; blank when clear.
@@ -218,8 +136,8 @@ func (m *Model) statusRow() string {
 	return "  " + style.Render(truncateTitle(tui.IconError+" "+m.err.Error(), width-2))
 }
 
-// contentDimensions sizes a ResizableStep: bodyWidth (the form column, not
-// the pane) by the same fixed-overhead height the viewport uses.
+// contentDimensions sizes a ResizableStep: bodyWidth by the same
+// fixed-overhead height the viewport uses.
 func (m *Model) contentDimensions() (width, height int) {
 	width = m.bodyWidth()
 	height = m.height - m.layoutOverhead()
@@ -229,8 +147,7 @@ func (m *Model) contentDimensions() (width, height int) {
 	return width, height
 }
 
-// viewportDimensions sizes the scrollable viewport itself to bodyWidth — the
-// form column alone, since the context pane beside it isn't scrollable.
+// viewportDimensions sizes the scrollable viewport itself to bodyWidth.
 func (m *Model) viewportDimensions() (width, height int) {
 	contentWidth := m.bodyWidth()
 
@@ -395,14 +312,12 @@ func (m *Model) renderStepTitle(title string) string {
 // progressInfo reports the current step's position among visible steps for
 // FlowChrome.Trail hooks.
 func (m *Model) progressInfo() ProgressInfo {
-	titles := make([]string, 0, len(m.steps))
 	visibleIDs := make([]StepID, 0, len(m.steps))
 	var currentID StepID
 	for i, step := range m.steps {
 		if !stepShouldShow(step, m.config) {
 			continue
 		}
-		titles = append(titles, step.Title())
 		visibleIDs = append(visibleIDs, step.ID())
 		if i == m.currentStep {
 			currentID = step.ID()
@@ -412,7 +327,6 @@ func (m *Model) progressInfo() ProgressInfo {
 		Current:    m.currentVisibleStepIndex() + 1,
 		Total:      m.countVisibleSteps(),
 		CurrentID:  currentID,
-		Titles:     titles,
 		VisibleIDs: visibleIDs,
 	}
 }
@@ -555,13 +469,9 @@ func (m *Model) windowTitle() string {
 // renderHelpOverlay renders the full, untruncated key-binding list — the
 // same bindings footerBindings feeds the ribbon, plus the active step's own
 // footer-silent extras (OverlayHelpProvider) and the wizard's footer-silent
-// vim/jump vocabulary — over the body region, sized to exactly replace it —
-// the full content width on a split tier.
+// vim/jump vocabulary — over the body region, sized to exactly replace it.
 func (m *Model) renderHelpOverlay() string {
 	width, height := m.viewportDimensions()
-	if m.splitLayout() {
-		width = m.contentWidth()
-	}
 
 	bindings := m.footerBindings()
 	hints := make([]components.KeyHint, len(bindings), len(bindings)+8)

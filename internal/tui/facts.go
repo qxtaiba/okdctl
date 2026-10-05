@@ -21,7 +21,7 @@ type FactRow struct {
 type FactLeader int
 
 // Fact leader dialects: dotted leaders (done cards, CLI summaries), a padded
-// key column (review sections), and flowing "key: value" (the context pane).
+// key column (review sections), and flowing "key: value" (fold summaries).
 const (
 	FactLeaderDots FactLeader = iota
 	FactLeaderPad
@@ -57,7 +57,7 @@ type FactLayout struct {
 
 // RenderFacts renders rows as styled fact lines in one of the three house
 // dialects — the single engine behind the done cards' dotted leaders, the
-// review sections' key columns, and the context pane's flowing facts. Lines
+// review sections' key columns, and the fold summaries' flowing facts. Lines
 // come back un-downsampled.
 func RenderFacts(rows []FactRow, l *FactLayout) []string {
 	var lines []string

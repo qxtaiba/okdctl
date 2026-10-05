@@ -477,7 +477,7 @@ func demoDiscoveryUnknownCapacity() *proxmoxDiscovery {
 
 // TestGolden_NodePlacementUnknownCapacity pins demoDiscoveryUnknownCapacity
 // through the full model (so the viewport, not the bare step, governs
-// height), at both the compact and the wide-split tiers.
+// height), at both the compact tier and a wide terminal.
 func TestGolden_NodePlacementUnknownCapacity(t *testing.T) {
 	for _, sz := range []struct{ w, h int }{{80, 24}, {180, 48}} {
 		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {

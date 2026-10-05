@@ -59,13 +59,6 @@ func (s *DoneStep) SetSize(width, height int) {
 	s.SetBodyHeight(height)
 }
 
-// PaneContent keeps the live log in the split layout's right pane on the
-// completion screen too: the run just ended, and its last lines are what an
-// operator reads next.
-func (s *DoneStep) PaneContent(width, height int) string {
-	return s.log.RenderPane(width, height)
-}
-
 // InterceptBack keeps the flow forward-only: esc from the done screen would
 // re-enter the finished stream step and softlock on its drained event channel.
 // Closing an open filter input is the one thing the key does here — the frame
@@ -120,7 +113,7 @@ func (s *DoneStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		cmd := s.copy(s.st.RunID)
 		return s, cmd
 	}
-	switch relayout, moved := s.log.HandleKey(keyMsg, s.SplitsFrame(flowStepCount)); {
+	switch relayout, moved := s.log.HandleKey(keyMsg); {
 	case relayout:
 		return s, func() tea.Msg { return wizard.LayoutChangedMsg{} }
 	case moved:
@@ -199,12 +192,10 @@ func (s *DoneStep) ScrollsWithArrows() bool {
 	return !s.log.Full()
 }
 
-// SuppressesSplit gives the payoff screen the whole frame: the summary is the
-// run's record, and a log pane beside it would squeeze the access URLs into a
-// half-width column they have to wrap in. A failure keeps the pane — its
-// evidence is what the operator reads next — unless the log has gone
-// full-screen, which takes the frame anyway.
-func (s *DoneStep) SuppressesSplit() bool {
+// OwnsFrameWidth gives the payoff screen the whole frame: the summary is the
+// run's record, and its two columns need the width. A failure keeps the
+// capped measure unless the log has gone full-screen, which takes the frame.
+func (s *DoneStep) OwnsFrameWidth() bool {
 	if s.st.Result == nil {
 		return true
 	}
@@ -271,14 +262,10 @@ func (s *DoneStep) fullLog(col int) string {
 	return strings.Join(head, "\n") + "\n" + s.log.RenderFull(col, max(s.BodyHeight()-len(head), 2))
 }
 
-// evidence renders the log's last lines under the report on a frame with no
-// pane to carry them. A failure's evidence is the chatter that led up to it,
-// so it stays on screen at every width; a success needs none — its summary box
-// is the record.
+// evidence renders the log's last lines under the report. A failure's
+// evidence is the chatter that led up to it, so it stays on screen at every
+// width; a success needs none — its summary box is the record.
 func (s *DoneStep) evidence(col int) []string {
-	if s.SplitsFrame(flowStepCount) {
-		return nil
-	}
 	tail := s.log.FailureTail(col)
 	if tail == "" {
 		return nil

@@ -34,52 +34,14 @@ const (
 
 	fixedLayoutOverhead = headerHeight + statusHeight + footerHeight + outerVerticalPadding
 
-	// wideSplitWidth is the terminal width at and above which the wizard
-	// splits into a form column and a dim context pane; below it the frame
-	// stays a single column.
-	wideSplitWidth = 150
-
-	// singleFormMaxWidth caps the single-column tier's form measure — the
-	// frame itself always spans the terminal, so a wide-but-unsplit terminal
-	// keeps a readable column inside the full-width frame rather than
-	// stretching the form; at and above wideSplitWidth the surplus becomes
-	// the context pane instead.
+	// singleFormMaxWidth caps the form measure — the frame itself always
+	// spans the terminal, so a wide terminal keeps a readable column inside
+	// the full-width frame rather than stretching the form.
 	singleFormMaxWidth = 110
 
-	// formMaxWidth caps the split layout's form column measure.
+	// formMaxWidth is the measure FieldWidthAuto and FieldWidthPath derive from.
 	formMaxWidth = 104
-
-	// paneRuleWidth is the single-column divider between the form and the
-	// context pane.
-	paneRuleWidth = 1
-
-	// paneGutterWidth is the breathing room between the pane rule and the
-	// pane's first content column; paneEdgeWidth keeps one blank column
-	// between the pane's last content column and the frame border.
-	paneGutterWidth = 2
-	paneEdgeWidth   = 1
-
-	// paneMinWidth floors the split layout's context pane; the pane has no
-	// ceiling — it absorbs everything the form column's cap leaves over.
-	paneMinWidth = 28
-
-	// paneStepsHeaderRows is the PROGRESS section's own header row, counted
-	// separately from its one-row-per-step body in splitMinHeight.
-	paneStepsHeaderRows = 1
 )
-
-// splitMinHeight is the terminal height at and above which a stepCount-step
-// wizard's context pane has room for its PROGRESS section — the header plus one
-// row per step — without truncating it: fixedLayoutOverhead's fixed chrome
-// rows, plus the header, plus stepCount. Below it, splitLayout falls back to
-// the capped single-column tier rather than splitting into an unusably
-// short pane; at or above it, renderContextPane may still drop CONFIGURED and
-// FOCUSED FIELD (and, defensively, truncate the step list itself) if their
-// content doesn't fit — the PROGRESS section's own minimum is the one thing
-// this floor guarantees room for.
-func splitMinHeight(stepCount int) int {
-	return fixedLayoutOverhead + paneStepsHeaderRows + stepCount
-}
 
 type earlyExiter interface {
 	ShouldExitEarly() bool
@@ -100,19 +62,11 @@ type heroRenderer interface {
 	RendersHero() bool
 }
 
-// splitSuppressor is implemented by steps that own the frame's whole width
-// however wide the terminal is — a centered launcher, where the context pane
-// would be chrome describing work the screen isn't doing.
-type splitSuppressor interface {
-	SuppressesSplit() bool
-}
-
-// paneRenderer is implemented by steps that fill the split layout's right pane
-// themselves, in place of the context pane — a live log beside the work it
-// narrates says more than a step list the screen isn't walking. The same height
-// clamp the context pane obeys applies: content must fit the rows it is given.
-type paneRenderer interface {
-	PaneContent(width, height int) string
+// frameWidthOwner is implemented by steps that render across the frame's
+// whole width instead of the capped form measure — a centered launcher, a
+// full-screen log.
+type frameWidthOwner interface {
+	OwnsFrameWidth() bool
 }
 
 // displayTitler is implemented by steps with a header prompt distinct from
@@ -161,11 +115,6 @@ type Model struct {
 	// is the open question a first ctrl+c raises once the live config differs.
 	savedDigest    [sha256.Size]byte
 	discardPending bool
-
-	// theme is the resolved Theme this frame renders with, injected at
-	// construction and re-resolved once when the terminal reports its
-	// background — the exemplar for per-surface theme injection.
-	theme tui.Theme
 
 	// The shared frame clock (see motion.go): motion is the resolved dial,
 	// frame the monotonic counter, clockGen/clockRunning the identity and
@@ -368,7 +317,6 @@ func NewFlowModel(steps []WizardStep, cfg *config.Config, chrome FlowChrome) *Mo
 		config:      cfg,
 		chrome:      chrome,
 		savedDigest: configDigest(cfg),
-		theme:       tui.CurrentTheme(),
 		motion:      tui.Motion(),
 		keyMap:      defaultKeyMap(),
 	}
@@ -459,7 +407,6 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// terminal's one reply lands here as the sole caller, early — before
 		// the user has had any chance to act on the rendered wizard.
 		tui.SetDarkBackground(msg.IsDark())
-		m.theme = tui.CurrentTheme()
 		rebuildWizardStyles()
 		components.RebuildStyles()
 		return m, nil

@@ -202,7 +202,7 @@ type StepCompleteMsg struct {
 type StepBackMsg struct{}
 
 // LayoutChangedMsg asks the wizard to re-measure the active step: a step that
-// flips its own layout gate — a full-screen toggle turning SuppressesSplit on —
+// flips its own layout gate — a full-screen toggle turning OwnsFrameWidth on —
 // changes the body width without the terminal changing at all, and nothing else
 // resizes the viewport before the next real resize.
 type LayoutChangedMsg struct{}

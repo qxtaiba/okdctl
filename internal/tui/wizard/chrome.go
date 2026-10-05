@@ -14,7 +14,6 @@ import (
 type ProgressInfo struct {
 	Current, Total int
 	CurrentID      StepID
-	Titles         []string
 	// VisibleIDs lists every currently visible step's ID in flow order, so a
 	// Trail hook can work out a step's position within a subset (e.g. a
 	// Stage) without knowing which steps a given config hides.

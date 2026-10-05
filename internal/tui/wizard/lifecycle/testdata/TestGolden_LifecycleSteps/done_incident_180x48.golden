@@ -3,46 +3,46 @@
   │ O K D C T L                                                                                                                                                                  │  
   │ done                                                                                                                                op · target · params · plan · run · done │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
-  │  ✓ homelab-master0                                                                           1m0s      │  LOG                                                                │  
-  │  ✗ homelab-master1                                                                                     │  · 09:00:00 terraform apply step=step-00 node=homelab-master0       │  
-  │      ✓ etcd health gate (pre)                                                                   —      │  · 09:00:07 terraform apply step=step-01 node=homelab-master0       │  
-  │      ✓ cordon + drain                                                                           —      │  · 09:00:14 terraform apply step=step-02 node=homelab-master0       │  
-  │      ✗ terraform apply (in-place update)                                                      30s      │  · 09:00:21 terraform apply step=step-03 node=homelab-master0       │  
-  │      ○ power-cycle vm                                                                                  │  · 09:00:28 terraform apply step=step-04 node=homelab-master0       │  
-  │      ○ wait for node ready                                                                             │  · 09:00:35 terraform apply step=step-05 node=homelab-master0       │  
-  │      ○ etcd health gate (post)                                                                         │  · 09:00:42 terraform apply step=step-06 node=homelab-master0       │  
-  │      ○ uncordon + ceph health gate                                                                     │  · 09:00:49 terraform apply step=step-07 node=homelab-master0       │  
-  │  ○ homelab-master2                                                                                     │  · 09:00:56 terraform apply step=step-08 node=homelab-master0       │  
-  │                                                                                                        │  · 09:01:03 terraform apply step=step-09 node=homelab-master0       │  
-  │  ╭──────────────────────────────────────── ERROR ─────────────────────────────────────────╮            │  · 09:01:10 terraform apply step=step-10 node=homelab-master0       │  
-  │  │                                                                                        │            │  · 09:01:17 terraform apply step=step-11 node=homelab-master0       │  
-  │  │  ✗  resize failed                                                                      │            │  · 09:01:24 terraform apply step=step-12 node=homelab-master0       │  
-  │  │                                                                                        │            │  · 09:01:31 terraform apply step=step-13 node=homelab-master0       │  
-  │  │  etcd health gate (post-master0) failed: quorum lost                                   │            │  · 09:01:38 terraform apply step=step-14 node=homelab-master0       │  
-  │  │                                                                                        │            │  · 09:01:45 terraform apply step=step-15 node=homelab-master0       │  
-  │  ╰────────────────────────────────────────────────────────────────────────────────────────╯            │  · 09:01:52 terraform apply step=step-16 node=homelab-master0       │  
-  │                                                                                                        │  · 09:01:59 terraform apply step=step-17 node=homelab-master0       │  
-  │  operation ..... resize                                                                                │  · 09:02:06 terraform apply step=step-18 node=homelab-master0       │  
-  │  failed gate ... terraform apply (in-place update)                                                     │  · 09:02:13 terraform apply step=step-19 node=homelab-master0       │  
-  │  node .......... homelab-master1                                                                       │  · 09:02:20 terraform apply step=step-20 node=homelab-master0       │  
-  │  elapsed ....... 1m30s                                                                                 │  · 09:02:27 terraform apply step=step-21 node=homelab-master0       │  
-  │  cause ......... etcd health gate (post-master0) failed                                                │  · 09:02:34 terraform apply step=step-22 node=homelab-master0       │  
-  │                                                                                                        │  · 09:02:41 terraform apply step=step-23 node=homelab-master0       │  
-  │  NEXT MOVES                                                                                            │                                                                     │  
-  │  f   open the full log, filter it, jump between errors                                                 │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │  run these yourself:                                                                                   │                                                                     │  
-  │  okdctl node manage      resume the interrupted operation at the recorded step                         │                                                                     │  
-  │  okdctl status           check what the cluster makes of the nodes now                                 │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │  full log okd-install/okdctl.log                                                                       │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
-  │                                                                                                        │                                                                     │  
+  │  ✓ homelab-master0                                                                                 1m0s                                                                      │  
+  │  ✗ homelab-master1                                                                                                                                                           │  
+  │      ✓ etcd health gate (pre)                                                                         —                                                                      │  
+  │      ✓ cordon + drain                                                                                 —                                                                      │  
+  │      ✗ terraform apply (in-place update)                                                            30s                                                                      │  
+  │      ○ power-cycle vm                                                                                                                                                        │  
+  │      ○ wait for node ready                                                                                                                                                   │  
+  │      ○ etcd health gate (post)                                                                                                                                               │  
+  │      ○ uncordon + ceph health gate                                                                                                                                           │  
+  │  ○ homelab-master2                                                                                                                                                           │  
   │                                                                                                                                                                              │  
-  │─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── ▸ homelab │  
+  │  ╭──────────────────────────────────────── ERROR ─────────────────────────────────────────╮                                                                                  │  
+  │  │                                                                                        │                                                                                  │  
+  │  │  ✗  resize failed                                                                      │                                                                                  │  
+  │  │                                                                                        │                                                                                  │  
+  │  │  etcd health gate (post-master0) failed: quorum lost                                   │                                                                                  │  
+  │  │                                                                                        │                                                                                  │  
+  │  ╰────────────────────────────────────────────────────────────────────────────────────────╯                                                                                  │  
+  │                                                                                                                                                                              │  
+  │  operation ..... resize                                                                                                                                                      │  
+  │  failed gate ... terraform apply (in-place update)                                                                                                                           │  
+  │  node .......... homelab-master1                                                                                                                                             │  
+  │  elapsed ....... 1m30s                                                                                                                                                       │  
+  │  cause ......... etcd health gate (post-master0) failed                                                                                                                      │  
+  │                                                                                                                                                                              │  
+  │  NEXT MOVES                                                                                                                                                                  │  
+  │  f   open the full log, filter it, jump between errors                                                                                                                       │  
+  │                                                                                                                                                                              │  
+  │  run these yourself:                                                                                                                                                         │  
+  │  okdctl node manage      resume the interrupted operation at the recorded step                                                                                               │  
+  │  okdctl status           check what the cluster makes of the nodes now                                                                                                       │  
+  │                                                                                                                                                                              │  
+  │  LOG                                                                                                                                                                         │  
+  │  · 09:02:06 terraform apply step=step-18 node=homelab-master0                                         │                                                                      │  
+  │  · 09:02:13 terraform apply step=step-19 node=homelab-master0                                         │                                                                      │  
+  │  · 09:02:20 terraform apply step=step-20 node=homelab-master0                                         │                                                                      │  
+  │  · 09:02:27 terraform apply step=step-21 node=homelab-master0                                         │                                                                      │  
+  │  · 09:02:34 terraform apply step=step-22 node=homelab-master0                                         ▎                                                                      │  
+  │                                                                                                                                                                              │  
+  │──────────────────────────────────────────────────────────────────── ↑ ↓  scroll down for more ──────────────────────────────────────────────────────────────────── ▸ homelab │  
   │  / filter the log • l lock the log here • f full-screen log • enter exit • ? help                                                                                            │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                                                                                                     

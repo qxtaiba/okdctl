@@ -30,7 +30,7 @@ type Theme struct {
 	TextFaint color.Color // faintest readable tier: nested keys, timestamps
 
 	Subtle color.Color // structural, sub-text: pending glyphs, soft borders
-	Rule   color.Color // separators, dot leaders, pane rules
+	Rule   color.Color // separators, dot leaders
 
 	Code   color.Color // inline code and credentials
 	Accent color.Color // section headers, spinner, small emphasis

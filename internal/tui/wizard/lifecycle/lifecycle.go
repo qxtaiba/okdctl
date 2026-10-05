@@ -102,7 +102,7 @@ type Hooks struct {
 	Execute   func(st *State, events chan<- ExecEvent) error
 	CancelOp  func()
 	// Logs is the human log stream the log surface reads; nil leaves the
-	// pane to the wizard's own context pane.
+	// screens without a log tail or full-screen log.
 	Logs logview.Source
 	// LogPath is the resolved path of the run-log sink that keeps every
 	// byte the ring evicts; empty when no file sink is open, and no screen

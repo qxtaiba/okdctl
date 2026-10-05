@@ -343,7 +343,7 @@ func phaseComplete(ph *phaseProgress) bool {
 // screen below the fold. With no Logs hook (documented-supported) every key
 // is inert — an empty full-screen log would blank the whole body.
 func (s *StreamStep) handleLogKey(msg tea.KeyPressMsg) tea.Cmd {
-	switch relayout, moved := s.log.HandleKey(msg, s.paneCarriesLog()); {
+	switch relayout, moved := s.log.HandleKey(msg); {
 	case relayout:
 		return func() tea.Msg { return wizard.LayoutChangedMsg{} }
 	case moved:
@@ -353,8 +353,8 @@ func (s *StreamStep) handleLogKey(msg tea.KeyPressMsg) tea.Cmd {
 }
 
 // ConsumesPaging reports whether pgup/pgdn page the log window itself — the
-// full-screen log always, a locked pane or tail too — so the frame leaves the
-// keys to the step instead of scrolling the checklist viewport.
+// full-screen log always, a locked tail too — so the frame leaves the keys
+// to the step instead of scrolling the checklist viewport.
 func (s *StreamStep) ConsumesPaging() bool {
 	return s.log.ConsumesPaging()
 }
@@ -366,22 +366,10 @@ func (s *StreamStep) ScrollsWithArrows() bool {
 	return s.hooks.Logs == nil || !s.log.Full()
 }
 
-// SuppressesSplit hands the log the whole frame while `f` has it full-screen;
+// OwnsFrameWidth hands the log the whole frame while `f` has it full-screen;
 // the checklist comes back the moment it is toggled off.
-func (s *StreamStep) SuppressesSplit() bool {
+func (s *StreamStep) OwnsFrameWidth() bool {
 	return s.log.Full() && s.hooks.Logs != nil
-}
-
-// PaneContent fills the split layout's right pane with the live log, in place of
-// the context pane's step list.
-func (s *StreamStep) PaneContent(width, height int) string {
-	return s.log.RenderPane(width, height)
-}
-
-// paneCarriesLog reports whether the log has a pane of its own, in which case
-// the checklist body carries no tail.
-func (s *StreamStep) paneCarriesLog() bool {
-	return s.hooks.Logs != nil && !s.log.Full() && s.SplitsFrame(flowStepCount)
 }
 
 // applyEvent updates phase/row state for ev: a phase change closes out the
@@ -605,35 +593,20 @@ func (s *StreamStep) View(width, _ int) string {
 		clauses = append(clauses, "ctrl+c cancels after the current step")
 	}
 
-	// On the split tier the pane carries the log, so the checklist's dead
-	// lower rows take the per-phase duration bars instead; a narrow frame
-	// spends the same slack on the log tail below.
-	if s.paneCarriesLog() {
-		chrome := 2
-		if len(clauses) > 0 {
-			chrome += 2
-		}
-		if s.BodyHeight()-len(lines)-chrome >= s.phaseBarRows() {
-			lines = append(lines, s.renderPhaseBars(col)...)
-		}
-	}
-
+	// The tail's budget is whatever body rows the checklist and the
+	// chrome around the tail (its blank row, the LOG header, and the
+	// clauses block) leave over, floored at logview.NarrowTailRows —
+	// slack becomes evidence instead of blank rows.
 	s.tailRendered = false
-	if !s.paneCarriesLog() {
-		// The tail's budget is whatever body rows the checklist and the
-		// chrome around the tail (its blank row, the LOG header, and the
-		// clauses block) leave over, floored at logview.NarrowTailRows —
-		// slack becomes evidence instead of blank rows.
-		chrome := 2
-		if len(clauses) > 0 {
-			chrome += 2
-		}
-		budget := max(logview.NarrowTailRows, s.BodyHeight()-len(lines)-chrome)
-		if tail := s.log.RenderTail(col, budget); len(tail) > 0 {
-			lines = append(lines, "")
-			lines = append(lines, tail...)
-			s.tailRendered = true
-		}
+	chrome := 2
+	if len(clauses) > 0 {
+		chrome += 2
+	}
+	budget := max(logview.NarrowTailRows, s.BodyHeight()-len(lines)-chrome)
+	if tail := s.log.RenderTail(col, budget); len(tail) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, tail...)
+		s.tailRendered = true
 	}
 
 	if len(clauses) > 0 {

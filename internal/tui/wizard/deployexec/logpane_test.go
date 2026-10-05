@@ -32,12 +32,6 @@ func seededRing(n int) *logview.Ring {
 	return r
 }
 
-func TestFlowStepCountMatchesNewSteps(t *testing.T) {
-	if got := len(NewSteps(streamState(), Hooks{})); got != flowStepCount {
-		t.Errorf("NewSteps builds %d screens, flowStepCount says %d", got, flowStepCount)
-	}
-}
-
 func TestStreamLockKeyTogglesFollow(t *testing.T) {
 	s := NewStreamStep(streamState(), Hooks{Logs: seededRing(10)})
 
@@ -54,8 +48,8 @@ func TestStreamLockKeyTogglesFollow(t *testing.T) {
 	if s.log.LockPoint() != 10 {
 		t.Errorf("lock point = %d, want the stream index at lock time (10)", s.log.LockPoint())
 	}
-	if got := tuitest.StripANSI(s.PaneContent(44, 6)); !strings.Contains(got, "LOG · 6–10 of 10") {
-		t.Errorf("a locked pane must name its window position:\n%s", got)
+	if got := tuitest.StripANSI(strings.Join(s.log.RenderTail(44, 5), "\n")); !strings.Contains(got, "LOG · 6–10 of 10") {
+		t.Errorf("a locked tail must name its window position:\n%s", got)
 	}
 
 	s.Update(tea.KeyPressMsg{Code: logview.KeyLock, Text: "l"})
@@ -68,7 +62,6 @@ func TestStreamFullKeySwapsTheLogFullScreenAndBack(t *testing.T) {
 	s := NewStreamStep(streamState(), Hooks{Logs: seededRing(30)})
 	s.buildRows()
 	s.SetSize(100, 20)
-	s.SetTerminalSize(180, 48)
 
 	_, cmd := s.Update(tea.KeyPressMsg{Code: logview.KeyFull, Text: "f"})
 	if cmd == nil {
@@ -77,7 +70,7 @@ func TestStreamFullKeySwapsTheLogFullScreenAndBack(t *testing.T) {
 	if _, ok := cmd().(wizard.LayoutChangedMsg); !ok {
 		t.Errorf("f emitted %T, want LayoutChangedMsg", cmd())
 	}
-	if !s.SuppressesSplit() {
+	if !s.OwnsFrameWidth() {
 		t.Error("a full-screen log must claim the whole frame")
 	}
 
@@ -93,7 +86,7 @@ func TestStreamFullKeySwapsTheLogFullScreenAndBack(t *testing.T) {
 	}
 
 	s.Update(tea.KeyPressMsg{Code: logview.KeyFull, Text: "f"})
-	if s.SuppressesSplit() {
+	if s.OwnsFrameWidth() {
 		t.Error("a second f must give the checklist back")
 	}
 	if !strings.Contains(tuitest.StripANSI(s.View(104, 1000)), string(PhasePrep)) {
@@ -104,7 +97,6 @@ func TestStreamFullKeySwapsTheLogFullScreenAndBack(t *testing.T) {
 func TestStreamNarrowFrameCarriesTheTailUnderTheChecklist(t *testing.T) {
 	s := NewStreamStep(streamState(), Hooks{Logs: seededRing(20)})
 	s.buildRows()
-	s.SetTerminalSize(120, 40)
 
 	body := tuitest.StripANSI(s.View(104, 1000))
 	if !strings.Contains(body, "step-19") {
@@ -113,16 +105,10 @@ func TestStreamNarrowFrameCarriesTheTailUnderTheChecklist(t *testing.T) {
 	if strings.Contains(body, "step-10") {
 		t.Errorf("the tail must be capped at %d rows:\n%s", logview.NarrowTailRows, body)
 	}
-
-	s.SetTerminalSize(180, 48)
-	if strings.Contains(tuitest.StripANSI(s.View(100, 1000)), "step-19") {
-		t.Error("a frame with a log pane must not repeat the tail in the body")
-	}
 }
 
-// TestStreamTailSpanFollowsTheNewestLine pins the viewport contract per tier:
-// a narrow frame follows the tail so the newest line is always on screen, while
-// a frame whose pane carries the log follows the running row instead.
+// TestStreamTailSpanFollowsTheNewestLine pins the viewport contract: the
+// frame follows the tail so the newest line is always on screen.
 func TestStreamTailSpanFollowsTheNewestLine(t *testing.T) {
 	base := logBase
 	cur := base
@@ -133,7 +119,6 @@ func TestStreamTailSpanFollowsTheNewestLine(t *testing.T) {
 	s.buildRows()
 	s.applyEvent(&Event{StepID: st.Plan[0].ID})
 
-	s.SetTerminalSize(120, 40)
 	_ = s.View(104, 1000)
 	span, ok := s.FocusedSpan()
 	if !ok {
@@ -142,20 +127,12 @@ func TestStreamTailSpanFollowsTheNewestLine(t *testing.T) {
 	if span.Start != s.lastLine || span.End != s.lastLine {
 		t.Errorf("narrow span = %+v, want the tail's end line %d", span, s.lastLine)
 	}
-
-	s.SetTerminalSize(180, 48)
-	_ = s.View(100, 1000)
-	span, _ = s.FocusedSpan()
-	if span.Start != s.focusLine {
-		t.Errorf("wide span = %+v, want the running row %d — the pane carries the log there", span, s.focusLine)
-	}
 }
 
 func TestDoneFailureKeepsTheLastLogLinesOnScreen(t *testing.T) {
 	st := doneState()
 	st.Result = errStreamFailed
 	s := NewDoneStep(st, Hooks{Logs: seededRing(20)})
-	s.SetTerminalSize(100, 30)
 
 	out := tuitest.StripANSI(s.View(96, 1000))
 	if !strings.Contains(out, "deploy failed") {
@@ -163,15 +140,6 @@ func TestDoneFailureKeepsTheLastLogLinesOnScreen(t *testing.T) {
 	}
 	if !strings.Contains(out, "step-19") {
 		t.Errorf("failure view must keep the last log lines on screen:\n%s", out)
-	}
-
-	// A wide frame carries them in the pane instead, so the body must not repeat them.
-	s.SetTerminalSize(180, 48)
-	if strings.Contains(tuitest.StripANSI(s.View(96, 1000)), "step-19") {
-		t.Error("a frame with a log pane must not repeat the tail under the card")
-	}
-	if !strings.Contains(tuitest.StripANSI(s.PaneContent(47, 8)), "step-19") {
-		t.Error("the pane must carry the tail on the completion screen too")
 	}
 }
 
@@ -214,16 +182,13 @@ func TestStreamWithoutALogSourceAdvertisesNoLogKeys(t *testing.T) {
 			t.Errorf("advertised %q with no log source", b.Key)
 		}
 	}
-	if s.PaneContent(44, 8) != "" {
-		t.Error("with no log source the pane must fall back to the context pane")
-	}
-	if s.SuppressesSplit() {
+	if s.OwnsFrameWidth() {
 		t.Error("with no log source there is nothing to go full-screen")
 	}
 }
 
 // streamModelAt builds the deploy flow around a seeded ring and renders it once
-// at w×h, so pane tests exercise the real frame rather than the step alone.
+// at w×h, so log tests exercise the real frame rather than the step alone.
 func streamModelAt(t *testing.T, st *State, hooks Hooks, w, h int) *wizard.Model {
 	t.Helper()
 	tui.SetTerminalWidth(w)
@@ -341,7 +306,6 @@ func TestStreamFullScreenPagingWalksTheRing(t *testing.T) {
 	s := NewStreamStep(streamState(), Hooks{Logs: seededRing(40)})
 	s.buildRows()
 	s.SetSize(100, 20)
-	s.SetTerminalSize(120, 40)
 
 	s.Update(tea.KeyPressMsg{Code: logview.KeyFull, Text: "f"})
 	_ = s.View(104, 1000)
@@ -386,7 +350,6 @@ func TestStreamFullScreenArrowsScrollByLine(t *testing.T) {
 	s := NewStreamStep(streamState(), Hooks{Logs: seededRing(40)})
 	s.buildRows()
 	s.SetSize(100, 20)
-	s.SetTerminalSize(120, 40)
 
 	if !s.ScrollsWithArrows() {
 		t.Fatal("the checklist must leave the arrows to the frame's viewport")
@@ -408,29 +371,28 @@ func TestStreamFullScreenArrowsScrollByLine(t *testing.T) {
 	}
 }
 
-// TestStreamLockedPanePagesThroughTheRing pins item: the locked side pane
+// TestStreamLockedTailPagesThroughTheRing pins item: the locked tail
 // pages with pgup/pgdn; while following, the checklist keeps those keys.
-func TestStreamLockedPanePagesThroughTheRing(t *testing.T) {
+func TestStreamLockedTailPagesThroughTheRing(t *testing.T) {
 	s := NewStreamStep(streamState(), Hooks{Logs: seededRing(40)})
 	s.buildRows()
-	s.SetTerminalSize(180, 48)
 
 	if s.ConsumesPaging() {
-		t.Fatal("a following pane must leave paging to the checklist viewport")
+		t.Fatal("a following tail must leave paging to the checklist viewport")
 	}
 	s.Update(tea.KeyPressMsg{Code: logview.KeyLock, Text: "l"})
 	if !s.ConsumesPaging() {
-		t.Fatal("a locked pane must claim the paging keys")
+		t.Fatal("a locked tail must claim the paging keys")
 	}
 
-	_ = s.PaneContent(44, 10)
+	_ = s.log.RenderTail(44, 9)
 	s.Update(tea.KeyPressMsg{Code: tea.KeyPgUp})
-	pane := tuitest.StripANSI(s.PaneContent(44, 10))
-	if strings.Contains(pane, "step-39") {
-		t.Errorf("a paged pane must have scrolled past the tail:\n%s", pane)
+	tail := tuitest.StripANSI(strings.Join(s.log.RenderTail(44, 9), "\n"))
+	if strings.Contains(tail, "step-39") {
+		t.Errorf("a paged tail must have scrolled past the newest line:\n%s", tail)
 	}
-	if !strings.Contains(pane, "of 40") {
-		t.Errorf("a paged pane must name its position:\n%s", pane)
+	if !strings.Contains(tail, "of 40") {
+		t.Errorf("a paged tail must name its position:\n%s", tail)
 	}
 }
 
@@ -483,7 +445,6 @@ func TestStreamFullScreenHeaderCarriesTheSinkPath(t *testing.T) {
 func TestStreamFootnoteNamesTheResolvedSinkPath(t *testing.T) {
 	s := NewStreamStep(streamState(), Hooks{Logs: seededRing(4), LogPath: "/srv/lab/okdctl.log"})
 	s.buildRows()
-	s.SetTerminalSize(120, 40)
 
 	body := tuitest.StripANSI(s.View(104, 1000))
 	if !strings.Contains(body, "full log /srv/lab/okdctl.log") {
@@ -492,7 +453,6 @@ func TestStreamFootnoteNamesTheResolvedSinkPath(t *testing.T) {
 
 	bare := NewStreamStep(streamState(), Hooks{Logs: seededRing(4)})
 	bare.buildRows()
-	bare.SetTerminalSize(120, 40)
 	if body := tuitest.StripANSI(bare.View(104, 1000)); strings.Contains(body, "full log") {
 		t.Errorf("with no sink open the footnote must not invent one:\n%s", body)
 	}

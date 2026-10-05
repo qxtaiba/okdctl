@@ -14,33 +14,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 )
 
-func TestLabeledField_EveryFieldKindReportsItsLabelAndHelp(t *testing.T) {
-	input := NewInputField("host", "192.168.1.1")
-	input.Help = "proxmox host"
-
-	sel := NewSelectField("provider", []string{"a", "b"})
-	sel.Help = "pick a provider"
-
-	multi := NewMultiSelectField("addons", []string{"a", "b"})
-	multi.Help = "enable addons"
-
-	kv := NewKeyValueField("labels")
-	kv.Help = "extra labels"
-
-	fields := []LabeledField{input, sel, multi, kv}
-	wantLabels := []string{"host", "provider", "addons", "labels"}
-	wantHelp := []string{"proxmox host", "pick a provider", "enable addons", "extra labels"}
-
-	for i, f := range fields {
-		if got := f.FieldLabel(); got != wantLabels[i] {
-			t.Errorf("field %d FieldLabel() = %q, want %q", i, got, wantLabels[i])
-		}
-		if got := f.FieldHelp(); got != wantHelp[i] {
-			t.Errorf("field %d FieldHelp() = %q, want %q", i, got, wantHelp[i])
-		}
-	}
-}
-
 func TestInputField_BoxIsExactlyBoxWidth(t *testing.T) {
 	for _, outer := range []int{16, 40, 64} {
 		f := NewInputField("cluster name", "")

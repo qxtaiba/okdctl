@@ -24,8 +24,8 @@ type deployScenario struct {
 }
 
 // goldenHooks is the seeded feed every deploy golden renders against: no engine,
-// a fixed log ring, and a fixed sink path so the pane, the narrow tail, and the
-// full-log pointers are deterministic.
+// a fixed log ring, and a fixed sink path so the log tail and the full-log
+// pointers are deterministic.
 func goldenHooks() Hooks {
 	return Hooks{
 		Logs:    seededRing(24),

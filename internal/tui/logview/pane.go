@@ -177,9 +177,9 @@ func fitWrapped(w []Line, width, budget int) []Line {
 }
 
 // renderRows renders lines as dim, stamped rows within width columns, never
-// exceeding budget rows — the oldest are dropped first. A side pane and a narrow
-// tail give one row per line and clip the overflow, since a wrapped line there
-// costs a second row to show a few trailing fields; the full-screen log wraps
+// exceeding budget rows — the oldest are dropped first. The tail gives one
+// row per line and clips the overflow, since a wrapped line there costs a
+// second row to show a few trailing fields; the full-screen log wraps
 // instead, where there is room to read them.
 func renderRows(lines []Line, width, budget int, wrap bool) []string {
 	if width <= 0 || budget <= 0 {
@@ -280,25 +280,24 @@ func levelStyle(level string) lipgloss.Style {
 	}
 }
 
-// renderPane renders a log viewport into at most height rows of width
-// columns: a dim header naming the follow state, then the window's stamped rows,
-// tail last. wrap is the full-screen view's line handling; see renderRows.
-func renderPane(src Source, v view, width, height int, wrap bool) string {
-	if src == nil || height <= 0 {
+// renderFull renders the log across the whole body once `f` has swapped it
+// full-screen, into at most height rows of width columns: a dim header naming
+// the follow state, then the window's stamped, wrapped rows, tail last.
+func renderFull(src Source, v view, width, height int) string {
+	if src == nil {
 		return ""
 	}
+	height = max(height, 2)
 	budget := max(height-1, 1)
 	lines, first := src.Snapshot()
 	st := v.filter.selectFrom(lines, first)
 	w, pos, end := windowIn(&st, v, budget)
-	if wrap {
-		w = fitWrapped(w, width, budget)
-	}
+	w = fitWrapped(w, width, budget)
 	header := paneHeader(v, coords{
 		shown: len(w), end: end, total: first + int64(len(lines)),
 		pos: pos, matches: st.len(),
 	}, width)
-	rows := renderRows(w, width, budget, wrap)
+	rows := renderRows(w, width, budget, true)
 	if len(rows) == 0 {
 		rows = []string{lipgloss.NewStyle().Foreground(tui.ColorSubtle()).Render(emptyNote(v.filter))}
 	}
@@ -437,8 +436,8 @@ func filterChip(f filter, matches, total int) string {
 	return fmt.Sprintf("%s %s (%d/%d)", tui.IconCaretRight, label, matches, total)
 }
 
-// renderTail renders the rows that ride under a step's own body when the
-// frame is too narrow for a pane: the same stamped rows, led by a dim label.
+// renderTail renders the rows that ride under a step's own body: the same
+// stamped rows, led by a dim label.
 func renderTail(src Source, v view, width, budget int) []string {
 	if src == nil || budget <= 0 {
 		return nil
@@ -461,15 +460,6 @@ func renderTail(src Source, v view, width, budget int) []string {
 		pos: pos, matches: st.len(),
 	}, width)
 	return append([]string{header}, rows...)
-}
-
-// renderFull renders the log across the whole body once `f` has swapped it
-// full-screen: the same rows, sized to the body box instead of the pane.
-func renderFull(src Source, v view, width, height int) string {
-	if src == nil {
-		return ""
-	}
-	return renderPane(src, v, width, max(height, 2), true)
 }
 
 // lockedAt is the absolute stream index a fresh lock pins the window's end to:

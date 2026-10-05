@@ -170,21 +170,6 @@ func (s *PreviewStep) GetSelectedAction() wizard.Action {
 	return wizard.ActionExit
 }
 
-// Answered recaps the informed plan for the split layout's context pane —
-// the operation and how many nodes it touches — once the dry-run has one;
-// the body already carries the full node table and gate grid, so this is a
-// recap, not a duplicate of either.
-func (s *PreviewStep) Answered() []render.Fact {
-	if s.st.Plan == nil {
-		return nil
-	}
-	facts := []render.Fact{{Key: factKeyOperation, Value: s.operationLabel()}}
-	if n := len(s.st.Plan.Nodes); n > 0 {
-		facts = append(facts, render.Fact{Key: "nodes", Value: fmt.Sprintf("%d", n)})
-	}
-	return facts
-}
-
 // View renders the spinner, the dry-run failure, or the informed plan.
 func (s *PreviewStep) View(width, height int) string {
 	s.SetSize(width, height)
@@ -421,9 +406,7 @@ func (s *PreviewStep) operationLabel() string {
 }
 
 // operationLabel names the chosen operation and its target in one human
-// phrase ("resize homelab-master1", "add 2 worker(s)", "remove worker-2"),
-// shared by the preview screen's own operation entry and the params screen's
-// context-pane recap so the two never drift on wording.
+// phrase ("resize homelab-master1", "add 2 worker(s)", "remove worker-2").
 func operationLabel(st *State) string {
 	switch st.Op {
 	case node.OpResize:

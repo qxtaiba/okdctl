@@ -3,20 +3,20 @@
   │ O K D C T L                                                              │  
   │ review your configuration            connect · cluster · extras · review │  
   │──────────────────────────────────────────────────────────────────────────│  
-  │  worker data disk  500 gb per worker (1500 gb total)                     │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
-  │  total             40 vcpu, 104 gb ram, 1850 gb disk                     │  
-  │                                                                          │  
-  │  [5] files & ignition                                                    │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
-  │  ignition server  https://192.168.1.20                                   │  
-  │  web root         /var/www/html                                          │  
-  │                                                                          │  
-  │  [6] advanced                                                            │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
-  │  vm id base             6000                                             │  
-  │  timeouts               bootstrap 60m, install 120m                      │  
   │  terraform environment  production                                       │  
+  │                                                                          │  
+  │  DEPLOY PLAN                                                             │  
+  │  role      vms vcpu   ram os disk                                        │  
+  │  bootstrap   1    4  8 gb   50 gb                                        │  
+  │  masters     3    4 12 gb   50 gb                                        │  
+  │  workers     3    8 20 gb   50 gb                                        │  
+  │                                                                          │  
+  │  WRITES                                                                  │  
+  │  okdctl.yaml                                                             │  
+  │                                                                          │  
+  │  HEADLESS                                                                │  
+  │  okdctl deploy --config 'okdctl.yaml' --yes --confirm-cluster            │  
+  │  'mycluster'                                                             │  
   │                                                                          │  
   │──────────── ↑ ↓  scroll up for more ───────────── ▸ okd 4.22.0-okd-scos.7│  
   │  ○ deploy now   ● save and exit                    ctrl+c quit • ? help  │  

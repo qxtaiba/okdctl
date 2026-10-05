@@ -72,12 +72,6 @@ func (f *MultiSelectField) Value() string {
 	return strings.Join(parts, ",")
 }
 
-// FieldLabel returns the field's label.
-func (f *MultiSelectField) FieldLabel() string { return f.Label }
-
-// FieldHelp returns the field's help text.
-func (f *MultiSelectField) FieldHelp() string { return f.Help }
-
 // SetValue marks each option present in the comma-separated value as
 // selected. An entry the option list does not offer is never dropped: it
 // joins the list as an extra checked chip labeled (current), so a valid
