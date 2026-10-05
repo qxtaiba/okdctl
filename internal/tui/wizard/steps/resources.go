@@ -182,9 +182,8 @@ func resourceSummaryStyles() (value lipgloss.Style, sep string) {
 }
 
 func renderResourceFooter(step *wizard.DataDrivenStep, state *ResourcesStepState, width int) string {
-	cfg := state.Cfg
-	if cfg == nil {
-		cfg = config.DefaultConfig()
+	if state.Cfg == nil {
+		return ""
 	}
 	keys := []string{"cp_vcpus", "cp_memory", "cp_disk", "worker_vcpus", "worker_memory", "worker_disk", "worker_data_disk", "cp_data_disk"}
 	values := make(map[string]int, len(keys))
@@ -195,14 +194,14 @@ func renderResourceFooter(step *wizard.DataDrivenStep, state *ResourcesStepState
 		}
 		values[key] = value
 	}
-	in := EffectiveResourceInputsFromConfig(cfg)
-	in.ControlPlaneCPU, in.ControlPlaneMemoryMB, in.ControlPlaneDiskGB = values["cp_vcpus"], values["cp_memory"], values["cp_disk"]
-	in.WorkerCPU, in.WorkerMemoryMB, in.WorkerDiskGB = values["worker_vcpus"], values["worker_memory"], values["worker_disk"]
-	in.WorkerDataDiskGB, in.ControlPlaneDataDiskGB = values["worker_data_disk"], values["cp_data_disk"]
-	// The bootstrap VM runs alongside the control plane during installation;
-	// ComputeEffectiveResourceTotals falls back to control-plane sizing when
-	// cfg carries no explicit bootstrap cpu/memory of its own.
-	totals := ComputeEffectiveResourceTotals(&in)
+	// The as-typed values overlay a copy of the session config, so the totals
+	// track input ahead of its sync and share the review's one computation.
+	topology, disks := state.Cfg.Topology, state.Cfg.Disks
+	cp, workers := &topology.ControlPlane, &topology.Workers
+	cp.CPU, cp.MemoryMB, cp.DiskGB = values["cp_vcpus"], values["cp_memory"], values["cp_disk"]
+	workers.CPU, workers.MemoryMB, workers.DiskGB = values["worker_vcpus"], values["worker_memory"], values["worker_disk"]
+	disks.WorkerDataSizeGB, disks.ControlPlaneDataSizeGB = values["worker_data_disk"], values["cp_data_disk"]
+	totals := ComputeEffectiveResourceTotals(&topology, &disks)
 	totalCPU, totalMemoryMB, totalDiskGB := totals.CPU, totals.MemoryMB, totals.OSDiskGB+totals.DataDiskGB
 	label := fmt.Sprintf("%d vcpu · %d gb ram · %d gb disk", totalCPU, totalMemoryMB/1024, totalDiskGB)
 	capacity := state.Capacity.OnlineTotals()

@@ -186,6 +186,7 @@ func newGoldenModelWithCapacity(t *testing.T) (*wizard.Model, *WizardCapacitySna
 		}
 	}
 	capacity.cfg = cfg
+	built.States[wizard.StepTypeResources].(*ResourcesStepState).Cfg = cfg
 	return wizard.NewFlowModel(built.Steps, cfg, Chrome()), capacity
 }
 
