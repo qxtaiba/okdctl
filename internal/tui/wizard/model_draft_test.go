@@ -24,13 +24,10 @@ func TestConfigSyncSavesCurrentDraftState(t *testing.T) {
 	step := &draftSyncStep{id: StepIDBasics}
 	model := NewFlowModel([]WizardStep{step}, config.DefaultConfig(), DefaultChrome())
 	called := false
-	model.draftStateSaver = func(_ *config.Config, gotStep StepID, field string, history map[string][]string) error {
+	model.draftSaver = func(_ *config.Config, gotStep StepID, field string) error {
 		called = true
 		if gotStep != StepIDBasics || field != "cluster_name" {
 			t.Fatalf("saved cursor = %s/%s", gotStep, field)
-		}
-		if history["basics/cluster_name"][0] != "cluster-a" {
-			t.Fatalf("saved history = %v", history)
 		}
 		return nil
 	}
@@ -44,6 +41,3 @@ func TestConfigSyncSavesCurrentDraftState(t *testing.T) {
 type draftSyncWithCursor struct{ *draftSyncStep }
 
 func (*draftSyncWithCursor) DraftFieldKey() string { return "cluster_name" }
-func (*draftSyncWithCursor) FieldHistory() map[string][]string {
-	return map[string][]string{"basics/cluster_name": {"cluster-a"}}
-}

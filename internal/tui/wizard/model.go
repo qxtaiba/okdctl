@@ -153,10 +153,9 @@ type Model struct {
 	// while set, next/previous route to review.
 	returnToReview bool
 
-	config          *config.Config
-	chrome          FlowChrome
-	draftSaver      func(*config.Config, StepID, string) error
-	draftStateSaver func(*config.Config, StepID, string, map[string][]string) error
+	config     *config.Config
+	chrome     FlowChrome
+	draftSaver func(*config.Config, StepID, string) error
 
 	// theme is the resolved Theme this frame renders with, injected at
 	// construction and re-resolved once when the terminal reports its

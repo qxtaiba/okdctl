@@ -15,7 +15,6 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
@@ -376,11 +375,6 @@ func (f *MultiSectionForm) Update(msg tea.Msg) (cmd tea.Cmd, enterPressed bool) 
 	group := f.currentGroup()
 	if group == nil {
 		return nil, false
-	}
-	if chooser, ok := f.FocusedField().(components.HistoryChooser); ok && chooser.HistoryChooserOpen() {
-		var groupCmd tea.Cmd
-		f.sections[f.currentSection].Group, groupCmd = group.Update(msg)
-		return groupCmd, false
 	}
 
 	if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
@@ -807,7 +801,6 @@ type DataDrivenStep struct {
 	definition    *StepDefinition
 	draftFocusKey string
 	fieldKeys     map[string]fieldLocation
-	history       *components.FieldHistory
 
 	form *MultiSectionForm
 
@@ -824,7 +817,6 @@ func NewDataDrivenStep(def *StepDefinition) *DataDrivenStep {
 		BaseStep:   NewBaseStepWithDisplayTitle(def.ID, def.Title, def.DisplayTitle, def.Description),
 		definition: def,
 		fieldKeys:  make(map[string]fieldLocation),
-		history:    components.NewFieldHistory(8),
 	}
 
 	sections := make([]FormSection, 0, len(def.Sections))
@@ -846,9 +838,6 @@ func NewDataDrivenStep(def *StepDefinition) *DataDrivenStep {
 		for fieldIdx := range sectionDef.Fields {
 			fieldDef := &sectionDef.Fields[fieldIdx]
 			field := buildFormField(fieldDef)
-			if input, ok := field.(*components.InputField); ok && safeFieldHistory(fieldDef) {
-				input.SetHistory(step.history, string(def.ID)+"/"+fieldDef.Key)
-			}
 			fields = append(fields, field)
 			pairKeys = append(pairKeys, fieldDef.PairKey)
 			step.fieldKeys[fieldDef.Key] = fieldLocation{
@@ -896,53 +885,6 @@ func foldSummaryFunc(sectionDef *SectionDefinition, step *DataDrivenStep) func()
 		return nil
 	}
 	return func() []tui.FactRow { return sectionDef.FoldSummary(step.rawValues()) }
-}
-
-// SetFieldHistory restores safe prior values for configured form fields.
-func (s *DataDrivenStep) SetFieldHistory(values map[string][]string) {
-	known := make(map[string][]string)
-	for key := range s.fieldKeys {
-		_, ok := s.getField(key).(*components.InputField)
-		if !ok || !safeFieldHistory(fieldDefinition(s.definition, key)) {
-			continue
-		}
-		id := string(s.ID()) + "/" + key
-		if entries, exists := values[id]; exists {
-			known[id] = entries
-		}
-	}
-	s.history = components.NewFieldHistoryFrom(known)
-	for key := range s.fieldKeys {
-		fieldDef := fieldDefinition(s.definition, key)
-		if field, ok := s.getField(key).(*components.InputField); ok && safeFieldHistory(fieldDef) {
-			field.SetHistory(s.history, string(s.ID())+"/"+key)
-		}
-	}
-}
-
-// FieldHistory returns safe prior values keyed by stable field ID.
-func (s *DataDrivenStep) FieldHistory() map[string][]string {
-	return s.history.Snapshot()
-}
-
-func fieldDefinition(def *StepDefinition, fieldKey string) *FieldDefinition {
-	for section := range def.Sections {
-		for field := range def.Sections[section].Fields {
-			if def.Sections[section].Fields[field].Key == fieldKey {
-				return &def.Sections[section].Fields[field]
-			}
-		}
-	}
-	return nil
-}
-
-func safeFieldHistory(def *FieldDefinition) bool {
-	if def == nil || def.Type == FieldTypePassword || logutil.KeyIsSecret(def.Key) {
-		return false
-	}
-	lower := strings.ToLower(def.Key)
-	return !strings.Contains(lower, "username") && !strings.Contains(lower, "private_key") &&
-		!strings.Contains(lower, "privatekey")
 }
 
 func buildFormField(def *FieldDefinition) components.FormField {

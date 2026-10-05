@@ -6,7 +6,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
 )
 
 func TestDataDrivenInputEditRequestsDraftSync(t *testing.T) {
@@ -36,33 +35,4 @@ func TestDataDrivenInputEditRequestsDraftSync(t *testing.T) {
 		}
 	}
 	t.Fatalf("edit command returned %T(%+v), want basics ConfigSyncMsg", msg, msg)
-}
-
-func TestDataDrivenFieldHistoryRestoresSafeValuesAndSkipsPasswords(t *testing.T) {
-	step := NewDataDrivenStep(&StepDefinition{
-		ID:    StepIDProxmox,
-		Title: "proxmox",
-		Sections: []SectionDefinition{{Fields: []FieldDefinition{
-			{Key: "host", Type: FieldTypeText},
-			{Key: "auth", Type: FieldTypePassword},
-		}}},
-	})
-	step.SetFieldHistory(map[string][]string{
-		"proxmox/host": {"pve.example.test"},
-		"proxmox/auth": {"password-sentinel"},
-	})
-	step.Init()
-	step.getField("host").(*components.InputField).Focus()
-	step.Update(tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl})
-	step.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if got := step.Value("host"); got != "pve.example.test" {
-		t.Fatalf("restored host = %q", got)
-	}
-	password := step.getField("auth").(*components.InputField)
-	password.Focus()
-	password.SetValue("password-sentinel")
-	password.Blur()
-	if got := step.FieldHistory(); len(got) != 1 {
-		t.Fatalf("password entered history: %v", got)
-	}
 }

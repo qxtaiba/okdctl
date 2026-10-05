@@ -60,13 +60,12 @@ is confirmed. That active draft also surfaces as a sixth hub entry,
 it left off at and how long ago (`WelcomeStep.SetDraftResume`).
 
 That sidecar strips credentials before it ever reaches disk. The config
-clone `SaveWithHistory` marshals has its Proxmox username, password, API
-token, and token ID cleared, and any addon setting whose key looks
-sensitive dropped, before it is written (`safeConfig`). That same
-filtering reaches the per-field recall history saved alongside it: a
-value that looks like a password, token, private key, or SSH key is
-skipped (`containsSensitiveValue`), and a field whose key itself reads
-as a secret is dropped entirely (`safeFieldKey`).
+clone `Save` marshals has its Proxmox username, password, API token, and
+token ID cleared, and any addon setting whose key looks sensitive
+dropped, before it is written (`safeConfig`). That same filtering
+reaches the resume cursor saved alongside it: a field whose key itself
+reads as a secret is never recorded as the field to return to
+(`safeFieldKey`).
 
 This persistence is scoped to the configure flow proper, not the whole
 wizard: `supportedStep` recognizes only the ten data-driven steps from

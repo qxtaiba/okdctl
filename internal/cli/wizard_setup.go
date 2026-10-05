@@ -71,7 +71,6 @@ func runWizardWithMode(cmd *cobra.Command, cfg *config.Config, configExists bool
 	}
 	if hasDraft {
 		configureDraftResume(built, draft, time.Now())
-		configureDraftHistory(built, draft.FieldHistory)
 	}
 
 	var hub *steps.WelcomeStep
@@ -122,37 +121,29 @@ func sessionVerb(result wizard.Result, hub *steps.WelcomeStep) steps.HubVerb {
 	return hub.SelectedVerb()
 }
 
-func configureDraftHistory(built wizard.BuiltSteps, history map[string][]string) {
-	for _, step := range built.Steps {
-		if restorer, ok := step.(interface{ SetFieldHistory(map[string][]string) }); ok {
-			restorer.SetFieldHistory(history)
-		}
-	}
-}
-
 // wizardDraftSaveFn returns the interactive wizard's per-step draft saver,
 // wrapped in the project lock so a concurrent `okdctl deploy` in the same
 // project can't clobber an in-progress draft — the same serialization
 // saveConfig and persistWizardConfig already give the final config write.
-func wizardDraftSaveFn(configPath string) func(*config.Config, wizard.StepID, string, map[string][]string) error {
-	return func(cfg *config.Config, stepID wizard.StepID, fieldKey string, history map[string][]string) error {
+func wizardDraftSaveFn(configPath string) func(*config.Config, wizard.StepID, string) error {
+	return func(cfg *config.Config, stepID wizard.StepID, fieldKey string) error {
 		projectRoot, err := resolveWorkspaceRoot()
 		if err != nil {
 			return err
 		}
 		return withProjectLock(projectRoot, "save wizard draft", func() error {
-			return wizarddraft.New(configPath).SaveWithHistory(cfg, wizarddraft.Cursor{StepID: stepID, FieldKey: fieldKey}, history, time.Now())
+			return wizarddraft.New(configPath).Save(cfg, wizarddraft.Cursor{StepID: stepID, FieldKey: fieldKey}, time.Now())
 		})
 	}
 }
 
-func runHubSessionWithDraftState(cmd *cobra.Command, flowSteps []wizard.WizardStep, cfg *config.Config, save func(*config.Config, wizard.StepID, string, map[string][]string) error) (wizard.Result, error) {
+func runHubSessionWithDraftState(cmd *cobra.Command, flowSteps []wizard.WizardStep, cfg *config.Config, save func(*config.Config, wizard.StepID, string) error) (wizard.Result, error) {
 	restoreLogs := logutil.Redirect(subprocSink())
 	defer restoreLogs()
 	progressBars := logutil.ProgressBarsEnabled()
 	logutil.SetProgressBarsEnabled(false)
 	defer logutil.SetProgressBarsEnabled(progressBars)
-	return wizard.RunFlowWithDraftState(cmd.Context(), flowSteps, cfg, steps.Chrome(), save)
+	return wizard.RunFlowWithDraft(cmd.Context(), flowSteps, cfg, steps.Chrome(), save)
 }
 
 // hubFlows builds the hub's in-process flow providers. Each is called at the

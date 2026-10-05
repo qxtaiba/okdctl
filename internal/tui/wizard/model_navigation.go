@@ -433,7 +433,7 @@ func (m *Model) focusStep(idx int) (tea.Model, tea.Cmd) {
 	// superseded reply is simply discarded rather than clobbering newer
 	// state, and re-entry never needs to be gated here.
 	cmd := m.ownCommand(m.steps[idx].Init())
-	if (m.draftSaver != nil || m.draftStateSaver != nil) && isConfigDraftStep(m.steps[idx].ID()) {
+	if m.draftSaver != nil && isConfigDraftStep(m.steps[idx].ID()) {
 		fieldKey := ""
 		if cursor, ok := m.steps[idx].(interface{ DraftFieldKey() string }); ok {
 			fieldKey = cursor.DraftFieldKey()
@@ -455,21 +455,10 @@ func (m *Model) focusStep(idx int) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) saveDraft(stepID StepID, fieldKey string) {
-	var err error
-	if m.draftStateSaver != nil {
-		history := make(map[string][]string)
-		for _, step := range m.steps {
-			if provider, ok := step.(interface{ FieldHistory() map[string][]string }); ok {
-				for id, values := range provider.FieldHistory() {
-					history[id] = values
-				}
-			}
-		}
-		err = m.draftStateSaver(m.config, stepID, fieldKey, history)
-	} else if m.draftSaver != nil {
-		err = m.draftSaver(m.config, stepID, fieldKey)
+	if m.draftSaver == nil {
+		return
 	}
-	if err != nil {
+	if err := m.draftSaver(m.config, stepID, fieldKey); err != nil {
 		m.err = fmt.Errorf("save wizard draft: %w", err)
 	}
 }

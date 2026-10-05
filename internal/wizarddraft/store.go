@@ -27,10 +27,9 @@ type Cursor struct {
 
 // Draft contains safe configuration values and the wizard resume cursor.
 type Draft struct {
-	Config       *config.Config      `json:"config"`
-	Cursor       Cursor              `json:"cursor"`
-	FieldHistory map[string][]string `json:"field_history,omitempty"`
-	UpdatedAt    time.Time           `json:"updated_at"`
+	Config    *config.Config `json:"config"`
+	Cursor    Cursor         `json:"cursor"`
+	UpdatedAt time.Time      `json:"updated_at"`
 }
 
 // Store writes versioned drafts beside their associated config file.
@@ -39,12 +38,11 @@ type Store struct {
 }
 
 type document struct {
-	Version       int                 `json:"version"`
-	ConfigVersion string              `json:"config_version"`
-	UpdatedAt     time.Time           `json:"updated_at"`
-	Cursor        Cursor              `json:"cursor"`
-	FieldHistory  map[string][]string `json:"field_history,omitempty"`
-	Config        *config.Config      `json:"config"`
+	Version       int            `json:"version"`
+	ConfigVersion string         `json:"config_version"`
+	UpdatedAt     time.Time      `json:"updated_at"`
+	Cursor        Cursor         `json:"cursor"`
+	Config        *config.Config `json:"config"`
 }
 
 // New returns the draft store associated with configPath.
@@ -57,11 +55,6 @@ func (s *Store) Path() string { return s.path }
 
 // Save atomically stores cfg without credential fields or secret-keyed settings.
 func (s *Store) Save(cfg *config.Config, cursor Cursor, now time.Time) error {
-	return s.SaveWithHistory(cfg, cursor, nil, now)
-}
-
-// SaveWithHistory atomically stores cfg and safe per-field recall values.
-func (s *Store) SaveWithHistory(cfg *config.Config, cursor Cursor, history map[string][]string, now time.Time) error {
 	if cfg == nil {
 		return errors.New("save draft: nil config")
 	}
@@ -79,7 +72,6 @@ func (s *Store) SaveWithHistory(cfg *config.Config, cursor Cursor, history map[s
 		ConfigVersion: config.SchemaVersionCurrent,
 		UpdatedAt:     now.UTC(),
 		Cursor:        cursor,
-		FieldHistory:  safeFieldHistory(history),
 		Config:        safeCfg,
 	})
 	if err != nil {
@@ -130,64 +122,7 @@ func (s *Store) Load() (*Draft, error) {
 		return nil, fmt.Errorf("load draft: sanitize config: %w", err)
 	}
 	doc.Cursor.FieldKey = safeFieldKey(doc.Cursor.FieldKey)
-	return &Draft{Config: safeCfg, Cursor: doc.Cursor, FieldHistory: safeFieldHistory(doc.FieldHistory), UpdatedAt: doc.UpdatedAt}, nil
-}
-
-func safeFieldHistory(history map[string][]string) map[string][]string {
-	if len(history) == 0 {
-		return nil
-	}
-	out := make(map[string][]string)
-	for id, entries := range history {
-		if !safeHistoryID(id) {
-			continue
-		}
-		values := make([]string, 0, min(len(entries), 8))
-		for _, value := range entries {
-			if strings.TrimSpace(value) == "" || containsSensitiveValue(value) {
-				continue
-			}
-			duplicate := false
-			for _, kept := range values {
-				if kept == value {
-					duplicate = true
-					break
-				}
-			}
-			if !duplicate {
-				values = append(values, value)
-			}
-			if len(values) == 8 {
-				break
-			}
-		}
-		if len(values) > 0 {
-			out[id] = values
-		}
-	}
-	return out
-}
-
-func safeHistoryID(id string) bool {
-	step, field, ok := strings.Cut(id, "/")
-	if !ok || strings.Contains(field, "/") || !supportedStep(wizard.StepID(step)) || safeFieldKey(field) == "" {
-		return false
-	}
-	lower := strings.ToLower(field)
-	return !strings.Contains(lower, "key")
-}
-
-func containsSensitiveValue(value string) bool {
-	lower := strings.ToLower(value)
-	for _, fragment := range []string{"password=", "passwd=", "token=", "secret=", "private_key=", "authorization:"} {
-		if strings.Contains(lower, fragment) {
-			return true
-		}
-	}
-	trimmed := strings.TrimSpace(value)
-	return strings.HasPrefix(strings.ToLower(trimmed), "-----begin ") ||
-		strings.HasPrefix(trimmed, "ssh-rsa ") || strings.HasPrefix(trimmed, "ssh-ed25519 ") ||
-		strings.HasPrefix(trimmed, "ecdsa-sha2-")
+	return &Draft{Config: safeCfg, Cursor: doc.Cursor, UpdatedAt: doc.UpdatedAt}, nil
 }
 
 // Clear removes the draft and succeeds when it is already absent.
