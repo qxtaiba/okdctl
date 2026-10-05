@@ -131,36 +131,45 @@ func TestLogRingConcurrentWritesAndReads(t *testing.T) {
 	r := NewRing(32)
 	log := slog.New(r.Handler(nil))
 
-	stop := make(chan struct{})
-	var wg sync.WaitGroup
+	// The reader stops when the writers are done rather than after a fixed
+	// iteration count: snapshotting an empty ring is cheap enough that a
+	// counted reader can finish before the writers are ever scheduled, which
+	// left the ring empty under GOMAXPROCS=1.
+	writersDone := make(chan struct{})
+	var writers sync.WaitGroup
 	for w := range 4 {
-		wg.Add(1)
+		writers.Add(1)
 		go func(id int) {
-			defer wg.Done()
+			defer writers.Done()
 			for i := range 200 {
-				select {
-				case <-stop:
-					return
-				default:
-				}
 				log.Info("step", "worker", id, "n", i)
 			}
 		}(w)
 	}
-
-	wg.Add(1)
 	go func() {
-		defer wg.Done()
-		for range 500 {
+		writers.Wait()
+		close(writersDone)
+	}()
+
+	var reader sync.WaitGroup
+	reader.Add(1)
+	go func() {
+		defer reader.Done()
+		for {
+			select {
+			case <-writersDone:
+				return
+			default:
+			}
 			lines, first := r.Snapshot()
 			st := filter{}.selectFrom(lines, first)
 			rows, _, _ := windowIn(&st, view{}, 8)
 			_ = renderRows(rows, 40, 8, false)
 		}
-		close(stop)
 	}()
 
-	wg.Wait()
+	writers.Wait()
+	reader.Wait()
 	if lines, _ := r.Snapshot(); len(lines) == 0 {
 		t.Error("no lines reached the ring")
 	}
