@@ -3,7 +3,6 @@ package steps
 import (
 	"fmt"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -16,6 +15,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okdctl/internal/netutil"
+	"github.com/qxtaiba/okdctl/internal/platform"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
@@ -309,7 +309,7 @@ func (s *ReviewStep) renderInstallConfigPreview(width int) string {
 		WorkerReplicas: s.cfg.Topology.Workers.Count,
 		ClusterCIDR:    s.cfg.Networking.PodCIDR, HostPrefix: hostPrefix,
 		MachineCIDR: s.cfg.Networking.MachineCIDR, ServiceCIDR: s.cfg.Networking.ServiceCIDR,
-		PullSecret: "[redacted]", SSHKey: "[redacted]", Architecture: runtime.GOARCH,
+		PullSecret: "[redacted]", SSHKey: "[redacted]", Architecture: platform.ClusterArch,
 	})
 	if err != nil {
 		return "install-config preview unavailable: " + err.Error()

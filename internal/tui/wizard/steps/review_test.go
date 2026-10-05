@@ -264,6 +264,17 @@ func TestReviewStep_PreviewShowsRedactedInstallConfigAndEscReturns(t *testing.T)
 	}
 }
 
+func TestReviewStep_PreviewShowsClusterArchitecture(t *testing.T) {
+	s := NewReviewStep()
+	s.SetConfig(reviewTestConfig())
+	_, _ = s.Update(tea.KeyPressMsg{Code: 'p', Text: "p"})
+
+	out := tuitest.StripANSI(s.View(100, 100))
+	if got := strings.Count(out, "architecture: amd64\n"); got != 2 {
+		t.Errorf("preview sets amd64 on %d of its 2 machine pools:\n%s", got, out)
+	}
+}
+
 func previewKeyColumn(t *testing.T, frame, key string) int {
 	t.Helper()
 	for _, line := range strings.Split(frame, "\n") {

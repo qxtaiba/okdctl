@@ -151,7 +151,7 @@ type coreOSStreamData struct {
 }
 
 func coreOSInfoFromStream(sd *coreOSStreamData) (*CoreOSInfo, error) {
-	archKey := platform.CoreOSArch()
+	archKey := platform.ClusterCoreOSArch
 	arch, ok := sd.Architectures[archKey]
 	if !ok {
 		return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("%s architecture not found in CoreOS stream", archKey)}
