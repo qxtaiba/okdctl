@@ -3,6 +3,7 @@ package proxmox
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/luthermonson/go-proxmox"
@@ -98,6 +99,32 @@ func (pc *PowerCycler) vm(ctx context.Context, _ string, vmid int, timeout time.
 	return vm, nil
 }
 
+// waitTask stands in for go-proxmox's Task.Wait, which returns nil for any
+// stopped task and sleeps through ctx cancellation.
+func waitTask(ctx context.Context, task *proxmox.Task, timeout time.Duration) error {
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	for {
+		if err := task.Ping(ctx); err != nil {
+			return err
+		}
+		if task.Status != proxmox.TaskRunning {
+			// PVE's own upid_status_is_error also counts "WARNINGS: n" as success.
+			if task.ExitStatus != "OK" && !strings.HasPrefix(task.ExitStatus, "WARNINGS: ") {
+				return fmt.Errorf("task failed with exit status %q", task.ExitStatus)
+			}
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-deadline.C:
+			return fmt.Errorf("task still running after %s", timeout)
+		case <-time.After(powerTaskPollInterval):
+		}
+	}
+}
+
 // PowerCycleVM stops (if running) then starts the VM, waiting for each task;
 // it is fail-closed, leaving the caller to treat the resize as unrealized on error.
 func (pc *PowerCycler) PowerCycleVM(ctx context.Context, node string, vmid int) error {
@@ -113,7 +140,7 @@ func (pc *PowerCycler) PowerCycleVM(ctx context.Context, node string, vmid int) 
 		if err != nil {
 			return fmt.Errorf("stop vm %d: %w", vmid, err)
 		}
-		if err := stop.Wait(ctx, powerTaskPollInterval, timeout); err != nil {
+		if err := waitTask(ctx, stop, timeout); err != nil {
 			return fmt.Errorf("wait for vm %d stop: %w", vmid, err)
 		}
 	}
@@ -122,7 +149,7 @@ func (pc *PowerCycler) PowerCycleVM(ctx context.Context, node string, vmid int) 
 	if err != nil {
 		return fmt.Errorf("start vm %d: %w", vmid, err)
 	}
-	if err := start.Wait(ctx, powerTaskPollInterval, timeout); err != nil {
+	if err := waitTask(ctx, start, timeout); err != nil {
 		return fmt.Errorf("wait for vm %d start: %w", vmid, err)
 	}
 	return nil
@@ -145,7 +172,7 @@ func (pc *PowerCycler) ShutdownVM(ctx context.Context, node string, vmid int) er
 	if err != nil {
 		return fmt.Errorf("shutdown vm %d: %w", vmid, err)
 	}
-	if err := task.Wait(ctx, powerTaskPollInterval, timeout); err != nil {
+	if err := waitTask(ctx, task, timeout); err != nil {
 		return fmt.Errorf("wait for vm %d shutdown: %w", vmid, err)
 	}
 
@@ -174,7 +201,7 @@ func (pc *PowerCycler) StartVM(ctx context.Context, node string, vmid int) error
 	if err != nil {
 		return fmt.Errorf("start vm %d: %w", vmid, err)
 	}
-	if err := task.Wait(ctx, powerTaskPollInterval, timeout); err != nil {
+	if err := waitTask(ctx, task, timeout); err != nil {
 		return fmt.Errorf("wait for vm %d start: %w", vmid, err)
 	}
 	return nil

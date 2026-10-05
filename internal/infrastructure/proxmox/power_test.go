@@ -2,6 +2,7 @@ package proxmox
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -18,8 +19,12 @@ type fakePVE struct {
 	vmStatus       string
 	posts          []string
 	lastUPID       string
+	lastAction     string
 	failAction     string // this power action's POST returns 500
 	ignoreShutdown bool   // guest ignores ACPI: shutdown completes but status stays running
+
+	taskExitByAction map[string]string
+	taskNeverEnds    bool
 }
 
 const (
@@ -77,8 +82,10 @@ func (f *fakePVE) start(t *testing.T) *PowerCycler {
 		f.mu.Lock()
 		f.posts = append(f.posts, action)
 		f.lastUPID = upid
+		f.lastAction = action
 		fail := action == f.failAction
-		if !fail && (action != actShutdown || !f.ignoreShutdown) {
+		_, taskFails := f.taskExitByAction[action]
+		if !fail && !taskFails && !f.taskNeverEnds && (action != actShutdown || !f.ignoreShutdown) {
 			f.vmStatus = newStatus
 		}
 		f.mu.Unlock()
@@ -93,8 +100,17 @@ func (f *fakePVE) start(t *testing.T) *PowerCycler {
 	mux.HandleFunc("GET /api2/json/nodes/pve1/tasks/{upid}/status", func(w http.ResponseWriter, _ *http.Request) {
 		f.mu.Lock()
 		upid := f.lastUPID
+		exit, taskFails := f.taskExitByAction[f.lastAction]
+		running := f.taskNeverEnds
 		f.mu.Unlock()
-		fmt.Fprintf(w, `{"data":{"upid":%q,"node":"pve1","status":"stopped","exitstatus":"OK"}}`, upid)
+		if running {
+			fmt.Fprintf(w, `{"data":{"upid":%q,"node":"pve1","status":"running"}}`, upid)
+			return
+		}
+		if !taskFails {
+			exit = "OK"
+		}
+		fmt.Fprintf(w, `{"data":{"upid":%q,"node":"pve1","status":"stopped","exitstatus":%q}}`, upid, exit)
 	})
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -203,6 +219,92 @@ func TestPowerCyclerStartVM(t *testing.T) {
 			t.Errorf("power actions = %v; want none", got)
 		}
 	})
+}
+
+func TestPowerCyclerFailedTaskIsAnError(t *testing.T) {
+	const lockTimeout = "can't lock file '/var/lock/qemu-server/lock-101.conf' - got timeout"
+	cases := []struct {
+		name        string
+		vmStatus    string
+		failing     string
+		run         func(*PowerCycler) error
+		wantWrap    string
+		wantActions []string
+	}{
+		{
+			name: "power-cycle stop task", vmStatus: "running", failing: actStop,
+			run:      func(pc *PowerCycler) error { return pc.PowerCycleVM(t.Context(), fakeNode, fakeVMID) },
+			wantWrap: "wait for vm 101 stop", wantActions: []string{actStop},
+		},
+		{
+			name: "power-cycle start task", vmStatus: "running", failing: actStart,
+			run:      func(pc *PowerCycler) error { return pc.PowerCycleVM(t.Context(), fakeNode, fakeVMID) },
+			wantWrap: "wait for vm 101 start", wantActions: []string{actStop, actStart},
+		},
+		{
+			name: "shutdown task", vmStatus: "running", failing: actShutdown,
+			run:      func(pc *PowerCycler) error { return pc.ShutdownVM(t.Context(), fakeNode, fakeVMID) },
+			wantWrap: "wait for vm 101 shutdown", wantActions: []string{actShutdown},
+		},
+		{
+			name: "start task", vmStatus: "stopped", failing: actStart,
+			run:      func(pc *PowerCycler) error { return pc.StartVM(t.Context(), fakeNode, fakeVMID) },
+			wantWrap: "wait for vm 101 start", wantActions: []string{actStart},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := &fakePVE{vmStatus: tc.vmStatus, taskExitByAction: map[string]string{tc.failing: lockTimeout}}
+			err := tc.run(f.start(t))
+			if err == nil {
+				t.Fatalf("err = nil; want the failed %s task reported", tc.failing)
+			}
+			if !strings.Contains(err.Error(), tc.wantWrap) || !strings.Contains(err.Error(), lockTimeout) {
+				t.Errorf("err = %v; want %q and the task exit status %q", err, tc.wantWrap, lockTimeout)
+			}
+			if got := f.actions(); !slices.Equal(got, tc.wantActions) {
+				t.Errorf("power actions = %v; want %v", got, tc.wantActions)
+			}
+		})
+	}
+}
+
+func TestPowerCyclerTaskWithWarningsSucceeds(t *testing.T) {
+	f := &fakePVE{vmStatus: "stopped", taskExitByAction: map[string]string{actStart: "WARNINGS: 1"}}
+	if err := f.start(t).StartVM(t.Context(), fakeNode, fakeVMID); err != nil {
+		t.Fatalf("StartVM: %v", err)
+	}
+}
+
+func TestPowerCyclerTaskWaitHonoursContext(t *testing.T) {
+	f := &fakePVE{vmStatus: "stopped", taskNeverEnds: true}
+	pc := f.start(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	time.AfterFunc(100*time.Millisecond, cancel)
+
+	began := time.Now()
+	err := pc.StartVM(ctx, fakeNode, fakeVMID)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("StartVM err = %v; want context.Canceled", err)
+	}
+	if waited := time.Since(began); waited >= powerTaskPollInterval {
+		t.Errorf("StartVM returned after %v; want it back before the next %v poll", waited, powerTaskPollInterval)
+	}
+}
+
+func TestPowerCyclerTaskWaitTimesOut(t *testing.T) {
+	f := &fakePVE{vmStatus: "stopped", taskNeverEnds: true}
+	pc := f.start(t)
+	pc.opts.Timeout = 200 * time.Millisecond
+
+	began := time.Now()
+	err := pc.StartVM(t.Context(), fakeNode, fakeVMID)
+	if err == nil || !strings.Contains(err.Error(), "still running after 200ms") {
+		t.Fatalf("StartVM err = %v; want a still-running timeout", err)
+	}
+	if waited := time.Since(began); waited >= powerTaskPollInterval {
+		t.Errorf("StartVM returned after %v; want it back at the 200ms timeout", waited)
+	}
 }
 
 func TestPowerCycler_timeout(t *testing.T) {
