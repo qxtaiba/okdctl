@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -58,13 +57,12 @@ func TestRoleSizingDrift(t *testing.T) {
 		sizing     provision.TerraformVarsSizing
 		found      bool
 		wantStatus string
-		wantDetail bool
 	}{
-		{name: "not rendered yet", role: nodetypes.RoleMaster, sizing: provision.TerraformVarsSizing{}, found: false, wantStatus: driftUnknown, wantDetail: false},
-		{name: "master in sync", role: nodetypes.RoleMaster, sizing: inSync, found: true, wantStatus: driftNone, wantDetail: false},
-		{name: "worker in sync", role: nodetypes.RoleWorker, sizing: inSync, found: true, wantStatus: driftNone, wantDetail: false},
-		{name: "worker drifted", role: nodetypes.RoleWorker, sizing: stale, found: true, wantStatus: driftPending, wantDetail: true},
-		{name: "unknown role", role: nodetypes.RoleUnknown, sizing: inSync, found: true, wantStatus: driftUnknown, wantDetail: false},
+		{name: "not rendered yet", role: nodetypes.RoleMaster, sizing: provision.TerraformVarsSizing{}, found: false, wantStatus: driftUnknown},
+		{name: "master in sync", role: nodetypes.RoleMaster, sizing: inSync, found: true, wantStatus: driftNone},
+		{name: "worker in sync", role: nodetypes.RoleWorker, sizing: inSync, found: true, wantStatus: driftNone},
+		{name: "worker drifted", role: nodetypes.RoleWorker, sizing: stale, found: true, wantStatus: driftPending},
+		{name: "unknown role", role: nodetypes.RoleUnknown, sizing: inSync, found: true, wantStatus: driftUnknown},
 		{
 			name:       "disk drift only",
 			role:       nodetypes.RoleMaster,
@@ -72,7 +70,6 @@ func TestRoleSizingDrift(t *testing.T) {
 			sizing:     provision.TerraformVarsSizing{MasterCPU: 4, MasterMemoryMB: 8192, MasterOSDiskGB: 50},
 			found:      true,
 			wantStatus: driftPending,
-			wantDetail: true,
 		},
 	}
 	for _, tc := range cases {
@@ -83,20 +80,8 @@ func TestRoleSizingDrift(t *testing.T) {
 				tc.cfgMod(&clone)
 				runCfg = &clone
 			}
-			status, detail := roleSizingDrift(runCfg, tc.role, tc.sizing, tc.found)
-			if status != tc.wantStatus {
+			if status := roleSizingDrift(runCfg, tc.role, tc.sizing, tc.found); status != tc.wantStatus {
 				t.Errorf("status = %q, want %q", status, tc.wantStatus)
-			}
-			if tc.wantDetail && detail == "" {
-				t.Error("want non-empty detail, got empty")
-			}
-			if !tc.wantDetail && detail != "" {
-				t.Errorf("want empty detail, got %q", detail)
-			}
-			if tc.name == "disk drift only" {
-				if !strings.Contains(detail, "50GiB") || !strings.Contains(detail, "100GiB") {
-					t.Errorf("detail %q must mention both disk values (50GiB and 100GiB)", detail)
-				}
 			}
 		})
 	}
@@ -150,34 +135,6 @@ func TestBuildNodeListEntries(t *testing.T) {
 	}
 }
 
-func TestNodeListEntryJSONShape(t *testing.T) {
-	withIndex := nodeListEntry{Name: "master-0", Role: nodetypes.RoleMaster, Ready: true, TFIndex: intPtr(0), Drift: driftNone}
-	data, err := json.Marshal(withIndex)
-	if err != nil {
-		t.Fatalf("Marshal: %v", err)
-	}
-	s := string(data)
-	for _, want := range []string{`"name":"master-0"`, `"role":"master"`, `"ready":true`, `"tf_index":0`, `"drift":"none"`} {
-		if !strings.Contains(s, want) {
-			t.Errorf("json output %q missing %q", s, want)
-		}
-	}
-	for _, absent := range []string{"drift_detail", "in_flight_op"} {
-		if strings.Contains(s, absent) {
-			t.Errorf("json output %q must omit empty %q", s, absent)
-		}
-	}
-
-	noIndex := nodeListEntry{Name: "foreign", Role: nodetypes.RoleUnknown, Drift: driftUnknown}
-	data, err = json.Marshal(noIndex)
-	if err != nil {
-		t.Fatalf("Marshal: %v", err)
-	}
-	if strings.Contains(string(data), "tf_index") {
-		t.Errorf("json output %q must omit nil tf_index", string(data))
-	}
-}
-
 // profile is pinned to no-color so byte-offset column math stays valid on ANSI-styled rows.
 func TestPrintNodeListAlignsColumnsWithLongNames(t *testing.T) {
 	tui.SetColorProfileFor(&bytes.Buffer{})
@@ -187,8 +144,7 @@ func TestPrintNodeListAlignsColumnsWithLongNames(t *testing.T) {
 		{Name: "m0", Role: nodetypes.RoleMaster, Ready: true, TFIndex: intPtr(0), Drift: driftNone},
 		{
 			Name: "worker-extraordinarily-long-hostname-12", Role: nodetypes.RoleWorker, Ready: false,
-			TFIndex: intPtr(12), Drift: driftPending, DriftDetail: "config 8192MiB/4cpu/50GiB vs tfvars 4096MiB/4cpu/50GiB",
-			InFlightOp: "resize (tf-apply)",
+			TFIndex: intPtr(12), Drift: driftPending, InFlightOp: "resize (tf-apply)",
 		},
 	}
 	var buf bytes.Buffer

@@ -32,8 +32,6 @@ var (
 	nodeSnapshotCreateDryRun       bool
 	nodeSnapshotCreateAcknowledge  bool
 
-	nodeSnapshotListOutput string
-
 	nodeSnapshotRollbackYes         bool
 	nodeSnapshotRollbackConfirm     string
 	nodeSnapshotRollbackDryRun      bool
@@ -81,7 +79,7 @@ var nodeSnapshotListCmd = &cobra.Command{
 	Use:     "list <node>",
 	Short:   "List a node's Proxmox snapshots",
 	Long:    `List target's Proxmox snapshots. Read-only; no confirmation gate.`,
-	Example: "  okdctl node snapshot list worker0\n  okdctl node snapshot list worker0 --output json",
+	Example: "  okdctl node snapshot list worker0",
 	Args:    cobra.ExactArgs(1),
 	RunE:    runNodeSnapshotList,
 }
@@ -127,9 +125,6 @@ func init() {
 	nodeSnapshotCreateCmd.Flags().StringVar(&nodeSnapshotCreateConfirm, "confirm-cluster", "", "required with --yes; must equal the config cluster name")
 	nodeSnapshotCreateCmd.Flags().BoolVar(&nodeSnapshotCreateDryRun, flagDryRun, false, "report what would happen without creating a snapshot")
 	nodeSnapshotCreateCmd.Flags().BoolVar(&nodeSnapshotCreateAcknowledge, "acknowledge-interrupted-op", false, "override a stranded marker left by an unrelated op and proceed fresh")
-
-	nodeSnapshotListCmd.Flags().StringVarP(&nodeSnapshotListOutput, flagOutput, flagOutputShort, outputText, "output format: text|json")
-	registerOutputCompletion(nodeSnapshotListCmd)
 
 	nodeSnapshotRollbackCmd.Flags().BoolVarP(&nodeSnapshotRollbackYes, "yes", "y", false, "skip confirmation prompt")
 	nodeSnapshotRollbackCmd.Flags().StringVar(&nodeSnapshotRollbackConfirm, "confirm-cluster", "", "required with --yes; must equal the config cluster name")
@@ -332,11 +327,6 @@ func runNodeSnapshotDelete(cmd *cobra.Command, args []string) error {
 }
 
 func runNodeSnapshotList(cmd *cobra.Command, args []string) error {
-	if err := validateFormat(nodeSnapshotListOutput); err != nil {
-		return err
-	}
-	quietForJSON(nodeSnapshotListOutput)
-
 	cfg, err := loadConfig(cfgFile)
 	if err != nil {
 		return err
@@ -352,21 +342,14 @@ func runNodeSnapshotList(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	entries := toNodeSnapshotEntries(snapshots)
-
-	if nodeSnapshotListOutput == outputJSON {
-		return writeJSON(cmd.OutOrStdout(), entries)
-	}
-	return printNodeSnapshotList(cmd.OutOrStdout(), entries)
+	return printNodeSnapshotList(cmd.OutOrStdout(), toNodeSnapshotEntries(snapshots))
 }
 
-// nodeSnapshotEntry is one row of `okdctl node snapshot list --output json`;
-// see docs/cli/json-schema.md.
 type nodeSnapshotEntry struct {
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-	SnapTime    string `json:"snap_time,omitempty"`
-	Parent      string `json:"parent,omitempty"`
+	Name        string
+	Description string
+	SnapTime    string
+	Parent      string
 }
 
 func toNodeSnapshotEntries(snapshots []hostssh.SnapshotInfo) []nodeSnapshotEntry {

@@ -7,7 +7,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/system"
@@ -18,8 +17,6 @@ import (
 // see docs/cli/exit-codes.md.
 var errPlanDrift = errors.New("plan: drift detected")
 
-var planOutput string
-
 var planCmd = &cobra.Command{
 	Use:   "plan",
 	Short: "Preview infrastructure drift without applying changes",
@@ -29,40 +26,17 @@ terraform state on disk. okdctl plan never applies changes and never leaves
 a usable plan file behind.
 
 Exit code is 0 when the plan is clean, 7 when a create/update/replace/delete
-is pending. Run 'okdctl deploy' to reconcile drift.
-
-Pass --output=json for machine-readable output (see docs/cli/json-schema.md).`,
-	Example: `  okdctl plan
-  okdctl plan --output json | jq '.drift'`,
-	Args: cobra.NoArgs,
-	RunE: runPlan,
+is pending. Run 'okdctl deploy' to reconcile drift.`,
+	Example: "  okdctl plan",
+	Args:    cobra.NoArgs,
+	RunE:    runPlan,
 }
 
 func init() {
-	planCmd.Flags().StringVarP(&planOutput, flagOutput, flagOutputShort, outputText, "output format: text|json")
-	registerOutputCompletion(planCmd)
 	rootCmd.AddCommand(planCmd)
 }
 
-// planJSONChange is one entry in planJSONOutput.Changes; see
-// docs/cli/json-schema.md for the stable shape.
-type planJSONChange struct {
-	Address string `json:"address"`
-	Action  string `json:"action"`
-}
-
-// planJSONOutput is the top-level envelope emitted by `okdctl plan --output=json`.
-type planJSONOutput struct {
-	Drift   bool             `json:"drift"`
-	Changes []planJSONChange `json:"changes"`
-}
-
 func runPlan(cmd *cobra.Command, _ []string) error {
-	if err := validateFormat(planOutput); err != nil {
-		return err
-	}
-	quietForJSON(planOutput)
-
 	cfg, err := loadConfig(cfgFile)
 	if err != nil {
 		return err
@@ -95,13 +69,7 @@ func runPlan(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	if planOutput == outputJSON {
-		if err := writeJSON(cmd.OutOrStdout(), newPlanJSONOutput(changes)); err != nil {
-			return err
-		}
-	} else {
-		fmt.Fprintln(cmd.OutOrStdout(), render.PlanPreview(changes))
-	}
+	fmt.Fprintln(cmd.OutOrStdout(), render.PlanPreview(changes))
 
 	if len(changes) > 0 {
 		logutil.Warn("plan: drift detected", logutil.LF("changes", len(changes)))
@@ -109,12 +77,4 @@ func runPlan(cmd *cobra.Command, _ []string) error {
 	}
 	logutil.Info("plan: no drift detected")
 	return nil
-}
-
-func newPlanJSONOutput(changes []terraform.ResourceChange) planJSONOutput {
-	out := planJSONOutput{Drift: len(changes) > 0, Changes: make([]planJSONChange, len(changes))}
-	for i, c := range changes {
-		out.Changes[i] = planJSONChange{Address: c.Address, Action: string(c.Action)}
-	}
-	return out
 }

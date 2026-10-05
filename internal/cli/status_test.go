@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"strconv"
 	"strings"
 	"testing"
@@ -9,8 +10,28 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
+
+func TestValidateFormat_InvalidIsUsageError(t *testing.T) {
+	err := validateFormat("yaml")
+	if err == nil {
+		t.Fatal("expected error for invalid format")
+	}
+	var ue *errtypes.UsageError
+	if !errors.As(err, &ue) {
+		t.Fatalf("expected *errtypes.UsageError, got %T: %v", err, err)
+	}
+}
+
+func TestValidateFormat_ValidReturnsNil(t *testing.T) {
+	for _, f := range []string{outputText, outputJSON} {
+		if err := validateFormat(f); err != nil {
+			t.Errorf("validateFormat(%q) = %v, want nil", f, err)
+		}
+	}
+}
 
 func TestPrintClusterStatusIncludesTableAndFooterCounts(t *testing.T) {
 	st := &okd.ClusterStatus{

@@ -30,25 +30,6 @@ func TestValidateChannel_ValidReturnsNil(t *testing.T) {
 	}
 }
 
-func TestValidateFormat_InvalidIsUsageError(t *testing.T) {
-	err := validateFormat("yaml")
-	if err == nil {
-		t.Fatal("expected error for invalid format")
-	}
-	var ue *errtypes.UsageError
-	if !errors.As(err, &ue) {
-		t.Fatalf("expected *errtypes.UsageError, got %T: %v", err, err)
-	}
-}
-
-func TestValidateFormat_ValidReturnsNil(t *testing.T) {
-	for _, f := range []string{outputText, outputJSON} {
-		if err := validateFormat(f); err != nil {
-			t.Errorf("validateFormat(%q) = %v, want nil", f, err)
-		}
-	}
-}
-
 func TestPrintVersionListTable(t *testing.T) {
 	versions := []releases.OKDVersion{
 		{
@@ -79,15 +60,5 @@ func TestPrintVersionListEmpty(t *testing.T) {
 	}
 	if got := buf.String(); !strings.Contains(got, "no releases") || !strings.Contains(got, "--channel all") {
 		t.Errorf("printVersionList(nil) = %q, want to contain %q and %q", got, "no releases", "--channel all")
-	}
-}
-
-func TestWriteJSON_EmptySliceEncodesAsArray(t *testing.T) {
-	var buf bytes.Buffer
-	if err := writeJSON(&buf, []releases.OKDVersion{}); err != nil {
-		t.Fatalf("writeJSON: %v", err)
-	}
-	if got := strings.TrimSpace(buf.String()); got != "[]" {
-		t.Fatalf("empty slice should encode as []; got %q", got)
 	}
 }

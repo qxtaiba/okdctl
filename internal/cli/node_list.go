@@ -28,8 +28,6 @@ const (
 	driftUnknown = "unknown"
 )
 
-var nodeListOutput string
-
 var nodeListCmd = &cobra.Command{
 	Use:   cmdNameList,
 	Short: "List cluster nodes with role, readiness, and sizing drift",
@@ -42,35 +40,25 @@ query (okdctl fetches no per-guest Proxmox sizing anywhere today), so
 "pending" means a sizing change is staged in the workspace, not that a
 specific node's guest has actually been resized yet. "unknown" means
 terraform.tfvars has not been rendered at all.`,
-	Example: "  okdctl node list\n  okdctl node list --output json",
+	Example: "  okdctl node list",
 	Args:    cobra.NoArgs,
 	RunE:    runNodeList,
 }
 
 func init() {
-	nodeListCmd.Flags().StringVarP(&nodeListOutput, flagOutput, flagOutputShort, outputText, "output format: text|json")
-	registerOutputCompletion(nodeListCmd)
 	nodeCmd.AddCommand(nodeListCmd)
 }
 
-// nodeListEntry is one row of "okdctl node list --output json"; see
-// docs/cli/json-schema.md for the stable shape.
 type nodeListEntry struct {
-	Name        string             `json:"name"`
-	Role        nodetypes.NodeRole `json:"role"`
-	Ready       bool               `json:"ready"`
-	TFIndex     *int               `json:"tf_index,omitempty"`
-	Drift       string             `json:"drift"`
-	DriftDetail string             `json:"drift_detail,omitempty"`
-	InFlightOp  string             `json:"in_flight_op,omitempty"`
+	Name       string
+	Role       nodetypes.NodeRole
+	Ready      bool
+	TFIndex    *int
+	Drift      string
+	InFlightOp string
 }
 
 func runNodeList(cmd *cobra.Command, _ []string) error {
-	if err := validateFormat(nodeListOutput); err != nil {
-		return err
-	}
-	quietForJSON(nodeListOutput)
-
 	cfg, err := loadConfig(cfgFile)
 	if err != nil {
 		return err
@@ -94,10 +82,6 @@ func runNodeList(cmd *cobra.Command, _ []string) error {
 	side := loadNodeListSideData(cfg, projectRoot)
 	entries := buildNodeListEntries(nodes, cfg, side)
 	unattached := unattachedOpNote(side.marker, nodes)
-
-	if nodeListOutput == outputJSON {
-		return writeJSON(cmd.OutOrStdout(), entries)
-	}
 	return printNodeList(cmd.OutOrStdout(), entries, unattached)
 }
 
@@ -135,7 +119,7 @@ func buildNodeListEntries(nodes []cluster.NodeDetail, cfg *config.Config, side n
 		if idx, ok := cluster.NodeIndex(n.Name); ok {
 			e.TFIndex = &idx
 		}
-		e.Drift, e.DriftDetail = roleSizingDrift(cfg, n.Role, side.tfSizing, side.tfSizingFound)
+		e.Drift = roleSizingDrift(cfg, n.Role, side.tfSizing, side.tfSizingFound)
 		if side.marker != nil && side.marker.Target == n.Name {
 			e.InFlightOp = fmt.Sprintf("%s (%s)", side.marker.Op, side.marker.Step)
 		}
@@ -145,7 +129,7 @@ func buildNodeListEntries(nodes []cluster.NodeDetail, cfg *config.Config, side n
 }
 
 // unattachedOpNote reports a marker whose Target matches no listed node; empty
-// when there is no marker or it's already attached via in_flight_op.
+// when there is no marker or it's already attached via InFlightOp.
 func unattachedOpNote(marker *node.OpMarker, nodes []cluster.NodeDetail) string {
 	if marker == nil || slices.ContainsFunc(nodes, func(n cluster.NodeDetail) bool { return n.Name == marker.Target }) {
 		return ""
@@ -155,9 +139,9 @@ func unattachedOpNote(marker *node.OpMarker, nodes []cluster.NodeDetail) string 
 
 // roleSizingDrift compares cfg's role sizing to tfvars; found=false means
 // tfvars hasn't been rendered, so drift can't be assessed.
-func roleSizingDrift(cfg *config.Config, role nodetypes.NodeRole, sizing provision.TerraformVarsSizing, found bool) (status, detail string) {
+func roleSizingDrift(cfg *config.Config, role nodetypes.NodeRole, sizing provision.TerraformVarsSizing, found bool) string {
 	if !found {
-		return driftUnknown, ""
+		return driftUnknown
 	}
 	var cfgCPU, cfgMem, cfgDisk, tfCPU, tfMem, tfDisk int
 	switch role {
@@ -168,12 +152,12 @@ func roleSizingDrift(cfg *config.Config, role nodetypes.NodeRole, sizing provisi
 		cfgCPU, cfgMem, cfgDisk = cfg.Topology.Workers.CPU, cfg.Topology.Workers.MemoryMB, cfg.Topology.Workers.DiskGB
 		tfCPU, tfMem, tfDisk = sizing.WorkerCPU, sizing.WorkerMemoryMB, sizing.WorkerOSDiskGB
 	default:
-		return driftUnknown, ""
+		return driftUnknown
 	}
 	if cfgCPU == tfCPU && cfgMem == tfMem && cfgDisk == tfDisk {
-		return driftNone, ""
+		return driftNone
 	}
-	return driftPending, fmt.Sprintf("config %dMiB/%dcpu/%dGiB vs tfvars %dMiB/%dcpu/%dGiB", cfgMem, cfgCPU, cfgDisk, tfMem, tfCPU, tfDisk)
+	return driftPending
 }
 
 // printNodeList renders the node table via printTable, an empty-state line

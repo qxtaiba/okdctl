@@ -63,7 +63,7 @@ body:
     id: doctor
     attributes:
       label: okdctl doctor output
-      description: Output of `okdctl doctor` (add `-o json` if you prefer)
+      description: Output of `okdctl doctor`
       render: shell
     validations:
       required: true

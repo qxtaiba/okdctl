@@ -8,8 +8,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-var doctorOutput string
-
 // doctorCmd differs from main.preflight (startup guardrail); runDoctor refuses
 // non-linux hosts at runtime.
 var doctorCmd = &cobra.Command{
@@ -31,17 +29,12 @@ Exit code is 0 when every check passes, 6 when one or more checks warn
 but none fail, and 2 (configuration error) when any check fails.
 Designed to be rerun until clean.
 
-Pass --output=json for machine-readable output (see docs/cli/json-schema.md).
-
 See docs/doctor-checks.md for per-check fail messages and fix guidance.`, tui.IconSuccess, tui.IconWarning, tui.IconError),
-	Example: `  okdctl doctor
-  okdctl doctor --output json | jq '.failed'`,
-	Args: cobra.NoArgs,
-	RunE: runDoctor,
+	Example: "  okdctl doctor",
+	Args:    cobra.NoArgs,
+	RunE:    runDoctor,
 }
 
 func init() {
-	doctorCmd.Flags().StringVarP(&doctorOutput, flagOutput, flagOutputShort, outputText, "output format: text|json")
-	registerOutputCompletion(doctorCmd)
 	rootCmd.AddCommand(doctorCmd)
 }

@@ -26,7 +26,7 @@ const (
 )
 
 // OKDVersion is one release entry from the catalog. JSON field names are the
-// `releases list --output=json` wire contract — do not rename without updating consumers.
+// on-disk cache shape — bump diskCacheSchema when renaming one.
 type OKDVersion struct {
 	Version     string      `json:"version"`
 	Tag         string      `json:"tag"`
@@ -60,8 +60,8 @@ type diskCache struct {
 	Series   []OKDReleaseSeries `json:"series"`
 }
 
-// releaseTypeLabels is the single wire-label source for String and
-// UnmarshalJSON, so the wire contract and cache schema can't drift apart.
+// releaseTypeLabels is the single label source for String and
+// UnmarshalJSON, so the displayed label and cache schema can't drift apart.
 var releaseTypeLabels = map[ReleaseType]string{
 	ReleaseTypeStable:        "stable",
 	ReleaseTypeLatestStable:  "latest-stable",

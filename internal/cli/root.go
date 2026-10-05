@@ -388,45 +388,16 @@ func exitCodeFor(err error) int {
 	return 1
 }
 
-// versionOutput is the machine-readable shape for "okdctl version
-// --output=json"; fields match internal/version/version.go's ldflags vars.
-type versionOutput struct {
-	Version   string `json:"version"`
-	GitCommit string `json:"git_commit"`
-	BuildDate string `json:"build_date"`
-	GoVersion string `json:"go_version"`
-	Platform  string `json:"platform"`
-}
-
-var versionOutputFlag string
-
 // versionCmd exists so "okdctl version" works alongside "okdctl --version"
 // (kubectl/docker/gh pattern).
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print version, git commit, build date",
 	Long: `Print the okdctl build identity: version number, git commit SHA,
-build date, Go toolchain version, and OS/arch platform.
-
-Pass --output=json for machine-readable output suitable for CI version
-pinning or scripted comparisons (see docs/cli/json-schema.md).`,
-	Example: `  okdctl version
-  okdctl version --output json | jq .version`,
-	Args: cobra.NoArgs,
+build date, Go toolchain version, and OS/arch platform.`,
+	Example: "  okdctl version",
+	Args:    cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		if err := validateFormat(versionOutputFlag); err != nil {
-			return err
-		}
-		quietForJSON(versionOutputFlag)
-		if versionOutputFlag == outputJSON {
-			return writeJSON(cmd.OutOrStdout(), versionOutput{
-				Version:   version.Version,
-				GitCommit: version.GitCommit,
-				BuildDate: version.BuildDate,
-				GoVersion: version.GoVersion,
-				Platform:  version.Platform,
-			})
-		}
 		_, err := fmt.Fprint(cmd.OutOrStdout(), versionText())
 		return err
 	},
@@ -475,9 +446,6 @@ func init() {
 		usageErr := &errtypes.UsageError{Msg: err.Error(), Err: err}
 		return usageErr.WithHint(fmt.Sprintf("see '%s --help'", c.CommandPath()))
 	})
-
-	versionCmd.Flags().StringVarP(&versionOutputFlag, flagOutput, flagOutputShort, outputText, "output format: text|json")
-	registerOutputCompletion(versionCmd)
 
 	rootCmd.AddCommand(deployCmd)
 	rootCmd.AddCommand(destroyCmd)
