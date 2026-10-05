@@ -2,7 +2,11 @@
 
 `okdctl doctor` runs 10 preflight checks against the local environment
 before a deploy. The command is Linux-only (it reads `/etc/os-release`
-and uses Linux syscalls). Checks run in the order listed below; results
+and uses Linux syscalls), and only RHEL-family bastions are supported: on
+any other distribution doctor runs no checks and exits 2 with
+`unsupported host os "<id>": okdctl deploys from rhel-family bastions only
+(fedora, rhel, centos, rocky, almalinux)`. `okdctl deploy` refuses the same
+way. Checks run in the order listed below; results
 are reported per-check. Exit code is 0 when every check passes, 6 when
 one or more checks report `[warn]` and none report `[fail]`, and 2
 (configuration error) when any check reports `[fail]`. See
@@ -32,8 +36,8 @@ it, so doctor stays useful before a cluster exists.
 ## host os
 
 **What it checks:** Reads `/etc/os-release` via `platform.Detect()` and
-reports the OS ID, version, and family (rhel-family or debian-family). This
-tells subsequent phases which package manager and service names to use.
+reports the OS ID and version of the RHEL-family host. A host from another
+family never reaches this check; doctor refuses it before any check runs.
 
 **Fail message:**
 ```
@@ -41,8 +45,8 @@ cannot read /etc/os-release: <error>
 ```
 
 **How to fix:** The check runs on Linux only. If `/etc/os-release` is absent
-or unreadable, ensure you are on a supported Linux host. Non-Linux hosts
-(macOS, Windows) cannot run `okdctl deploy`.
+or unreadable, ensure you are on a supported RHEL-family host. Non-Linux
+hosts (macOS, Windows) cannot run `okdctl deploy`.
 
 ---
 
@@ -148,8 +152,8 @@ mkdir -p ~/bin
 - **Installable CLIs** (`oc`, `openshift-install`) — downloaded by
   setup into the configured bin dir (see [bin dir](#bin-dir); defaults to
   `/usr/local/bin`); missing = `[warn]`.
-- **System packages** (`terraform`, `coreos-installer`, `haproxy`, `dnsmasq`, `apache`/`httpd`/`apache2`)
-  — installed by setup via `dnf`/`apt`; missing = `[warn]`.
+- **System packages** (`terraform`, `coreos-installer`, `haproxy`, `dnsmasq`, `httpd`)
+  — installed by setup via `dnf`; missing = `[warn]`.
 
 **Fail message (per missing host tool):**
 ```
@@ -166,11 +170,7 @@ will be installed via package manager
 
 For `[fail]` items install the host tools with your system package manager:
 ```bash
-# rhel-family
 sudo dnf install -y curl openssh git
-
-# debian-family
-sudo apt-get install -y curl openssh-client git
 ```
 
 `[warn]` items are handled automatically by `okdctl deploy`; no manual action
@@ -198,11 +198,7 @@ sudo requires a password; deploy will prompt
 
 If `sudo` is not installed:
 ```bash
-# rhel-family
 sudo dnf install -y sudo
-
-# debian-family
-sudo apt-get install -y sudo
 ```
 
 To enable passwordless sudo for your user, add a sudoers entry:
@@ -337,7 +333,7 @@ Common culprits and fixes:
 | Port | Common culprit | Fix |
 |------|---------------|-----|
 | 53 | `systemd-resolved` | `sudo systemctl stop systemd-resolved` and set `DNSStubListener=no` in `/etc/systemd/resolved.conf` |
-| 80 / 443 | Existing web server | `sudo systemctl stop httpd apache2 nginx` |
+| 80 / 443 | Existing web server | `sudo systemctl stop httpd nginx` |
 | 6443 | Existing k8s API server | Stop the conflicting cluster |
 | 22623 | Another OKD install | Stop or destroy the existing cluster first |
 

@@ -69,23 +69,12 @@ func TestExecute_TerraformOnlyPreservesTFState(t *testing.T) {
 	}
 }
 
-// installFakePkg stubs rpm/dnf/dpkg/apt-get on PATH; dnf/apt-get log argv to pkg.called.
+// installFakePkg stubs rpm/dnf on PATH; dnf logs argv to pkg.called.
 func installFakePkg(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	logScript := "#!/bin/sh\necho \"$@\" >> \"" + filepath.Join(dir, "pkg.called") + "\"\nexit 0\n"
-	rpmScript := "#!/bin/sh\nexit 0\n"
-	// dpkg -l <pkg> must print "ii  <pkg>" so platform's postCheck treats it as installed.
-	dpkgScript := "#!/bin/sh\nfor a in \"$@\"; do\n  case \"$a\" in -*) continue ;; esac\n  echo \"ii  $a 1.0 amd64 fake\"\ndone\nexit 0\n"
-	scripts := map[string]string{
-		"dnf":     logScript,
-		"apt-get": logScript,
-		"rpm":     rpmScript,
-		"dpkg":    dpkgScript,
-	}
-	for name, body := range scripts {
-		testutil.InstallFakeBin(t, name, body)
-	}
+	testutil.InstallFakeBin(t, "dnf", "#!/bin/sh\necho \"$@\" >> \""+filepath.Join(dir, "pkg.called")+"\"\nexit 0\n")
+	testutil.InstallFakeBin(t, "rpm", "#!/bin/sh\nexit 0\n")
 	return dir
 }
 

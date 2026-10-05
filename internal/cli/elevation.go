@@ -12,6 +12,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/platform"
 )
 
 // rootRequiredCmds lists subcommands needing sudo re-exec; matching walks the
@@ -22,6 +23,18 @@ const annotationValueTrue = "true"
 
 // lookPath is exec.LookPath, indirected so tests can stub it.
 var lookPath = exec.LookPath
+
+// hostSupportedFn is platform.RequireSupported, indirected so tests can stub it.
+var hostSupportedFn = platform.RequireSupported
+
+// refuseUnsupportedHost fails with the one message a non-RHEL-family bastion
+// gets from deploy and doctor.
+func refuseUnsupportedHost() error {
+	if err := hostSupportedFn(); err != nil {
+		return &errtypes.ConfigError{Msg: err.Error(), Err: err}
+	}
+	return nil
+}
 
 type elevAction int
 
@@ -69,6 +82,13 @@ func elevationDecision(cmd *cobra.Command, euid int) elevAction {
 func ensureRoot(cmd *cobra.Command) error {
 	if os.Getenv(wizardDemoEnv) != "" {
 		return nil
+	}
+	// Ahead of the sudo re-exec so the refusal precedes a password prompt;
+	// deploy only, so existing VMs can still be destroyed from any host.
+	if cmd.Name() == cmdNameDeploy {
+		if err := refuseUnsupportedHost(); err != nil {
+			return err
+		}
 	}
 	switch elevationDecision(cmd, os.Geteuid()) {
 	case elevAllow:

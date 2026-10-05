@@ -74,7 +74,7 @@ main() {
     OS=$(uname -s | tr '[:upper:]' '[:lower:]')
     case "$OS" in
         linux) ;;
-        *) die "unsupported OS: $OS — okdctl runs on Linux only (the deploy phase needs dnf/apt, systemd, firewall-cmd, nmcli)" ;;
+        *) die "unsupported OS: $OS — okdctl runs on Linux only (the deploy phase needs dnf, systemd, firewall-cmd, nmcli)" ;;
     esac
 
     ARCH=$(uname -m)

@@ -34,6 +34,9 @@ func doctorExitErr(fails, warns int) error {
 }
 
 func runDoctor(cmd *cobra.Command, _ []string) error {
+	if err := refuseUnsupportedHost(); err != nil {
+		return err
+	}
 	// Runtime gate (not a build tag) keeps the pipeline compiling/testing on darwin dev hosts.
 	if runtime.GOOS != "linux" {
 		return &errtypes.UsageError{Msg: fmt.Sprintf("okdctl doctor is only supported on linux (current: %s)", runtime.GOOS)}

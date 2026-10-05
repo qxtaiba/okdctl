@@ -8,8 +8,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/qxtaiba/okdctl/internal/doctor"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/platform"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
@@ -40,10 +43,29 @@ func TestRunDoctorNonLinuxGateIsUsageError(t *testing.T) {
 	if runtime.GOOS == "linux" {
 		t.Skip("gate is unreachable on linux")
 	}
+	stubHostSupported(t, nil)
 	err := runDoctor(doctorCmd, nil)
 	var usageErr *errtypes.UsageError
 	if !errors.As(err, &usageErr) {
 		t.Fatalf("want *errtypes.UsageError (exit 64), got %T: %v", err, err)
+	}
+}
+
+func TestRunDoctorRefusesUnsupportedHostBeforeAnyCheck(t *testing.T) {
+	stubHostSupported(t, unsupportedHostErr())
+	var out bytes.Buffer
+	cmd := &cobra.Command{}
+	cmd.SetOut(&out)
+
+	err := runDoctor(cmd, nil)
+	if !errors.Is(err, platform.ErrUnsupportedOS) {
+		t.Fatalf("want the unsupported-host refusal, got %T: %v", err, err)
+	}
+	if got := exitCodeFor(err); got != 2 {
+		t.Errorf("exit code = %d; want 2", got)
+	}
+	if out.Len() != 0 {
+		t.Errorf("no check may run or print on an unsupported host, got:\n%s", out.String())
 	}
 }
 

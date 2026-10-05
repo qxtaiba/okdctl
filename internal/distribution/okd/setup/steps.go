@@ -365,12 +365,8 @@ func (p *Phase) setupInfraSteps(cfg *config.Config, opts *Options) []distributio
 }
 
 func (p *Phase) installSystemPackages(ctx context.Context) error {
-	sysPkgs := []string{"coreos-installer", "haproxy", p.OS.ApachePackageName(), "dnsmasq"}
-	// mod_ssl is a separate RHEL/Fedora rpm for the ignition vhost's SSLEngine;
-	// Debian ships it with apache2 (a2enmod ssl).
-	if p.OS.Family == platform.FamilyRHEL {
-		sysPkgs = append(sysPkgs, "mod_ssl")
-	}
+	// mod_ssl is a separate rpm for the ignition vhost's SSLEngine.
+	sysPkgs := []string{"coreos-installer", "haproxy", platform.ApachePackage, "dnsmasq", "mod_ssl"}
 
 	var toInstall []string
 	for _, pkg := range sysPkgs {

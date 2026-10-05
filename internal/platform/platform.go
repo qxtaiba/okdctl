@@ -1,29 +1,28 @@
-// Package platform detects the host Linux family (RHEL vs Debian) from
-// /etc/os-release and exposes family-specific knobs (Apache paths, service
-// names, CoreOS arch, package manager) so provisioning code stays
-// distribution-agnostic.
+// Package platform identifies the bastion host from /etc/os-release — only
+// RHEL-family Linux is supported — and holds its fixed Apache names, CoreOS
+// arch keys, and package manager.
 package platform
 
 import (
+	"errors"
 	"fmt"
-	"log/slog"
 	"os"
 	"runtime"
 	"strings"
-
-	"github.com/qxtaiba/okdctl/internal/logutil"
 )
-
-// Family identifies the host OS lineage (RHEL or Debian).
-type Family string
 
 const archARM64 = "arm64"
 
-// Platform OS-family identifiers.
+// Apache names on a RHEL-family bastion; conf.d drop-ins are auto-included.
 const (
-	FamilyRHEL   Family = "rhel"
-	FamilyDebian Family = "debian"
+	ApachePackage      = "httpd"
+	ApacheService      = "httpd"
+	ApacheUser         = "apache"
+	ApacheVhostConfDir = "/etc/httpd/conf.d"
 )
+
+// ErrUnsupportedOS marks an os-release that names a non-RHEL-family distribution.
+var ErrUnsupportedOS = errors.New("unsupported host os")
 
 // DownloadArch returns the architecture suffix for tool download URLs.
 func DownloadArch() string {
@@ -43,39 +42,32 @@ func CoreOSArch() string {
 
 // OS describes the detected host operating system.
 type OS struct {
-	Family   Family
-	ID       string // "fedora", "ubuntu", "rocky", "almalinux", "rhel", "debian"
-	Version  string // "39", "24.04"
-	Codename string // VERSION_CODENAME, e.g. "noble", "bookworm"; "" on RHEL family
+	ID      string // "fedora", "rocky", "almalinux", "rhel", "centos"
+	Version string // "41", "9.4"
 }
 
 var rhelIDs = map[string]bool{
 	"fedora": true, "rhel": true, "rocky": true, "almalinux": true, "alma": true, "centos": true,
 }
 
-var debianIDs = map[string]bool{
-	"debian": true, "ubuntu": true,
-}
-
-// DetectOrDefault returns the detected OS, falling back to
-// OS{Family: FamilyRHEL, ID: "unknown"} and warning via logger (nil-safe)
-// on failure.
-func DetectOrDefault(logger *slog.Logger) OS {
-	detected, err := Detect()
-	if err != nil {
-		logutil.OrNop(logger).Warn("platform: detect failed; defaulting to rhel", "err", err)
-		return OS{Family: FamilyRHEL, ID: "unknown"}
-	}
-	return detected
-}
-
-// Detect reads /etc/os-release and returns the detected OS.
+// Detect reads /etc/os-release and returns the detected OS. A host outside the
+// RHEL family fails with an error wrapping ErrUnsupportedOS.
 func Detect() (OS, error) {
 	content, err := os.ReadFile("/etc/os-release")
 	if err != nil {
 		return OS{}, fmt.Errorf("cannot read /etc/os-release: %w", err)
 	}
 	return parseOSRelease(string(content))
+}
+
+// RequireSupported fails with ErrUnsupportedOS only on a host positively
+// identified as non-RHEL-family; an unreadable os-release passes, so
+// non-Linux development hosts are not refused here.
+func RequireSupported() error {
+	if _, err := Detect(); errors.Is(err, ErrUnsupportedOS) {
+		return err
+	}
+	return nil
 }
 
 func parseOSRelease(content string) (OS, error) {
@@ -97,66 +89,21 @@ func parseOSRelease(content string) (OS, error) {
 		return OS{}, fmt.Errorf("ID not found in os-release")
 	}
 
-	family := detectFamily(id, fields["ID_LIKE"])
-	if family == "" {
-		return OS{}, fmt.Errorf("unsupported os: %s (requires fedora, rocky, alma, rhel, ubuntu, or debian)", id)
+	if !isRHELFamily(id, fields["ID_LIKE"]) {
+		return OS{}, fmt.Errorf("%w %q: okdctl deploys from rhel-family bastions only (fedora, rhel, centos, rocky, almalinux)", ErrUnsupportedOS, id)
 	}
 
-	return OS{
-		Family:   family,
-		ID:       id,
-		Version:  fields["VERSION_ID"],
-		Codename: fields["VERSION_CODENAME"],
-	}, nil
+	return OS{ID: id, Version: fields["VERSION_ID"]}, nil
 }
 
-func detectFamily(id, idLike string) Family {
+func isRHELFamily(id, idLike string) bool {
 	if rhelIDs[id] {
-		return FamilyRHEL
-	}
-	if debianIDs[id] {
-		return FamilyDebian
+		return true
 	}
 	for like := range strings.FieldsSeq(idLike) {
 		if rhelIDs[like] {
-			return FamilyRHEL
-		}
-		if debianIDs[like] {
-			return FamilyDebian
+			return true
 		}
 	}
-	return ""
-}
-
-// ApachePackageName returns the package name for Apache HTTP server.
-func (o OS) ApachePackageName() string {
-	if o.Family == FamilyDebian {
-		return "apache2"
-	}
-	return "httpd"
-}
-
-// ApacheServiceName returns the systemd service name for Apache.
-func (o OS) ApacheServiceName() string {
-	if o.Family == FamilyDebian {
-		return "apache2"
-	}
-	return "httpd"
-}
-
-// ApacheUser returns the user that Apache runs as.
-func (o OS) ApacheUser() string {
-	if o.Family == FamilyDebian {
-		return "www-data"
-	}
-	return "apache"
-}
-
-// ApacheVhostConfDir returns the drop-in vhost conf dir — auto-included via
-// conf.d on RHEL, activated via a2enconf on Debian.
-func (o OS) ApacheVhostConfDir() string {
-	if o.Family == FamilyDebian {
-		return "/etc/apache2/conf-available"
-	}
-	return "/etc/httpd/conf.d"
+	return false
 }

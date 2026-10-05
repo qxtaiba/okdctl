@@ -25,9 +25,11 @@ okdctl collects no telemetry and no analytics.
 
 ## Requirements
 
-- A Linux host to deploy from (the bastion), rhel- or debian-family. The
-  deploy phase shells out to `dnf`/`apt`, `firewall-cmd`, `nmcli`, and
-  `systemctl`, so macOS and Windows can build okdctl but not deploy with it.
+- A RHEL-family Linux host to deploy from (the bastion): Fedora, RHEL,
+  CentOS Stream, Rocky, or AlmaLinux. The deploy phase shells out to `dnf`,
+  `firewall-cmd`, `nmcli`, and `systemctl`, so `okdctl deploy` and `okdctl
+  doctor` refuse any other distribution up front, and macOS and Windows
+  can build okdctl but not deploy with it.
 - A Proxmox VE node reachable from the bastion over SSH and the API.
 - `curl`, `ssh`, and `git` on the bastion, sudo access, and 20 GB of free
   disk in your home directory.

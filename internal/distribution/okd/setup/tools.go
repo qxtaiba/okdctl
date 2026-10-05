@@ -3,10 +3,7 @@ package setup
 import (
 	"context"
 	_ "embed"
-	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,7 +14,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/download"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
-	"github.com/qxtaiba/okdctl/internal/httputil"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/platform"
 	"github.com/qxtaiba/okdctl/internal/system"
@@ -157,19 +153,12 @@ func (p *Phase) installTool(ctx context.Context, tool externalTool) error {
 func (p *Phase) installTerraform(ctx context.Context) error {
 	p.Log.Info("tools: installing terraform via hashicorp repository")
 
-	switch p.OS.Family {
-	case platform.FamilyDebian:
-		if err := installHashiCorpDebianRepo(ctx, p.OS.Codename); err != nil {
-			return err
-		}
-	default: // rhel family
-		// Build-time-pinned .repo content avoids trusting the URL at deploy
-		// time; written root-owned so a non-root user can't poison the gpgkey
-		// URL.
-		repoPath := "/etc/yum.repos.d/hashicorp.repo"
-		if err := system.AtomicWrite(repoPath, hashicorpRPMRepo, 0o644); err != nil {
-			return fmt.Errorf("write HashiCorp repository file: %w", err)
-		}
+	// Build-time-pinned .repo content avoids trusting the URL at deploy
+	// time; written root-owned so a non-root user can't poison the gpgkey
+	// URL.
+	repoPath := "/etc/yum.repos.d/hashicorp.repo"
+	if err := system.AtomicWrite(repoPath, hashicorpRPMRepo, 0o644); err != nil {
+		return fmt.Errorf("write HashiCorp repository file: %w", err)
 	}
 
 	p.Log.Info("tools: hashicorp repository added")
@@ -266,111 +255,4 @@ func getToolVersion(ctx context.Context, tool, flag string) string {
 		}
 	}
 	return "unknown"
-}
-
-// expectedHashiCorpGPGFingerprint is HashiCorp's signing key fingerprint; a
-// mismatch aborts before install so a MITM can't plant a persistent trust root.
-const expectedHashiCorpGPGFingerprint = "798AEC654E5C15428C8E42EEAA16FCBCA621E701"
-
-func installHashiCorpDebianRepo(ctx context.Context, codename string) error {
-	gpgPath := "/usr/share/keyrings/hashicorp-archive-keyring.gpg"
-
-	gpgTmp, err := system.WriteTempFile("hashicorp-gpg", 0o600, func(f *os.File) error {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://apt.releases.hashicorp.com/gpg", http.NoBody)
-		if err != nil {
-			return err
-		}
-		resp, err := httputil.New(httputil.TimeoutShort).Do(req)
-		if err != nil {
-			return fmt.Errorf("fetch hashicorp gpg key: %w", err)
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("fetch hashicorp gpg key: status %d", resp.StatusCode)
-		}
-		if _, err := io.Copy(f, resp.Body); err != nil {
-			return fmt.Errorf("copy hashicorp gpg key: %w", err)
-		}
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("download HashiCorp GPG key: %w", err)
-	}
-	defer func() { _ = os.Remove(gpgTmp) }()
-
-	if err := installHashiCorpKey(ctx, gpgTmp, gpgPath); err != nil {
-		return err
-	}
-
-	if codename == "" {
-		return &errtypes.ConfigError{Msg: "debian codename not detected: VERSION_CODENAME not set in /etc/os-release"}
-	}
-
-	listContent := fmt.Sprintf("deb [signed-by=%s] https://apt.releases.hashicorp.com %s main\n", gpgPath, codename)
-	listPath := "/etc/apt/sources.list.d/hashicorp.list"
-	listTmp, err := system.WriteTempFile("hashicorp-list", 0o600, func(f *os.File) error {
-		_, err := f.WriteString(listContent)
-		return err
-	})
-	if err != nil {
-		return fmt.Errorf("write HashiCorp repo list: %w", err)
-	}
-	defer func() { _ = os.Remove(listTmp) }()
-
-	if err := system.CopyFile(listTmp, listPath); err != nil {
-		return fmt.Errorf("install HashiCorp repo list: %w", err)
-	}
-	return executor.RunCaptured(ctx, "apt-get", "update")
-}
-
-func verifyHashiCorpGPGFingerprint(ctx context.Context, armoredKeyPath string) error {
-	out, err := executor.OutputCaptured(
-		ctx,
-		"gpg", "--with-fingerprint", "--with-colons",
-		"--import-options", "show-only", "--import", armoredKeyPath,
-	)
-	if err != nil {
-		return fmt.Errorf("gpg fingerprint check: %w", err)
-	}
-	for line := range strings.Lines(string(out)) {
-		line = strings.TrimRight(line, "\n")
-		if !strings.HasPrefix(line, "fpr:") {
-			continue
-		}
-		fields := strings.Split(line, ":")
-		if len(fields) < 10 {
-			continue
-		}
-		got := strings.ToUpper(strings.ReplaceAll(fields[9], " ", ""))
-		if got == expectedHashiCorpGPGFingerprint {
-			return nil
-		}
-		return &errtypes.ConfigError{
-			Msg: fmt.Sprintf("hashicorp gpg key fingerprint mismatch: got %s, want %s", got, expectedHashiCorpGPGFingerprint),
-		}
-	}
-	return &errtypes.ConfigError{Msg: "hashicorp gpg key fingerprint not found in gpg output"}
-}
-
-func installHashiCorpKey(ctx context.Context, gpgTmp, gpgPath string) error {
-	if err := verifyHashiCorpGPGFingerprint(ctx, gpgTmp); err != nil {
-		return err
-	}
-
-	// Refuses to overwrite a keyring from a different key; show-only accepts
-	// armored or binary, so the same helper checks the on-disk form too.
-	if _, statErr := os.Stat(gpgPath); statErr == nil {
-		if err := verifyHashiCorpGPGFingerprint(ctx, gpgPath); err != nil {
-			return &errtypes.ConfigError{
-				Msg: fmt.Sprintf("existing keyring %s has an unexpected fingerprint; remove it manually to proceed", gpgPath),
-				Err: err,
-			}
-		}
-	} else if !errors.Is(statErr, os.ErrNotExist) {
-		return fmt.Errorf("inspect HashiCorp keyring: %w", statErr)
-	} else if err := executor.RunCaptured(ctx, "gpg", "--dearmor", "-o", gpgPath, gpgTmp); err != nil {
-		return fmt.Errorf("dearmor HashiCorp GPG key: %w", err)
-	}
-
-	return nil
 }

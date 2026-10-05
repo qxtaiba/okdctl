@@ -9,8 +9,6 @@ import (
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/platform"
-	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
 // goosLinux dedupes the "linux" literal so goconst doesn't flag 3+ occurrences.
@@ -183,9 +181,9 @@ func TestDeployToWebServer_AuthFilesNotCopied(t *testing.T) {
 func redirectVhostDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	orig := apacheVhostConfDirFn
-	apacheVhostConfDirFn = func(platform.OS) string { return dir }
-	t.Cleanup(func() { apacheVhostConfDirFn = orig })
+	orig := apacheVhostConfDir
+	apacheVhostConfDir = dir
+	t.Cleanup(func() { apacheVhostConfDir = orig })
 	return dir
 }
 
@@ -218,7 +216,7 @@ func TestConfigureApacheHTTPS_RendersVhost(t *testing.T) {
 			certPath, keyPath := IgnitionCertPaths("/root/okd")
 
 			p := newTestPhase(t)
-			if err := p.configureApacheHTTPS(t.Context(), certPath, keyPath, "/var/www/html", tc.bindIP); err != nil {
+			if err := p.configureApacheHTTPS(certPath, keyPath, "/var/www/html", tc.bindIP); err != nil {
 				t.Fatalf("configureApacheHTTPS: %v", err)
 			}
 
@@ -231,22 +229,6 @@ func TestConfigureApacheHTTPS_RendersVhost(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestConfigureApacheHTTPS_DebianEnablesModAndConf(t *testing.T) {
-	redirectVhostDir(t)
-	logPath := filepath.Join(t.TempDir(), "a2.log")
-	script := "#!/bin/sh\necho \"$(basename \"$0\") $@\" >> " + logPath + "\nexit 0\n"
-	testutil.InstallFakeBin(t, "a2enmod", script)
-	testutil.InstallFakeBin(t, "a2enconf", script)
-
-	p := newTestPhase(t)
-	p.OS = platform.OS{Family: platform.FamilyDebian}
-	if err := p.configureApacheHTTPS(t.Context(), "/c.crt", "/c.key", "/var/www/html", ""); err != nil {
-		t.Fatalf("configureApacheHTTPS: %v", err)
-	}
-
-	assertFileContainsAll(t, logPath, "a2 calls", "a2enmod ssl", "a2enconf ignition-ssl")
 }
 
 func TestConfigureApache_WiresVhostServiceAndIgnitionDir(t *testing.T) {

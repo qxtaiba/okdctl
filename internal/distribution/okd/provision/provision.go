@@ -9,7 +9,6 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
-	"github.com/qxtaiba/okdctl/internal/platform"
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
@@ -31,21 +30,15 @@ func NewOptions(projectRoot string) Options {
 	}
 }
 
-// Provisioner drives the shared ISO/ignition provisioning operations; host
-// OS detection populates OS, falling back to RHEL defaults on error.
+// Provisioner drives the shared ISO/ignition provisioning operations.
 type Provisioner struct {
 	phase.BasePhase
-	OS         platform.OS
 	loggedISOs map[string]bool
 }
 
 // New constructs a Provisioner with the given base-phase options.
 func New(opts ...phase.BasePhaseOption) *Provisioner {
-	bp := phase.NewBasePhase(opts...)
-	return &Provisioner{
-		BasePhase: bp,
-		OS:        platform.DetectOrDefault(bp.Log),
-	}
+	return &Provisioner{BasePhase: phase.NewBasePhase(opts...)}
 }
 
 // BuildIgnitionURL builds the base https:// URL where ignition payloads are

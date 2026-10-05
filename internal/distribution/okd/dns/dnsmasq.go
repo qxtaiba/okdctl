@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -25,21 +24,14 @@ const dnsmasqService = "dnsmasq"
 // dnsmasqConfigDir is overridden to t.TempDir() in tests.
 var dnsmasqConfigDir = phase.DefaultDNSMasqConfigDir
 
-// resolvedConf is the systemd-resolved drop-in path; overridden to t.TempDir() in tests.
-var resolvedConf = "/etc/systemd/resolved.conf.d/dnsmasq.conf"
-
 var (
 	// validateDnsmasqConfigFn/restartDnsmasqFn: package vars so tests can
 	// inject fakes without a real dnsmasq binary.
 	validateDnsmasqConfigFn = ValidateDnsmasqConfig
 	restartDnsmasqFn        = RestartDnsmasq
-	// removeAllFn: os.RemoveAll indirection for injecting a failing func in
-	// RestoreSystemResolver tests.
-	removeAllFn = os.RemoveAll
-	// isNetworkManagerActiveFn/isServiceActiveFn let tests drive resolver paths
-	// on non-Linux hosts, bypassing the runtime.GOOS gate.
+	// isNetworkManagerActiveFn lets tests drive resolver paths on non-Linux
+	// hosts, bypassing the runtime.GOOS gate.
 	isNetworkManagerActiveFn = IsNetworkManagerActive
-	isServiceActiveFn        = system.IsServiceActive
 )
 
 var validConfigNameRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
@@ -131,9 +123,9 @@ func validateDNSAddresses(addresses []string) error {
 	return nil
 }
 
-// ConfigureSystemResolver points system DNS at localhost (dnsmasq), using
-// fallbackDNS for queries dnsmasq can't resolve. It tries NetworkManager then
-// systemd-resolved, warning if neither is found.
+// ConfigureSystemResolver points system DNS at localhost (dnsmasq) through
+// NetworkManager, using fallbackDNS for queries dnsmasq can't resolve; it
+// only warns when NetworkManager is not active.
 func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *slog.Logger) error {
 	if err := validateDNSAddresses(fallbackDNS); err != nil {
 		return fmt.Errorf("invalid fallback DNS configuration: %w", err)
@@ -176,45 +168,7 @@ func ConfigureSystemResolver(ctx context.Context, fallbackDNS []string, logger *
 		return nil
 	}
 
-	if isServiceActiveFn(ctx, "systemd-resolved") {
-		logger.Info("resolver: configuring systemd-resolved to use dnsmasq")
-		confPath := resolvedConf
-		if err := os.MkdirAll(filepath.Dir(confPath), 0o755); err != nil {
-			return fmt.Errorf("create resolved.conf.d: %w", err)
-		}
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		tmpPath, err := system.WriteTempFile("resolved-conf", 0o644, func(f *os.File) error {
-			_, err := f.WriteString("[Resolve]\nDNS=127.0.0.1\nDomains=~.\n")
-			return err
-		})
-		if err != nil {
-			return fmt.Errorf("write dnsmasq.conf: %w", err)
-		}
-		defer func() { _ = os.Remove(tmpPath) }()
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		if err := system.CopyFile(tmpPath, confPath); err != nil {
-			return fmt.Errorf("install dnsmasq.conf: %w", err)
-		}
-		if err := executor.RunCaptured(ctx, "systemctl", "restart", "systemd-resolved"); err != nil {
-			// resolved restart failed with DNS forced to 127.0.0.1; remove the
-			// drop-in and re-restart (detached ctx) so the host falls back
-			// instead of staying dead.
-			if rmErr := removeAllFn(confPath); rmErr != nil {
-				return fmt.Errorf("restart systemd-resolved: %w (drop-in %s left in place; removing it also failed: %w)", err, confPath, rmErr)
-			}
-			rCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), resolverRestoreTimeout)
-			defer cancel()
-			_ = executor.RunCaptured(rCtx, "systemctl", "restart", "systemd-resolved")
-			return fmt.Errorf("restart systemd-resolved: %w (drop-in %s removed)", err, confPath)
-		}
-		return nil
-	}
-
-	logger.Warn("resolver: neither NetworkManager nor systemd-resolved found, skipping system resolver configuration")
+	logger.Warn("resolver: NetworkManager not active, skipping system resolver configuration")
 	return nil
 }
 
@@ -244,9 +198,8 @@ func restoreConnDNS(ctx context.Context, conn, dns, ignoreAutoDNS string) error 
 	return executor.RunCaptured(ctx, "nmcli", "connection", "modify", conn, "ipv4.dns", dns, "ipv4.ignore-auto-dns", ignoreAutoDNS)
 }
 
-// RestoreSystemResolver undoes ConfigureSystemResolver: clears the nmcli DNS
-// override or removes the systemd-resolved drop-in. Failures are logged but do
-// not abort cleanup.
+// RestoreSystemResolver undoes ConfigureSystemResolver by clearing the nmcli
+// DNS override. Failures are logged but do not abort cleanup.
 func RestoreSystemResolver(ctx context.Context, logger *slog.Logger) error {
 	if isNetworkManagerActiveFn(ctx) {
 		conn, err := hostnet.ActiveConnection(ctx)
@@ -270,19 +223,6 @@ func RestoreSystemResolver(ctx context.Context, logger *slog.Logger) error {
 		if modifyErr == nil && upErr == nil {
 			logger.Info("resolver: system DNS restored to DHCP")
 		}
-		return nil
-	}
-
-	if system.FileExists(resolvedConf) {
-		logger.Info("resolver: removing systemd-resolved dnsmasq configuration")
-		if err := removeAllFn(resolvedConf); err != nil {
-			logger.Warn("resolver: failed to remove", "path", resolvedConf, "err", err)
-			return nil
-		}
-		if isServiceActiveFn(ctx, "systemd-resolved") {
-			_ = system.ManageService(ctx, system.ServiceRestart, "systemd-resolved")
-		}
-		logger.Info("resolver: systemd-resolved configuration restored")
 	}
 
 	return nil

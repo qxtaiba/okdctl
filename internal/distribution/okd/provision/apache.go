@@ -25,9 +25,9 @@ import (
 
 const minIgnitionFileSize = 1000 // bytes
 
-// apacheVhostConfDirFn resolves the vhost drop-in dir; tests override it to
-// redirect writes to a t.TempDir().
-var apacheVhostConfDirFn = platform.OS.ApacheVhostConfDir
+// apacheVhostConfDir is the vhost drop-in dir; tests override it to redirect
+// writes to a t.TempDir().
+var apacheVhostConfDir = platform.ApacheVhostConfDir
 
 func (p *Provisioner) ensureIgnitionDir(ctx context.Context, webRoot string) (string, error) {
 	if err := ctx.Err(); err != nil {
@@ -50,8 +50,7 @@ func (p *Provisioner) ensureIgnitionDir(ctx context.Context, webRoot string) (st
 		return "", &errtypes.AuthError{Msg: fmt.Sprintf("ignition dir %q is a symlink; refusing to chown/chmod", ignitionDir), Err: os.ErrPermission}
 	}
 
-	apacheUser := p.OS.ApacheUser()
-	if err := system.ChownByName(ignitionDir, apacheUser+":"+apacheUser); err != nil {
+	if err := system.ChownByName(ignitionDir, platform.ApacheUser+":"+platform.ApacheUser); err != nil {
 		p.Log.Warn("apache: failed to set ignition dir ownership", "err", err)
 	}
 	if err := os.Chmod(ignitionDir, 0o750); err != nil {
@@ -93,10 +92,10 @@ func (p *Provisioner) verifyApacheListening(ctx context.Context, bindIP string) 
 	p.Log.Info("apache: httpd service listening on port 443")
 }
 
-// configureApacheHTTPS writes the HTTPS vhost conf and, on Debian, enables
-// mod_ssl and the conf (RHEL auto-includes conf.d).
-func (p *Provisioner) configureApacheHTTPS(ctx context.Context, certPath, keyPath, webRoot, bindIP string) error {
-	vhostDir := apacheVhostConfDirFn(p.OS)
+// configureApacheHTTPS writes the HTTPS vhost conf into conf.d, which httpd
+// auto-includes.
+func (p *Provisioner) configureApacheHTTPS(certPath, keyPath, webRoot, bindIP string) error {
+	vhostDir := apacheVhostConfDir
 	if err := system.EnsureDir(vhostDir); err != nil {
 		return fmt.Errorf("apache: ensure vhost conf dir: %w", err)
 	}
@@ -112,15 +111,6 @@ func (p *Provisioner) configureApacheHTTPS(ctx context.Context, certPath, keyPat
 	confPath := filepath.Join(vhostDir, "ignition-ssl.conf")
 	if err := system.AtomicWriteString(confPath, vhostConf, 0o644); err != nil {
 		return fmt.Errorf("apache: write HTTPS vhost conf: %w", err)
-	}
-
-	if p.OS.Family == platform.FamilyDebian {
-		if _, err := p.Exec.RunChecked(ctx, "a2enmod", "ssl"); err != nil {
-			p.Log.Warn("apache: a2enmod ssl failed", "err", err)
-		}
-		if _, err := p.Exec.RunChecked(ctx, "a2enconf", "ignition-ssl"); err != nil {
-			p.Log.Warn("apache: a2enconf ignition-ssl failed", "err", err)
-		}
 	}
 
 	p.Log.Info("apache: HTTPS vhost configured", "path", confPath)
@@ -144,11 +134,11 @@ func (p *Provisioner) ConfigureApache(ctx context.Context, cfg *config.Config, p
 	}
 
 	certPath, keyPath := IgnitionCertPaths(projectRoot)
-	if err := p.configureApacheHTTPS(ctx, certPath, keyPath, webRoot, bindIP); err != nil {
+	if err := p.configureApacheHTTPS(certPath, keyPath, webRoot, bindIP); err != nil {
 		return &errtypes.ClusterError{Msg: "configure apache HTTPS vhost", Err: err}
 	}
 
-	if err := enableAndStartApache(ctx, p.OS.ApacheServiceName()); err != nil {
+	if err := enableAndStartApache(ctx, platform.ApacheService); err != nil {
 		return &errtypes.ClusterError{Msg: "enable and start apache", Err: err}
 	}
 
@@ -178,10 +168,10 @@ func (p *Provisioner) ReviveIgnitionServer(ctx context.Context, cfg *config.Conf
 	}
 
 	certPath, keyPath := IgnitionCertPaths(projectRoot)
-	if err := p.configureApacheHTTPS(ctx, certPath, keyPath, webRoot, bindIP); err != nil {
+	if err := p.configureApacheHTTPS(certPath, keyPath, webRoot, bindIP); err != nil {
 		return &errtypes.ClusterError{Msg: "configure apache https vhost", Err: err}
 	}
-	if err := startApache(ctx, p.OS.ApacheServiceName()); err != nil {
+	if err := startApache(ctx, platform.ApacheService); err != nil {
 		return &errtypes.ClusterError{Msg: "start apache", Err: err}
 	}
 	p.verifyApacheListening(ctx, bindIP)
@@ -195,7 +185,7 @@ func (p *Provisioner) ReviveIgnitionServer(ctx context.Context, cfg *config.Conf
 // post-cancel context. A non-nil return means httpd may still be serving
 // ignition payloads — the caller must surface that loudly.
 func (p *Provisioner) TeardownIgnitionServer(ctx context.Context) error {
-	svc := p.OS.ApacheServiceName()
+	svc := platform.ApacheService
 	var errs []error
 	if err := system.ManageService(ctx, system.ServiceStop, svc); err != nil {
 		errs = append(errs, fmt.Errorf("stop %s: %w", svc, err))

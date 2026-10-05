@@ -14,7 +14,7 @@ import (
 
 func installFakePkgTools(t *testing.T) {
 	t.Helper()
-	for _, name := range []string{"rpm", "dnf", "dpkg", "apt-get"} {
+	for _, name := range []string{"rpm", "dnf"} {
 		testutil.InstallFakeBin(t, name, "#!/bin/sh\nexit 0\n")
 	}
 }

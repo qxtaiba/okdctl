@@ -108,9 +108,9 @@ func Checks(cfgFile string) []Check {
 func checkHostOS(_ context.Context) Result {
 	host, err := platform.Detect()
 	if err != nil {
-		return Result{Sev: Fail, Detail: fmt.Sprintf("cannot read /etc/os-release: %v", err)}
+		return Result{Sev: Fail, Detail: err.Error()}
 	}
-	return Result{Sev: Pass, Detail: fmt.Sprintf("%s %s (%s family)", host.ID, host.Version, host.Family)}
+	return Result{Sev: Pass, Detail: fmt.Sprintf("%s %s (rhel family)", host.ID, host.Version)}
 }
 
 // checkNotRoot is a secondary guard: cli.ensureRoot rejects `sudo okdctl
@@ -180,7 +180,7 @@ func checkBinDir(r binDirResolution) Result {
 func checkBinaries(_ context.Context) Result {
 	hostBinaries := []string{"curl", "ssh", "git"}
 	installableTools := []string{"oc", "openshift-install", "terraform"}
-	systemPackages := []string{"coreos-installer", "haproxy", "dnsmasq"}
+	systemPackages := []string{"coreos-installer", "haproxy", "dnsmasq", platform.ApachePackage}
 
 	var items []Item
 	worst := Pass
@@ -202,18 +202,6 @@ func checkBinaries(_ context.Context) Result {
 	}
 	for _, name := range systemPackages {
 		probe(name, Warn, "will be installed via package manager")
-	}
-
-	// Apache binary name varies by distro: httpd (rhel) or apache2 (debian).
-	apacheFound := slices.ContainsFunc([]string{"httpd", "apache2"}, func(bin string) bool {
-		_, err := exec.LookPath(bin)
-		return err == nil
-	})
-	if apacheFound {
-		items = append(items, Item{Sev: Pass, Name: "apache"})
-	} else {
-		items = append(items, Item{Sev: Warn, Name: "apache", Note: "will be installed via package manager"})
-		worst = max(worst, Warn)
 	}
 
 	return Result{Sev: worst, Items: items}
