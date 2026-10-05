@@ -20,15 +20,15 @@ func TestOrchestratorRun_FatalStepStopsRun(t *testing.T) {
 	var ran []string
 	defs := []distribution.StepDef{
 		{
-			ID: "a", Name: "a", ReRunSafe: distribution.ReRunSafeYes,
+			ID: "a", Name: "a",
 			Exec: func(_ context.Context) error { ran = append(ran, "a"); return nil },
 		},
 		{
-			ID: "b", Name: "b", ReRunSafe: distribution.ReRunSafeYes,
+			ID: "b", Name: "b",
 			Exec: func(_ context.Context) error { ran = append(ran, "b"); return errors.New("boom") },
 		},
 		{
-			ID: "c", Name: "c", ReRunSafe: distribution.ReRunSafeYes,
+			ID: "c", Name: "c",
 			Exec: func(_ context.Context) error { ran = append(ran, "c"); return nil },
 		},
 	}
@@ -53,11 +53,11 @@ func TestOrchestratorRun_NonFatalStepContinues(t *testing.T) {
 	var ran []string
 	defs := []distribution.StepDef{
 		{
-			ID: "a", Name: "a", ReRunSafe: distribution.ReRunSafeYes, NonFatal: true,
+			ID: "a", Name: "a", NonFatal: true,
 			Exec: func(_ context.Context) error { ran = append(ran, "a"); return errors.New("warn") },
 		},
 		{
-			ID: "b", Name: "b", ReRunSafe: distribution.ReRunSafeYes,
+			ID: "b", Name: "b",
 			Exec: func(_ context.Context) error { ran = append(ran, "b"); return nil },
 		},
 	}
@@ -75,7 +75,7 @@ func TestOrchestratorRun_SkipWhen(t *testing.T) {
 	var ran bool
 	defs := []distribution.StepDef{
 		{
-			ID: "a", Name: "a", ReRunSafe: distribution.ReRunSafeYes,
+			ID: "a", Name: "a",
 			SkipWhen: func() bool { return true }, SkipReason: "not needed",
 			Exec: func(_ context.Context) error { ran = true; return nil },
 		},
@@ -98,7 +98,7 @@ func TestOrchestratorRun_SkipReasonFuncResolvesFiredCause(t *testing.T) {
 	reason := "unresolved"
 	defs := []distribution.StepDef{
 		{
-			ID: "a", Name: "a", ReRunSafe: distribution.ReRunSafeYes,
+			ID: "a", Name: "a",
 			SkipWhen:       func() bool { reason = "cause that fired"; return true },
 			SkipReason:     "static or-list",
 			SkipReasonFunc: func() string { return reason },
@@ -123,7 +123,7 @@ func TestOrchestratorRun_AlreadyDoneSkipsExecute(t *testing.T) {
 	var ran bool
 	defs := []distribution.StepDef{
 		{
-			ID: "a", Name: "a", ReRunSafe: distribution.ReRunSafeNo,
+			ID: "a", Name: "a",
 			AlreadyDone: func(_ context.Context) (bool, error) { return true, nil },
 			Exec:        func(_ context.Context) error { ran = true; return nil },
 		},
@@ -146,7 +146,7 @@ func TestOrchestratorRun_AlreadyDoneErrorProceedsToExecute(t *testing.T) {
 	var ran bool
 	defs := []distribution.StepDef{
 		{
-			ID: "a", Name: "a", ReRunSafe: distribution.ReRunSafeNo,
+			ID: "a", Name: "a",
 			AlreadyDone: func(_ context.Context) (bool, error) { return false, errors.New("probe failed") },
 			Exec:        func(_ context.Context) error { ran = true; return nil },
 		},
@@ -165,7 +165,7 @@ func TestOrchestratorRun_OnErrorFiresWithClassifiedError(t *testing.T) {
 	var gotErr error
 	defs := []distribution.StepDef{
 		{
-			ID: "a", Name: "a", ReRunSafe: distribution.ReRunSafeYes,
+			ID: "a", Name: "a",
 			Exec:    func(_ context.Context) error { return errors.New("boom") },
 			OnError: func(err error) { gotErr = err },
 		},
@@ -183,7 +183,7 @@ func TestOrchestratorRun_ScrubsCredentialInClassifiedMsg(t *testing.T) {
 	root := errors.New("provider auth failed: password=hunter2")
 	defs := []distribution.StepDef{
 		{
-			ID: "a", Name: "a", ReRunSafe: distribution.ReRunSafeYes,
+			ID: "a", Name: "a",
 			Exec: func(_ context.Context) error { return root },
 		},
 	}
@@ -219,7 +219,7 @@ func TestOrchestratorRun_PreservesErrorIdentity(t *testing.T) {
 			t.Parallel()
 			o := buildOrchestrator([]distribution.StepDef{
 				{
-					ID: "a", Name: "a", ReRunSafe: distribution.ReRunSafeYes,
+					ID: "a", Name: "a",
 					Exec: func(_ context.Context) error { return tc.err },
 				},
 			})
@@ -235,7 +235,7 @@ func TestOrchestratorRun_CtxDoneBeforeStepStopsRun(t *testing.T) {
 	var ran bool
 	defs := []distribution.StepDef{
 		{
-			ID: "a", Name: "a", ReRunSafe: distribution.ReRunSafeYes,
+			ID: "a", Name: "a",
 			Exec: func(_ context.Context) error { ran = true; return nil },
 		},
 	}

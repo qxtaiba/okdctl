@@ -181,8 +181,7 @@ func retainClusterCredentials(opts *Options, logger *slog.Logger) (bool, error) 
 func cleanupSummaryStep(opts *Options, t *cleanupTracker, logger *slog.Logger) distribution.StepDef {
 	return distribution.StepDef{
 		ID: StepCleanupSummary, Name: "cleanup summary",
-		NonFatal:  false,
-		ReRunSafe: distribution.ReRunSafeYes,
+		NonFatal: false,
 		Exec: func(_ context.Context) error {
 			printSummary(opts, t, logger)
 			return errors.Join(t.errs...)
@@ -193,10 +192,9 @@ func cleanupSummaryStep(opts *Options, t *cleanupTracker, logger *slog.Logger) d
 func ignitionCertsCleanupStep(opts *Options, t *cleanupTracker, logger *slog.Logger) distribution.StepDef {
 	return distribution.StepDef{
 		ID: StepCleanupIgnitionCerts, Name: "cleanup ignition certs",
-		NonFatal:  true,
-		ReRunSafe: distribution.ReRunSafeYes,
-		Exec:      func(ctx context.Context) error { return IgnitionCerts(ctx, opts.ProjectRoot, logger) },
-		OnError:   t.onError("ignition-certs"),
+		NonFatal: true,
+		Exec:     func(ctx context.Context) error { return IgnitionCerts(ctx, opts.ProjectRoot, logger) },
+		OnError:  t.onError("ignition-certs"),
 	}
 }
 
@@ -206,7 +204,6 @@ func terraformCleanupStep(opts *Options, t *cleanupTracker, logger *slog.Logger)
 	return distribution.StepDef{
 		ID: StepCleanupTerraform, Name: "cleanup terraform",
 		NonFatal:    true,
-		ReRunSafe:   distribution.ReRunSafeNo,
 		AlreadyDone: func(_ context.Context) (bool, error) { return terraformCleanupDone(opts) },
 		Exec: func(ctx context.Context) error {
 			if err := Terraform(ctx, opts.ProjectRoot, opts.TerraformEnv, logger); err != nil {
@@ -240,8 +237,7 @@ func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 
 	workDirStep := distribution.StepDef{
 		ID: StepCleanupWorkDir, Name: "cleanup work directory",
-		NonFatal:  true,
-		ReRunSafe: distribution.ReRunSafeNo,
+		NonFatal: true,
 		AlreadyDone: func(_ context.Context) (bool, error) {
 			return !system.DirExists(opts.WorkDir), nil
 		},
@@ -257,16 +253,14 @@ func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 
 	webServerStep := distribution.StepDef{
 		ID: StepCleanupWebServer, Name: "cleanup web server",
-		NonFatal:  true,
-		ReRunSafe: distribution.ReRunSafeYes,
-		Exec:      func(ctx context.Context) error { return WebServer(ctx, opts.HTTPServerRoot, logger) },
-		OnError:   t.onError("web server"),
+		NonFatal: true,
+		Exec:     func(ctx context.Context) error { return WebServer(ctx, opts.HTTPServerRoot, logger) },
+		OnError:  t.onError("web server"),
 	}
 
 	haproxyStep := distribution.StepDef{
 		ID: StepCleanupHAProxy, Name: "cleanup haproxy",
-		NonFatal:  true,
-		ReRunSafe: distribution.ReRunSafeNo,
+		NonFatal: true,
 		AlreadyDone: func(ctx context.Context) (bool, error) {
 			return !system.FileExists(opts.HAProxyConfig) && !system.IsServiceActive(ctx, "haproxy"), nil
 		},
@@ -276,16 +270,14 @@ func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 
 	apacheStep := distribution.StepDef{
 		ID: StepCleanupApache, Name: "cleanup apache",
-		NonFatal:  true,
-		ReRunSafe: distribution.ReRunSafeYes,
-		Exec:      func(ctx context.Context) error { return Apache(ctx, logger) },
-		OnError:   t.onError("apache"),
+		NonFatal: true,
+		Exec:     func(ctx context.Context) error { return Apache(ctx, logger) },
+		OnError:  t.onError("apache"),
 	}
 
 	dnsmasqStep := distribution.StepDef{
 		ID: StepCleanupDnsmasq, Name: "cleanup dnsmasq",
-		NonFatal:  true,
-		ReRunSafe: distribution.ReRunSafeNo,
+		NonFatal: true,
 		AlreadyDone: func(_ context.Context) (bool, error) {
 			if opts.ClusterName == "" {
 				return false, nil
@@ -305,7 +297,6 @@ func cleanupSteps(opts *Options, logger *slog.Logger) []distribution.StepDef {
 	packagesStep := distribution.StepDef{
 		ID: StepCleanupPackages, Name: "cleanup packages",
 		NonFatal:   true,
-		ReRunSafe:  distribution.ReRunSafeYes,
 		SkipWhen:   func() bool { return !opts.RemovePackages },
 		SkipReason: "package removal disabled",
 		Exec:       func(ctx context.Context) error { return Packages(ctx, opts.BinDir, logger) },

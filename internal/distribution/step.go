@@ -22,24 +22,12 @@ type StepResult struct {
 	Duration   time.Duration
 }
 
-// ReRunSafety declares whether a step may re-run on a fresh orchestrator run;
-// BuildSteps panics on the zero value.
-type ReRunSafety int8
-
-// ReRunSafe values declare whether a step body may be re-executed mid-phase.
-const (
-	ReRunSafeUnset ReRunSafety = 0
-	ReRunSafeYes   ReRunSafety = 1
-	ReRunSafeNo    ReRunSafety = 2
-)
-
-// StepDef is a data-driven step definition with required ID, Name, Exec, and
-// ReRunSafe; AlreadyDone runs before Exec and skips the step when true.
+// StepDef is a data-driven step definition with required ID, Name, and Exec;
+// AlreadyDone runs before Exec and skips the step when true.
 type StepDef struct {
 	ID          StepID
 	Name        string
 	NonFatal    bool
-	ReRunSafe   ReRunSafety
 	AlreadyDone func(ctx context.Context) (bool, error)
 	SkipWhen    func() bool
 	SkipReason  string
@@ -51,96 +39,22 @@ type StepDef struct {
 	OnError        func(error)
 }
 
-// builtStep is the runtime step: BuildSteps is its only constructor,
-// Orchestrator its only consumer.
-type builtStep struct {
-	id           StepID
-	name         string
-	fatal        bool
-	alreadyDone  func(context.Context) (bool, error)
-	skipWhen     func() bool
-	skipReason   string
-	skipReasonFn func() string
-	onStart      func()
-	onError      func(error)
-	exec         func(context.Context) error
-}
-
-// BuildSteps converts StepDefs into steps for NewOrchestrator. Panics on an
-// empty ID/Name, ReRunSafeUnset, or ReRunSafeNo without AlreadyDone.
-func BuildSteps(defs []StepDef) []*builtStep {
-	steps := make([]*builtStep, 0, len(defs))
-	for _, d := range defs {
-		if d.ReRunSafe == ReRunSafeUnset {
-			panic("BuildSteps: step " + string(d.ID) + " must declare ReRunSafe (ReRunSafeYes or ReRunSafeNo)")
-		}
-		if d.ReRunSafe == ReRunSafeNo && d.AlreadyDone == nil {
-			panic("BuildSteps: step " + string(d.ID) + " is ReRunSafeNo but has no AlreadyDone guard")
-		}
-		if d.ID == "" {
+// BuildSteps validates defs for NewOrchestrator. Panics on an empty ID or Name.
+func BuildSteps(defs []StepDef) []StepDef {
+	for i := range defs {
+		if defs[i].ID == "" {
 			panic("BuildSteps: step has empty ID")
 		}
-		if d.Name == "" {
-			panic("BuildSteps: step " + string(d.ID) + " has empty Name")
+		if defs[i].Name == "" {
+			panic("BuildSteps: step " + string(defs[i].ID) + " has empty Name")
 		}
-		steps = append(steps, &builtStep{
-			id:           d.ID,
-			name:         d.Name,
-			fatal:        !d.NonFatal,
-			alreadyDone:  d.AlreadyDone,
-			skipWhen:     d.SkipWhen,
-			skipReason:   d.SkipReason,
-			skipReasonFn: d.SkipReasonFunc,
-			onStart:      d.OnStart,
-			exec:         d.Exec,
-			onError:      d.OnError,
-		})
 	}
-	return steps
+	return defs
 }
 
-func (s *builtStep) ID() StepID { return s.id }
-
-func (s *builtStep) Name() string { return s.name }
-
-func (s *builtStep) IsFatal() bool { return s.fatal }
-
-func (s *builtStep) IsAlreadyDone(ctx context.Context) (bool, error) {
-	if s.alreadyDone == nil {
-		return false, nil
+func (d *StepDef) skipReason() string {
+	if d.SkipReasonFunc != nil {
+		return d.SkipReasonFunc()
 	}
-	return s.alreadyDone(ctx)
-}
-
-func (s *builtStep) ShouldSkip() bool {
-	if s.skipWhen == nil {
-		return false
-	}
-	return s.skipWhen()
-}
-
-func (s *builtStep) SkipReason() string {
-	if s.skipReasonFn != nil {
-		return s.skipReasonFn()
-	}
-	return s.skipReason
-}
-
-func (s *builtStep) Execute(ctx context.Context) error {
-	if s.exec == nil {
-		return nil
-	}
-	return s.exec(ctx)
-}
-
-func (s *builtStep) OnStart() {
-	if s.onStart != nil {
-		s.onStart()
-	}
-}
-
-func (s *builtStep) OnError(err error) {
-	if s.onError != nil {
-		s.onError(err)
-	}
+	return d.SkipReason
 }

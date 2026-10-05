@@ -85,26 +85,22 @@ func (p *Phase) setupBaseSteps(cfg *config.Config, opts *Options) []distribution
 	return []distribution.StepDef{
 		{
 			ID: StepInstallPackages, Name: StepNames[StepInstallPackages],
-			ReRunSafe: distribution.ReRunSafeYes,
-			NonFatal:  true,
-			Exec:      func(ctx context.Context) error { return p.installSystemPackages(ctx) },
-			OnError:   phase.WarnOnError(p.Log, "packages: system installation had warnings"),
+			NonFatal: true,
+			Exec:     func(ctx context.Context) error { return p.installSystemPackages(ctx) },
+			OnError:  phase.WarnOnError(p.Log, "packages: system installation had warnings"),
 		},
 		{
 			ID: StepInstallTools, Name: StepNames[StepInstallTools],
-			ReRunSafe: distribution.ReRunSafeYes,
-			NonFatal:  true,
-			Exec:      func(ctx context.Context) error { return p.InstallExternalTools(ctx, cfg) },
-			OnError:   phase.WarnOnError(p.Log, "tools: external installation had warnings"),
+			NonFatal: true,
+			Exec:     func(ctx context.Context) error { return p.InstallExternalTools(ctx, cfg) },
+			OnError:  phase.WarnOnError(p.Log, "tools: external installation had warnings"),
 		},
 		{
 			ID: StepEnsureWorkDir, Name: StepNames[StepEnsureWorkDir],
-			ReRunSafe: distribution.ReRunSafeYes,
-			Exec:      func(_ context.Context) error { return system.EnsureDir(opts.WorkDir) },
+			Exec: func(_ context.Context) error { return system.EnsureDir(opts.WorkDir) },
 		},
 		{
 			ID: StepDownloadTools, Name: StepNames[StepDownloadTools],
-			ReRunSafe:  distribution.ReRunSafeNo,
 			SkipWhen:   func() bool { return opts.SkipDownloads },
 			SkipReason: "downloads disabled",
 			// Presence alone is version-blind; DownloadOKDTools' sentinel
@@ -127,7 +123,6 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 	return []distribution.StepDef{
 		{
 			ID: StepGenerateConfig, Name: StepNames[StepGenerateConfig],
-			ReRunSafe: distribution.ReRunSafeNo,
 			// install-config.yaml is consumed during manifest generation;
 			// .backup is the stable post-state sentinel.
 			AlreadyDone: func(_ context.Context) (bool, error) {
@@ -144,7 +139,6 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 		},
 		{
 			ID: StepGenerateManifests, Name: StepNames[StepGenerateManifests],
-			ReRunSafe: distribution.ReRunSafeNo,
 			// manifests/ alone is unsafe — a partial mid-write dir would look
 			// done; require .complete or the ignition sentinel too.
 			AlreadyDone: func(_ context.Context) (bool, error) {
@@ -160,7 +154,6 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 		},
 		{
 			ID: StepGenerateKubeVIP, Name: StepNames[StepGenerateKubeVIP],
-			ReRunSafe: distribution.ReRunSafeYes,
 			Exec: func(_ context.Context) error {
 				if err := p.generateKubeVIPManifests(cfg, clusterDir); err != nil {
 					return &errtypes.ConfigError{Msg: "generate kube-vip manifests", Err: err}
@@ -170,7 +163,6 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 		},
 		{
 			ID: StepGenerateChrony, Name: StepNames[StepGenerateChrony],
-			ReRunSafe: distribution.ReRunSafeYes,
 			Exec: func(_ context.Context) error {
 				if err := p.generateChronyManifests(cfg, clusterDir); err != nil {
 					return &errtypes.ConfigError{Msg: "generate chrony machineconfigs", Err: err}
@@ -180,7 +172,6 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 		},
 		{
 			ID: StepGenerateFstrim, Name: StepNames[StepGenerateFstrim],
-			ReRunSafe: distribution.ReRunSafeYes,
 			Exec: func(_ context.Context) error {
 				if err := p.generateFstrimManifests(clusterDir); err != nil {
 					return &errtypes.ConfigError{Msg: "generate fstrim machineconfigs", Err: err}
@@ -190,7 +181,6 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 		},
 		{
 			ID: StepInjectManifests, Name: StepNames[StepInjectManifests],
-			ReRunSafe: distribution.ReRunSafeYes,
 			Exec: func(ctx context.Context) error {
 				count, err := p.InjectCustomManifests(ctx, opts.ProjectRoot, clusterDir)
 				if err != nil {
@@ -204,7 +194,6 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 		},
 		{
 			ID: StepCompactCluster, Name: StepNames[StepCompactCluster],
-			ReRunSafe:  distribution.ReRunSafeYes,
 			SkipWhen:   func() bool { return cfg.Topology.Workers.Count > 0 },
 			SkipReason: "cluster has workers",
 			Exec: func(ctx context.Context) error {
@@ -217,7 +206,6 @@ func (p *Phase) setupManifestSteps(cfg *config.Config, opts *Options, clusterDir
 		},
 		{
 			ID: StepGenerateIgnition, Name: StepNames[StepGenerateIgnition],
-			ReRunSafe: distribution.ReRunSafeNo,
 			AlreadyDone: func(_ context.Context) (bool, error) {
 				return system.FileExists(IgnitionSentinel(clusterDir)), nil
 			},
@@ -236,14 +224,12 @@ func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir stri
 	return []distribution.StepDef{
 		{
 			ID: StepInstallApache, Name: StepNames[StepInstallApache],
-			ReRunSafe: distribution.ReRunSafeYes,
-			NonFatal:  true,
-			Exec:      func(ctx context.Context) error { return p.ConfigureApache(ctx, cfg, opts.ProjectRoot) },
-			OnError:   phase.WarnOnError(p.Log, "apache: installation skipped"),
+			NonFatal: true,
+			Exec:     func(ctx context.Context) error { return p.ConfigureApache(ctx, cfg, opts.ProjectRoot) },
+			OnError:  phase.WarnOnError(p.Log, "apache: installation skipped"),
 		},
 		{
 			ID: StepDeployIgnition, Name: StepNames[StepDeployIgnition],
-			ReRunSafe: distribution.ReRunSafeNo,
 			// Content identity, not existence: crash-resume regenerates
 			// ignition with a fresh CA, so a stale webroot copy would wedge the
 			// install.
@@ -265,7 +251,6 @@ func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir stri
 		},
 		{
 			ID: StepVerifyWebServer, Name: StepNames[StepVerifyWebServer],
-			ReRunSafe: distribution.ReRunSafeYes,
 			Exec: func(ctx context.Context) error {
 				certPEM, _, err := provision.EnsureIgnitionCert(opts.ProjectRoot, cfg.HTTPServer.IgnitionServerIP)
 				if err != nil {
@@ -275,16 +260,14 @@ func (p *Phase) setupWebSteps(cfg *config.Config, opts *Options, clusterDir stri
 			},
 		},
 		{
-			ID: StepBuildISOs, Name: StepNames[StepBuildISOs],
 			// BuildCustomISOs fingerprint-checks per node (iso.go), skipping unchanged ISOs on repeat runs.
-			ReRunSafe:  distribution.ReRunSafeYes,
+			ID: StepBuildISOs, Name: StepNames[StepBuildISOs],
 			SkipWhen:   func() bool { return opts.SkipISOs },
 			SkipReason: "iso building disabled",
 			Exec:       func(ctx context.Context) error { return p.BuildCustomISOs(ctx, cfg, opts.provisionOpts()) },
 		},
 		{
 			ID: StepUploadISOs, Name: StepNames[StepUploadISOs],
-			ReRunSafe:  distribution.ReRunSafeNo,
 			NonFatal:   true,
 			SkipWhen:   func() bool { return opts.SkipISOs },
 			SkipReason: "iso building disabled",
@@ -309,7 +292,6 @@ func (p *Phase) setupInfraSteps(cfg *config.Config, opts *Options) []distributio
 	return []distribution.StepDef{
 		{
 			ID: StepGenerateTfvars, Name: StepNames[StepGenerateTfvars],
-			ReRunSafe: distribution.ReRunSafeYes,
 			Exec: func(ctx context.Context) error {
 				if err := p.GenerateTerraformVars(ctx, cfg, opts); err != nil {
 					return &errtypes.ConfigError{Msg: "generate Terraform variables", Err: err}
@@ -321,7 +303,6 @@ func (p *Phase) setupInfraSteps(cfg *config.Config, opts *Options) []distributio
 		},
 		{
 			ID: StepConfigureHAProxy, Name: StepNames[StepConfigureHAProxy],
-			ReRunSafe:  distribution.ReRunSafeYes,
 			SkipWhen:   func() bool { return opts.SkipHAProxy },
 			SkipReason: "haproxy configuration disabled",
 			Exec: func(ctx context.Context) error {
@@ -334,7 +315,6 @@ func (p *Phase) setupInfraSteps(cfg *config.Config, opts *Options) []distributio
 		},
 		{
 			ID: StepConfigureFirewall, Name: StepNames[StepConfigureFirewall],
-			ReRunSafe:  distribution.ReRunSafeYes,
 			NonFatal:   true,
 			SkipWhen:   func() bool { return opts.SkipFirewall },
 			SkipReason: "firewall configuration disabled",
@@ -349,8 +329,7 @@ func (p *Phase) setupInfraSteps(cfg *config.Config, opts *Options) []distributio
 		},
 		{
 			ID: StepConfigureDNS, Name: StepNames[StepConfigureDNS],
-			ReRunSafe: distribution.ReRunSafeYes,
-			NonFatal:  true,
+			NonFatal: true,
 			Exec: func(ctx context.Context) error {
 				if err := p.configureDNS(ctx, cfg, opts); err != nil {
 					return &errtypes.ClusterError{Msg: "dns configuration failed", Err: err}
