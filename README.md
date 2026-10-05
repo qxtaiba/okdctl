@@ -21,11 +21,7 @@ glue.
   between minors, so pin your version. Every break is listed in the
   [release notes](https://github.com/qxtaiba/okdctl/releases).
 
-okdctl collects no telemetry and no analytics. The one request it makes on
-its own behalf is an update check: a plain HTTPS GET to `api.github.com`
-(`releases/latest`), at most once per 24 hours, cached in
-`~/.cache/okdctl/update-check.json`. Builds without a release version skip
-it. Set `OKDCTL_NO_UPDATE_CHECK=1` to turn it off.
+okdctl collects no telemetry and no analytics.
 
 ## Requirements
 
