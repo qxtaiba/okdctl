@@ -193,19 +193,27 @@ func (s *DoneStep) ScrollsWithArrows() bool {
 }
 
 // OwnsFrameWidth gives the payoff screen the whole frame: the summary is the
-// run's record, and its two columns need the width. A failure keeps the
-// capped measure unless the log has gone full-screen, which takes the frame.
+// run's record, and its two columns need the width. A failure takes it for
+// the full-screen log, or for the report and the log side by side on a wide
+// terminal.
 func (s *DoneStep) OwnsFrameWidth() bool {
 	if s.st.Result == nil {
 		return true
 	}
-	return s.log.Full() && s.hooks.Logs != nil
+	return s.log.Full() && s.hooks.Logs != nil || s.SideLog(&s.log)
 }
 
 // View renders the CLI post-deploy summary for a success, or the failure
 // incident report for a failed or cancelled run, sized to fit the wizard
 // frame's inner width.
 func (s *DoneStep) View(width, _ int) string {
+	if s.st.Result != nil && s.SideLog(&s.log) {
+		return s.WithSideLog(s.body(wizard.SideLogBodyWidth), &s.log, width)
+	}
+	return s.body(width)
+}
+
+func (s *DoneStep) body(width int) string {
 	w := min(width, tui.DefaultBoxWidth)
 	col := max(width-4, 1)
 	s.log.ViewCol = col
@@ -262,10 +270,14 @@ func (s *DoneStep) fullLog(col int) string {
 	return strings.Join(head, "\n") + "\n" + s.log.RenderFull(col, max(s.BodyHeight()-len(head), 2))
 }
 
-// evidence renders the log's last lines under the report. A failure's
-// evidence is the chatter that led up to it, so it stays on screen at every
-// width; a success needs none — its summary box is the record.
+// evidence renders the log's last lines under the report, unless the log
+// already sits beside it. A failure's evidence is the chatter that led up to
+// it, so it stays on screen at every width; a success needs none — its
+// summary box is the record.
 func (s *DoneStep) evidence(col int) []string {
+	if s.SideLog(&s.log) {
+		return nil
+	}
 	tail := s.log.FailureTail(col)
 	if tail == "" {
 		return nil

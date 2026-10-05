@@ -207,10 +207,11 @@ ceiling: a step's content renders in one column capped at 110
 (`singleFormMaxWidth`), so a wide terminal doesn't stretch the form edge
 to edge just because there's room. That cap's leftover columns become
 blank right-hand margin inside the frame, never a partial row for
-AltScreen to leave dirty, and it holds at every width — there is no wider
-tier that adds a second column. The one exemption is a step that owns the
-frame's width (`frameWidthOwner`: the hub, a full-screen log, the deploy
-done screen), which renders across the whole content width instead.
+AltScreen to leave dirty, and it holds at every width — the frame itself
+has no wider tier that adds a second column. The one exemption is a step
+that owns the frame's width (`frameWidthOwner`: the hub, a full-screen
+log, the deploy done screen, an exec screen laying its log out beside
+its checklist), which renders across the whole content width instead.
 
 | Terminal      | Outer width (frame) | Content width | Body width | Viewport height (H−10) |
 | ------------- | -------------------- | -------------- | ----------- | ----------------------- |
@@ -356,12 +357,17 @@ The stream groups the install engine's own setup/install/postinstall
 phases into five coarser, human-facing ones — `prep`, `ignition`,
 `infra`, `install`, `verify`, the order `deployexec.PhaseOrder` runs and
 collapses them in — each a checklist section of the steps it owns. That
-checklist shares its screen with a live log: a tail of at least six
-lines rides under the checklist, taking whatever rows the checklist
-leaves, and the `f` key swaps it to a full-screen view across the
-frame's whole width. The `l` key locks the visible window in place rather
-than following the newest line, useful for reading a burst of output
-before it scrolls away.
+checklist shares its screen with a live log, in one of three layouts.
+Below 150 terminal columns a tail of at least six lines rides under the
+checklist, taking whatever rows the checklist leaves. From 150 columns
+the log is a column of its own beside the checklist, the height of the
+body: the step owns the frame's width and lays both columns out itself
+(`FrameSize.WithSideLog`), so this is the exec screens' layout and not a
+frame tier — the lifecycle exec screen and both flows' failure reports
+use it too, while the configure flow stays one column. The `f` key swaps
+either layout to a full-screen log across the frame's whole width. The
+`l` key locks the visible window in place rather than following the
+newest line, useful for reading a burst of output before it scrolls away.
 
 ## Why not huh, survey, or promptui
 
