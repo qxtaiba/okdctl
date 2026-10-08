@@ -411,7 +411,7 @@ func (p *Provider) probeVMEnumeration(ctx context.Context, cfg *config.Config) v
 	if vmidBase == 0 {
 		vmidBase = config.DefaultVMIDBase
 	}
-	params := &hostssh.RemoteISOParams{
+	params := &hostssh.PveshParams{
 		Host:           hostssh.ProxmoxBareHost(p.host),
 		Node:           p.node,
 		Exec:           p.sshExec,

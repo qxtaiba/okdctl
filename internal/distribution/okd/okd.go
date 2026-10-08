@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/credentials"
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/cleanup"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/destroy"
@@ -33,6 +34,7 @@ type Provisioner struct {
 	projectRoot string
 	executor    *executor.Executor
 	pendingEnv  []string
+	creds       *credentials.ProxmoxCredentials
 	logger      *slog.Logger
 	recorder    distribution.MetricsRecorder
 	reporter    logutil.ProgressReporter
@@ -93,6 +95,12 @@ func WithEnv(env []string) ProvisionerOption {
 	return func(p *Provisioner) {
 		p.pendingEnv = append(p.pendingEnv, env...)
 	}
+}
+
+// WithCredentials lends the phases the Proxmox API credentials for ISO
+// storage calls; the caller keeps ownership and zeroizes after the run.
+func WithCredentials(creds *credentials.ProxmoxCredentials) ProvisionerOption {
+	return func(p *Provisioner) { p.creds = creds }
 }
 
 // New constructs a Provisioner, applying opts in order and building the
@@ -169,6 +177,7 @@ func (p *Provisioner) Setup(ctx context.Context, cfg *config.Config, opts SetupO
 		phase.WithExecutor(p.executor),
 		phase.WithLogger(p.logger),
 		phase.WithRecorder(p.recorder),
+		phase.WithProxmoxCredentials(p.creds),
 	)
 	setupPhase.BinDir = config.ResolveBinDir(cfg)
 	return setupPhase.Execute(ctx, cfg, &setupOpts)
@@ -349,7 +358,7 @@ func (p *Provisioner) ZeroizeEnv() {
 // destroy.NewOptions(cfg, projectRoot) — there is no separate CLI-facing
 // options type.
 func (p *Provisioner) Destroy(ctx context.Context, cfg *config.Config, opts *destroy.Options) ([]distribution.StepResult, error) {
-	destroyPhase := destroy.New(phase.WithExecutor(p.executor), phase.WithLogger(p.logger))
+	destroyPhase := destroy.New(phase.WithExecutor(p.executor), phase.WithLogger(p.logger), phase.WithProxmoxCredentials(p.creds))
 	return destroyPhase.Execute(ctx, cfg, opts)
 }
 

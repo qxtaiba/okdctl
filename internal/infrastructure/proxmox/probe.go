@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -214,13 +215,16 @@ func mapVMStates(resources proxmox.ClusterResources, vmids []int) map[int]nodety
 // newProxmoxClient builds the shared go-proxmox client; the credential
 // becomes an immutable Go string Zeroize can't reach, bounded to this call.
 func newProxmoxClient(endpoint, username string, password, apiToken []byte, insecure bool, timeout time.Duration) (*proxmox.Client, error) {
+	return buildProxmoxClient(endpoint, username, password, apiToken, insecure, httputil.NewOptionalInsecure(insecure, timeout))
+}
+
+func buildProxmoxClient(endpoint, username string, password, apiToken []byte, insecure bool, httpClient *http.Client) (*proxmox.Client, error) {
 	if endpoint == "" {
 		return nil, fmt.Errorf("proxmox client: endpoint is required")
 	}
 	if insecure {
 		warnInsecureTLS(endpoint)
 	}
-	httpClient := httputil.NewOptionalInsecure(insecure, timeout)
 	base := APIBaseURL(endpoint)
 
 	switch {

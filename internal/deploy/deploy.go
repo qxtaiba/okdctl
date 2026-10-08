@@ -88,7 +88,7 @@ func NewProvisioner(creds *credentials.ProxmoxCredentials, projectRoot string, e
 	}
 
 	if creds != nil && creds.IsValid() {
-		opts = append(opts, okd.WithEnv(creds.Env()))
+		opts = append(opts, okd.WithEnv(creds.Env()), okd.WithCredentials(creds))
 	}
 
 	opts = append(opts, extra...)

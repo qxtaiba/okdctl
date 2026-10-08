@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/credentials"
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
@@ -88,13 +89,14 @@ func OKDToolBinaries() []string {
 }
 
 // BasePhase is the shared state every phase embeds: executor, logger,
-// metrics recorder, and progress reporter.
+// metrics recorder, progress reporter, and Proxmox API credentials.
 type BasePhase struct {
-	Exec       *executor.Executor
-	Log        *slog.Logger
-	Recorder   distribution.MetricsRecorder
-	Reporter   logutil.ProgressReporter
-	StatusLine logutil.StatusLineReporter
+	Exec         *executor.Executor
+	Log          *slog.Logger
+	Recorder     distribution.MetricsRecorder
+	Reporter     logutil.ProgressReporter
+	StatusLine   logutil.StatusLineReporter
+	ProxmoxCreds *credentials.ProxmoxCredentials
 }
 
 // BasePhaseOption configures a BasePhase at construction time.
@@ -126,6 +128,12 @@ func WithReporter(r logutil.ProgressReporter) BasePhaseOption {
 // resolves to logutil.NopStatusLineReporter.
 func WithStatusLine(r logutil.StatusLineReporter) BasePhaseOption {
 	return func(p *BasePhase) { p.StatusLine = r }
+}
+
+// WithProxmoxCredentials lends the phase the Proxmox API credentials for ISO
+// storage calls; the caller keeps ownership and zeroizes after the phase ends.
+func WithProxmoxCredentials(creds *credentials.ProxmoxCredentials) BasePhaseOption {
+	return func(p *BasePhase) { p.ProxmoxCreds = creds }
 }
 
 // NewBasePhase constructs a BasePhase from opts, defaulting a nil
