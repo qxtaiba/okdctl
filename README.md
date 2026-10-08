@@ -194,8 +194,11 @@ okdctl uploads and removes the per-node CoreOS ISOs through the Proxmox
 API with the same credentials, so no root SSH access is needed for them.
 On the ISO storage (`provider.proxmox.iso_storage`, path `/storage/<name>`)
 the user or token needs `Datastore.AllocateTemplate` to upload,
-`Datastore.Audit` to list what is already there, and `Datastore.Allocate`
-for `okdctl destroy` to delete the ISOs. Destroy also deletes base CoreOS
+`Datastore.Audit` (or `Datastore.AllocateSpace`) to list what is already
+there, and `Datastore.Allocate` for `okdctl destroy` to delete the ISOs.
+Before setup or `okdctl node add` touches anything, okdctl reads the
+credentials' own permissions on that path: a missing upload or listing
+privilege stops the run, a missing `Datastore.Allocate` only warns. Destroy also deletes base CoreOS
 ISOs (`fedora-coreos-*.iso`, `scos-*.iso`) from the `local` storage, which
 needs the same rights on `/storage/local`, and it reads VM configs
 (`VM.Audit`) so it never deletes an ISO a VM still references.

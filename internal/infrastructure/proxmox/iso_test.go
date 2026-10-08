@@ -40,6 +40,7 @@ type fakeISOPVE struct {
 	vms         string
 	configs     map[string]string
 	deletes     []string
+	perms       string
 }
 
 func (f *fakeISOPVE) deleted() []string {
@@ -125,6 +126,19 @@ func (f *fakeISOPVE) start(t *testing.T) *ISOStore {
 		if !ok {
 			http.Error(w, "no such vm", http.StatusInternalServerError)
 			return
+		}
+		fmt.Fprintf(w, `{"data":%s}`, body)
+	})
+	mux.HandleFunc("GET /api2/json/access/permissions", func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("path"); got != "/storage/local" {
+			http.Error(w, "want path=/storage/local, got "+got, http.StatusBadRequest)
+			return
+		}
+		f.mu.Lock()
+		body := f.perms
+		f.mu.Unlock()
+		if body == "" {
+			body = "{}"
 		}
 		fmt.Fprintf(w, `{"data":%s}`, body)
 	})
@@ -403,4 +417,25 @@ func TestISOStoreStatus(t *testing.T) {
 	if want := "GET /api2/json/nodes/pve2/storage/local/status"; !slices.Contains(f.log(), want) {
 		t.Errorf("requests = %v; want %s", f.log(), want)
 	}
+}
+
+func TestISOStorePrivileges(t *testing.T) {
+	t.Run("held on the storage path", func(t *testing.T) {
+		f := &fakeISOPVE{perms: `{"/storage/local":{"Datastore.AllocateTemplate":1,"Datastore.Audit":0}}`}
+		got, err := f.start(t).Privileges(t.Context())
+		if err != nil {
+			t.Fatalf("Privileges: %v", err)
+		}
+		if !got["Datastore.AllocateTemplate"] || !got["Datastore.Audit"] || got["Datastore.Allocate"] {
+			t.Errorf("Privileges = %v; want AllocateTemplate and Audit only", got)
+		}
+	})
+
+	t.Run("nothing on the storage path", func(t *testing.T) {
+		f := &fakeISOPVE{}
+		got, err := f.start(t).Privileges(t.Context())
+		if err != nil || len(got) != 0 {
+			t.Fatalf("Privileges = %v, %v; want none", got, err)
+		}
+	})
 }

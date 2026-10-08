@@ -1,6 +1,7 @@
 package provision
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -12,12 +13,14 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/credentials"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
 type fakePlacement struct {
 	mu       sync.Mutex
 	status   map[string]string
 	content  map[string]string
+	perms    string
 	requests []string
 }
 
@@ -40,6 +43,17 @@ func (f *fakePlacement) serve(t *testing.T) *credentials.ProxmoxCredentials {
 	})
 	mux.HandleFunc("GET /api2/json/nodes/{node}/storage/shared/content", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, `{"data":%s}`, f.content[r.PathValue("node")])
+	})
+	mux.HandleFunc("GET /api2/json/access/permissions", func(w http.ResponseWriter, r *http.Request) {
+		if f.perms == "" {
+			http.Error(w, "permission listing unavailable", http.StatusInternalServerError)
+			return
+		}
+		if got := r.URL.Query().Get("path"); got != "/storage/shared" {
+			http.Error(w, "unexpected path "+got, http.StatusBadRequest)
+			return
+		}
+		fmt.Fprintf(w, `{"data":%s}`, f.perms)
 	})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
@@ -93,7 +107,7 @@ func TestValidateISOPlacement(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			f := &fakePlacement{status: tc.status}
 			p := New(phase.WithExecutor(newUploadExecutor()), phase.WithProxmoxCredentials(f.serve(t)))
-			err := p.ValidateISOPlacement(t.Context(), multiHostConfig())
+			err := p.validateISOPlacement(t.Context(), multiHostConfig())
 			if tc.wantErr == "" {
 				if err != nil {
 					t.Fatalf("ValidateISOPlacement: %v", err)
@@ -112,12 +126,12 @@ func TestValidateISOPlacement(t *testing.T) {
 	}
 }
 
-func TestValidateISOPlacementSingleHostNeedsNoAPI(t *testing.T) {
+func TestValidateISOStorageSingleHostWithoutCredentials(t *testing.T) {
 	cfg := multiHostConfig()
 	cfg.Provider.Proxmox.WorkerNodes = nil
 	p := New(phase.WithExecutor(newUploadExecutor()))
-	if err := p.ValidateISOPlacement(t.Context(), cfg); err != nil {
-		t.Fatalf("ValidateISOPlacement: %v", err)
+	if err := p.ValidateISOStorage(t.Context(), cfg); err != nil {
+		t.Fatalf("ValidateISOStorage: %v", err)
 	}
 }
 
@@ -139,5 +153,58 @@ func TestVerifySharedISOsAcceptsEveryDestination(t *testing.T) {
 	p := New(phase.WithExecutor(newUploadExecutor()), phase.WithProxmoxCredentials(f.serve(t)))
 	if err := p.verifySharedISOs(t.Context(), multiHostConfig(), []string{"/work/custom-isos/worker0.iso"}); err != nil {
 		t.Fatalf("verifySharedISOs: %v", err)
+	}
+}
+
+func TestValidateISOStoragePrivileges(t *testing.T) {
+	cases := []struct {
+		name    string
+		perms   string
+		wantErr string
+	}{
+		{name: "upload and delete rights", perms: `{"/storage/shared":{"Datastore.AllocateTemplate":1,"Datastore.Audit":1,"Datastore.Allocate":1}}`},
+		{name: "allocate space instead of audit", perms: `{"/storage/shared":{"Datastore.AllocateTemplate":1,"Datastore.AllocateSpace":1}}`},
+		{name: "no delete right only warns", perms: `{"/storage/shared":{"Datastore.AllocateTemplate":1,"Datastore.Audit":1}}`},
+		{name: "listing unavailable defers to upload"},
+		{
+			name:    "no upload right",
+			perms:   `{"/storage/shared":{"Datastore.Audit":1,"Datastore.Allocate":1}}`,
+			wantErr: "lack Datastore.AllocateTemplate on /storage/shared",
+		},
+		{
+			name:    "nothing on the storage",
+			perms:   `{}`,
+			wantErr: "lack Datastore.AllocateTemplate, Datastore.Audit on /storage/shared",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := &fakePlacement{perms: tc.perms}
+			p := New(phase.WithExecutor(newUploadExecutor()), phase.WithProxmoxCredentials(f.serve(t)))
+			cfg := multiHostConfig()
+			cfg.Provider.Proxmox.WorkerNodes = nil
+			err := p.ValidateISOStorage(t.Context(), cfg)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("ValidateISOStorage: %v", err)
+				}
+				return
+			}
+			var cfgErr *errtypes.ConfigError
+			if !errors.As(err, &cfgErr) || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("err = %v; want a ConfigError containing %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestValidateISOStorageChecksPlacementAfterPrivileges(t *testing.T) {
+	f := &fakePlacement{
+		perms:  `{"/storage/shared":{"Datastore.AllocateTemplate":1,"Datastore.Audit":1,"Datastore.Allocate":1}}`,
+		status: map[string]string{"pve1": nfsActive},
+	}
+	p := New(phase.WithExecutor(newUploadExecutor()), phase.WithProxmoxCredentials(f.serve(t)))
+	if err := p.ValidateISOStorage(t.Context(), multiHostConfig()); err == nil || !strings.Contains(err.Error(), "pve2") {
+		t.Fatalf("err = %v; want the storage missing on pve2 reported", err)
 	}
 }

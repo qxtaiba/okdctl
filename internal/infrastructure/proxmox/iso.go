@@ -103,6 +103,25 @@ func (s *ISOStore) Status(ctx context.Context, node string) (*StorageStatus, err
 	}, nil
 }
 
+// Privileges returns the privileges the credentials effectively hold on
+// this storage, from the API's listing of the caller's own permissions.
+func (s *ISOStore) Privileges(ctx context.Context) (map[string]bool, error) {
+	client, err := s.client(ctx, defaultProbeTimeout)
+	if err != nil {
+		return nil, err
+	}
+	path := "/storage/" + s.storage
+	perms, err := client.Permissions(ctx, &proxmox.PermissionsOptions{Path: path})
+	if err != nil {
+		return nil, fmt.Errorf("list permissions on %s: %w", path, err)
+	}
+	held := make(map[string]bool, len(perms[path]))
+	for priv := range perms[path] {
+		held[priv] = true
+	}
+	return held, nil
+}
+
 // Volumes lists the ISO volumes on node, keyed by file name with their size in bytes.
 func (s *ISOStore) Volumes(ctx context.Context, node string) (map[string]uint64, error) {
 	client, err := s.client(ctx, defaultProbeTimeout)

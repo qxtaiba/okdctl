@@ -187,7 +187,7 @@ func (p *Provisioner) UploadCustomISOsToProxmox(ctx context.Context, cfg *config
 		return nil
 	}
 
-	if err := p.ValidateISOPlacement(ctx, cfg); err != nil {
+	if err := p.validateISOPlacement(ctx, cfg); err != nil {
 		return err
 	}
 	plan, err := p.planISOUpload(ctx, cfg, opts, isoFiles)
@@ -243,7 +243,7 @@ func (p *Provisioner) ISOUploadAlreadyDone(ctx context.Context, cfg *config.Conf
 	if !current {
 		return false, nil
 	}
-	if err := p.ValidateISOPlacement(ctx, cfg); err != nil {
+	if err := p.validateISOPlacement(ctx, cfg); err != nil {
 		return false, err
 	}
 	if err := p.verifySharedISOs(ctx, cfg, isoFiles); err != nil {
