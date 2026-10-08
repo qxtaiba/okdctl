@@ -12,8 +12,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/firewall"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox/hostssh"
-	"github.com/qxtaiba/okdctl/internal/sshpin"
 )
 
 // Step IDs for the destroy phase, ordered as they execute.
@@ -133,25 +131,8 @@ func (p *Phase) destroySteps(ctx context.Context, cfg *config.Config, opts *Opti
 			NonFatal:       true,
 			SkipWhen:       sk.iso,
 			SkipReasonFunc: sk.isoReason,
-			Exec: func(ctx context.Context) error {
-				host := hostssh.ProxmoxBareHost(cfg.Provider.Proxmox.Host)
-				knownHostsPath, verifyErr := sshpin.Verify(ctx, host, cfg.Provider.Proxmox.SSHHostFingerprint, cfg.Provider.Proxmox.RequirePinnedFingerprint, p.Log)
-				if verifyErr != nil {
-					return verifyErr
-				}
-				params := &hostssh.RemoteISOParams{
-					Host:           host,
-					Node:           cfg.Provider.Proxmox.Node,
-					Exec:           p.Exec,
-					Log:            p.Log,
-					KnownHostsPath: knownHostsPath,
-				}
-				if err := hostssh.RemoveFCOSISOFromProxmox(ctx, params, hostssh.DefaultProxmoxISODir); err != nil {
-					return err
-				}
-				return hostssh.RemoveCustomISOsFromProxmox(ctx, params, hostssh.DefaultProxmoxISODir, customISONames(cfg))
-			},
-			OnError: track("iso removal"),
+			Exec:           func(ctx context.Context) error { return p.removeRemoteISOs(ctx, cfg) },
+			OnError:        track("iso removal"),
 		},
 		{
 			ID: StepCleanupFiles, Name: "cleanup files",

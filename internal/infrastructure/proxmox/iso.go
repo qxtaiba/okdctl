@@ -2,9 +2,11 @@ package proxmox
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -126,4 +128,106 @@ func (s *ISOStore) Upload(ctx context.Context, node, path, sha256 string) error 
 		return fmt.Errorf("import %s: %w", name, err)
 	}
 	return nil
+}
+
+// Remove deletes ISO name from the storage via node and waits for the task.
+func (s *ISOStore) Remove(ctx context.Context, node, name string) error {
+	client, err := s.client(ctx, defaultProbeTimeout)
+	if err != nil {
+		return err
+	}
+	st, err := s.open(ctx, client, node)
+	if err != nil {
+		return err
+	}
+	task, err := st.DeleteContent(ctx, s.VolumeID(name))
+	if err != nil {
+		return fmt.Errorf("delete %s: %w", s.VolumeID(name), err)
+	}
+	// PVE may delete synchronously and return no task id.
+	if task == nil {
+		return nil
+	}
+	if err := waitTask(ctx, task, isoTaskTimeout); err != nil {
+		return fmt.Errorf("delete %s: %w", s.VolumeID(name), err)
+	}
+	return nil
+}
+
+// ReferencedVolumes returns every volume id named by the config of a qemu
+// VM in the cluster, running or stopped; any unreadable config is an error
+// so callers never treat an unknown reference as absent.
+func (s *ISOStore) ReferencedVolumes(ctx context.Context) (map[string]bool, error) {
+	client, err := s.client(ctx, defaultProbeTimeout)
+	if err != nil {
+		return nil, err
+	}
+	var resources proxmox.ClusterResources
+	if err := client.Get(ctx, "/cluster/resources?type=vm", &resources); err != nil {
+		return nil, fmt.Errorf("list cluster vms: %w", err)
+	}
+	refs := make(map[string]bool)
+	for _, r := range resources {
+		if r == nil {
+			return nil, fmt.Errorf("list cluster vms: null resource in response")
+		}
+		if r.Type != resourceTypeQEMU {
+			continue
+		}
+		var vmConfig map[string]any
+		if err := client.Get(ctx, fmt.Sprintf("/nodes/%s/qemu/%d/config", r.Node, r.VMID), &vmConfig); err != nil {
+			return nil, fmt.Errorf("read vm %d config: %w", r.VMID, err)
+		}
+		for _, value := range vmConfig {
+			str, ok := value.(string)
+			if !ok {
+				continue
+			}
+			for seg := range strings.SplitSeq(str, ",") {
+				seg = strings.TrimPrefix(strings.TrimSpace(seg), "file=")
+				if seg != "" && !strings.Contains(seg, "=") {
+					refs[seg] = true
+				}
+			}
+		}
+	}
+	return refs, nil
+}
+
+// RemoveUnreferenced deletes the ISOs on node whose names satisfy match and
+// that no VM config references, returning the removed and in-use names. It
+// removes nothing when the VM references cannot be read; per-volume delete
+// failures are joined into err after the remaining volumes are tried.
+func (s *ISOStore) RemoveUnreferenced(ctx context.Context, node string, match func(name string) bool) (removed, inUse []string, err error) {
+	volumes, err := s.Volumes(ctx, node)
+	if err != nil {
+		return nil, nil, err
+	}
+	var candidates []string
+	for name := range volumes {
+		if match(name) {
+			candidates = append(candidates, name)
+		}
+	}
+	if len(candidates) == 0 {
+		return nil, nil, nil
+	}
+	slices.Sort(candidates)
+	refs, err := s.ReferencedVolumes(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("check vm references: %w", err)
+	}
+	var errs []error
+	for _, name := range candidates {
+		if refs[s.VolumeID(name)] {
+			inUse = append(inUse, name)
+			continue
+		}
+		if err := s.Remove(ctx, node, name); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		removed = append(removed, name)
+	}
+	return removed, inUse, errors.Join(errs...)
 }

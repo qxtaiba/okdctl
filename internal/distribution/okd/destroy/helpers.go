@@ -2,10 +2,13 @@ package destroy
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
 	"github.com/qxtaiba/okdctl/internal/infrastructure/terraform"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
 	"github.com/qxtaiba/okdctl/internal/system"
@@ -113,7 +116,7 @@ func (p *Phase) warnTopologyDrift(ctx context.Context, tf *terraform.Executor, c
 }
 
 // customISONames returns the setup phase's per-node ISO filenames (no cluster
-// prefix — removal safety relies on RemoveCustomISOsFromProxmox's in-use check).
+// prefix — removal safety relies on RemoveUnreferenced's in-use check).
 func customISONames(cfg *config.Config) []string {
 	names := []string{string(nodetypes.RoleBootstrap) + ".iso"}
 	for i := range cfg.Topology.ControlPlane.Count {
@@ -123,4 +126,40 @@ func customISONames(cfg *config.Config) []string {
 		names = append(names, fmt.Sprintf("%s%d.iso", nodetypes.RoleWorker, i))
 	}
 	return names
+}
+
+// baseISOStorage is the stock `local` storage, whose ISO directory
+// (hostssh.DefaultProxmoxISODir) is where setup looks for the base ISO.
+const baseISOStorage = "local"
+
+// removeRemoteISOs deletes the cluster's per-node ISOs from the ISO storage
+// and base CoreOS ISOs from the local storage through the Proxmox API,
+// skipping any a VM config still references.
+func (p *Phase) removeRemoteISOs(ctx context.Context, cfg *config.Config) error {
+	if p.ProxmoxCreds == nil || !p.ProxmoxCreds.IsValid() {
+		return &errtypes.ConfigError{Msg: "proxmox api credentials are required for iso removal"}
+	}
+	px := cfg.Provider.Proxmox
+	custom := customISONames(cfg)
+	passes := []struct {
+		label, storage string
+		match          func(string) bool
+	}{
+		{"base coreos", baseISOStorage, nodetypes.IsCoreOSISOName},
+		{"custom node", px.ISOStorage, func(name string) bool { return slices.Contains(custom, name) }},
+	}
+	var errs []error
+	for _, pass := range passes {
+		removed, inUse, err := proxmox.NewISOStore(p.ProxmoxCreds, pass.storage).RemoveUnreferenced(ctx, px.Node, pass.match)
+		for _, name := range inUse {
+			p.Log.Warn("iso: still referenced by a vm — skipping removal", "file", name, "storage", pass.storage)
+		}
+		for _, name := range removed {
+			p.Log.Info("iso: removed from proxmox storage", "kind", pass.label, "file", name, "storage", pass.storage)
+		}
+		if err != nil {
+			errs = append(errs, fmt.Errorf("remove %s isos from %s: %w", pass.label, pass.storage, err))
+		}
+	}
+	return errors.Join(errs...)
 }

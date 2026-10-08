@@ -190,11 +190,15 @@ config, never in the YAML. Env vars: `PROXMOX_VE_ENDPOINT`,
 `PROXMOX_VE_USERNAME`, `PROXMOX_VE_PASSWORD` (or
 `PROXMOX_VE_API_TOKEN`).
 
-okdctl uploads the per-node CoreOS ISOs through the Proxmox API with the
-same credentials, so no root SSH access is needed for them. On the ISO
-storage (`provider.proxmox.iso_storage`, path `/storage/<name>`) the user
-or token needs `Datastore.AllocateTemplate` to upload and
-`Datastore.Audit` to list what is already there.
+okdctl uploads and removes the per-node CoreOS ISOs through the Proxmox
+API with the same credentials, so no root SSH access is needed for them.
+On the ISO storage (`provider.proxmox.iso_storage`, path `/storage/<name>`)
+the user or token needs `Datastore.AllocateTemplate` to upload,
+`Datastore.Audit` to list what is already there, and `Datastore.Allocate`
+for `okdctl destroy` to delete the ISOs. Destroy also deletes base CoreOS
+ISOs (`fedora-coreos-*.iso`, `scos-*.iso`) from the `local` storage, which
+needs the same rights on `/storage/local`, and it reads VM configs
+(`VM.Audit`) so it never deletes an ISO a VM still references.
 
 ### OKD pull secret
 
