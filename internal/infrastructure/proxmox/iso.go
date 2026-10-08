@@ -75,6 +75,34 @@ func (s *ISOStore) open(ctx context.Context, client *proxmox.Client, node string
 	return st, nil
 }
 
+// StorageStatus is a storage's configuration and availability as one node sees it.
+type StorageStatus struct {
+	Type    string
+	Content []string
+	Active  bool
+	Enabled bool
+	Shared  bool
+}
+
+// Status reads the storage's status on node.
+func (s *ISOStore) Status(ctx context.Context, node string) (*StorageStatus, error) {
+	client, err := s.client(ctx, defaultProbeTimeout)
+	if err != nil {
+		return nil, err
+	}
+	st, err := s.open(ctx, client, node)
+	if err != nil {
+		return nil, err
+	}
+	return &StorageStatus{
+		Type:    st.Type,
+		Content: strings.Split(st.Content, ","),
+		Active:  st.Active == 1,
+		Enabled: st.Enabled == 1,
+		Shared:  st.Shared == 1,
+	}, nil
+}
+
 // Volumes lists the ISO volumes on node, keyed by file name with their size in bytes.
 func (s *ISOStore) Volumes(ctx context.Context, node string) (map[string]uint64, error) {
 	client, err := s.client(ctx, defaultProbeTimeout)

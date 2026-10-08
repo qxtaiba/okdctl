@@ -221,10 +221,13 @@ func TestISOStoreUpload(t *testing.T) {
 		t.Fatalf("Upload: %v", err)
 	}
 
-	if len(f.uploads) != 1 {
-		t.Fatalf("uploads = %d; want 1", len(f.uploads))
+	f.mu.Lock()
+	uploads := slices.Clone(f.uploads)
+	f.mu.Unlock()
+	if len(uploads) != 1 {
+		t.Fatalf("uploads = %d; want 1", len(uploads))
 	}
-	up := f.uploads[0]
+	up := uploads[0]
 	wantFields := map[string]string{"content": "iso", "checksum": sum, "checksum-algorithm": "sha256"}
 	for k, v := range wantFields {
 		if up.fields[k] != v {
@@ -384,5 +387,20 @@ func TestISOStoreRemoveUnreferencedNothingToDo(t *testing.T) {
 	}
 	if slices.ContainsFunc(f.log(), func(r string) bool { return strings.Contains(r, "/cluster/resources") }) {
 		t.Errorf("requests = %v; want no vm scan without candidates", f.log())
+	}
+}
+
+func TestISOStoreStatus(t *testing.T) {
+	f := &fakeISOPVE{status: map[string]string{"pve2": `{"type":"nfs","content":"images,iso","active":1,"enabled":1,"shared":1}`}}
+	got, err := f.start(t).Status(t.Context(), "pve2")
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	want := StorageStatus{Type: "nfs", Content: []string{"images", "iso"}, Active: true, Enabled: true, Shared: true}
+	if got.Type != want.Type || !slices.Equal(got.Content, want.Content) || got.Active != want.Active || got.Enabled != want.Enabled || got.Shared != want.Shared {
+		t.Errorf("Status = %+v; want %+v", *got, want)
+	}
+	if want := "GET /api2/json/nodes/pve2/storage/local/status"; !slices.Contains(f.log(), want) {
+		t.Errorf("requests = %v; want %s", f.log(), want)
 	}
 }

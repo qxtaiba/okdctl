@@ -97,8 +97,11 @@ func TestRemoveRemoteISOs(t *testing.T) {
 		"local:iso/fedora-coreos-40.20240416.3.1-live.x86_64.iso",
 		"nfs-iso:iso/master0.iso",
 	}
-	if !slices.Equal(f.deletes, want) {
-		t.Errorf("deleted volumes = %v; want %v", f.deletes, want)
+	f.mu.Lock()
+	deleted := slices.Clone(f.deletes)
+	f.mu.Unlock()
+	if !slices.Equal(deleted, want) {
+		t.Errorf("deleted volumes = %v; want %v", deleted, want)
 	}
 }
 
