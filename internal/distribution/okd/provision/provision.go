@@ -35,7 +35,6 @@ func NewOptions(projectRoot string) Options {
 // Provisioner drives the shared ISO/ignition provisioning operations.
 type Provisioner struct {
 	phase.BasePhase
-	loggedISOs map[string]bool
 }
 
 // New constructs a Provisioner with the given base-phase options.

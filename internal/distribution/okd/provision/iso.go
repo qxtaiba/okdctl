@@ -46,9 +46,9 @@ func (p *Provisioner) BuildCustomISOs(ctx context.Context, cfg *config.Config, o
 		return &errtypes.ConfigError{Msg: "coreos-installer not found - please install it first"}
 	}
 
-	fcosISO, err := p.findOrDownloadFCOSISO(ctx, cfg, opts)
+	fcosISO, err := p.EnsureCoreOSISO(ctx, opts)
 	if err != nil {
-		return &errtypes.NetworkError{Msg: "find or download CoreOS ISO", Err: err}
+		return &errtypes.NetworkError{Msg: "ensure CoreOS ISO", Err: err}
 	}
 
 	nodes, err := BuildNodeList(cfg)

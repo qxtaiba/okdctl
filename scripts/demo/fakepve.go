@@ -43,7 +43,6 @@ func routes() []route {
 		mk(`^GET /api2/json/nodes/pve[12]/status$`, `{"uptime":4200000,"cpuinfo":{"cpus":32},"memory":{"total":137438953472}}`),
 		mk(`^GET /api2/json/nodes/pve[12]/version$`, `{"version":"8.4.1","release":"8.4"}`),
 		mk(`^GET /api2/json/nodes/pve[12]/storage/local/status$`, `{"storage":"local","type":"dir","content":"iso,backup,vztmpl","enabled":1,"active":1}`),
-		mk(`^GET /api2/json/nodes/pve[12]/storage/local/content`, `[{"volid":"local:iso/fedora-coreos-live.x86_64.iso","content":"iso","size":838860800}]`),
 		mk(`^GET /api2/json/nodes/pve[12]/storage`, storage),
 		mk(`^GET /api2/json/nodes/pve[12]/network`, bridges),
 	}

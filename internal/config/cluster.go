@@ -124,7 +124,6 @@ type ProxmoxConfig struct {
 	DataStorage string `json:"data_storage,omitempty"`
 	ISOStorage  string `json:"iso_storage,omitempty"`
 	Bridge      string `json:"bridge,omitempty"`
-	FCOSIso     string `json:"fcos_iso,omitempty"`
 
 	// Credentials come from internal/credentials (okdctl.env/env vars),
 	// never persisted; json:"-" excludes them from load and save.
@@ -166,7 +165,6 @@ type redactedProxmoxConfig struct {
 	DataStorage              string
 	ISOStorage               string
 	Bridge                   string
-	FCOSIso                  string
 	TokenID                  string
 	Insecure                 bool
 	InsecureHTTP             bool
@@ -192,7 +190,6 @@ func (p *ProxmoxConfig) Redacted() any {
 		DataStorage:              p.DataStorage,
 		ISOStorage:               p.ISOStorage,
 		Bridge:                   p.Bridge,
-		FCOSIso:                  p.FCOSIso,
 		TokenID:                  p.TokenID,
 		Insecure:                 p.Insecure,
 		InsecureHTTP:             p.InsecureHTTP,

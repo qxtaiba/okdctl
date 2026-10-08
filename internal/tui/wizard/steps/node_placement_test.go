@@ -746,11 +746,9 @@ func TestNodePlacementStep_HelpOverlay_DiscoveringPhaseListsNoRefresh(t *testing
 func TestNodePlacementStep_SanitizesHostileProxmoxText(t *testing.T) {
 	const payload = "\x1b[2J\x1b[H"
 
-	t.Run("node, storage, bridge, and iso names", func(t *testing.T) {
-		const hostileISO = "local:iso/fcos" + payload + ".iso"
+	t.Run("node, storage, and bridge names", func(t *testing.T) {
 		cfg := newProxmoxTestConfig()
 		cfg.Topology.ControlPlane.Count = 1
-		cfg.Provider.Proxmox.FCOSIso = hostileISO // pre-selects it as the field's current value
 		s := NewNodePlacementStep()
 		s.cfg = cfg
 
@@ -763,7 +761,6 @@ func TestNodePlacementStep_SanitizesHostileProxmoxText(t *testing.T) {
 			}},
 			Storage: []proxmoxStorage{{Name: "local-lvm" + payload, Content: "images"}},
 			Bridges: []proxmoxBridge{{Name: "vmbr0" + payload}},
-			ISOs:    []string{hostileISO},
 		}
 		step, _ := s.Update(discoveryCompleteMsg{discovery: disc})
 		s = step.(*NodePlacementStep)

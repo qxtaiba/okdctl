@@ -93,6 +93,8 @@ Tab
 Sleep 450ms
 Tab
 Sleep 450ms
+Tab
+Sleep 450ms
 Right
 Sleep 650ms
 Enter
@@ -121,8 +123,6 @@ Wait+Screen@10s /connect · cluster ✓●○○ · extras · review/
 Sleep 2s
 Screenshot out/@NAME@-node-placement.png
 Sleep 300ms
-Tab
-Sleep 450ms
 Tab
 Sleep 450ms
 Tab
