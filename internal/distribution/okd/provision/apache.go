@@ -184,12 +184,12 @@ func (p *Provisioner) publishWorkerIgnition(ctx context.Context, cfg *config.Con
 	return p.deployIgnitionFiles(ctx, cfg, clusterDir, []string{workerIgnition})
 }
 
-// TeardownIgnitionServer stops and disables httpd once a node-add join
-// window closes, verifying the stop took, then removes the worker.ign that
-// ReviveIgnitionServer published; the stop runs unconditionally (not gated
-// on an is-active probe) since teardown runs under a detached post-cancel
-// context. A non-nil return means httpd may still be serving ignition
-// payloads — the caller must surface that loudly.
+// TeardownIgnitionServer stops and disables httpd, verifying the stop took,
+// then removes every ignition file from the web root even if the stop
+// failed; it runs after postinstall and when a node-add join window closes,
+// and a re-run with nothing to stop or remove is a no-op. A non-nil return
+// means httpd may still be serving ignition payloads — the caller must
+// surface that loudly.
 func (p *Provisioner) TeardownIgnitionServer(ctx context.Context, cfg *config.Config) error {
 	svc := platform.ApacheService
 	var errs []error
@@ -207,9 +207,11 @@ func (p *Provisioner) TeardownIgnitionServer(ctx context.Context, cfg *config.Co
 	if webRoot == "" {
 		webRoot = phase.DefaultHTTPServerRoot
 	}
-	published := filepath.Join(webRoot, "ignition", workerIgnition)
-	if err := os.Remove(published); err != nil && !errors.Is(err, os.ErrNotExist) {
-		errs = append(errs, fmt.Errorf("remove %s: %w", published, err))
+	for _, name := range IgnitionFilenames {
+		published := filepath.Join(webRoot, "ignition", name)
+		if err := os.Remove(published); err != nil && !errors.Is(err, os.ErrNotExist) {
+			errs = append(errs, fmt.Errorf("remove %s: %w", published, err))
+		}
 	}
 	return errors.Join(errs...)
 }

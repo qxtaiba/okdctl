@@ -337,9 +337,11 @@ Two known exposure windows are worth understanding before you deploy:
 
 ### Ignition pull-secret exposure window
 
-During bootstrap (roughly 15–30 minutes), Apache on the bastion serves
-`bootstrap.ign`, `master.ign`, and `worker.ign` over HTTPS on port 443.
-These files embed the OKD pull-secret JSON in plain text.
+Until the deploy finishes, Apache on the bastion serves `bootstrap.ign`,
+`master.ign`, and `worker.ign` over HTTPS on port 443. These files embed
+the OKD pull-secret JSON in plain text. Once the bootstrap VM is gone,
+postinstall stops and disables httpd and deletes all three from the web
+root; `okdctl node add` serves `worker.ign` again only for its join window.
 
 okdctl binds Apache to `http_server.ignition_server_ip` (the bridge IP
 FCOS nodes reference in their kargs ignition URL), not `0.0.0.0`, so
@@ -347,15 +349,16 @@ hosts off the machine network can't reach it. Each node ISO gets the
 server's CA embedded via `coreos-installer iso customize --ignition-ca`,
 so nodes verify the server before requesting files. The residual risk:
 TLS authenticates the server, not the client. Any host that can reach the
-bastion bridge IP on port 443 during bootstrap can retrieve the ignition
-files and harvest the pull secret.
+bastion bridge IP on port 443 while the files are served can retrieve
+them and harvest the pull secret.
 
 Mitigations:
 
 - Isolate the bastion bridge network from untrusted hosts (VLAN, private
   bridge, or Proxmox SDN zone) before running `okdctl deploy`.
-- Run `okdctl cleanup` after deploy completes. It removes the ignition
-  files from the web root.
+- If postinstall warns that the ignition server stop failed, or skips it
+  because it kept the bootstrap VM, run `systemctl disable --now httpd` and
+  delete the three files under `<http_server.root>/ignition/` by hand.
 
 ### SSH host-key trust on first run (TOFU window)
 

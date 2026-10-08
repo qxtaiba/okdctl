@@ -71,6 +71,7 @@ var stepPhases = map[distribution.StepID]Phase{
 	postinstall.StepVerifyHealth:        PhaseVerify,
 	postinstall.StepVerifyKubeVIP:       PhaseVerify,
 	postinstall.StepCleanupBootstrap:    PhaseVerify,
+	postinstall.StepStopIgnitionServer:  PhaseVerify,
 	postinstall.StepDeployProductionDNS: PhaseVerify,
 	postinstall.StepInstallAddons:       PhaseVerify,
 	postinstall.StepDisableRHDefaults:   PhaseVerify,
