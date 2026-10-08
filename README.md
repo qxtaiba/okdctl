@@ -190,6 +190,12 @@ config, never in the YAML. Env vars: `PROXMOX_VE_ENDPOINT`,
 `PROXMOX_VE_USERNAME`, `PROXMOX_VE_PASSWORD` (or
 `PROXMOX_VE_API_TOKEN`).
 
+okdctl uploads the per-node CoreOS ISOs through the Proxmox API with the
+same credentials, so no root SSH access is needed for them. On the ISO
+storage (`provider.proxmox.iso_storage`, path `/storage/<name>`) the user
+or token needs `Datastore.AllocateTemplate` to upload and
+`Datastore.Audit` to list what is already there.
+
 ### OKD pull secret
 
 No Red Hat account needed. The dummy pull secret from
@@ -362,16 +368,17 @@ Mitigations:
 
 ### SSH host-key trust on first run (TOFU window)
 
-The first `okdctl deploy` scps CoreOS ISOs to the Proxmox host with
+The first SSH call `okdctl deploy` makes to the Proxmox host runs with
 `-o StrictHostKeyChecking=accept-new`, trusting and pinning the Proxmox
-host key without prior verification. Every later SSH/SCP call reuses that
+host key without prior verification. Every later SSH call reuses that
 cached key. A machine-in-the-middle on the bastion-to-Proxmox path during
-that first SCP call can substitute an attacker key, which then stays
-trusted for the life of the cluster.
+that first call can substitute an attacker key, which then stays
+trusted for the life of the cluster. ISO uploads go through the Proxmox
+API over HTTPS instead and don't use this key.
 
 Set `provider.proxmox.ssh_host_fingerprint` in `okdctl.yaml`
 (`SHA256:<base64>`, from `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`
-or the Proxmox UI) for deterministic verification; every later SSH/SCP
+or the Proxmox UI) for deterministic verification; every later SSH
 call then refuses on mismatch. Set
 `provider.proxmox.require_pinned_fingerprint: true` to fail closed when
 the pin is absent.

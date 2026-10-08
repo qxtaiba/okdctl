@@ -27,7 +27,7 @@ esac
 	if err := p.ValidateISOPlacement(t.Context(), cfg); err != nil {
 		t.Fatal(err)
 	}
-	if err := p.verifySharedISOs(t.Context(), cfg, "pve", "", []string{"worker0.iso"}); err == nil {
+	if err := p.verifySharedISOs(t.Context(), cfg, []string{"worker0.iso"}); err == nil {
 		t.Fatal("ISO absent at destination accepted")
 	}
 }

@@ -90,35 +90,18 @@ func (p *Provisioner) storageQuery(ctx context.Context, host, known, path string
 	return nil
 }
 
-func (p *Provisioner) isoStoragePath(ctx context.Context, cfg *config.Config, host, known string) (string, error) {
-	if cfg.Provider.Proxmox.ISOStorage == "local" && len(placementNodes(cfg)) < 2 {
-		return hostssh.DefaultProxmoxISODir, nil
-	}
-	volume := cfg.Provider.Proxmox.ISOStorage + ":iso/bootstrap.iso"
-	result, err := hostssh.SSHRunArgv(ctx, p.Exec, host, known, "pvesm", "path", volume)
-	if err != nil {
-		return "", err
-	}
-	if result.ExitCode != 0 {
-		return "", executor.NewExitError(ctx, "pvesm path", result.ExitCode, result.Stderr)
-	}
-	if result.Truncated {
-		return "", fmt.Errorf("ISO storage path truncated")
-	}
-	path := strings.TrimSpace(result.Stdout)
-	if filepath.Base(path) != "bootstrap.iso" {
-		return "", fmt.Errorf("unexpected ISO storage path")
-	}
-	directory := filepath.Dir(path)
-	if err := hostssh.ValidateISODir(directory); err != nil {
-		return "", err
-	}
-	return directory, nil
-}
-
-func (p *Provisioner) verifySharedISOs(ctx context.Context, cfg *config.Config, host, known string, files []string) error {
+func (p *Provisioner) verifySharedISOs(ctx context.Context, cfg *config.Config, files []string) error {
 	if len(placementNodes(cfg)) < 2 {
 		return nil
+	}
+	px := cfg.Provider.Proxmox
+	host := hostssh.ProxmoxBareHost(px.Host)
+	known, err := sshpin.Verify(ctx, host, px.SSHHostFingerprint, px.RequirePinnedFingerprint, p.Log)
+	if err != nil {
+		return err
+	}
+	if known != "" {
+		defer os.Remove(known)
 	}
 	storage := cfg.Provider.Proxmox.ISOStorage
 	for _, node := range placementNodes(cfg) {
