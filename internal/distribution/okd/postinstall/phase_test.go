@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -28,6 +29,7 @@ var postinstallStepOrder = []distribution.StepID{
 	StepVerifyHealth,
 	StepVerifyKubeVIP,
 	StepCleanupBootstrap,
+	StepStopIgnitionServer,
 	StepDeployProductionDNS,
 	StepInstallAddons,
 	StepDisableRHDefaults,
@@ -38,6 +40,7 @@ func TestPostinstallSteps_StepListAndSkipWiring(t *testing.T) {
 		name            string
 		opts            Options
 		kubeVIPVerified bool
+		bootstrapGone   bool
 		wantSkip        map[distribution.StepID]bool
 	}{
 		{
@@ -46,6 +49,7 @@ func TestPostinstallSteps_StepListAndSkipWiring(t *testing.T) {
 				StepVerifyHealth:        false,
 				StepVerifyKubeVIP:       false,
 				StepCleanupBootstrap:    true,
+				StepStopIgnitionServer:  true,
 				StepDeployProductionDNS: true,
 				StepDisableRHDefaults:   false,
 			},
@@ -67,6 +71,13 @@ func TestPostinstallSteps_StepListAndSkipWiring(t *testing.T) {
 				StepDeployProductionDNS: false,
 			},
 		},
+		{
+			name:          "cleaned-up bootstrap unlocks the ignition server stop",
+			bootstrapGone: true,
+			wantSkip: map[distribution.StepID]bool{
+				StepStopIgnitionServer: false,
+			},
+		},
 	}
 
 	for _, tc := range cases {
@@ -76,6 +87,9 @@ func TestPostinstallSteps_StepListAndSkipWiring(t *testing.T) {
 			pctx := distribution.NewPhaseContext(postInstallContext{})
 			if tc.kubeVIPVerified {
 				pctx.Update(func(c *postInstallContext) { c.KubeVIPVerified = true })
+			}
+			if tc.bootstrapGone {
+				pctx.Update(func(c *postInstallContext) { c.BootstrapCleaned = true })
 			}
 			mgr := addon.NewManager(cfg, addon.WithLogger(logutil.NopLogger))
 
@@ -102,12 +116,16 @@ func TestPostinstallSteps_StepListAndSkipWiring(t *testing.T) {
 func TestPostinstallExecute_BootstrapTeardownViaFakeTerraform(t *testing.T) {
 	installFakeTerraformArgv(t)
 
+	systemctlLog := installFakeSystemctl(t, "exit 1")
+
 	projectRoot := t.TempDir()
 	envDir := seedBootstrapEnvDir(t, projectRoot)
+	webRoot := seedPublishedIgnition(t)
 
 	cfg := &config.Config{
 		Cluster:    config.ClusterConfig{Name: "test"},
 		Networking: config.NetworkingConfig{Bastion: config.BastionConfig{IP: "192.168.1.5"}},
+		HTTPServer: config.HTTPServerConfig{Root: webRoot},
 	}
 	opts := NewOptions(cfg, projectRoot)
 	// Skip wiring for these is covered by TestPostinstallSteps_StepListAndSkipWiring.
@@ -127,6 +145,7 @@ func TestPostinstallExecute_BootstrapTeardownViaFakeTerraform(t *testing.T) {
 	wantSkipped := map[distribution.StepID]bool{
 		StepVerifyHealth:        true,
 		StepCleanupBootstrap:    false,
+		StepStopIgnitionServer:  false,
 		StepVerifyKubeVIP:       true,
 		StepDeployProductionDNS: true,
 		StepInstallAddons:       false,
@@ -136,8 +155,8 @@ func TestPostinstallExecute_BootstrapTeardownViaFakeTerraform(t *testing.T) {
 		if r.StepID != postinstallStepOrder[i] {
 			t.Errorf("result[%d] = %q; want %q", i, r.StepID, postinstallStepOrder[i])
 		}
-		if !r.Success {
-			t.Errorf("%s: Success = false; err = %v", r.StepID, r.Error)
+		if wantSuccess := r.StepID != StepStopIgnitionServer; r.Success != wantSuccess {
+			t.Errorf("%s: Success = %v; want %v; err = %v", r.StepID, r.Success, wantSuccess, r.Error)
 		}
 		if r.Skipped != wantSkipped[r.StepID] {
 			t.Errorf("%s: Skipped = %v; want %v", r.StepID, r.Skipped, wantSkipped[r.StepID])
@@ -180,6 +199,90 @@ func TestPostinstallExecute_BootstrapTeardownViaFakeTerraform(t *testing.T) {
 	if want := "apply -lock-timeout=120s " + filepath.Join(envDir, "bootstrap-destroy.tfplan"); lines[1] != want {
 		t.Errorf("apply argv = %q; want %q", lines[1], want)
 	}
+
+	if got := publishedIgnitionFiles(t, webRoot); len(got) != 0 {
+		t.Errorf("published ignition files after postinstall = %v; want none", got)
+	}
+	if runtime.GOOS == "linux" {
+		data, err := os.ReadFile(systemctlLog)
+		if err != nil {
+			t.Fatalf("read systemctl log: %v", err)
+		}
+		for _, want := range []string{"stop httpd", "disable httpd"} {
+			if !strings.Contains(string(data), want) {
+				t.Errorf("systemctl calls missing %q; got:\n%s", want, data)
+			}
+		}
+	}
+}
+
+func TestPostinstallExecute_ReRunWithNothingPublishedSucceeds(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("systemctl branches are linux-only; darwin takes the GOOS gate")
+	}
+	installFakeTerraformArgv(t)
+	installFakeSystemctl(t, `case "$1" in is-active) exit 1;; *) exit 0;; esac`)
+
+	projectRoot := t.TempDir()
+	seedBootstrapEnvDir(t, projectRoot)
+	webRoot := t.TempDir()
+
+	cfg := &config.Config{
+		Cluster:    config.ClusterConfig{Name: "test"},
+		HTTPServer: config.HTTPServerConfig{Root: webRoot},
+	}
+	opts := NewOptions(cfg, projectRoot)
+	opts.SkipClusterHealth = true
+	opts.SkipKubeVIP = true
+	opts.KeepRedHatCatalogs = true
+
+	p := newTestPhase(t)
+	for _, round := range []string{"first", "resume"} {
+		_, results, err := p.Execute(t.Context(), cfg, &opts)
+		if err != nil {
+			t.Fatalf("%s Execute: %v", round, err)
+		}
+		for _, r := range results {
+			if r.StepID == StepStopIgnitionServer && (r.Skipped || !r.Success) {
+				t.Errorf("%s: %s skipped=%v success=%v err=%v", round, r.StepID, r.Skipped, r.Success, r.Error)
+			}
+		}
+	}
+}
+
+func installFakeSystemctl(t *testing.T, script string) string {
+	t.Helper()
+	callLog := filepath.Join(t.TempDir(), "systemctl.log")
+	testutil.InstallFakeBin(t, "systemctl", "#!/bin/sh\necho \"$@\" >> '"+callLog+"'\n"+script+"\n")
+	return callLog
+}
+
+func seedPublishedIgnition(t *testing.T) string {
+	t.Helper()
+	webRoot := t.TempDir()
+	dir := filepath.Join(webRoot, "ignition")
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"bootstrap.ign", "master.ign", "worker.ign"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("{}"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return webRoot
+}
+
+func publishedIgnitionFiles(t *testing.T, webRoot string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(filepath.Join(webRoot, "ignition"))
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatalf("read published ignition dir: %v", err)
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	return names
 }
 
 // installFakeTerraformArgv logs argv instead of switching on exit code.

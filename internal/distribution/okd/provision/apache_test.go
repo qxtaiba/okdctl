@@ -107,10 +107,10 @@ func seedPublishedIgnition(t *testing.T, webRoot string, names ...string) {
 	writeIgnitionFixture(t, dir, names...)
 }
 
-func TestTeardownIgnitionServer_UnpublishesWorkerIgnitionEvenWhenStopFails(t *testing.T) {
+func TestTeardownIgnitionServer_UnpublishesEveryIgnitionFileEvenWhenStopFails(t *testing.T) {
 	fakeSystemctl(t, "exit 1")
 	webRoot := t.TempDir()
-	seedPublishedIgnition(t, webRoot, "worker.ign")
+	seedPublishedIgnition(t, webRoot, IgnitionFilenames...)
 
 	p := newTestPhase(t)
 	if err := p.TeardownIgnitionServer(t.Context(), apacheCfg(webRoot)); err == nil {
@@ -121,20 +121,22 @@ func TestTeardownIgnitionServer_UnpublishesWorkerIgnitionEvenWhenStopFails(t *te
 	}
 }
 
-func TestTeardownIgnitionServer_CleanStopUnpublishesWorkerIgnition(t *testing.T) {
+func TestTeardownIgnitionServer_CleanStopUnpublishesEverythingAndIsRepeatable(t *testing.T) {
 	if runtime.GOOS != goosLinux {
 		t.Skip("systemctl branches are linux-only; darwin takes the GOOS gate")
 	}
 	fakeSystemctl(t, "case \"$1\" in is-active) exit 1;; *) exit 0;; esac")
 	webRoot := t.TempDir()
-	seedPublishedIgnition(t, webRoot, "worker.ign")
+	seedPublishedIgnition(t, webRoot, IgnitionFilenames...)
 
 	p := newTestPhase(t)
-	if err := p.TeardownIgnitionServer(t.Context(), apacheCfg(webRoot)); err != nil {
-		t.Fatalf("clean teardown must return nil: %v", err)
-	}
-	if got := publishedIgnitionFiles(t, webRoot); len(got) != 0 {
-		t.Errorf("published ignition files after teardown = %v; want none", got)
+	for _, round := range []string{"first", "repeat"} {
+		if err := p.TeardownIgnitionServer(t.Context(), apacheCfg(webRoot)); err != nil {
+			t.Fatalf("%s clean teardown must return nil: %v", round, err)
+		}
+		if got := publishedIgnitionFiles(t, webRoot); len(got) != 0 {
+			t.Errorf("%s teardown left published ignition files %v; want none", round, got)
+		}
 	}
 }
 

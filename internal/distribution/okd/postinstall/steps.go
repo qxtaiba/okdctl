@@ -7,6 +7,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/distribution/okd/phase"
+	"github.com/qxtaiba/okdctl/internal/distribution/okd/provision"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
@@ -14,6 +15,7 @@ import (
 const (
 	StepVerifyHealth        distribution.StepID = "verify-health"
 	StepCleanupBootstrap    distribution.StepID = "cleanup-bootstrap"
+	StepStopIgnitionServer  distribution.StepID = "stop-ignition-server"
 	StepVerifyKubeVIP       distribution.StepID = "verify-kubevip"
 	StepDeployProductionDNS distribution.StepID = "deploy-production-dns"
 	StepInstallAddons       distribution.StepID = "install-addons"
@@ -24,6 +26,7 @@ const (
 var StepNames = map[distribution.StepID]string{
 	StepVerifyHealth:        "verify cluster health",
 	StepCleanupBootstrap:    "cleanup bootstrap vm",
+	StepStopIgnitionServer:  "stop ignition server",
 	StepVerifyKubeVIP:       "verify kube-vip",
 	StepDeployProductionDNS: "deploy production dns",
 	StepInstallAddons:       "install addons",
@@ -84,6 +87,22 @@ func (p *Phase) postinstallSteps(cfg *config.Config, opts *Options, pctx *distri
 				})
 				return nil
 			},
+		},
+		// Bootstrap gone, every node joined: only node add needs ignition again.
+		{
+			ID: StepStopIgnitionServer, Name: StepNames[StepStopIgnitionServer],
+			NonFatal:   true,
+			SkipWhen:   func() bool { return !pctx.Get().BootstrapCleaned },
+			SkipReason: "bootstrap vm kept — ignition server left running until 'okdctl cleanup'",
+			Exec: func(ctx context.Context) error {
+				prov := provision.New(phase.WithExecutor(p.Exec), phase.WithLogger(p.Log))
+				if err := prov.TeardownIgnitionServer(ctx, cfg); err != nil {
+					return &errtypes.ClusterError{Msg: "stop ignition server", Err: err}
+				}
+				p.Log.Info("apache: ignition server stopped and ignition files removed")
+				return nil
+			},
+			OnError: phase.WarnOnError(p.Log, "apache: ignition server stop failed — the pull secret may still be served on port 443; run 'systemctl stop httpd' and verify with 'systemctl status httpd'"),
 		},
 		{
 			ID: StepDeployProductionDNS, Name: StepNames[StepDeployProductionDNS],
