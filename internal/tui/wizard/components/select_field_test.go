@@ -193,12 +193,11 @@ func TestSelectField_TwoOptionArrowDropsDefaultTag(t *testing.T) {
 	}
 }
 
-// TestSelectField_BlankOptionRendersHonestLabel pins the fcos-iso field's
-// shape (a leading blank option meaning "let okdctl download it"): the
-// blank value must render as a dim "none" between the cycle arrows rather
-// than a bare double space that reads as a rendering glitch.
+// TestSelectField_BlankOptionRendersHonestLabel pins that a blank option
+// renders as a dim "none" between the cycle arrows rather than a bare
+// double space that reads as a rendering glitch.
 func TestSelectField_BlankOptionRendersHonestLabel(t *testing.T) {
-	f := NewSelectField("fcos iso", []string{"", "local:iso/fedora-coreos.iso"})
+	f := NewSelectField("storage class", []string{"", "ceph-rbd"})
 	f.SetWidth(90)
 
 	rows := strings.Split(tuitest.StripANSI(f.View()), "\n")

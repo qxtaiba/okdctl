@@ -438,7 +438,6 @@ func reviewConfigSnapshot(cfg *config.Config) map[string]string {
 		values["proxmox.storage"] = tui.SanitizeTerminalEscapes(p.Storage)
 		values["proxmox.data_storage"] = tui.SanitizeTerminalEscapes(p.DataStorage)
 		values["proxmox.iso_storage"] = tui.SanitizeTerminalEscapes(p.ISOStorage)
-		values["proxmox.fcos_iso"] = tui.SanitizeTerminalEscapes(p.FCOSIso)
 		values["proxmox.bridge"] = tui.SanitizeTerminalEscapes(p.Bridge)
 		values["proxmox.token_id"] = p.TokenID
 		values["proxmox.insecure"] = strconv.FormatBool(p.Insecure)
@@ -491,8 +490,8 @@ func reviewChangeLabel(fieldPath string) string {
 		"deployment.bin_dir": "binary directory",
 		"proxmox.host":       "proxmox host", "proxmox.bootstrap_node": "bootstrap node",
 		"proxmox.storage": "os storage", "proxmox.data_storage": "data storage",
-		"proxmox.iso_storage": "iso storage", "proxmox.fcos_iso": "fcos iso",
-		"proxmox.bridge": "network bridge", "proxmox.token_id": "token id",
+		"proxmox.iso_storage": "iso storage", "proxmox.bridge": "network bridge",
+		"proxmox.token_id": "token id",
 		"proxmox.insecure": "allow insecure tls", "proxmox.insecure_http": "allow insecure http",
 		"proxmox.cpu_type": "cpu type", "proxmox.numa": "numa",
 		"proxmox.ha_anti_affinity":    "ha anti-affinity",
@@ -556,7 +555,6 @@ func (s *ReviewStep) renderProxmox(st *wizard.SectionStyles) string {
 		{Label: "storage", Value: tui.SanitizeTerminalEscapes(p.Storage)},
 		{Label: "data storage", Value: tui.SanitizeTerminalEscapes(p.DataStorage), Skip: p.DataStorage == "" || p.DataStorage == p.Storage},
 		{Label: "iso storage", Value: tui.SanitizeTerminalEscapes(p.ISOStorage), Skip: p.ISOStorage == ""},
-		{Label: "fcos iso", Value: tui.SanitizeTerminalEscapes(p.FCOSIso), Skip: p.FCOSIso == ""},
 		{Label: "extra networks", Value: addlNetworks, Skip: len(p.AdditionalNetworks) == 0},
 	})
 }

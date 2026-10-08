@@ -78,7 +78,6 @@ type NodePlacementStep struct {
 	osStorageField     *components.SelectField
 	dataStorageField   *components.SelectField
 	isoStorageField    *components.SelectField
-	fcosField          *components.SelectField
 	bootstrapField     *components.SelectField
 	controlPlaneFields []*components.SelectField
 	workerFields       []*components.SelectField
@@ -169,14 +168,6 @@ func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, nodeNames []s
 			s.isoStorageField = newSelectField("iso storage", "storage for iso files",
 				pools, firstMatch(pools, px.ISOStorage, "local"), px.ISOStorage)
 			infraFields = append(infraFields, s.isoStorageField)
-		}
-		if len(disc.ISOs) > 0 {
-			isoOptions := append([]string{""}, disc.ISOs...)
-			s.fcosField = newSelectField("fcos iso",
-				"pre-uploaded coreos iso — blank to let okdctl download and upload it",
-				isoOptions, firstMatch(disc.ISOs, px.FCOSIso, ""), px.FCOSIso)
-			s.fcosField.SetDisplayOptions(sanitizeNames(isoOptions))
-			infraFields = append(infraFields, s.fcosField)
 		}
 
 		if len(infraFields) > 0 {
@@ -586,9 +577,6 @@ func (s *NodePlacementStep) Apply(cfg *config.Config) error {
 	if s.isoStorageField != nil {
 		px.ISOStorage = s.isoStorageField.Value()
 	}
-	if s.fcosField != nil {
-		px.FCOSIso = s.fcosField.Value()
-	}
 	if s.bootstrapField != nil {
 		px.Node = s.bootstrapField.Value()
 	}
@@ -672,17 +660,6 @@ func bridgeNames(bridges []proxmoxBridge) []string {
 		names[i] = tui.SanitizeTerminalEscapes(b.Name)
 	}
 	return names
-}
-
-// sanitizeNames returns names with every element passed through
-// tui.SanitizeTerminalEscapes, for display-only option lists built from
-// Proxmox-reported data.
-func sanitizeNames(names []string) []string {
-	out := make([]string, len(names))
-	for i, n := range names {
-		out[i] = tui.SanitizeTerminalEscapes(n)
-	}
-	return out
 }
 
 func additionalNetworksBridges(nets []config.AdditionalNetwork) string {

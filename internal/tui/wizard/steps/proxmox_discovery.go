@@ -48,16 +48,15 @@ type proxmoxDiscovery struct {
 	Nodes   []proxmoxNode
 	Storage []proxmoxStorage
 	Bridges []proxmoxBridge
-	ISOs    []string // storage volids of ISO files, e.g. "local:iso/fcos.iso"
 
 	// Heterogeneous reports that online nodes' inventories differed, so
-	// Storage/Bridges/ISOs hold only what every online node shares and the
+	// Storage/Bridges hold only what every online node shares and the
 	// placement step should say so.
 	Heterogeneous bool
 }
 
 // discoverProxmox queries every online Proxmox node — not just one sampled
-// node — so Storage/Bridges/ISOs reflect what every node actually shares,
+// node — so Storage/Bridges reflect what every node actually shares,
 // and cross-checks the config's already-chosen placement (storage/bridge
 // per role) against each node's own reported inventory: a selection valid
 // when it was made can go stale the moment discovery reports a node that
@@ -119,7 +118,7 @@ func discoverProxmox(parent context.Context, cfg *config.Config) (*proxmoxDiscov
 		online = []string{nodes[0].Name}
 	}
 
-	storage, bridges, isos, heterogeneous, inventories := fetchClusterDetails(ctx, client, online)
+	storage, bridges, heterogeneous, inventories := fetchClusterDetails(ctx, client, online)
 	for i := range nodes {
 		if inventory, ok := inventories[nodes[i].Name]; ok {
 			nodes[i].Storage = inventory.Storage
@@ -133,7 +132,6 @@ func discoverProxmox(parent context.Context, cfg *config.Config) (*proxmoxDiscov
 		Nodes:         nodes,
 		Storage:       storage,
 		Bridges:       bridges,
-		ISOs:          isos,
 		Heterogeneous: heterogeneous,
 	}
 
@@ -182,7 +180,7 @@ func (s *NodePlacementStep) startDiscovery() tea.Cmd {
 	}
 }
 
-// fetchClusterDetails pulls storage/bridges/ISOs from every online node and
+// fetchClusterDetails pulls storage/bridges from every online node and
 // keeps only what all of them share (by name), so the wizard's single
 // cluster-wide pick lists never offer a resource missing on the node a VM
 // lands on; heterogeneous reports whether any two inventories differed. A
@@ -193,14 +191,13 @@ type proxmoxNodeInventory struct {
 	StorageKnown bool
 	Bridges      []proxmoxBridge
 	BridgesKnown bool
-	ISOs         []string
 }
 
-func fetchClusterDetails(ctx context.Context, client *proxmox.Client, nodeNames []string) (storage []proxmoxStorage, bridges []proxmoxBridge, isos []string, heterogeneous bool, inventories map[string]proxmoxNodeInventory) {
+func fetchClusterDetails(ctx context.Context, client *proxmox.Client, nodeNames []string) (storage []proxmoxStorage, bridges []proxmoxBridge, heterogeneous bool, inventories map[string]proxmoxNodeInventory) {
 	inventories = make(map[string]proxmoxNodeInventory, len(nodeNames))
 	first := fetchNodeDetails(ctx, client, nodeNames[0])
 	inventories[nodeNames[0]] = first
-	storage, bridges, isos = first.Storage, first.Bridges, first.ISOs
+	storage, bridges = first.Storage, first.Bridges
 
 	for _, nodeName := range nodeNames[1:] {
 		details := fetchNodeDetails(ctx, client, nodeName)
@@ -210,11 +207,9 @@ func fetchClusterDetails(ctx context.Context, client *proxmox.Client, nodeNames 
 		heterogeneous = heterogeneous || differs
 		bridges, differs = keepShared(bridges, details.Bridges, func(v proxmoxBridge) string { return v.Name })
 		heterogeneous = heterogeneous || differs
-		isos, differs = keepShared(isos, details.ISOs, func(v string) string { return v })
-		heterogeneous = heterogeneous || differs
 	}
 
-	return storage, bridges, isos, heterogeneous, inventories
+	return storage, bridges, heterogeneous, inventories
 }
 
 // keepShared returns the elements of base whose key other also has, plus
@@ -253,7 +248,7 @@ func storageNames(storage []proxmoxStorage) []string {
 	return names
 }
 
-// fetchNodeDetails pulls storage/bridges/ISOs, best-effort — endpoint errors
+// fetchNodeDetails pulls storage/bridges, best-effort — endpoint errors
 // are swallowed to nil slices rather than failing the whole discovery.
 func fetchNodeDetails(ctx context.Context, client *proxmox.Client, nodeName string) proxmoxNodeInventory {
 	node, err := client.Node(ctx, nodeName)
@@ -262,7 +257,6 @@ func fetchNodeDetails(ctx context.Context, client *proxmox.Client, nodeName stri
 	}
 
 	var storage []proxmoxStorage
-	var isoStorageNames []string
 	storageKnown := false
 	if stores, err := node.Storages(ctx); err == nil {
 		storageKnown = true
@@ -277,9 +271,6 @@ func fetchNodeDetails(ctx context.Context, client *proxmox.Client, nodeName stri
 				TotalGB:    int(s.Total / (1024 * 1024 * 1024)), //nolint:gosec // G115: uint64→int is safe for GB-scale storage
 				TotalKnown: true,
 			})
-			if strings.Contains(s.Content, "iso") {
-				isoStorageNames = append(isoStorageNames, s.Name)
-			}
 		}
 	}
 
@@ -296,27 +287,9 @@ func fetchNodeDetails(ctx context.Context, client *proxmox.Client, nodeName stri
 		}
 	}
 
-	var isos []string
-	for _, storeName := range isoStorageNames {
-		st, err := node.Storage(ctx, storeName)
-		if err != nil {
-			continue
-		}
-		contents, err := st.GetContent(ctx)
-		if err != nil {
-			continue
-		}
-		for _, c := range contents {
-			if strings.HasSuffix(strings.ToLower(c.Volid), ".iso") {
-				isos = append(isos, c.Volid)
-			}
-		}
-	}
-
 	return proxmoxNodeInventory{
 		Storage: storage, StorageKnown: storageKnown,
 		Bridges: bridges, BridgesKnown: bridgesKnown,
-		ISOs: isos,
 	}
 }
 

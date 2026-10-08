@@ -211,7 +211,6 @@ func demoDiscovery() *proxmoxDiscovery {
 			{Name: "vmbr0", CIDR: "192.168.1.2/24"},
 			{Name: "vmbr1", CIDR: "10.10.0.1/24"},
 		},
-		ISOs: []string{"local:iso/fedora-coreos-live.x86_64.iso"},
 	}
 }
 
@@ -592,8 +591,8 @@ func TestGolden_DistributionHelpOverlay(t *testing.T) {
 // TestGolden_NodePlacementSingleNode pins the single-Proxmox-host case:
 // the bootstrap field's per-node select has exactly one option and must
 // render the bare value with no cycle arrows. Tabs past the infrastructure
-// section's 6 fields (bridge, additional networks, os/data/iso storage,
-// fcos iso) so the bootstrap field is focused and scrolled into view.
+// section's 5 fields (bridge, additional networks, os/data/iso storage)
+// so the bootstrap field is focused and scrolled into view.
 func TestGolden_NodePlacementSingleNode(t *testing.T) {
 	tui.SetTerminalWidth(100)
 	t.Cleanup(func() { tui.SetTerminalWidth(0) })
@@ -605,7 +604,7 @@ func TestGolden_NodePlacementSingleNode(t *testing.T) {
 	m.Update(discoveryCompleteMsg{generation: gen, discovery: demoDiscoverySingleNode()})
 
 	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
-	for range 6 {
+	for range 5 {
 		m.Update(tabKey)
 		m.Update(wizard.FocusChangedMsg{})
 	}

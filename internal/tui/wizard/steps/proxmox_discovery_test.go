@@ -51,15 +51,6 @@ func newFakeProxmoxServer(t *testing.T, targetNode string) *httptest.Server {
 			{"iface": "vmbr0", "active": 1, "cidr": "192.168.1.1/24"},
 		})
 	})
-	mux.HandleFunc("GET /api2/json/nodes/"+targetNode+"/storage/local/status", func(w http.ResponseWriter, _ *http.Request) {
-		writeData(w, map[string]any{})
-	})
-	mux.HandleFunc("GET /api2/json/nodes/"+targetNode+"/storage/local/content", func(w http.ResponseWriter, _ *http.Request) {
-		writeData(w, []map[string]any{
-			{"volid": "local:iso/fcos-38.iso"},
-			{"volid": "local:iso/notes.txt"},
-		})
-	})
 	return httptest.NewServer(mux)
 }
 
@@ -110,15 +101,11 @@ func TestDiscoverProxmox_Success(t *testing.T) {
 	if len(got.Bridges) != 1 || got.Bridges[0].Name != "vmbr0" || got.Bridges[0].CIDR != "192.168.1.1/24" {
 		t.Errorf("Bridges = %+v", got.Bridges)
 	}
-
-	if len(got.ISOs) != 1 || got.ISOs[0] != "local:iso/fcos-38.iso" {
-		t.Errorf("ISOs = %+v; want [local:iso/fcos-38.iso]", got.ISOs)
-	}
 }
 
 // newFakeHeterogeneousServer mocks a two-online-node cluster whose
-// inventories differ: pve1 carries an extra storage pool, bridge, and ISO
-// that pve2 lacks.
+// inventories differ: pve1 carries an extra storage pool and bridge that
+// pve2 lacks.
 func newFakeHeterogeneousServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -153,22 +140,12 @@ func newFakeHeterogeneousServer(t *testing.T) *httptest.Server {
 			}
 			writeData(w, bridges)
 		})
-		mux.HandleFunc("GET /api2/json/nodes/"+node+"/storage/local/status", func(w http.ResponseWriter, _ *http.Request) {
-			writeData(w, map[string]any{})
-		})
-		mux.HandleFunc("GET /api2/json/nodes/"+node+"/storage/local/content", func(w http.ResponseWriter, _ *http.Request) {
-			isos := []map[string]any{{"volid": "local:iso/fcos-38.iso"}}
-			if node == "pve1" {
-				isos = append(isos, map[string]any{"volid": "local:iso/extra.iso"})
-			}
-			writeData(w, isos)
-		})
 	}
 	return httptest.NewServer(mux)
 }
 
 // TestDiscoverProxmox_IntersectsAcrossOnlineNodes pins bug 10: discovery
-// reads every online node, offers only the storage/bridges/ISOs common to
+// reads every online node, offers only the storage/bridges common to
 // all of them, and flags the cluster heterogeneous so the wizard can warn.
 func TestDiscoverProxmox_IntersectsAcrossOnlineNodes(t *testing.T) {
 	server := newFakeHeterogeneousServer(t)
@@ -184,9 +161,6 @@ func TestDiscoverProxmox_IntersectsAcrossOnlineNodes(t *testing.T) {
 	}
 	if len(got.Bridges) != 1 || got.Bridges[0].Name != "vmbr0" {
 		t.Errorf("Bridges = %+v; want only vmbr0", got.Bridges)
-	}
-	if len(got.ISOs) != 1 || got.ISOs[0] != "local:iso/fcos-38.iso" {
-		t.Errorf("ISOs = %+v; want only the shared ISO", got.ISOs)
 	}
 	if !got.Heterogeneous {
 		t.Error("Heterogeneous = false, want true for differing inventories")
@@ -305,9 +279,6 @@ func TestFetchNodeDetails_PartialFailure(t *testing.T) {
 	}
 	if !details.BridgesKnown || len(details.Bridges) != 1 || details.Bridges[0].Name != "vmbr0" {
 		t.Errorf("bridges = %+v known=%v; want [{vmbr0 ...}] despite storage failure", details.Bridges, details.BridgesKnown)
-	}
-	if details.ISOs != nil {
-		t.Errorf("isos = %+v; want nil (no iso-tagged storage)", details.ISOs)
 	}
 }
 
