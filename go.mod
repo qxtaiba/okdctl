@@ -23,6 +23,7 @@ require (
 	github.com/charmbracelet/colorprofile v0.4.3
 	github.com/spf13/pflag v1.0.10
 	go.yaml.in/yaml/v2 v2.4.4
+	go.yaml.in/yaml/v3 v3.0.5
 )
 
 require (
