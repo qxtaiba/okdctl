@@ -372,13 +372,15 @@ Mitigations:
 
 ### SSH host-key trust on first run (TOFU window)
 
-The first SSH call `okdctl deploy` makes to the Proxmox host runs with
+okdctl's only SSH connection to Proxmox is a read-only `pvesh` VM
+listing, run as root on the Proxmox host after `terraform apply` to
+confirm the bootstrap VM is enumerable. Without a pinned fingerprint its first call runs with
 `-o StrictHostKeyChecking=accept-new`, trusting and pinning the Proxmox
-host key without prior verification. Every later SSH call reuses that
+host key without prior verification, and every later SSH call reuses that
 cached key. A machine-in-the-middle on the bastion-to-Proxmox path during
 that first call can substitute an attacker key, which then stays
-trusted for the life of the cluster. ISO uploads go through the Proxmox
-API over HTTPS instead and don't use this key.
+trusted for the life of the cluster. ISO uploads and removals go through
+the Proxmox API over HTTPS and don't use this key.
 
 Set `provider.proxmox.ssh_host_fingerprint` in `okdctl.yaml`
 (`SHA256:<base64>`, from `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`

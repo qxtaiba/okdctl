@@ -12,7 +12,7 @@ import (
 // /nodes/<node>/ is composed from the same p.Node validateProxmoxName checks.
 func TestPveshRun_ComposesNodeScopedPath(t *testing.T) {
 	installFakeSSHEcho(t)
-	p := &RemoteISOParams{Node: "pve-01", Host: "pve-test", Exec: executor.New()}
+	p := &PveshParams{Node: "pve-01", Host: "pve-test", Exec: executor.New()}
 
 	stdout, err := PveshRun(context.Background(), p, "get", "qemu")
 	if err != nil {
@@ -27,8 +27,39 @@ func TestPveshRun_ComposesNodeScopedPath(t *testing.T) {
 // the pvesh boundary, before ssh runs (p.Exec/p.Host go unused because
 // validateProxmoxName fires first).
 func TestPveshRun_RejectsInvalidNode(t *testing.T) {
-	p := &RemoteISOParams{Node: "bad;rm -rf /", Host: "ignored"}
+	p := &PveshParams{Node: "bad;rm -rf /", Host: "ignored"}
 	if _, err := PveshRun(t.Context(), p, "get", "qemu"); err == nil {
 		t.Fatal("expected error for malformed node name; got nil")
+	}
+}
+
+func TestValidateProxmoxName(t *testing.T) {
+	accept := []string{"pve-1", "node_a", "PVE0", "1pve", "A"}
+	for _, name := range accept {
+		if err := validateProxmoxName(name); err != nil {
+			t.Errorf("validateProxmoxName(%q) rejected; want nil: %v", name, err)
+		}
+	}
+
+	reject := []string{
+		"",
+		"pve.example",
+		"pve/etc",
+		"pve;rm",
+		"pve`id`",
+		"pve$(id)",
+		"pve space",
+		"pvé",
+		"pve\x00",
+		"pve\ttab",
+		"..",
+		"/",
+		"node|pipe",
+		"node&bg",
+	}
+	for _, name := range reject {
+		if err := validateProxmoxName(name); err == nil {
+			t.Errorf("validateProxmoxName(%q) accepted; want error", name)
+		}
 	}
 }

@@ -1,7 +1,5 @@
-// Package hostssh runs commands on the Proxmox host as root over SSH:
-// command execution, pvesh queries, and CoreOS ISO cleanup. Policy: every
-// SSH op uses SSHRunArgv except the single sanctioned sh -c call in
-// RemoveFCOSISOFromProxmox.
+// Package hostssh runs read-only pvesh queries on the Proxmox host as root
+// over SSH, always in argv mode, never through a remote sh -c string.
 package hostssh
 
 import (
@@ -27,60 +25,9 @@ func ProxmoxBareHost(host string) string {
 	return host
 }
 
-// sshRun runs a single command on root@host over SSH; it's unexported so
-// RemoveFCOSISOFromProxmox stays the only sh -c call site, making the
-// shell-injection policy compiler-enforced. New cross-package operations
-// use SSHRunArgv.
-//
-// knownHostsPath non-empty enforces strict host-key checking; empty applies
-// accept-new TOFU. Only transport failures error — non-zero exit codes don't.
-func sshRun(ctx context.Context, exec *executor.Executor, host, knownHostsPath, cmd string) (*executor.Result, error) {
-	args := sshBaseArgs(host, knownHostsPath)
-	args = append(args, cmd)
-	result, err := exec.Run(ctx, "ssh", args...)
-	if err != nil {
-		return result, fmt.Errorf("ssh %s: %w", host, err)
-	}
-	return result, nil
-}
-
-// SSHRunArgv passes each argv element to ssh as a separate argument; ssh(1)
-// still space-joins them into one command string for the remote shell, so
-// argv mode does NOT bypass it. Callers MUST validate every atom themselves
-// (pveshRun is the canonical example) — as a fail-closed backstop, any atom
-// outside [A-Za-z0-9@%+=:,./_-] is rejected here first.
-//
-// knownHostsPath non-empty enforces strict host-key checking; empty applies accept-new TOFU.
-func SSHRunArgv(ctx context.Context, exec *executor.Executor, host, knownHostsPath string, argv ...string) (*executor.Result, error) {
-	if err := validateArgvAtoms(argv); err != nil {
-		return nil, fmt.Errorf("ssh %s: %w", host, err)
-	}
-	args := sshBaseArgs(host, knownHostsPath)
-	args = append(args, argv...)
-	result, err := exec.Run(ctx, "ssh", args...)
-	if err != nil {
-		return result, fmt.Errorf("ssh %s: %w", host, err)
-	}
-	return result, nil
-}
-
-// sshRunOutput is sshRun with full stdout capture (Executor.RunOutput)
-// instead of the ring-truncated tail, for callers parsing stdout as JSON;
-// same semantics as sshRun.
-func sshRunOutput(ctx context.Context, exec *executor.Executor, host, knownHostsPath, cmd string) (*executor.Result, error) {
-	args := sshBaseArgs(host, knownHostsPath)
-	args = append(args, cmd)
-	result, err := exec.RunOutput(ctx, 0, "ssh", args...)
-	if err != nil {
-		return result, fmt.Errorf("ssh %s: %w", host, err)
-	}
-	return result, nil
-}
-
-// SSHRunArgvOutput is SSHRunArgv with full stdout capture (Executor.RunOutput)
-// instead of the ring-truncated tail, for JSON-parsing callers; same
-// semantics as SSHRunArgv.
-func SSHRunArgvOutput(ctx context.Context, exec *executor.Executor, host, knownHostsPath string, argv ...string) (*executor.Result, error) {
+// sshRunArgvOutput still reaches the remote shell, since ssh(1) space-joins
+// argv, so callers validate every atom and validateArgvAtoms backstops it.
+func sshRunArgvOutput(ctx context.Context, exec *executor.Executor, host, knownHostsPath string, argv ...string) (*executor.Result, error) {
 	if err := validateArgvAtoms(argv); err != nil {
 		return nil, fmt.Errorf("ssh %s: %w", host, err)
 	}
