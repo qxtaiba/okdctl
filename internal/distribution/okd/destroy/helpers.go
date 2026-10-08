@@ -128,8 +128,7 @@ func customISONames(cfg *config.Config) []string {
 	return names
 }
 
-// baseISOStorage is the stock `local` storage, whose ISO directory
-// (hostssh.DefaultProxmoxISODir) is where setup looks for the base ISO.
+// baseISOStorage is the stock `local` storage, where base CoreOS ISOs live.
 const baseISOStorage = "local"
 
 // removeRemoteISOs deletes the cluster's per-node ISOs from the ISO storage

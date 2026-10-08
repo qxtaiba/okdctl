@@ -7,10 +7,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/executor"
 )
 
-// DefaultProxmoxISODir is the ISO directory of a stock Proxmox VE `local`
-// storage.
-const DefaultProxmoxISODir = "/var/lib/vz/template/iso"
-
 // PveshParams carries the connection parameters for pvesh queries against a
 // Proxmox host. Host must be a bare hostname or IP (no port); an empty
 // KnownHostsPath allows accept-new TOFU, otherwise strict host-key checking
