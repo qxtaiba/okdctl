@@ -2,18 +2,15 @@ package provision
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/executor"
-	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox/hostssh"
+	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
 	"github.com/qxtaiba/okdctl/internal/nodetypes"
-	"github.com/qxtaiba/okdctl/internal/sshpin"
 )
 
 func placementNodes(cfg *config.Config) []string {
@@ -27,115 +24,102 @@ func placementNodes(cfg *config.Config) []string {
 	return slices.Compact(nodes)
 }
 
-// ValidateISOPlacement requires shared ISO storage for every multi-host destination before mutation.
-func (p *Provisioner) ValidateISOPlacement(ctx context.Context, cfg *config.Config) error {
-	if cfg.Provider.Proxmox == nil || len(placementNodes(cfg)) < 2 {
+const (
+	privAllocateTemplate = "Datastore.AllocateTemplate"
+	privAudit            = "Datastore.Audit"
+	privAllocateSpace    = "Datastore.AllocateSpace"
+	privAllocate         = "Datastore.Allocate"
+)
+
+// sharedISOStorageTypes are the storage types whose ISO directory is the same
+// filesystem on every node; a directory storage's shared flag only asserts that.
+var sharedISOStorageTypes = []string{"nfs", "cifs", "cephfs"}
+
+// ValidateISOStorage is the pre-mutation ISO storage check: the credentials
+// must hold the upload privileges and every multi-host destination must
+// share the ISO storage.
+func (p *Provisioner) ValidateISOStorage(ctx context.Context, cfg *config.Config) error {
+	if cfg.Provider.Proxmox == nil {
 		return nil
 	}
-	px := cfg.Provider.Proxmox
-	host := hostssh.ProxmoxBareHost(px.Host)
-	known, err := sshpin.Verify(ctx, host, px.SSHHostFingerprint, px.RequirePinnedFingerprint, p.Log)
-	if err != nil {
+	if err := p.checkISOPrivileges(ctx, cfg); err != nil {
 		return err
 	}
-	if known != "" {
-		defer os.Remove(known)
-	}
-	var storage struct {
-		Type    string `json:"type"`
-		Content string `json:"content"`
-	}
-	if err := p.storageQuery(ctx, host, known, "/storage/"+px.ISOStorage, &storage); err != nil {
-		return err
-	}
-	if !slices.Contains([]string{"nfs", "cifs", "cephfs"}, storage.Type) || !slices.Contains(strings.Split(storage.Content, ","), "iso") {
-		return fmt.Errorf("multi-host placement requires nfs, cifs, or cephfs ISO storage %q with ISO content enabled", px.ISOStorage)
-	}
-	for _, node := range placementNodes(cfg) {
-		var stores []struct {
-			Name    string `json:"storage"`
-			Active  int    `json:"active"`
-			Enabled int    `json:"enabled"`
-		}
-		if err := p.storageQuery(ctx, host, known, "/nodes/"+node+"/storage", &stores); err != nil {
-			return err
-		}
-		available := false
-		for _, store := range stores {
-			if store.Name == px.ISOStorage && store.Active == 1 && store.Enabled == 1 {
-				available = true
-			}
-		}
-		if !available {
-			return fmt.Errorf("ISO storage %s is unavailable on %s", px.ISOStorage, node)
-		}
-	}
-	return nil
+	return p.validateISOPlacement(ctx, cfg)
 }
 
-func (p *Provisioner) storageQuery(ctx context.Context, host, known, path string, target any) error {
-	result, err := hostssh.SSHRunArgvOutput(ctx, p.Exec, host, known, "pvesh", "get", path, "--output-format", "json")
-	if err != nil {
-		return err
-	}
-	if result.ExitCode != 0 {
-		return executor.NewExitError(ctx, "pvesh get storage", result.ExitCode, result.Stderr)
-	}
-	if result.Truncated {
-		return fmt.Errorf("proxmox storage observation truncated")
-	}
-	if err := json.Unmarshal([]byte(result.Stdout), target); err != nil {
-		return fmt.Errorf("decode proxmox storage: %w", err)
-	}
-	return nil
-}
-
-func (p *Provisioner) isoStoragePath(ctx context.Context, cfg *config.Config, host, known string) (string, error) {
-	if cfg.Provider.Proxmox.ISOStorage == "local" && len(placementNodes(cfg)) < 2 {
-		return hostssh.DefaultProxmoxISODir, nil
-	}
-	volume := cfg.Provider.Proxmox.ISOStorage + ":iso/bootstrap.iso"
-	result, err := hostssh.SSHRunArgv(ctx, p.Exec, host, known, "pvesm", "path", volume)
-	if err != nil {
-		return "", err
-	}
-	if result.ExitCode != 0 {
-		return "", executor.NewExitError(ctx, "pvesm path", result.ExitCode, result.Stderr)
-	}
-	if result.Truncated {
-		return "", fmt.Errorf("ISO storage path truncated")
-	}
-	path := strings.TrimSpace(result.Stdout)
-	if filepath.Base(path) != "bootstrap.iso" {
-		return "", fmt.Errorf("unexpected ISO storage path")
-	}
-	directory := filepath.Dir(path)
-	if err := hostssh.ValidateISODir(directory); err != nil {
-		return "", err
-	}
-	return directory, nil
-}
-
-func (p *Provisioner) verifySharedISOs(ctx context.Context, cfg *config.Config, host, known string, files []string) error {
-	if len(placementNodes(cfg)) < 2 {
+// checkISOPrivileges fails only on a privilege the listing proves missing;
+// absent credentials or an unreadable listing defer to the upload step.
+func (p *Provisioner) checkISOPrivileges(ctx context.Context, cfg *config.Config) error {
+	if p.ProxmoxCreds == nil || !p.ProxmoxCreds.IsValid() {
 		return nil
 	}
 	storage := cfg.Provider.Proxmox.ISOStorage
+	held, err := proxmox.NewISOStore(p.ProxmoxCreds, storage).Privileges(ctx)
+	if err != nil {
+		p.Log.Warn("iso: could not list proxmox privileges; the upload will report any gap", "err", err)
+		return nil
+	}
+	var missing []string
+	if !held[privAllocateTemplate] {
+		missing = append(missing, privAllocateTemplate)
+	}
+	if !held[privAudit] && !held[privAllocateSpace] {
+		missing = append(missing, privAudit)
+	}
+	if len(missing) > 0 {
+		return (&errtypes.ConfigError{
+			Msg: fmt.Sprintf("proxmox credentials lack %s on /storage/%s, needed to upload node isos", strings.Join(missing, ", "), storage),
+		}).WithHint("grant a role with these privileges on /storage/" + storage + " to the user or api token")
+	}
+	if !held[privAllocate] {
+		p.Log.Warn("iso: proxmox credentials lack Datastore.Allocate; okdctl destroy will not be able to remove the node isos", "path", "/storage/"+storage)
+	}
+	return nil
+}
+
+func (p *Provisioner) validateISOPlacement(ctx context.Context, cfg *config.Config) error {
+	if cfg.Provider.Proxmox == nil || len(placementNodes(cfg)) < 2 {
+		return nil
+	}
+	store, err := p.isoStore(cfg)
+	if err != nil {
+		return err
+	}
+	storage := cfg.Provider.Proxmox.ISOStorage
 	for _, node := range placementNodes(cfg) {
-		var content []isoVolume
-		if err := p.storageQuery(ctx, host, known, "/nodes/"+node+"/storage/"+storage+"/content", &content); err != nil {
-			return err
+		status, err := store.Status(ctx, node)
+		if err != nil {
+			return fmt.Errorf("check iso storage visibility: %w", err)
 		}
-		for _, file := range files {
-			volume := storage + ":iso/" + filepath.Base(file)
-			if !slices.ContainsFunc(content, func(item isoVolume) bool { return item.Volume == volume }) {
-				return fmt.Errorf("ISO %s is not visible on %s", volume, node)
-			}
+		if !slices.Contains(sharedISOStorageTypes, status.Type) || !slices.Contains(status.Content, "iso") {
+			return fmt.Errorf("multi-host placement requires nfs, cifs, or cephfs ISO storage %q with ISO content enabled", storage)
+		}
+		if !status.Active || !status.Enabled {
+			return fmt.Errorf("ISO storage %s is unavailable on %s", storage, node)
 		}
 	}
 	return nil
 }
 
-type isoVolume struct {
-	Volume string `json:"volid"`
+func (p *Provisioner) verifySharedISOs(ctx context.Context, cfg *config.Config, files []string) error {
+	if len(placementNodes(cfg)) < 2 {
+		return nil
+	}
+	store, err := p.isoStore(cfg)
+	if err != nil {
+		return err
+	}
+	for _, node := range placementNodes(cfg) {
+		volumes, err := store.Volumes(ctx, node)
+		if err != nil {
+			return fmt.Errorf("check iso visibility: %w", err)
+		}
+		for _, file := range files {
+			if _, ok := volumes[filepath.Base(file)]; !ok {
+				return fmt.Errorf("ISO %s is not visible on %s", store.VolumeID(filepath.Base(file)), node)
+			}
+		}
+	}
+	return nil
 }

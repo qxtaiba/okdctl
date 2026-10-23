@@ -95,8 +95,10 @@ of them, and the guards that look for those files (`generate-config`,
 `generate-manifests`, `generate-ignition`) never fire on that path. The
 setup guards that can still skip a step are the ones that compare against
 state outside the work directory: `download-tools` checks a version
-sentinel next to the binaries in the bin dir, and `upload-isos` compares
-each rebuilt ISO's sha256 with the copy already on Proxmox storage.
+sentinel next to the binaries in the bin dir, and `upload-isos` skips an
+ISO whose volume on Proxmox storage has the local size and whose sha256
+matches the one Proxmox verified on its last upload, recorded in
+`.okdctl-iso-uploads.json` in the project root.
 
 When teardown is the right move instead, `okdctl cleanup` removes local
 files after a setup-phase failure (terraform state is still empty) and

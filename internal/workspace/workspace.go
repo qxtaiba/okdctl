@@ -54,3 +54,10 @@ func TerraformModuleDir(projectRoot string) string {
 func KubeconfigPath(clusterDir string) string {
 	return filepath.Join(clusterDir, "auth", "kubeconfig")
 }
+
+// ISOUploadRecordPath returns the record of ISO uploads Proxmox verified
+// (<projectRoot>/.okdctl-iso-uploads.json); it lives outside WorkDir so a
+// setup restart's work-dir wipe keeps unchanged ISOs from re-uploading.
+func ISOUploadRecordPath(projectRoot string) string {
+	return filepath.Join(projectRoot, ".okdctl-iso-uploads.json")
+}

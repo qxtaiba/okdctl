@@ -2,58 +2,26 @@ package provision
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/download"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/executor"
-	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox/hostssh"
-	"github.com/qxtaiba/okdctl/internal/sshpin"
+	"github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
 	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
-// remoteISO256 runs sha256sum on remotePath/filename over SSH, returning the
-// hex digest; any SSH or parse failure returns ("", err).
-func remoteISO256(ctx context.Context, exec *executor.Executor, host, knownHostsPath, remotePath, filename string) (string, error) {
-	if err := hostssh.ValidateISODir(remotePath); err != nil {
-		return "", fmt.Errorf("remoteISO256: %w", err)
-	}
-	if err := hostssh.ValidateRemoteFilename(filename); err != nil {
-		return "", fmt.Errorf("remoteISO256: %w", err)
-	}
-	target := remotePath + "/" + filename
-	result, err := hostssh.SSHRunArgv(ctx, exec, host, knownHostsPath, "sha256sum", "--", target)
-	if err != nil {
-		return "", err
-	}
-	if result.ExitCode != 0 {
-		return "", executor.NewExitError(ctx, "sha256sum "+target, result.ExitCode, result.Stderr)
-	}
-	fields := strings.Fields(result.Stdout)
-	if len(fields) == 0 {
-		return "", fmt.Errorf("sha256sum %s: empty output", target)
-	}
-	return fields[0], nil
-}
-
-// isoUploadNeeded returns false only when the remote sha256 matches the
-// local file; any error fails open to true so the caller re-uploads.
-func isoUploadNeeded(ctx context.Context, exec *executor.Executor, host, knownHostsPath, remotePath, localPath string) bool {
-	localHash, err := download.CalculateChecksum(ctx, localPath)
-	if err != nil {
-		return true
-	}
-	remoteHash, err := remoteISO256(ctx, exec, host, knownHostsPath, remotePath, filepath.Base(localPath))
-	if err != nil {
-		return true
-	}
-	return localHash != remoteHash
+type localISO struct {
+	path   string
+	name   string
+	sha256 string
+	size   int64
 }
 
 func collectISOFiles(isoDir string) ([]string, error) {
@@ -72,56 +40,134 @@ func collectISOFiles(isoDir string) ([]string, error) {
 	return isoFiles, nil
 }
 
-func calculateTotalSize(files []string) int64 {
-	var totalSize int64
+func inspectISOs(ctx context.Context, files []string) ([]localISO, error) {
+	isos := make([]localISO, 0, len(files))
 	for _, f := range files {
-		if info, err := os.Stat(f); err == nil {
-			totalSize += info.Size()
+		info, err := os.Stat(f)
+		if err != nil {
+			return nil, fmt.Errorf("stat %s: %w", f, err)
 		}
+		sum, err := download.CalculateChecksum(ctx, f)
+		if err != nil {
+			return nil, err
+		}
+		isos = append(isos, localISO{path: f, name: filepath.Base(f), sha256: sum, size: info.Size()})
 	}
-	return totalSize
+	return isos, nil
 }
 
-// proxmoxSCPUser is fixed to root: ISO uploads target /var/lib/vz, writable
-// only by root on a stock Proxmox VE install.
-const proxmoxSCPUser = "root"
+// isoUploadRecords maps volume ids to the sha256 Proxmox verified on their
+// last upload, the only checksum source since the storage API reports sizes
+// but no hashes.
+type isoUploadRecords map[string]string
 
-// uploadISOsViaSCP scps the pre-filtered ISOs to the Proxmox host one file at
-// a time, so a SIGINT or network drop mid-batch leaves already-uploaded
-// files intact and the next run resumes only the tail. A non-empty
-// knownHostsPath enforces strict host-key checking; empty falls back to
-// accept-new TOFU.
-func uploadISOsViaSCP(ctx context.Context, cmdRunner *executor.Executor, isoFiles []string, host, remotePath, knownHostsPath string) error {
-	var baseArgs []string
-	if knownHostsPath != "" {
-		baseArgs = []string{
-			"-o", "UserKnownHostsFile=" + knownHostsPath,
-			"-o", "StrictHostKeyChecking=yes",
-			"-o", "BatchMode=yes",
-		}
-	} else {
-		baseArgs = []string{
-			"-o", "StrictHostKeyChecking=accept-new",
-			"-o", "BatchMode=yes",
-		}
+// loadUploadRecords treats a missing or unreadable record as empty, which
+// only ever costs a re-upload.
+func loadUploadRecords(path string) isoUploadRecords {
+	records := isoUploadRecords{}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return records
 	}
-	dest := fmt.Sprintf("%s@%s:%s/", proxmoxSCPUser, host, remotePath)
-	for _, f := range isoFiles {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		args := append(slices.Clone(baseArgs), f, dest)
-		if err := cmdRunner.RunInteractive(ctx, "scp", args...); err != nil {
-			return fmt.Errorf("scp %s: %w", filepath.Base(f), err)
-		}
+	if json.Unmarshal(data, &records) != nil {
+		return isoUploadRecords{}
 	}
-	return nil
+	return records
 }
 
-// UploadCustomISOsToProxmox uploads only the custom ISOs that differ from
-// the remote copies (sha256-compared over SSH), skipping unchanged ones. It
-// verifies the pinned SSH host key first and hard-fails on mismatch when a
-// fingerprint is required.
+func (r isoUploadRecords) save(path string) error {
+	data, err := json.MarshalIndent(r, "", "  ")
+	if err != nil {
+		return err
+	}
+	return system.AtomicWrite(path, data, 0o600)
+}
+
+// uploadNeeded reports false only when the remote volume has the local size
+// and the recorded verified upload matches the local sha256; coreos-installer
+// embeds ignition in a fixed-size area, so size alone never proves content.
+func uploadNeeded(iso localISO, remote map[string]uint64, recorded string) bool {
+	size, ok := remote[iso.name]
+	if !ok || iso.size < 0 || size != uint64(iso.size) {
+		return true
+	}
+	return recorded != iso.sha256
+}
+
+func (p *Provisioner) isoStore(cfg *config.Config) (*proxmox.ISOStore, error) {
+	if p.ProxmoxCreds == nil || !p.ProxmoxCreds.IsValid() {
+		return nil, &errtypes.ConfigError{Msg: "proxmox api credentials are required for iso storage access"}
+	}
+	return proxmox.NewISOStore(p.ProxmoxCreds, cfg.Provider.Proxmox.ISOStorage), nil
+}
+
+func totalSizeMB(isos []localISO) float64 {
+	var total int64
+	for _, iso := range isos {
+		total += iso.size
+	}
+	return math.Round(float64(total)/1024/1024*10) / 10
+}
+
+// isoUploadPlan is the comparison of the local ISOs against node's storage.
+type isoUploadPlan struct {
+	store      *proxmox.ISOStore
+	node       string
+	recordPath string
+	records    isoUploadRecords
+	isos       []localISO
+	pending    []localISO
+}
+
+func (p *Provisioner) planISOUpload(ctx context.Context, cfg *config.Config, opts Options, files []string) (*isoUploadPlan, error) {
+	store, err := p.isoStore(cfg)
+	if err != nil {
+		return nil, err
+	}
+	isos, err := inspectISOs(ctx, files)
+	if err != nil {
+		return nil, err
+	}
+	node := cfg.Provider.Proxmox.Node
+	remote, err := store.Volumes(ctx, node)
+	if err != nil {
+		return nil, &errtypes.NetworkError{Msg: "list proxmox iso storage", Err: err}
+	}
+	plan := &isoUploadPlan{
+		store:      store,
+		node:       node,
+		recordPath: workspace.ISOUploadRecordPath(opts.ProjectRoot),
+		isos:       isos,
+	}
+	plan.records = loadUploadRecords(plan.recordPath)
+	for _, iso := range isos {
+		if uploadNeeded(iso, remote, plan.records[store.VolumeID(iso.name)]) {
+			plan.pending = append(plan.pending, iso)
+		}
+	}
+	return plan, nil
+}
+
+// upload drops an ISO's record before sending it, so an interrupted upload
+// can never leave a stale record vouching for a half-replaced volume.
+func (plan *isoUploadPlan) upload(ctx context.Context, iso localISO) error {
+	volume := plan.store.VolumeID(iso.name)
+	if _, ok := plan.records[volume]; ok {
+		delete(plan.records, volume)
+		if err := plan.records.save(plan.recordPath); err != nil {
+			return fmt.Errorf("save iso upload record: %w", err)
+		}
+	}
+	if err := plan.store.Upload(ctx, plan.node, iso.path, iso.sha256); err != nil {
+		return &errtypes.NetworkError{Msg: "upload iso to proxmox", Err: err}
+	}
+	plan.records[volume] = iso.sha256
+	return plan.records.save(plan.recordPath)
+}
+
+// UploadCustomISOsToProxmox uploads the custom ISOs that are missing or
+// differ on the ISO storage through the Proxmox API, one file at a time, so
+// an interrupted run resumes with only the remainder.
 func (p *Provisioner) UploadCustomISOsToProxmox(ctx context.Context, cfg *config.Config, opts Options) error {
 	if cfg.Provider.Proxmox == nil {
 		return &errtypes.ConfigError{Msg: msgProxmoxProviderRequired}
@@ -141,86 +187,66 @@ func (p *Provisioner) UploadCustomISOsToProxmox(ctx context.Context, cfg *config
 		return nil
 	}
 
-	host := hostssh.ProxmoxBareHost(cfg.Provider.Proxmox.Host)
-
-	knownHostsPath, err := sshpin.Verify(ctx, host, cfg.Provider.Proxmox.SSHHostFingerprint, cfg.Provider.Proxmox.RequirePinnedFingerprint, p.Log)
-	if err != nil {
-		return fmt.Errorf("verify proxmox host key: %w", err)
-	}
-
-	if knownHostsPath != "" {
-		defer os.Remove(knownHostsPath)
-	}
-	if err := p.ValidateISOPlacement(ctx, cfg); err != nil {
+	if err := p.validateISOPlacement(ctx, cfg); err != nil {
 		return err
 	}
-	remotePath, err := p.isoStoragePath(ctx, cfg, host, knownHostsPath)
+	plan, err := p.planISOUpload(ctx, cfg, opts, isoFiles)
 	if err != nil {
 		return err
 	}
-	var toUpload []string
-	for _, f := range isoFiles {
-		if isoUploadNeeded(ctx, p.Exec, host, knownHostsPath, remotePath, f) {
-			toUpload = append(toUpload, f)
-		} else {
-			p.Log.Info("iso: skipping unchanged", "file", filepath.Base(f))
+	for _, iso := range plan.isos {
+		if !slices.Contains(plan.pending, iso) {
+			p.Log.Info("iso: skipping unchanged", "file", iso.name)
 		}
 	}
-
-	if len(toUpload) == 0 {
+	if len(plan.pending) == 0 {
 		p.Log.Info("iso: all isos already up to date on proxmox storage")
-		return p.verifySharedISOs(ctx, cfg, host, knownHostsPath, isoFiles)
+		return p.verifySharedISOs(ctx, cfg, isoFiles)
 	}
 
-	totalSizeMB := float64(calculateTotalSize(toUpload)) / 1024 / 1024
-	roundedMB := math.Round(totalSizeMB*10) / 10
-	p.Log.Info("iso: uploading", "count", len(toUpload), "size_mb", roundedMB, "user", proxmoxSCPUser, "host", host, "path", remotePath)
-
-	if err := uploadISOsViaSCP(ctx, p.Exec, toUpload, host, remotePath, knownHostsPath); err != nil {
-		return &errtypes.NetworkError{Msg: "scp upload to proxmox failed", Err: err}
+	p.Log.Info("iso: uploading", "count", len(plan.pending), "size_mb", totalSizeMB(plan.pending), "storage", cfg.Provider.Proxmox.ISOStorage, "node", plan.node)
+	for _, iso := range plan.pending {
+		if err := plan.upload(ctx, iso); err != nil {
+			return err
+		}
+		p.Log.Info("iso: uploaded", "file", iso.name)
 	}
 
-	p.Log.Info("iso: uploaded files to proxmox storage", "count", len(toUpload))
-	return p.verifySharedISOs(ctx, cfg, host, knownHostsPath, isoFiles)
+	p.Log.Info("iso: uploaded files to proxmox storage", "count", len(plan.pending))
+	return p.verifySharedISOs(ctx, cfg, isoFiles)
 }
 
-// ISOUploadAlreadyDone returns true when every local ISO has an identical
-// sha256 on the Proxmox host. Any SSH failure or absent Proxmox config
-// conservatively returns (false, nil), so Exec runs and surfaces the real
-// failure.
+// currentISOUploads returns the local ISO files when every one is already
+// on the ISO storage with its verified checksum; any failure reports false.
+func (p *Provisioner) currentISOUploads(ctx context.Context, cfg *config.Config, opts Options) ([]string, bool) {
+	isoDir := filepath.Join(opts.WorkDir, "custom-isos")
+	if !system.DirExists(isoDir) {
+		return nil, false
+	}
+	isoFiles, err := collectISOFiles(isoDir)
+	if err != nil || len(isoFiles) == 0 {
+		return nil, false
+	}
+	plan, err := p.planISOUpload(ctx, cfg, opts, isoFiles)
+	return isoFiles, err == nil && len(plan.pending) == 0
+}
+
+// ISOUploadAlreadyDone returns true when every local ISO is on the ISO
+// storage with its verified checksum. Missing credentials, an unreadable
+// storage, or absent Proxmox config return (false, nil), so Exec runs and
+// surfaces the real failure.
 func (p *Provisioner) ISOUploadAlreadyDone(ctx context.Context, cfg *config.Config, opts Options) (bool, error) {
 	if cfg.Provider.Proxmox == nil {
 		return false, nil
 	}
-	isoDir := filepath.Join(opts.WorkDir, "custom-isos")
-	if !system.DirExists(isoDir) {
+	isoFiles, current := p.currentISOUploads(ctx, cfg, opts)
+	if !current {
 		return false, nil
 	}
-	isoFiles, err := collectISOFiles(isoDir)
-	if err != nil || len(isoFiles) == 0 {
-		return false, nil
-	}
-	host := hostssh.ProxmoxBareHost(cfg.Provider.Proxmox.Host)
-	knownHostsPath, err := sshpin.Verify(ctx, host, cfg.Provider.Proxmox.SSHHostFingerprint, cfg.Provider.Proxmox.RequirePinnedFingerprint, p.Log)
-	if err != nil {
+	if err := p.validateISOPlacement(ctx, cfg); err != nil {
 		return false, err
 	}
-	if knownHostsPath != "" {
-		defer os.Remove(knownHostsPath)
-	}
-	remotePath, err := p.isoStoragePath(ctx, cfg, host, knownHostsPath)
-	if err != nil {
-		return false, err
-	}
-	if slices.ContainsFunc(isoFiles, func(f string) bool {
-		return isoUploadNeeded(ctx, p.Exec, host, knownHostsPath, remotePath, f)
-	}) {
-		return false, nil
-	}
-	if err := p.ValidateISOPlacement(ctx, cfg); err != nil {
-		return false, err
-	}
-	if err := p.verifySharedISOs(ctx, cfg, host, knownHostsPath, isoFiles); err != nil {
+	if err := p.verifySharedISOs(ctx, cfg, isoFiles); err != nil {
 		return false, err
 	}
 	return true, nil

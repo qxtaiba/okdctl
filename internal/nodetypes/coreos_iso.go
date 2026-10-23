@@ -6,7 +6,7 @@ import (
 )
 
 // CoreOSISONamePatterns are the known-safe base CoreOS installer ISO filename glob shapes.
-// provision's ISO auto-detect and hostssh's path-safety guard both match
+// provision's ISO auto-detect and destroy's base-ISO removal both match
 // against this list so the two allowlists cannot drift apart.
 var CoreOSISONamePatterns = []string{
 	"fedora-coreos-*.iso",

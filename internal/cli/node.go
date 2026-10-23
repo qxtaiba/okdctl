@@ -355,7 +355,7 @@ func (e *nodeOpsEnv) newRunner(cmd *cobra.Command, cfg *config.Config, verb stri
 		provExecOpts = append(provExecOpts, executor.WithStdout(subprocOut), executor.WithStderr(subprocOut))
 	}
 	provExec := executor.New(provExecOpts...)
-	prov := provision.New(phase.WithExecutor(provExec), phase.WithLogger(log))
+	prov := provision.New(phase.WithExecutor(provExec), phase.WithLogger(log), phase.WithProxmoxCredentials(creds))
 	runner.ISO = prov
 	runner.Ignition = prov
 	runner.Provision = provision.NewOptions(e.projectRoot)

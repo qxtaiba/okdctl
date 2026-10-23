@@ -12,7 +12,7 @@ Per-role placement lists use Terraform's node index ordering and fall back to th
 
 Day-2 capacity checks query each destination host and the relevant OS/data datastore. Same-store disk demand is combined; a shared datastore must fit the total demand across destination hosts. These are observations, not reservations against concurrent external allocation.
 
-Multi-host provisioning requires NFS, CIFS or CephFS ISO storage with ISO content enabled and active on every selected node. Upload uses SSH argv mode and the configured fingerprint policy, resolves the real storage path, and checks required volumes from every destination. A directory's `shared` flag alone does not establish this contract. Unsupported layouts fail before provisioning; no automatic per-host ISO replication is performed.
+Multi-host provisioning requires NFS, CIFS or CephFS ISO storage with ISO content enabled and active on every selected node. Before uploading, okdctl reads the storage status from every destination through the Proxmox API; after uploading through the API it lists the storage from every destination and requires each ISO volume to be visible. A directory's `shared` flag alone does not establish this contract. Unsupported layouts fail before provisioning; no automatic per-host ISO replication is performed.
 
 ## Effective configuration
 

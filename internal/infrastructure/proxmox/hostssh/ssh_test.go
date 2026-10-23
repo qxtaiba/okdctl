@@ -23,35 +23,9 @@ func TestSSHRunBaseArgs(t *testing.T) {
 		wants      []string
 	}{
 		{
-			name: "sshRun accept-new",
+			name: "accept-new",
 			run: func(exec *executor.Executor, knownHosts string) (*executor.Result, error) {
-				return sshRun(context.Background(), exec, "10.0.0.1", knownHosts, "uptime")
-			},
-			wants: []string{
-				"-o StrictHostKeyChecking=accept-new",
-				"-o BatchMode=yes",
-				"root@10.0.0.1",
-				"uptime",
-			},
-		},
-		{
-			name:       "sshRun strict mode",
-			knownHosts: "/tmp/known_hosts",
-			run: func(exec *executor.Executor, knownHosts string) (*executor.Result, error) {
-				return sshRun(context.Background(), exec, "10.0.0.1", knownHosts, "uptime")
-			},
-			wants: []string{
-				"-o UserKnownHostsFile=/tmp/known_hosts",
-				"-o StrictHostKeyChecking=yes",
-				"-o BatchMode=yes",
-				"root@10.0.0.1",
-				"uptime",
-			},
-		},
-		{
-			name: "SSHRunArgv accept-new",
-			run: func(exec *executor.Executor, knownHosts string) (*executor.Result, error) {
-				return SSHRunArgv(context.Background(), exec, "10.0.0.2", knownHosts, "pvesh", "get", "/nodes")
+				return sshRunArgvOutput(context.Background(), exec, "10.0.0.2", knownHosts, "pvesh", "get", "/nodes")
 			},
 			wants: []string{
 				"-o StrictHostKeyChecking=accept-new",
@@ -63,10 +37,10 @@ func TestSSHRunBaseArgs(t *testing.T) {
 			},
 		},
 		{
-			name:       "SSHRunArgv strict mode",
+			name:       "strict mode",
 			knownHosts: "/tmp/known_hosts",
 			run: func(exec *executor.Executor, knownHosts string) (*executor.Result, error) {
-				return SSHRunArgv(context.Background(), exec, "10.0.0.2", knownHosts, "pvesh", "get", "/nodes")
+				return sshRunArgvOutput(context.Background(), exec, "10.0.0.2", knownHosts, "pvesh", "get", "/nodes")
 			},
 			wants: []string{
 				"-o UserKnownHostsFile=/tmp/known_hosts",
@@ -97,7 +71,7 @@ func TestSSHRunBaseArgs(t *testing.T) {
 }
 
 // Error must name index/rune but never echo the atom, which could carry credential material.
-func TestSSHRunArgv_RejectsUnsafeAtoms(t *testing.T) {
+func TestSSHRunArgvOutput_RejectsUnsafeAtoms(t *testing.T) {
 	installFakeSSHEcho(t)
 	exec := executor.New()
 
@@ -122,33 +96,24 @@ func TestSSHRunArgv_RejectsUnsafeAtoms(t *testing.T) {
 		"",
 	}
 	for _, atom := range payloads {
-		for name, run := range map[string]func() (*executor.Result, error){
-			"SSHRunArgv": func() (*executor.Result, error) {
-				return SSHRunArgv(context.Background(), exec, "10.0.0.2", "", "pvesh", "get", atom)
-			},
-			"SSHRunArgvOutput": func() (*executor.Result, error) {
-				return SSHRunArgvOutput(context.Background(), exec, "10.0.0.2", "", "pvesh", "get", atom)
-			},
-		} {
-			_, err := run()
-			if err == nil {
-				t.Errorf("%s accepted unsafe atom %q; want error", name, atom)
-				continue
-			}
-			if atom != "" && len(atom) > 2 && strings.Contains(err.Error(), atom) {
-				t.Errorf("%s error %q echoes the unsafe atom %q", name, err.Error(), atom)
-			}
+		_, err := sshRunArgvOutput(context.Background(), exec, "10.0.0.2", "", "pvesh", "get", atom)
+		if err == nil {
+			t.Errorf("accepted unsafe atom %q; want error", atom)
+			continue
+		}
+		if atom != "" && len(atom) > 2 && strings.Contains(err.Error(), atom) {
+			t.Errorf("error %q echoes the unsafe atom %q", err.Error(), atom)
 		}
 	}
 }
 
 // Pins the full allowed charset so tightening it can't silently break pvesh
 // paths, UPIDs, or option atoms.
-func TestSSHRunArgv_AcceptsShlexSafeCharset(t *testing.T) {
+func TestSSHRunArgvOutput_AcceptsShlexSafeCharset(t *testing.T) {
 	installFakeSSHEcho(t)
 	exec := executor.New()
 
-	result, err := SSHRunArgv(context.Background(), exec, "10.0.0.2", "",
+	result, err := sshRunArgvOutput(context.Background(), exec, "10.0.0.2", "",
 		"pvesh", "get", "/nodes/pve-01/tasks/UPID:pve:0A:root@pam:/status",
 		"--output-format", "a%b+c=d,e._f-g")
 	if err != nil {

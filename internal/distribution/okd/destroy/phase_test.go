@@ -232,7 +232,7 @@ func TestDestroyExecute_RunsTerraformDestroy(t *testing.T) {
 	}
 
 	cfg := destroyableConfig()
-	cfg.Provider.Proxmox = nil // ISO removal requires live SSH to Proxmox; skipped here
+	cfg.Provider.Proxmox = nil
 	opts := destroyableOpts(workDir, projectRoot)
 	opts.CleanupKind = cleanup.WorkOnly
 

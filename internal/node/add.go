@@ -121,11 +121,11 @@ func (r *Runner) AddWorkers(ctx context.Context, opts AddOptions) error {
 
 	plan := addPlan(r.Cfg.Cluster.Name, startIdx, opts.Count)
 	if checker, ok := r.ISO.(interface {
-		ValidateISOPlacement(context.Context, *config.Config) error
+		ValidateISOStorage(context.Context, *config.Config) error
 	}); ok {
 		topology := *r.Cfg
 		topology.Topology.Workers.Count = startIdx + opts.Count
-		if err := checker.ValidateISOPlacement(ctx, &topology); err != nil {
+		if err := checker.ValidateISOStorage(ctx, &topology); err != nil {
 			return err
 		}
 	}
