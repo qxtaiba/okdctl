@@ -59,6 +59,9 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	if result := validateConfig(cfg, cmd.ErrOrStderr()); !result.IsValid() {
+		return (&errtypes.ConfigError{Msg: "config validation failed", Err: result}).WithHint("review the errors listed above")
+	}
 	creds, err := doctorCredentials(cfg, cfgFile)
 	if err != nil {
 		return err
@@ -84,14 +87,15 @@ func validateOutputFormat(format string) error {
 }
 
 func doctorCredentials(cfg *config.Config, configPath string) (*credentials.ProxmoxCredentials, error) {
-	if cfg.Provider.Proxmox == nil || cfg.Provider.Proxmox.Host == "" {
-		return nil, &errtypes.ConfigError{Msg: "provider.proxmox.host is not set in " + configPath}
-	}
 	envPath := credentials.EnvFilePath(configPath)
 	if err := credentials.LoadEnvFile(envPath); err != nil {
 		return nil, err
 	}
 	creds := credentials.GetProxmoxCredentials(cfg)
+	if creds.Endpoint == "" {
+		creds.Zeroize()
+		return nil, &errtypes.ConfigError{Msg: "proxmox endpoint refused: an http:// host or PROXMOX_VE_ENDPOINT needs provider.proxmox.insecure_http: true"}
+	}
 	if !creds.UseAPIToken() {
 		creds.Zeroize()
 		return nil, &errtypes.AuthError{Msg: "no proxmox api token: set PROXMOX_VE_API_TOKEN in " + envPath}

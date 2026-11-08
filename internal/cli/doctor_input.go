@@ -8,9 +8,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/proxmox"
 )
 
-// preflightInput maps the v2 provider block onto the preflight footprint
-// with no node identities; the Define slice replaces it with a model.Build
-// based mapping.
+// preflightInput maps the raw v2 provider block to a footprint with no node identities.
 func preflightInput(cfg *config.Config) proxmox.PreflightInput {
 	px := cfg.Provider.Proxmox
 	if px == nil {

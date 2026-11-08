@@ -55,8 +55,12 @@ func TestHighestTrafficCommandsCarryExamples(t *testing.T) {
 	want := []string{
 		"okdctl",
 		"okdctl init",
+		"okdctl doctor",
 		"okdctl releases list",
 		"okdctl config validate",
+	}
+	if !strings.Contains(rootCmd.Example, "okdctl doctor") {
+		t.Errorf("root Example does not list okdctl doctor:\n%s", rootCmd.Example)
 	}
 	for _, path := range want {
 		t.Run(path, func(t *testing.T) {
