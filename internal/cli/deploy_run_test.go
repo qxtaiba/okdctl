@@ -55,14 +55,6 @@ func stubWizard(t *testing.T, res wizard.Result, verb steps.HubVerb, err error) 
 	return rec
 }
 
-func forbidWizard(t *testing.T) {
-	t.Helper()
-	runWizardFn = func(*cobra.Command, *config.Config, bool) (hubOutcome, error) {
-		t.Error("wizard must not be constructed on this path")
-		return hubOutcome{Result: wizard.Result{Outcome: wizard.OutcomeCancelled}, Verb: steps.HubVerbEditConfig}, nil
-	}
-}
-
 func seedDeployConfig(t *testing.T) {
 	t.Helper()
 	cfg := config.DefaultConfig()

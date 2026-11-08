@@ -1,3 +1,4 @@
+// Package steps holds the wizard's configure-flow screens.
 package steps
 
 import (

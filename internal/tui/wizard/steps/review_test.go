@@ -309,16 +309,6 @@ func TestReviewStep_ShortHelp_AdvertisesJumpOnlyWhenTargetsExist(t *testing.T) {
 	}
 }
 
-// reviewFullJumpTargets is the digit assignment the wizard computes when
-// every reviewJumpOrder step is present (nothing hidden by ShouldShow).
-func reviewFullJumpTargets() []wizard.JumpTarget {
-	targets := make([]wizard.JumpTarget, len(reviewJumpOrder))
-	for i, id := range reviewJumpOrder {
-		targets[i] = wizard.JumpTarget{StepID: id, Digit: i + 1}
-	}
-	return targets
-}
-
 func TestReviewStep_PinnedFooterShowsActions(t *testing.T) {
 	s := NewReviewStep()
 
