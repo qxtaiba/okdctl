@@ -1,16 +1,11 @@
 package system
 
 import (
-	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
-	"time"
-
-	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
 func setSudoEnv(t *testing.T, uid, gid string) {
@@ -260,37 +255,4 @@ func TestChownTreeToInvokingUser_AggregatesErrors(t *testing.T) {
 	if lineCount < 3 {
 		t.Errorf("expected >=3 joined errors (walk continued); got %d in: %v", lineCount, err)
 	}
-}
-
-func TestHasPasswordlessSudo(t *testing.T) {
-	// Locks the executor.NewExitError convention: reports ctx cancellation, not
-	// an opaque exec.ExitError from the signal.
-	t.Run("ctx cancel surfaces ctx err", func(t *testing.T) {
-		testutil.InstallFakeBin(t, "sudo", "#!/bin/sh\nexec /bin/sleep 5\n")
-
-		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-		defer cancel()
-		err := HasPasswordlessSudo(ctx)
-		if !errors.Is(err, context.DeadlineExceeded) {
-			t.Fatalf("err = %v; want context.DeadlineExceeded", err)
-		}
-	})
-
-	t.Run("exit 0 maps to nil", func(t *testing.T) {
-		testutil.InstallFakeBin(t, "sudo", "#!/bin/sh\nexit 0\n")
-		if err := HasPasswordlessSudo(context.Background()); err != nil {
-			t.Fatalf("passwordless probe: err = %v; want nil", err)
-		}
-	})
-
-	t.Run("non-zero exit propagates as non-ctx error", func(t *testing.T) {
-		testutil.InstallFakeBin(t, "sudo", "#!/bin/sh\nexit 1\n")
-		err := HasPasswordlessSudo(context.Background())
-		if err == nil {
-			t.Fatal("expected error for non-zero sudo exit")
-		}
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			t.Fatalf("err = %v; must not be a ctx error", err)
-		}
-	})
 }

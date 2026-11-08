@@ -78,10 +78,7 @@ func TestWantsDefaultLogSink(t *testing.T) {
 		want bool
 	}{
 		{deployCmd, true},
-		{destroyCmd, true},
-		{cleanupCmd, true},
 		{versionCmd, false},
-		{statusCmd, false},
 		{rootCmd, false},
 	}
 	for _, tc := range cases {

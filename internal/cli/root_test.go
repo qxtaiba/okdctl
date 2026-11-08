@@ -50,14 +50,12 @@ func TestNoRegisteredFlagNameLooksLikeCredential(t *testing.T) {
 // TestHighestTrafficCommandsCarryExamples guards E-C7: root plus the
 // highest-traffic leaves each carry a non-empty Example, so `--help` shows
 // an EXAMPLES section (installHelp's usage template only renders one when
-// .HasExample is true) — node resize is the model this list follows.
+// .HasExample is true).
 func TestHighestTrafficCommandsCarryExamples(t *testing.T) {
 	want := []string{
 		"okdctl",
 		"okdctl deploy",
-		"okdctl destroy",
-		"okdctl status",
-		"okdctl node manage",
+		"okdctl releases list",
 		"okdctl config validate",
 	}
 	for _, path := range want {
@@ -182,12 +180,6 @@ func TestExitCodeForTaxonomy(t *testing.T) {
 		{"ErrConfigMissing_wrapped", fmt.Errorf("load: %w", &errtypes.ConfigError{Msg: "not found", Err: errtypes.ErrConfigMissing}), 66},
 		{"ErrPullSecretInvalid_direct", &errtypes.AuthError{Msg: "bad json", Err: errtypes.ErrPullSecretInvalid}, 65},
 		{"ErrSudoMissing_direct", &errtypes.AuthError{Msg: "no sudo", Err: errtypes.ErrSudoMissing}, 71},
-		// doctor's warn-only sentinel is cli-local (not an errtypes category); see errDoctorWarn
-		{"errDoctorWarn_direct", errDoctorWarn, 6},
-		{"errDoctorWarn_wrapped", fmt.Errorf("doctor: %w", errDoctorWarn), 6},
-		// plan's drift-found sentinel mirrors errDoctorWarn (cli-local); see errPlanDrift
-		{"errPlanDrift_direct", errPlanDrift, 7},
-		{"errPlanDrift_wrapped", fmt.Errorf("plan: %w", errPlanDrift), 7},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -204,10 +196,6 @@ func TestShouldAnnounceFailure(t *testing.T) {
 		err  error
 		want bool
 	}{
-		{"errDoctorWarn suppressed", errDoctorWarn, false},
-		{"wrapped errDoctorWarn suppressed", fmt.Errorf("doctor: %w", errDoctorWarn), false},
-		{"errPlanDrift suppressed", errPlanDrift, false},
-		{"wrapped errPlanDrift suppressed", fmt.Errorf("plan: %w", errPlanDrift), false},
 		{"ConfigError announced", &errtypes.ConfigError{Msg: "bad yaml"}, true},
 		{"generic error announced", errors.New("boom"), true},
 	}
@@ -392,7 +380,7 @@ func installLogBuffer(t *testing.T) *bytes.Buffer {
 func TestFlagErrorFuncReturnsUsageErrorWithHelpHint(t *testing.T) {
 	buf := installLogBuffer(t)
 
-	err := rootCmd.FlagErrorFunc()(nodeResizeCmd, errors.New("unknown flag: --bogus"))
+	err := rootCmd.FlagErrorFunc()(deployCmd, errors.New("unknown flag: --bogus"))
 
 	var usageErr *errtypes.UsageError
 	if !errors.As(err, &usageErr) {
@@ -405,8 +393,8 @@ func TestFlagErrorFuncReturnsUsageErrorWithHelpHint(t *testing.T) {
 	if !ok {
 		t.Fatalf("errtypes.Describe failed to classify %v", err)
 	}
-	if !strings.Contains(d.Hint, "okdctl node resize --help") {
-		t.Fatalf("hint = %q, want it to contain %q", d.Hint, "okdctl node resize --help")
+	if !strings.Contains(d.Hint, "okdctl deploy --help") {
+		t.Fatalf("hint = %q, want it to contain %q", d.Hint, "okdctl deploy --help")
 	}
 	if buf.Len() != 0 {
 		t.Fatalf("FlagErrorFunc must not log directly; buffer = %q", buf.String())
@@ -463,22 +451,8 @@ func TestMutatesStateClassification(t *testing.T) {
 		want bool
 	}{
 		{deployCmd, true},
-		{destroyCmd, true},
-		{cleanupCmd, true},
-		{updateIngressCmd, true},
-		{nodeAddCmd, true},
-		{nodeRemoveCmd, true},
-		{nodeResizeCmd, true},
-		{clusterStopCmd, true},
-		{addonUninstallCmd, true},
 		{versionCmd, false},
-		{statusCmd, false},
-		{nodeListCmd, false},
 		{releasesListCmd, false},
-		{addonListCmd, false},
-		{addonVerifyCmd, false},
-		{doctorCmd, false},
-		{planCmd, false},
 	}
 	for _, tc := range cases {
 		if got := mutatesState(tc.cmd); got != tc.want {

@@ -21,28 +21,24 @@ func seedMarkerFile(t *testing.T, dir, relPath, content string) {
 	}
 }
 
-const tfStateRelPath = "infrastructure/terraform/environments/production/terraform.tfstate"
-
-func TestHasProjectMarker(t *testing.T) {
+func TestHasPrimaryMarker(t *testing.T) {
 	cases := []struct {
-		name    string
-		seed    string // relative path to create; empty seeds nothing
-		content string
-		want    bool
+		name string
+		seed string // relative path to create; empty seeds nothing
+		want bool
 	}{
-		{"config file", "okdctl.yaml", "", true},
-		{"env file", "okdctl.env", "", true},
-		{"tfstate", tfStateRelPath, "{}", true},
-		{"none", "", "", false},
+		{"config file", "okdctl.yaml", true},
+		{"env file", "okdctl.env", true},
+		{"none", "", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
 			if tc.seed != "" {
-				seedMarkerFile(t, dir, tc.seed, tc.content)
+				seedMarkerFile(t, dir, tc.seed, "")
 			}
-			if got := hasProjectMarker(dir); got != tc.want {
-				t.Errorf("hasProjectMarker = %v, want %v", got, tc.want)
+			if got := hasPrimaryMarker(dir); got != tc.want {
+				t.Errorf("hasPrimaryMarker = %v, want %v", got, tc.want)
 			}
 		})
 	}
