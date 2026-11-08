@@ -186,29 +186,6 @@ func TestCtrlCAsksOnEveryConfigureStep(t *testing.T) {
 	}
 }
 
-func TestCredentialEditCountsAsUnsaved(t *testing.T) {
-	edits := map[string]func(*config.ProxmoxConfig){
-		"username":  func(p *config.ProxmoxConfig) { p.Username = "root@pam" },
-		"password":  func(p *config.ProxmoxConfig) { p.Password.Set("hunter2") },
-		"api token": func(p *config.ProxmoxConfig) { p.APIToken.Set("token-value") },
-	}
-	for name, edit := range edits {
-		t.Run(name, func(t *testing.T) {
-			m, _ := configureModel(t, StepIDProxmox)
-			if m.Config().Provider.Proxmox == nil {
-				t.Fatal("default config carries no proxmox provider block")
-			}
-			edit(m.Config().Provider.Proxmox)
-
-			m = update(t, m, ctrlC)
-
-			if m.quitting || !showsDiscardPrompt(m) {
-				t.Error("ctrl+c after a credential edit must ask before quitting")
-			}
-		})
-	}
-}
-
 func TestRevertedEditQuitsImmediately(t *testing.T) {
 	m, _ := configureModel(t, StepIDBasics)
 	original := m.Config().Cluster.Name
@@ -274,36 +251,4 @@ func deliver(m *Model, cmd tea.Cmd) {
 		return
 	}
 	m.Update(msg)
-}
-
-func TestShutdownClearsTheSavedCredentials(t *testing.T) {
-	cfg := config.DefaultConfig()
-	cfg.Provider.Proxmox.Password.Set("hunter2")
-	cfg.Provider.Proxmox.APIToken.Set("token-value")
-	m := NewModel([]WizardStep{&fakeStep{id: StepIDBasics}}, cfg)
-	password, apiToken := m.saved.password, m.saved.apiToken
-	if string(password) != "hunter2" || string(apiToken) != "token-value" {
-		t.Fatalf("saved credentials = %q, %q; want the ones the flow opened with", password, apiToken)
-	}
-
-	m.shutdown()
-
-	for _, b := range append(password, apiToken...) {
-		if b != 0 {
-			t.Fatal("shutdown left a saved credential byte in memory")
-		}
-	}
-}
-
-func TestSavedCredentialsDoNotAliasTheLiveConfig(t *testing.T) {
-	cfg := config.DefaultConfig()
-	cfg.Provider.Proxmox.Password.Set("hunter2")
-	m := NewModel([]WizardStep{&fakeStep{id: StepIDBasics}}, cfg)
-
-	live := cfg.Provider.Proxmox.Password.Bytes()
-	live[0] = 'X'
-
-	if string(m.saved.password) != "hunter2" {
-		t.Errorf("saved password = %q; an edit to the live config reached it", m.saved.password)
-	}
 }

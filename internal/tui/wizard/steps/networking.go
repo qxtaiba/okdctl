@@ -1,366 +1,211 @@
 package steps
 
 import (
-	"errors"
 	"fmt"
-	"net"
 	"net/netip"
 	"strings"
 
 	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/netutil"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
-// NetworkingStepDefinition declares the cluster-networking step fields.
+// Node address offsets mirror internal/model: masters at +0..2, workers at +10 onward.
+const (
+	masterCount    = 3
+	workerIPOffset = 10
+)
+
+const pairKeyVIPs = "vips"
+
+// NetworkingStepDefinition declares the machine network, VIP and node
+// address fields.
 var NetworkingStepDefinition = wizard.StepDefinition{
 	ID:           wizard.StepIDNetworking,
 	Title:        "network configuration",
 	DisplayTitle: "configure cluster networking",
-	Description:  "configure cluster networking",
+	Description:  "lay out the machine network, the vips and the node addresses",
 	Sections: []wizard.SectionDefinition{
 		{
-			Title: "infrastructure network",
+			Title: "machine network",
 			Fields: []wizard.FieldDefinition{
 				{
-					Key:       "machine_cidr",
-					Label:     labelMachineCIDR,
+					Key:       config.FieldNetworkingMachineCIDR,
+					Label:     "machine cidr",
 					Default:   "192.168.1.0/24",
-					Help:      "network cidr where vms will be deployed, e.g. 192.168.1.0/24",
+					Help:      "network the vms live on, e.g. 192.168.1.0/24",
 					Required:  true,
-					Validate:  config.ValidateCIDR,
+					Validate:  validateCIDR,
 					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.MachineCIDR = v }),
 					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.MachineCIDR }),
 				},
 				{
-					Key:       fieldGateway,
-					Label:     fieldGateway,
+					Key:       config.FieldNetworkingGateway,
+					Label:     "gateway",
 					Default:   "192.168.1.1",
-					Help:      "network gateway ip address",
+					Help:      "default gateway ip address inside the machine cidr",
 					Required:  true,
-					Validate:  config.ValidateIP,
+					Validate:  validateIP,
 					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.Gateway = v }),
 					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.Gateway }),
 				},
 				{
-					Key:      "dns_servers",
-					Label:    labelUpstreamDNS,
-					Default:  "192.168.1.1",
-					Help:     "comma-separated ip addresses for dnsmasq on bastion — vms resolve through bastion automatically",
-					Required: true,
-					Validate: validateDNSServers,
-					ConfigSet: func(cfg *config.Config, value string) error {
-						servers := strings.Split(value, ",")
-						cfg.Networking.DNS = make([]string, 0, len(servers))
-						for _, dns := range servers {
-							dns = strings.TrimSpace(dns)
-							if dns != "" {
-								cfg.Networking.DNS = append(cfg.Networking.DNS, dns)
-							}
-						}
-						return nil
-					},
-					ConfigGet: func(cfg *config.Config) string {
-						return strings.Join(cfg.Networking.DNS, ", ")
-					},
+					Key:       config.FieldNetworkingDNS,
+					Label:     "dns servers",
+					Default:   "192.168.1.1",
+					Help:      "comma-separated resolver ip addresses the nodes use, e.g. 192.168.1.1, 1.1.1.1",
+					Required:  true,
+					Validate:  validateIPList,
+					ConfigSet: setList(func(c *config.Config, v []string) { c.Networking.DNS = v }),
+					ConfigGet: getList(func(c *config.Config) []string { return c.Networking.DNS }),
 				},
 			},
 		},
 		{
-			Title: "kubernetes networks",
+			Title: "virtual ips",
 			Fields: []wizard.FieldDefinition{
 				{
-					Key:       "pod_cidr",
-					Label:     labelPodCIDR,
-					Default:   "10.128.0.0/14",
-					Help:      "kubernetes pod network (okd default: 10.128.0.0/14)",
+					Key:       config.FieldNetworkingAPIVIP,
+					Label:     "api vip",
+					Default:   "192.168.1.158",
+					Help:      "unused ip address in the machine cidr for the kubernetes api, e.g. 192.168.1.158",
 					Required:  true,
-					Validate:  config.ValidateCIDR,
-					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.PodCIDR = v }),
-					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.PodCIDR }),
+					PairKey:   pairKeyVIPs,
+					Validate:  validateIP,
+					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.APIVIP = v }),
+					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.APIVIP }),
 				},
 				{
-					Key:       "service_cidr",
-					Label:     labelServiceCIDR,
-					Default:   "172.30.0.0/16",
-					Help:      "kubernetes service network (okd default: 172.30.0.0/16)",
+					Key:       config.FieldNetworkingIngressVIP,
+					Label:     "ingress vip",
+					Default:   "192.168.1.159",
+					Help:      "unused ip address in the machine cidr for the ingress router, e.g. 192.168.1.159",
 					Required:  true,
-					Validate:  config.ValidateCIDR,
-					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.ServiceCIDR = v }),
-					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.ServiceCIDR }),
-				},
-				{
-					Key:       "host_prefix",
-					Label:     labelHostPrefix,
-					Default:   "23",
-					Help:      "subnet size per node (smaller = more pods)",
-					Type:      wizard.FieldTypeSelect,
-					Options:   []string{"20", "21", "22", "23", "24", "25", "26"},
-					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Networking.HostPrefix = v }),
-					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Networking.HostPrefix }),
+					PairKey:   pairKeyVIPs,
+					Validate:  validateIP,
+					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.IngressVIP = v }),
+					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.IngressVIP }),
 				},
 			},
 		},
 		{
-			Title: "static ip allocation",
+			Title: "node addresses",
 			Fields: []wizard.FieldDefinition{
 				{
-					Key:       "start_ip",
-					Label:     "start ip",
-					Default:   DefaultStartIP,
-					Help:      "ip address where the bootstrap node boots, e.g. 192.168.1.140 — other nodes follow sequentially and the api vip derives from it",
+					Key:       config.FieldNetworkingNodeIPStart,
+					Label:     "node ip start",
+					Default:   "192.168.1.150",
+					Help:      "first node address — masters take +0..2 and workers +10 onward, e.g. 192.168.1.150",
 					Required:  true,
-					PairKey:   "static_ip",
-					Validate:  config.ValidateIP,
-					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.StaticIP.Start = v }),
-					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.StaticIP.Start }),
+					Validate:  validateIP,
+					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.NodeIPStart = v }),
+					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.NodeIPStart }),
 				},
 				{
-					Key:       fieldInterface,
-					Label:     fieldInterface,
-					Default:   "ens18",
-					Help:      "network interface inside vms — ens18 is the proxmox/virtio default; use ip link in a vm to verify",
-					Required:  true,
-					PairKey:   "static_ip",
-					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.StaticIP.Interface = v }),
-					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.StaticIP.Interface }),
-				},
-			},
-		},
-		{
-			Title: "load balancing",
-			Fields: []wizard.FieldDefinition{
-				{
-					Key:       "bastion_ip",
-					Label:     "bastion ip",
-					Default:   "192.168.1.20",
-					Help:      "ip of this machine (runs haproxy + dnsmasq — vms use this for dns resolution)",
-					Required:  true,
-					PairKey:   "load_balancing",
-					Validate:  config.ValidateIP,
-					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.Bastion.IP = v }),
-					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.Bastion.IP }),
-				},
-				{
-					Key:         "vip",
-					Label:       labelAPIVIP,
-					Default:     "",
-					Placeholder: "auto",
-					PairKey:     "load_balancing",
-					Help:        "virtual ip for kubernetes api — leave blank to auto-derive from static ip start",
-					Validate: func(value string) error {
-						if value == "" {
-							return nil
-						}
-						return config.ValidateIP(value)
-					},
-					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.Bastion.VIP = v }),
-					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.Bastion.VIP }),
+					Key:         fieldNTP,
+					Label:       "ntp servers",
+					Placeholder: "pool.ntp.org",
+					Help:        "comma-separated hostnames or ips for chrony — blank keeps the default pool",
+					ConfigSet:   setList(func(c *config.Config, v []string) { c.Networking.NTP = v }),
+					ConfigGet:   getList(func(c *config.Config) []string { return c.Networking.NTP }),
 				},
 			},
 		},
 	},
-	Validate: func(values map[string]string) error {
-		machineCIDR := values["machine_cidr"]
-		podCIDR := values["pod_cidr"]
-		serviceCIDR := values["service_cidr"]
-
-		if overlap, ok := cidrsOverlapIfValid(machineCIDR, podCIDR); ok && overlap {
-			return wizard.NewCrossFieldError(
-				errors.New("machine cidr and pod cidr must not overlap — widen or move one of the ranges"),
-				"machine_cidr", "pod_cidr",
-			)
-		}
-		if overlap, ok := cidrsOverlapIfValid(machineCIDR, serviceCIDR); ok && overlap {
-			return wizard.NewCrossFieldError(
-				errors.New("machine cidr and service cidr must not overlap — widen or move one of the ranges"),
-				"machine_cidr", "service_cidr",
-			)
-		}
-		if overlap, ok := cidrsOverlapIfValid(podCIDR, serviceCIDR); ok && overlap {
-			return wizard.NewCrossFieldError(
-				errors.New("pod cidr and service cidr must not overlap — widen or move one of the ranges"),
-				"pod_cidr", "service_cidr",
-			)
-		}
-		if err := config.ValidateGatewayInCIDR(values[fieldGateway], machineCIDR); err != nil {
-			return err
-		}
-		return nil
-	},
-	Apply: func(_ *wizard.DataDrivenStep, cfg *config.Config) error {
-		cfg.Networking.StaticIP.DNS = cfg.Networking.Bastion.IP
-		// Shared with loader.go's load-time derivation; unlike the loader
-		// this step rejects an invalid CIDR rather than leaving it for validators.
-		return config.DeriveStaticNetmask(cfg)
-	},
+	Validate: networkingCrossFields,
 }
 
-// cidrsOverlapIfValid reports whether a and b overlap, with checked false
-// when either fails to parse — the per-field CIDR validator already shows
-// its own clean format error for a malformed value, so the overlap check
-// stays silent rather than surfacing netutil's wrapped netip parse error.
-func cidrsOverlapIfValid(a, b string) (overlap, checked bool) {
-	if !config.IsValidCIDR(a) || !config.IsValidCIDR(b) {
-		return false, false
+var networkingAddressKeys = []string{
+	config.FieldNetworkingGateway, config.FieldNetworkingAPIVIP,
+	config.FieldNetworkingIngressVIP, config.FieldNetworkingNodeIPStart,
+}
+
+// networkingCrossFields checks what no single field can: every address
+// inside the machine cidr and no two of them equal. Unparseable values are
+// left to their own field validator.
+func networkingCrossFields(values map[string]string) error {
+	cidr, err := netip.ParsePrefix(values[config.FieldNetworkingMachineCIDR])
+	if err != nil {
+		return nil //nolint:nilerr // the machine cidr's own field validator reports the malformed value
 	}
-	overlap, err := netutil.CIDRsOverlap(a, b)
-	return overlap, err == nil
+	seen := make(map[string]string, len(networkingAddressKeys))
+	for _, key := range networkingAddressKeys {
+		addr, err := netip.ParseAddr(values[key])
+		if err != nil {
+			continue
+		}
+		if !cidr.Contains(addr) {
+			return wizard.NewCrossFieldError(
+				fmt.Errorf("%s %s is outside machine cidr %s — pick an address inside it or widen the cidr", fieldLabel(key), addr, cidr.Masked()),
+				key, config.FieldNetworkingMachineCIDR)
+		}
+		if other, dup := seen[addr.String()]; dup {
+			return wizard.NewCrossFieldError(
+				fmt.Errorf("%s and %s both use %s — every address must be distinct", fieldLabel(other), fieldLabel(key), addr),
+				other, key)
+		}
+		seen[addr.String()] = key
+	}
+	return nil
 }
 
 // NewNetworkingStep returns the networking wizard step, with an allocation
-// preview once capacity is non-nil.
+// preview once capacity carries the session config.
 func NewNetworkingStep(capacity *WizardCapacitySnapshot) *wizard.DataDrivenStep {
 	step := wizard.NewDataDrivenStep(&NetworkingStepDefinition)
 	if capacity == nil {
 		return step
 	}
 	step.WithExtraContentFunc("allocation preview", func(s *wizard.DataDrivenStep, _ int) string {
-		cpCount, workerCount, known := capacity.counts()
-		if !known || capacity.discovery == nil {
+		if capacity.cfg == nil {
 			return ""
 		}
-		values := make(map[string]string, 8)
-		for _, key := range []string{"machine_cidr", fieldGateway, "start_ip", "bastion_ip", "vip"} {
+		values := make(map[string]string, 5)
+		for _, key := range append([]string{config.FieldNetworkingMachineCIDR}, networkingAddressKeys...) {
 			values[key] = s.Value(key)
 		}
-		if capacity.cfg != nil {
-			values["ignition_ip"] = capacity.cfg.HTTPServer.IgnitionServerIP
-			if capacity.cfg.Provider.Proxmox != nil {
-				values["proxmox_host"] = capacity.cfg.Provider.Proxmox.Host
-			}
-		}
-		return renderNetworkAllocationPreview(values, cpCount, workerCount)
+		return renderNetworkAllocationPreview(values, capacity.cfg.Workers.Count)
 	})
 	return step
 }
 
-func renderNetworkAllocationPreview(values map[string]string, controlPlaneCount, workerCount int) string {
+func renderNetworkAllocationPreview(values map[string]string, workers int) string {
 	warning := lipgloss.NewStyle().Foreground(tui.ColorWarning())
-	startText := values["start_ip"]
-	start, err := netip.ParseAddr(startText)
+	start, err := netip.ParseAddr(values[config.FieldNetworkingNodeIPStart])
 	if err != nil || !start.Is4() {
-		return warning.Render("invalid start IP — allocation unavailable")
+		return warning.Render("invalid node ip start — allocation unavailable")
 	}
-	count := 1 + controlPlaneCount + workerCount
-	var rows []string
-	ips := make([]string, count)
-	for i := range count {
-		ip, calcErr := netutil.CalculateVMIP(startText, i)
-		if calcErr != nil {
-			return warning.Render("static IP allocation invalid — preview unavailable")
-		}
-		ips[i] = ip
+	last := masterCount - 1
+	rows := []string{"masters " + addressRange(start, 0, last)}
+	if workers > 0 {
+		last = workerIPOffset + workers - 1
+		rows = append(rows, "workers "+addressRange(start, workerIPOffset, last))
 	}
-	rows = append(rows, "bootstrap "+ips[0])
-	if controlPlaneCount > 0 {
-		rows = append(rows, allocationGroup("masters", ips[1:1+controlPlaneCount]))
-	}
-	for i := 0; i < workerCount; i++ {
-		rows = append(rows, fmt.Sprintf("worker%d %s", i, ips[1+controlPlaneCount+i]))
-	}
-	cidr := values["machine_cidr"]
-	if config.ValidateCIDR(cidr) != nil {
-		rows = append(rows, warning.Render("invalid machine CIDR"))
-	} else {
-		if err := netutil.ValidateIPRangeInCIDR(startText, count, cidr); err != nil {
-			rows = append(rows, warning.Render("static IP range outside machine CIDR"))
-		}
-		if values[fieldGateway] != "" && config.ValidateGatewayInCIDR(values[fieldGateway], cidr) != nil {
-			rows = append(rows, warning.Render("gateway invalid for machine CIDR: "+values[fieldGateway]))
+	for _, key := range []string{config.FieldNetworkingAPIVIP, config.FieldNetworkingIngressVIP} {
+		if v := values[key]; v != "" {
+			rows = append(rows, fieldLabel(key)+" "+v)
 		}
 	}
-	if explicit := values["vip"]; explicit != "" {
-		if _, err := netutil.ResolveVIP(explicit, startText); err != nil {
-			rows = append(rows, warning.Render("api vip invalid: "+explicit))
-		} else {
-			rows = append(rows, "api vip "+explicit)
-			if config.ValidateCIDR(cidr) == nil && !addressInCIDR(explicit, cidr) {
-				rows = append(rows, warning.Render("api vip outside machine CIDR: "+explicit))
-			}
+	if cidr, err := netip.ParsePrefix(values[config.FieldNetworkingMachineCIDR]); err == nil {
+		if !cidr.Contains(start) || !cidr.Contains(addressAt(start, last)) {
+			rows = append(rows, warning.Render("node range leaves machine cidr "+cidr.Masked().String()))
 		}
-	} else if vip, err := netutil.ResolveVIP("", startText); err == nil {
-		rows = append(rows, "api vip "+vip+" (auto)")
-		if config.ValidateCIDR(cidr) == nil && !addressInCIDR(vip, cidr) {
-			rows = append(rows, warning.Render("api vip outside machine CIDR: "+vip))
-		}
-	}
-	if bastion := values["bastion_ip"]; bastion != "" {
-		if _, err := netip.ParseAddr(bastion); err != nil {
-			rows = append(rows, warning.Render("vm dns target invalid: "+bastion))
-		} else {
-			rows = append(rows, "vm dns → bastion "+bastion)
-			if config.ValidateCIDR(cidr) == nil && !addressInCIDR(bastion, cidr) {
-				rows = append(rows, warning.Render("bastion outside machine CIDR: "+bastion))
-			}
-		}
-	}
-	if gateway := values[fieldGateway]; gateway != "" {
-		if _, err := netip.ParseAddr(gateway); err != nil {
-			rows = append(rows, warning.Render("gateway invalid: "+gateway))
-		}
-	}
-	if collision := allocationCollision(ips, values[fieldGateway], values["bastion_ip"], allocationVIP(values, startText), values["ignition_ip"], proxmoxHostIP(values["proxmox_host"])); collision != "" {
-		rows = append(rows, warning.Render("collision at "+collision))
 	}
 	return strings.Join(rows, "\n")
 }
 
-func addressInCIDR(address, cidr string) bool {
-	addr, addrErr := netip.ParseAddr(address)
-	prefix, prefixErr := netip.ParsePrefix(cidr)
-	return addrErr == nil && prefixErr == nil && prefix.Contains(addr)
+func addressRange(start netip.Addr, from, to int) string {
+	if from == to {
+		return addressAt(start, from).String()
+	}
+	return addressAt(start, from).String() + "–" + addressAt(start, to).String()
 }
 
-func proxmoxHostIP(host string) string {
-	host = strings.TrimPrefix(strings.TrimPrefix(host, "https://"), "http://")
-	if parsed, err := netip.ParseAddr(host); err == nil {
-		return parsed.String()
+func addressAt(start netip.Addr, offset int) netip.Addr {
+	for range offset {
+		start = start.Next()
 	}
-	if name, _, err := net.SplitHostPort(host); err == nil {
-		if parsed, parseErr := netip.ParseAddr(name); parseErr == nil {
-			return parsed.String()
-		}
-	}
-	return ""
-}
-
-func allocationGroup(label string, ips []string) string {
-	if len(ips) == 1 {
-		return fmt.Sprintf("%s %s", strings.TrimSuffix(label, "s"), ips[0])
-	}
-	return fmt.Sprintf("%s %s–%s", label, ips[0], ips[len(ips)-1])
-}
-
-func allocationVIP(values map[string]string, start string) string {
-	vip, err := netutil.ResolveVIP(values["vip"], start)
-	if err != nil {
-		return ""
-	}
-	return vip
-}
-
-func allocationCollision(ips []string, reserved ...string) string {
-	used := make(map[netip.Addr]string, len(ips)+len(reserved))
-	for i, value := range ips {
-		addr, err := netip.ParseAddr(value)
-		if err != nil {
-			continue
-		}
-		used[addr] = fmt.Sprintf("vm %d", i)
-	}
-	for _, value := range reserved {
-		addr, err := netip.ParseAddr(value)
-		if err != nil || value == "" {
-			continue
-		}
-		if _, exists := used[addr]; exists {
-			return addr.String()
-		}
-		used[addr] = "reserved"
-	}
-	return ""
+	return start
 }

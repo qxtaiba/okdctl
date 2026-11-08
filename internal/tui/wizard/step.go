@@ -108,6 +108,18 @@ type BackGuard interface {
 	InterceptBack() bool
 }
 
+// Secrets is wizard input that never enters the Config: the Proxmox API
+// token and TLS toggle the caller writes to okdctl.env.
+type Secrets struct {
+	ProxmoxToken    config.SecretBytes
+	ProxmoxInsecure bool
+}
+
+// SecretsProvider is implemented by steps that collect Secrets.
+type SecretsProvider interface {
+	Secrets() Secrets
+}
+
 // KeyBinding is a key/help pair used in the wizard footer.
 type KeyBinding struct {
 	Key  string

@@ -1,9 +1,7 @@
 package wizard
 
 import (
-	"bytes"
 	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/json"
 	"strings"
 
@@ -14,52 +12,24 @@ import (
 
 const discardPrompt = "discard unsaved changes? ctrl+c or y quits · any other key stays"
 
-// savedState is the config a flow opened with: a digest of everything that
-// serializes, and the credentials themselves, which never do. A password
-// must not go through a fast hash, so credentials are compared directly.
+// savedState is a digest of the config a flow opened with.
 type savedState struct {
-	digest   [sha256.Size]byte
-	username string
-	password []byte
-	apiToken []byte
+	digest [sha256.Size]byte
 }
 
 func newSavedState(cfg *config.Config) savedState {
-	username, password, apiToken := credentialsOf(cfg)
-	return savedState{
-		digest:   configDigest(cfg),
-		username: username,
-		password: bytes.Clone(password),
-		apiToken: bytes.Clone(apiToken),
-	}
+	return savedState{digest: configDigest(cfg)}
 }
 
 func (s *savedState) matches(cfg *config.Config) bool {
-	username, password, apiToken := credentialsOf(cfg)
-	return configDigest(cfg) == s.digest &&
-		username == s.username &&
-		subtle.ConstantTimeCompare(password, s.password) == 1 &&
-		subtle.ConstantTimeCompare(apiToken, s.apiToken) == 1
-}
-
-func (s *savedState) release() {
-	clear(s.password)
-	clear(s.apiToken)
-}
-
-func credentialsOf(cfg *config.Config) (username string, password, apiToken []byte) {
-	if cfg == nil || cfg.Provider.Proxmox == nil {
-		return "", nil, nil
-	}
-	p := cfg.Provider.Proxmox
-	return p.Username, p.Password.Bytes(), p.APIToken.Bytes()
+	return configDigest(cfg) == s.digest
 }
 
 func configDigest(cfg *config.Config) [sha256.Size]byte {
 	if cfg == nil {
 		return sha256.Sum256(nil)
 	}
-	data, err := json.Marshal(config.Effective(cfg))
+	data, err := json.Marshal(cfg)
 	if err != nil {
 		return sha256.Sum256(nil)
 	}

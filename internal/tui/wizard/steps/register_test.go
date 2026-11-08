@@ -9,7 +9,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
-func TestDeployPhases_CoverEveryRegisteredStepExactlyOnce(t *testing.T) {
+func TestConfigurePhases_CoverEveryRegisteredStepExactlyOnce(t *testing.T) {
 	builder := wizard.NewStepBuilder()
 	RegisterAll(builder)
 	built, err := wizard.BuildSteps(wizard.DefaultConfig(), builder)
@@ -18,7 +18,7 @@ func TestDeployPhases_CoverEveryRegisteredStepExactlyOnce(t *testing.T) {
 	}
 
 	counts := make(map[wizard.StepID]int)
-	for _, stage := range deployPhases() {
+	for _, stage := range configurePhases() {
 		for _, id := range stage.Steps {
 			counts[id]++
 		}
@@ -30,7 +30,7 @@ func TestDeployPhases_CoverEveryRegisteredStepExactlyOnce(t *testing.T) {
 		}
 	}
 	if len(counts) != len(built.Steps) {
-		t.Errorf("deployPhases lists %d step ids, RegisterAll has %d", len(counts), len(built.Steps))
+		t.Errorf("configurePhases lists %d step ids, RegisterAll has %d", len(counts), len(built.Steps))
 	}
 }
 

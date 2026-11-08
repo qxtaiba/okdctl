@@ -1,0 +1,40 @@
+                                                                                                                        
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │ O K D C T L                                                                                                      │  
+  │ review your configuration                                                    connect · cluster · extras · review │  
+  │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
+  │  PREFLIGHT · 1 passed · 0 warnings · 2 failed · 0 not checked                                                    │  
+  │  ✗ pull secret · unavailable · ./pull-secret.json                                                                │  
+  │  ✗ ssh public key · unavailable · ./id_ed25519.pub                                                               │  
+  │  ✓ configuration · valid                                                                                         │  
+  │  [1] cluster identity                                                                                            │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
+  │  name          lab                                                                                               │  
+  │  domain        k8s.local                                                                                         │  
+  │  distribution  OKD 4.22.0-okd-scos.10                                                                            │  
+  │                                                                                                                  │  
+  │  [2] proxmox                                                                                                     │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
+  │  endpoint     https://192.168.1.100:8006                                                                         │  
+  │  nodes        pve1, pve2                                                                                         │  
+  │  storage      local-lvm                                                                                          │  
+  │  iso storage  local                                                                                              │  
+  │  bridge       vmbr0                                                                                              │  
+  │  cpu type     host                                                                                               │  
+  │  vm id base   6000                                                                                               │  
+  │                                                                                                                  │  
+  │  [3] nodes                                                                                                       │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
+  │  node        vmid ip            host vcpu   ram      disks                                                       │  
+  │  lab-master0 6010 192.168.1.150 pve2    4 32 gb     120 gb                                                       │  
+  │  lab-master1 6011 192.168.1.151 pve2    4 16 gb     120 gb                                                       │  
+  │  lab-master2 6012 192.168.1.152 pve1    4 16 gb     120 gb                                                       │  
+  │  lab-worker0 6100 192.168.1.160 pve2    8 16 gb 120+500 gb                                                       │  
+  │  lab-worker1 6101 192.168.1.161 pve1    8 16 gb 120+500 gb                                                       │  
+  │                                                                                                                  │  
+  │  [4] networking                                                                                                  │  
+  │                                                                                                                  │  
+  │────────────────────────────── ↑ ↓  scroll down for more ─────────────────────────────── ▸ okd 4.22.0-okd-scos.10 │  
+  │  ● deploy now   ○ save and exit                  ←/→ choose • enter confirm • esc back … • ctrl+c quit • ? help  │  
+  ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
+                                                                                                                        

@@ -3,38 +3,38 @@
   │ O K D C T L                                                                                                      │  
   │ review your configuration                                                    connect · cluster · extras · review │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
-  │  netmask          255.255.255.0 (from cidr)                                                                      │  
-  │  vm dns           192.168.1.20 (bastion/dnsmasq)                                                                 │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
+  │  machine cidr   192.168.1.0/24                                                                                   │  
+  │  gateway        192.168.1.1                                                                                      │  
+  │  dns            192.168.1.1                                                                                      │  
+  │  api vip        192.168.1.158                                                                                    │  
+  │  ingress vip    192.168.1.159                                                                                    │  
+  │  node ip start  192.168.1.150                                                                                    │  
   │                                                                                                                  │  
   │  [5] compute                                                                                                     │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
-  │  control plane     3 × (4 vcpu, 12 GB RAM, 50 GB os disk)                                                        │  
-  │  workers           3 × (8 vcpu, 20 GB RAM, 50 GB os disk)                                                        │  
-  │  worker data disk  500 gb per worker (1500 gb total)                                                             │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
-  │  total             40 vcpu, 104 gb ram, 1850 gb disk                                                             │  
+  │  control plane  3 × (4 vcpu, 16 gb ram, disks 120 gb)                                                            │  
+  │  workers        2 × (8 vcpu, 16 gb ram, disks 120+500 gb)                                                        │  
+  │  total          28 vcpu, 96 gb ram, 1600 gb disk                                                                 │  
   │                                                                                                                  │  
-  │  [6] files & ignition                                                                                            │  
+  │  [6] files                                                                                                       │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
-  │  ignition server  https://192.168.1.20                                                                           │  
-  │  web root         /var/www/html                                                                                  │  
+  │  pull secret     ./pull-secret.json                                                                              │  
+  │  ssh public key  ./id_ed25519.pub                                                                                │  
   │                                                                                                                  │  
   │  [7] advanced                                                                                                    │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
-  │  vm id base             6000                                                                                     │  
-  │  timeouts               bootstrap 60m, install 120m                                                              │  
-  │  terraform environment  production                                                                               │  
-  │                                                                                                                  │  
-  │  DEPLOY PLAN                                                                                                     │  
-  │  role      vms vcpu   ram os disk                                                                                │  
-  │  bootstrap   1    4  8 gb   50 gb                                                                                │  
-  │  masters     3    4 12 gb   50 gb                                                                                │  
-  │  workers     3    8 20 gb   50 gb                                                                                │  
+  │  pod cidr          10.128.0.0/14                                                                                 │  
+  │  service cidr      172.30.0.0/16                                                                                 │  
+  │  host prefix       23                                                                                            │  
+  │  drain timeout     10m                                                                                           │  
+  │  handoff           yes                                                                                           │  
+  │  red hat catalogs  disabled                                                                                      │  
   │                                                                                                                  │  
   │  WRITES                                                                                                          │  
   │  okdctl.yaml                                                                                                     │  
   │                                                                                                                  │  
-  │──────────────────────────────── ↑ ↓  scroll up for more ──────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
+  │─────────────────────────────── ↑ ↓  scroll up for more ──────────────────────────────── ▸ okd 4.22.0-okd-scos.10 │  
   │  ● deploy now   ○ save and exit                  ←/→ choose • enter confirm • esc back … • ctrl+c quit • ? help  │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                                         

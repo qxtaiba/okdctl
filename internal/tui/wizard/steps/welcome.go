@@ -72,7 +72,7 @@ var hubFreshVerbs = []hubEntry{
 
 // HubFlow builds the flow a hub verb swaps into. Building is deferred to the
 // moment the verb is confirmed: the manage-nodes flow's hooks load
-// credentials and probe the Proxmox host, work no plain `okdctl deploy` should
+// credentials and probe the Proxmox host, work no plain `okdctl init` should
 // pay for unless the operator asks for it.
 type HubFlow func() ([]wizard.WizardStep, wizard.FlowChrome, error)
 
@@ -177,7 +177,7 @@ func (s *WelcomeStep) SetExistingConfig(cfg *config.Config, state SaveSlotState)
 	if cfg == nil {
 		return
 	}
-	nodes := cfg.Topology.ControlPlane.Count + cfg.Topology.Workers.Count
+	nodes := masterCount + cfg.Workers.Count
 	s.saveSlot = fmt.Sprintf("%s · okd %s · %s · %s",
 		cfg.Cluster.Name, cfg.Distribution.Version, pluralNodes(nodes), state)
 }

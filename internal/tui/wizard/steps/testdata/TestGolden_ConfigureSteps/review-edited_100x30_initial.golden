@@ -4,27 +4,27 @@
   │ review your configuration                                connect · cluster · extras · review │  
   │──────────────────────────────────────────────────────────────────────────────────────────────│  
   │  PREFLIGHT · 1 passed · 0 warnings · 2 failed · 0 not checked                                │  
-  │  ✗ pull secret · not configured                                                              │  
-  │  ✗ ssh public key · not configured                                                           │  
-  │  ✓ CIDR ranges · no overlap · 192.168.1.0/24 · 10.128.0.0/14 · 172.30.0.0/16                 │  
+  │  ✗ pull secret · unavailable · ./pull-secret.json                                            │  
+  │  ✗ ssh public key · unavailable · ./id_ed25519.pub                                           │  
+  │  ✓ configuration · valid                                                                     │  
   │  CONFIG CHANGES · 2                                                                          │  
-  │    domain                  k8s.local → prod.example                                          │  
-  │    control plane vcpus     4 → 5                                                             │  
+  │    cluster.domain                k8s.local → prod.example                                    │  
+  │    control_plane.cpu             4 → 5                                                       │  
   │                                                                                              │  
   │  [1] cluster identity                                                                        │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
-  │  name          mycluster                                                                     │  
+  │  name          lab                                                                           │  
   │  domain        prod.example                                                                  │  
-  │  distribution  OKD 4.22.0-okd-scos.7                                                         │  
+  │  distribution  OKD 4.22.0-okd-scos.10                                                        │  
   │                                                                                              │  
   │  [2] proxmox                                                                                 │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
-  │  host            192.168.1.100:8006                                                          │  
-  │  bootstrap node  pve                                                                         │  
-  │  bridge          vmbr0                                                                       │  
-  │  storage         local-lvm                                                                   │  
+  │  endpoint     https://192.168.1.100:8006                                                     │  
+  │  nodes        pve                                                                            │  
+  │  storage      local-lvm                                                                      │  
+  │  iso storage  local                                                                          │  
   │                                                                                              │  
-  │───────────────────── ↑ ↓  scroll down for more ───────────────────── ▸ okd 4.22.0-okd-scos.7 │  
+  │──────────────────── ↑ ↓  scroll down for more ───────────────────── ▸ okd 4.22.0-okd-scos.10 │  
   │  ● deploy now   ○ save and exit         ←/→ choose • enter confirm … • ctrl+c quit • ? help  │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                     

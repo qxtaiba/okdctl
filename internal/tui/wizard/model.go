@@ -205,6 +205,7 @@ type SwapFlowMsg struct {
 type Result struct {
 	Outcome Outcome
 	Config  *config.Config
+	Secrets Secrets
 	Action  Action
 	// ExitStep is the step that completed the flow; empty when cancelled.
 	ExitStep StepID

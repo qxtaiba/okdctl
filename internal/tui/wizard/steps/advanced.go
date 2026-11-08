@@ -2,195 +2,128 @@
 package steps
 
 import (
-	"fmt"
-
-	"charm.land/lipgloss/v2"
+	"errors"
+	"net/netip"
+	"time"
 
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
-const cpuTypeHost = "host"
-
-// AdvancedStepDefinition declares the advanced-settings step fields.
+// AdvancedStepDefinition declares the cluster-network, lifecycle and install
+// option fields.
 var AdvancedStepDefinition = wizard.StepDefinition{
 	ID:           wizard.StepIDAdvanced,
 	Title:        "advanced settings",
 	DisplayTitle: "advanced settings",
-	Description:  "configure vm ids and timeouts",
+	Description:  "cluster networks, node lifecycle and install options",
 	Sections: []wizard.SectionDefinition{
 		{
-			Title: "vm settings",
+			Title: "cluster networks",
 			Fields: []wizard.FieldDefinition{
 				{
-					Key:       "vm_id_base",
-					Label:     labelVMIDBase,
-					Default:   "6000",
-					Help:      "starting vm id in proxmox (e.g., 6000, 6001, ...)",
-					Width:     wizard.FieldWidthNumber,
+					Key:       config.FieldNetworkingPodCIDR,
+					Label:     "pod cidr",
+					Default:   "10.128.0.0/14",
+					Help:      "kubernetes pod network (okd default: 10.128.0.0/14)",
 					Required:  true,
-					Validate:  config.ValidateVMID,
-					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.VMIDBase = v }),
-					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.VMIDBase }),
-				},
-			},
-		},
-		{
-			Title: "proxmox vm settings",
-			Fields: []wizard.FieldDefinition{
-				{
-					Key:     "cpu_type",
-					Label:   labelCPUType,
-					Default: cpuTypeHost,
-					Help:    "host gives best performance, x86-64-v2 or kvm64 allow live migration",
-					Type:    wizard.FieldTypeSelect,
-					Options: []string{cpuTypeHost, "x86-64-v2", "x86-64-v3", "kvm64"},
-					ConfigSet: func(cfg *config.Config, value string) error {
-						if cfg.Provider.Proxmox != nil {
-							cfg.Provider.Proxmox.CPUType = value
-						}
-						return nil
-					},
-					ConfigGet: func(cfg *config.Config) string {
-						if cfg.Provider.Proxmox != nil && cfg.Provider.Proxmox.CPUType != "" {
-							return cfg.Provider.Proxmox.CPUType
-						}
-						return cpuTypeHost
-					},
+					Validate:  validateCIDR,
+					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.PodCIDR = v }),
+					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.PodCIDR }),
 				},
 				{
-					Key:     "numa_enabled",
-					Label:   "enable numa",
-					Default: valNo,
-					Help:    "enable numa topology for vms — improves performance on multi-socket hosts",
-					Type:    wizard.FieldTypeSelect,
-					Options: []string{valNo, valYes},
-					ConfigSet: func(cfg *config.Config, value string) error {
-						if cfg.Provider.Proxmox != nil {
-							cfg.Provider.Proxmox.NUMAEnabled = value == valYes
-						}
-						return nil
-					},
-					ConfigGet: func(cfg *config.Config) string {
-						if cfg.Provider.Proxmox != nil && cfg.Provider.Proxmox.NUMAEnabled {
-							return valYes
-						}
-						return valNo
-					},
-				},
-				{
-					Key:     "ha_enabled",
-					Label:   "enable ha anti-affinity",
-					Default: valNo,
-					Help:    "spread master vms across proxmox nodes via ha-manager anti-affinity — see docs/architecture/wizard.md for requirements",
-					Type:    wizard.FieldTypeSelect,
-					Options: []string{valNo, valYes},
-					ConfigSet: wizard.SetBool(func(c *config.Config, v bool) {
-						if c.Provider.Proxmox != nil {
-							c.Provider.Proxmox.HAEnabled = v
-						}
-					}),
-					ConfigGet: func(cfg *config.Config) string {
-						if cfg.Provider.Proxmox != nil && cfg.Provider.Proxmox.HAEnabled {
-							return valYes
-						}
-						return valNo
-					},
-				},
-			},
-		},
-		{
-			Title: "clock synchronization",
-			Fields: []wizard.FieldDefinition{
-				{
-					Key:         "ntp_server",
-					Label:       labelNTPServer,
-					Default:     "",
-					Placeholder: "pool.ntp.org",
-					Help:        "hostname or ip of the chrony source for master/worker nodes, e.g. pool.ntp.org — blank uses the bastion's ignition server ip",
-					Validate:    config.ValidateNTPServer,
-					ConfigSet:   wizard.SetString(func(c *config.Config, v string) { c.Networking.NTPServer = v }),
-					ConfigGet:   wizard.GetString(func(c *config.Config) string { return c.Networking.NTPServer }),
-				},
-			},
-		},
-		{
-			Title: "installation timeouts",
-			Fields: []wizard.FieldDefinition{
-				{
-					Key:       "bootstrap_timeout",
-					Label:     "bootstrap timeout",
-					Default:   "3600",
-					Help:      "seconds to wait for bootstrap (default: 1 hour)",
-					Width:     wizard.FieldWidthNumber,
+					Key:       config.FieldNetworkingServiceCIDR,
+					Label:     "service cidr",
+					Default:   "172.30.0.0/16",
+					Help:      "kubernetes service network (okd default: 172.30.0.0/16)",
 					Required:  true,
-					Validate:  config.ValidateTimeout,
-					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Deployment.BootstrapTimeout = v }),
-					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Deployment.BootstrapTimeout }),
+					Validate:  validateCIDR,
+					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.ServiceCIDR = v }),
+					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.ServiceCIDR }),
 				},
 				{
-					Key:       "install_timeout",
-					Label:     "install timeout",
-					Default:   "7200",
-					Help:      "seconds to wait for install (default: 2 hours)",
-					Width:     wizard.FieldWidthNumber,
-					Required:  true,
-					Validate:  config.ValidateTimeout,
-					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Deployment.InstallTimeout = v }),
-					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Deployment.InstallTimeout }),
+					Key:       config.FieldNetworkingHostPrefix,
+					Label:     "host prefix",
+					Default:   "23",
+					Help:      "pod subnet size per node (smaller = more pods)",
+					Type:      wizard.FieldTypeSelect,
+					Options:   []string{"20", "21", "22", "23", "24", "25", "26", "27", "28"},
+					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Networking.HostPrefix = v }),
+					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Networking.HostPrefix }),
 				},
 			},
 		},
 		{
-			Title: "deployment options",
+			Title: "node lifecycle",
 			Fields: []wizard.FieldDefinition{
 				{
-					Key:         "terraform_env",
-					Label:       labelTerraformEnvironment,
-					Default:     "",
-					Placeholder: "production",
-					Help:        "directory name under infrastructure/terraform/environments/, e.g. production — blank uses the default (production)",
+					Key:         fieldHookCommand,
+					Label:       "before next node",
+					Placeholder: "none",
+					Help:        "command run between rolling node operations — blank disables the hook",
 					Width:       wizard.FieldWidthPath,
-					Validate:    config.ValidateTerraformEnv,
-					ConfigSet:   wizard.SetString(func(c *config.Config, v string) { c.Deployment.TerraformEnv = v }),
-					ConfigGet:   wizard.GetString(func(c *config.Config) string { return c.Deployment.TerraformEnv }),
+					ConfigSet:   wizard.SetString(func(c *config.Config, v string) { c.Lifecycle.BeforeNextNode.Command = v }),
+					ConfigGet:   wizard.GetString(func(c *config.Config) string { return c.Lifecycle.BeforeNextNode.Command }),
 				},
 				{
-					Key:       "auto_approve",
-					Label:     labelAutoApprove,
-					Default:   valNo,
-					Help:      "skip terraform apply confirmation prompts — use with care",
+					Key:       fieldHookTimeout,
+					Label:     "hook timeout",
+					Default:   "15m",
+					Help:      "how long the hook may run, in go duration syntax such as 15m",
+					Width:     wizard.FieldWidthNumber,
+					Required:  true,
+					Validate:  validateDuration,
+					ConfigSet: setDuration(func(c *config.Config, d time.Duration) { c.Lifecycle.BeforeNextNode.Timeout = d }),
+					ConfigGet: getDuration(func(c *config.Config) time.Duration { return c.Lifecycle.BeforeNextNode.Timeout }),
+				},
+				{
+					Key:       fieldDrainTimeout,
+					Label:     "drain timeout",
+					Default:   "10m",
+					Help:      "how long a node drain may take, in go duration syntax such as 10m",
+					Width:     wizard.FieldWidthNumber,
+					Required:  true,
+					Validate:  validateDuration,
+					ConfigSet: setDuration(func(c *config.Config, d time.Duration) { c.Lifecycle.DrainTimeout = d }),
+					ConfigGet: getDuration(func(c *config.Config) time.Duration { return c.Lifecycle.DrainTimeout }),
+				},
+			},
+		},
+		{
+			Title: "install options",
+			Fields: []wizard.FieldDefinition{
+				{
+					Key:       fieldHandoff,
+					Label:     "apply handoff",
+					Default:   valYes,
+					Help:      "apply handoff/secrets and handoff/manifests once the install completes",
 					Type:      wizard.FieldTypeSelect,
 					Options:   []string{valNo, valYes},
-					ConfigSet: wizard.SetBool(func(c *config.Config, v bool) { c.Deployment.AutoApprove = v }),
-					ConfigGet: func(c *config.Config) string {
-						if c.Deployment.AutoApprove {
-							return valYes
-						}
-						return valNo
-					},
+					ConfigSet: wizard.SetBool(func(c *config.Config, v bool) { c.Handoff.Enabled = v }),
+					ConfigGet: getBool(func(c *config.Config) bool { return c.Handoff.Enabled }),
 				},
 				{
-					Key:         "bin_dir",
-					Label:       "bin dir",
-					Default:     "",
-					Placeholder: "/usr/local/bin",
-					Help:        "absolute path to install oc, openshift-install and tools; ~/ is expanded. blank = /usr/local/bin",
-					Width:       wizard.FieldWidthPath,
-					Validate:    config.ValidateBinDir,
-					ConfigSet:   wizard.SetString(func(c *config.Config, v string) { c.Deployment.BinDir = v }),
-					ConfigGet:   wizard.GetString(func(c *config.Config) string { return c.Deployment.BinDir }),
+					Key:       fieldCatalogs,
+					Label:     "disable red hat catalogs",
+					Default:   valYes,
+					Help:      "turn off the red hat operator catalogs that need a subscription",
+					Type:      wizard.FieldTypeSelect,
+					Options:   []string{valNo, valYes},
+					ConfigSet: wizard.SetBool(func(c *config.Config, v bool) { c.Defaults.DisableRedHatCatalogs = v }),
+					ConfigGet: getBool(func(c *config.Config) bool { return c.Defaults.DisableRedHatCatalogs }),
 				},
 			},
 		},
 	},
-	ExtraContentTitle: "notes",
-	ExtraContent: func(values map[string]string, _ int) string {
-		return lipgloss.NewStyle().
-			Foreground(tui.ColorTextDim()).
-			Italic(true).
-			Render(fmt.Sprintf("current: vm ids from %s · cpu %s · HA %s\nbootstrap timeout %s · install timeout %s · auto approve %s", values["vm_id_base"], values["cpu_type"], values["ha_enabled"], values["bootstrap_timeout"], values["install_timeout"], values["auto_approve"]))
+	Validate: func(values map[string]string) error {
+		pod, podErr := netip.ParsePrefix(values[config.FieldNetworkingPodCIDR])
+		service, serviceErr := netip.ParsePrefix(values[config.FieldNetworkingServiceCIDR])
+		if podErr == nil && serviceErr == nil && pod.Overlaps(service) {
+			return wizard.NewCrossFieldError(
+				errors.New("pod cidr and service cidr must not overlap — widen or move one of the ranges"),
+				config.FieldNetworkingPodCIDR, config.FieldNetworkingServiceCIDR)
+		}
+		return nil
 	},
 }
 

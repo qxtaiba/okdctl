@@ -4,21 +4,21 @@
   │ configure node placement        connect · cluster ✓●○○ · extras · review │  
   │──────────────────────────────────────────────────────────────────────────│  
   │                                                                          │  
-  │    data storage                                                          │  
-  │    ╭────────────────────────────────────╮                                │  
-  │    │ ◂ orphan-pool — capacity unknown ▸ │                                │  
-  │    ╰────────────────────────────────────╯                                │  
+  │    placement pool                                                        │  
+  │    ╭────────────────────────────────────────────────────────────────╮    │  
+  │    │   [✓] pve1                                                     │    │  
+  │    ╰────────────────────────────────────────────────────────────────╯    │  
   │                                                                          │  
-  │    ● bootstrap                                                           │  
+  │    ● control plane                                                       │  
   │                                                                          │  
-  │    mycluster-bootstrap                                                   │  
+  │    lab-master0                                                           │  
   │    ╭──────────────────╮                                                  │  
   │    │ pve1 — ?c/?g     │ default                                          │  
   │    ╰──────────────────╯                                                  │  
-  │    proxmox node for bootstrap vm                                         │  
+  │    proxmox node (nodes.lab-master0.host)                                 │  
   │                                                                          │  
   │                                                                          │  
-  │─────────── ↑ ↓  38% • scroll for more ─────────── ▸ okd 4.22.0-okd-scos.7│  
+  │─────────── ↑ ↓  21% • scroll for more ─────────── ▸ okd 4.22.0-okd-scos.1│  
   │  ↑↓ navigate • ← → change value … • ctrl+c quit • ? help                 │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

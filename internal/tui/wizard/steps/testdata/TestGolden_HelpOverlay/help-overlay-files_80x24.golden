@@ -1,24 +1,24 @@
                                                                                 
   ╭──────────────────────────────────────────────────────────────────────────╮  
   │ O K D C T L                                                              │  
-  │ configure files & ignition serv…  connect · cluster · extras ●○ · review │  
+  │ configure required files          connect · cluster · extras ●○ · review │  
   │──────────────────────────────────────────────────────────────────────────│  
   │                                                                          │  
   │    ● required files                                                      │  
   │                                                                          │  
   │    pull secret                                                           │  
   │    ╭────────────────────────────────────────────────────────────────╮    │  
-  │    │ ?                                                              │    │  
+  │    │ ?./pull-secret.json                                            │    │  
   │    ╰────────────────────────────────────────────────────────────────╯    │  
-  │    path to okd pull-secret.json from red hat                             │  
+  │    path to the okd pull secret json from red hat                         │  
   │                                                                          │  
   │    ssh public key                                                        │  
   │    ╭────────────────────────────────────────────────────────────────╮    │  
-  │    │ ~/.ssh/id_ed25519.pub                                          │    │  
+  │    │ ./id_ed25519.pub                                               │    │  
   │    ╰────────────────────────────────────────────────────────────────╯    │  
   │                                                                          │  
   │                                                                          │  
-  │─────────── ↑ ↓  scroll down for more ──────────── ▸ okd 4.22.0-okd-scos.7│  
+  │─────────── ↑ ↓  scroll down for more ──────────── ▸ okd 4.22.0-okd-scos.1│  
   │  ↑↓/tab navigate • enter continue • esc back … • ctrl+c quit • ? help    │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

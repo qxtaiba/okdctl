@@ -1,24 +1,24 @@
                                                                                 
   ╭──────────────────────────────────────────────────────────────────────────╮  
   │ O K D C T L                                                              │  
-  │ configure proxmox ve connection  connect ✓✓● · cluster · extras · review │  
+  │ configure proxmox ve             connect ✓✓● · cluster · extras · review │  
   │──────────────────────────────────────────────────────────────────────────│  
+  │                                                                          │  
+  │    iso storage                                                           │  
   │    ╭────────────────────────────────────────────────────────╮            │  
-  │    │ 192.168.1.100:8006                                     │            │  
+  │    │ local                                                  │            │  
   │    ╰────────────────────────────────────────────────────────╯            │  
-  │    proxmox host ip:port (e.g., 192.168.1.100:8006)                       │  
   │                                                                          │  
-  │    ○ credentials                                                         │  
+  │    bridge                                                                │  
+  │    ╭────────────────────────────────────────────────────────╮            │  
+  │    │ vmbr0                                                  │            │  
+  │    ╰────────────────────────────────────────────────────────╯            │  
   │                                                                          │  
-  │    username                           password                           │  
-  │    ╭─────────────────────╮            ╭─────────────────────╮            │  
-  │    │ root@pam            │ default    │ ·                   │            │  
-  │    ╰─────────────────────╯            ╰─────────────────────╯            │  
-  │                                                                          │  
-  │    ▸ advanced  token id: not set  ·  verification: enabled               │  
+  │    ▸ advanced  vlan: untagged  ·  cpu type: host  ·  ha: no  ·  vm id    │  
+  │  base: 6000                                                              │  
   │                                                                          │  
   │                                                                          │  
-  │──────────── ↑ ↓  scroll up for more ───────────── ▸ okd 4.22.0-okd-scos.7│  
+  │──────────── ↑ ↓  scroll up for more ───────────── ▸ okd 4.22.0-okd-scos.1│  
   │  ↑↓/tab navigate • enter continue • esc back … • ctrl+c quit • ? help    │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

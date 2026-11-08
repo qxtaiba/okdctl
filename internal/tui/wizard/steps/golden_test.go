@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -15,8 +16,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
-// assertNoScrollIndicator fails t if frame's footer shows the viewport
-// scroll hint, i.e. the step's content overflowed its height.
 func assertNoScrollIndicator(t *testing.T, frame string) {
 	t.Helper()
 	if strings.Contains(tuitest.StripANSI(frame), "scroll") {
@@ -25,8 +24,7 @@ func assertNoScrollIndicator(t *testing.T, frame string) {
 }
 
 // forceHeroColor forces tui.ColorEnabled() true for the duration of t, so
-// the hub's block-letter hero renders instead of its no-color
-// fallback, restoring the prior color profile on cleanup.
+// the hub's block-letter hero renders instead of its no-color fallback.
 func forceHeroColor(t *testing.T) {
 	t.Helper()
 	t.Cleanup(func() { tui.SetColorProfileFor(&bytes.Buffer{}) })
@@ -34,14 +32,11 @@ func forceHeroColor(t *testing.T) {
 	tui.SetColorProfileFor(&bytes.Buffer{})
 }
 
-// seedHubSaveSlot puts the hub on its five-verb menu with the dim save-slot
-// line a loaded configuration produces.
 func seedHubSaveSlot(m *wizard.Model) {
 	cfg := m.Config()
 	cfg.Cluster.Name = "prod-cluster"
 	cfg.Distribution.Version = "4.20.1-okd-scos.7"
-	cfg.Topology.ControlPlane.Count = 3
-	cfg.Topology.Workers.Count = 3
+	cfg.Workers.Count = 3
 	m.CurrentStep().(*WelcomeStep).SetExistingConfig(cfg, SaveSlotDeployed)
 }
 
@@ -59,16 +54,8 @@ func configureScenarios() []configureScenario {
 
 	return []configureScenario{
 		{name: "hub_fresh", id: wizard.StepIDWelcome},
+		{name: "hub_existing", id: wizard.StepIDWelcome, seed: seedHubSaveSlot, interact: downKey},
 		{
-			name:     "hub_existing",
-			id:       wizard.StepIDWelcome,
-			seed:     seedHubSaveSlot,
-			interact: downKey,
-		},
-		{
-			// Tab expands the newest series' patch dropdown (enter now
-			// confirms, honouring the footer's promise), keeping the
-			// dropdown chrome pinned by this golden.
 			name: "distribution",
 			id:   wizard.StepIDDistribution,
 			seed: func(m *wizard.Model) {
@@ -83,6 +70,7 @@ func configureScenarios() []configureScenario {
 			name: "node-placement",
 			id:   wizard.StepIDNodePlacement,
 			seed: func(m *wizard.Model) {
+				m.Config().Provider.Proxmox.Nodes = []string{"pve1", "pve2"}
 				gen := m.CurrentStep().(*NodePlacementStep).generation
 				m.Update(discoveryCompleteMsg{generation: gen, discovery: demoDiscovery()})
 			},
@@ -100,27 +88,19 @@ func configureScenarios() []configureScenario {
 			},
 			interact: downKey,
 		},
+		{name: "review-edited", id: wizard.StepIDReview, seed: seedReviewChanges},
 		{
-			name: "review-edited",
-			id:   wizard.StepIDReview,
-			seed: seedReviewChanges,
-		},
-		{
-			// Populates node placement so every reviewJumpOrder section
-			// renders, pinning the full contiguous jump legend.
-			name: "review-with-8-targets",
+			name: "review-overrides",
 			id:   wizard.StepIDReview,
 			seed: func(m *wizard.Model) {
 				cfg := m.Config()
-				cfg.Provider.Proxmox.ControlPlaneNodes = []string{"pve1", "pve2", "pve3"}
-				cfg.Provider.Proxmox.WorkerNodes = []string{"pve1", "pve2", "pve3"}
+				cfg.Provider.Proxmox.Nodes = []string{"pve1", "pve2"}
+				cfg.Nodes = map[string]config.NodeOverride{"lab-master0": {Host: "pve2", MemoryMiB: new(32768)}}
 				m.CurrentStep().(*ReviewStep).SetConfig(cfg)
 			},
 			interact: endKey,
 		},
 		{
-			// A saved baseline identical to the current config renders no
-			// config-changes block.
 			name: "review-no-changes",
 			id:   wizard.StepIDReview,
 			seed: func(m *wizard.Model) {
@@ -140,7 +120,7 @@ func seedReviewChanges(m *wizard.Model) {
 	step.SetConfig(&baseline)
 	step.SetSavedConfig(&baseline)
 	cfg.Cluster.Domain = "prod.example"
-	cfg.Topology.ControlPlane.CPU++
+	cfg.ControlPlane.CPU++
 	step.SetConfig(cfg)
 }
 
@@ -159,6 +139,7 @@ func newGoldenModelWithCapacity(t *testing.T) (*wizard.Model, *WizardCapacitySna
 	}
 	capacity, _ := built.States[wizard.StepTypeReview].(*WizardCapacitySnapshot)
 	cfg := config.DefaultConfig()
+	cfg.Files.SSHPublicKey = "./id_ed25519.pub"
 	for _, step := range built.Steps {
 		if ds, ok := step.(*wizard.DataDrivenStep); ok {
 			ds.LoadFromConfig(cfg, false)
@@ -170,55 +151,10 @@ func newGoldenModelWithCapacity(t *testing.T) (*wizard.Model, *WizardCapacitySna
 }
 
 func demoDiscovery() *proxmoxDiscovery {
-	return &proxmoxDiscovery{
-		Nodes: []proxmoxNode{
-			{
-				Name: "pve1", Status: "online", CPUs: 32, CPUsKnown: true, MemGB: 128, MemKnown: true,
-				Storage: demoNodeStorage(), StorageKnown: true, Bridges: demoNodeBridges(), BridgesKnown: true,
-			},
-			{
-				Name: "pve2", Status: "online", CPUs: 24, CPUsKnown: true, MemGB: 96, MemKnown: true,
-				Storage: demoNodeStorage(), StorageKnown: true, Bridges: demoNodeBridges(), BridgesKnown: true,
-			},
-		},
-		Storage: []proxmoxStorage{
-			{Name: "local-lvm", Content: "images,rootdir", TotalGB: 1800},
-			{Name: "local", Content: "iso,backup,vztmpl", TotalGB: 200},
-			{Name: "tank", Content: "images", TotalGB: 7200},
-		},
-		Bridges: []proxmoxBridge{
-			{Name: "vmbr0", CIDR: "192.168.1.2/24"},
-			{Name: "vmbr1", CIDR: "10.10.0.1/24"},
-		},
-	}
-}
-
-// demoDiscoverySingleNode pins the single-Proxmox-host case: storage and
-// bridges stay multi-option (as demoDiscovery), but Nodes has exactly one
-// entry — named to match the seeded config's node, so the configured value
-// stays on-list — and every per-node select (bootstrap, control plane,
-// workers) resolves to exactly one option.
-func demoDiscoverySingleNode() *proxmoxDiscovery {
-	disc := demoDiscovery()
-	disc.Nodes = []proxmoxNode{
-		{
-			Name: "pve", Status: "online", CPUs: 32, CPUsKnown: true, MemGB: 128, MemKnown: true,
-			Storage: demoNodeStorage(), StorageKnown: true, Bridges: demoNodeBridges(), BridgesKnown: true,
-		},
-	}
-	return disc
-}
-
-func demoNodeStorage() []proxmoxStorage {
-	return []proxmoxStorage{
-		{Name: "local-lvm", Content: "images,rootdir", TotalGB: 1800, TotalKnown: true},
-		{Name: "local", Content: "iso,backup,vztmpl", TotalGB: 200, TotalKnown: true},
-		{Name: "tank", Content: "images", TotalGB: 7200, TotalKnown: true},
-	}
-}
-
-func demoNodeBridges() []proxmoxBridge {
-	return []proxmoxBridge{{Name: "vmbr0", CIDR: "192.168.1.2/24"}, {Name: "vmbr1", CIDR: "10.10.0.1/24"}}
+	return &proxmoxDiscovery{Nodes: []proxmoxNode{
+		{Name: "pve1", Status: "online", CPUs: 32, CPUsKnown: true, MemGB: 128, MemKnown: true},
+		{Name: "pve2", Status: "online", CPUs: 24, CPUsKnown: true, MemGB: 96, MemKnown: true},
+	}}
 }
 
 var goldenSizes = []struct {
@@ -238,11 +174,6 @@ func TestGolden_ConfigureSteps(t *testing.T) {
 					forceHeroColor(t)
 				}
 				base := fmt.Sprintf("%s_%dx%d", sc.name, sz.w, sz.h)
-
-				// newGoldenModel builds via wizard.NewModel, which seeds
-				// its initial size from the process's real terminal
-				// rather than sz; pin it so the golden is independent of
-				// that.
 				tui.SetTerminalWidth(sz.w)
 				t.Cleanup(func() { tui.SetTerminalWidth(0) })
 
@@ -291,7 +222,7 @@ func TestCapacityWizardFramesFitAllTiers(t *testing.T) {
 			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDResources})
 			resourceFrame := tuitest.RenderAt(t, m, size.width, size.height)
 			tuitest.AssertFits(t, resourceFrame, size.width, size.height)
-			if !strings.Contains(tuitest.StripANSI(resourceFrame), "40 vcpu · 104 gb ram · 1850 gb disk") {
+			if !strings.Contains(tuitest.StripANSI(resourceFrame), "28 vcpu · 80 gb ram · 1600 gb disk") {
 				t.Fatalf("resource totals are not pinned in the %dx%d frame:\n%s", size.width, size.height, resourceFrame)
 			}
 		})
@@ -322,9 +253,6 @@ func resolveCmd(t *testing.T, cmd tea.Cmd) tea.Msg {
 	return nil
 }
 
-// TestGolden_HubWideTiers pins the blank-slate hub at wide/tall terminals:
-// the launcher earns a second column instead of sitting as a lone centered
-// menu in an otherwise empty frame.
 func TestGolden_HubWideTiers(t *testing.T) {
 	for _, sz := range []struct{ w, h int }{{150, 24}, {180, 48}} {
 		t.Run(fmt.Sprintf("blank-slate_%dx%d", sz.w, sz.h), func(t *testing.T) {
@@ -340,15 +268,13 @@ func TestGolden_HubWideTiers(t *testing.T) {
 			plain := tuitest.StripANSI(frame)
 			for _, want := range []string{"get started", "GET STARTED", "connect", "cluster", "extras", "review"} {
 				if !strings.Contains(plain, want) {
-					t.Errorf("blank-slate hub at %dx%d is missing %q — it should earn its space, not sit in a void:\n%s", sz.w, sz.h, want, plain)
+					t.Errorf("blank-slate hub at %dx%d is missing %q:\n%s", sz.w, sz.h, want, plain)
 				}
 			}
 		})
 	}
 }
 
-// heroBlockRows counts the frame rows carrying block-letter hero cells, which
-// is heroRows normally and tui.WordmarkRows*heroScale once the hero doubles.
 func heroBlockRows(frame string) int {
 	rows := 0
 	for _, line := range strings.Split(tuitest.StripANSI(frame), "\n") {
@@ -359,9 +285,6 @@ func heroBlockRows(frame string) int {
 	return rows
 }
 
-// TestGolden_HubWideTerminals pins the hub on the two wide sizes goldenSizes
-// doesn't cover, 140x40 and 180x48, where the hero draws at double scale and
-// the launcher centers across the frame's whole width.
 func TestGolden_HubWideTerminals(t *testing.T) {
 	for _, sz := range []struct{ w, h int }{{140, 40}, {180, 48}} {
 		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
@@ -384,7 +307,7 @@ func TestGolden_HubWideTerminals(t *testing.T) {
 	}
 }
 
-var wideTerminalScenarios = map[string]bool{"proxmox": true, "node-placement": true, "review": true, "review-edited": true, "review-with-8-targets": true}
+var wideTerminalScenarios = map[string]bool{"proxmox": true, "node-placement": true, "review": true, "review-edited": true, "review-overrides": true}
 
 func TestGolden_WideTerminal(t *testing.T) {
 	const w, h = 180, 48
@@ -395,7 +318,6 @@ func TestGolden_WideTerminal(t *testing.T) {
 		}
 		t.Run(fmt.Sprintf("%s_%dx%d", sc.name, w, h), func(t *testing.T) {
 			base := fmt.Sprintf("%s_%dx%d", sc.name, w, h)
-
 			tui.SetTerminalWidth(w)
 			t.Cleanup(func() { tui.SetTerminalWidth(0) })
 
@@ -419,12 +341,10 @@ func TestGolden_WideTerminal(t *testing.T) {
 	}
 }
 
-// TestModel_PasswordNeverLeaksIntoTheFrame drives real keystrokes typing a
-// sentinel password into the proxmox password field one character at a
-// time, rendering the full composed frame after every keystroke: neither
-// the sentinel nor any prefix of it 3 characters or longer may ever appear
-// anywhere in the output.
-func TestModel_PasswordNeverLeaksIntoTheFrame(t *testing.T) {
+// TestModel_TokenNeverLeaksIntoTheFrame types a sentinel token into the
+// proxmox api token field one character at a time: neither the sentinel nor
+// any prefix of it 3 characters or longer may appear anywhere in the frame.
+func TestModel_TokenNeverLeaksIntoTheFrame(t *testing.T) {
 	const w, h = 180, 48
 	const sentinel = "hunter2sentinel"
 
@@ -434,9 +354,6 @@ func TestModel_PasswordNeverLeaksIntoTheFrame(t *testing.T) {
 	m := newGoldenModel(t)
 	_ = tuitest.RenderAt(t, m, w, h)
 	m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDProxmox})
-
-	// host is focused first; two tabs reach username, then password.
-	m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 
 	for i, r := range sentinel {
@@ -448,17 +365,11 @@ func TestModel_PasswordNeverLeaksIntoTheFrame(t *testing.T) {
 			t.Fatalf("typed prefix %q leaked into the frame after keystroke %d:\n%s", typed, i, frame)
 		}
 	}
-
-	frame := tuitest.StripANSI(tuitest.RenderAt(t, m, w, h))
-	if strings.Contains(frame, sentinel) {
+	if frame := tuitest.StripANSI(tuitest.RenderAt(t, m, w, h)); strings.Contains(frame, sentinel) {
 		t.Fatalf("full sentinel %q leaked into the frame:\n%s", sentinel, frame)
 	}
 }
 
-// TestGolden_HelpOverlay pins the "?" help overlay open on the files step —
-// key-event-driven, matching how a real terminal session would trigger it.
-// The overlay must replace only the viewport region (header/footer chrome
-// stays) and fit exactly at both sizes.
 func TestGolden_HelpOverlay(t *testing.T) {
 	questionMark := tea.KeyPressMsg{Code: '?', Text: "?"}
 
@@ -470,7 +381,6 @@ func TestGolden_HelpOverlay(t *testing.T) {
 			m := newGoldenModel(t)
 			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
 			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDFiles})
-
 			m.Update(questionMark)
 
 			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
@@ -480,11 +390,6 @@ func TestGolden_HelpOverlay(t *testing.T) {
 	}
 }
 
-// TestGolden_DistributionHelpOverlay pins the "?" overlay for the
-// distribution step's select phase, at the narrowest tier and a wide
-// terminal: its footer-silent "r refresh" entry (the loaded phase's reuse of
-// the key the error phase already binds as "r retry", see handleKeyMsg)
-// appears in the overlay's screen section at both extremes.
 func TestGolden_DistributionHelpOverlay(t *testing.T) {
 	questionMark := tea.KeyPressMsg{Code: '?', Text: "?"}
 
@@ -498,7 +403,6 @@ func TestGolden_DistributionHelpOverlay(t *testing.T) {
 			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDDistribution})
 			gen := m.CurrentStep().(*DistributionStep).generation
 			m.Update(versionsLoadedMsg{generation: gen, series: DemoReleaseSeries()})
-
 			m.Update(questionMark)
 
 			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
@@ -508,11 +412,8 @@ func TestGolden_DistributionHelpOverlay(t *testing.T) {
 	}
 }
 
-// TestGolden_NodePlacementSingleNode pins the single-Proxmox-host case:
-// the bootstrap field's per-node select has exactly one option and must
-// render the bare value with no cycle arrows. Tabs past the infrastructure
-// section's 5 fields (bridge, additional networks, os/data/iso storage)
-// so the bootstrap field is focused and scrolled into view.
+// TestGolden_NodePlacementSingleNode pins the single-host case: every host
+// select has exactly one option and renders the bare value with no arrows.
 func TestGolden_NodePlacementSingleNode(t *testing.T) {
 	tui.SetTerminalWidth(100)
 	t.Cleanup(func() { tui.SetTerminalWidth(0) })
@@ -521,22 +422,17 @@ func TestGolden_NodePlacementSingleNode(t *testing.T) {
 	_ = tuitest.RenderAt(t, m, 100, 30)
 	m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDNodePlacement})
 	gen := m.CurrentStep().(*NodePlacementStep).generation
-	m.Update(discoveryCompleteMsg{generation: gen, discovery: demoDiscoverySingleNode()})
-
-	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
-	for range 5 {
-		m.Update(tabKey)
-		m.Update(wizard.FocusChangedMsg{})
-	}
+	m.Update(discoveryCompleteMsg{generation: gen, discovery: &proxmoxDiscovery{Nodes: []proxmoxNode{
+		{Name: "pve", Status: "online", CPUs: 32, CPUsKnown: true, MemGB: 128, MemKnown: true},
+	}}})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	m.Update(wizard.FocusChangedMsg{})
 
 	frame := tuitest.RenderAt(t, m, 100, 30)
 	tuitest.Golden(t, "node-placement-single-node_100x30", frame)
 	tuitest.AssertFits(t, frame, 100, 30)
 }
 
-// TestGolden_DistributionLoadingState pins the distribution step's loading
-// phase (before versionsLoadedMsg arrives): the spinner, "fetching okd
-// releases", and the dim "this can take a few seconds" hint.
 func TestGolden_DistributionLoadingState(t *testing.T) {
 	for _, sz := range goldenSizes {
 		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
@@ -556,10 +452,6 @@ func TestGolden_DistributionLoadingState(t *testing.T) {
 	}
 }
 
-// TestGolden_DistributionErrorState pins the distribution step's error
-// phase: a failed release fetch renders tui.EmptyState's "no releases
-// loaded — check your connection" line plus the "r retry · esc back"
-// ribbon and the wrapped error detail, never the raw ✗ failure banner.
 func TestGolden_DistributionErrorState(t *testing.T) {
 	for _, sz := range goldenSizes {
 		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
@@ -581,11 +473,9 @@ func TestGolden_DistributionErrorState(t *testing.T) {
 	}
 }
 
-// newGoldenModelFreshDefaults mirrors newGoldenModel but skips
-// LoadFromConfig (matching OKDCTL_WIZARD_DEMO=1's real code path in
-// internal/cli/wizard_setup.go), so fields still carry their raw
-// FieldDefinition defaults instead of config.DefaultConfig's — needed to
-// pin the still-a-default rendering (dim text plus the "default" tag).
+// newGoldenModelFreshDefaults skips LoadFromConfig, matching the
+// OKDCTL_WIZARD_DEMO=1 code path, so fields still carry their raw
+// FieldDefinition defaults.
 func newGoldenModelFreshDefaults(t *testing.T) *wizard.Model {
 	t.Helper()
 	builder := wizard.NewStepBuilder()
@@ -597,9 +487,6 @@ func newGoldenModelFreshDefaults(t *testing.T) *wizard.Model {
 	return wizard.NewFlowModel(built.Steps, config.DefaultConfig(), Chrome())
 }
 
-// pumpCmd recursively runs cmd, flattening tea.BatchMsg, and delivers every
-// resulting message to m.Update, so a headless test observes the state a
-// running tea.Program would reach once its returned commands complete.
 func pumpCmd(m *wizard.Model, cmd tea.Cmd) {
 	if cmd == nil {
 		return
@@ -613,10 +500,6 @@ func pumpCmd(m *wizard.Model, cmd tea.Cmd) {
 	m.Update(cmd())
 }
 
-// TestGolden_BasicsDefaultAsRealValue pins the cluster-name field's default
-// rendering: "mycluster" shows dim with a "default" tag beside the box
-// before any input, and typing the first character replaces it outright
-// rather than appending to it.
 func TestGolden_BasicsDefaultAsRealValue(t *testing.T) {
 	tui.SetTerminalWidth(100)
 	t.Cleanup(func() { tui.SetTerminalWidth(0) })
@@ -636,15 +519,6 @@ func TestGolden_BasicsDefaultAsRealValue(t *testing.T) {
 	tuitest.AssertFits(t, frame, 100, 30)
 }
 
-// TestGolden_ProxmoxEnterHighlightsInvalidFields pins the honest-validation
-// story end to end: tabbing onto the empty, required password field paints
-// no error (it hasn't been left yet), but pressing enter forces the whole
-// form's validation, paints a red box plus field error on password, shows
-// the generic status-row message, and scrolls/focuses the first invalid
-// field.
-// TestGolden_NetworkingMalformedCIDRShowsOneCleanError pins the fix: typing
-// a malformed machine CIDR and tabbing away must show exactly one honest,
-// actionable error — never a second, raw netip parse failure alongside it.
 func TestGolden_NetworkingMalformedCIDRShowsOneCleanError(t *testing.T) {
 	tui.SetTerminalWidth(80)
 	t.Cleanup(func() { tui.SetTerminalWidth(0) })
@@ -674,12 +548,10 @@ func TestGolden_NetworkingMalformedCIDRShowsOneCleanError(t *testing.T) {
 	}
 }
 
-// TestGolden_NetworkingPairedFieldsVisible pins mechanism 2's two declared
-// networking pairs (start_ip+interface, bastion_ip+vip) once tabbed into
-// view — both sections are below the fold in the step's default-focus
-// goldens, so this is the only pinned coverage proving they actually render
-// as one joined row rather than two.
-func TestGolden_NetworkingPairedFieldsVisible(t *testing.T) {
+// TestGolden_NetworkingPairedVIPsVisible pins the api/ingress vip pair once
+// tabbed into view: the section sits below the fold in the default-focus
+// goldens, so this is the only pinned proof it renders as one joined row.
+func TestGolden_NetworkingPairedVIPsVisible(t *testing.T) {
 	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
 
 	for _, sz := range []struct{ w, h int }{{80, 24}, {120, 40}} {
@@ -690,59 +562,33 @@ func TestGolden_NetworkingPairedFieldsVisible(t *testing.T) {
 			m := newGoldenModel(t)
 			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
 			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDNetworking})
-
-			// machine_cidr -> gateway -> dns_servers -> pod_cidr ->
-			// service_cidr -> host_prefix -> start_ip (6 tabs).
-			for range 6 {
+			for range 3 {
 				m.Update(tabKey)
 			}
 			m.Update(wizard.FocusChangedMsg{})
-			staticIPFrame := tuitest.RenderAt(t, m, sz.w, sz.h)
-			tuitest.Golden(t, fmt.Sprintf("networking-paired-static-ip_%dx%d", sz.w, sz.h), staticIPFrame)
-			tuitest.AssertFits(t, staticIPFrame, sz.w, sz.h)
-			plain := tuitest.StripANSI(staticIPFrame)
-			startIdx := strings.Index(plain, "start ip")
-			ifaceIdx := strings.Index(plain, "interface")
-			if startIdx < 0 || ifaceIdx < 0 {
-				t.Fatalf("frame is missing start ip or interface:\n%s", plain)
-			}
-			if startLine, ifaceLine := lineOf(plain, startIdx), lineOf(plain, ifaceIdx); startLine != ifaceLine {
-				t.Errorf("start ip and interface labels are on different rows, want them paired on one row:\n%s", plain)
-			}
 
-			// interface -> bastion_ip (2 more tabs).
-			for range 2 {
-				m.Update(tabKey)
+			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
+			tuitest.Golden(t, fmt.Sprintf("networking-paired-vips_%dx%d", sz.w, sz.h), frame)
+			tuitest.AssertFits(t, frame, sz.w, sz.h)
+			plain := tuitest.StripANSI(frame)
+			apiIdx, ingressIdx := strings.Index(plain, "api vip"), strings.Index(plain, "ingress vip")
+			if apiIdx < 0 || ingressIdx < 0 {
+				t.Fatalf("frame is missing api vip or ingress vip:\n%s", plain)
 			}
-			m.Update(wizard.FocusChangedMsg{})
-			loadBalancingFrame := tuitest.RenderAt(t, m, sz.w, sz.h)
-			tuitest.Golden(t, fmt.Sprintf("networking-paired-load-balancing_%dx%d", sz.w, sz.h), loadBalancingFrame)
-			tuitest.AssertFits(t, loadBalancingFrame, sz.w, sz.h)
-			plain = tuitest.StripANSI(loadBalancingFrame)
-			bastionIdx := strings.Index(plain, "bastion ip")
-			vipIdx := strings.Index(plain, "api vip")
-			if bastionIdx < 0 || vipIdx < 0 {
-				t.Fatalf("frame is missing bastion ip or api vip:\n%s", plain)
-			}
-			if bastionLine, vipLine := lineOf(plain, bastionIdx), lineOf(plain, vipIdx); bastionLine != vipLine {
-				t.Errorf("bastion ip and api vip labels are on different rows, want them paired on one row:\n%s", plain)
+			if lineOf(plain, apiIdx) != lineOf(plain, ingressIdx) {
+				t.Errorf("api vip and ingress vip labels are on different rows, want them paired on one row:\n%s", plain)
 			}
 		})
 	}
 }
 
-// lineOf returns the 0-based line number byteIdx falls on within s.
 func lineOf(s string, byteIdx int) int {
 	return strings.Count(s[:byteIdx], "\n")
 }
 
 // TestGolden_ProxmoxAdvancedFoldExpandedStaysOpenAfterFocusLeaves pins the
-// fold's sticky expand latch at the real step/golden level (beyond
-// TestDataDrivenStep_CollapsibleSectionEnterStickyExpand's synthetic
-// definition): tab to the toggle, enter to expand it, then tab away to
-// username — the HARD CONSTRAINT's focus-forced-open case (i ==
-// currentSection) no longer applies once focus leaves, so this is the
-// sticky latch specifically, not just a focused section rendering in full.
+// fold's sticky expand latch: tab to the toggle, enter to expand, then tab
+// away so the section is no longer focus-forced open.
 func TestGolden_ProxmoxAdvancedFoldExpandedStaysOpenAfterFocusLeaves(t *testing.T) {
 	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
 	shiftTabKey := tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift}
@@ -758,16 +604,13 @@ func TestGolden_ProxmoxAdvancedFoldExpandedStaysOpenAfterFocusLeaves(t *testing.
 			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
 			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDProxmox})
 
-			// host -> username -> password -> the fold toggle (3 tabs).
-			for range 3 {
+			// endpoint, api token, skip tls verify, nodes, storage, iso
+			// storage, bridge, then the fold toggle (7 tabs).
+			for range 7 {
 				m.Update(tabKey)
 				m.Update(wizard.FocusChangedMsg{})
 			}
 			m.Update(enterKey)
-			// Tab away: shift+tab back onto password, so currentSection
-			// returns to "credentials" and the fold is no longer focused —
-			// then page down, since the now-expanded fields sit below
-			// password's own scroll position at the cramped 80x24 tier.
 			m.Update(shiftTabKey)
 			m.Update(wizard.FocusChangedMsg{})
 			m.Update(pageDown)
@@ -777,42 +620,28 @@ func TestGolden_ProxmoxAdvancedFoldExpandedStaysOpenAfterFocusLeaves(t *testing.
 			tuitest.AssertFits(t, frame, sz.w, sz.h)
 
 			plain := tuitest.StripANSI(frame)
-			if !strings.Contains(plain, labelTokenID) {
-				t.Errorf("frame is missing the expanded fold's token id field, want it to stay open after focus left:\n%s", plain)
+			if !hasLabelRow(plain, "vlan") || !hasLabelRow(plain, "cpu type") {
+				t.Errorf("frame is missing the expanded fold's fields, want them to stay open after focus left:\n%s", plain)
 			}
-			if !strings.Contains(plain, "skip tls verify") {
-				t.Errorf("frame is missing the expanded fold's skip tls verify field:\n%s", plain)
-			}
-			if strings.Contains(plain, "verification:") {
-				t.Errorf("frame still shows the collapsed summary's \"verification:\" fact, want the fold expanded:\n%s", plain)
+			if strings.Contains(plain, "vlan: untagged") {
+				t.Errorf("frame still shows the collapsed summary's fact, want the fold expanded:\n%s", plain)
 			}
 		})
 	}
 }
 
-// TestGolden_ProxmoxAdvancedFoldCollapsedAt80x24 pins mechanism 3's
-// collapsed state at the 80x24 "compact" tier: proxmox_80x24_initial
-// (TestGolden_ConfigureSteps) never scrolls far enough to show the fold
-// line itself (host plus the paired username/password row alone exceed
-// the 15-row viewport), so this scrolls to the bottom (G, independent of
-// field focus) to pin that the collapsed summary row still renders
-// correctly at the narrowest supported tier, not just at 100x30/120x40.
+// TestGolden_ProxmoxAdvancedFoldCollapsedAt80x24 pins the collapsed summary
+// row at the compact tier, scrolled into view with pgdn while the endpoint
+// keeps focus.
 func TestGolden_ProxmoxAdvancedFoldCollapsedAt80x24(t *testing.T) {
-	// pgdn, not the vim "G", since G/gg fall through to a focused text
-	// input (typed as literal text) while pgdn scrolls regardless of
-	// focus — host stays focused throughout, matching the step's real
-	// initial-focus state the way TestGolden_ConfigureSteps's own
-	// proxmox_80x24_initial does.
-	pageDown := tea.KeyPressMsg{Code: tea.KeyPgDown}
-
 	tui.SetTerminalWidth(80)
 	t.Cleanup(func() { tui.SetTerminalWidth(0) })
 
 	m := newGoldenModel(t)
 	_ = tuitest.RenderAt(t, m, 80, 24)
 	m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDProxmox})
-	for range 3 {
-		m.Update(pageDown)
+	for range 6 {
+		m.Update(tea.KeyPressMsg{Code: tea.KeyPgDown})
 	}
 
 	frame := tuitest.RenderAt(t, m, 80, 24)
@@ -820,16 +649,18 @@ func TestGolden_ProxmoxAdvancedFoldCollapsedAt80x24(t *testing.T) {
 	tuitest.AssertFits(t, frame, 80, 24)
 
 	plain := tuitest.StripANSI(frame)
-	if !strings.Contains(plain, "advanced") || !strings.Contains(plain, "verification: enabled") {
+	if !strings.Contains(plain, "advanced") || !strings.Contains(plain, "vlan: untagged") {
 		t.Errorf("frame is missing the collapsed fold's summary row:\n%s", plain)
 	}
-	if hasExactLine(plain, labelTokenID) {
-		t.Errorf("collapsed fold leaks the token id field's own label row:\n%s", plain)
+	if hasLabelRow(plain, "vlan") || hasLabelRow(plain, "vm id base") {
+		t.Errorf("collapsed fold leaks a field's own label row:\n%s", plain)
 	}
 }
 
+// TestGolden_ProxmoxEnterHighlightsInvalidFields pins honest validation:
+// clearing the required endpoint paints no error until enter forces the
+// form's validation, which paints the red box and the status-row message.
 func TestGolden_ProxmoxEnterHighlightsInvalidFields(t *testing.T) {
-	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
 	enterKey := tea.KeyPressMsg{Code: tea.KeyEnter}
 
 	tui.SetTerminalWidth(100)
@@ -838,10 +669,9 @@ func TestGolden_ProxmoxEnterHighlightsInvalidFields(t *testing.T) {
 	m := newGoldenModel(t)
 	_ = tuitest.RenderAt(t, m, 100, 30)
 	m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDProxmox})
-
-	for range 2 {
-		m.Update(tabKey)
-		m.Update(wizard.FocusChangedMsg{})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnd})
+	for range 40 {
+		m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
 	}
 
 	frame := tuitest.RenderAt(t, m, 100, 30)
@@ -854,16 +684,14 @@ func TestGolden_ProxmoxEnterHighlightsInvalidFields(t *testing.T) {
 	frame = tuitest.RenderAt(t, m, 100, 30)
 	tuitest.Golden(t, "proxmox-enter-invalid_100x30_after", frame)
 	tuitest.AssertFits(t, frame, 100, 30)
+	if plain := tuitest.StripANSI(frame); !strings.Contains(plain, "required") {
+		t.Errorf("enter on an empty endpoint painted no required error:\n%s", plain)
+	}
 }
 
-// hasExactLine reports whether any line of view, trimmed, equals want
-// exactly — used to tell a field's own bare label row apart from prose
-// (e.g. an AbsenceNote) that merely contains the same word.
-func hasExactLine(view, want string) bool {
-	for _, line := range strings.Split(view, "\n") {
-		if strings.TrimSpace(line) == want {
-			return true
-		}
-	}
-	return false
+// hasLabelRow reports whether a framed view carries a row holding only
+// label, the shape of a field's own label line as opposed to prose or a
+// fold fact that merely contains the same words.
+func hasLabelRow(view, label string) bool {
+	return regexp.MustCompile(`(?m)^\s*│\s+` + regexp.QuoteMeta(label) + `\s+│\s*$`).MatchString(view)
 }

@@ -12,14 +12,12 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 )
 
-// TestResourceSummaryRebindsOnPolarityFlip pins the totals line against the
-// dark-frozen-capture bug class: after a light flip its brand-highlighted
-// values must carry the light Primary tier, not an init-captured dark one.
 func TestResourceSummaryRebindsOnPolarityFlip(t *testing.T) {
 	t.Cleanup(func() { tui.SetDarkBackground(true) })
 
 	step, state := NewResourcesStep(nil)
 	state.Cfg = config.DefaultConfig()
+	step.LoadFromConfig(state.Cfg, true)
 	tui.SetDarkBackground(false)
 
 	out := renderResourceFooter(step, state, 120)
@@ -31,15 +29,8 @@ func TestResourceSummaryRebindsOnPolarityFlip(t *testing.T) {
 	}
 }
 
-func TestResourcePinnedFooterIncludesBootstrapAndOnlineCapacity(t *testing.T) {
-	cfg := config.MinimalConfig()
-	cfg.Topology.ControlPlane.Count = 2
-	cfg.Topology.Workers.Count = 1
-	cfg.Topology.Workers.CPU = 8
-	cfg.Topology.Workers.MemoryMB = 8192
-	cfg.Topology.Workers.DiskGB = 50
-	cfg.Disks.WorkerDataSizeGB = 0
-	cfg.Topology.Bootstrap = config.NodeConfig{Count: 1, CPU: 4, MemoryMB: 8192, DiskGB: 50}
+func TestResourcePinnedFooterSumsTheInventoryAgainstOnlineCapacity(t *testing.T) {
+	cfg := config.DefaultConfig()
 	capacity := &WizardCapacitySnapshot{cfg: cfg, discovery: &proxmoxDiscovery{Nodes: []proxmoxNode{
 		{Name: "pve1", Status: "online", CPUs: 4, CPUsKnown: true, MemGB: 8, MemKnown: true},
 		{Name: "pve2", Status: "online", CPUs: 8, CPUsKnown: true, MemGB: 16, MemKnown: true},
@@ -50,32 +41,13 @@ func TestResourcePinnedFooterIncludesBootstrapAndOnlineCapacity(t *testing.T) {
 	step.LoadFromConfig(cfg, true)
 
 	got := tuitest.StripANSI(step.PinnedFooter(120))
-	for _, want := range []string{"20 vcpu", "32 gb ram", "200 gb disk", "exceeds online capacity", "12c/24g"} {
+	for _, want := range []string{"28 vcpu", "80 gb ram", "1600 gb disk", "exceeds online capacity", "12c/24g"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("PinnedFooter() = %q, want %q", got, want)
 		}
 	}
 }
 
-// resourcesFooterTestConfig returns a small, fixed topology shared by the
-// resources footer's three branch goldens, so only the capacity snapshot
-// (known-and-sufficient, known-but-exceeded, or unknown) varies between them.
-func resourcesFooterTestConfig() *config.Config {
-	cfg := config.MinimalConfig()
-	cfg.Topology.ControlPlane.Count = 2
-	cfg.Topology.Workers.Count = 1
-	cfg.Topology.Workers.CPU = 4
-	cfg.Topology.Workers.MemoryMB = 8192
-	cfg.Topology.Workers.DiskGB = 50
-	cfg.Disks.WorkerDataSizeGB = 0
-	cfg.Topology.Bootstrap = config.NodeConfig{Count: 1, CPU: 4, MemoryMB: 8192, DiskGB: 50}
-	return cfg
-}
-
-// TestGolden_ResourcesFooterBranches pins the pinned footer's three mutually
-// exclusive outcomes against the same topology: capacity known and
-// sufficient (healthy), known and exceeded, and unknown (no CPU/memory
-// probe for an online node).
 func TestGolden_ResourcesFooterBranches(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -87,28 +59,28 @@ func TestGolden_ResourcesFooterBranches(t *testing.T) {
 			discovery: &proxmoxDiscovery{Nodes: []proxmoxNode{
 				{Name: "pve1", Status: "online", CPUs: 64, CPUsKnown: true, MemGB: 256, MemKnown: true},
 			}},
-			want: []string{"16 vcpu", "32 gb ram", "200 gb disk"},
+			want: []string{"12 vcpu", "48 gb ram", "360 gb disk"},
 		},
 		{
 			name: "exceeds",
 			discovery: &proxmoxDiscovery{Nodes: []proxmoxNode{
 				{Name: "pve1", Status: "online", CPUs: 4, CPUsKnown: true, MemGB: 8, MemKnown: true},
 			}},
-			want: []string{"16 vcpu", "exceeds online capacity"},
+			want: []string{"12 vcpu", "exceeds online capacity"},
 		},
 		{
 			name: "unknown",
 			discovery: &proxmoxDiscovery{Nodes: []proxmoxNode{
 				{Name: "pve1", Status: "online", CPUsKnown: false, MemKnown: false},
 			}},
-			want: []string{"16 vcpu", "online capacity unknown"},
+			want: []string{"12 vcpu", "online capacity unknown"},
 		},
 	}
 
 	for _, tc := range cases {
 		for _, width := range []int{80, 180} {
 			t.Run(fmt.Sprintf("%s_w%d", tc.name, width), func(t *testing.T) {
-				cfg := resourcesFooterTestConfig()
+				cfg := config.MinimalConfig()
 				capacity := &WizardCapacitySnapshot{cfg: cfg, discovery: tc.discovery}
 				step, state := NewResourcesStep(capacity)
 				state.Cfg = cfg
@@ -141,16 +113,39 @@ func TestResourcePinnedFooterTracksKeyInput(t *testing.T) {
 		t.Fatalf("footer after clearing a required resource = %q, want pending", got)
 	}
 	step.Update(tea.PasteMsg{Content: "5"})
-	if got := tuitest.StripANSI(step.PinnedFooter(100)); !strings.Contains(got, "43 vcpu") {
+	if got := tuitest.StripANSI(step.PinnedFooter(100)); !strings.Contains(got, "31 vcpu") {
 		t.Fatalf("footer after entering 5 vcpus = %q, want totals recalculated from the message", got)
 	}
 	step.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	step.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	step.Update(tea.KeyPressMsg{Code: tea.KeyEnd})
-	step.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
-	step.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
-	step.Update(tea.PasteMsg{Content: "60"})
-	if got := tuitest.StripANSI(step.PinnedFooter(120)); !strings.Contains(got, "1890 gb disk") {
-		t.Fatalf("footer after changing control-plane disk = %q, want bootstrap disk to follow it", got)
+	for range 3 {
+		step.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	}
+	step.Update(tea.PasteMsg{Content: "160"})
+	if got := tuitest.StripANSI(step.PinnedFooter(120)); !strings.Contains(got, "1720 gb disk") {
+		t.Fatalf("footer after changing the control-plane root disk = %q, want 1720 gb disk", got)
+	}
+	if got := cfg.ControlPlane.CPU; got != 4 {
+		t.Fatalf("the footer wrote %d into the session config; totals must come from an overlay", got)
+	}
+}
+
+func TestSetDiskSize(t *testing.T) {
+	disks := []config.DiskSpec{{SizeGiB: 120}, {SizeGiB: 500, Storage: "tank"}}
+	if got := setDiskSize(disks, 0, 160); got[0].SizeGiB != 160 || len(got) != 2 {
+		t.Errorf("root resize = %+v", got)
+	}
+	if got := setDiskSize(disks, 1, 0); len(got) != 1 {
+		t.Errorf("zero data disk = %+v, want the root alone", got)
+	}
+	if got := setDiskSize([]config.DiskSpec{{SizeGiB: 120}}, 1, 0); len(got) != 1 {
+		t.Errorf("zero on an absent data disk = %+v, want unchanged", got)
+	}
+	if got := setDiskSize([]config.DiskSpec{{SizeGiB: 120}}, 1, 300); len(got) != 2 || got[1].SizeGiB != 300 {
+		t.Errorf("append data disk = %+v", got)
+	}
+	if got := setDiskSize(nil, 0, 100); len(got) != 1 || got[0].SizeGiB != 100 {
+		t.Errorf("root on nil = %+v", got)
 	}
 }

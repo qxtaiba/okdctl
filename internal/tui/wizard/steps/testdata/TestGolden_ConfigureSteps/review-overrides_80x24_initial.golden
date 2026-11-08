@@ -3,22 +3,22 @@
   │ O K D C T L                                                              │  
   │ review your configuration            connect · cluster · extras · review │  
   │──────────────────────────────────────────────────────────────────────────│  
-  │  [7] advanced                                                            │  
+  │  PREFLIGHT · 1 passed · 0 warnings · 2 failed · 0 not checked            │  
+  │  ✗ pull secret · unavailable · ./pull-secret.json                        │  
+  │  ✗ ssh public key · unavailable · ./id_ed25519.pub                       │  
+  │  ✓ configuration · valid                                                 │  
+  │  [1] cluster identity                                                    │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
-  │  vm id base             6000                                             │  
-  │  timeouts               bootstrap 60m, install 120m                      │  
-  │  terraform environment  production                                       │  
+  │  name          lab                                                       │  
+  │  domain        k8s.local                                                 │  
+  │  distribution  OKD 4.22.0-okd-scos.10                                    │  
   │                                                                          │  
-  │  DEPLOY PLAN                                                             │  
-  │  role      vms vcpu   ram os disk                                        │  
-  │  bootstrap   1    4  8 gb   50 gb                                        │  
-  │  masters     3    4 12 gb   50 gb                                        │  
-  │  workers     3    8 20 gb   50 gb                                        │  
+  │  [2] proxmox                                                             │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
+  │  endpoint     https://192.168.1.100:8006                                 │  
+  │  nodes        pve1, pve2                                                 │  
   │                                                                          │  
-  │  WRITES                                                                  │  
-  │  okdctl.yaml                                                             │  
-  │                                                                          │  
-  │──────────── ↑ ↓  scroll up for more ───────────── ▸ okd 4.22.0-okd-scos.7│  
+  │─────────── ↑ ↓  scroll down for more ──────────── ▸ okd 4.22.0-okd-scos.1│  
   │  ● deploy now   ○ save and exit     ←/→ choose … • ctrl+c quit • ? help  │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

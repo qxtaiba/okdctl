@@ -85,5 +85,4 @@ func (m *Model) shutdown() {
 			releaser.Release()
 		}
 	}
-	m.saved.release()
 }

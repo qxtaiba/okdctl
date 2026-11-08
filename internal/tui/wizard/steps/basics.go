@@ -5,62 +5,35 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
-// BasicsStepDefinition declares the cluster-basics step fields.
+// BasicsStepDefinition declares the cluster identity fields.
 var BasicsStepDefinition = wizard.StepDefinition{
 	ID:           wizard.StepIDBasics,
 	Title:        "cluster basics",
 	DisplayTitle: "configure your cluster basics",
-	Description:  "configure cluster identity and topology",
+	Description:  "name the cluster and its domain",
 	Sections: []wizard.SectionDefinition{
 		{
 			Title: "cluster identity",
 			Fields: []wizard.FieldDefinition{
 				{
-					Key:       "cluster_name",
+					Key:       config.FieldClusterName,
 					Label:     "cluster name",
 					Default:   "mycluster",
-					Help:      "lowercase letters, numbers, and hyphens only",
+					Help:      "lowercase letters, numbers, and hyphens only — nodes are named <cluster>-master0..2 and <cluster>-worker<n>",
 					Required:  true,
-					Validate:  config.ValidateClusterName,
+					Validate:  validateClusterName,
 					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Cluster.Name = v }),
 					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Cluster.Name }),
 				},
 				{
-					Key:       fieldDomain,
-					Label:     fieldDomain,
+					Key:       config.FieldClusterDomain,
+					Label:     "domain",
 					Default:   "k8s.local",
 					Help:      "dot-separated domain name for cluster services, e.g. example.com",
 					Required:  true,
-					Validate:  config.ValidateDomain,
+					Validate:  validateDomain,
 					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Cluster.Domain = v }),
 					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Cluster.Domain }),
-				},
-			},
-		},
-		{
-			Title: "node topology",
-			Fields: []wizard.FieldDefinition{
-				{
-					Key:       "control_plane_count",
-					Label:     roleLabelControlPlane,
-					Default:   "3",
-					Help:      "number of control plane nodes (odd for etcd quorum)",
-					Width:     wizard.FieldWidthNumber,
-					Type:      wizard.FieldTypeSelect,
-					Options:   []string{"1", "3", "5"},
-					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.ControlPlane.Count = v }),
-					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.ControlPlane.Count }),
-				},
-				{
-					Key:       "worker_count",
-					Label:     roleLabelWorkers,
-					Default:   "3",
-					Help:      "number of worker nodes (0-100)",
-					Width:     wizard.FieldWidthNumber,
-					Required:  true,
-					Validate:  config.ValidateNodeCount,
-					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Topology.Workers.Count = v }),
-					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Topology.Workers.Count }),
 				},
 			},
 		},
