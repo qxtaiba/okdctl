@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestValidateNetwork(t *testing.T) {
 	cases := []struct {
@@ -25,6 +28,11 @@ func TestValidateNetwork(t *testing.T) {
 		{"node ip start parse", func(c *Config) { c.Networking.NodeIPStart = "" }, finding{FieldNetworkingNodeIPStart, "not an IP address"}},
 		{"node range starts outside", func(c *Config) { c.Networking.NodeIPStart = "192.168.2.10" }, finding{FieldNetworkingNodeIPStart, "outside machine_cidr 192.168.1.0/24"}},
 		{"node range ends outside", func(c *Config) { c.Networking.NodeIPStart = "192.168.1.245" }, finding{FieldNetworkingNodeIPStart, "192.168.1.245-192.168.2.0 leaves machine_cidr 192.168.1.0/24"}},
+		{"node start is gateway", func(c *Config) { c.Networking.NodeIPStart = "192.168.1.1" }, finding{FieldNetworkingNodeIPStart, "lab-master0 and gateway share 192.168.1.1"}},
+		{"master is resolver", func(c *Config) { c.Networking.DNS = []string{"192.168.1.1", "192.168.1.151"} }, finding{FieldNetworkingNodeIPStart, "lab-master1 and dns[1] share 192.168.1.151"}},
+		{"worker is resolver", func(c *Config) { c.Networking.DNS = []string{"192.168.1.161"} }, finding{FieldNetworkingNodeIPStart, "lab-worker1 and dns[0] share 192.168.1.161"}},
+		{"node start is network address", func(c *Config) { c.Networking.NodeIPStart = "192.168.1.0" }, finding{FieldNetworkingNodeIPStart, "lab-master0 lands on 192.168.1.0, the network address of machine_cidr 192.168.1.0/24"}},
+		{"worker lands on broadcast", func(c *Config) { c.Networking.NodeIPStart = "192.168.1.244" }, finding{FieldNetworkingNodeIPStart, "lab-worker1 lands on 192.168.1.255, the broadcast address of machine_cidr 192.168.1.0/24"}},
 		{
 			"node range ends outside via worker index",
 			func(c *Config) {
@@ -50,10 +58,10 @@ func TestValidateNetwork(t *testing.T) {
 	passing := map[string]func(*Config){
 		"gateway outside machine_cidr": func(c *Config) { c.Networking.Gateway = "10.0.0.1" },
 		"public resolvers":             func(c *Config) { c.Networking.DNS = []string{"1.1.1.1", "9.9.9.9"} },
-		"range ends on last host":      func(c *Config) { c.Networking.NodeIPStart = "192.168.1.244" },
+		"range ends on last host":      func(c *Config) { c.Networking.NodeIPStart = "192.168.1.243" },
 		"host prefix 20":               func(c *Config) { c.Networking.HostPrefix = 20 },
 		"host prefix 28":               func(c *Config) { c.Networking.HostPrefix = 28 },
-		"masters only range":           func(c *Config) { c.Workers.Count = 0; c.Networking.NodeIPStart = "192.168.1.253" },
+		"masters only range":           func(c *Config) { c.Workers.Count = 0; c.Networking.NodeIPStart = "192.168.1.252" },
 		"ntp listed":                   func(c *Config) { c.Networking.NTP = []string{"pool.ntp.org"} },
 	}
 	for name, mutate := range passing {
@@ -63,4 +71,27 @@ func TestValidateNetwork(t *testing.T) {
 			assertValid(t, cfg)
 		})
 	}
+}
+
+func TestValidateNetwork_DerivedAddressRule(t *testing.T) {
+	t.Run("skips a /31", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.Networking.MachineCIDR = "192.168.1.0/31"
+		cfg.Networking.NodeIPStart = "192.168.1.0"
+		for _, e := range cfg.Validate().Errors {
+			if strings.Contains(e.Message, "network address") || strings.Contains(e.Message, "broadcast address") {
+				t.Errorf("edge rule fired on a point-to-point prefix: %v", e)
+			}
+		}
+	})
+	t.Run("skips an overridden node", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.Nodes = map[string]NodeOverride{"lab-worker0": {IP: "192.168.1.1"}}
+		assertFinding(t, cfg, finding{"nodes.lab-worker0.ip", "lab-worker0 and gateway share 192.168.1.1"})
+		for _, e := range cfg.Validate().Errors {
+			if e.Field == FieldNetworkingNodeIPStart {
+				t.Errorf("derived rule reported an override: %v", e)
+			}
+		}
+	})
 }

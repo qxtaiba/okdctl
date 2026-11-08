@@ -71,7 +71,7 @@ type NetworkingConfig struct {
 	APIVIP      string   `json:"api_vip"`
 	IngressVIP  string   `json:"ingress_vip"`
 	NodeIPStart string   `json:"node_ip_start"`
-	NTP         []string `json:"ntp"`
+	NTP         []string `json:"ntp,omitempty"`
 	PodCIDR     string   `json:"pod_cidr"`
 	ServiceCIDR string   `json:"service_cidr"`
 	HostPrefix  int      `json:"host_prefix"`

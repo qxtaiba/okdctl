@@ -17,6 +17,7 @@ func TestValidateNodes(t *testing.T) {
 		{"worker root disk floor", func(c *Config) { c.Workers.Disks[0].SizeGiB = 50 }, finding{FieldWorkers + ".disks[0].size_gib", "at least 100"}},
 		{"worker data disk zero", func(c *Config) { c.Workers.Disks[1].SizeGiB = 0 }, finding{FieldWorkers + ".disks[1].size_gib", "greater than 0"}},
 		{"worker count negative", func(c *Config) { c.Workers.Count = -5 }, finding{FieldWorkers + ".count", "0 or more"}},
+		{"worker count over cap", func(c *Config) { c.Workers.Count = 3_000_000 }, finding{FieldWorkers + ".count", "3000000 exceeds the maximum of 4096"}},
 		{
 			"unknown key with hyphen",
 			func(c *Config) { c.Nodes = map[string]NodeOverride{"lab-worker-3": {Host: "pve"}} },
@@ -113,11 +114,6 @@ func TestValidateNodes(t *testing.T) {
 				c.Nodes = map[string]NodeOverride{"lab-worker0": {Host: "pve9"}}
 			},
 			finding{"nodes.lab-worker0.host", `lab-worker0 host "pve9" is not one of provider.proxmox.nodes (pve1, pve2)`},
-		},
-		{
-			"disk serial too long",
-			func(c *Config) { c.Provider.Proxmox.VMIDBase = 1_000_000_000_000_000_000 },
-			finding{"nodes.lab-master0.disks[0]", "serial okd1000000000000000010d0 exceeds 20 characters"},
 		},
 	}
 	for _, tc := range cases {

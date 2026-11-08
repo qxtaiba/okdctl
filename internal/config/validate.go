@@ -51,8 +51,9 @@ func (c *Config) Validate() *ValidationResult {
 		return r
 	}
 	c.validateCluster(r)
-	c.validateProvider(r)
-	c.validateNetwork(r)
-	c.validateNodes(r)
+	nodes := c.validateNodeCount(r)
+	c.validateProvider(r, nodes)
+	c.validateNetwork(r, nodes)
+	c.validateNodes(r, nodes)
 	return r
 }

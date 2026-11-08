@@ -8,8 +8,6 @@ import (
 	"strings"
 )
 
-const maxDiskSerialLen = 20
-
 type roleFloor struct {
 	cpu       int
 	memoryMiB int
@@ -34,19 +32,28 @@ type nodeRef struct {
 	overridden bool
 }
 
-func (c *Config) validateNodes(r *ValidationResult) {
-	validateDefaults(r, FieldControlPlane, &c.ControlPlane, floorFor(RoleMaster))
-	if c.Workers.Count < 0 {
+// validateNodeCount returns the node list the other rules check, or nil
+// with a finding when workers.count exceeds MaxWorkers, so no rule derives
+// an unbounded list.
+func (c *Config) validateNodeCount(r *ValidationResult) []nodeRef {
+	switch {
+	case c.Workers.Count < 0:
 		r.addf(FieldWorkers+".count", "%d must be 0 or more", c.Workers.Count)
+	case c.Workers.Count > MaxWorkers:
+		r.addf(FieldWorkers+".count", "%d exceeds the maximum of %d", c.Workers.Count, MaxWorkers)
+		return nil
 	}
+	return c.nodes()
+}
+
+func (c *Config) validateNodes(r *ValidationResult, nodes []nodeRef) {
+	validateDefaults(r, FieldControlPlane, &c.ControlPlane, floorFor(RoleMaster))
 	if c.Workers.Count > 0 {
 		validateDefaults(r, FieldWorkers, &c.Workers.NodeDefaults, floorFor(RoleWorker))
 	}
 	c.validateOverrideKeys(r)
-	nodes := c.nodes()
 	for i := range nodes {
 		c.validateOverride(r, nodes, i)
-		c.validateSerials(r, &nodes[i])
 	}
 }
 
@@ -153,21 +160,8 @@ func (c *Config) validateOverrideIP(r *ValidationResult, nodes []nodeRef, i int)
 	}
 }
 
-func (c *Config) validateSerials(r *ValidationResult, node *nodeRef) {
-	disks := c.ControlPlane.Disks
-	if node.role == RoleWorker {
-		disks = c.Workers.Disks
-	}
-	if len(node.override.Disks) > 0 {
-		disks = node.override.Disks
-	}
-	for n := range disks {
-		if serial := fmt.Sprintf("okd%dd%d", node.vmid, n); len(serial) > maxDiskSerialLen {
-			r.addf(fmt.Sprintf("%s.%s.disks[%d]", FieldNodes, node.name, n), "serial %s exceeds %d characters", serial, maxDiskSerialLen)
-		}
-	}
-}
-
+// nodes lists the config's nodes masters first, then workers by index, so
+// the last entry carries the highest VMID and derived address.
 func (c *Config) nodes() []nodeRef {
 	workers := c.WorkerIndices()
 	refs := make([]nodeRef, 0, MasterCount+len(workers))

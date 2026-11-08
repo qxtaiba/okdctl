@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/binary"
 	"fmt"
 	"net/netip"
 )
@@ -10,7 +11,7 @@ const (
 	maxHostPrefix = 28
 )
 
-func (c *Config) validateNetwork(r *ValidationResult) {
+func (c *Config) validateNetwork(r *ValidationResult, nodes []nodeRef) {
 	n := &c.Networking
 	machine := parsePrefix(r, FieldNetworkingMachineCIDR, n.MachineCIDR)
 	pod := parsePrefix(r, FieldNetworkingPodCIDR, n.PodCIDR)
@@ -22,8 +23,9 @@ func (c *Config) validateNetwork(r *ValidationResult) {
 	for i, d := range n.DNS {
 		parseAddr(r, fmt.Sprintf("%s[%d]", FieldNetworkingDNS, i), d)
 	}
-	c.validateVIPs(r, machine)
-	c.validateNodeRange(r, machine)
+	c.validateVIPs(r, machine, nodes)
+	c.validateNodeRange(r, machine, nodes)
+	c.validateDerivedAddresses(r, machine, nodes)
 	if pod.IsValid() && machine.IsValid() && pod.Overlaps(machine) {
 		r.addf(FieldNetworkingPodCIDR, "%s overlaps machine_cidr %s", pod, machine)
 	}
@@ -38,12 +40,11 @@ func (c *Config) validateNetwork(r *ValidationResult) {
 	}
 }
 
-func (c *Config) validateVIPs(r *ValidationResult, machine netip.Prefix) {
+func (c *Config) validateVIPs(r *ValidationResult, machine netip.Prefix, nodes []nodeRef) {
 	n := &c.Networking
 	api := parseAddr(r, FieldNetworkingAPIVIP, n.APIVIP)
 	ingress := parseAddr(r, FieldNetworkingIngressVIP, n.IngressVIP)
 	gateway, _ := netip.ParseAddr(n.Gateway)
-	nodes := c.nodes()
 	for _, vip := range []struct {
 		field string
 		addr  netip.Addr
@@ -75,16 +76,17 @@ func (c *Config) validateVIPs(r *ValidationResult, machine netip.Prefix) {
 
 // validateNodeRange checks node_ip_start and the last derived node address;
 // a CIDR is contiguous, so both inside means every node address is inside.
-func (c *Config) validateNodeRange(r *ValidationResult, machine netip.Prefix) {
+func (c *Config) validateNodeRange(r *ValidationResult, machine netip.Prefix, nodes []nodeRef) {
 	start := parseAddr(r, FieldNetworkingNodeIPStart, c.Networking.NodeIPStart)
-	if !start.IsValid() || !machine.IsValid() {
+	if !start.IsValid() || !machine.IsValid() || len(nodes) == 0 {
 		return
 	}
 	if !machine.Contains(start) {
 		r.addf(FieldNetworkingNodeIPStart, "%s is outside machine_cidr %s", start, machine)
 		return
 	}
-	end, err := c.DerivedNodeAddress(c.lastNode())
+	last := &nodes[len(nodes)-1]
+	end, err := c.DerivedNodeAddress(last.role, last.index)
 	if err != nil {
 		r.addf(FieldNetworkingNodeIPStart, "derive the last node address: %v", err)
 		return
@@ -92,6 +94,48 @@ func (c *Config) validateNodeRange(r *ValidationResult, machine netip.Prefix) {
 	if !machine.Contains(end) {
 		r.addf(FieldNetworkingNodeIPStart, "node range %s-%s leaves machine_cidr %s", start, end, machine)
 	}
+}
+
+// validateDerivedAddresses reports a derived address inside machine_cidr
+// that collides with the gateway, a resolver or an edge of the prefix;
+// overrides and addresses outside the prefix have their own rules.
+func (c *Config) validateDerivedAddresses(r *ValidationResult, machine netip.Prefix, nodes []nodeRef) {
+	n := &c.Networking
+	gateway, _ := netip.ParseAddr(n.Gateway)
+	network, broadcast := edges(machine)
+	for i := range nodes {
+		node := &nodes[i]
+		if !node.derived || (machine.IsValid() && !machine.Contains(node.ip)) {
+			continue
+		}
+		if node.ip == gateway {
+			r.addf(FieldNetworkingNodeIPStart, "%s and gateway share %s", node.name, node.ip)
+		}
+		for k, d := range n.DNS {
+			if resolver, err := netip.ParseAddr(d); err == nil && node.ip == resolver {
+				r.addf(FieldNetworkingNodeIPStart, "%s and dns[%d] share %s", node.name, k, node.ip)
+			}
+		}
+		switch node.ip {
+		case network:
+			r.addf(FieldNetworkingNodeIPStart, "%s lands on %s, the network address of machine_cidr %s", node.name, node.ip, machine)
+		case broadcast:
+			r.addf(FieldNetworkingNodeIPStart, "%s lands on %s, the broadcast address of machine_cidr %s", node.name, node.ip, machine)
+		}
+	}
+}
+
+// edges returns the network and broadcast addresses of an IPv4 prefix
+// shorter than /31; a /31 or /32 reserves neither.
+func edges(p netip.Prefix) (network, broadcast netip.Addr) {
+	if !p.IsValid() || !p.Addr().Is4() || p.Bits() >= 31 {
+		return netip.Addr{}, netip.Addr{}
+	}
+	first := p.Masked().Addr().As4()
+	last := first
+	hostBits := uint32(1)<<(32-p.Bits()) - 1
+	binary.BigEndian.PutUint32(last[:], binary.BigEndian.Uint32(first[:])|hostBits)
+	return netip.AddrFrom4(first), netip.AddrFrom4(last)
 }
 
 func parsePrefix(r *ValidationResult, field, value string) netip.Prefix {

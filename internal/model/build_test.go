@@ -51,6 +51,13 @@ func TestBuild_ThreePlusZero(t *testing.T) {
 	}
 }
 
+func TestBuild_RefusesCountOverCap(t *testing.T) {
+	_, err := Build(testConfig(config.MaxWorkers+1), testInfraID)
+	if err == nil || !strings.Contains(err.Error(), "exceeds the maximum") {
+		t.Fatalf("Build(count %d) = %v; want a cap error", config.MaxWorkers+1, err)
+	}
+}
+
 func TestBuild_ThreePlusTwoWithOverride(t *testing.T) {
 	cfg := testConfig(2)
 	cfg.Provider.Proxmox.Nodes = []string{"pve1", "pve2"}

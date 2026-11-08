@@ -12,6 +12,7 @@ func TestValidateProvider(t *testing.T) {
 		{"endpoint required", func(c *Config) { c.Provider.Proxmox.Endpoint = "" }, finding{FieldProxmoxEndpoint, "required"}},
 		{"endpoint no scheme", func(c *Config) { c.Provider.Proxmox.Endpoint = "pve:8006" }, finding{FieldProxmoxEndpoint, "URL with scheme and host"}},
 		{"endpoint no host", func(c *Config) { c.Provider.Proxmox.Endpoint = "https://" }, finding{FieldProxmoxEndpoint, "URL with scheme and host"}},
+		{"endpoint scheme", func(c *Config) { c.Provider.Proxmox.Endpoint = "ftp://pve:8006" }, finding{FieldProxmoxEndpoint, `"ftp://pve:8006" must use http or https`}},
 		{"no nodes", func(c *Config) { c.Provider.Proxmox.Nodes = nil }, finding{FieldProxmoxNodes, "at least one"}},
 		{"blank node", func(c *Config) { c.Provider.Proxmox.Nodes = []string{"pve", ""} }, finding{FieldProxmoxNodes + "[1]", "required"}},
 		{"storage", func(c *Config) { c.Provider.Proxmox.Storage = "" }, finding{FieldProxmoxStorage, "required"}},
