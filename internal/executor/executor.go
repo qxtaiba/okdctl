@@ -140,7 +140,8 @@ type Result struct {
 }
 
 // ExitError is the typed non-zero-exit error; callers errors.As it to
-// inspect ExitCode without re-parsing the message.
+// inspect ExitCode without re-parsing the message. Command must be the bare
+// command name; it is rendered unredacted.
 type ExitError struct {
 	Command  string
 	ExitCode int

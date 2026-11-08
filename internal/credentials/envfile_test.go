@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
@@ -195,7 +196,19 @@ func TestLoadEnvFile_PermRefusal(t *testing.T) {
 	})
 }
 
+// resetLoadOnceAfter clears the package-level LoadEnvFile guard once t ends,
+// so a repeated in-process run starts from an unloaded state.
+func resetLoadOnceAfter(t *testing.T) {
+	t.Helper()
+	t.Cleanup(func() {
+		loadOnce = sync.Once{}
+		loadErr = nil
+		loadedPath = ""
+	})
+}
+
 func TestLoadEnvFile_SecondCallDifferentPath(t *testing.T) {
+	resetLoadOnceAfter(t)
 	dir := t.TempDir()
 	first := filepath.Join(dir, "first.env")
 	mustWriteEnv(t, first, "PROXMOX_VE_INSECURE=true\n", 0o600)
