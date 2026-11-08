@@ -2,13 +2,15 @@ package render
 
 import (
 	"bytes"
-	"charm.land/lipgloss/v2"
 	"fmt"
+	"strings"
+	"testing"
+
+	"charm.land/lipgloss/v2"
+
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
-	"strings"
-	"testing"
 )
 
 func TestValidationSummary(t *testing.T) {

@@ -1,3 +1,4 @@
+// Package proxmox probes Proxmox VE hosts and drives VM power through the API.
 package proxmox
 
 import (

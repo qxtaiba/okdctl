@@ -148,14 +148,6 @@ func configureLogging(cmd *cobra.Command) error {
 	return nil
 }
 
-// quietForJSON raises the stderr log level to error when --output=json is
-// active and verbose logging was not requested.
-func quietForJSON(format string) {
-	if format == outputJSON && !logVerbose {
-		tui.SuppressInfo()
-	}
-}
-
 func effectiveLogLevel() string {
 	switch {
 	case logQuiet:

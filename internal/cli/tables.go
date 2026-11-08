@@ -14,9 +14,7 @@ import (
 // starves the value column down to nothing.
 const minLeaderWrapWidth = 12
 
-// headerName is the shared "NAME" column header used by every entity table
 // (addon list, addon verify, node list, node status).
-const headerName = "NAME"
 
 // printLeaders prints rows as two-space-indented dotted key/value leaders at
 // tui.DefaultKeyColWidth, wrapping each value to the terminal width.
