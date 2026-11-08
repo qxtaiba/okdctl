@@ -1,0 +1,1 @@
+{"data":[{"key":"digest","value":"7f3a0c2e5b9d1e4f6a8c0b2d4f6e8a0c2e4f6a8c"},{"key":"name","value":"grappleberry-master-0"},{"key":"cores","value":4},{"key":"memory","value":"16384","pending":32768},{"key":"ide2","value":"local:iso/grappleberry-master.iso,media=cdrom,size=904416K","delete":1},{"key":"tags","value":"grappleberry","pending":"grappleberry;okd"}]}

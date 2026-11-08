@@ -79,10 +79,61 @@ type VMPatch struct {
 	Delete    []string
 }
 
-// VMConfig is a VM's normalised configuration; Digest is the optimistic-lock
-// token UpdateVM requires.
+// VMConfig is a VM's normalised configuration; a zero field means PVE has
+// the key unset, and Digest is the optimistic-lock token UpdateVM requires.
 type VMConfig struct {
-	Digest string
+	Name         string
+	Cores        int
+	Sockets      int
+	CPUType      string
+	MemoryMiB    int
+	Balloon      int
+	BIOS         string
+	Machine      string
+	SCSIHW       string
+	OSType       string
+	OnBoot       bool
+	AgentEnabled bool
+	BootOrder    []string
+	Tags         []string
+	NICModel     string
+	MAC          string
+	Bridge       string
+	VLAN         int
+	Disks        map[string]DiskConfig
+	EFI          *EFIConfig
+	CDROM        string
+	Digest       string
+}
+
+// DiskConfig is one hard disk as the VM config reports it; VolID is the
+// Proxmox-assigned volume, Storage the pool it lives on.
+type DiskConfig struct {
+	Storage  string
+	VolID    string
+	SizeGiB  int
+	Serial   string
+	IOThread bool
+	Discard  bool
+	Cache    string
+	AIO      string
+}
+
+// EFIConfig is the OVMF variables disk.
+type EFIConfig struct {
+	Storage         string
+	VolID           string
+	EFIType         string
+	PreEnrolledKeys bool
+}
+
+// Change is one difference between a VM's config and its spec; NeedsPowerCycle
+// marks a key PVE queues as pending until the next cold boot.
+type Change struct {
+	Field           string
+	Want            string
+	Have            string
+	NeedsPowerCycle bool
 }
 
 // Pending is one queued configuration change that applies on the next power cycle.
@@ -188,14 +239,6 @@ type driver struct {
 
 func notImplemented(method string) error {
 	return fmt.Errorf("proxmox driver: %s not implemented", method)
-}
-
-func (d *driver) VMConfig(context.Context, VMRef) (VMConfig, error) {
-	return VMConfig{}, notImplemented("VMConfig")
-}
-
-func (d *driver) VMPending(context.Context, VMRef) ([]Pending, error) {
-	return nil, notImplemented("VMPending")
 }
 
 func (d *driver) UploadISO(context.Context, string, string, string, string) (Task, error) {

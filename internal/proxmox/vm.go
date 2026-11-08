@@ -40,6 +40,50 @@ func (d *driver) CreateVM(ctx context.Context, node string, spec VMSpec) (Task, 
 	return d.task(ctx, http.MethodPost, node, nodePath(node, "qemu"), spec.values())
 }
 
+func (d *driver) VMConfig(ctx context.Context, ref VMRef) (VMConfig, error) {
+	var raw map[string]any
+	path := vmPath(ref, "/config")
+	if err := d.get(ctx, path, &raw); err != nil {
+		return VMConfig{}, err
+	}
+	if len(raw) == 0 {
+		return VMConfig{}, fmt.Errorf("get %s: vm %d: %w", path, ref.VMID, ErrNotFound)
+	}
+	cfg, err := ParseVMConfig(raw)
+	if err != nil {
+		return VMConfig{}, fmt.Errorf("get %s: %w", path, err)
+	}
+	return cfg, nil
+}
+
+type pendingRow struct {
+	Key     string `json:"key"`
+	Value   any    `json:"value"`
+	Pending any    `json:"pending"`
+	Delete  num    `json:"delete"`
+}
+
+// VMPending returns only the keys with a queued value or deletion; PVE lists
+// every current key there, so an empty reply means the VM does not exist.
+func (d *driver) VMPending(ctx context.Context, ref VMRef) ([]Pending, error) {
+	var rows []pendingRow
+	path := vmPath(ref, "/pending")
+	if err := d.get(ctx, path, &rows); err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, fmt.Errorf("get %s: vm %d: %w", path, ref.VMID, ErrNotFound)
+	}
+	var pending []Pending
+	for _, r := range rows {
+		if r.Pending == nil && r.Delete == 0 {
+			continue
+		}
+		pending = append(pending, Pending{Key: r.Key, Value: scalar(r.Value), Pending: scalar(r.Pending), Delete: r.Delete != 0})
+	}
+	return pending, nil
+}
+
 func (d *driver) UpdateVM(ctx context.Context, ref VMRef, patch VMPatch, digest string) (Task, error) {
 	form := url.Values{"digest": {digest}}
 	if patch.Cores != nil {
@@ -65,7 +109,7 @@ func (d *driver) ResizeDisk(ctx context.Context, ref VMRef, disk, size string) (
 }
 
 func (d *driver) DetachISO(ctx context.Context, ref VMRef) (Task, error) {
-	form := url.Values{"ide2": {"none,media=cdrom"}, "boot": {"order=" + bootDisk}}
+	form := url.Values{cdromSlot: {"none,media=cdrom"}, "boot": {"order=" + bootDisk}}
 	return d.task(ctx, http.MethodPost, ref.Node, vmPath(ref, "/config"), form)
 }
 

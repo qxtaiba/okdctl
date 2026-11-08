@@ -34,6 +34,8 @@ var fakeFixtures = map[string]string{
 	"GET /cluster/resources?type=vm":                "cluster_resources_vm.json",
 	"GET /access/permissions":                       "access_permissions.json",
 	"GET /nodes/pve/qemu/101/status/current":        "nodes_pve_qemu_101_status_current.json",
+	"GET /nodes/pve/qemu/101/config":                "nodes_pve_qemu_101_config.json",
+	"GET /nodes/pve/qemu/101/pending":               "nodes_pve_qemu_101_pending.json",
 	"GET /nodes/pve/tasks/" + upidStart + "/status": "nodes_pve_tasks_qmstart_status.json",
 	"GET /cluster/ha/resources/vm:101":              "cluster_ha_resources_vm_101.json",
 }
