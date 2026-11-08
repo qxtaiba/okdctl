@@ -90,9 +90,11 @@ func TestRunInit_MinimalWritesWithoutTheWizard(t *testing.T) {
 
 func TestWriteCredentialsEnv(t *testing.T) {
 	const loadedToken = "root@pam!ci=loaded-token"
+	const shellToken = "root@pam!shell=exported-token"
 	cases := []struct {
 		name          string
 		envToken      string
+		fileToken     string
 		envInsecure   string
 		typedToken    string
 		toggle        bool
@@ -100,25 +102,35 @@ func TestWriteCredentialsEnv(t *testing.T) {
 		wantLines     []string
 		unwantedLines []string
 	}{
-		{"untouched session writes nothing", loadedToken, "true", "", true, false, nil, nil},
-		{"no token anywhere and toggle off writes nothing", "", "", "", false, false, nil, nil},
+		{"untouched session writes nothing", loadedToken, loadedToken, "true", "", true, false, nil, nil},
+		{"no token anywhere and toggle off writes nothing", "", "", "", "", false, false, nil, nil},
 		{
-			"flip insecure only keeps the loaded token", loadedToken, "", "", true, true,
+			"flip insecure only keeps the file's token", loadedToken, loadedToken, "", "", true, true,
 			[]string{"PROXMOX_VE_API_TOKEN=" + loadedToken, "PROXMOX_VE_INSECURE=true"},
 			nil,
 		},
 		{
-			"flip insecure back off drops the flag", loadedToken, "true", "", false, true,
+			"flip insecure never copies a shell export over the file's token", shellToken, loadedToken, "", "", true, true,
+			[]string{"PROXMOX_VE_API_TOKEN=" + loadedToken, "PROXMOX_VE_INSECURE=true"},
+			[]string{shellToken},
+		},
+		{
+			"flip insecure with a shell export and no file writes no token", shellToken, "", "", "", true, true,
+			[]string{"PROXMOX_VE_INSECURE=true"},
+			[]string{"PROXMOX_VE_API_TOKEN"},
+		},
+		{
+			"flip insecure back off drops the flag", loadedToken, loadedToken, "true", "", false, true,
 			[]string{"PROXMOX_VE_API_TOKEN=" + loadedToken},
 			[]string{"PROXMOX_VE_INSECURE"},
 		},
 		{
-			"rotate token preserves insecure", loadedToken, "true", fixtureAPIToken, true, true,
+			"rotate token preserves insecure", loadedToken, loadedToken, "true", fixtureAPIToken, true, true,
 			[]string{"PROXMOX_VE_API_TOKEN=" + fixtureAPIToken, "PROXMOX_VE_INSECURE=true"},
 			[]string{loadedToken},
 		},
 		{
-			"first token with verification on", "", "", fixtureAPIToken, false, true,
+			"first token with verification on", "", "", "", fixtureAPIToken, false, true,
 			[]string{"PROXMOX_VE_API_TOKEN=" + fixtureAPIToken},
 			[]string{"PROXMOX_VE_INSECURE"},
 		},
@@ -131,15 +143,24 @@ func TestWriteCredentialsEnv(t *testing.T) {
 			secrets.ProxmoxToken.Set(tc.typedToken)
 			secrets.ProxmoxInsecure = tc.toggle
 			configPath := filepath.Join(t.TempDir(), "okdctl.yaml")
+			if tc.fileToken != "" {
+				saved := &credentials.ProxmoxCredentials{APIToken: []byte(tc.fileToken), Insecure: tc.envInsecure == "true"}
+				if err := credentials.WriteEnvFile(credentials.EnvFilePath(configPath), saved); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			envPath := credentials.EnvFilePath(configPath)
+			before, _ := os.ReadFile(envPath)
 
 			if err := writeCredentialsEnv(&secrets, configPath); err != nil {
 				t.Fatalf("writeCredentialsEnv: %v", err)
 			}
-			envPath := credentials.EnvFilePath(configPath)
 			fi, err := os.Stat(envPath)
 			if !tc.wantFile {
-				if err == nil {
-					t.Fatalf("expected no sidecar, found %s", envPath)
+				after, _ := os.ReadFile(envPath)
+				if string(after) != string(before) {
+					t.Fatalf("sidecar changed by an untouched session:\n%s", after)
 				}
 				return
 			}
