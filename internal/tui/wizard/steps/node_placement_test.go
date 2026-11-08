@@ -310,6 +310,18 @@ func TestNodePlacementCredentialsPreferTheTypedToken(t *testing.T) {
 	}
 }
 
+func TestNodePlacementCredentialsTypedToggleWins(t *testing.T) {
+	t.Setenv("PROXMOX_VE_API_TOKEN", "env@pam!okdctl=env")
+	t.Setenv("PROXMOX_VE_INSECURE", "true")
+	s := NewNodePlacementStep()
+	s.cfg = newPlacementConfig()
+	s.withSecrets(func() wizard.Secrets { return wizard.Secrets{ProxmoxInsecure: false} })
+
+	if creds := s.credentials(); creds.Insecure || string(creds.APIToken) != "env@pam!okdctl=env" {
+		t.Fatalf("creds = %+v; want the toggle typed off to win over PROXMOX_VE_INSECURE", creds.Redacted())
+	}
+}
+
 func TestGolden_NodePlacementUnknownCapacity(t *testing.T) {
 	for _, sz := range []struct{ w, h int }{{80, 24}, {180, 48}} {
 		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {

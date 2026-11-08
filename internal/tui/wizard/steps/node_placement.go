@@ -131,7 +131,9 @@ func (s *NodePlacementStep) startDiscovery() tea.Cmd {
 	}
 }
 
-// credentials prefers a token typed this session over the environment's.
+// credentials prefers a token typed this session over the environment's
+// and takes the TLS toggle as typed, since the proxmox step seeds it from
+// the environment.
 func (s *NodePlacementStep) credentials() *credentials.ProxmoxCredentials {
 	creds := credentials.GetProxmoxCredentials(s.cfg)
 	if s.secrets == nil {
@@ -139,7 +141,7 @@ func (s *NodePlacementStep) credentials() *credentials.ProxmoxCredentials {
 	}
 	typed := s.secrets()
 	defer typed.ProxmoxToken.Zeroize()
-	creds.Insecure = creds.Insecure || typed.ProxmoxInsecure
+	creds.Insecure = typed.ProxmoxInsecure
 	if !typed.ProxmoxToken.IsEmpty() {
 		creds.Zeroize()
 		creds.APIToken = bytes.Clone(typed.ProxmoxToken.Bytes())

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -59,7 +60,10 @@ func runInit(cmd *cobra.Command, _ []string) error {
 		return withProjectLock(root, cmdNameInit, func() error { return writeMinimalConfig(initOutputFile, out) })
 	}
 
-	cfg, configExists := loadInitConfig(initOutputFile)
+	cfg, configExists, err := loadInitConfig(initOutputFile)
+	if err != nil {
+		return err
+	}
 	// A saved token lets node placement discover the cluster without retyping it.
 	if err := credentials.LoadEnvFile(credentials.EnvFilePath(initOutputFile)); err != nil {
 		return err
@@ -112,17 +116,22 @@ func runHubVerb(verb steps.HubVerb, out io.Writer) bool {
 	return true
 }
 
-// loadInitConfig returns the valid on-disk config, or the compiled-in
-// defaults with a warning when the file is missing or unreadable.
-func loadInitConfig(path string) (cfg *config.Config, configExists bool) {
-	if _, statErr := os.Stat(path); statErr == nil {
-		loaded, loadErr := config.NewLoader().LoadFile(path)
-		if loadErr == nil {
-			return loaded, true
+// loadInitConfig returns the on-disk config, or the compiled-in defaults
+// when the file is missing; any other load failure is returned as is, so a
+// file the loader rejects is never overwritten by the wizard.
+func loadInitConfig(path string) (cfg *config.Config, configExists bool, err error) {
+	cfg, err = config.NewLoader().LoadFile(path)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		return config.DefaultConfig(), false, nil
+	case err != nil:
+		var hinted errtypes.HintAppender
+		if errors.As(err, &hinted) {
+			err = hinted.WithHint("move it aside, or pass --output-file to write a new config elsewhere")
 		}
-		logutil.Warn("existing config could not be loaded; starting fresh with defaults", logutil.LF("err", loadErr))
+		return nil, false, err
 	}
-	return config.DefaultConfig(), false
+	return cfg, true, nil
 }
 
 func writeMinimalConfig(path string, w io.Writer) error {
