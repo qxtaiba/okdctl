@@ -3,14 +3,10 @@ package system
 import (
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"os/user"
 	"path/filepath"
 	"strconv"
-	"strings"
-
-	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
 // invokingUser returns root under direct-root invocation (SUDO_USER unset);
@@ -105,74 +101,4 @@ func WriteAsInvokingUser(path string, data []byte, mode os.FileMode) error {
 		return ChownToInvokingUser(parentDir)
 	}
 	return nil
-}
-
-// canonicalizePath resolves symlinks (so /tmp vs /private/tmp on macOS doesn't
-// split the allowlist), falling back to the input on failure.
-func canonicalizePath(p string) string {
-	if p == "" {
-		return p
-	}
-	if resolved, err := filepath.EvalSymlinks(p); err == nil {
-		return resolved
-	}
-	return p
-}
-
-// isAllowedChownRoot guards recursive chown against paths like /etc; only
-// subpaths of homeDir and tmpDir qualify.
-func isAllowedChownRoot(absPath, homeDir, tmpDir string) bool {
-	hasPrefix := func(prefix string) bool {
-		if prefix == "" {
-			return false
-		}
-		if absPath == prefix {
-			return true
-		}
-		return strings.HasPrefix(absPath, prefix+string(filepath.Separator))
-	}
-	return hasPrefix(homeDir) || hasPrefix(tmpDir)
-}
-
-// ChownTreeToInvokingUser recursively chowns root and its descendants to the
-// invoking user, continuing past per-entry errors rather than aborting the
-// whole walk; a no-op when not running under sudo. The walk runs through
-// os.Root, so directory-component symlinks can't redirect a chown outside
-// the trust root.
-func ChownTreeToInvokingUser(root string) error {
-	ids, err := invokingUserIDs()
-	if err != nil || ids == nil {
-		return err
-	}
-	absRoot, err := filepath.Abs(root)
-	if err != nil {
-		return fmt.Errorf("resolve path %s: %w", root, err)
-	}
-	homeDir, _ := InvokingUserHomeDir()
-	tmpDir := os.TempDir()
-	if !isAllowedChownRoot(canonicalizePath(absRoot), canonicalizePath(homeDir), canonicalizePath(tmpDir)) {
-		return &errtypes.AuthError{
-			Msg:  "chown tree refused: path is not in an okdctl-managed subtree",
-			Path: absRoot,
-		}
-	}
-	osRoot, openErr := os.OpenRoot(root)
-	if openErr != nil {
-		return fmt.Errorf("open root %s: %w", root, openErr)
-	}
-	defer func() { _ = osRoot.Close() }()
-	var errs []error
-	if walkErr := fs.WalkDir(osRoot.FS(), ".", func(path string, _ fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			errs = append(errs, walkErr)
-			return nil
-		}
-		if chownErr := osRoot.Lchown(path, ids.uid, ids.gid); chownErr != nil {
-			errs = append(errs, fmt.Errorf("chown %s: %w", path, chownErr))
-		}
-		return nil
-	}); walkErr != nil {
-		errs = append(errs, walkErr)
-	}
-	return errors.Join(errs...)
 }
