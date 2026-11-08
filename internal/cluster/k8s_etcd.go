@@ -9,7 +9,6 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
-	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
 
 // EtcdHealth summarizes the etcd quorum's fitness for a one-at-a-time
@@ -114,13 +113,13 @@ func parseOperatorAvailableStable(data []byte) (bool, error) {
 	}
 	available, degraded, progressing := false, false, false
 	for _, cond := range co.Status.Conditions {
-		switch nodetypes.ConditionType(cond.Type) {
-		case nodetypes.ConditionTypeAvailable:
-			available = cond.Status == string(nodetypes.ConditionStatusTrue)
-		case nodetypes.ConditionTypeDegraded:
-			degraded = cond.Status == string(nodetypes.ConditionStatusTrue)
-		case nodetypes.ConditionTypeProgressing:
-			progressing = cond.Status == string(nodetypes.ConditionStatusTrue)
+		switch ConditionType(cond.Type) {
+		case ConditionTypeAvailable:
+			available = cond.Status == string(ConditionStatusTrue)
+		case ConditionTypeDegraded:
+			degraded = cond.Status == string(ConditionStatusTrue)
+		case ConditionTypeProgressing:
+			progressing = cond.Status == string(ConditionStatusTrue)
 		}
 	}
 	return available && !degraded && !progressing, nil
@@ -140,7 +139,7 @@ func parsePodsReady(data []byte) (ready, total int, err error) {
 	total = len(pl.Items)
 	for _, p := range pl.Items {
 		for _, cond := range p.Status.Conditions {
-			if cond.Type == string(nodetypes.ConditionTypeReady) && cond.Status == string(nodetypes.ConditionStatusTrue) {
+			if cond.Type == string(ConditionTypeReady) && cond.Status == string(ConditionStatusTrue) {
 				ready++
 			}
 		}
@@ -160,6 +159,6 @@ func parseEtcdRolloutInFlight(data []byte) (bool, error) {
 		return false, fmt.Errorf("parse etcd json: %w", err)
 	}
 	return slices.ContainsFunc(e.Status.Conditions, func(cond k8sCondition) bool {
-		return cond.Type == "NodeInstallerProgressing" && cond.Status == string(nodetypes.ConditionStatusTrue)
+		return cond.Type == "NodeInstallerProgressing" && cond.Status == string(ConditionStatusTrue)
 	}), nil
 }

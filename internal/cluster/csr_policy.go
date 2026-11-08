@@ -10,8 +10,7 @@ import (
 
 	certificatesv1 "k8s.io/api/certificates/v1"
 
-	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/nodetypes"
+	"github.com/qxtaiba/okdctl/internal/model"
 )
 
 const (
@@ -25,26 +24,15 @@ type CSRIdentity struct {
 	IP    string
 }
 
-// ExpectedCSRIdentities derives provisioned identities, optionally restricted to one node.
-func ExpectedCSRIdentities(cfg *config.Config, target string) ([]CSRIdentity, error) {
-	nodes, err := nodetypes.ClusterNodes(cfg)
-	if err != nil {
-		return nil, err
-	}
-	var identities []CSRIdentity
-	for _, node := range nodes {
-		if node.Role == nodetypes.RoleBootstrap {
-			continue
-		}
-		domain := cfg.Cluster.Name + "." + cfg.Cluster.Domain
-		names := []string{node.Name(), node.PrefixedName(cfg.Cluster.Name), node.Name() + "." + domain, node.PrefixedName(cfg.Cluster.Name) + "." + domain}
-		if target != "" && !slices.Contains(names, target) {
-			continue
-		}
-		identities = append(identities, CSRIdentity{Names: names, IP: node.IP})
-	}
-	if len(identities) == 0 {
+// ExpectedCSRIdentities returns each node's short and fully qualified name
+// plus its address; domain is the cluster domain, <cluster>.<base-domain>.
+func ExpectedCSRIdentities(inv model.Inventory, domain string) ([]CSRIdentity, error) {
+	if len(inv.Nodes) == 0 {
 		return nil, errors.New("no expected node identities for CSR approval")
+	}
+	identities := make([]CSRIdentity, 0, len(inv.Nodes))
+	for _, node := range inv.Nodes {
+		identities = append(identities, CSRIdentity{Names: []string{node.Name, node.Name + "." + domain}, IP: node.IP.String()})
 	}
 	return identities, nil
 }
