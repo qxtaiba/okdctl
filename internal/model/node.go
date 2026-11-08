@@ -16,32 +16,32 @@ const (
 
 // Disk is one virtual disk with its storage and serial resolved.
 type Disk struct {
-	SizeGiB int
-	Storage string
-	Serial  string
-	Wipe    bool
+	SizeGiB int    `json:"size_gib"`
+	Storage string `json:"storage"`
+	Serial  string `json:"serial"`
+	Wipe    bool   `json:"wipe"`
 }
 
 // NodeSpec is the fully derived identity and sizing of one node.
 type NodeSpec struct {
-	Role      Role
-	Index     int
-	Name      string
-	VMID      int
-	MAC       string
-	IP        netip.Addr
-	Host      string
-	CPU       int
-	MemoryMiB int
-	Disks     []Disk
+	Role      Role       `json:"role"`
+	Index     int        `json:"index"`
+	Name      string     `json:"name"`
+	VMID      int        `json:"vmid"`
+	MAC       string     `json:"mac"`
+	IP        netip.Addr `json:"ip"`
+	Host      string     `json:"host"`
+	CPU       int        `json:"cpu"`
+	MemoryMiB int        `json:"memory_mib"`
+	Disks     []Disk     `json:"disks"`
 }
 
 // Inventory is every node of a cluster, masters first, then workers by index.
 type Inventory struct {
-	InfraID    string
-	Nodes      []NodeSpec
-	APIVIP     netip.Addr
-	IngressVIP netip.Addr
+	InfraID    string     `json:"infra_id"`
+	APIVIP     netip.Addr `json:"api_vip"`
+	IngressVIP netip.Addr `json:"ingress_vip"`
+	Nodes      []NodeSpec `json:"nodes"`
 }
 
 // ByName returns the node called name.
