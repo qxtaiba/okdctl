@@ -37,34 +37,31 @@ func IsPresented(err error) bool {
 func ErrorSummary(err error, exitCode int, runID string) string {
 	kind, headline, hint := describeError(err)
 
-	sb := errorBody(kind, headline, hint, tui.DefaultBoxWidth)
-	sb.Newline()
 	footer := fmt.Sprintf("exit %d · run_id %s", exitCode, runID)
-	sb.WriteString("  " + tui.MutedStyle.Render(footer) + "\n")
+	body := errorBody(kind, headline, hint, tui.DefaultBoxWidth) +
+		"\n  " + tui.MutedStyle.Render(footer) + "\n"
 
-	return "\n" + tui.BoxedSectionAccent(sb.String(), "error", tui.DefaultBoxWidth, tui.ColorError()) + "\n"
+	return "\n" + tui.BoxedSectionAccent(body, "error", tui.DefaultBoxWidth, tui.ColorError()) + "\n"
 }
 
 // ErrorCard renders the red error box body — kind chip, wrapped message, and
 // pointer-led hint — without the exit-code/run-id footer ErrorSummary adds.
 func ErrorCard(kind, message, hint string, width int) string {
-	sb := errorBody(kind, message, hint, width)
-	return "\n" + tui.BoxedSectionAccent(sb.String(), "error", width, tui.ColorError()) + "\n"
+	return "\n" + tui.BoxedSectionAccent(errorBody(kind, message, hint, width), "error", width, tui.ColorError()) + "\n"
 }
 
 // errorBody writes the kind chip, wrapped message, and pointer-led hint
 // shared by ErrorSummary and ErrorCard, sized to fit inside width.
-func errorBody(kind, message, hint string, width int) *Builder {
-	sb := NewBuilderWidth(width)
-	contentWidth := sb.ContentWidth()
-	sb.Newline()
-	sb.WriteString("  " + tui.ErrorStyle.Render(tui.IconError+"  "+kind) + "\n")
-	sb.Newline()
+func errorBody(kind, message, hint string, width int) string {
+	// Two columns of margin inside the box border.
+	contentWidth := tui.BoxInnerWidth(width) - 2
+	var sb strings.Builder
+	sb.WriteString("\n  " + tui.ErrorStyle.Render(tui.IconError+"  "+kind) + "\n\n")
 	for _, line := range tui.WrapLines(message, contentWidth) {
 		sb.WriteString("  " + line + "\n")
 	}
 	if hint != "" {
-		sb.Newline()
+		sb.WriteString("\n")
 		pointer := tui.HighlightStyle.Render(tui.IconPointer)
 		// contentWidth-2 covers only the pointer glyph and its trailing
 		// space; both the first line's "pointer " prefix and every
@@ -82,7 +79,7 @@ func errorBody(kind, message, hint string, width int) *Builder {
 			}
 		}
 	}
-	return sb
+	return sb.String()
 }
 
 // describeError decomposes err via errtypes.Describe, falling back to a plain

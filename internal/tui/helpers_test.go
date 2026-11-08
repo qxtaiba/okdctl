@@ -1,12 +1,10 @@
 package tui
 
 import (
-	"bytes"
 	"strings"
 	"testing"
 
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/colorprofile"
 
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 )
@@ -113,47 +111,5 @@ func TestDottedKVNoWrapWhenUnbounded(t *testing.T) {
 	}
 	if !strings.Contains(plain, value) {
 		t.Fatalf("expected the value to render intact, got %q", plain)
-	}
-}
-
-// Node-op tables' sub-rows (Builder.SubKV) depend on DottedKeyValueSubFull
-// muting its key, which was otherwise unverified.
-func TestDottedKeyValueSubFullKeyIsMuted(t *testing.T) {
-	forced := colorprofile.TrueColor
-	outputProfile.Store(&forced)
-	t.Cleanup(func() { SetColorProfileFor(&bytes.Buffer{}) })
-
-	full := DottedKeyValueFull("key", "value", DefaultKeyColWidth, 0)
-	sub := DottedKeyValueSubFull("key", "value", DefaultKeyColWidth, 0)
-
-	mutedKey := lipgloss.NewStyle().Foreground(ColorTextFaint()).Render("key")
-	plainKey := lipgloss.NewStyle().Foreground(ColorTextDim()).Render("key")
-
-	if !strings.Contains(sub, mutedKey) {
-		t.Errorf("SubFull's key must render with the muted ColorTextFaint() foreground:\n%q", sub)
-	}
-	if !strings.Contains(full, plainKey) {
-		t.Errorf("Full's key must render with the normal ColorTextDim() foreground:\n%q", full)
-	}
-	if strings.Contains(sub, plainKey) {
-		t.Errorf("SubFull's key must not reuse Full's ColorTextDim() styling:\n%q", sub)
-	}
-}
-
-func TestKeyValueNoteHasNoDots(t *testing.T) {
-	out := KeyValueNote("note", "some prose here", 10, 0)
-	plain := tuitest.StripANSI(out)
-	want := "note" + strings.Repeat(" ", 6) + "some prose here"
-
-	if plain != want {
-		t.Fatalf("KeyValueNote = %q, want %q", plain, want)
-	}
-	if strings.Contains(plain, ".") {
-		t.Fatalf("KeyValueNote must not render dot leaders: %q", plain)
-	}
-
-	long := tuitest.StripANSI(KeyValueNote("a-very-long-key", "v", 10, 0))
-	if long != "a-very-long-key v" {
-		t.Fatalf("KeyValueNote overlong key = %q, want exactly one space of separation", long)
 	}
 }

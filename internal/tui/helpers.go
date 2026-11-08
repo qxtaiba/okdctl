@@ -14,13 +14,6 @@ const DefaultKeyColWidth = 24
 // narrow totalWidth never collapses it to an unreadable sliver.
 const minValueWrapWidth = 12
 
-type dottedKVOpts struct {
-	highlight  bool
-	subKey     bool
-	totalWidth int
-	link       string
-}
-
 // wrapValueColumn renders value starting at column valueStart, wrapping it
 // to fit totalWidth when value is too wide to fit and totalWidth > 0 (0
 // disables wrapping), styling every line with valueStyle and right-padding
@@ -58,47 +51,13 @@ func wrapValueColumn(value string, valueStart int, valueStyle *lipgloss.Style, t
 	return b.String()
 }
 
-func dottedKV(key, value string, keyColWidth int, opts dottedKVOpts) string {
+// DottedKeyValueFull renders "key ....... value" padded to totalWidth, wrapping the value under the value column across several lines when it doesn't fit.
+func DottedKeyValueFull(key, value string, keyColWidth, totalWidth int) string {
 	// Semantic theme roles, not raw palette tiers: the resolved Theme
 	// carries the a11y and light-background variants to every rendered row.
 	lines := RenderFacts(
-		[]FactRow{{Key: key, Value: value, Link: opts.link, Highlight: opts.highlight, Sub: opts.subKey}},
-		&FactLayout{Leader: FactLeaderDots, KeyWidth: keyColWidth, TotalWidth: opts.totalWidth, Styles: DefaultFactStyles()},
-	)
-	return Downsample(strings.Join(lines, "\n"))
-}
-
-// DottedKeyValueFull renders "key ....... value" padded to totalWidth, wrapping the value under the value column across several lines when it doesn't fit.
-func DottedKeyValueFull(key, value string, keyColWidth, totalWidth int) string {
-	return dottedKV(key, value, keyColWidth, dottedKVOpts{totalWidth: totalWidth})
-}
-
-// DottedKeyValueHighlightFull renders DottedKeyValueFull with an
-// amber-highlighted value.
-func DottedKeyValueHighlightFull(key, value string, keyColWidth, totalWidth int) string {
-	return dottedKV(key, value, keyColWidth, dottedKVOpts{highlight: true, totalWidth: totalWidth})
-}
-
-// DottedKeyValueSubFull renders DottedKeyValueFull with a muted key for a nested row.
-func DottedKeyValueSubFull(key, value string, keyColWidth, totalWidth int) string {
-	return dottedKV(key, value, keyColWidth, dottedKVOpts{subKey: true, totalWidth: totalWidth})
-}
-
-// DottedKeyValueLinkFull renders DottedKeyValueFull with every value segment
-// wrapped in an OSC 8 hyperlink to url — the printed value is the url itself
-// — degrading to plain text off-TTY and under NO_COLOR.
-func DottedKeyValueLinkFull(key, url string, keyColWidth, totalWidth int) string {
-	return dottedKV(key, url, keyColWidth, dottedKVOpts{totalWidth: totalWidth, link: url})
-}
-
-// KeyValueNote renders "key    text" — key padded to keyColWidth with no dot leaders, wrapping text under the value column across several lines when it doesn't fit.
-func KeyValueNote(key, text string, keyColWidth, totalWidth int) string {
-	lines := RenderFacts(
-		[]FactRow{{Key: key, Value: text}},
-		&FactLayout{Leader: FactLeaderPad, KeyWidth: keyColWidth, TotalWidth: totalWidth, Styles: FactStyles{
-			Key:   lipgloss.NewStyle().Foreground(ColorTextDim()),
-			Value: lipgloss.NewStyle(),
-		}},
+		[]FactRow{{Key: key, Value: value}},
+		&FactLayout{Leader: FactLeaderDots, KeyWidth: keyColWidth, TotalWidth: totalWidth, Styles: DefaultFactStyles()},
 	)
 	return Downsample(strings.Join(lines, "\n"))
 }

@@ -58,18 +58,6 @@ func WrapLines(text string, width int) []string {
 	return lines
 }
 
-// PromptLine styles text as an interactive prompt, leading with the
-// highlighted pointer glyph and trailing with a colon and space.
-func PromptLine(text string) string {
-	return Downsample(HighlightStyle.Render(IconPointer) + " " + text + ": ")
-}
-
-// Footnote renders text as a dim explanatory note, downsampled for the
-// active color profile.
-func Footnote(text string) string {
-	return Downsample(MutedStyle.Render(text))
-}
-
 // truncateMiddle shortens s to maxW columns by replacing the middle with an
 // ellipsis, preserving the distinguishing head and tail; maxW <= 0 returns s
 // unchanged.
