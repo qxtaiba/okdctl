@@ -18,7 +18,9 @@ var ErrRecordMismatch = errors.New("cluster record names a different cluster")
 
 var recordFile = marker.File{Label: "cluster record", Version: "1"}
 
-// Record is the on-disk identity of a cluster, written once at define time.
+// Record is the on-disk identity of a cluster, written once at define time;
+// Nodes names the day-1 nodes, masters then workers, so a worker added
+// later is told apart from an original.
 type Record struct {
 	InfraID    string    `json:"infra_id"`
 	Cluster    string    `json:"cluster"`
@@ -26,6 +28,7 @@ type Record struct {
 	Created    time.Time `json:"created"`
 	Release    string    `json:"release"`
 	InputsHash string    `json:"inputs_hash"`
+	Nodes      []string  `json:"nodes"`
 }
 
 type recordBody struct {

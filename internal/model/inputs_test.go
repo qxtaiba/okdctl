@@ -41,8 +41,9 @@ func TestInputsHash_Sensitivity(t *testing.T) {
 		in     func(*Inputs)
 		change bool
 	}{
-		{name: "worker address", change: true, cfg: func(c *config.Config) {
-			c.Nodes = map[string]config.NodeOverride{"lab-worker0": {IP: "192.168.1.200"}}
+		{name: "infra id", change: true, in: func(in *Inputs) { in.Inventory.InfraID = "lab-000000" }},
+		{name: "master address", change: true, cfg: func(c *config.Config) {
+			c.Nodes = map[string]config.NodeOverride{"lab-master0": {IP: "192.168.1.200"}}
 		}},
 		{name: "api vip", change: true, cfg: func(c *config.Config) { c.Networking.APIVIP = "192.168.1.157" }},
 		{name: "ingress vip", change: true, cfg: func(c *config.Config) { c.Networking.IngressVIP = "192.168.1.157" }},
@@ -50,7 +51,10 @@ func TestInputsHash_Sensitivity(t *testing.T) {
 		{name: "manifest byte", change: true, in: func(in *Inputs) { in.ExtraManifests["98-a.yaml"] = []byte("a: 2\n") }},
 		{name: "pull secret", change: true, in: func(in *Inputs) { in.PullSecret = []byte(`{"auths":{"x":{}}}`) }},
 		{name: "ssh key", change: true, in: func(in *Inputs) { in.SSHKey = []byte("ssh-ed25519 BBBB") }},
-		{name: "worker count", change: true, cfg: func(c *config.Config) { c.Workers.Count = 3 }},
+		{name: "worker count", cfg: func(c *config.Config) { c.Workers.Count = 3 }},
+		{name: "worker address", cfg: func(c *config.Config) {
+			c.Nodes = map[string]config.NodeOverride{"lab-worker0": {IP: "192.168.1.200"}}
+		}},
 		{name: "memory", cfg: func(c *config.Config) { c.Workers.MemoryMiB = 65536 }},
 		{name: "cpu", cfg: func(c *config.Config) { c.ControlPlane.CPU = 2 }},
 		{name: "host", cfg: func(c *config.Config) {
