@@ -6,6 +6,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -88,7 +89,7 @@ func goodDriver() *fakeDriver {
 			},
 			"/storage":                      {"Datastore.Allocate": true, "Datastore.AllocateSpace": true, "Datastore.AllocateTemplate": true, "Datastore.Audit": true},
 			"/sdn/zones/localnetwork/vmbr0": {"SDN.Use": true},
-			"/pool/okd":                     {"Pool.Audit": true},
+			"/pool/okd":                     {"Pool.Allocate": true},
 		},
 		version: Version{Version: "9.0.10", Release: "9.0"},
 		nodes: []NodeInfo{
@@ -159,10 +160,24 @@ func TestPreflight(t *testing.T) {
 			name: "permissions conditional privileges skipped",
 			mutate: func(d *fakeDriver, in *PreflightInput, _ *fakePinger) {
 				delete(d.perms["/"], "Sys.Console")
-				delete(d.perms["/"], "Sys.Modify")
 				delete(d.perms, "/pool/okd")
-				in.HA, in.Tag, in.Pool = false, "", ""
+				in.HA, in.Pool = false, ""
 			},
+		},
+		{
+			name: "permissions pool needs allocate",
+			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) {
+				d.perms["/pool/okd"] = map[string]bool{"Pool.Audit": true}
+			},
+			want: []Finding{{"permissions", "fail", "missing privilege Pool.Allocate on /pool/okd"}},
+		},
+		{
+			name: "permissions tagging needs sys.modify whatever the tag",
+			mutate: func(d *fakeDriver, in *PreflightInput, _ *fakePinger) {
+				delete(d.perms["/"], "Sys.Modify")
+				in.Tag = ""
+			},
+			want: []Finding{{"permissions", "fail", "missing privilege Sys.Modify on /"}},
 		},
 		{
 			name: "permissions single storage reports each privilege once",
@@ -209,6 +224,13 @@ func TestPreflight(t *testing.T) {
 			want:   []Finding{{"memory", "warn", "node pve1: planned 49153 MiB + running 8192 MiB + 8192 MiB reserve exceeds 65536 MiB"}},
 		},
 		{
+			name: "memory skips the cluster's own running vms",
+			mutate: func(d *fakeDriver, in *PreflightInput, _ *fakePinger) {
+				d.vms[0].Tags = []string{"okd", "okd-grappleberry"}
+				in.MemoryMiBByNode["pve1"] = 49153
+			},
+		},
+		{
 			name:   "memory exactly fits",
 			mutate: func(_ *fakeDriver, in *PreflightInput, _ *fakePinger) { in.MemoryMiBByNode["pve1"] = 49152 },
 		},
@@ -226,6 +248,28 @@ func TestPreflight(t *testing.T) {
 			want: []Finding{
 				{"vmid-collision", "fail", `vmid 100 already used by "web" on node pve1`},
 				{"vmid-collision", "fail", `vmid 200 already used by "db" on node pve2`},
+			},
+		},
+		{
+			name: "vmid collision skips the cluster's own vms",
+			mutate: func(d *fakeDriver, in *PreflightInput, _ *fakePinger) {
+				d.vms[1].Tags = []string{"okd-grappleberry"}
+				in.VMIDs = append(in.VMIDs, 200)
+			},
+		},
+		{
+			name: "vmid collision with a prefix tag is foreign",
+			mutate: func(d *fakeDriver, in *PreflightInput, _ *fakePinger) {
+				d.vms[1].Tags = []string{"okd-grappleberry-old"}
+				in.VMIDs = append(in.VMIDs, 200)
+			},
+			want: []Finding{{"vmid-collision", "fail", `vmid 200 already used by "db" on node pve2`}},
+		},
+		{
+			name: "mac collision skips the cluster's own vms",
+			mutate: func(d *fakeDriver, in *PreflightInput, _ *fakePinger) {
+				d.vms[0].Tags = []string{"okd-grappleberry"}
+				in.MACs[0] = "bc:24:11:aa:bb:01"
 			},
 		},
 		{
@@ -319,6 +363,28 @@ func TestPreflight(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestPreflightNilPingerSkipsAddresses(t *testing.T) {
+	got, err := Preflight(context.Background(), goodDriver(), nil, goodInput())
+	if err != nil {
+		t.Fatalf("Preflight: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("findings = %+v, want none", got)
+	}
+}
+
+func TestFixtureNodeHasRequiredCPUFlags(t *testing.T) {
+	nodes, err := newFakeAPI(t, nil).driver(t).Nodes(t.Context())
+	if err != nil {
+		t.Fatalf("Nodes(): %v", err)
+	}
+	for _, flag := range requiredCPUFlags {
+		if !slices.Contains(nodes[0].CPUFlags, flag) {
+			t.Errorf("fixture node lacks cpu flag %s", flag)
+		}
 	}
 }
 

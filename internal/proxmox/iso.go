@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -79,7 +80,7 @@ func (d *driver) UploadISO(ctx context.Context, node, storage, path, sha256 stri
 	case res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden:
 		return Task{}, fmt.Errorf("upload iso: %w", ErrPermission)
 	case res.StatusCode >= http.StatusMultipleChoices:
-		return Task{}, fmt.Errorf("upload iso: %s", res.Status)
+		return Task{}, fmt.Errorf("upload iso: %w", mapAPIError(errors.New(res.Status)))
 	}
 	var envelope struct {
 		Data string `json:"data"`
