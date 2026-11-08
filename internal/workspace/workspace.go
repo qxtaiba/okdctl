@@ -1,30 +1,79 @@
-// Package workspace owns okdctl's on-disk workspace layout: the per-project
-// work directory and the openshift-install cluster-config directory. It is a
-// dependency-light leaf so any package can build these paths without
-// layering hacks.
+// Package workspace owns okdctl's v3 on-disk layout under a workspace root:
+// cluster/ (record, rendered installer inputs, auth, state, ISO), handoff/,
+// backups/ and bin/.
 package workspace
 
 import "path/filepath"
 
-// WorkDirName is the per-project workdir for run artifacts (install-config,
-// manifests, ignition, downloaded tools); system.isAllowedChownRoot reads
-// it for the chown-back allowlist.
-const WorkDirName = "okd-install"
+// Layout names pin the on-disk contract: renaming one orphans existing
+// workspaces.
+const (
+	ClusterDirName = "cluster"
+	HandoffDirName = "handoff"
+	BackupsDirName = "backups"
+	BinDirName     = "bin"
+	RecordFile     = "record.json"
+	ISOFile        = "agent.x86_64.iso"
+)
 
-// WorkDir returns the per-project work directory (<projectRoot>/okd-install).
-func WorkDir(projectRoot string) string {
-	return filepath.Join(projectRoot, WorkDirName)
+// ClusterDir returns <root>/cluster, created by up and removed by destroy.
+func ClusterDir(root string) string {
+	return filepath.Join(root, ClusterDirName)
 }
 
-// ClusterConfigDir returns the openshift-install output directory
-// (<workDir>/cluster-config) holding install-config.yaml and the generated
-// kubeconfig/auth bundle.
-func ClusterConfigDir(workDir string) string {
-	return filepath.Join(workDir, "cluster-config")
+// RecordPath returns the cluster record (infra-ID, inputs hash, release).
+func RecordPath(root string) string {
+	return filepath.Join(ClusterDir(root), RecordFile)
 }
 
-// KubeconfigPath returns the admin kubeconfig path
-// (<clusterDir>/auth/kubeconfig) openshift-install writes.
-func KubeconfigPath(clusterDir string) string {
-	return filepath.Join(clusterDir, "auth", "kubeconfig")
+// AuthDir returns the directory openshift-install writes credentials into.
+func AuthDir(root string) string {
+	return filepath.Join(ClusterDir(root), "auth")
+}
+
+// KubeconfigPath returns the admin kubeconfig path.
+func KubeconfigPath(root string) string {
+	return filepath.Join(AuthDir(root), "kubeconfig")
+}
+
+// KubeadminPasswordPath returns the kubeadmin password file path.
+func KubeadminPasswordPath(root string) string {
+	return filepath.Join(AuthDir(root), "kubeadmin-password")
+}
+
+// StateFilePath returns the installer state file, which holds signer private
+// keys and tokens and must stay 0600.
+func StateFilePath(root string) string {
+	return filepath.Join(ClusterDir(root), ".openshift_install_state.json")
+}
+
+// ISOPath returns the agent ISO path, deleted after install-complete.
+func ISOPath(root string) string {
+	return filepath.Join(ClusterDir(root), ISOFile)
+}
+
+// ExtraManifestsDir returns the directory of extra manifests baked into the ISO.
+func ExtraManifestsDir(root string) string {
+	return filepath.Join(ClusterDir(root), "openshift")
+}
+
+// HandoffManifestsDir returns the operator-provided manifests directory.
+func HandoffManifestsDir(root string) string {
+	return filepath.Join(root, HandoffDirName, "manifests")
+}
+
+// HandoffSecretsDir returns the operator-provided secrets directory, which
+// must stay 0700 and gitignored.
+func HandoffSecretsDir(root string) string {
+	return filepath.Join(root, HandoffDirName, "secrets")
+}
+
+// BackupsDir returns the parent of the per-timestamp backup directories.
+func BackupsDir(root string) string {
+	return filepath.Join(root, BackupsDirName)
+}
+
+// BinDir returns the directory of pinned tools (openshift-install, oc, nmstatectl).
+func BinDir(root string) string {
+	return filepath.Join(root, BinDirName)
 }
