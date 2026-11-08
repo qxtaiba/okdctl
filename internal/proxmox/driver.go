@@ -177,11 +177,12 @@ func New(endpoint string, token []byte, insecure bool) (Driver, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &driver{client: client}, nil
+	return &driver{client: client, pollInterval: taskPollInterval}, nil
 }
 
 type driver struct {
-	client *proxmox.Client
+	client       *proxmox.Client
+	pollInterval time.Duration
 }
 
 func notImplemented(method string) error {
@@ -196,50 +197,6 @@ func (d *driver) VMPending(context.Context, VMRef) ([]Pending, error) {
 	return nil, notImplemented("VMPending")
 }
 
-func (d *driver) CreateVM(context.Context, string, VMSpec) (Task, error) {
-	return Task{}, notImplemented("CreateVM")
-}
-
-func (d *driver) UpdateVM(context.Context, VMRef, VMPatch, string) (Task, error) {
-	return Task{}, notImplemented("UpdateVM")
-}
-
-func (d *driver) ResizeDisk(context.Context, VMRef, string, string) (Task, error) {
-	return Task{}, notImplemented("ResizeDisk")
-}
-
-func (d *driver) DetachISO(context.Context, VMRef) (Task, error) {
-	return Task{}, notImplemented("DetachISO")
-}
-
-func (d *driver) DeleteVM(context.Context, VMRef) (Task, error) {
-	return Task{}, notImplemented("DeleteVM")
-}
-
-func (d *driver) Start(context.Context, VMRef) (Task, error) {
-	return Task{}, notImplemented("Start")
-}
-
-func (d *driver) Shutdown(context.Context, VMRef, time.Duration, bool) (Task, error) {
-	return Task{}, notImplemented("Shutdown")
-}
-
-func (d *driver) Stop(context.Context, VMRef) (Task, error) {
-	return Task{}, notImplemented("Stop")
-}
-
-func (d *driver) Reset(context.Context, VMRef) (Task, error) {
-	return Task{}, notImplemented("Reset")
-}
-
-func (d *driver) Status(context.Context, VMRef) (VMStatus, error) {
-	return VMStatus{}, notImplemented("Status")
-}
-
-func (d *driver) WaitTask(context.Context, Task) error {
-	return notImplemented("WaitTask")
-}
-
 func (d *driver) UploadISO(context.Context, string, string, string, string) (Task, error) {
 	return Task{}, notImplemented("UploadISO")
 }
@@ -250,12 +207,4 @@ func (d *driver) ListISOs(context.Context, string, string) ([]Volume, error) {
 
 func (d *driver) DeleteVolume(context.Context, string, string, string) (Task, error) {
 	return Task{}, notImplemented("DeleteVolume")
-}
-
-func (d *driver) SetHA(context.Context, VMRef, HASpec) error {
-	return notImplemented("SetHA")
-}
-
-func (d *driver) ClearHA(context.Context, VMRef) error {
-	return notImplemented("ClearHA")
 }

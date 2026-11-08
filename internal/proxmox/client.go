@@ -2,9 +2,11 @@ package proxmox
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -15,8 +17,8 @@ import (
 )
 
 // get decodes the data envelope of an authenticated GET on an
-// /api2/json-relative path into v, translating go-proxmox's auth and
-// lookup failures into this package's sentinels.
+// /api2/json-relative path into v, translating go-proxmox's auth failure
+// into this package's sentinel.
 func (d *driver) get(ctx context.Context, path string, v any) error {
 	if err := d.client.Get(ctx, path, v); err != nil {
 		return fmt.Errorf("get %s: %w", path, mapAPIError(err))
@@ -24,15 +26,40 @@ func (d *driver) get(ctx context.Context, path string, v any) error {
 	return nil
 }
 
-func mapAPIError(err error) error {
-	switch {
-	case errors.Is(err, proxmox.ErrNotAuthorized):
-		return ErrPermission
-	case errors.Is(err, proxmox.ErrNotFound):
-		return ErrNotFound
-	default:
-		return err
+// write sends form as a flat JSON object (PVE accepts JSON bodies for every
+// form parameter) and decodes the data envelope into v; a nil v discards it.
+func (d *driver) write(ctx context.Context, method, path string, form url.Values, v any) error {
+	var body []byte
+	if form != nil {
+		fields := make(map[string]string, len(form))
+		for k := range form {
+			fields[k] = form.Get(k)
+		}
+		var err error
+		if body, err = json.Marshal(fields); err != nil {
+			return fmt.Errorf("%s %s: encode form: %w", method, path, err)
+		}
 	}
+	if err := d.client.Req(ctx, method, path, body, v); err != nil {
+		return fmt.Errorf("%s %s: %w", method, path, mapAPIError(err))
+	}
+	return nil
+}
+
+// task issues a write that returns a UPID and wraps it with node.
+func (d *driver) task(ctx context.Context, method, node, path string, form url.Values) (Task, error) {
+	var upid string
+	if err := d.write(ctx, method, path, form, &upid); err != nil {
+		return Task{}, err
+	}
+	return Task{Node: node, UPID: upid}, nil
+}
+
+func mapAPIError(err error) error {
+	if errors.Is(err, proxmox.ErrNotAuthorized) {
+		return ErrPermission
+	}
+	return err
 }
 
 // newProxmoxClient builds the shared go-proxmox client; the credential
@@ -71,8 +98,8 @@ func newProxmoxClient(endpoint, username string, password, apiToken []byte, inse
 
 var insecureTLSWarnOnce sync.Once
 
-// warnInsecureTLS logs insecure:true once per process (PowerCycler builds a
-// client per call) via slog.Default rather than threading a logger through.
+// warnInsecureTLS logs once per process via slog.Default rather than
+// threading a logger through every constructor.
 func warnInsecureTLS(endpoint string) {
 	insecureTLSWarnOnce.Do(func() {
 		slog.Warn("proxmox tls verification disabled (insecure: true)", "endpoint", endpoint)

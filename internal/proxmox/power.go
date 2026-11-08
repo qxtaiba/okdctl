@@ -3,239 +3,90 @@ package proxmox
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
-
-	"github.com/luthermonson/go-proxmox"
 )
-
-// defaultPowerCycleTimeout bounds each stop/start task within a power-cycle.
-const defaultPowerCycleTimeout = 5 * time.Minute
 
 const (
-	powerTaskPollInterval = 2 * time.Second
-	resourceTypeQEMU      = "qemu"
+	taskPollInterval = time.Second
+	taskRunning      = "running"
 )
 
-// PowerCycleOptions carries the Proxmox API credentials for a power-cycle;
-// Password/APIToken are caller-owned bytes the caller must Zeroize.
-type PowerCycleOptions struct {
-	Endpoint string
-	Username string
-	Password []byte
-	APIToken []byte
-	Insecure bool
-	Timeout  time.Duration
+func (d *driver) Start(ctx context.Context, ref VMRef) (Task, error) {
+	return d.task(ctx, http.MethodPost, ref.Node, vmPath(ref, "/status/start"), nil)
 }
 
-// redactedPowerCycleOptions is PowerCycleOptions without Password/APIToken,
-// safe to format (slog's redactAny).
-type redactedPowerCycleOptions struct {
-	Endpoint string
-	Username string
-	Insecure bool
-	Timeout  time.Duration
+// Shutdown asks the guest to power off via ACPI; with force the task falls
+// back to a hard stop once timeout elapses instead of failing.
+func (d *driver) Shutdown(ctx context.Context, ref VMRef, timeout time.Duration, force bool) (Task, error) {
+	form := url.Values{}
+	if timeout > 0 {
+		form.Set("timeout", strconv.Itoa(int(timeout/time.Second)))
+	}
+	if force {
+		form.Set("forceStop", "1")
+	}
+	return d.task(ctx, http.MethodPost, ref.Node, vmPath(ref, "/status/shutdown"), form)
 }
 
-// Redacted returns o's non-secret fields, for the logutil.redactAny interface.
-func (o *PowerCycleOptions) Redacted() any {
-	if o == nil {
+func (d *driver) Stop(ctx context.Context, ref VMRef) (Task, error) {
+	return d.task(ctx, http.MethodPost, ref.Node, vmPath(ref, "/status/stop"), nil)
+}
+
+func (d *driver) Reset(ctx context.Context, ref VMRef) (Task, error) {
+	return d.task(ctx, http.MethodPost, ref.Node, vmPath(ref, "/status/reset"), nil)
+}
+
+func (d *driver) Status(ctx context.Context, ref VMRef) (VMStatus, error) {
+	var raw struct {
+		Status    string `json:"status"`
+		QMPStatus string `json:"qmpstatus"`
+		Lock      string `json:"lock"`
+		HA        struct {
+			Managed num `json:"managed"`
+		} `json:"ha"`
+	}
+	path := vmPath(ref, "/status/current")
+	if err := d.get(ctx, path, &raw); err != nil {
+		return VMStatus{}, err
+	}
+	if raw.Status == "" {
+		return VMStatus{}, fmt.Errorf("get %s: vm %d: %w", path, ref.VMID, ErrNotFound)
+	}
+	return VMStatus{Status: raw.Status, QMPStatus: raw.QMPStatus, Lock: raw.Lock, HA: raw.HA.Managed != 0}, nil
+}
+
+// WaitTask polls the task until it stops; a zero Task is already done, and a
+// task ending with anything but OK or WARNINGS: n fails with *TaskFailed.
+func (d *driver) WaitTask(ctx context.Context, task Task) error {
+	if task.UPID == "" {
 		return nil
 	}
-	return redactedPowerCycleOptions{
-		Endpoint: o.Endpoint,
-		Username: o.Username,
-		Insecure: o.Insecure,
-		Timeout:  o.Timeout,
-	}
-}
-
-// String masks secret fields so accidental %v/%s/log calls can't leak them.
-func (o *PowerCycleOptions) String() string {
-	if o == nil {
-		return "PowerCycleOptions(nil)"
-	}
-	return fmt.Sprintf("%+v", o.Redacted())
-}
-
-// PowerCycler stops then starts a VM via the Proxmox API: bpg/proxmox can't
-// restart on resize (only stop→start picks up new RAM). Sanctioned exception
-// to routing mutations through terraform, which can't express per-VM power.
-type PowerCycler struct {
-	opts *PowerCycleOptions
-}
-
-// NewPowerCycler returns a PowerCycler bound to the given API credentials.
-func NewPowerCycler(opts *PowerCycleOptions) *PowerCycler {
-	return &PowerCycler{opts: opts}
-}
-
-func (pc *PowerCycler) timeout() time.Duration {
-	if pc.opts.Timeout > 0 {
-		return pc.opts.Timeout
-	}
-	return defaultPowerCycleTimeout
-}
-
-// vm builds a timeout-scoped client; go-proxmox populates status/config on lookup.
-func (pc *PowerCycler) vm(ctx context.Context, _ string, vmid int, timeout time.Duration) (*proxmox.VirtualMachine, error) {
-	client, err := newProxmoxClient(pc.opts.Endpoint, pc.opts.Username, pc.opts.Password, pc.opts.APIToken, pc.opts.Insecure, timeout)
-	if err != nil {
-		return nil, err
-	}
-
-	node, err := observedVMOwner(ctx, client, vmid)
-	if err != nil {
-		return nil, err
-	}
-	n, err := client.Node(ctx, node)
-	if err != nil {
-		return nil, fmt.Errorf("get proxmox node %s: %w", node, err)
-	}
-	vm, err := n.VirtualMachine(ctx, vmid)
-	if err != nil {
-		return nil, fmt.Errorf("get vm %d: %w", vmid, err)
-	}
-	return vm, nil
-}
-
-// waitTask stands in for go-proxmox's Task.Wait, which returns nil for any
-// stopped task and sleeps through ctx cancellation.
-func waitTask(ctx context.Context, task *proxmox.Task, timeout time.Duration) error {
-	deadline := time.NewTimer(timeout)
-	defer deadline.Stop()
+	path := nodePath(task.Node, "tasks/"+url.PathEscape(task.UPID)+"/status")
+	ticker := time.NewTicker(d.pollInterval)
+	defer ticker.Stop()
 	for {
-		if err := task.Ping(ctx); err != nil {
+		var st struct {
+			Status     string `json:"status"`
+			ExitStatus string `json:"exitstatus"`
+		}
+		if err := d.get(ctx, path, &st); err != nil {
 			return err
 		}
-		if task.Status != proxmox.TaskRunning {
+		if st.Status != taskRunning {
 			// PVE's own upid_status_is_error also counts "WARNINGS: n" as success.
-			if task.ExitStatus != "OK" && !strings.HasPrefix(task.ExitStatus, "WARNINGS: ") {
-				return fmt.Errorf("task failed with exit status %q", task.ExitStatus)
+			if st.ExitStatus == "OK" || strings.HasPrefix(st.ExitStatus, "WARNINGS: ") {
+				return nil
 			}
-			return nil
+			return &TaskFailed{UPID: task.UPID, ExitStatus: st.ExitStatus}
 		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-deadline.C:
-			return fmt.Errorf("task still running after %s", timeout)
-		case <-time.After(powerTaskPollInterval):
+		case <-ticker.C:
 		}
 	}
-}
-
-// PowerCycleVM stops (if running) then starts the VM, waiting for each task;
-// it is fail-closed, leaving the caller to treat the resize as unrealized on error.
-func (pc *PowerCycler) PowerCycleVM(ctx context.Context, node string, vmid int) error {
-	timeout := pc.timeout()
-
-	vm, err := pc.vm(ctx, node, vmid, timeout)
-	if err != nil {
-		return err
-	}
-
-	if vm.IsRunning() {
-		stop, err := vm.Stop(ctx)
-		if err != nil {
-			return fmt.Errorf("stop vm %d: %w", vmid, err)
-		}
-		if err := waitTask(ctx, stop, timeout); err != nil {
-			return fmt.Errorf("wait for vm %d stop: %w", vmid, err)
-		}
-	}
-
-	start, err := vm.Start(ctx)
-	if err != nil {
-		return fmt.Errorf("start vm %d: %w", vmid, err)
-	}
-	if err := waitTask(ctx, start, timeout); err != nil {
-		return fmt.Errorf("wait for vm %d start: %w", vmid, err)
-	}
-	return nil
-}
-
-// ShutdownVM sends ACPI shutdown then confirms via ping, since a completed
-// task alone doesn't prove the guest powered off. No-op if already stopped.
-func (pc *PowerCycler) ShutdownVM(ctx context.Context, node string, vmid int) error {
-	timeout := pc.timeout()
-
-	vm, err := pc.vm(ctx, node, vmid, timeout)
-	if err != nil {
-		return err
-	}
-	if vm.IsStopped() {
-		return nil
-	}
-
-	task, err := vm.Shutdown(ctx)
-	if err != nil {
-		return fmt.Errorf("shutdown vm %d: %w", vmid, err)
-	}
-	if err := waitTask(ctx, task, timeout); err != nil {
-		return fmt.Errorf("wait for vm %d shutdown: %w", vmid, err)
-	}
-
-	if err := vm.Ping(ctx); err != nil {
-		return fmt.Errorf("confirm vm %d shutdown: %w", vmid, err)
-	}
-	if !vm.IsStopped() {
-		return fmt.Errorf("confirm vm %d shutdown: vm still running after shutdown task completed", vmid)
-	}
-	return nil
-}
-
-// StartVM starts the VM and waits for the task; a no-op if already running.
-func (pc *PowerCycler) StartVM(ctx context.Context, node string, vmid int) error {
-	timeout := pc.timeout()
-
-	vm, err := pc.vm(ctx, node, vmid, timeout)
-	if err != nil {
-		return err
-	}
-	if vm.IsRunning() {
-		return nil
-	}
-
-	task, err := vm.Start(ctx)
-	if err != nil {
-		return fmt.Errorf("start vm %d: %w", vmid, err)
-	}
-	if err := waitTask(ctx, task, timeout); err != nil {
-		return fmt.Errorf("wait for vm %d start: %w", vmid, err)
-	}
-	return nil
-}
-
-// VMOwner resolves current ownership independently of desired placement after HA migration.
-func (pc *PowerCycler) VMOwner(ctx context.Context, vmid int) (string, error) {
-	client, err := newProxmoxClient(pc.opts.Endpoint, pc.opts.Username, pc.opts.Password, pc.opts.APIToken, pc.opts.Insecure, pc.timeout())
-	if err != nil {
-		return "", err
-	}
-	return observedVMOwner(ctx, client, vmid)
-}
-
-func observedVMOwner(ctx context.Context, client *proxmox.Client, vmid int) (string, error) {
-	var resources proxmox.ClusterResources
-	if err := client.Get(ctx, "/cluster/resources?type=vm", &resources); err != nil {
-		return "", fmt.Errorf("observe vm %d ownership: %w", vmid, err)
-	}
-	owner := ""
-	for _, resource := range resources {
-		if resource == nil {
-			return "", fmt.Errorf("vm %d ownership response contains null resource", vmid)
-		}
-		if vmid < 0 || resource.VMID != uint64(vmid) || resource.Type != resourceTypeQEMU {
-			continue
-		}
-		if owner != "" || resource.Node == "" {
-			return "", fmt.Errorf("vm %d ownership is ambiguous", vmid)
-		}
-		owner = resource.Node
-	}
-	if owner == "" {
-		return "", fmt.Errorf("vm %d ownership is unknown", vmid)
-	}
-	return owner, nil
 }

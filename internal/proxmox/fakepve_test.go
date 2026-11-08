@@ -1,8 +1,10 @@
 package proxmox
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,27 +12,65 @@ import (
 	"testing"
 )
 
+const (
+	fakeToken = "root@pam!tok=secret"
+
+	upidCreate   = "UPID:pve:00001234:00005678:66aabbcc:qmcreate:105:root@pam!tok:"
+	upidConfig   = "UPID:pve:00001234:00005678:66aabbcc:qmconfig:101:root@pam!tok:"
+	upidResize   = "UPID:pve:00001234:00005678:66aabbcc:qmresize:101:root@pam!tok:"
+	upidDestroy  = "UPID:pve:00001234:00005678:66aabbcc:qmdestroy:101:root@pam!tok:"
+	upidStart    = "UPID:pve:00001234:00005678:66aabbcc:qmstart:101:root@pam!tok:"
+	upidShutdown = "UPID:pve:00001234:00005678:66aabbcc:qmshutdown:101:root@pam!tok:"
+	upidStop     = "UPID:pve:00001234:00005678:66aabbcc:qmstop:101:root@pam!tok:"
+	upidReset    = "UPID:pve:00001234:00005678:66aabbcc:qmreset:101:root@pam!tok:"
+)
+
 var fakeFixtures = map[string]string{
-	"/version":                           "version.json",
-	"/nodes":                             "nodes.json",
-	"/nodes/pve/status":                  "nodes_pve_status.json",
-	"/nodes/pve/storage":                 "nodes_pve_storage.json",
-	"/nodes/pve/network?type=any_bridge": "nodes_pve_network_any_bridge.json",
-	"/cluster/resources?type=vm":         "cluster_resources_vm.json",
-	"/access/permissions":                "access_permissions.json",
+	"GET /version":                                  "version.json",
+	"GET /nodes":                                    "nodes.json",
+	"GET /nodes/pve/status":                         "nodes_pve_status.json",
+	"GET /nodes/pve/storage":                        "nodes_pve_storage.json",
+	"GET /nodes/pve/network?type=any_bridge":        "nodes_pve_network_any_bridge.json",
+	"GET /cluster/resources?type=vm":                "cluster_resources_vm.json",
+	"GET /access/permissions":                       "access_permissions.json",
+	"GET /nodes/pve/qemu/101/status/current":        "nodes_pve_qemu_101_status_current.json",
+	"GET /nodes/pve/tasks/" + upidStart + "/status": "nodes_pve_tasks_qmstart_status.json",
+}
+
+// fakeWrites maps a write call to the UPID it returns; "" answers {"data":null}.
+var fakeWrites = map[string]string{
+	"POST /nodes/pve/qemu":                                            upidCreate,
+	"POST /nodes/pve/qemu/101/config":                                 upidConfig,
+	"PUT /nodes/pve/qemu/101/resize":                                  upidResize,
+	"DELETE /nodes/pve/qemu/101?purge=1&destroy-unreferenced-disks=1": upidDestroy,
+	"POST /nodes/pve/qemu/101/status/start":                           upidStart,
+	"POST /nodes/pve/qemu/101/status/shutdown":                        upidShutdown,
+	"POST /nodes/pve/qemu/101/status/stop":                            upidStop,
+	"POST /nodes/pve/qemu/101/status/reset":                           upidReset,
+	"POST /cluster/ha/resources":                                      "",
+	"DELETE /cluster/ha/resources/vm:101?purge=1":                     "",
+}
+
+type fakeCall struct {
+	Method string
+	Key    string
+	Form   url.Values
 }
 
 type fakeAPI struct {
+	t         *testing.T
 	srv       *httptest.Server
 	overrides map[string]http.HandlerFunc
 
 	mu    sync.Mutex
-	calls []string
+	calls []fakeCall
 }
 
+// newFakeAPI serves the fixtures; overrides are keyed "METHOD /path[?query]"
+// or, for any method, "/path[?query]". Unmapped paths answer 500.
 func newFakeAPI(t *testing.T, overrides map[string]http.HandlerFunc) *fakeAPI {
 	t.Helper()
-	f := &fakeAPI{overrides: overrides}
+	f := &fakeAPI{t: t, overrides: overrides}
 	f.srv = httptest.NewServer(http.HandlerFunc(f.serve))
 	t.Cleanup(f.srv.Close)
 	return f
@@ -45,38 +85,85 @@ func (f *fakeAPI) serve(w http.ResponseWriter, r *http.Request) {
 	if r.URL.RawQuery != "" {
 		key += "?" + r.URL.RawQuery
 	}
-	f.mu.Lock()
-	f.calls = append(f.calls, r.Method+" "+key)
-	f.mu.Unlock()
+	f.record(r, key)
 
+	if h, ok := f.overrides[r.Method+" "+key]; ok {
+		h(w, r)
+		return
+	}
 	if h, ok := f.overrides[key]; ok {
 		h(w, r)
 		return
 	}
-	name, ok := fakeFixtures[key]
-	if !ok {
-		w.WriteHeader(http.StatusNotFound)
-		_, _ = w.Write([]byte(`{"data":null}`))
+	if name, ok := fakeFixtures[r.Method+" "+key]; ok {
+		body, err := os.ReadFile(filepath.Join("testdata", name))
+		if err != nil {
+			f.t.Errorf("fixture %s: %v", name, err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(body)
 		return
 	}
-	body, err := os.ReadFile(filepath.Join("testdata", name))
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+	if upid, ok := fakeWrites[r.Method+" "+key]; ok {
+		if upid == "" {
+			jsonHandler(http.StatusOK, `{"data":null}`)(w, r)
+			return
+		}
+		jsonHandler(http.StatusOK, `{"data":"`+upid+`"}`)(w, r)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_, _ = w.Write(body)
+	f.t.Errorf("unmapped request %s %s", r.Method, key)
+	w.WriteHeader(http.StatusInternalServerError)
+	_, _ = w.Write([]byte(`{"data":null,"message":"unmapped path"}`))
+}
+
+func (f *fakeAPI) record(r *http.Request, key string) {
+	call := fakeCall{Method: r.Method, Key: key}
+	if r.Body != nil && r.ContentLength != 0 {
+		var fields map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&fields); err != nil {
+			f.t.Errorf("%s %s: body is not a flat JSON object: %v", r.Method, key, err)
+		}
+		call.Form = url.Values{}
+		for k, v := range fields {
+			call.Form.Set(k, v)
+		}
+	}
+	f.mu.Lock()
+	f.calls = append(f.calls, call)
+	f.mu.Unlock()
 }
 
 func (f *fakeAPI) called(key string) bool {
+	return f.count(key) > 0
+}
+
+func (f *fakeAPI) count(key string) int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	n := 0
 	for _, c := range f.calls {
-		if c == key {
-			return true
+		if c.Method+" "+c.Key == key {
+			n++
 		}
 	}
-	return false
+	return n
+}
+
+// form returns the body of the last call matching "METHOD key".
+func (f *fakeAPI) form(key string) url.Values {
+	f.t.Helper()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i := len(f.calls) - 1; i >= 0; i-- {
+		if c := f.calls[i]; c.Method+" "+c.Key == key {
+			return c.Form
+		}
+	}
+	f.t.Fatalf("no call %s recorded; calls: %+v", key, f.calls)
+	return nil
 }
 
 func (f *fakeAPI) driver(t *testing.T) Driver {
