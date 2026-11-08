@@ -1,1 +1,4 @@
-{"data":[{"storage":"local","type":"dir","shared":0,"active":1,"enabled":1,"content":"iso,vztmpl","avail":85899345920,"total":107374182400,"used":21474836480,"used_fraction":0.2},{"storage":"local-lvm","type":"lvmthin","shared":0,"active":1,"enabled":1,"content":"images,rootdir","avail":"429496729600","total":"536870912000","used":107374182400,"used_fraction":0.2}]}
+{"data":[
+{"active":1,"avail":85899345920,"content":"iso,vztmpl","enabled":1,"shared":0,"storage":"local","total":107374182400,"type":"dir","used":21474836480,"used_fraction":0.2},
+{"active":1,"avail":"429496729600","content":"images,rootdir","enabled":1,"shared":0,"storage":"local-lvm","total":"536870912000","type":"lvmthin","used":107374182400,"used_fraction":0.2}
+]}
