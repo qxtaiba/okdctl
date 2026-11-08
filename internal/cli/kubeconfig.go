@@ -35,9 +35,7 @@ func runKubeconfig(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	workDir := workspace.WorkDir(projectRoot)
-	clusterDir := workspace.ClusterConfigDir(workDir)
-	src := workspace.KubeconfigPath(clusterDir)
+	src := workspace.KubeconfigPath(projectRoot)
 
 	if !system.FileExists(src) {
 		return &errtypes.ConfigError{

@@ -121,11 +121,11 @@ func canonicalizePath(p string) string {
 }
 
 // isAllowedChownRoot guards recursive chown against paths like /etc; allowed
-// are okdctl's own WorkDir/infrastructure trees, subpaths of homeDir, and
+// are okdctl's own cluster/infrastructure trees, subpaths of homeDir, and
 // subpaths of tmpDir.
 func isAllowedChownRoot(absPath, homeDir, tmpDir string) bool {
 	base := filepath.Base(absPath)
-	if base == workspace.WorkDirName || base == "infrastructure" {
+	if base == workspace.ClusterDirName || base == "infrastructure" {
 		return true
 	}
 	hasPrefix := func(prefix string) bool {

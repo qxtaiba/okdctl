@@ -19,7 +19,7 @@ func seedKubeconfigWorkspace(t *testing.T) []byte {
 	if err := os.WriteFile(filepath.Join(root, "okdctl.yaml"), []byte(""), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	authDir := filepath.Join(root, workspace.WorkDirName, "cluster-config", "auth")
+	authDir := workspace.AuthDir(root)
 	if err := os.MkdirAll(authDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

@@ -6,17 +6,53 @@ import (
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
-// TestLayoutContract pins the literal on-disk paths — a rename orphans
-// existing workspaces.
 func TestLayoutContract(t *testing.T) {
-	root := "/proj"
-	if got, want := workspace.WorkDir(root), "/proj/okd-install"; got != want {
-		t.Errorf("WorkDir = %q, want %q", got, want)
+	const root = "/proj"
+	tests := []struct {
+		name string
+		fn   func(string) string
+		want string
+	}{
+		{"ClusterDir", workspace.ClusterDir, "/proj/cluster"},
+		{"RecordPath", workspace.RecordPath, "/proj/cluster/record.json"},
+		{"AuthDir", workspace.AuthDir, "/proj/cluster/auth"},
+		{"KubeconfigPath", workspace.KubeconfigPath, "/proj/cluster/auth/kubeconfig"},
+		{"KubeadminPasswordPath", workspace.KubeadminPasswordPath, "/proj/cluster/auth/kubeadmin-password"},
+		{"StateFilePath", workspace.StateFilePath, "/proj/cluster/.openshift_install_state.json"},
+		{"ISOPath", workspace.ISOPath, "/proj/cluster/agent.x86_64.iso"},
+		{"ExtraManifestsDir", workspace.ExtraManifestsDir, "/proj/cluster/openshift"},
+		{"HandoffManifestsDir", workspace.HandoffManifestsDir, "/proj/handoff/manifests"},
+		{"HandoffSecretsDir", workspace.HandoffSecretsDir, "/proj/handoff/secrets"},
+		{"BackupsDir", workspace.BackupsDir, "/proj/backups"},
+		{"BinDir", workspace.BinDir, "/proj/bin"},
 	}
-	if got, want := workspace.ClusterConfigDir(workspace.WorkDir(root)), "/proj/okd-install/cluster-config"; got != want {
-		t.Errorf("ClusterConfigDir = %q, want %q", got, want)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.fn(root); got != tt.want {
+				t.Errorf("%s(%q) = %q, want %q", tt.name, root, got, tt.want)
+			}
+		})
 	}
-	if got, want := workspace.KubeconfigPath("/proj/okd-install/cluster-config"), "/proj/okd-install/cluster-config/auth/kubeconfig"; got != want {
-		t.Errorf("KubeconfigPath = %q, want %q", got, want)
+}
+
+func TestLayoutNames(t *testing.T) {
+	tests := []struct {
+		name string
+		got  string
+		want string
+	}{
+		{"ClusterDirName", workspace.ClusterDirName, "cluster"},
+		{"HandoffDirName", workspace.HandoffDirName, "handoff"},
+		{"BackupsDirName", workspace.BackupsDirName, "backups"},
+		{"BinDirName", workspace.BinDirName, "bin"},
+		{"RecordFile", workspace.RecordFile, "record.json"},
+		{"ISOFile", workspace.ISOFile, "agent.x86_64.iso"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.got != tt.want {
+				t.Errorf("%s = %q, want %q", tt.name, tt.got, tt.want)
+			}
+		})
 	}
 }
