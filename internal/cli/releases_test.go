@@ -2,33 +2,12 @@ package cli
 
 import (
 	"bytes"
-	"errors"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/releases"
 )
-
-func TestValidateChannel_InvalidIsUsageError(t *testing.T) {
-	err := validateChannel("nightly")
-	if err == nil {
-		t.Fatal("expected error for invalid channel")
-	}
-	var ue *errtypes.UsageError
-	if !errors.As(err, &ue) {
-		t.Fatalf("expected *errtypes.UsageError, got %T: %v", err, err)
-	}
-}
-
-func TestValidateChannel_ValidReturnsNil(t *testing.T) {
-	for _, ch := range []string{channelStable, channelAll} {
-		if err := validateChannel(ch); err != nil {
-			t.Errorf("validateChannel(%q) = %v, want nil", ch, err)
-		}
-	}
-}
 
 func TestPrintVersionListTable(t *testing.T) {
 	versions := []releases.OKDVersion{

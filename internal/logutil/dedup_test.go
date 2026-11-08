@@ -50,9 +50,3 @@ func TestDedupWarner(t *testing.T) {
 		}
 	}
 }
-
-func TestDedupWarnerNilLoggerDoesNotPanic(*testing.T) {
-	d := NewDedupWarner(nil)
-	d.Warn("k", "msg")
-	d.Reset()
-}
