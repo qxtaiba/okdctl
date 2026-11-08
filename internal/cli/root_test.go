@@ -182,31 +182,11 @@ func TestExitCodeForTaxonomy(t *testing.T) {
 		// Granular BSD sysexits sentinels: specific code beats broad category.
 		{"ErrConfigMissing_direct", &errtypes.ConfigError{Msg: "not found", Err: errtypes.ErrConfigMissing}, 66},
 		{"ErrConfigMissing_wrapped", fmt.Errorf("load: %w", &errtypes.ConfigError{Msg: "not found", Err: errtypes.ErrConfigMissing}), 66},
-		{"ErrPullSecretInvalid_direct", &errtypes.AuthError{Msg: "bad json", Err: errtypes.ErrPullSecretInvalid}, 65},
-		{"ErrSudoMissing_direct", &errtypes.AuthError{Msg: "no sudo", Err: errtypes.ErrSudoMissing}, 71},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := exitCodeFor(tc.err); got != tc.want {
 				t.Fatalf("exitCodeFor(%v) = %d, want %d", tc.err, got, tc.want)
-			}
-		})
-	}
-}
-
-func TestShouldAnnounceFailure(t *testing.T) {
-	cases := []struct {
-		name string
-		err  error
-		want bool
-	}{
-		{"ConfigError announced", &errtypes.ConfigError{Msg: "bad yaml"}, true},
-		{"generic error announced", errors.New("boom"), true},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := shouldAnnounceFailure(tc.err); got != tc.want {
-				t.Errorf("shouldAnnounceFailure(%v) = %v, want %v", tc.err, got, tc.want)
 			}
 		})
 	}

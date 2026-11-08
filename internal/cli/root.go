@@ -48,13 +48,9 @@ var startBookendMutates bool
 
 // mutatesState reports whether cmd mutates cluster/host state, gating the
 // "okdctl: started"/"finished" bookends between Info (mutating) and Debug
-// (read-only): true for a default-log-sink verb, a command exposing --yes, or
-// one annotated requires-root.
+// (read-only): true for a default-log-sink verb.
 func mutatesState(cmd *cobra.Command) bool {
-	if wantsDefaultLogSink(cmd) {
-		return true
-	}
-	return cmd.Flags().Lookup("yes") != nil
+	return wantsDefaultLogSink(cmd)
 }
 
 // logBookend logs msg at Info when mutates else Debug, keeping the
@@ -190,9 +186,7 @@ func execute() (code int) {
 		if sigCode, handled := signalExitCode(&caughtSig, err); handled {
 			return sigCode
 		}
-		if shouldAnnounceFailure(err) {
-			announceFailure(err)
-		}
+		announceFailure(err)
 		return exitCodeFor(err)
 	}
 
@@ -292,11 +286,6 @@ func shouldRenderErrorBox(stderrTTY, stdoutTTY bool, format string, err error) b
 	return stderrTTY && stdoutTTY && format != tui.FormatJSON && !render.IsPresented(err)
 }
 
-// shouldAnnounceFailure reports whether to print "command failed".
-func shouldAnnounceFailure(error) bool {
-	return true
-}
-
 // signalExitCode reports the exit code for a caught signal (130 SIGINT, 143
 // SIGTERM); handled is false when none was caught.
 func signalExitCode(caughtSig *atomic.Value, err error) (int, bool) {
@@ -323,12 +312,6 @@ func exitCodeFor(err error) int {
 	}
 	if errors.Is(err, errtypes.ErrConfigMissing) {
 		return 66
-	}
-	if errors.Is(err, errtypes.ErrPullSecretInvalid) {
-		return 65
-	}
-	if errors.Is(err, errtypes.ErrSudoMissing) {
-		return 71
 	}
 	var cfgErr *errtypes.ConfigError
 	if errors.As(err, &cfgErr) {
