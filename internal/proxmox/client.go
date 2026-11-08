@@ -23,8 +23,9 @@ import (
 const errorBodyLimit = 64 << 10
 
 // notFoundPhrases are how PVE's die() paths report a missing VM, config or
-// HA resource; pveproxy sends them as the reason phrase and in the body.
-var notFoundPhrases = []string{"does not exist", "no such resource"}
+// HA resource (deleting one says "not HA managed"); pveproxy sends them as
+// the reason phrase and in the body.
+var notFoundPhrases = []string{"does not exist", "no such resource", "not HA managed"}
 
 // pveErrorTransport appends a failed reply's JSON message to its status
 // line, because go-proxmox reports a 5xx as errors.New(res.Status) and
