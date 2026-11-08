@@ -84,7 +84,7 @@ func TestSave_FillsSchemaVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadFile: %v", err)
 	}
-	if loaded.SchemaVersion != SchemaVersionCurrent || SchemaVersionCurrent != "v3" {
+	if loaded.SchemaVersion != "v3" {
 		t.Errorf("SchemaVersion = %q; want v3", loaded.SchemaVersion)
 	}
 }

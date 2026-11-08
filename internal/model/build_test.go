@@ -132,25 +132,27 @@ func TestBuild_Errors(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		mutate func(*config.Config)
+		want   string
 	}{
-		{"vmid above 24 bits", func(c *config.Config) { c.Provider.Proxmox.VMIDBase = 0xFFFFFF }},
+		{"vmid above 24 bits", func(c *config.Config) { c.Provider.Proxmox.VMIDBase = 0xFFFFFF }, "vmid 16777225 exceeds 24 bits"},
 		{"ip override outside cidr", func(c *config.Config) {
 			c.Nodes = map[string]config.NodeOverride{"lab-master0": {IP: "10.0.0.5"}}
-		}},
+		}, "node lab-master0: address 10.0.0.5 outside machine_cidr"},
 		{"ip override malformed", func(c *config.Config) {
 			c.Nodes = map[string]config.NodeOverride{"lab-master0": {IP: "nope"}}
-		}},
-		{"node range outside cidr", func(c *config.Config) { c.Networking.NodeIPStart = "192.168.1.254" }},
-		{"no proxmox nodes", func(c *config.Config) { c.Provider.Proxmox.Nodes = nil }},
-		{"negative workers count", func(c *config.Config) { c.Workers.Count = -1 }},
-		{"bad machine cidr", func(c *config.Config) { c.Networking.MachineCIDR = "192.168.1.0" }},
-		{"bad api vip", func(c *config.Config) { c.Networking.APIVIP = "" }},
+		}, "node lab-master0: parse address"},
+		{"node range outside cidr", func(c *config.Config) { c.Networking.NodeIPStart = "192.168.1.254" }, "node lab-master2: address 192.168.2.0 outside machine_cidr"},
+		{"no proxmox nodes", func(c *config.Config) { c.Provider.Proxmox.Nodes = nil }, "provider.proxmox.nodes is empty"},
+		{"negative workers count", func(c *config.Config) { c.Workers.Count = -1 }, "workers.count -1 must be 0 or more"},
+		{"bad machine cidr", func(c *config.Config) { c.Networking.MachineCIDR = "192.168.1.0" }, "parse machine_cidr"},
+		{"bad api vip", func(c *config.Config) { c.Networking.APIVIP = "" }, "parse api_vip"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := testConfig(0)
 			tc.mutate(cfg)
-			if _, err := Build(cfg, testInfraID); err == nil {
-				t.Fatal("Build accepted an invalid config")
+			_, err := Build(cfg, testInfraID)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Build error = %v, want %q", err, tc.want)
 			}
 		})
 	}
