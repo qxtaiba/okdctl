@@ -52,10 +52,14 @@ func TestVMSpecValues(t *testing.T) {
 		t.Fatalf("values() =\n%v\nwant\n%v", got, want)
 	}
 
-	t.Run("no pool and untagged bridge", func(t *testing.T) {
+	t.Run("no pool, untagged bridge and no iso", func(t *testing.T) {
 		spec.Pool = ""
 		spec.VLAN = 0
+		spec.ISOVolID = ""
 		got := spec.values()
+		if ide2, boot := got.Get("ide2"), got.Get("boot"); ide2 != "none,media=cdrom" || boot != "order=scsi0" {
+			t.Errorf("ide2 = %q, boot = %q; want an empty drive left out of the boot order", ide2, boot)
+		}
 		if _, ok := got["pool"]; ok {
 			t.Errorf("values() has pool=%q with Pool unset", got.Get("pool"))
 		}

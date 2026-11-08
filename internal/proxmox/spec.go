@@ -1,6 +1,7 @@
 package proxmox
 
 import (
+	"cmp"
 	"net/url"
 	"strconv"
 	"strings"
@@ -29,7 +30,7 @@ func (s *VMSpec) values() url.Values {
 		"efidisk0": {s.EFIStorage + ":1,efitype=4m,pre-enrolled-keys=0"},
 		"scsihw":   {vmSCSIHW},
 		"net0":     {s.net0()},
-		cdromSlot:  {s.ISOVolID + ",media=cdrom"},
+		cdromSlot:  {s.cdrom()},
 		"boot":     {s.bootOrder()},
 		"cpu":      {s.CPUType},
 		"cores":    {strconv.Itoa(s.Cores)},
@@ -48,6 +49,11 @@ func (s *VMSpec) values() url.Values {
 		v.Set("pool", s.Pool)
 	}
 	return v
+}
+
+// cdrom renders an empty CD-ROM drive when the spec mounts no ISO.
+func (s *VMSpec) cdrom() string {
+	return cmp.Or(s.ISOVolID, "none") + ",media=cdrom"
 }
 
 // bootOrder lists the CD-ROM only while the spec still mounts an ISO.

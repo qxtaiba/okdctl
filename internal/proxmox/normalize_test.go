@@ -317,10 +317,34 @@ func TestVMConfigDiff(t *testing.T) {
 		}
 	})
 
-	t.Run("unset keys are not drift", func(t *testing.T) {
-		c := VMConfig{Digest: "d", OnBoot: true, AgentEnabled: true, Tags: []string{"grappleberry"}, CDROM: spec.ISOVolID, Disks: renderedConfig(t, &spec).Disks}
-		if changes := c.Diff(spec); len(changes) != 0 {
+	t.Run("keys the spec leaves unset are not drift", func(t *testing.T) {
+		loose := spec
+		loose.CPUType, loose.EFIStorage, loose.Tag, loose.Name = "", "", "", ""
+		if changes := renderedConfig(t, &spec).Diff(loose); len(changes) != 0 {
 			t.Fatalf("Diff() = %+v, want none", changes)
+		}
+	})
+
+	t.Run("keys the vm lacks are drift", func(t *testing.T) {
+		cases := []struct {
+			key  string
+			want Change
+		}{
+			{"bios", Change{Field: "bios", Want: "ovmf", Have: "", NeedsPowerCycle: true}},
+			{"cores", Change{Field: "cores", Want: "4", Have: "0", NeedsPowerCycle: true}},
+			{"scsihw", Change{Field: "scsihw", Want: "virtio-scsi-single", Have: "", NeedsPowerCycle: true}},
+			{"net0", Change{Field: "net0", Want: "virtio=BC:24:11:AA:BB:CC,bridge=vmbr0,tag=227", Have: "", NeedsPowerCycle: true}},
+			{"efidisk0", Change{Field: "efidisk0.storage", Want: "local-lvm", Have: ""}},
+			{"boot", Change{Field: "boot", Want: "order=scsi0;ide2", Have: "", NeedsPowerCycle: true}},
+		}
+		for _, tc := range cases {
+			t.Run(tc.key, func(t *testing.T) {
+				raw := pveStore(spec.values())
+				delete(raw, tc.key)
+				if changes := mustParse(t, raw).Diff(spec); !reflect.DeepEqual(changes, []Change{tc.want}) {
+					t.Fatalf("Diff() = %+v, want %+v", changes, tc.want)
+				}
+			})
 		}
 	})
 
