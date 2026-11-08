@@ -30,7 +30,7 @@ var doctorFixture = []proxmox.Finding{
 }
 
 const (
-	doctorPassed = "preflight passed (10 checks)"
+	doctorPassed = "preflight passed"
 	doctorToken  = "doctor@pve!ci=00000000-0000-0000-0000-000000000000"
 )
 
@@ -438,6 +438,28 @@ func TestDoctorCommandConfigErrors(t *testing.T) {
 		}
 		if h.seam != nil {
 			t.Fatal("preflight ran against a record doctor could not read")
+		}
+	})
+
+	t.Run("record naming another cluster is a config error", func(t *testing.T) {
+		recPath := workspace.RecordPath(".")
+		rec := &model.Record{InfraID: "other-a1b2c3", Cluster: "other", Domain: "k8s.local", Created: time.Now(), Release: "4.22.0-okd-scos.10"}
+		if err := model.SaveRecord(recPath, rec); err != nil {
+			t.Fatalf("SaveRecord: %v", err)
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(filepath.Dir(recPath)) })
+		_, err := run(t, doctorToken, nil, nil)
+		var ce *errtypes.ConfigError
+		if !errors.As(err, &ce) {
+			t.Fatalf("err = %T %v, want *errtypes.ConfigError", err, err)
+		}
+		for _, want := range []string{`"other"`, `"minimal"`, "cluster record"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("err %q missing %q", err, want)
+			}
+		}
+		if h.seam != nil {
+			t.Fatal("preflight ran against another cluster's record")
 		}
 	})
 }

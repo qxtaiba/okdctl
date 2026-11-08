@@ -14,7 +14,7 @@ import (
 // node model; the VM tag and MACs come only from a written cluster record,
 // since preview identities are not the cluster's.
 func preflightInput(cfg *config.Config, configPath string) (proxmox.PreflightInput, error) {
-	infraID, recorded, err := recordedInfraID(configPath)
+	infraID, recorded, err := recordedInfraID(configPath, cfg.Cluster.Name)
 	if err != nil {
 		return proxmox.PreflightInput{}, err
 	}
