@@ -46,8 +46,8 @@ func printLeaders(w io.Writer, rows [][2]string) error {
 // printTable writes headers and rows as a tui.Table, downsampling each line
 // to honor NO_COLOR and non-terminal output and trimming the last column's
 // padding.
-func printTable(w io.Writer, headers []string, rows [][]string, opts tui.TableOptions) error {
-	for _, line := range tui.Table(headers, rows, opts) {
+func printTable(w io.Writer, headers []string, rows [][]string) error {
+	for _, line := range tui.Table(headers, rows, tui.TableOptions{}) {
 		if _, err := fmt.Fprintln(w, strings.TrimRight(tui.Downsample(line), " ")); err != nil {
 			return err
 		}

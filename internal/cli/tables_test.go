@@ -61,7 +61,7 @@ func TestPrintLeadersIndentAndWrap(t *testing.T) {
 
 func TestPrintTableTrimsTrailingWhitespace(t *testing.T) {
 	var buf bytes.Buffer
-	if err := printTable(&buf, []string{"NAME", "DISKS"}, [][]string{{"a", "120,500"}, {"bb", "120"}}, tui.TableOptions{}); err != nil {
+	if err := printTable(&buf, []string{"NAME", "DISKS"}, [][]string{{"a", "120,500"}, {"bb", "120"}}); err != nil {
 		t.Fatalf("printTable() error = %v", err)
 	}
 	for i, line := range strings.Split(strings.TrimRight(buf.String(), "\n"), "\n") {
