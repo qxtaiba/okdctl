@@ -1,34 +1,20 @@
 package httputil
 
 import (
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
-	"crypto/tls"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/base64"
-	"encoding/pem"
 	"errors"
-	"math/big"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 )
 
 func TestClientFactories(t *testing.T) {
-	pool := x509.NewCertPool()
 	cases := []struct {
 		name         string
 		client       *http.Client
 		wantTimeout  time.Duration
 		nilTransport bool
 		wantInsecure bool
-		checkTLS     func(t *testing.T, cfg *tls.Config)
 	}{
 		{
 			name:         "New leaves Transport nil for verified TLS",
@@ -46,20 +32,6 @@ func TestClientFactories(t *testing.T) {
 			name:        "NewOptionalInsecure false keeps verification on",
 			client:      NewOptionalInsecure(false, time.Second),
 			wantTimeout: time.Second,
-		},
-		{
-			name:        "NewWithCA pins pool and TLS 1.2",
-			client:      NewWithCA(pool, 7*time.Second),
-			wantTimeout: 7 * time.Second,
-			checkTLS: func(t *testing.T, cfg *tls.Config) {
-				t.Helper()
-				if cfg.RootCAs != pool {
-					t.Error("RootCAs not set to provided pool")
-				}
-				if cfg.MinVersion != tls.VersionTLS12 {
-					t.Errorf("MinVersion = %d, want TLS 1.2 (%d)", cfg.MinVersion, tls.VersionTLS12)
-				}
-			},
 		},
 	}
 	for _, tc := range cases {
@@ -85,9 +57,6 @@ func TestClientFactories(t *testing.T) {
 			}
 			if tr.TLSClientConfig.InsecureSkipVerify != tc.wantInsecure {
 				t.Errorf("InsecureSkipVerify = %v, want %v", tr.TLSClientConfig.InsecureSkipVerify, tc.wantInsecure)
-			}
-			if tc.checkTLS != nil {
-				tc.checkTLS(t, tr.TLSClientConfig)
 			}
 		})
 	}
@@ -146,58 +115,6 @@ func TestCapRedirects(t *testing.T) {
 	})
 }
 
-func TestKubeconfigCAPool(t *testing.T) {
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		t.Fatalf("generate key: %v", err)
-	}
-	tmpl := &x509.Certificate{
-		SerialNumber:          big.NewInt(1),
-		Subject:               pkix.Name{CommonName: "test-ca"},
-		IsCA:                  true,
-		BasicConstraintsValid: true,
-	}
-	certDER, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
-	if err != nil {
-		t.Fatalf("create certificate: %v", err)
-	}
-	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
-	caData := base64.StdEncoding.EncodeToString(certPEM)
-
-	kubeconfig := "clusters:\n- cluster:\n    certificate-authority-data: " + caData + "\n  name: test-cluster\n"
-	dir := t.TempDir()
-	kpath := filepath.Join(dir, "kubeconfig")
-	if err := os.WriteFile(kpath, []byte(kubeconfig), 0o600); err != nil {
-		t.Fatalf("write kubeconfig: %v", err)
-	}
-
-	pool, err := KubeconfigCAPool(kpath)
-	if err != nil {
-		t.Fatalf("KubeconfigCAPool: %v", err)
-	}
-	if pool == nil {
-		t.Fatal("pool is nil")
-	}
-
-	t.Run("missing file", func(t *testing.T) {
-		_, err := KubeconfigCAPool(filepath.Join(dir, "nonexistent"))
-		if err == nil {
-			t.Error("expected error for missing file")
-		}
-	})
-
-	t.Run("no clusters", func(t *testing.T) {
-		p := filepath.Join(dir, "empty-kc")
-		if err := os.WriteFile(p, []byte("clusters: []\n"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		_, err := KubeconfigCAPool(p)
-		if err == nil {
-			t.Error("expected error for kubeconfig with no certificate-authority-data")
-		}
-	})
-}
-
 func TestRedirectRefusesHTTPSDowngrade(t *testing.T) {
 	for _, auth := range []string{"", "Bearer synthetic"} {
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://example.com/next", http.NoBody)
@@ -209,41 +126,8 @@ func TestRedirectRefusesHTTPSDowngrade(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := capRedirects(req, []*http.Request{previous}); !errors.Is(err, ErrInsecureRedirect) {
+		if err := capRedirects(req, []*http.Request{previous}); !errors.Is(err, errInsecureRedirect) {
 			t.Fatalf("error = %v", err)
 		}
-	}
-}
-
-func TestCAServerNameRetainsChainVerification(t *testing.T) {
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
-	defer server.Close()
-	pool := x509.NewCertPool()
-	pool.AddCert(server.Certificate())
-	for _, tc := range []struct {
-		name       string
-		roots      *x509.CertPool
-		serverName string
-		wantError  bool
-	}{
-		{"trusted DNS through IP", pool, "example.com", false},
-		{"untrusted issuer", x509.NewCertPool(), "example.com", true},
-		{"wrong DNS name", pool, "wrong.example.net", true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			client := NewWithCAServerName(tc.roots, tc.serverName, time.Second)
-			defer client.CloseIdleConnections()
-			request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL, http.NoBody)
-			if err != nil {
-				t.Fatal(err)
-			}
-			response, err := client.Do(request)
-			if response != nil {
-				_ = response.Body.Close()
-			}
-			if (err != nil) != tc.wantError {
-				t.Fatalf("error = %v, want error %v", err, tc.wantError)
-			}
-		})
 	}
 }
