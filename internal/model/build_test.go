@@ -135,6 +135,7 @@ func TestBuild_Errors(t *testing.T) {
 		}},
 		{"node range outside cidr", func(c *config.Config) { c.Networking.NodeIPStart = "192.168.1.254" }},
 		{"no proxmox nodes", func(c *config.Config) { c.Provider.Proxmox.Nodes = nil }},
+		{"negative workers count", func(c *config.Config) { c.Workers.Count = -1 }},
 		{"bad machine cidr", func(c *config.Config) { c.Networking.MachineCIDR = "192.168.1.0" }},
 		{"bad api vip", func(c *config.Config) { c.Networking.APIVIP = "" }},
 	} {

@@ -50,23 +50,39 @@ func TestRecordRoundTrip(t *testing.T) {
 
 func TestLoadRecord_Errors(t *testing.T) {
 	for _, tc := range []struct {
-		name   string
-		seed   string
-		wantIs error
-		notIs  []error
+		name    string
+		seed    string
+		wantIs  error
+		notIs   []error
+		wantMsg string
+		notMsg  string
 	}{
 		{name: "missing file", wantIs: os.ErrNotExist},
 		{
-			name:   "cluster name mismatch",
-			seed:   `{"schema_version":"1","cluster_name":"other","infra_id":"lab-a1b2c3","cluster":"lab"}`,
-			wantIs: ErrRecordMismatch,
+			name:    "cluster name mismatch",
+			seed:    `{"schema_version":"1","cluster_name":"other","infra_id":"lab-a1b2c3","cluster":"lab"}`,
+			wantIs:  ErrRecordMismatch,
+			wantMsg: `(envelope "other", record "lab")`,
+		},
+		{
+			name:    "empty cluster name",
+			seed:    `{"schema_version":"1","infra_id":"lab-a1b2c3","cluster":"lab"}`,
+			notIs:   []error{os.ErrNotExist, ErrRecordMismatch},
+			wantMsg: "record has no cluster name",
+			notMsg:  "different cluster",
 		},
 		{
 			name:  "unknown schema version",
 			seed:  `{"schema_version":"99","cluster_name":"lab","infra_id":"lab-a1b2c3","cluster":"lab"}`,
 			notIs: []error{os.ErrNotExist, ErrRecordMismatch},
 		},
-		{name: "corrupt json", seed: `{broken`, notIs: []error{os.ErrNotExist, ErrRecordMismatch}},
+		{
+			name:    "corrupt json",
+			seed:    `{broken`,
+			notIs:   []error{os.ErrNotExist, ErrRecordMismatch},
+			wantMsg: "parse cluster record marker:",
+			notMsg:  "load cluster record: parse cluster record",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "record.json")
@@ -86,6 +102,12 @@ func TestLoadRecord_Errors(t *testing.T) {
 				if errors.Is(err, not) {
 					t.Errorf("err = %v; must not be %v", err, not)
 				}
+			}
+			if tc.wantMsg != "" && !strings.Contains(err.Error(), tc.wantMsg) {
+				t.Errorf("err = %q; want it to contain %q", err, tc.wantMsg)
+			}
+			if tc.notMsg != "" && strings.Contains(err.Error(), tc.notMsg) {
+				t.Errorf("err = %q; must not contain %q", err, tc.notMsg)
 			}
 		})
 	}

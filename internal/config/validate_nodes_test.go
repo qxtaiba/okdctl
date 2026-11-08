@@ -107,6 +107,14 @@ func TestValidateNodes(t *testing.T) {
 			finding{"nodes.lab-worker0.ip", "lab-worker0 and dns[1] share 192.168.1.53"},
 		},
 		{
+			"override host outside the pool",
+			func(c *Config) {
+				c.Provider.Proxmox.Nodes = []string{"pve1", "pve2"}
+				c.Nodes = map[string]NodeOverride{"lab-worker0": {Host: "pve9"}}
+			},
+			finding{"nodes.lab-worker0.host", `lab-worker0 host "pve9" is not one of provider.proxmox.nodes (pve1, pve2)`},
+		},
+		{
 			"disk serial too long",
 			func(c *Config) { c.Provider.Proxmox.VMIDBase = 1_000_000_000_000_000_000 },
 			finding{"nodes.lab-master0.disks[0]", "serial okd1000000000000000010d0 exceeds 20 characters"},
@@ -132,6 +140,10 @@ func TestValidateNodes(t *testing.T) {
 			c.Nodes = map[string]NodeOverride{"lab-worker0": {IP: "192.168.1.170"}, "lab-worker1": {IP: "192.168.1.171"}}
 		},
 		"no workers block": func(c *Config) { c.Workers = WorkersConfig{} },
+		"override host in the pool": func(c *Config) {
+			c.Provider.Proxmox.Nodes = []string{"pve1", "pve2"}
+			c.Nodes = map[string]NodeOverride{"lab-master1": {Host: "pve2"}}
+		},
 	}
 	for name, mutate := range passing {
 		t.Run("accepts "+name, func(t *testing.T) {

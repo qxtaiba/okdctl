@@ -5,25 +5,10 @@ import (
 	"maps"
 	"net/netip"
 	"slices"
-	"strconv"
 	"strings"
-
-	"github.com/qxtaiba/okdctl/internal/netutil"
 )
 
-// The layout constants mirror internal/model, which derives the same names,
-// VMIDs and addresses; model imports config, so the values live here.
-const (
-	masterCount      = 3
-	masterVMIDOffset = 10
-	workerVMIDOffset = 100
-	workerIPOffset   = 10
-	maxVMID          = 0xFFFFFF
-	maxDiskSerialLen = 20
-
-	roleMaster = "master"
-	roleWorker = "worker"
-)
+const maxDiskSerialLen = 20
 
 type roleFloor struct {
 	cpu       int
@@ -31,8 +16,8 @@ type roleFloor struct {
 	rootGiB   int
 }
 
-func floorFor(role string) roleFloor {
-	if role == roleMaster {
+func floorFor(role Role) roleFloor {
+	if role == RoleMaster {
 		return roleFloor{cpu: 4, memoryMiB: 16384, rootGiB: 100}
 	}
 	return roleFloor{cpu: 2, memoryMiB: 8192, rootGiB: 100}
@@ -40,7 +25,7 @@ func floorFor(role string) roleFloor {
 
 type nodeRef struct {
 	name       string
-	role       string
+	role       Role
 	index      int
 	vmid       int
 	ip         netip.Addr
@@ -50,12 +35,12 @@ type nodeRef struct {
 }
 
 func (c *Config) validateNodes(r *ValidationResult) {
-	validateDefaults(r, FieldControlPlane, &c.ControlPlane, floorFor(roleMaster))
+	validateDefaults(r, FieldControlPlane, &c.ControlPlane, floorFor(RoleMaster))
 	if c.Workers.Count < 0 {
 		r.addf(FieldWorkers+".count", "%d must be 0 or more", c.Workers.Count)
 	}
 	if c.Workers.Count > 0 {
-		validateDefaults(r, FieldWorkers, &c.Workers.NodeDefaults, floorFor(roleWorker))
+		validateDefaults(r, FieldWorkers, &c.Workers.NodeDefaults, floorFor(RoleWorker))
 	}
 	c.validateOverrideKeys(r)
 	nodes := c.nodes()
@@ -93,13 +78,13 @@ func validateDisks(r *ValidationResult, field string, disks []DiskSpec, rootGiB 
 func (c *Config) validateOverrideKeys(r *ValidationResult) {
 	workers := 0
 	for _, key := range slices.Sorted(maps.Keys(c.Nodes)) {
-		role, _, ok := c.parseNodeKey(key)
+		role, _, ok := c.ParseNodeKey(key)
 		if !ok {
 			r.addf(FieldNodes+"."+key, "not a node name this config produces; keys match %s-master<0..%d> or %s-worker<i>",
-				c.Cluster.Name, masterCount-1, c.Cluster.Name)
+				c.Cluster.Name, MasterCount-1, c.Cluster.Name)
 			continue
 		}
-		if role == roleWorker {
+		if role == RoleWorker {
 			workers++
 		}
 	}
@@ -123,6 +108,9 @@ func (c *Config) validateOverride(r *ValidationResult, nodes []nodeRef, i int) {
 		r.addf(field+".memory_mib", "%d must be at least %d MiB", *o.MemoryMiB, f.memoryMiB)
 	}
 	validateDisks(r, field, o.Disks, f.rootGiB)
+	if pool := c.Provider.Proxmox.Nodes; o.Host != "" && !slices.Contains(pool, o.Host) {
+		r.addf(field+".host", "%s host %q is not one of provider.proxmox.nodes (%s)", node.name, o.Host, strings.Join(pool, ", "))
+	}
 	if o.IP != "" {
 		c.validateOverrideIP(r, nodes, i)
 	}
@@ -167,7 +155,7 @@ func (c *Config) validateOverrideIP(r *ValidationResult, nodes []nodeRef, i int)
 
 func (c *Config) validateSerials(r *ValidationResult, node *nodeRef) {
 	disks := c.ControlPlane.Disks
-	if node.role == roleWorker {
+	if node.role == RoleWorker {
 		disks = c.Workers.Disks
 	}
 	if len(node.override.Disks) > 0 {
@@ -181,97 +169,27 @@ func (c *Config) validateSerials(r *ValidationResult, node *nodeRef) {
 }
 
 func (c *Config) nodes() []nodeRef {
-	refs := make([]nodeRef, 0, masterCount+max(c.Workers.Count, 0))
-	for i := range masterCount {
-		refs = append(refs, c.nodeRef(roleMaster, i))
+	workers := c.WorkerIndices()
+	refs := make([]nodeRef, 0, MasterCount+len(workers))
+	for i := range MasterCount {
+		refs = append(refs, c.nodeRef(RoleMaster, i))
 	}
-	for _, i := range c.workerIndices() {
-		refs = append(refs, c.nodeRef(roleWorker, i))
+	for _, i := range workers {
+		refs = append(refs, c.nodeRef(RoleWorker, i))
 	}
 	return refs
 }
 
-func (c *Config) nodeRef(role string, index int) nodeRef {
-	name := fmt.Sprintf("%s-%s%d", c.Cluster.Name, role, index)
+func (c *Config) nodeRef(role Role, index int) nodeRef {
+	name := c.NodeName(role, index)
 	override, overridden := c.Nodes[name]
-	vmidOffset, ipOffset := masterVMIDOffset, 0
-	if role == roleWorker {
-		vmidOffset, ipOffset = workerVMIDOffset, workerIPOffset
-	}
-	ref := nodeRef{name: name, role: role, index: index, vmid: c.Provider.Proxmox.VMIDBase + vmidOffset + index, override: override, overridden: overridden}
+	ref := nodeRef{name: name, role: role, index: index, vmid: c.NodeVMID(role, index), override: override, overridden: overridden}
 	if override.IP != "" {
 		ref.ip, _ = netip.ParseAddr(override.IP)
 		return ref
 	}
-	if raw, err := netutil.CalculateVMIP(c.Networking.NodeIPStart, ipOffset+index); err == nil {
-		ref.ip, ref.derived = netip.MustParseAddr(raw), true
+	if addr, err := c.DerivedNodeAddress(role, index); err == nil {
+		ref.ip, ref.derived = addr, true
 	}
 	return ref
-}
-
-// parseNodeKey accepts exactly the names nodeRef produces: masters 0..2 and
-// any non-negative worker index without leading zeros.
-func (c *Config) parseNodeKey(key string) (role string, index int, ok bool) {
-	rest, found := strings.CutPrefix(key, c.Cluster.Name+"-")
-	if !found {
-		return "", 0, false
-	}
-	for _, role := range []string{roleMaster, roleWorker} {
-		digits, found := strings.CutPrefix(rest, role)
-		if !found {
-			continue
-		}
-		i, err := strconv.Atoi(digits)
-		if err != nil || i < 0 || strconv.Itoa(i) != digits || (role == roleMaster && i >= masterCount) {
-			return "", 0, false
-		}
-		return role, i, true
-	}
-	return "", 0, false
-}
-
-// workerIndices mirrors model's slot filling: explicit nodes: indices first,
-// then the lowest free indices up to workers.count.
-func (c *Config) workerIndices() []int {
-	count := c.Workers.Count
-	var explicit []int
-	for key := range c.Nodes {
-		if role, i, ok := c.parseNodeKey(key); ok && role == roleWorker {
-			explicit = append(explicit, i)
-		}
-	}
-	slices.Sort(explicit)
-	if len(explicit) >= count {
-		return explicit[:max(count, 0)]
-	}
-	indices := explicit
-	for next := 0; len(indices) < count; next++ {
-		if !slices.Contains(explicit, next) {
-			indices = append(indices, next)
-		}
-	}
-	slices.Sort(indices)
-	return indices
-}
-
-func (c *Config) highestWorkerIndex() int {
-	indices := c.workerIndices()
-	if len(indices) == 0 {
-		return -1
-	}
-	return indices[len(indices)-1]
-}
-
-func (c *Config) highestVMID() int {
-	if hw := c.highestWorkerIndex(); hw >= 0 {
-		return c.Provider.Proxmox.VMIDBase + workerVMIDOffset + hw
-	}
-	return c.Provider.Proxmox.VMIDBase + masterVMIDOffset + masterCount - 1
-}
-
-func (c *Config) highestIPOffset() int {
-	if hw := c.highestWorkerIndex(); hw >= 0 {
-		return workerIPOffset + hw
-	}
-	return masterCount - 1
 }
