@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -33,7 +34,7 @@ func TestNodes(t *testing.T) {
 		MemUsedMiB:  20480,
 		CPUs:        32,
 		CPUModel:    "AMD Ryzen 9 7950X 16-Core Processor",
-		CPUFlags:    []string{"fpu", "vme", "de", "pse", "sse", "sse2", "ssse3", "sse4_1", "sse4_2", "avx", "avx2", "x86-64-v3"},
+		CPUFlags:    strings.Fields("fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpb cat_l3 cdp_l3 hw_pstate ssbd mba ibrs ibpb stibp vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl"),
 		PVEVersion:  "pve-manager/9.0.10/abcdef0123456789",
 	}}
 	if !reflect.DeepEqual(got, want) {

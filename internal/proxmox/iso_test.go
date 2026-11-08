@@ -82,6 +82,16 @@ func TestUploadISO(t *testing.T) {
 		}
 	})
 
+	t.Run("missing storage maps to ErrNotFound", func(t *testing.T) {
+		f := newFakeAPI(t, map[string]http.HandlerFunc{
+			"/nodes/pve/storage/local/upload": pveErrorHandler("storage 'local' does not exist"),
+		})
+		_, err := f.driver(t).UploadISO(t.Context(), "pve", "local", writeISO(t, "x"), fakeSHA256)
+		if !errors.Is(err, ErrNotFound) || !strings.Contains(err.Error(), "storage 'local' does not exist") {
+			t.Fatalf("UploadISO() error = %v, want ErrNotFound carrying the pve message", err)
+		}
+	})
+
 	t.Run("pve failure carries its message", func(t *testing.T) {
 		f := newFakeAPI(t, map[string]http.HandlerFunc{
 			"/nodes/pve/storage/local/upload": pveErrorHandler("checksum mismatch"),

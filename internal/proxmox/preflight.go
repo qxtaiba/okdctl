@@ -170,11 +170,11 @@ func (st *preflightState) requiredPrivileges() []privReq {
 		reqs = append(reqs, privReq{"/", "Sys.Console"})
 	}
 	if in.Pool != "" {
-		reqs = append(reqs, privReq{"/pool/" + in.Pool, "Pool.Audit"})
+		// create_vm with pool= calls check_perm_modify, which wants
+		// Permissions.Modify or Pool.Allocate on the pool.
+		reqs = append(reqs, privReq{"/pool/" + in.Pool, "Pool.Allocate"})
 	}
-	if in.Tag != "" {
-		reqs = append(reqs, privReq{"/", "Sys.Modify"})
-	}
+	reqs = append(reqs, privReq{"/", "Sys.Modify"})
 	seen := make(map[privReq]bool, len(reqs))
 	return slices.DeleteFunc(reqs, func(r privReq) bool {
 		dup := seen[r]
@@ -236,6 +236,12 @@ func (st *preflightState) checkCPUFlags(out *findings) {
 	}
 }
 
+// owned reports a VM carrying the planned cluster's tag, which a re-run
+// meets at its own VMIDs, MACs and memory.
+func (st *preflightState) owned(tags []string) bool {
+	return st.in.Tag != "" && slices.Contains(tags, st.in.Tag)
+}
+
 func (st *preflightState) checkMemory(out *findings) {
 	for _, name := range slices.Sorted(maps.Keys(st.in.MemoryMiBByNode)) {
 		node, ok := st.nodes[name]
@@ -244,7 +250,7 @@ func (st *preflightState) checkMemory(out *findings) {
 		}
 		running := 0
 		for _, vm := range st.vms {
-			if vm.Node == name && vm.Status == "running" {
+			if vm.Node == name && vm.Status == "running" && !st.owned(vm.Tags) {
 				running += vm.MaxMemMiB
 			}
 		}
@@ -277,7 +283,7 @@ func (st *preflightState) checkISOSpace(out *findings) {
 
 func (st *preflightState) checkVMIDCollision(out *findings) {
 	for _, vm := range st.vms {
-		if slices.Contains(st.in.VMIDs, vm.VMID) {
+		if !st.owned(vm.Tags) && slices.Contains(st.in.VMIDs, vm.VMID) {
 			out.add("vmid-collision", "vmid %d already used by %q on node %s", vm.VMID, vm.Name, vm.Node)
 		}
 	}
@@ -289,6 +295,9 @@ func (st *preflightState) checkMACCollision(ctx context.Context, d Driver, out *
 		planned[strings.ToLower(mac)] = mac
 	}
 	for _, vm := range st.vms {
+		if st.owned(vm.Tags) {
+			continue
+		}
 		cfg, err := d.VMConfig(ctx, vm.VMRef)
 		if err != nil {
 			out.warn("mac-collision", "read config of vmid %d on node %s: %v", vm.VMID, vm.Node, err)
@@ -303,6 +312,9 @@ func (st *preflightState) checkMACCollision(ctx context.Context, d Driver, out *
 }
 
 func (st *preflightState) checkAddresses(ctx context.Context, ping Pinger, out *findings) {
+	if ping == nil {
+		return
+	}
 	addrs := slices.Clone(st.in.Addresses)
 	slices.SortFunc(addrs, netip.Addr.Compare)
 	for _, a := range addrs {
