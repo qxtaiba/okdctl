@@ -37,7 +37,7 @@ func seedHubSaveSlot(m *wizard.Model) {
 	cfg.Cluster.Name = "prod-cluster"
 	cfg.Distribution.Version = "4.20.1-okd-scos.7"
 	cfg.Workers.Count = 3
-	m.CurrentStep().(*WelcomeStep).SetExistingConfig(cfg, SaveSlotDeployed)
+	m.CurrentStep().(*WelcomeStep).SetExistingConfig(cfg)
 }
 
 type configureScenario struct {
@@ -227,30 +227,6 @@ func TestCapacityWizardFramesFitAllTiers(t *testing.T) {
 			}
 		})
 	}
-}
-
-// resolveCmd runs cmd and returns the single message it produces, unwrapping
-// the batch the wizard's Update wraps a step's command in.
-func resolveCmd(t *testing.T, cmd tea.Cmd) tea.Msg {
-	t.Helper()
-	if cmd == nil {
-		t.Fatal("expected a command, got none")
-	}
-	msg := cmd()
-	batch, ok := msg.(tea.BatchMsg)
-	if !ok {
-		return msg
-	}
-	for _, inner := range batch {
-		if inner == nil {
-			continue
-		}
-		if m := inner(); m != nil {
-			return m
-		}
-	}
-	t.Fatal("batch produced no message")
-	return nil
 }
 
 func TestGolden_HubWideTiers(t *testing.T) {

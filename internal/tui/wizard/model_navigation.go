@@ -14,7 +14,6 @@ func (m *Model) handleResize(msg tea.WindowSizeMsg) {
 	m.sizeCurrentStep()
 	m.resizeViewport()
 	m.syncViewportContent()
-	m.notifyIfAtBottom()
 	// Deliberately does not re-scroll to the focused field: a resize must
 	// resync content/height without fighting a scroll position the operator
 	// (or a test) just set deliberately — e.g. 'G'/'gg'/pgup/pgdn — which a
@@ -56,33 +55,21 @@ func (m *Model) resizeViewport() {
 	m.viewport.SetHeight(height)
 }
 
-// handleScrollKey scrolls the viewport on page/home/end/arrow keys — plus
-// the footer-silent vim vocabulary (j/k, ctrl+d/u, gg/G) — and reports
-// whether it consumed msg; home/end fall through to a focused text input
-// (line-start/line-end cursor moves), pgup/pgdn to a step paging a log
-// region of its own, the arrows and j/k scroll only for steps that opted in
-// via arrowScroller, and every vim key falls through while a text input is
-// focused — every other step keeps its own keys.
+// handleScrollKey scrolls the viewport on page/home/end keys — plus the
+// footer-silent vim vocabulary (ctrl+d/u, gg/G) — and reports whether it
+// consumed msg; home/end and every vim key fall through to a focused text
+// input, and every other step keeps its own keys.
 func (m *Model) handleScrollKey(msg tea.KeyPressMsg) bool {
 	if !m.ready {
 		return false
 	}
 	if handled, consumed := m.handleVimScrollKey(msg); handled {
-		if consumed {
-			m.notifyIfAtBottom()
-		}
 		return consumed
 	}
 	switch {
 	case key.Matches(msg, m.keyMap.PageUp):
-		if m.currentStepConsumesPaging() {
-			return false
-		}
 		m.viewport.HalfPageUp()
 	case key.Matches(msg, m.keyMap.PageDown):
-		if m.currentStepConsumesPaging() {
-			return false
-		}
 		m.viewport.HalfPageDown()
 	case key.Matches(msg, m.keyMap.Home):
 		if m.currentStepConsumesTextInput() {
@@ -94,43 +81,23 @@ func (m *Model) handleScrollKey(msg tea.KeyPressMsg) bool {
 			return false
 		}
 		m.viewport.GotoBottom()
-	case key.Matches(msg, m.keyMap.Up):
-		if !m.currentStepScrollsWithArrows() {
-			return false
-		}
-		m.viewport.ScrollUp(1)
-	case key.Matches(msg, m.keyMap.Down):
-		if !m.currentStepScrollsWithArrows() {
-			return false
-		}
-		m.viewport.ScrollDown(1)
 	default:
 		return false
 	}
-	m.notifyIfAtBottom()
 	return true
 }
 
-// handleVimScrollKey handles the footer-silent vim vocabulary: j/k mirror
-// the arrow gate, ctrl+d/u the half-page keys, gg/G jump to the ends, and
-// every key falls through while a text input is focused. handled reports
-// whether msg was a vim key at all; consumed whether it acted (or, for a
-// lone g, armed the gg chord).
+// handleVimScrollKey handles the footer-silent vim vocabulary: ctrl+d/u
+// mirror the half-page keys and gg/G jump to the ends, every key falling
+// through while a text input is focused. handled reports whether msg was a
+// vim key at all; consumed whether it acted (or, for a lone g, armed the gg
+// chord).
 func (m *Model) handleVimScrollKey(msg tea.KeyPressMsg) (handled, consumed bool) {
 	pendingG := m.pendingG
 	m.pendingG = false
 	switch {
-	case key.Matches(msg, m.keyMap.VimDown), key.Matches(msg, m.keyMap.VimUp):
-		if !m.currentStepScrollsWithArrows() || m.currentStepConsumesTextInput() {
-			return true, false
-		}
-		if key.Matches(msg, m.keyMap.VimDown) {
-			m.viewport.ScrollDown(1)
-		} else {
-			m.viewport.ScrollUp(1)
-		}
 	case key.Matches(msg, m.keyMap.VimHalfDown), key.Matches(msg, m.keyMap.VimHalfUp):
-		if m.currentStepConsumesPaging() || m.currentStepConsumesTextInput() {
+		if m.currentStepConsumesTextInput() {
 			return true, false
 		}
 		if key.Matches(msg, m.keyMap.VimHalfDown) {
@@ -156,25 +123,6 @@ func (m *Model) handleVimScrollKey(msg tea.KeyPressMsg) (handled, consumed bool)
 		return false, false
 	}
 	return true, true
-}
-
-// notifyIfAtBottom tells the active step, if it implements BottomNotifiable,
-// that the viewport currently shows its last line — either because the
-// content fits without scrolling or because the operator has scrolled all
-// the way down. A step cannot see the viewport's own scroll offset, so this
-// is the only signal it gets that content below an initial fold was ever
-// actually displayed.
-func (m *Model) notifyIfAtBottom() {
-	if !m.ready || len(m.steps) == 0 || m.currentStep < 0 || m.currentStep >= len(m.steps) {
-		return
-	}
-	atBottom := m.viewport.TotalLineCount() <= m.viewport.Height() || m.viewport.ScrollPercent() >= 1.0
-	if !atBottom {
-		return
-	}
-	if n, ok := m.steps[m.currentStep].(BottomNotifiable); ok {
-		n.NotifyViewportAtBottom()
-	}
 }
 
 // scrollToFocusedField scrolls the viewport so the active step's focused
@@ -333,16 +281,15 @@ func (m *Model) goToPreviousStep() (tea.Model, tea.Cmd) {
 
 	prevStep := m.currentStep - 1
 	for prevStep >= 0 {
-		step := m.steps[prevStep]
-		if stepShouldShow(step, m.config) && !stepAutoCompletes(step) {
+		if stepShouldShow(m.steps[prevStep], m.config) {
 			break
 		}
 		prevStep--
 	}
 
 	if prevStep < 0 {
-		// Every earlier step is hidden or auto-completing; landing on a
-		// screen ShouldShow hides would strand the user, so stay put.
+		// Every earlier step is hidden; landing on a screen ShouldShow hides
+		// would strand the user, so stay put.
 		return m, nil
 	}
 
@@ -398,11 +345,10 @@ func (m *Model) indexOfStepByID(id StepID) int {
 
 // focusStep is the shared tail of every step transition: resize, focus, refresh
 // jump targets, resync viewport. It is also the single point every
-// navigation-mutating message (StepCompleteMsg, StepBackMsg, SwapFlowMsg,
-// JumpToStepMsg) funnels through, so it closes the help
-// overlay first — the overlay gates only tea.KeyPressMsg, so one of those
-// messages can otherwise arrive asynchronously while it is open and move the
-// current step (or replace the whole step set, on SwapFlow) underneath it,
+// navigation-mutating message (StepCompleteMsg, StepBackMsg, JumpToStepMsg)
+// funnels through, so it closes the help overlay first — the overlay gates
+// only tea.KeyPressMsg, so one of those messages can otherwise arrive
+// asynchronously while it is open and move the current step underneath it,
 // leaving it rendering bindings for a step the user never navigated to.
 func (m *Model) focusStep(idx int) (tea.Model, tea.Cmd) {
 	m.helpOpen = false
@@ -427,7 +373,6 @@ func (m *Model) focusStep(idx int) (tea.Model, tea.Cmd) {
 		m.resizeViewport()
 		m.viewport.GotoTop()
 		m.syncViewportContent()
-		m.notifyIfAtBottom()
 	}
 
 	m.autoScrollToField(0, 0)

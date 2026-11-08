@@ -49,16 +49,6 @@ func TestReviewDiffBaselineRequiresAnExistingConfig(t *testing.T) {
 	}
 }
 
-func TestSaveSlotStateIsConfiguredWithoutInfrastructure(t *testing.T) {
-	t.Chdir(t.TempDir())
-
-	cfg := config.DefaultConfig()
-	if got := saveSlotState(cfg); got != steps.SaveSlotConfigured {
-		t.Errorf("saveSlotState() = %q in an empty workspace, want %q — the hub must never overstate a cluster",
-			got, steps.SaveSlotConfigured)
-	}
-}
-
 func TestWizardAssemblySeedsConfiguredOrder(t *testing.T) {
 	t.Setenv(wizardDemoEnv, "")
 	cfg := config.DefaultConfig()
@@ -138,7 +128,7 @@ func TestWizardAssemblyRejectsUnknownAndDuplicateSteps(t *testing.T) {
 func TestSessionVerb(t *testing.T) {
 	deployHighlighted := func() *steps.WelcomeStep {
 		hub := steps.NewWelcomeStep()
-		hub.SetExistingConfig(config.DefaultConfig(), steps.SaveSlotConfigured)
+		hub.SetExistingConfig(config.DefaultConfig())
 		if hub.SelectedVerb() != steps.HubVerbDeploy {
 			t.Fatalf("hub highlights %v; want the deploy row", hub.SelectedVerb())
 		}

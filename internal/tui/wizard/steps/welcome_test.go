@@ -1,7 +1,6 @@
 package steps
 
 import (
-	"errors"
 	"strings"
 	"testing"
 
@@ -115,12 +114,12 @@ func TestHubArrowsMoveThePointerVertically(t *testing.T) {
 
 func TestHubSaveSlotLineFromConfig(t *testing.T) {
 	s := NewWelcomeStep()
-	s.SetExistingConfig(hubConfig(), SaveSlotDeployed)
+	s.SetExistingConfig(hubConfig())
 
 	if !s.configExists {
 		t.Fatal("SetExistingConfig did not switch the hub to its five-verb menu")
 	}
-	want := "prod-cluster · okd 4.20.1-okd-scos.7 · 6 nodes · deployed"
+	want := "prod-cluster · okd 4.20.1-okd-scos.7 · 6 nodes · configured"
 	if s.saveSlot != want {
 		t.Errorf("saveSlot = %q, want %q", s.saveSlot, want)
 	}
@@ -136,21 +135,21 @@ func TestHubFreshSlateHasNoSaveSlotLine(t *testing.T) {
 	}
 }
 
-func TestHubDeployedViewKeepsSummaryLineAndActionMenu(t *testing.T) {
+func TestHubExistingViewKeepsSummaryLineAndActionMenu(t *testing.T) {
 	s := NewWelcomeStep()
-	s.SetExistingConfig(hubConfig(), SaveSlotDeployed)
+	s.SetExistingConfig(hubConfig())
 	s.SetTerminalSize(180, 48)
 
 	if !s.IsCentered() {
-		t.Fatal("deployed hub should keep the centered launcher")
+		t.Fatal("existing-config hub should keep the centered launcher")
 	}
 	view := tuitest.StripANSI(s.View(172, 41))
 	for _, want := range []string{
-		s.saveSlot, "deployed", "deploy", "edit config",
+		s.saveSlot, "configured", "deploy", "edit config",
 		"manage nodes", "cluster status", "destroy",
 	} {
 		if !strings.Contains(view, want) {
-			t.Errorf("deployed hub is missing %q:\n%s", want, view)
+			t.Errorf("existing-config hub is missing %q:\n%s", want, view)
 		}
 	}
 }
@@ -192,10 +191,7 @@ func TestHubGetStartedWalksTheConfigureFlow(t *testing.T) {
 
 func TestHubClusterStatusShortcutLeavesTheVerbToTheCLI(t *testing.T) {
 	s := NewWelcomeStep()
-	s.SetExistingConfig(hubConfig(), SaveSlotDeployed)
-	s.SetFlows(HubFlows{ManageNodes: func() ([]wizard.WizardStep, wizard.FlowChrome, error) {
-		return stubFlow(), wizard.FlowChrome{}, nil
-	}})
+	s.SetExistingConfig(hubConfig())
 
 	_, cmd := s.Update(tea.KeyPressMsg{Code: 's', Text: "s"})
 	if cmd == nil {
@@ -207,24 +203,11 @@ func TestHubClusterStatusShortcutLeavesTheVerbToTheCLI(t *testing.T) {
 	if s.SelectedVerb() != HubVerbClusterStatus || !s.ShouldExitEarly() {
 		t.Errorf("verb = %v, exits early = %v; want cluster status handed to the CLI", s.SelectedVerb(), s.ShouldExitEarly())
 	}
-	if s.opening != "" {
-		t.Errorf("opening = %q, want no in-process flow for cluster status", s.opening)
-	}
-}
-
-type stubFlowStep struct{ wizard.BaseStep }
-
-func (s *stubFlowStep) Init() tea.Cmd                               { return nil }
-func (s *stubFlowStep) Update(tea.Msg) (wizard.WizardStep, tea.Cmd) { return s, nil }
-func (s *stubFlowStep) View(int, int) string                        { return "" }
-
-func stubFlow() []wizard.WizardStep {
-	return []wizard.WizardStep{&stubFlowStep{BaseStep: wizard.NewBaseStep("stub", "stub", "")}}
 }
 
 func TestHubConfigExistsFalseClearsSaveSlotFromView(t *testing.T) {
 	s := NewWelcomeStep()
-	s.SetExistingConfig(hubConfig(), SaveSlotDeployed)
+	s.SetExistingConfig(hubConfig())
 	s.SetTerminalSize(80, 24)
 
 	s.SetConfigExists(false)
@@ -247,108 +230,7 @@ func selectVerb(t *testing.T, s *WelcomeStep, verb HubVerb) {
 	t.Fatalf("verb %v is not on the menu", verb)
 }
 
-func TestHubManageVerbSwapsInItsFlow(t *testing.T) {
-	s := NewWelcomeStep()
-	s.SetConfigExists(true)
-
-	want := stubFlow()
-	calls := 0
-	s.SetFlows(HubFlows{ManageNodes: func() ([]wizard.WizardStep, wizard.FlowChrome, error) {
-		calls++
-		return want, wizard.FlowChrome{Tagline: "day-2 node operations"}, nil
-	}})
-
-	selectVerb(t, s, HubVerbManageNodes)
-	_, cmd := s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if cmd == nil {
-		t.Fatal("confirming manage nodes produced no command")
-	}
-	if s.opening != "manage nodes" {
-		t.Errorf("opening = %q, want the verb being opened", s.opening)
-	}
-
-	swap, ok := resolveCmd(t, cmd).(wizard.SwapFlowMsg)
-	if !ok {
-		t.Fatalf("command produced %T, want wizard.SwapFlowMsg", resolveCmd(t, cmd))
-	}
-	if calls != 1 {
-		t.Errorf("flow built %d times, want 1", calls)
-	}
-	if len(swap.Steps) != len(want) || swap.Chrome.Tagline != "day-2 node operations" {
-		t.Errorf("swap carried %d steps with tagline %q, want the provider's flow", len(swap.Steps), swap.Chrome.Tagline)
-	}
-}
-
-func TestHubSurfacesAFlowThatCannotBeBuilt(t *testing.T) {
-	s := NewWelcomeStep()
-	s.SetConfigExists(true)
-	s.SetFlows(HubFlows{ManageNodes: func() ([]wizard.WizardStep, wizard.FlowChrome, error) {
-		return nil, wizard.FlowChrome{}, errors.New("prepare node ops: no proxmox credentials")
-	}})
-
-	selectVerb(t, s, HubVerbManageNodes)
-	_, cmd := s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-
-	failed, ok := resolveCmd(t, cmd).(hubFlowFailedMsg)
-	if !ok {
-		t.Fatalf("command produced %T, want hubFlowFailedMsg", resolveCmd(t, cmd))
-	}
-
-	_, errCmd := s.Update(failed)
-	if s.opening != "" {
-		t.Errorf("opening = %q after a failed build, want it cleared", s.opening)
-	}
-	setErr, ok := errCmd().(wizard.ErrorSetMsg)
-	if !ok {
-		t.Fatalf("follow-up command produced %T, want wizard.ErrorSetMsg", errCmd())
-	}
-	if !strings.Contains(setErr.Error.Error(), "no proxmox credentials") {
-		t.Errorf("surfaced error = %v, want the provider's", setErr.Error)
-	}
-}
-
-// TestHubOpeningNoticeAnimatesASpinner guards NEW(T7): the "opening ..."
-// notice carries a live spinner driven by the wizard's shared frame clock --
-// Animating must report true exactly while the notice is up, and a FrameMsg
-// must advance the rendered glyph.
-func TestHubOpeningNoticeAnimatesASpinner(t *testing.T) {
-	s := NewWelcomeStep()
-	s.SetConfigExists(true)
-	s.SetFlows(HubFlows{ManageNodes: func() ([]wizard.WizardStep, wizard.FlowChrome, error) {
-		return stubFlow(), wizard.FlowChrome{}, nil
-	}})
-	selectVerb(t, s, HubVerbManageNodes)
-
-	if s.Animating() {
-		t.Fatal("Animating() = true before any verb was confirmed")
-	}
-	_, cmd := s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if cmd == nil {
-		t.Fatal("confirming manage nodes produced no command")
-	}
-	before := s.View(70, 14)
-	if before == "" || !strings.Contains(before, "opening manage nodes") {
-		t.Fatalf("View() before any frame = %q, want the opening notice present", before)
-	}
-	if !s.Animating() {
-		t.Fatal("Animating() = false while the opening notice is up")
-	}
-
-	s.Update(wizard.FrameMsg{Frame: 3})
-	after := s.View(70, 14)
-	if after == before {
-		t.Fatal("View() unchanged after a frame - the opening spinner is static")
-	}
-
-	// Once the notice clears (flow opened or failed), the step stops asking
-	// for frames and the shared clock winds down.
-	s.opening = ""
-	if s.Animating() {
-		t.Error("Animating() = true after the opening notice cleared")
-	}
-}
-
-func TestHubVerbWithNoFlowCompletesTheStep(t *testing.T) {
+func TestHubDestroyCompletesTheStep(t *testing.T) {
 	s := NewWelcomeStep()
 	s.SetConfigExists(true)
 	selectVerb(t, s, HubVerbDestroy)
@@ -357,34 +239,11 @@ func TestHubVerbWithNoFlowCompletesTheStep(t *testing.T) {
 	if _, ok := cmd().(wizard.StepCompleteMsg); !ok {
 		t.Fatalf("command produced %T, want wizard.StepCompleteMsg", cmd())
 	}
-	if s.opening != "" {
-		t.Errorf("opening = %q, want empty for a verb with no in-process flow", s.opening)
-	}
-}
-
-func TestHubClearsTheOpeningNoticeOnReturn(t *testing.T) {
-	s := NewWelcomeStep()
-	s.SetConfigExists(true)
-	s.SetFlows(HubFlows{ManageNodes: func() ([]wizard.WizardStep, wizard.FlowChrome, error) {
-		return stubFlow(), wizard.FlowChrome{}, nil
-	}})
-
-	selectVerb(t, s, HubVerbManageNodes)
-	s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if s.opening == "" {
-		t.Fatal("confirming manage nodes raised no opening notice")
-	}
-	s.SetFocused(false)
-	s.SetFocused(true)
-
-	if s.opening != "" {
-		t.Errorf("opening = %q after the hub regained focus, want it cleared", s.opening)
-	}
 }
 
 func TestHubBodyCarriesOnlyHeroSlotAndVerbs(t *testing.T) {
 	s := NewWelcomeStep()
-	s.SetExistingConfig(hubConfig(), SaveSlotConfigured)
+	s.SetExistingConfig(hubConfig())
 	s.SetTerminalSize(80, 24)
 
 	body := s.View(70, 14)

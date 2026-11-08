@@ -68,12 +68,6 @@ type TerminalSizer interface {
 	SetTerminalSize(width, height int)
 }
 
-// AutoCompletingStep marks steps that complete without user interaction; they
-// are skipped when navigating back with ESC.
-type AutoCompletingStep interface {
-	AutoCompletes() bool
-}
-
 // HelpProvider is implemented by steps that supply their own help footer.
 type HelpProvider interface {
 	ShortHelp() []KeyBinding
@@ -86,12 +80,6 @@ type OverlayHelpProvider interface {
 	OverlayHelp() []KeyBinding
 }
 
-// QuitGuard is implemented by steps that must intercept ctrl+c (e.g. graceful
-// cancel on first press); returning true consumes the keypress, false quits normally.
-type QuitGuard interface {
-	InterceptQuit() bool
-}
-
 // TextInputConsumer is implemented by steps whose currently focused field
 // would consume a "?" keypress as literal typed text rather than the
 // wizard's help-overlay toggle; a step with no text fields need not
@@ -99,13 +87,6 @@ type QuitGuard interface {
 // always opens the overlay there.
 type TextInputConsumer interface {
 	ConsumesTextInput() bool
-}
-
-// BackGuard is implemented by forward-only steps that must intercept esc
-// (navigating away would orphan an in-flight mutation); true consumes the
-// keypress, false navigates back normally.
-type BackGuard interface {
-	InterceptBack() bool
 }
 
 // Secrets is wizard input that never enters the Config: the Proxmox API
@@ -198,11 +179,6 @@ func (b *BaseStep) ShortHelp() []KeyBinding {
 	}
 }
 
-// AutoCompletes reports whether the step auto-advances without user input; default false.
-func (b *BaseStep) AutoCompletes() bool {
-	return false
-}
-
 // StepCompleteMsg signals that the named step is finished and the wizard
 // should advance.
 type StepCompleteMsg struct {
@@ -242,14 +218,6 @@ type LineSpan struct {
 // not rendered yet reports false.
 type SpanProvider interface {
 	FocusedSpan() (LineSpan, bool)
-}
-
-// BottomNotifiable is implemented by a step that must not trust content
-// below an initial fold until the wizard confirms the viewport has shown
-// its last line at least once — a step has no visibility into the
-// viewport's own scroll offset, so this is the only guarantee it can act on.
-type BottomNotifiable interface {
-	NotifyViewportAtBottom()
 }
 
 // ConfigSyncMsg applies the active step without advancing.

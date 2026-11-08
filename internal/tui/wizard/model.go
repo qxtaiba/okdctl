@@ -98,11 +98,6 @@ type Model struct {
 	steps       []WizardStep
 	currentStep int
 
-	// suspended is the flow SwapFlow put aside — the hub — restored when the
-	// swapped-in flow's first screen is escaped. One level deep by design: the
-	// hub is the only screen that swaps, and a sub-flow never swaps again.
-	suspended *suspendedFlow
-
 	// returnToReview: set on a review jump (JumpToStepMsg), cleared on confirm/escape;
 	// while set, next/previous route to review.
 	returnToReview bool
@@ -140,65 +135,6 @@ type Model struct {
 	// pendingG: a lone "g" is held one keystroke, completing the vim gg
 	// chord if the next key is "g" again and clearing otherwise.
 	pendingG bool
-}
-
-// suspendedFlow is a flow SwapFlow put aside: its steps, its chrome, and the
-// screen the operator was on, so restoring it lands exactly where they left.
-type suspendedFlow struct {
-	steps       []WizardStep
-	chrome      FlowChrome
-	currentStep int
-}
-
-// SwapFlow replaces the live step set and chrome with another flow's inside the
-// same program, suspending the current flow so escaping the new flow's first
-// screen returns to it. The caller passes freshly built steps on every entry:
-// the swapped-out instances are dropped on return, so nothing a sub-flow
-// collected can bleed into the next entry.
-func (m *Model) SwapFlow(steps []WizardStep, chrome FlowChrome) tea.Cmd {
-	// A second swap is refused outright: accepting it would overwrite the
-	// single suspended return target with the sub-flow being displaced,
-	// leaving esc with nowhere correct to land.
-	if len(steps) == 0 || m.suspended != nil {
-		return nil
-	}
-	if f, ok := m.CurrentStep().(FocusableStep); ok {
-		f.SetFocused(false)
-	}
-
-	m.suspended = &suspendedFlow{steps: m.steps, chrome: m.chrome, currentStep: m.currentStep}
-	m.steps, m.chrome = steps, chrome
-	m.returnToReview = false
-	m.err = nil
-
-	_, cmd := m.focusStep(0)
-	return cmd
-}
-
-// restoreFlow returns to the flow SwapFlow suspended, discarding the swapped-in
-// flow's steps so the next entry rebuilds them.
-func (m *Model) restoreFlow() (tea.Model, tea.Cmd) {
-	prev := m.suspended
-	if prev == nil {
-		return m, nil
-	}
-	if f, ok := m.CurrentStep().(FocusableStep); ok {
-		f.SetFocused(false)
-	}
-
-	m.suspended = nil
-	m.steps, m.chrome = prev.steps, prev.chrome
-	m.returnToReview = false
-	m.err = nil
-
-	return m.focusStep(min(prev.currentStep, len(prev.steps)-1))
-}
-
-// SwapFlowMsg asks the wizard to replace its live step set and chrome with
-// another flow's, in the same program and the same terminal session.
-type SwapFlowMsg struct {
-	Steps  []WizardStep
-	Chrome FlowChrome
 }
 
 // Result is what the wizard returns when it exits.
@@ -241,10 +177,6 @@ type KeyMap struct {
 	PageDown    key.Binding
 	Home        key.Binding
 	End         key.Binding
-	Up          key.Binding
-	Down        key.Binding
-	VimUp       key.Binding
-	VimDown     key.Binding
 	VimHalfUp   key.Binding
 	VimHalfDown key.Binding
 	VimTop      key.Binding
@@ -281,16 +213,6 @@ func defaultKeyMap() KeyMap {
 			key.WithKeys("ctrl+end"),
 			key.WithHelp("ctrl+end", "bottom"),
 		),
-		Up: key.NewBinding(
-			key.WithKeys("up"),
-			key.WithHelp("↑", "scroll up"),
-		),
-		Down: key.NewBinding(
-			key.WithKeys("down"),
-			key.WithHelp("↓", "scroll down"),
-		),
-		VimUp:       key.NewBinding(key.WithKeys("k")),
-		VimDown:     key.NewBinding(key.WithKeys("j")),
 		VimHalfUp:   key.NewBinding(key.WithKeys("ctrl+u")),
 		VimHalfDown: key.NewBinding(key.WithKeys("ctrl+d")),
 		VimTop:      key.NewBinding(key.WithKeys("g")),
@@ -418,7 +340,7 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case StepCompleteMsg:
 		// A late async completion from a step the user has already left
-		// (esc, SwapFlow) must not advance — and Apply — whichever step is
+		// (esc) must not advance — and Apply — whichever step is
 		// current now.
 		if !m.currentStepMatches(msg.StepID) {
 			return m, nil
@@ -433,13 +355,8 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.sizeCurrentStep()
 			m.resizeViewport()
 			m.syncViewportContent()
-			m.notifyIfAtBottom()
 		}
 		return m, nil
-
-	case SwapFlowMsg:
-		cmd := m.SwapFlow(msg.Steps, msg.Chrome)
-		return m, cmd
 
 	case JumpToStepMsg:
 		return m.jumpToStep(msg.StepID)
@@ -473,7 +390,6 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if m.ready {
 			m.syncViewportContent()
-			m.notifyIfAtBottom()
 			m.followEditedFocus(msg)
 		}
 	}
@@ -505,15 +421,6 @@ func (m *Model) handleWizardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) 
 	m.err = nil
 
 	if key.Matches(msg, m.keyMap.Quit) {
-		if len(m.steps) > 0 && m.currentStep < len(m.steps) {
-			if g, ok := m.steps[m.currentStep].(QuitGuard); ok && g.InterceptQuit() {
-				// The guard's own feedback (e.g. "press again to
-				// force-quit") renders in the viewport region the
-				// overlay would otherwise cover.
-				m.helpOpen = false
-				return m, nil, true
-			}
-		}
 		if !m.discardPending && m.asksBeforeDiscarding() {
 			m.discardPending = true
 			m.helpOpen = false
@@ -546,17 +453,8 @@ func (m *Model) handleWizardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) 
 		if owner, ok := m.CurrentStep().(interface{ OwnsKey(tea.KeyPressMsg) bool }); ok && owner.OwnsKey(msg) {
 			return m, nil, false
 		}
-		if g, ok := m.CurrentStep().(BackGuard); ok && g.InterceptBack() {
-			return m, nil, true
-		}
 		if m.currentStep > 0 {
 			model, cmd := m.goToPreviousStep()
-			return model, cmd, true
-		}
-		// Escaping a swapped-in flow's first screen leaves the sub-flow and
-		// returns to the hub that launched it.
-		if m.suspended != nil {
-			model, cmd := m.restoreFlow()
 			return model, cmd, true
 		}
 	}
@@ -571,13 +469,6 @@ func stepShouldShow(step WizardStep, cfg *config.Config) bool {
 	return true
 }
 
-func stepAutoCompletes(step WizardStep) bool {
-	if a, ok := step.(AutoCompletingStep); ok {
-		return a.AutoCompletes()
-	}
-	return false
-}
-
 // currentStepConsumesTextInput reports whether the active step's focused
 // field would consume a "?" keypress as literal typed text — see
 // TextInputConsumer. A step that doesn't implement the interface (no text
@@ -589,42 +480,6 @@ func (m *Model) currentStepConsumesTextInput() bool {
 	}
 	tc, ok := m.steps[m.currentStep].(TextInputConsumer)
 	return ok && tc.ConsumesTextInput()
-}
-
-// arrowScroller is implemented by steps that opt in to ↑/↓ scrolling the
-// frame's viewport one line — read-only screens with no field for the arrows
-// to drive; a form or list step keeps the keys for its own navigation.
-type arrowScroller interface {
-	ScrollsWithArrows() bool
-}
-
-// currentStepScrollsWithArrows reports whether the active step has opted its
-// viewport into line-by-line arrow scrolling, mirroring the
-// currentStepConsumesTextInput opt-in: an unimplemented interface leaves the
-// arrows to the step's own Update.
-func (m *Model) currentStepScrollsWithArrows() bool {
-	if len(m.steps) == 0 || m.currentStep < 0 || m.currentStep >= len(m.steps) {
-		return false
-	}
-	a, ok := m.steps[m.currentStep].(arrowScroller)
-	return ok && a.ScrollsWithArrows()
-}
-
-// logPager is implemented by steps that page a log region of their own with
-// pgup/pgdn; while it reports true the frame leaves those keys to the step
-// instead of scrolling the viewport.
-type logPager interface {
-	ConsumesPaging() bool
-}
-
-// currentStepConsumesPaging reports whether the active step is paging a log
-// region of its own right now.
-func (m *Model) currentStepConsumesPaging() bool {
-	if len(m.steps) == 0 || m.currentStep < 0 || m.currentStep >= len(m.steps) {
-		return false
-	}
-	p, ok := m.steps[m.currentStep].(logPager)
-	return ok && p.ConsumesPaging()
 }
 
 // Result returns the wizard's terminal state. Valid only after tea.Quit.

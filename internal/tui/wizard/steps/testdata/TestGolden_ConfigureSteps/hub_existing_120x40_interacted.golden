@@ -18,7 +18,7 @@
   │         ████████████    ████      ████  ████████████      ████████████        ████        ██████████████         │  
   │         ████████████    ████      ████  ████████████      ████████████        ████        ██████████████         │  
   │                                                                                                                  │  
-  │                             prod-cluster · okd 4.20.1-okd-scos.7 · 6 nodes · deployed                            │  
+  │                            prod-cluster · okd 4.20.1-okd-scos.7 · 6 nodes · configured                           │  
   │                                                                                                                  │  
   │                                                 [d] deploy                                                       │  
   │                                               ▸ [e] edit config                                                  │  

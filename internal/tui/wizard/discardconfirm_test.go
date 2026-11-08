@@ -223,22 +223,6 @@ func TestTypingInAFormFieldArmsTheDiscardQuestion(t *testing.T) {
 	}
 }
 
-func TestQuitGuardStillOwnsCtrlCAheadOfTheDiscardQuestion(t *testing.T) {
-	g := &guardedStep{nopStep: nopStep{BaseStep: NewBaseStep(StepIDBasics, "basics", "")}, intercepts: true}
-	m := NewModel([]WizardStep{g}, config.DefaultConfig())
-	tuitest.RenderAt(t, m, 100, 30)
-	m.Config().Cluster.Name = "edited"
-
-	m = update(t, m, ctrlC)
-
-	if g.calls != 1 {
-		t.Fatalf("InterceptQuit calls = %d, want 1", g.calls)
-	}
-	if m.quitting || showsDiscardPrompt(m) {
-		t.Error("an intercepting quit guard must consume ctrl+c before the discard question")
-	}
-}
-
 func deliver(m *Model, cmd tea.Cmd) {
 	if cmd == nil {
 		return
