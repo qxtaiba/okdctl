@@ -13,7 +13,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/logutil"
 
-	"github.com/qxtaiba/okdctl/internal/distribution"
+	"github.com/qxtaiba/okdctl/internal/steps"
 )
 
 func threeStepPlan() []StepMeta {
@@ -33,7 +33,7 @@ func TestStepProgress_StartThenFinishRewritesLine(t *testing.T) {
 	if !lineReg.hasOwner() {
 		t.Fatal("StepStarted did not register the checklist as line owner")
 	}
-	sp.StepFinished(&distribution.StepResult{StepID: "create-vms", Success: true, Duration: 12 * time.Second})
+	sp.StepFinished(&steps.StepResult{StepID: "create-vms", Success: true, Duration: 12 * time.Second})
 
 	out := tty.String()
 	for _, want := range []string{"[2/3]", "create vms", "install", IconSuccess, "12s"} {
@@ -56,7 +56,7 @@ func TestStepProgress_FinishWithoutStart(t *testing.T) {
 	var tty, sink bytes.Buffer
 	sp := newStepProgress(threeStepPlan(), &tty, &sink)
 
-	sp.StepFinished(&distribution.StepResult{StepID: "gen-config", Skipped: true, Success: true})
+	sp.StepFinished(&steps.StepResult{StepID: "gen-config", Skipped: true, Success: true})
 
 	out := tty.String()
 	for _, want := range []string{"[1/3]", "generate config", "setup", IconSkip, "skipped"} {
@@ -76,7 +76,7 @@ func TestStepProgress_FailureStyling(t *testing.T) {
 	var tty, sink bytes.Buffer
 	sp := newStepProgress(threeStepPlan(), &tty, &sink)
 
-	sp.StepFinished(&distribution.StepResult{StepID: "verify", Success: false, Duration: 3 * time.Second})
+	sp.StepFinished(&steps.StepResult{StepID: "verify", Success: false, Duration: 3 * time.Second})
 
 	out := tty.String()
 	if !strings.Contains(out, IconError) {
@@ -90,7 +90,7 @@ func TestStepProgress_FailureStyling(t *testing.T) {
 func TestStepProgress_CounterPadding(t *testing.T) {
 	plan := make([]StepMeta, 17)
 	for i := range plan {
-		plan[i] = StepMeta{ID: distribution.StepID(string(rune('a' + i))), Name: "n", Phase: "install"}
+		plan[i] = StepMeta{ID: steps.StepID(string(rune('a' + i))), Name: "n", Phase: "install"}
 	}
 	sp := newStepProgress(plan, nil, nil)
 	if got := sp.counter(4); got != "[ 4/17]" {
@@ -135,8 +135,8 @@ func TestStepProgress_GlyphColumnIsFixed(t *testing.T) {
 	}
 	sp := newStepProgress(plan, nil, nil)
 
-	short := sp.finalLine(&distribution.StepResult{StepID: "short", Success: true, Duration: time.Second}, sp.index["short"])
-	long := sp.finalLine(&distribution.StepResult{StepID: "long", Success: true, Duration: time.Second}, sp.index["long"])
+	short := sp.finalLine(&steps.StepResult{StepID: "short", Success: true, Duration: time.Second}, sp.index["short"])
+	long := sp.finalLine(&steps.StepResult{StepID: "long", Success: true, Duration: time.Second}, sp.index["long"])
 
 	shortCol := lipgloss.Width(strings.SplitN(short, IconSuccess, 2)[0])
 	longCol := lipgloss.Width(strings.SplitN(long, IconSuccess, 2)[0])
@@ -151,8 +151,8 @@ func TestStepProgress_GlyphColumnIsFixed(t *testing.T) {
 func TestStepProgress_SkippedSharesColumns(t *testing.T) {
 	sp := newStepProgress(threeStepPlan(), nil, nil)
 
-	skip := sp.finalLine(&distribution.StepResult{StepID: "gen-config", Skipped: true, Success: true}, sp.index["gen-config"])
-	ok := sp.finalLine(&distribution.StepResult{StepID: "create-vms", Success: true, Duration: 12 * time.Second}, sp.index["create-vms"])
+	skip := sp.finalLine(&steps.StepResult{StepID: "gen-config", Skipped: true, Success: true}, sp.index["gen-config"])
+	ok := sp.finalLine(&steps.StepResult{StepID: "create-vms", Success: true, Duration: 12 * time.Second}, sp.index["create-vms"])
 
 	skipCol := lipgloss.Width(strings.SplitN(skip, IconSkip, 2)[0])
 	okCol := lipgloss.Width(strings.SplitN(ok, IconSuccess, 2)[0])
@@ -181,7 +181,7 @@ func TestStepProgress_PrefixDuringStep(t *testing.T) {
 		t.Errorf("Prefix during step = %q, want %q", got, want)
 	}
 
-	sp.StepFinished(&distribution.StepResult{StepID: "create-vms", Success: true, Duration: time.Second})
+	sp.StepFinished(&steps.StepResult{StepID: "create-vms", Success: true, Duration: time.Second})
 	if got := sp.Prefix(); got != "" {
 		t.Errorf("Prefix after step finished = %q, want empty", got)
 	}
@@ -191,7 +191,7 @@ func TestStepProgress_UnknownStepIgnored(t *testing.T) {
 	var tty bytes.Buffer
 	sp := newStepProgress(threeStepPlan(), &tty, nil)
 	sp.StepStarted("nonexistent")
-	sp.StepFinished(&distribution.StepResult{StepID: "nonexistent", Success: true})
+	sp.StepFinished(&steps.StepResult{StepID: "nonexistent", Success: true})
 	if tty.Len() != 0 {
 		t.Errorf("unknown step produced output:\n%q", tty.String())
 	}
@@ -227,8 +227,8 @@ func TestStepProgress_ConcurrentInterleave(t *testing.T) {
 
 	// Spinners stop only after all log producers join, keeping withLine's
 	// "leftover spinner" clear path racing against Info() calls.
-	ids := []distribution.StepID{"gen-config", "create-vms", "wait-bootstrap", "verify", "cleanup"}
-	results := make([]*distribution.StepResult, len(ids))
+	ids := []steps.StepID{"gen-config", "create-vms", "wait-bootstrap", "verify", "cleanup"}
+	results := make([]*steps.StepResult, len(ids))
 	stopSpinners := make([]func(), 0, len(ids))
 	for i, id := range ids {
 		sp.StepStarted(id)
@@ -236,7 +236,7 @@ func TestStepProgress_ConcurrentInterleave(t *testing.T) {
 		// Real sleep on purpose — synctest's fake clock only advances when
 		// every goroutine blocks, which would collapse the race window here.
 		time.Sleep(2 * time.Millisecond)
-		results[i] = &distribution.StepResult{
+		results[i] = &steps.StepResult{
 			StepID:   id,
 			Success:  id != "wait-bootstrap",
 			Duration: time.Duration(i+1) * time.Second,

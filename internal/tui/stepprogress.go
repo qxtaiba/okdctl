@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/qxtaiba/okdctl/internal/distribution"
+	"github.com/qxtaiba/okdctl/internal/steps"
 )
 
 // durationCol is the fixed width of the trailing duration/status field on a
@@ -37,13 +37,13 @@ func formatElapsed(d time.Duration) string {
 // label. deploy builds the list from phases that will actually run, so a
 // resume seeds a shorter checklist total.
 type StepMeta struct {
-	ID    distribution.StepID
+	ID    steps.StepID
 	Name  string
 	Phase string
 }
 
 // StepProgress renders a live, rewriting deploy step checklist to stderr,
-// mirroring each step to the log sink (implements distribution.
+// mirroring each step to the log sink (implements steps.
 // MetricsRecorder). It's a line owner: StepStarted takes ownership, a
 // spawned spinner may replace it mid-step, and StepFinished always commits
 // the final line regardless of current owner.
@@ -51,7 +51,7 @@ type StepProgress struct {
 	w          io.Writer
 	logSink    io.Writer
 	total      int
-	index      map[distribution.StepID]stepPos
+	index      map[steps.StepID]stepPos
 	labelWidth int
 
 	mu      sync.Mutex
@@ -72,7 +72,7 @@ func NewStepProgress(plan []StepMeta, logSink io.Writer) *StepProgress {
 }
 
 func newStepProgress(plan []StepMeta, w, logSink io.Writer) *StepProgress {
-	index := make(map[distribution.StepID]stepPos, len(plan))
+	index := make(map[steps.StepID]stepPos, len(plan))
 	for i, m := range plan {
 		index[m.ID] = stepPos{n: i + 1, meta: m}
 	}
@@ -92,7 +92,7 @@ func (s *StepProgress) SuppressStepLog() bool { return true }
 
 // StepStarted paints the dim in-progress line for id and takes ownership of
 // the terminal line until a spinner replaces it or StepFinished commits it.
-func (s *StepProgress) StepStarted(id distribution.StepID) {
+func (s *StepProgress) StepStarted(id steps.StepID) {
 	pos, ok := s.index[id]
 	if !ok {
 		return
@@ -124,7 +124,7 @@ func (s *StepProgress) Prefix() string {
 // StepFinished rewrites r's step line with its duration and a ✓/✗/skip
 // glyph, commits it to scrollback, and mirrors to the log sink; tolerates a
 // missing StepStarted.
-func (s *StepProgress) StepFinished(r *distribution.StepResult) {
+func (s *StepProgress) StepFinished(r *steps.StepResult) {
 	pos, ok := s.index[r.StepID]
 	if !ok {
 		return
@@ -164,7 +164,7 @@ func (s *StepProgress) label(pos stepPos) string {
 // finalLine renders r's committed checklist line: the label padded to
 // labelWidth so every step's glyph lands in the same column, followed by a
 // durationCol-wide status field so "skipped" and elapsed durations share it too.
-func (s *StepProgress) finalLine(r *distribution.StepResult, pos stepPos) string {
+func (s *StepProgress) finalLine(r *steps.StepResult, pos stepPos) string {
 	label := fmt.Sprintf("%-*s", s.labelWidth, s.label(pos))
 	dur := fmt.Sprintf("%*s", durationCol, formatElapsed(r.Duration))
 	switch {
@@ -177,7 +177,7 @@ func (s *StepProgress) finalLine(r *distribution.StepResult, pos stepPos) string
 	}
 }
 
-func (s *StepProgress) plainStatus(r *distribution.StepResult, pos stepPos) string {
+func (s *StepProgress) plainStatus(r *steps.StepResult, pos stepPos) string {
 	switch {
 	case r.Skipped:
 		return "step: skip " + s.label(pos)

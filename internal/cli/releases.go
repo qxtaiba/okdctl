@@ -9,8 +9,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/releases"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/releases"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 

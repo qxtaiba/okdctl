@@ -1,4 +1,4 @@
-package distribution
+package steps
 
 import (
 	"context"

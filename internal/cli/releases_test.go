@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/releases"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/releases"
 )
 
 func TestValidateChannel_InvalidIsUsageError(t *testing.T) {
