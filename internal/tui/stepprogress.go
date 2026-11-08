@@ -42,11 +42,10 @@ type StepMeta struct {
 	Phase string
 }
 
-// StepProgress renders a live, rewriting deploy step checklist to stderr,
-// mirroring each step to the log sink (implements steps.
-// MetricsRecorder). It's a line owner: StepStarted takes ownership, a
-// spawned spinner may replace it mid-step, and StepFinished always commits
-// the final line regardless of current owner.
+// StepProgress renders a live, rewriting step checklist to stderr and
+// mirrors each step to the log sink. StepStarted takes ownership of the
+// terminal line, a spinner may replace it mid-step, and StepFinished always
+// commits the final line regardless of the current owner.
 type StepProgress struct {
 	w          io.Writer
 	logSink    io.Writer

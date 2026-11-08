@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -108,9 +107,9 @@ func checkSchemaVersion(data []byte, path string) error {
 	case SchemaVersionCurrent:
 		return nil
 	case "":
-		return &errtypes.ConfigError{Msg: fmt.Sprintf("%s has no schemaVersion; this release reads v3 only, see docs/migration.md", filepath.Base(path))}
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("%s has no schemaVersion; this release reads v3 only, see docs/migration.md", path)}
 	default:
-		return &errtypes.ConfigError{Msg: fmt.Sprintf("%s is schema %s; this release reads v3 only, see docs/migration.md", filepath.Base(path), probe.SchemaVersion)}
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("%s is schema %s; this release reads v3 only, see docs/migration.md", path, probe.SchemaVersion)}
 	}
 }
 
