@@ -19,7 +19,7 @@ import (
 func TestNewInsecureCallerPolicy(t *testing.T) {
 	const importPath = "github.com/qxtaiba/okdctl/internal/httputil"
 	allowedPrefixes := map[string][]string{
-		"NewInsecure": {"internal/distribution/okd/postinstall/"},
+		"NewInsecure": {},
 		"NewOptionalInsecure": {
 			"internal/infrastructure/proxmox/",
 			"internal/tui/wizard/steps/",
