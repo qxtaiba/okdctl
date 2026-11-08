@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 
@@ -68,7 +69,11 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 	}
 	defer creds.Zeroize()
 	findings, err := runPreflight(cmd.Context(), cfg, creds)
-	if err != nil {
+	switch {
+	case errors.Is(err, proxmox.ErrPermission):
+		return (&errtypes.AuthError{Msg: "proxmox rejected the api token", Err: err}).
+			WithHint("check PROXMOX_VE_API_TOKEN and the privileges granted to it")
+	case err != nil:
 		return fmt.Errorf("preflight: %w", err)
 	}
 	if err := printFindings(cmd.OutOrStdout(), doctorOutput, findings); err != nil {

@@ -5,10 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -188,12 +190,40 @@ type doctorHarness struct {
 	errOut     bytes.Buffer
 }
 
+var (
+	sharedConfigDirOnce sync.Once
+	sharedConfigDir     string
+)
+
+// sharedConfigDirPath is one directory per process because
+// credentials.LoadEnvFile binds the process to the first env path it sees.
+func sharedConfigDirPath(t *testing.T) string {
+	t.Helper()
+	var err error
+	sharedConfigDirOnce.Do(func() { sharedConfigDir, err = os.MkdirTemp("", "okdctl-cli-") })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sharedConfigDir == "" {
+		t.Fatal("shared config dir was never created")
+	}
+	return sharedConfigDir
+}
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if sharedConfigDir != "" {
+		_ = os.RemoveAll(sharedConfigDir)
+	}
+	os.Exit(code)
+}
+
 func newDoctorHarness(t *testing.T) *doctorHarness {
 	t.Helper()
 	tui.SetColorProfileFor(&bytes.Buffer{})
 	t.Cleanup(func() { tui.SetColorProfileFor(&bytes.Buffer{}) })
 
-	h := &doctorHarness{configPath: filepath.Join(t.TempDir(), "okdctl.yaml")}
+	h := &doctorHarness{configPath: filepath.Join(sharedConfigDirPath(t), "okdctl.yaml")}
 	if err := os.WriteFile(h.configPath, []byte(doctorConfigBody), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -215,9 +245,6 @@ func (h *doctorHarness) run(t *testing.T, cfgPath, token string, findings []prox
 	t.Setenv("PROXMOX_VE_API_TOKEN", token)
 	t.Setenv("PROXMOX_VE_USERNAME", "")
 	t.Setenv("PROXMOX_VE_PASSWORD", "")
-	if os.Getenv("PROXMOX_VE_ENDPOINT") == "" {
-		t.Setenv("PROXMOX_VE_ENDPOINT", "")
-	}
 	var gotCfg *config.Config
 	var gotCreds *credentials.ProxmoxCredentials
 	var gotToken string
@@ -314,6 +341,17 @@ func TestDoctorCommand(t *testing.T) {
 		_, err := run(t, configPath, token, nil, errors.New("read permissions: 401"))
 		if err == nil || !strings.Contains(err.Error(), "read permissions: 401") {
 			t.Fatalf("err = %v, want wrapped preflight error", err)
+		}
+	})
+
+	t.Run("rejected token is an auth error", func(t *testing.T) {
+		_, err := run(t, configPath, token, nil, fmt.Errorf("read permissions: %w", proxmox.ErrPermission))
+		var ae *errtypes.AuthError
+		if !errors.As(err, &ae) {
+			t.Fatalf("err = %T %v, want *errtypes.AuthError", err, err)
+		}
+		if !errors.Is(err, proxmox.ErrPermission) || !strings.Contains(err.Error(), "api token") {
+			t.Fatalf("err = %v, want ErrPermission kept and the token named", err)
 		}
 	})
 
