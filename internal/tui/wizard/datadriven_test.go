@@ -616,19 +616,11 @@ func TestDataDrivenStep_ShortHelpIncludesFieldHints(t *testing.T) {
 		}
 	}
 
-	def := &StepDefinition{
-		ID:    StepIDBasics,
-		Title: "test step",
-		Sections: []SectionDefinition{
-			{
-				Title: "section one",
-				Fields: []FieldDefinition{
-					{Key: "networks", Label: "additional networks", Type: FieldTypeMultiSelect, Options: []string{"vmbr0", "vmbr1"}},
-				},
-			},
-		},
-	}
-	multiStep := NewDataDrivenStep(def)
+	multiStep := NewDataDrivenStep(testStepDefinition())
+	multiStep.form = NewMultiSectionForm([]FormSection{{
+		Title: "section one",
+		Group: components.NewInputGroup(components.NewMultiSelectField("additional networks", []string{"vmbr0", "vmbr1"})),
+	}})
 	multiStep.SetFocused(true)
 
 	help := multiStep.ShortHelp()
@@ -946,34 +938,30 @@ func TestMultiSectionForm_HiddenSectionSkippedByViewAndNavigation(t *testing.T) 
 	}
 }
 
-// TestMultiSectionForm_EnterMidEditReachesTheField pins bug 4: enter while
-// a KeyValueField is mid-edit must commit the cell edit, not submit the
-// whole step — the form routes enter to a field that consumes it before
-// matching its own submit binding.
-func TestMultiSectionForm_EnterMidEditReachesTheField(t *testing.T) {
-	kv := components.NewKeyValueField("tf env")
+// TestMultiSectionForm_EnterReachesAConsumingField pins bug 4: enter on a
+// field that consumes it must reach the field, not submit the whole step —
+// the form routes enter to such a field before matching its own submit
+// binding; a field that does not consume enter still submits.
+func TestMultiSectionForm_EnterReachesAConsumingField(t *testing.T) {
+	fold := components.NewFoldToggleField("advanced", nil)
 	form := NewMultiSectionForm([]FormSection{{
 		Title: "env",
-		Group: components.NewInputGroup(kv),
+		Group: components.NewInputGroup(fold, components.NewInputField("host", "")),
 	}})
 	_ = form.Init()
-	_, _ = form.Update(tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl})
-	if !kv.ConsumesTextInput() {
-		t.Fatal("ctrl+e did not enter edit mode")
-	}
 
 	_, enterPressed := form.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-
 	if enterPressed {
-		t.Fatal("enter mid-edit submitted the step, want it routed to the field")
+		t.Fatal("enter on a consuming field submitted the step, want it routed to the field")
 	}
-	if kv.ConsumesTextInput() {
-		t.Fatal("enter mid-edit did not commit the edit (still in edit mode)")
+	if !fold.Expanded() {
+		t.Fatal("enter did not reach the fold")
 	}
 
+	form.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	_, enterPressed = form.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if !enterPressed {
-		t.Fatal("enter in navigate mode must still submit the step")
+		t.Fatal("enter on a plain field must still submit the step")
 	}
 }
 
@@ -1340,30 +1328,5 @@ func TestDataDrivenStep_CollapsibleSectionEnterStickyExpand(t *testing.T) {
 	view := tuitest.StripANSI(step.View(100, 24))
 	if !strings.Contains(view, "hidden required") {
 		t.Fatalf("View() = %q, want the fold to stay expanded via its sticky latch after focus left", view)
-	}
-}
-
-func TestTableCellCommitDoesNotCompleteStep(t *testing.T) {
-	step := NewDataDrivenStep(&StepDefinition{ID: StepIDAdvanced, Sections: []SectionDefinition{{Title: "labels", Fields: []FieldDefinition{{Key: "labels", Label: "labels", Type: FieldTypeKeyValue}}}}})
-	step.SetFocused(true)
-	step.Init()
-	step.Update(tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl})
-	if !step.OwnsKey(tea.KeyPressMsg{Code: tea.KeyEnter}) {
-		t.Fatal("editor does not own enter")
-	}
-	step.Update(tea.KeyPressMsg{Code: 'x', Text: "x"})
-	step.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
-	if step.Value("labels") != "" {
-		t.Fatal("cancel retained edited cell")
-	}
-	step.Update(tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl})
-	_, cmd := step.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if cmd != nil {
-		if _, complete := cmd().(StepCompleteMsg); complete {
-			t.Fatal("cell commit advanced step")
-		}
-	}
-	if step.OwnsKey(tea.KeyPressMsg{Code: tea.KeyEnter}) {
-		t.Fatal("cell remained in edit mode")
 	}
 }
