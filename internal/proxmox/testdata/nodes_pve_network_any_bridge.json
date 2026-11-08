@@ -1,0 +1,1 @@
+{"data":[{"iface":"vmbr0","type":"bridge","bridge_vlan_aware":1,"active":1,"cidr":"192.168.227.195/24","bridge_ports":"enp5s0"}]}
