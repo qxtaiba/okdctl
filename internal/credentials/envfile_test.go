@@ -67,6 +67,19 @@ func TestWriteEnvFileRejectsLossyValues(t *testing.T) {
 	}
 }
 
+func TestEnvFilePath(t *testing.T) {
+	cases := map[string]string{
+		"okdctl.yaml": "okdctl.env",
+		"okdctl.yml":  "okdctl.env",
+		"noext":       "noext.env",
+	}
+	for in, want := range cases {
+		if got := EnvFilePath(in); got != want {
+			t.Errorf("EnvFilePath(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestWriteEnvFile_TokenAndFlagOnly(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "okdctl.env")
 	creds := &ProxmoxCredentials{Endpoint: "https://pve:8006", APIToken: []byte("root@pam!okdctl=tok-abc"), Insecure: true}
