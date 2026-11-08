@@ -119,7 +119,7 @@ func TestListVMs(t *testing.T) {
 	}
 	want := []VMSummary{
 		{VMRef: VMRef{Node: "pve", VMID: 100}, Name: "grappleberry-bootstrap", Status: "running", Tags: []string{"grappleberry", "okd"}, Pool: "okd", MaxMemMiB: 16384, MaxCPU: 4},
-		{VMRef: VMRef{Node: "pve", VMID: 101}, Name: "grappleberry-master-0", Status: "running", Tags: []string{"grappleberry", "okd"}, Pool: "okd", MaxMemMiB: 16384, MaxCPU: 4},
+		{VMRef: VMRef{Node: "pve", VMID: 101}, Name: "grappleberry-master-0", Status: "running", Tags: []string{"grappleberry"}, Pool: "okd", MaxMemMiB: 16384, MaxCPU: 4},
 		{VMRef: VMRef{Node: "pve", VMID: 200}, Name: "lab-9f3a1c-worker-0", Status: "stopped", Tags: []string{"lab-9f3a1c"}, MaxMemMiB: 8192, MaxCPU: 2},
 		{VMRef: VMRef{Node: "pve", VMID: 201}, Name: "lab-9f3a1cx-worker-0", Status: "stopped", Tags: []string{"lab-9f3a1cx"}, MaxMemMiB: 8192, MaxCPU: 2},
 		{VMRef: VMRef{Node: "pve", VMID: 9000}, Name: "fcos-template", Status: "stopped", MaxMemMiB: 2048, MaxCPU: 1},
