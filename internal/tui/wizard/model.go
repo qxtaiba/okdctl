@@ -316,7 +316,7 @@ func NewFlowModel(steps []WizardStep, cfg *config.Config, chrome FlowChrome) *Mo
 		currentStep: 0,
 		config:      cfg,
 		chrome:      chrome,
-		saved:       newSavedState(cfg),
+		saved:       newSavedState(cfg, steps),
 		motion:      tui.Motion(),
 		keyMap:      defaultKeyMap(),
 	}
