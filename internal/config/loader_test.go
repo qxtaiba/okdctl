@@ -66,7 +66,7 @@ func TestLoadFile_RefusesSchemaV2(t *testing.T) {
 	if !errors.As(err, &cfgErr) {
 		t.Fatalf("err = %v; want *errtypes.ConfigError", err)
 	}
-	const want = "okdctl.yaml is schema v2; this release reads v3 only, see docs/migration.md"
+	want := path + " is schema v2; this release reads v3 only, see docs/migration.md"
 	if cfgErr.Msg != want {
 		t.Errorf("ConfigError.Msg = %q; want %q", cfgErr.Msg, want)
 	}

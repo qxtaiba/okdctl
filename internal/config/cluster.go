@@ -122,8 +122,8 @@ type LifecycleConfig struct {
 
 // Hook is a command run between node operations; an empty Command disables it.
 type Hook struct {
-	Command string
-	Timeout time.Duration
+	Command string        `json:"command"`
+	Timeout time.Duration `json:"timeout"`
 }
 
 // HandoffConfig toggles applying handoff/secrets and handoff/manifests after install.
