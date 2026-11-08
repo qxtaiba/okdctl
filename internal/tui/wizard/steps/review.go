@@ -190,7 +190,7 @@ func (s *ReviewStep) changedConfigKeys() []string {
 		return nil
 	}
 	current := reviewConfigSnapshot(s.cfg)
-	seen := make(map[string]struct{}, len(s.saved)+len(current))
+	seen := make(map[string]struct{}, len(current))
 	for k := range s.saved {
 		seen[k] = struct{}{}
 	}
