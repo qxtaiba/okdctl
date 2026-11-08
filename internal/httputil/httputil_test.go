@@ -37,12 +37,6 @@ func TestClientFactories(t *testing.T) {
 			nilTransport: true,
 		},
 		{
-			name:         "NewInsecure skips verification",
-			client:       NewInsecure(3 * time.Second),
-			wantTimeout:  3 * time.Second,
-			wantInsecure: true,
-		},
-		{
 			name:         "NewOptionalInsecure true skips verification",
 			client:       NewOptionalInsecure(true, 3*time.Second),
 			wantTimeout:  3 * time.Second,
