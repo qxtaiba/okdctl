@@ -1,6 +1,6 @@
-// Package distribution hosts the phase-step orchestration primitives
+// Package steps hosts the phase-step orchestration primitives
 // (StepDef, BuildSteps, Orchestrator) shared by every distribution.
-package distribution
+package steps
 
 import (
 	"context"

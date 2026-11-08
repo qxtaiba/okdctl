@@ -1,4 +1,4 @@
-package distribution
+package steps
 
 // PhaseContext shares typed data between phase steps; the zero value panics,
 // so create it via NewPhaseContext.

@@ -3,7 +3,7 @@ package steps
 import (
 	"time"
 
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/releases"
+	"github.com/qxtaiba/okdctl/internal/releases"
 )
 
 func demoDate(year int, month time.Month) time.Time {

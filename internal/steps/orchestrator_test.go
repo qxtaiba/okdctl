@@ -1,4 +1,4 @@
-package distribution_test
+package steps_test
 
 import (
 	"context"
@@ -7,18 +7,18 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/qxtaiba/okdctl/internal/distribution"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/steps"
 )
 
-func buildOrchestrator(defs []distribution.StepDef) *distribution.Orchestrator {
-	return distribution.NewOrchestrator(distribution.BuildSteps(defs)...)
+func buildOrchestrator(defs []steps.StepDef) *steps.Orchestrator {
+	return steps.NewOrchestrator(steps.BuildSteps(defs)...)
 }
 
 func TestOrchestratorRun_FatalStepStopsRun(t *testing.T) {
 	t.Parallel()
 	var ran []string
-	defs := []distribution.StepDef{
+	defs := []steps.StepDef{
 		{
 			ID: "a", Name: "a",
 			Exec: func(_ context.Context) error { ran = append(ran, "a"); return nil },
@@ -51,7 +51,7 @@ func TestOrchestratorRun_FatalStepStopsRun(t *testing.T) {
 func TestOrchestratorRun_NonFatalStepContinues(t *testing.T) {
 	t.Parallel()
 	var ran []string
-	defs := []distribution.StepDef{
+	defs := []steps.StepDef{
 		{
 			ID: "a", Name: "a", NonFatal: true,
 			Exec: func(_ context.Context) error { ran = append(ran, "a"); return errors.New("warn") },
@@ -73,7 +73,7 @@ func TestOrchestratorRun_NonFatalStepContinues(t *testing.T) {
 func TestOrchestratorRun_SkipWhen(t *testing.T) {
 	t.Parallel()
 	var ran bool
-	defs := []distribution.StepDef{
+	defs := []steps.StepDef{
 		{
 			ID: "a", Name: "a",
 			SkipWhen: func() bool { return true }, SkipReason: "not needed",
@@ -96,7 +96,7 @@ func TestOrchestratorRun_SkipWhen(t *testing.T) {
 func TestOrchestratorRun_SkipReasonFuncResolvesFiredCause(t *testing.T) {
 	t.Parallel()
 	reason := "unresolved"
-	defs := []distribution.StepDef{
+	defs := []steps.StepDef{
 		{
 			ID: "a", Name: "a",
 			SkipWhen:       func() bool { reason = "cause that fired"; return true },
@@ -121,7 +121,7 @@ func TestOrchestratorRun_SkipReasonFuncResolvesFiredCause(t *testing.T) {
 func TestOrchestratorRun_AlreadyDoneSkipsExecute(t *testing.T) {
 	t.Parallel()
 	var ran bool
-	defs := []distribution.StepDef{
+	defs := []steps.StepDef{
 		{
 			ID: "a", Name: "a",
 			AlreadyDone: func(_ context.Context) (bool, error) { return true, nil },
@@ -144,7 +144,7 @@ func TestOrchestratorRun_AlreadyDoneSkipsExecute(t *testing.T) {
 func TestOrchestratorRun_AlreadyDoneErrorProceedsToExecute(t *testing.T) {
 	t.Parallel()
 	var ran bool
-	defs := []distribution.StepDef{
+	defs := []steps.StepDef{
 		{
 			ID: "a", Name: "a",
 			AlreadyDone: func(_ context.Context) (bool, error) { return false, errors.New("probe failed") },
@@ -163,7 +163,7 @@ func TestOrchestratorRun_AlreadyDoneErrorProceedsToExecute(t *testing.T) {
 func TestOrchestratorRun_OnErrorFiresWithClassifiedError(t *testing.T) {
 	t.Parallel()
 	var gotErr error
-	defs := []distribution.StepDef{
+	defs := []steps.StepDef{
 		{
 			ID: "a", Name: "a",
 			Exec:    func(_ context.Context) error { return errors.New("boom") },
@@ -181,7 +181,7 @@ func TestOrchestratorRun_OnErrorFiresWithClassifiedError(t *testing.T) {
 func TestOrchestratorRun_ScrubsCredentialInClassifiedMsg(t *testing.T) {
 	t.Parallel()
 	root := errors.New("provider auth failed: password=hunter2")
-	defs := []distribution.StepDef{
+	defs := []steps.StepDef{
 		{
 			ID: "a", Name: "a",
 			Exec: func(_ context.Context) error { return root },
@@ -217,7 +217,7 @@ func TestOrchestratorRun_PreservesErrorIdentity(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			o := buildOrchestrator([]distribution.StepDef{
+			o := buildOrchestrator([]steps.StepDef{
 				{
 					ID: "a", Name: "a",
 					Exec: func(_ context.Context) error { return tc.err },
@@ -233,7 +233,7 @@ func TestOrchestratorRun_PreservesErrorIdentity(t *testing.T) {
 func TestOrchestratorRun_CtxDoneBeforeStepStopsRun(t *testing.T) {
 	t.Parallel()
 	var ran bool
-	defs := []distribution.StepDef{
+	defs := []steps.StepDef{
 		{
 			ID: "a", Name: "a",
 			Exec: func(_ context.Context) error { ran = true; return nil },

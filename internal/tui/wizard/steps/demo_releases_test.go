@@ -3,7 +3,7 @@ package steps
 import (
 	"testing"
 
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/releases"
+	"github.com/qxtaiba/okdctl/internal/releases"
 )
 
 func TestDemoReleaseSeriesWellFormed(t *testing.T) {
