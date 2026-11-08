@@ -172,11 +172,13 @@ func (s *WelcomeStep) Init() tea.Cmd {
 func (s *WelcomeStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	if msg, ok := msg.(tea.KeyPressMsg); ok {
 		if msg.Code == tea.KeyEnter || msg.Code == tea.KeySpace {
-			return s, s.confirm()
+			cmd := s.confirm()
+			return s, cmd
 		}
 		if i, ok := s.acceleratedEntry(msg.Text); ok {
 			s.nav.Select(i)
-			return s, s.confirm()
+			cmd := s.confirm()
+			return s, cmd
 		}
 		s.nav, _ = s.nav.Update(components.ArrowsAsVertical(msg))
 	}
