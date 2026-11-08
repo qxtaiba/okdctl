@@ -53,7 +53,7 @@ Go version and toolchain come from `go.mod`.
 - `internal/tui` — the wizard framework, its steps and the terminal styling.
 - `internal/cluster` — the `oc`/`kubectl` client, CSR policy and health gates.
 - `internal/steps` — the step engine phases are built from.
-- `internal/infrastructure/proxmox` — the Proxmox API probe and power calls.
+- `internal/infrastructure/proxmox` — the Proxmox API endpoint helper the wizard's discovery uses.
 
 See `docs/architecture/wizard.md` for the wizard's design.
 
