@@ -44,14 +44,8 @@ func ErrorSummary(err error, exitCode int, runID string) string {
 	return "\n" + tui.BoxedSectionAccent(body, "error", tui.DefaultBoxWidth, tui.ColorError()) + "\n"
 }
 
-// ErrorCard renders the red error box body — kind chip, wrapped message, and
-// pointer-led hint — without the exit-code/run-id footer ErrorSummary adds.
-func ErrorCard(kind, message, hint string, width int) string {
-	return "\n" + tui.BoxedSectionAccent(errorBody(kind, message, hint, width), "error", width, tui.ColorError()) + "\n"
-}
-
-// errorBody writes the kind chip, wrapped message, and pointer-led hint
-// shared by ErrorSummary and ErrorCard, sized to fit inside width.
+// errorBody writes the kind chip, wrapped message, and pointer-led hint,
+// sized to fit inside width.
 func errorBody(kind, message, hint string, width int) string {
 	// Two columns of margin inside the box border.
 	contentWidth := tui.BoxInnerWidth(width) - 2

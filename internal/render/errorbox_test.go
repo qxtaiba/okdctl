@@ -71,41 +71,24 @@ func TestPresentedMarkerRoundTrips(t *testing.T) {
 	}
 }
 
-func TestErrorCardOmitsRunID(t *testing.T) {
-	got := ErrorCard("resize failed", "etcd health gate (post-master0) failed: quorum lost",
-		"re-run the same operation to resume at the recorded step", 70)
-	for _, want := range []string{"resize failed", "quorum lost", "→", "re-run the same operation"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("error card missing %q:\n%s", want, got)
-		}
-	}
-	for _, absent := range []string{"run_id", "exit "} {
-		if strings.Contains(got, absent) {
-			t.Errorf("error card must carry no exit/run_id footer, found %q:\n%s", absent, got)
-		}
-	}
-}
-
 func TestErrorBodyChipHasTwoSpaceGap(t *testing.T) {
 	summary := ErrorSummary(&errtypes.ConfigError{Msg: "boom"}, 1, "R")
 	if !strings.Contains(summary, "✗  config error") {
 		t.Errorf("ErrorSummary chip must render the icon and kind with a two-space gap:\n%s", summary)
 	}
-	card := ErrorCard("resize failed", "boom", "", 70)
-	if !strings.Contains(card, "✗  resize failed") {
-		t.Errorf("ErrorCard chip must render the icon and kind with a two-space gap:\n%s", card)
-	}
 }
 
-// TestErrorCardWrappedHintNeverTouchesTheRightBorder guards the T8 nit. A
+// TestErrorSummaryWrappedHintNeverTouchesTheRightBorder guards the T8 nit. A
 // single unbroken "word" longer than the wrap width hard-splits (see
 // TestWrapTextHardSplitsLongToken) into lines that fill the wrap budget
 // exactly — the worst case for a right-edge gutter — so every wrapped hint
 // row this produces must still leave at least one blank column before the
 // closing "│", never land flush against it the way message/kind rows can.
-func TestErrorCardWrappedHintNeverTouchesTheRightBorder(t *testing.T) {
+func TestErrorSummaryWrappedHintNeverTouchesTheRightBorder(t *testing.T) {
+	tui.SetTerminalWidth(70)
+	t.Cleanup(func() { tui.SetTerminalWidth(0) })
 	hint := strings.Repeat("a", 200)
-	out := ErrorCard("usage error", "short message", hint, 70)
+	out := ErrorSummary((&errtypes.UsageError{Msg: "short message"}).WithHint(hint), 64, "R")
 	stripped := tuitest.StripANSI(out)
 
 	found := false
@@ -123,7 +106,7 @@ func TestErrorCardWrappedHintNeverTouchesTheRightBorder(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatal("could not locate the wrapped hint's rows in the rendered card")
+		t.Fatal("could not locate the wrapped hint's rows in the rendered box")
 	}
 }
 
