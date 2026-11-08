@@ -79,11 +79,10 @@ func DeferWarn(fn func()) {
 
 var rootCmd = &cobra.Command{
 	Use:   "okdctl",
-	Short: "Provision OKD clusters on Proxmox VE",
-	Long: `okdctl provisions OKD clusters on Proxmox VE from an interactive wizard.
-It's for the homelab operator with one or two Proxmox nodes who wants a
-real Kubernetes cluster without hand-rolling Terraform, Ignition, and
-bootstrap glue.`,
+	Short: "Run OKD clusters on Proxmox VE",
+	Long: `okdctl defines, installs and operates one OKD cluster on Proxmox VE from
+a single configuration file. This release configures a cluster through the
+wizard; installation on the agent-based installer returns in a later release.`,
 	Example: `  okdctl deploy
   okdctl config validate
   okdctl releases list`,
@@ -417,7 +416,7 @@ func init() {
 	// contradicting the auto-switch prose; keep in sync with the flag's Usage
 	// string
 	rootCmd.PersistentFlags().Lookup(flagLogFormat).DefValue = ""
-	rootCmd.PersistentFlags().StringVar(&logFile, flagLogFile, "", "also write logs to this file (replaces the default okdctl.log of deploy/destroy/cleanup)")
+	rootCmd.PersistentFlags().StringVar(&logFile, flagLogFile, "", "also write logs to this file (replaces deploy's default okdctl.log)")
 	rootCmd.PersistentFlags().BoolVarP(&logQuiet, flagQuiet, "q", false, "suppress info/warn logs (alias for --log-level=error)")
 	rootCmd.PersistentFlags().BoolVarP(&logVerbose, flagVerbose, "v", false, "enable debug logging (alias for --log-level=debug)")
 	rootCmd.MarkFlagsMutuallyExclusive(flagQuiet, flagVerbose)
