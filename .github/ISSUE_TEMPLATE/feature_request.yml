@@ -47,7 +47,7 @@ body:
         - Addon system
         - Configuration schema
         - Networking / VIPs / DNS
-        - Terraform / infrastructure provisioning
+        - Proxmox / infrastructure provisioning
         - Release / build / distribution
         - Documentation
         - Not sure

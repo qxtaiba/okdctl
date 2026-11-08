@@ -74,49 +74,6 @@ jobs:
           YAMLFMT_VERSION: v0.21.0
         run: go install github.com/google/yamlfmt/cmd/yamlfmt@${YAMLFMT_VERSION}
       - run: yamlfmt -lint .
-  validate-terraform:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
-        with:
-          # renovate: datasource=github-releases depName=hashicorp/terraform
-          terraform_version: "1.16.5"
-      - run: terraform fmt -check -recursive infrastructure/terraform
-      # The production env validates the module transitively via
-      # source = ../../modules/proxmox-okd, exercising the committed lock file.
-      # A standalone module init would resolve bpg/proxmox unpinned (module
-      # dirs carry no lock), so it is deliberately omitted.
-      - working-directory: infrastructure/terraform/environments/production
-        run: terraform init -backend=false && terraform validate
-  lint-terraform:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6.3.2
-        with:
-          # renovate: datasource=github-releases depName=terraform-linters/tflint
-          tflint_version: "v0.64.0"
-      - working-directory: infrastructure/terraform/modules/proxmox-okd
-        run: |
-          tflint --init --config="${GITHUB_WORKSPACE}/infrastructure/terraform/.tflint.hcl"
-          tflint -f compact --config="${GITHUB_WORKSPACE}/infrastructure/terraform/.tflint.hcl"
-      - working-directory: infrastructure/terraform/environments/production
-        run: |
-          tflint --init --config="${GITHUB_WORKSPACE}/infrastructure/terraform/.tflint.hcl"
-          tflint -f compact --config="${GITHUB_WORKSPACE}/infrastructure/terraform/.tflint.hcl"
-  scan-terraform:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # Trivy replaced tfsec here: upstream deprecated tfsec in Trivy's
-      # favor, so tfsec's rule set no longer receives updates.
-      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          scan-type: config
-          scan-ref: infrastructure/terraform
-          # trivy-action defaults to exit-code 0; keep tfsec's fail-on-findings gate
-          exit-code: "1"
   lint-shell:
     runs-on: ubuntu-latest
     steps:

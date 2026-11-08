@@ -32,11 +32,6 @@
       "matchDatasources": ["github-releases"],
       "semanticCommitScope": "github-release",
       "commitMessageTopic": "release {{depName}}"
-    },
-    {
-      "matchManagers": ["terraform"],
-      "semanticCommitScope": "terraform",
-      "commitMessageTopic": "{{depName}}"
     }
   ]
 }

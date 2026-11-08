@@ -1,5 +1,5 @@
 // Package cli wires the cobra command tree and drives the top-level event
-// loop; exit codes follow the taxonomy in docs/cli/exit-codes.md.
+// loop.
 package cli
 
 import (
@@ -330,7 +330,7 @@ func signalExitCode(caughtSig *atomic.Value, err error) (int, bool) {
 
 // exitCodeFor maps err to the documented BSD-sysexits code. Precedence is
 // sentinel > Config(2) > Network(3) > Cluster(4) > Auth(5) > Usage(64)
-// regardless of wrap order; see docs/cli/exit-codes.md.
+// regardless of wrap order.
 func exitCodeFor(err error) int {
 	if err == nil {
 		return 0
