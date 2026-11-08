@@ -748,7 +748,7 @@ func newSpanTestForm() *MultiSectionForm {
 			Title: "section two",
 			Group: components.NewInputGroup(
 				components.NewInputField("gateway", "10.0.0.1"),
-				components.NewInputField("bastion", "10.0.0.2"),
+				components.NewInputField("dns", "10.0.0.2"),
 				components.NewSelectField("mode", []string{"a", "b"}),
 			),
 		},
