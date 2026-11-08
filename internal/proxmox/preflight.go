@@ -306,6 +306,9 @@ func (st *preflightState) checkVMIDCollision(out *findings) {
 }
 
 func (st *preflightState) checkMACCollision(ctx context.Context, d Driver, out *findings) {
+	if len(st.in.MACs) == 0 {
+		return
+	}
 	planned := make(map[string]string, len(st.in.MACs))
 	for _, mac := range st.in.MACs {
 		planned[strings.ToLower(mac)] = mac
