@@ -54,7 +54,7 @@ body:
       label: Steps to reproduce
       description: Minimal steps to reproduce. If you can't reproduce, say so.
       placeholder: |
-        1. Run `okdctl deploy`
+        1. Run `okdctl init`
         2. Answer wizard with ...
         3. Error appears at step X
     validations:

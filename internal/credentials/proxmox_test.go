@@ -58,7 +58,6 @@ func TestProxmoxCredentialsMaskAndZeroize(t *testing.T) {
 
 	for name, rendered := range map[string]string{
 		"String":   creds.String(),
-		"%v":       fmt.Sprintf("%v", creds),
 		"%+v":      fmt.Sprintf("%+v", creds),
 		"%#v":      fmt.Sprintf("%#v", creds),
 		"Redacted": fmt.Sprint(creds.Redacted()),

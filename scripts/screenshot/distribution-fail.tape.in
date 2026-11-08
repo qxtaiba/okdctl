@@ -17,7 +17,7 @@ Type `export PATH="$(dirname "$OKDCTL_DEMO_BIN"):$PATH" HOME="$OKDCTL_DEMO_HOME"
 Enter
 Show
 
-Type "okdctl deploy"
+Type "okdctl init"
 Sleep 450ms
 Enter
 

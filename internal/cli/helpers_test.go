@@ -54,11 +54,11 @@ func TestLoadConfigFailureCarriesCause(t *testing.T) {
 		perm os.FileMode
 		want []string
 	}{
-		{"unsupported schemaVersion", "schemaVersion: v1\n", 0o600, []string{`schemaVersion "v1"`, `expected "v2"`}},
-		{"missing schemaVersion", "cluster:\n  name: demo\n", 0o600, []string{"missing required schemaVersion", `expected "v2"`}},
-		{"unknown key", "schemaVersion: v2\nclutser:\n  name: demo\n", 0o600, []string{`unknown field "clutser"`}},
-		{"several documents", "schemaVersion: v2\n---\ncluster:\n  name: demo\n", 0o600, []string{"more than one YAML document"}},
-		{"group-writable file", "schemaVersion: v2\n", 0o660, []string{"insecure permissions 0660"}},
+		{"unsupported schemaVersion", "schemaVersion: v1\n", 0o600, []string{"is schema v1", "reads v3 only"}},
+		{"missing schemaVersion", "cluster:\n  name: demo\n", 0o600, []string{"has no schemaVersion", "reads v3 only"}},
+		{"unknown key", "schemaVersion: v3\nclutser:\n  name: demo\n", 0o600, []string{`unknown field "clutser"`}},
+		{"several documents", "schemaVersion: v3\n---\ncluster:\n  name: demo\n", 0o600, []string{"more than one YAML document"}},
+		{"group-writable file", "schemaVersion: v3\n", 0o660, []string{"insecure permissions 0660"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -78,7 +78,7 @@ func TestLoadConfigFailureCarriesCause(t *testing.T) {
 			if !strings.HasPrefix(msg, "config error: load configuration: ") {
 				t.Errorf("error = %q; want the load configuration prefix followed by a cause", msg)
 			}
-			for _, want := range append(tc.want, path) {
+			for _, want := range append(tc.want, filepath.Base(path)) {
 				if !strings.Contains(msg, want) {
 					t.Errorf("error = %q; want it to contain %q", msg, want)
 				}
@@ -105,8 +105,8 @@ func TestLoadConfigMissingCarriesHint(t *testing.T) {
 		if !ok {
 			t.Fatalf("errtypes.Describe failed to classify %v", err)
 		}
-		if !strings.Contains(d.Hint, "okdctl deploy") {
-			t.Fatalf("hint = %q, want it to contain %q", d.Hint, "okdctl deploy")
+		if !strings.Contains(d.Hint, "okdctl init") {
+			t.Fatalf("hint = %q, want it to contain %q", d.Hint, "okdctl init")
 		}
 	})
 

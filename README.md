@@ -16,9 +16,10 @@ removed from this branch; its history is the `develop` commits before the
 demolition change. Until the new install path lands, this binary does three
 things:
 
-- `okdctl deploy` opens the configuration wizard and saves `okdctl.yaml`
-  (with credentials in `okdctl.env`). Choosing "deploy now" saves the file
-  and prints a note that installation returns in a later release.
+- `okdctl init` opens the configuration wizard and saves `okdctl.yaml`
+  (with the Proxmox API token in `okdctl.env`). Choosing "deploy now" saves
+  the file and prints `run: okdctl up`; the install itself returns in a
+  later release.
 - `okdctl config show` and `okdctl config validate` read and check that
   file.
 - `okdctl releases list` and `okdctl releases show` browse the OKD release

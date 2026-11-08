@@ -81,7 +81,7 @@ func TestPromptLine(t *testing.T) {
 }
 
 // TestWrapLinesNeverBreaksAtHyphens pins that copy-paste recovery commands
-// (`okdctl deploy --fresh`, kubeadmin-password paths) wrap on spaces only:
+// (`okdctl init --minimal`, kubeadmin-password paths) wrap on spaces only:
 // a hyphen split silently corrupts the exact strings users copy during
 // failure recovery.
 func TestWrapLinesNeverBreaksAtHyphens(t *testing.T) {
@@ -90,7 +90,7 @@ func TestWrapLinesNeverBreaksAtHyphens(t *testing.T) {
 		width int
 		token string
 	}{
-		{"resume with okdctl deploy --fresh after cleanup", 16, "--fresh"},
+		{"resume with okdctl init --minimal after cleanup", 16, "--minimal"},
 		{"cat cluster-config/auth/kubeadmin-password to log in", 40, "cluster-config/auth/kubeadmin-password"},
 		{"resume the interrupted power-cycle with okdctl node resize", 28, "power-cycle"},
 	}

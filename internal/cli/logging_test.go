@@ -77,7 +77,7 @@ func TestWantsDefaultLogSink(t *testing.T) {
 		cmd  *cobra.Command
 		want bool
 	}{
-		{deployCmd, true},
+		{initCmd, true},
 		{versionCmd, false},
 		{rootCmd, false},
 	}
@@ -93,7 +93,7 @@ func TestConfigureLogging_DefaultSinkRedacts(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	if err := configureLogging(deployCmd); err != nil {
+	if err := configureLogging(initCmd); err != nil {
 		t.Fatalf("configureLogging: %v", err)
 	}
 	if runLogPath == "" || filepath.Base(runLogPath) != logutil.DefaultLogFileName {
@@ -103,7 +103,7 @@ func TestConfigureLogging_DefaultSinkRedacts(t *testing.T) {
 		t.Fatal("logFileCloser not set for default sink")
 	}
 
-	// Error always emits regardless of level, independent of the deploy-family Info/Warn policy.
+	// Error always emits regardless of level, independent of the init-flow Info/Warn policy.
 	logutil.Error("connect failed", logutil.LF("password", "hunter2"), logutil.LF("cluster", "prod"))
 
 	data, err := os.ReadFile(runLogPath)
@@ -123,12 +123,12 @@ func TestConfigureLogging_DefaultSinkRedacts(t *testing.T) {
 }
 
 // stderr is piped under go test, so configureLogging auto-selects json here.
-func TestConfigureLogging_DeployMilestonesSurviveNonTTY(t *testing.T) {
+func TestConfigureLogging_InitMilestonesSurviveNonTTY(t *testing.T) {
 	resetLoggingState(t)
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	if err := configureLogging(deployCmd); err != nil {
+	if err := configureLogging(initCmd); err != nil {
 		t.Fatalf("configureLogging: %v", err)
 	}
 
@@ -141,10 +141,10 @@ func TestConfigureLogging_DeployMilestonesSurviveNonTTY(t *testing.T) {
 	}
 	out := string(data)
 	if !strings.Contains(out, "bootstrap complete") {
-		t.Errorf("milestone Info silenced on non-TTY deploy:\n%s", out)
+		t.Errorf("milestone Info silenced on non-TTY init:\n%s", out)
 	}
 	if !strings.Contains(out, "cluster operator degraded") {
-		t.Errorf("degraded-operator Warn silenced on non-TTY deploy:\n%s", out)
+		t.Errorf("degraded-operator Warn silenced on non-TTY init:\n%s", out)
 	}
 }
 
@@ -154,7 +154,7 @@ func TestConfigureLogging_LogFilePrecedence(t *testing.T) {
 	t.Chdir(dir)
 	logFile = filepath.Join(dir, "custom.log")
 
-	if err := configureLogging(deployCmd); err != nil {
+	if err := configureLogging(initCmd); err != nil {
 		t.Fatalf("configureLogging: %v", err)
 	}
 	if runLogPath != logFile {

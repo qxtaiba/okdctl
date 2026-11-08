@@ -119,13 +119,9 @@ func canonicalizePath(p string) string {
 	return p
 }
 
-// isAllowedChownRoot guards recursive chown against paths like /etc; allowed
-// are okdctl's own infrastructure tree, subpaths of homeDir, and subpaths of
-// tmpDir.
+// isAllowedChownRoot guards recursive chown against paths like /etc; only
+// subpaths of homeDir and tmpDir qualify.
 func isAllowedChownRoot(absPath, homeDir, tmpDir string) bool {
-	if filepath.Base(absPath) == "infrastructure" {
-		return true
-	}
 	hasPrefix := func(prefix string) bool {
 		if prefix == "" {
 			return false

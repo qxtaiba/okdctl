@@ -54,7 +54,7 @@ func TestNoRegisteredFlagNameLooksLikeCredential(t *testing.T) {
 func TestHighestTrafficCommandsCarryExamples(t *testing.T) {
 	want := []string{
 		"okdctl",
-		"okdctl deploy",
+		"okdctl init",
 		"okdctl releases list",
 		"okdctl config validate",
 	}
@@ -113,7 +113,7 @@ func TestSignalLoop(t *testing.T) {
 }
 
 // TestSignalLoop_SecondSignalAwaitsCleanup proves a second real signal no
-// longer skips execute()'s deferred credential Zeroize/ZeroizeEnv and
+// longer skips execute()'s deferred credential Zeroize and
 // model.shutdown — it waits for mainDone (ExecuteContext having returned,
 // meaning that cleanup already ran) before deciding whether to force exit.
 func TestSignalLoop_SecondSignalAwaitsCleanup(t *testing.T) {
@@ -380,7 +380,7 @@ func installLogBuffer(t *testing.T) *bytes.Buffer {
 func TestFlagErrorFuncReturnsUsageErrorWithHelpHint(t *testing.T) {
 	buf := installLogBuffer(t)
 
-	err := rootCmd.FlagErrorFunc()(deployCmd, errors.New("unknown flag: --bogus"))
+	err := rootCmd.FlagErrorFunc()(initCmd, errors.New("unknown flag: --bogus"))
 
 	var usageErr *errtypes.UsageError
 	if !errors.As(err, &usageErr) {
@@ -393,8 +393,8 @@ func TestFlagErrorFuncReturnsUsageErrorWithHelpHint(t *testing.T) {
 	if !ok {
 		t.Fatalf("errtypes.Describe failed to classify %v", err)
 	}
-	if !strings.Contains(d.Hint, "okdctl deploy --help") {
-		t.Fatalf("hint = %q, want it to contain %q", d.Hint, "okdctl deploy --help")
+	if !strings.Contains(d.Hint, "okdctl init --help") {
+		t.Fatalf("hint = %q, want it to contain %q", d.Hint, "okdctl init --help")
 	}
 	if buf.Len() != 0 {
 		t.Fatalf("FlagErrorFunc must not log directly; buffer = %q", buf.String())
@@ -450,7 +450,7 @@ func TestMutatesStateClassification(t *testing.T) {
 		cmd  *cobra.Command
 		want bool
 	}{
-		{deployCmd, true},
+		{initCmd, true},
 		{versionCmd, false},
 		{releasesListCmd, false},
 	}

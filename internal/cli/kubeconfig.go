@@ -39,7 +39,7 @@ func runKubeconfig(cmd *cobra.Command, _ []string) error {
 
 	if !system.FileExists(src) {
 		return &errtypes.ConfigError{
-			Msg: fmt.Sprintf("kubeconfig not found at %s; run `okdctl deploy` first", src),
+			Msg: fmt.Sprintf("kubeconfig not found at %s; run `okdctl up` first", src),
 			Err: errtypes.ErrConfigMissing,
 		}
 	}

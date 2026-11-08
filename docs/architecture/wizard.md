@@ -11,7 +11,7 @@ flow.
 ## The hub: one program, five verbs
 
 The wizard's entry point is `steps.WelcomeStep`, the hero-hub: a centered
-wordmark screen `okdctl deploy` opens on every time, offering five verbs
+wordmark screen `okdctl init` opens on every time, offering five verbs
 over an existing `okdctl.yaml` (`deploy`, `edit config`, `manage nodes`,
 `cluster status`, `destroy`) or two on a blank slate (`get started`,
 `quit`). The hub is a hand-written `WizardStep`, not a `StepDefinition`,
@@ -45,7 +45,7 @@ same `lifecycle.Chrome()`) and runs it as its own top-level
 `wizard.RunFlow` program, skipping the hub screen entirely. This suits a
 scripted or automation-adjacent entry: `okdctl node manage` refuses
 outright without a terminal, naming `okdctl node resize/add/remove` as
-the alternative, while `okdctl deploy` always opens on the hub first.
+the alternative, while `okdctl init` always opens on the hub first.
 
 ## Unsaved edits: nothing persists until review
 

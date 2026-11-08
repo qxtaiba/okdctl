@@ -25,13 +25,12 @@ var logFileCloser io.Closer
 var runLogPath string
 
 // runLogSink aliases logFileCloser as a writer (do not close separately);
-// deploy routes the install-log firehose here so the TTY shows only the curated
-// status line.
+// init routes log output here while the wizard owns the terminal.
 var runLogSink io.Writer
 
 // defaultLogSinkCmds lists commands that tee logs to <workspace>/okdctl.log by
 // default; matching walks the parent chain.
-var defaultLogSinkCmds = []string{cmdNameDeploy}
+var defaultLogSinkCmds = []string{cmdNameInit}
 
 func wantsDefaultLogSink(cmd *cobra.Command) bool {
 	for c := cmd; c != nil; c = c.Parent() {
@@ -140,8 +139,8 @@ func configureLogging(cmd *cobra.Command) error {
 	if sinkErr != nil {
 		logutil.Warn("default log file unavailable; continuing without persistent log", logutil.LF("err", sinkErr))
 	}
-	// suppress Info/Warn under json for clean pipelines, except deploy-family
-	// flows which keep milestones/degraded-notices visible
+	// suppress Info/Warn under json for clean pipelines, except the init
+	// flow, which keeps its milestones visible
 	if logFormat == tui.FormatJSON && !logVerbose && !wantsDefaultLogSink(cmd) {
 		tui.SuppressInfo()
 	}
