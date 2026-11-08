@@ -145,12 +145,11 @@ func TestWithHintUniformAcrossCategories(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got := tc.base.WithHint("do X")
-			kind, ok := errtypes.Classify(got)
-			if !ok || kind != tc.want {
-				t.Fatalf("Classify(WithHint) = %v (ok=%v); want %v — type reclassified",
-					kind, ok, tc.want)
+			d, ok := errtypes.Describe(got)
+			if !ok || d.Kind != tc.want {
+				t.Fatalf("Describe(WithHint).Kind = %v (ok=%v); want %v — type reclassified",
+					d.Kind, ok, tc.want)
 			}
-			d, _ := errtypes.Describe(got)
 			if d.Hint != "do X" {
 				t.Errorf("Describe().Hint = %q; want %q", d.Hint, "do X")
 			}
@@ -181,7 +180,7 @@ func TestKindLabelAndExitCode(t *testing.T) {
 	}
 }
 
-func TestClassifyAndDescribe(t *testing.T) {
+func TestDescribe(t *testing.T) {
 	cases := []struct {
 		name string
 		err  error
@@ -198,10 +197,6 @@ func TestClassifyAndDescribe(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			k, ok := errtypes.Classify(tc.err)
-			if k != tc.kind || ok != tc.ok {
-				t.Errorf("Classify() = (%d, %v), want (%d, %v)", k, ok, tc.kind, tc.ok)
-			}
 			d, dok := errtypes.Describe(tc.err)
 			if dok != tc.ok || d.Kind != tc.kind {
 				t.Errorf("Describe() = (%+v, %v), want kind %d ok %v", d, dok, tc.kind, tc.ok)

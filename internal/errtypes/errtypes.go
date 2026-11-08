@@ -3,7 +3,6 @@
 package errtypes
 
 import (
-	"context"
 	"errors"
 	"fmt"
 )
@@ -11,18 +10,6 @@ import (
 // ErrConfigMissing is wrapped in ConfigError when the config file is missing;
 // exitCodeFor maps it to 66 (EX_NOINPUT).
 var ErrConfigMissing = errors.New("config file not found")
-
-// ErrPullSecretInvalid is wrapped in AuthError when the pull secret file has
-// invalid JSON; exitCodeFor maps it to 65 (EX_DATAERR).
-var ErrPullSecretInvalid = errors.New("pull secret is not valid JSON")
-
-// ErrSudoMissing is wrapped in AuthError when sudo isn't found on PATH;
-// exitCodeFor maps it to 71 (EX_OSERR).
-var ErrSudoMissing = errors.New("sudo not found")
-
-// ErrWaitTimeout marks a poll-loop timeout from WaitFor's own opts.Timeout
-// (not the caller's ctx deadline); it wraps context.DeadlineExceeded so errors.Is still matches.
-var ErrWaitTimeout = fmt.Errorf("wait timeout: %w", context.DeadlineExceeded)
 
 // HintAppender lets an error type carry a next-step hint without changing its
 // type or exit code; the hint is a separate field so Describe reads it back structurally.
@@ -192,8 +179,8 @@ func (k Kind) Label() string {
 }
 
 // ExitCode returns the BSD-sysexits code for the category tier (Config=2,
-// Network=3, Cluster=4, Auth=5, Usage=64, Unknown=1). It excludes the sentinel
-// tier (66/65/71); exitCodeFor checks those first.
+// Network=3, Cluster=4, Auth=5, Usage=64, Unknown=1). It excludes the
+// ErrConfigMissing sentinel (66); exitCodeFor checks that first.
 func (k Kind) ExitCode() int {
 	switch k {
 	case KindConfig:
@@ -250,11 +237,4 @@ func Describe(err error) (Display, bool) {
 		return Display{Kind: KindUsage, Message: usage.Msg, Hint: usage.hint}, true
 	}
 	return Display{}, false
-}
-
-// Classify reports the Kind of err using Describe's precedence order; ok is
-// false for untyped errors.
-func Classify(err error) (Kind, bool) {
-	d, ok := Describe(err)
-	return d.Kind, ok
 }
