@@ -79,8 +79,9 @@ type VMPatch struct {
 	Delete    []string
 }
 
-// VMConfig is a VM's normalised configuration; a zero field means PVE has
-// the key unset, and Digest is the optimistic-lock token UpdateVM requires.
+// VMConfig is a VM's normalised configuration; a zero field means PVE has the
+// key unset except for Cores, Sockets, MemoryMiB and Balloon, which carry
+// PVE's defaults, and Digest is the optimistic-lock token UpdateVM requires.
 type VMConfig struct {
 	Name         string
 	Cores        int
