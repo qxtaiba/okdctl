@@ -12,6 +12,7 @@ import (
 
 var (
 	diskSlot  = regexp.MustCompile(`^(scsi|virtio|sata|ide)\d+$`)
+	netSlot   = regexp.MustCompile(`^net(\d+)$`)
 	nicModels = map[string]bool{
 		"virtio": true, "e1000": true, "e1000e": true, "e1000-82540em": true, "e1000-82544gc": true,
 		"e1000-82545em": true, "rtl8139": true, "vmxnet3": true, "i82551": true, "i82557b": true,
@@ -43,6 +44,7 @@ func ParseVMConfig(raw map[string]any) (VMConfig, error) {
 	if err := c.setNIC(r.str("net0")); err != nil {
 		r.fail("net0", err)
 	}
+	c.MACs = collectMACs(r)
 	if err := c.setEFI(r.str("efidisk0")); err != nil {
 		r.fail("efidisk0", err)
 	}
@@ -191,17 +193,15 @@ func (c *VMConfig) setNIC(s string) error {
 		return nil
 	}
 	_, kv := propString(s)
-	for k, v := range kv {
+	for k := range kv {
 		if nicModels[k] {
-			c.NICModel, c.MAC = k, v
+			c.NICModel = k
 		}
 	}
 	if m, ok := kv["model"]; ok {
 		c.NICModel = m
 	}
-	if mac, ok := kv["macaddr"]; ok {
-		c.MAC = mac
-	}
+	c.MAC = nicMAC(kv)
 	c.Bridge = kv["bridge"]
 	if tag, ok := kv["tag"]; ok {
 		vlan, err := strconv.Atoi(tag)
@@ -374,3 +374,43 @@ func discardFlag(on bool) string {
 }
 
 func gib(n int) string { return strconv.Itoa(n) + "G" }
+
+func nicMAC(kv map[string]string) string {
+	if mac, ok := kv["macaddr"]; ok {
+		return mac
+	}
+	for k, v := range kv {
+		if nicModels[k] {
+			return v
+		}
+	}
+	return ""
+}
+
+func collectMACs(r cfgReader) []string {
+	type slot struct {
+		n   int
+		mac string
+	}
+	var slots []slot
+	for key := range r.raw {
+		m := netSlot.FindStringSubmatch(key)
+		if m == nil {
+			continue
+		}
+		n, _ := strconv.Atoi(m[1])
+		_, kv := propString(r.str(key))
+		if mac := nicMAC(kv); mac != "" {
+			slots = append(slots, slot{n, mac})
+		}
+	}
+	if len(slots) == 0 {
+		return nil
+	}
+	slices.SortFunc(slots, func(a, b slot) int { return cmp.Compare(a.n, b.n) })
+	macs := make([]string, 0, len(slots))
+	for _, s := range slots {
+		macs = append(macs, s.mac)
+	}
+	return macs
+}

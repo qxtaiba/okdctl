@@ -105,8 +105,8 @@ func goodDriver() *fakeDriver {
 			{VMRef: VMRef{Node: "pve2", VMID: 200}, Name: "db", Status: "stopped", MaxMemMiB: 16384},
 		},
 		configs: map[int]VMConfig{
-			100: {MAC: "BC:24:11:AA:BB:01"},
-			200: {MAC: "bc:24:11:aa:bb:02"},
+			100: {MAC: "BC:24:11:AA:BB:01", MACs: []string{"BC:24:11:AA:BB:01"}},
+			200: {MAC: "bc:24:11:aa:bb:02", MACs: []string{"bc:24:11:aa:bb:02"}},
 		},
 		errs: map[string]error{},
 	}
@@ -165,6 +165,17 @@ func TestPreflight(t *testing.T) {
 			},
 		},
 		{
+			name: "permissions single storage reports each privilege once",
+			mutate: func(d *fakeDriver, in *PreflightInput, _ *fakePinger) {
+				in.ISOStorage = "ceph"
+				delete(d.perms["/storage"], "Datastore.Audit")
+				for _, n := range in.Nodes {
+					d.storages[n][0].Content = append(d.storages[n][0].Content, "iso")
+				}
+			},
+			want: []Finding{{"permissions", "fail", "missing privilege Datastore.Audit on /storage/ceph"}},
+		},
+		{
 			name:   "version too old",
 			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) { d.version.Version = "7.4-1" },
 			want:   []Finding{{"version", "fail", "proxmox ve 7.4-1 unsupported"}},
@@ -221,6 +232,13 @@ func TestPreflight(t *testing.T) {
 			name:   "mac collision is case-insensitive",
 			mutate: func(_ *fakeDriver, in *PreflightInput, _ *fakePinger) { in.MACs[0] = "bc:24:11:aa:bb:01" },
 			want:   []Finding{{"mac-collision", "fail", "mac bc:24:11:aa:bb:01 already used by vmid 100 on node pve1"}},
+		},
+		{
+			name: "mac collision on secondary nic",
+			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) {
+				d.configs[200] = VMConfig{MAC: "bc:24:11:aa:bb:02", MACs: []string{"bc:24:11:aa:bb:02", "bc:24:11:00:00:03"}}
+			},
+			want: []Finding{{"mac-collision", "fail", "mac BC:24:11:00:00:03 already used by vmid 200 on node pve2"}},
 		},
 		{
 			name:   "mac config read error warns",
