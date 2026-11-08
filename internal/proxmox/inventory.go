@@ -187,6 +187,8 @@ func (d *driver) ListVMs(ctx context.Context) ([]VMSummary, error) {
 	return vms, nil
 }
 
+func bytesToMiB(b uint64) int { return int(b / (1024 * 1024)) } //nolint:gosec // G115: MiB-scale value fits int
+
 func nodePath(node, rest string) string {
 	return "/nodes/" + url.PathEscape(node) + "/" + rest
 }

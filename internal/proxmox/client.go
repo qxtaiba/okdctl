@@ -117,9 +117,9 @@ func mapAPIError(err error) error {
 	return err
 }
 
-// newProxmoxClient builds the shared go-proxmox client and returns the
-// *http.Client under it for raw requests; the credential becomes an
-// immutable Go string Zeroize can't reach, bounded to this call.
+// newProxmoxClient builds the go-proxmox client and returns the *http.Client
+// under it for raw requests; the credential becomes an immutable Go string
+// Zeroize can't reach, bounded to this call.
 func newProxmoxClient(endpoint, username string, password, apiToken []byte, insecure bool, timeout time.Duration) (client *proxmox.Client, httpClient *http.Client, err error) {
 	if endpoint == "" {
 		return nil, nil, fmt.Errorf("proxmox client: endpoint is required")
@@ -176,5 +176,3 @@ func normalizeEndpoint(endpoint string) string {
 	}
 	return "https://" + e
 }
-
-func bytesToMiB(b uint64) int { return int(b / (1024 * 1024)) } //nolint:gosec // G115: MiB-scale value fits int
