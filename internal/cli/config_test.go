@@ -36,13 +36,10 @@ func runValidate(t *testing.T, configFile, output string) (stdout, stderr string
 	return out.String(), errOut.String(), err
 }
 
-func standardExample(t *testing.T) string {
-	t.Helper()
-	return filepath.Join("..", "..", "configs", "examples", "standard.yaml")
-}
+var standardExample = filepath.Join("..", "..", "configs", "examples", "standard.yaml")
 
 func TestConfigValidate_TextPrintsNodeTable(t *testing.T) {
-	stdout, _, err := runValidate(t, standardExample(t), "")
+	stdout, _, err := runValidate(t, standardExample, "")
 	if err != nil {
 		t.Fatalf("runConfigValidate: %v\n%s", err, stdout)
 	}
@@ -52,7 +49,7 @@ func TestConfigValidate_TextPrintsNodeTable(t *testing.T) {
 	lines := strings.Split(stdout, "\n")
 	header := -1
 	for i, line := range lines {
-		if strings.Fields(line) != nil && strings.Join(strings.Fields(line), " ") == "NAME ROLE VMID MAC IP HOST CPU MEM DISKS" {
+		if strings.Join(strings.Fields(line), " ") == "NAME ROLE VMID MAC IP HOST CPU MEM DISKS" {
 			header = i
 		}
 	}
@@ -80,7 +77,7 @@ func TestConfigValidate_TextPrintsNodeTable(t *testing.T) {
 }
 
 func TestConfigValidate_JSONCarriesInventoryOnly(t *testing.T) {
-	stdout, stderr, err := runValidate(t, standardExample(t), "json")
+	stdout, stderr, err := runValidate(t, standardExample, "json")
 	if err != nil {
 		t.Fatalf("runConfigValidate: %v", err)
 	}
@@ -115,7 +112,7 @@ func TestConfigValidate_JSONCarriesInventoryOnly(t *testing.T) {
 }
 
 func TestConfigValidate_UnknownOutputIsUsageError(t *testing.T) {
-	_, _, err := runValidate(t, standardExample(t), "yaml")
+	_, _, err := runValidate(t, standardExample, "yaml")
 	var ue *errtypes.UsageError
 	if !errors.As(err, &ue) {
 		t.Fatalf("err = %v; want *errtypes.UsageError", err)

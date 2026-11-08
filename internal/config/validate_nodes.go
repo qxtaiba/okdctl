@@ -108,7 +108,7 @@ func (c *Config) validateOverride(r *ValidationResult, nodes []nodeRef, i int) {
 		r.addf(field+".memory_mib", "%d must be at least %d MiB", *o.MemoryMiB, f.memoryMiB)
 	}
 	validateDisks(r, field, o.Disks, f.rootGiB)
-	if pool := c.Provider.Proxmox.Nodes; o.Host != "" && !slices.Contains(pool, o.Host) {
+	if pool := c.Provider.Proxmox.Nodes; len(pool) > 0 && o.Host != "" && !slices.Contains(pool, o.Host) {
 		r.addf(field+".host", "%s host %q is not one of provider.proxmox.nodes (%s)", node.name, o.Host, strings.Join(pool, ", "))
 	}
 	if o.IP != "" {
