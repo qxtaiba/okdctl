@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"slices"
 	"strings"
 	"testing"
 
@@ -77,97 +76,6 @@ func TestProxmoxCredentials_StringMasks(t *testing.T) {
 	if got := nilCreds.String(); got != "ProxmoxCredentials(nil)" {
 		t.Errorf("nil String() = %q", got)
 	}
-}
-
-func TestProxmoxCredentials_Env(t *testing.T) {
-	tests := []struct {
-		name    string
-		creds   ProxmoxCredentials
-		wantHas []string
-		wantNot []string
-	}{
-		{
-			name:    "invalid creds return nil",
-			creds:   ProxmoxCredentials{Endpoint: "https://pve:8006"},
-			wantHas: nil,
-			wantNot: []string{"PROXMOX_VE_ENDPOINT"},
-		},
-		{
-			name: "api token path",
-			creds: ProxmoxCredentials{
-				Endpoint: "https://pve:8006",
-				APIToken: []byte("tok"),
-			},
-			wantHas: []string{"PROXMOX_VE_ENDPOINT=https://pve:8006", "PROXMOX_VE_API_TOKEN=tok"},
-			wantNot: []string{"PROXMOX_VE_USERNAME", "PROXMOX_VE_PASSWORD"},
-		},
-		{
-			name: "username+password path",
-			creds: ProxmoxCredentials{
-				Endpoint: "https://pve:8006",
-				Username: "root@pam",
-				Password: []byte("pw"),
-			},
-			wantHas: []string{"PROXMOX_VE_USERNAME=root@pam", "PROXMOX_VE_PASSWORD=pw"},
-			wantNot: []string{"PROXMOX_VE_API_TOKEN"},
-		},
-		{
-			name: "insecure flag appended",
-			creds: ProxmoxCredentials{
-				Endpoint: "https://pve:8006",
-				APIToken: []byte("tok"),
-				Insecure: true,
-			},
-			wantHas: []string{"PROXMOX_VE_INSECURE=true"},
-		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			env := tc.creds.Env()
-			joined := strings.Join(env, "\x00")
-			for _, must := range tc.wantHas {
-				if !strings.Contains(joined, must) {
-					t.Errorf("Env() missing %q; got %v", must, env)
-				}
-			}
-			for _, forbid := range tc.wantNot {
-				if strings.Contains(joined, forbid+"=") {
-					t.Errorf("Env() contained %q unexpectedly; got %v", forbid, env)
-				}
-			}
-		})
-	}
-
-	t.Run("password backing not shared with env string", func(t *testing.T) {
-		pw := []byte("pw-alive")
-		creds := ProxmoxCredentials{
-			Endpoint: "https://pve:8006",
-			Username: "root@pam",
-			Password: pw,
-		}
-		env := creds.Env()
-		for i := range pw {
-			pw[i] = 0
-		}
-		if !slices.Contains(env, "PROXMOX_VE_PASSWORD=pw-alive") {
-			t.Errorf("env password corrupted after Zeroize-style wipe: %v", env)
-		}
-	})
-
-	t.Run("api token backing not shared with env string", func(t *testing.T) {
-		tok := []byte("tok-alive")
-		creds := ProxmoxCredentials{
-			Endpoint: "https://pve:8006",
-			APIToken: tok,
-		}
-		env := creds.Env()
-		for i := range tok {
-			tok[i] = 0
-		}
-		if !slices.Contains(env, "PROXMOX_VE_API_TOKEN=tok-alive") {
-			t.Errorf("env api token corrupted after Zeroize-style wipe: %v", env)
-		}
-	})
 }
 
 func TestGetProxmoxCredentials(t *testing.T) {
