@@ -145,7 +145,7 @@ func printNodeTable(w io.Writer, inv *model.Inventory) error {
 			strconv.Itoa(n.CPU), strconv.Itoa(n.MemoryMiB), strings.Join(sizes, ","),
 		})
 	}
-	return printTable(w, []string{"NAME", "ROLE", "VMID", "MAC", "IP", "HOST", "CPU", "MEM", "DISKS"}, rows, tui.TableOptions{})
+	return printTable(w, []string{"NAME", "ROLE", "VMID", "MAC", "IP", "HOST", "CPU", "MEM", "DISKS"}, rows)
 }
 
 func runConfigShow(cmd *cobra.Command, _ []string) error {

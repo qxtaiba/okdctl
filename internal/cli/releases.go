@@ -154,7 +154,7 @@ func printVersionList(w io.Writer, versions []releases.OKDVersion) error {
 			v.Type.String(),
 		})
 	}
-	return printTable(w, []string{"VERSION", "RELEASED", "STABLE", "TYPE"}, rows, tui.TableOptions{})
+	return printTable(w, []string{"VERSION", "RELEASED", "STABLE", "TYPE"}, rows)
 }
 
 func printVersionDetail(w io.Writer, v releases.OKDVersion) error {

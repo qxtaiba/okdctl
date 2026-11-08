@@ -140,7 +140,7 @@ func printFindings(w io.Writer, format string, findings []proxmox.Finding) error
 	for _, f := range findings {
 		rows = append(rows, []string{f.Check, f.Severity, f.Message})
 	}
-	return printTable(w, []string{"CHECK", "SEVERITY", "MESSAGE"}, rows, tui.TableOptions{})
+	return printTable(w, []string{"CHECK", "SEVERITY", "MESSAGE"}, rows)
 }
 
 func findingsError(findings []proxmox.Finding) error {
