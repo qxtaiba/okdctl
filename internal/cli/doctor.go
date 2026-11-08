@@ -23,10 +23,11 @@ var doctorCmd = &cobra.Command{
 	Use:   "doctor",
 	Short: "Check the Proxmox cluster against the configuration",
 	Long: `Run the Proxmox preflight checks the installer relies on: API token
-privileges, PVE version, CPU flags, free memory, ISO storage space, storage
-content types and the bridge on every target node. The VMID, MAC and address
-collision checks need the node identities the v3 schema carries and are
-skipped until then.
+privileges, PVE version, CPU flags, free memory per host, ISO storage space,
+VMID, MAC and address collisions, storage content types and the bridge on
+every target node. Node identities come from the configuration through the
+node model; the MAC check compares real addresses once cluster/record.json
+names the infra-ID and passes vacuously before okdctl up writes it.
 
 Read-only: nothing is created or changed. Exits 0 when every check passes or
 only warns, 1 when any check fails.`,
@@ -43,18 +44,17 @@ func init() {
 	rootCmd.AddCommand(doctorCmd)
 }
 
-// doctorChecks counts the preflight checks the v2 config can feed; the VMID,
-// MAC and address checks run vacuously until the v3 schema names the nodes.
-const doctorChecks = 7
+// doctorChecks is how many checks Preflight runs, named in the all-clear line.
+const doctorChecks = 10
 
 // runPreflight is the seam tests replace so doctor runs without a Proxmox server.
-var runPreflight = func(ctx context.Context, cfg *config.Config, creds *credentials.ProxmoxCredentials) ([]proxmox.Finding, error) {
+var runPreflight = func(ctx context.Context, creds *credentials.ProxmoxCredentials, in *proxmox.PreflightInput) ([]proxmox.Finding, error) {
 	d, err := proxmox.New(creds.Endpoint, creds.APIToken, creds.Insecure)
 	creds.Zeroize()
 	if err != nil {
 		return nil, fmt.Errorf("connect proxmox: %w", err)
 	}
-	return proxmox.Preflight(ctx, d, proxmox.ExecPinger(executor.New()), preflightInput(cfg))
+	return proxmox.Preflight(ctx, d, proxmox.ExecPinger(executor.New()), *in)
 }
 
 func runDoctor(cmd *cobra.Command, _ []string) error {
@@ -68,12 +68,16 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 	if result := validateConfig(cfg, cmd.ErrOrStderr()); !result.IsValid() {
 		return (&errtypes.ConfigError{Msg: "config validation failed", Err: result}).WithHint("review the errors listed above")
 	}
+	in, err := preflightInput(cfg, cfgFile)
+	if err != nil {
+		return err
+	}
 	creds, err := doctorCredentials(cfg, cfgFile)
 	if err != nil {
 		return err
 	}
 	defer creds.Zeroize()
-	findings, err := runPreflight(cmd.Context(), cfg, creds)
+	findings, err := runPreflight(cmd.Context(), creds, &in)
 	switch {
 	case errors.Is(err, proxmox.ErrPermission):
 		return (&errtypes.AuthError{Msg: "proxmox rejected the api token", Err: err}).
@@ -102,11 +106,7 @@ func doctorCredentials(cfg *config.Config, configPath string) (*credentials.Prox
 		return nil, err
 	}
 	creds := credentials.GetProxmoxCredentials(cfg)
-	if creds.Endpoint == "" {
-		creds.Zeroize()
-		return nil, &errtypes.ConfigError{Msg: "proxmox endpoint refused: an http:// host or PROXMOX_VE_ENDPOINT needs provider.proxmox.insecure_http: true"}
-	}
-	if !creds.UseAPIToken() {
+	if !creds.IsValid() {
 		creds.Zeroize()
 		return nil, &errtypes.AuthError{Msg: "no proxmox api token: set PROXMOX_VE_API_TOKEN in " + envPath}
 	}
