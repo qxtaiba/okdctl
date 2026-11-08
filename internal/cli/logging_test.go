@@ -103,7 +103,6 @@ func TestConfigureLogging_DefaultSinkRedacts(t *testing.T) {
 		t.Fatal("logFileCloser not set for default sink")
 	}
 
-	// Error always emits regardless of level, independent of the init-flow Info/Warn policy.
 	logutil.Error("connect failed", logutil.LF("password", "hunter2"), logutil.LF("cluster", "prod"))
 
 	data, err := os.ReadFile(runLogPath)

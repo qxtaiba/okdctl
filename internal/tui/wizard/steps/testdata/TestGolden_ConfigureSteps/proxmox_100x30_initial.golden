@@ -19,7 +19,7 @@
   │                                                                                              │  
   │    skip tls verify                                                                           │  
   │    ╭────────────────╮                                                                        │  
-  │    │ ● no  ○ yes    │ default                                                                │  
+  │    │ ● no  ○ yes    │                                                                        │  
   │    ╰────────────────╯                                                                        │  
   │                                                                                              │  
   │    ✓ placement                                                                               │  

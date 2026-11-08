@@ -2,6 +2,7 @@ package steps
 
 import (
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/credentials"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
@@ -50,21 +51,14 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 					Help:    "skip tls certificate verification — yes only for self-signed certs; saved to okdctl.env as PROXMOX_VE_INSECURE",
 					Type:    wizard.FieldTypeSelect,
 					Options: []string{valNo, valYes},
+					// seeded from PROXMOX_VE_INSECURE, which init loads before the wizard
+					ConfigGet: getBool(func(*config.Config) bool { return credentials.GetProxmoxCredentials(nil).Insecure }),
 				},
 			},
 		},
 		{
 			Title: "placement",
 			Fields: []wizard.FieldDefinition{
-				{
-					Key:       config.FieldProxmoxNodes,
-					Label:     "nodes",
-					Default:   "pve",
-					Help:      "comma-separated proxmox node names the vms spread across, e.g. pve1, pve2 — node placement refines this from discovery",
-					Required:  true,
-					ConfigSet: setList(func(c *config.Config, v []string) { c.Provider.Proxmox.Nodes = v }),
-					ConfigGet: getList(func(c *config.Config) []string { return c.Provider.Proxmox.Nodes }),
-				},
 				{
 					Key:       config.FieldProxmoxStorage,
 					Label:     "storage",

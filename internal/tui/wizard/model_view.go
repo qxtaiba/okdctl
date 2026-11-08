@@ -526,9 +526,10 @@ func (m *Model) renderHelpRow() string {
 
 // renderFooterRule draws the footer's top row: a "─" rule with the scroll
 // indicator centred in it when the viewport overflows, plus the context
-// badge pinned to the right. The row never exceeds the content width: on a
-// tight fit it degrades to bare arrows, then to a plain rule, and drops the
-// badge itself before it would wrap the frame.
+// badge pinned to the right. The row never exceeds the content width: the
+// badge is ellipsized to half the row, the indicator degrades to bare
+// arrows, then to a plain rule, and the badge is dropped before it would
+// wrap the frame.
 func (m *Model) renderFooterRule() string {
 	width := m.contentWidth()
 	lineStyle := lipgloss.NewStyle().Foreground(tui.ColorRule())
@@ -539,8 +540,8 @@ func (m *Model) renderFooterRule() string {
 	if contextBadge != "" {
 		badgeStyled = lipgloss.NewStyle().
 			Foreground(tui.ColorSuccess()).
-			Bold(true).Inline(true).MaxWidth(width / 3).
-			Render(" " + tui.IconCaretRight + " " + contextBadge + " ")
+			Bold(true).Inline(true).
+			Render(tui.Truncate(" "+tui.IconCaretRight+" "+contextBadge+" ", width/2))
 		badgeWidth = lipgloss.Width(badgeStyled)
 		if badgeWidth > width {
 			badgeStyled, badgeWidth = "", 0

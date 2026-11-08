@@ -3,28 +3,28 @@
   │ O K D C T L                                                                                  │  
   │ configure node placement                            connect · cluster ✓●○○ · extras · review │  
   │──────────────────────────────────────────────────────────────────────────────────────────────│  
+  │    discovered 2 node(s)                                                                      │  
   │    pve1 ✓ online · 32c · 128g                                                                │  
   │    pve2 ✓ online · 24c · 96g                                                                 │  
   │    assigned demand · pve1: 16c/48g/860gb · pve2: 12c/32g/740gb                               │  
   │                                                                                              │  
   │                                                                                              │  
-  │    ✓ proxmox nodes                                                                           │  
+  │    ● proxmox nodes                                                                           │  
   │                                                                                              │  
   │    placement pool                                                                            │  
   │    ╭────────────────────────────────────────────────────────────────────────────────────╮    │  
   │    │   [✓] pve1    [✓] pve2                                                             │    │  
   │    ╰────────────────────────────────────────────────────────────────────────────────────╯    │  
   │                                                                                              │  
-  │    ● control plane                                                                           │  
+  │    add nodes                                                                                 │  
+  │    ╭──────────────────────────────────────╮                                                  │  
+  │    │ none                                 │                                                  │  
+  │    ╰──────────────────────────────────────╯                                                  │  
+  │    comma-separated node names to add to the pool when discovery did not list them            │  
   │                                                                                              │  
-  │    lab-master0                                                                               │  
-  │    ╭─────────────────────╮                                                                   │  
-  │    │ ◂ pve1 — 32c/128g ▸ │ default                                                           │  
-  │    ╰─────────────────────╯                                                                   │  
-  │    proxmox node (nodes.lab-master0.host)                                                     │  
+  │    ✓ control plane                                                                           │  
   │                                                                                              │  
-  │                                                                                              │  
-  │──────────────────── ↑ ↓  4% • scroll for more ───────────────────── ▸ okd 4.22.0-okd-scos.10 │  
+  │──────────────────── ↑ ↓  scroll down for more ───────────────────── ▸ okd 4.22.0-okd-scos.10 │  
   │  ↑↓ navigate • ← → change value • enter continue • esc back … • ctrl+c quit • ? help         │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                     

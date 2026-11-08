@@ -341,9 +341,6 @@ func TestGolden_WideTerminal(t *testing.T) {
 	}
 }
 
-// TestModel_TokenNeverLeaksIntoTheFrame types a sentinel token into the
-// proxmox api token field one character at a time: neither the sentinel nor
-// any prefix of it 3 characters or longer may appear anywhere in the frame.
 func TestModel_TokenNeverLeaksIntoTheFrame(t *testing.T) {
 	const w, h = 180, 48
 	const sentinel = "hunter2sentinel"
@@ -425,8 +422,10 @@ func TestGolden_NodePlacementSingleNode(t *testing.T) {
 	m.Update(discoveryCompleteMsg{generation: gen, discovery: &proxmoxDiscovery{Nodes: []proxmoxNode{
 		{Name: "pve", Status: "online", CPUs: 32, CPUsKnown: true, MemGB: 128, MemKnown: true},
 	}}})
-	m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
-	m.Update(wizard.FocusChangedMsg{})
+	for range 2 {
+		m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+		m.Update(wizard.FocusChangedMsg{})
+	}
 
 	frame := tuitest.RenderAt(t, m, 100, 30)
 	tuitest.Golden(t, "node-placement-single-node_100x30", frame)
@@ -473,9 +472,6 @@ func TestGolden_DistributionErrorState(t *testing.T) {
 	}
 }
 
-// newGoldenModelFreshDefaults skips LoadFromConfig, matching the
-// OKDCTL_WIZARD_DEMO=1 code path, so fields still carry their raw
-// FieldDefinition defaults.
 func newGoldenModelFreshDefaults(t *testing.T) *wizard.Model {
 	t.Helper()
 	builder := wizard.NewStepBuilder()
@@ -548,9 +544,6 @@ func TestGolden_NetworkingMalformedCIDRShowsOneCleanError(t *testing.T) {
 	}
 }
 
-// TestGolden_NetworkingPairedVIPsVisible pins the api/ingress vip pair once
-// tabbed into view: the section sits below the fold in the default-focus
-// goldens, so this is the only pinned proof it renders as one joined row.
 func TestGolden_NetworkingPairedVIPsVisible(t *testing.T) {
 	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
 
@@ -604,9 +597,7 @@ func TestGolden_ProxmoxAdvancedFoldExpandedStaysOpenAfterFocusLeaves(t *testing.
 			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
 			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDProxmox})
 
-			// endpoint, api token, skip tls verify, nodes, storage, iso
-			// storage, bridge, then the fold toggle (7 tabs).
-			for range 7 {
+			for range 6 {
 				m.Update(tabKey)
 				m.Update(wizard.FocusChangedMsg{})
 			}
@@ -689,9 +680,6 @@ func TestGolden_ProxmoxEnterHighlightsInvalidFields(t *testing.T) {
 	}
 }
 
-// hasLabelRow reports whether a framed view carries a row holding only
-// label, the shape of a field's own label line as opposed to prose or a
-// fold fact that merely contains the same words.
 func hasLabelRow(view, label string) bool {
 	return regexp.MustCompile(`(?m)^\s*│\s+` + regexp.QuoteMeta(label) + `\s+│\s*$`).MatchString(view)
 }

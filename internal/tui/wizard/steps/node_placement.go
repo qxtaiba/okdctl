@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -52,6 +53,7 @@ type NodePlacementStep struct {
 	header     string
 	inner      *wizard.MultiSectionForm
 	poolField  *components.MultiSelectField
+	addField   *components.InputField
 	hostFields map[string]*components.SelectField
 	inventory  []model.NodeSpec
 	buildErr   error
@@ -173,13 +175,16 @@ func (s *NodePlacementStep) hostNames() []string {
 	return []string{"pve"}
 }
 
-// buildInnerStep builds the pool multi-select and one host select per node
-// the model derives, defaulting each to the model's placement.
+// buildInnerStep builds the pool multi-select, a typed-names field for nodes
+// discovery did not list, and one host select per node the model derives,
+// defaulting each to the model's placement.
 func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, hosts []string) {
 	s.poolField = components.NewMultiSelectField("placement pool", hosts)
 	s.poolField.Help = "proxmox nodes the vms spread across (provider.proxmox.nodes)"
 	s.poolField.SetValue(strings.Join(s.cfg.Provider.Proxmox.Nodes, ","))
-	sections := []wizard.FormSection{{Title: "proxmox nodes", Group: components.NewInputGroup(s.poolField)}}
+	s.addField = components.NewInputField("add nodes", "none")
+	s.addField.Help = "comma-separated node names to add to the pool when discovery did not list them"
+	sections := []wizard.FormSection{{Title: "proxmox nodes", Group: components.NewInputGroup(s.poolField, s.addField)}}
 
 	s.hostFields = make(map[string]*components.SelectField)
 	s.inventory = nil
@@ -438,13 +443,20 @@ func (s *NodePlacementStep) FocusedSpan() (wizard.LineSpan, bool) {
 	return wizard.LineSpan{Start: span.Start + offset, End: span.End + offset}, true
 }
 
-// Apply writes the pool and, per node the current config produces, a host
-// override only where the choice differs from the model's placement.
+// Apply writes the pool (the checked nodes plus any typed ones) and, per
+// node the current config produces, a host override only where the choice
+// differs from the model's placement.
 func (s *NodePlacementStep) Apply(cfg *config.Config) error {
 	if s.inner == nil {
 		return nil
 	}
-	if pool := splitList(s.poolField.Value()); len(pool) > 0 {
+	pool := splitList(s.poolField.Value())
+	for _, name := range splitList(s.addField.Value()) {
+		if !slices.Contains(pool, name) {
+			pool = append(pool, name)
+		}
+	}
+	if len(pool) > 0 {
 		cfg.Provider.Proxmox.Nodes = pool
 	}
 	_, defaults, err := placementInventory(cfg)
