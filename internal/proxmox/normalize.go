@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"math"
 	"regexp"
 	"slices"
 	"strconv"
@@ -271,8 +272,13 @@ func ParseSize(s string) (int64, error) {
 		s = s[:len(s)-1]
 	}
 	n, err := strconv.ParseInt(s, 10, 64)
-	if err != nil {
+	switch {
+	case err != nil:
 		return 0, fmt.Errorf("size: %w", err)
+	case n < 0:
+		return 0, fmt.Errorf("size: negative %q", s)
+	case n > math.MaxInt64/unit:
+		return 0, fmt.Errorf("size: %q%c overflows int64", s, unit)
 	}
 	return n * unit, nil
 }

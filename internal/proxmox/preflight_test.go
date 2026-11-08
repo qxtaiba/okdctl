@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -68,12 +69,18 @@ func (f *fakeDriver) VMConfig(_ context.Context, ref VMRef) (VMConfig, error) {
 }
 
 type fakePinger struct {
-	alive map[netip.Addr]bool
-	delay time.Duration
+	alive                 map[netip.Addr]bool
+	inflight, maxInflight *atomic.Int32
 }
 
 func (p fakePinger) Alive(_ context.Context, addr netip.Addr) bool {
-	time.Sleep(p.delay)
+	if p.inflight != nil {
+		n := p.inflight.Add(1)
+		for old := p.maxInflight.Load(); n > old && !p.maxInflight.CompareAndSwap(old, n); old = p.maxInflight.Load() {
+		}
+		time.Sleep(30 * time.Millisecond)
+		p.inflight.Add(-1)
+	}
 	return p.alive[addr]
 }
 
@@ -413,13 +420,12 @@ func TestPreflight(t *testing.T) {
 }
 
 func TestPreflightPingsConcurrently(t *testing.T) {
-	p := fakePinger{alive: map[netip.Addr]bool{}, delay: 30 * time.Millisecond}
-	began := time.Now()
+	p := fakePinger{alive: map[netip.Addr]bool{}, inflight: new(atomic.Int32), maxInflight: new(atomic.Int32)}
 	if _, err := Preflight(context.Background(), goodDriver(), p, goodInput()); err != nil {
 		t.Fatalf("Preflight: %v", err)
 	}
-	if took := time.Since(began); took > 100*time.Millisecond {
-		t.Fatalf("four 30ms pings took %v, want them in parallel", took)
+	if got := p.maxInflight.Load(); got < 2 {
+		t.Fatalf("at most %d pings in flight, want them to overlap", got)
 	}
 }
 

@@ -242,6 +242,16 @@ func TestDeleteVM(t *testing.T) {
 		t.Fatalf("DeleteVM() calls = %+v, want a purging delete", f.calls)
 	}
 
+	t.Run("stale node names where the vm lives", func(t *testing.T) {
+		f := newFakeAPI(t, map[string]http.HandlerFunc{
+			"DELETE /nodes/pve2/qemu/200?purge=1&destroy-unreferenced-disks=1": missingConfig(200),
+		})
+		task, err := f.driver(t).DeleteVM(t.Context(), VMRef{Node: "pve2", VMID: 200})
+		if err == nil || !strings.Contains(err.Error(), "on node pve") || task != (Task{}) {
+			t.Fatalf("DeleteVM() = %+v, %v; want an error naming node pve", task, err)
+		}
+	})
+
 	t.Run("missing vm is already deleted", func(t *testing.T) {
 		f := newFakeAPI(t, map[string]http.HandlerFunc{
 			"DELETE /nodes/pve/qemu/999?purge=1&destroy-unreferenced-disks=1": missingConfig(999),

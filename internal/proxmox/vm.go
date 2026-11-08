@@ -138,13 +138,21 @@ func (d *driver) DetachISO(ctx context.Context, ref VMRef) (Task, error) {
 	return d.task(ctx, http.MethodPost, ref.Node, vmPath(ref, "/config"), form)
 }
 
-// DeleteVM is idempotent: a VM PVE no longer has yields a zero Task.
+// DeleteVM is idempotent: a VM PVE no longer has anywhere yields a zero Task,
+// while one that moved off ref.Node is an error naming its node.
 func (d *driver) DeleteVM(ctx context.Context, ref VMRef) (Task, error) {
 	task, err := d.task(ctx, http.MethodDelete, ref.Node, vmPath(ref, "?purge=1&destroy-unreferenced-disks=1"), nil)
-	if errors.Is(err, ErrNotFound) {
-		return Task{}, nil
+	if !errors.Is(err, ErrNotFound) {
+		return task, err
 	}
-	return task, err
+	vms, listErr := d.ListVMs(ctx)
+	if listErr != nil {
+		return Task{}, fmt.Errorf("delete vm %d: %w", ref.VMID, errors.Join(err, listErr))
+	}
+	if i := slices.IndexFunc(vms, func(vm VMSummary) bool { return vm.VMID == ref.VMID }); i >= 0 {
+		return Task{}, fmt.Errorf("delete vm %d: not on %s, it is on node %s", ref.VMID, ref.Node, vms[i].Node)
+	}
+	return Task{}, nil
 }
 
 func haPath(ref VMRef) string {
