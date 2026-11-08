@@ -1,0 +1,1 @@
+{"data":[{"storage":"local","type":"dir","shared":0,"active":1,"enabled":1,"content":"iso,vztmpl","avail":85899345920,"total":107374182400,"used":21474836480,"used_fraction":0.2},{"storage":"local-lvm","type":"lvmthin","shared":0,"active":1,"enabled":1,"content":"images,rootdir","avail":"429496729600","total":"536870912000","used":107374182400,"used_fraction":0.2}]}

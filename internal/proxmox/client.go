@@ -1,6 +1,8 @@
 package proxmox
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -11,6 +13,27 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/httputil"
 )
+
+// get decodes the data envelope of an authenticated GET on an
+// /api2/json-relative path into v, translating go-proxmox's auth and
+// lookup failures into this package's sentinels.
+func (d *driver) get(ctx context.Context, path string, v any) error {
+	if err := d.client.Get(ctx, path, v); err != nil {
+		return fmt.Errorf("get %s: %w", path, mapAPIError(err))
+	}
+	return nil
+}
+
+func mapAPIError(err error) error {
+	switch {
+	case errors.Is(err, proxmox.ErrNotAuthorized):
+		return ErrPermission
+	case errors.Is(err, proxmox.ErrNotFound):
+		return ErrNotFound
+	default:
+		return err
+	}
+}
 
 // newProxmoxClient builds the shared go-proxmox client; the credential
 // becomes an immutable Go string Zeroize can't reach, bounded to this call.
@@ -69,3 +92,5 @@ func normalizeEndpoint(endpoint string) string {
 	}
 	return "https://" + e
 }
+
+func bytesToMiB(b uint64) int { return int(b / (1024 * 1024)) } //nolint:gosec // G115: MiB-scale value fits int

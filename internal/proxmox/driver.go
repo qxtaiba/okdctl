@@ -188,30 +188,6 @@ func notImplemented(method string) error {
 	return fmt.Errorf("proxmox driver: %s not implemented", method)
 }
 
-func (d *driver) Version(context.Context) (Version, error) {
-	return Version{}, notImplemented("Version")
-}
-
-func (d *driver) Permissions(context.Context) (Permissions, error) {
-	return nil, notImplemented("Permissions")
-}
-
-func (d *driver) Nodes(context.Context) ([]NodeInfo, error) {
-	return nil, notImplemented("Nodes")
-}
-
-func (d *driver) Storages(context.Context, string) ([]StorageInfo, error) {
-	return nil, notImplemented("Storages")
-}
-
-func (d *driver) Bridges(context.Context, string) ([]Bridge, error) {
-	return nil, notImplemented("Bridges")
-}
-
-func (d *driver) ListVMs(context.Context) ([]VMSummary, error) {
-	return nil, notImplemented("ListVMs")
-}
-
 func (d *driver) VMConfig(context.Context, VMRef) (VMConfig, error) {
 	return VMConfig{}, notImplemented("VMConfig")
 }

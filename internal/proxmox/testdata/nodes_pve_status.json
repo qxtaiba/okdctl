@@ -1,0 +1,1 @@
+{"data":{"pveversion":"pve-manager/9.0.10/abcdef0123456789","cpuinfo":{"model":"AMD Ryzen 9 7950X 16-Core Processor","cores":16,"sockets":1,"cpus":32,"flags":"fpu vme de pse sse sse2 ssse3 sse4_1 sse4_2 avx avx2 x86-64-v3"},"memory":{"total":68719476736,"used":21474836480,"free":47244640256},"uptime":864000}}

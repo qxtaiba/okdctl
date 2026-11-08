@@ -1,0 +1,8 @@
+{"data":[
+{"id":"qemu/100","type":"qemu","vmid":100,"node":"pve","name":"grappleberry-bootstrap","status":"running","tags":"grappleberry;okd","pool":"okd","maxmem":17179869184,"maxcpu":4,"template":0},
+{"id":"qemu/101","type":"qemu","vmid":101,"node":"pve","name":"grappleberry-master-0","status":"running","tags":"grappleberry;okd","pool":"okd","maxmem":17179869184,"maxcpu":4,"template":0},
+{"id":"qemu/200","type":"qemu","vmid":"200","node":"pve","name":"lab-9f3a1c-worker-0","status":"stopped","tags":"lab-9f3a1c","maxmem":"8589934592","maxcpu":"2","template":0},
+{"id":"qemu/201","type":"qemu","vmid":201,"node":"pve","name":"lab-9f3a1cx-worker-0","status":"stopped","tags":"lab-9f3a1cx","maxmem":8589934592,"maxcpu":2,"template":0},
+{"id":"qemu/9000","type":"qemu","vmid":9000,"node":"pve","name":"fcos-template","status":"stopped","maxmem":2147483648,"maxcpu":1,"template":1},
+{"id":"lxc/300","type":"lxc","vmid":300,"node":"pve","name":"dns","status":"running","tags":"okd","maxmem":536870912,"maxcpu":1,"template":0}
+]}

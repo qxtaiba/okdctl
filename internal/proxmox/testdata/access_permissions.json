@@ -1,0 +1,1 @@
+{"data":{"/":{"Sys.Audit":1},"/nodes/pve":{"Sys.Audit":1,"Sys.Console":1},"/storage/local":{"Datastore.AllocateSpace":1,"Datastore.AllocateTemplate":1,"Datastore.Audit":1},"/vms":{"VM.Allocate":1,"VM.Audit":1,"VM.Config.Disk":1,"VM.PowerMgmt":1}}}
