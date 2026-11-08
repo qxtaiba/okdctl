@@ -74,6 +74,7 @@ var rootCmd = &cobra.Command{
 a single configuration file. This release defines a cluster with okdctl init;
 installing it (okdctl up) returns in a later release.`,
 	Example: `  okdctl init
+  okdctl doctor
   okdctl config validate
   okdctl releases list`,
 	Version:       version.Version,

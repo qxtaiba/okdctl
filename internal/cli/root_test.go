@@ -451,6 +451,7 @@ func TestMutatesStateClassification(t *testing.T) {
 		want bool
 	}{
 		{initCmd, true},
+		{doctorCmd, false},
 		{versionCmd, false},
 		{releasesListCmd, false},
 	}
