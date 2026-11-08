@@ -13,8 +13,6 @@
 # Area labels
 - name: area/cli
   color: "c5def5"
-- name: area/terraform
-  color: "5C4EE5"
 - name: area/automation
   color: "1D76DB"
 - name: area/ci

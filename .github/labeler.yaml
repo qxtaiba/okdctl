@@ -6,10 +6,6 @@ area/cli:
           - internal/**/*
           - go.mod
           - go.sum
-area/terraform:
-  - changed-files:
-      - any-glob-to-any-file:
-          - infrastructure/terraform/**/*
 area/automation:
   - changed-files:
       - any-glob-to-any-file:

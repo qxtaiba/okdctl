@@ -335,40 +335,6 @@ host cannot satisfy the anti-affinity rule. In particular, once enabled,
 ha-manager supersedes the per-VM `startup{}` ordering on any HA-triggered
 relocation.
 
-## The deploy stream: a second program
-
-The screen that actually runs a deploy is never the same program as the
-screen that led to it. The path to it varies: confirming `deploy`
-straight from the hub over an existing configuration skips the configure
-flow entirely and starts the stream screen against the configuration
-already on disk, while confirming it from the review step — at the end
-of a configure flow reached via `get started` or `edit config` — starts
-that same stream screen only after the whole configure flow has run to
-completion and exited. In particular, `--yes` reaches the stream screen
-(or, under `--no-tui`, the plain stderr checklist described in [the
-README](../../README.md#without-the-tui)) without any wizard screen
-running first at all. That stream screen, whenever it does run, is a
-fresh `wizard.RunFlow` over `deployexec.NewSteps`, started only once any
-earlier wizard program has already returned — a genuine two-program
-boundary, unlike the hub's own in-process `SwapFlow` into a day-two
-flow.
-
-The stream groups the install engine's own setup/install/postinstall
-phases into five coarser, human-facing ones — `prep`, `ignition`,
-`infra`, `install`, `verify`, the order `deployexec.PhaseOrder` runs and
-collapses them in — each a checklist section of the steps it owns. That
-checklist shares its screen with a live log, in one of three layouts.
-Below 150 terminal columns a tail of at least six lines rides under the
-checklist, taking whatever rows the checklist leaves. From 150 columns
-the log is a column of its own beside the checklist, the height of the
-body: the step owns the frame's width and lays both columns out itself
-(`FrameSize.WithSideLog`), so this is the exec screens' layout and not a
-frame tier — the lifecycle exec screen and both flows' failure reports
-use it too, while the configure flow stays one column. The `f` key swaps
-either layout to a full-screen log across the frame's whole width. The
-`l` key locks the visible window in place rather than following the
-newest line, useful for reading a burst of output before it scrolls away.
-
 ## Why not huh, survey, or promptui
 
 We looked at the Charmbracelet `huh` library and decided to skip it.

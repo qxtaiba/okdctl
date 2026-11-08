@@ -20,10 +20,5 @@
     "prEditedNotification",
     "prIgnoreNotification"
   ],
-  "terraform": {
-    "managerFilePatterns": [
-      "/infrastructure/terraform/.+\\.tf$/"
-    ]
-  },
   "postUpdateOptions": ["gomodTidy"]
 }

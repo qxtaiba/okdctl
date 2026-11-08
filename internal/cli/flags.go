@@ -21,8 +21,8 @@ const (
 	flagVerbose     = "verbose"
 )
 
-// Output-format values for --output/-o; mirrors kubectl/oc convention (see
-// docs/cli/json-schema.md). Deliberately separate from tui.FormatText/FormatJSON:
+// Output-format values for --output/-o; mirrors kubectl/oc convention.
+// Deliberately separate from tui.FormatText/FormatJSON:
 // --output selects a data encoding, --log-format selects a log encoding.
 const (
 	outputText = "text"

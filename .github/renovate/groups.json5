@@ -1,10 +1,4 @@
 {
   "packageRules": [
-    {
-      "description": "group terraform provider updates",
-      "matchManagers": ["terraform"],
-      "matchDepTypes": ["provider"],
-      "groupName": "terraform providers"
-    }
   ]
 }

@@ -212,22 +212,7 @@ Sleep 650ms
 Enter
 Sleep 450ms
 
-# ==================== STEP 8: addons ====================
-Wait+Screen@10s /connect · cluster · extras ●○○ · review/
-Screenshot out/@NAME@-addons.png
-Sleep 300ms
-Down
-Sleep 450ms
-Down
-Sleep 450ms
-Up
-Sleep 450ms
-Up
-Sleep 650ms
-Enter
-Sleep 450ms
-
-# ==================== STEP 9: files ====================
+# ==================== STEP 8: files ====================
 # The relative fixture paths resolve from the seeded demo working directory,
 # keeping the review screen compact at the smallest terminal size.
 Wait+Screen@10s /connect · cluster · extras ✓●○ · review/
@@ -244,7 +229,7 @@ Sleep 650ms
 Enter
 Sleep 450ms
 
-# ==================== STEP 10: advanced ====================
+# ==================== STEP 9: advanced ====================
 Wait+Screen@10s /connect · cluster · extras ✓✓● · review/
 Screenshot out/@NAME@-advanced.png
 Sleep 300ms
@@ -274,7 +259,7 @@ Sleep 650ms
 Enter
 Sleep 450ms
 
-# ==================== STEP 11: review ====================
+# ==================== STEP 10: review ====================
 Wait+Screen@10s /connect · cluster · extras · review/
 Screenshot out/@NAME@-review.png
 Sleep 300ms
