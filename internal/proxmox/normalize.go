@@ -1,6 +1,7 @@
 package proxmox
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -218,7 +219,7 @@ func (c *VMConfig) setEFI(s string) error {
 	}
 	volid, kv := propString(s)
 	storage, _, _ := strings.Cut(volid, ":")
-	keys, err := strconv.ParseBool(cmpOr(kv["pre-enrolled-keys"], "0"))
+	keys, err := strconv.ParseBool(cmp.Or(kv["pre-enrolled-keys"], "0"))
 	if err != nil {
 		return err
 	}
@@ -273,15 +274,8 @@ func parseSize(s string) (int, error) {
 	return n * unit, nil
 }
 
-func cmpOr(s, def string) string {
-	if s == "" {
-		return def
-	}
-	return s
-}
-
-// Diff lists where c departs from spec, skipping keys PVE has unset except
-// those whose absence is itself a value (onboot, agent, tags, ide2).
+// Diff lists where c departs from spec; a key the spec leaves unset is never
+// compared, while one the VM lacks is reported with an empty Have.
 func (c VMConfig) Diff(spec VMSpec) []Change { //nolint:gocritic // hugeParam: the Driver API passes configs and specs by value
 	var d differ
 	d.str("name", spec.Name, c.Name, false)
@@ -296,11 +290,15 @@ func (c VMConfig) Diff(spec VMSpec) []Change { //nolint:gocritic // hugeParam: t
 	d.add("onboot", "1", boolFlag(c.OnBoot), false)
 	d.int("balloon", vmBalloon, c.Balloon, false)
 	d.add("agent", "enabled=1", "enabled="+boolFlag(c.AgentEnabled), true)
+	have := ""
 	if len(c.BootOrder) > 0 {
-		d.add("boot", spec.bootOrder(), "order="+strings.Join(c.BootOrder, ";"), true)
+		have = "order=" + strings.Join(c.BootOrder, ";")
 	}
+	d.add("boot", spec.bootOrder(), have, true)
 	d.tags(spec.Tag, c.Tags)
-	if c.NICModel != "" {
+	if c.NICModel == "" {
+		d.add("net0", spec.net0(), "", true)
+	} else {
 		d.add("net0.model", vmNICModel, c.NICModel, true)
 		if !strings.EqualFold(spec.MAC, c.MAC) {
 			d.add("net0.mac", spec.MAC, c.MAC, true)
@@ -308,9 +306,11 @@ func (c VMConfig) Diff(spec VMSpec) []Change { //nolint:gocritic // hugeParam: t
 		d.add("net0.bridge", spec.Bridge, c.Bridge, false)
 		d.add("net0.vlan", strconv.Itoa(spec.VLAN), strconv.Itoa(c.VLAN), false)
 	}
+	efi := ""
 	if c.EFI != nil {
-		d.str("efidisk0.storage", spec.EFIStorage, c.EFI.Storage, false)
+		efi = c.EFI.Storage
 	}
+	d.str("efidisk0.storage", spec.EFIStorage, efi, false)
 	for _, want := range spec.Disks {
 		d.disk(want, c.Disks)
 	}
@@ -329,15 +329,13 @@ func (d *differ) add(field, want, have string, powerCycle bool) {
 }
 
 func (d *differ) str(field, want, have string, powerCycle bool) {
-	if want != "" && have != "" {
+	if want != "" {
 		d.add(field, want, have, powerCycle)
 	}
 }
 
 func (d *differ) int(field string, want, have int, powerCycle bool) {
-	if have != 0 {
-		d.add(field, strconv.Itoa(want), strconv.Itoa(have), powerCycle)
-	}
+	d.add(field, strconv.Itoa(want), strconv.Itoa(have), powerCycle)
 }
 
 // tags requires the spec's tag among the VM's, which may carry others the
@@ -365,7 +363,7 @@ func (d *differ) disk(want DiskSpec, have map[string]DiskConfig) {
 	d.add(field+".size", gib(want.SizeGiB), gib(got.SizeGiB), false)
 	d.add(field+".serial", want.Serial, got.Serial, true)
 	d.add(field+".iothread", "1", boolFlag(got.IOThread), true)
-	d.add(field+".discard", "on", cmpOr(discardFlag(got.Discard), "ignore"), true)
+	d.add(field+".discard", "on", discardFlag(got.Discard), true)
 }
 
 func discardFlag(on bool) string {
