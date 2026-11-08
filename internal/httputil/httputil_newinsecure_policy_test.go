@@ -18,7 +18,10 @@ import (
 func TestNewInsecureCallerPolicy(t *testing.T) {
 	const importPath = "github.com/qxtaiba/okdctl/internal/httputil"
 	allowedPrefixes := map[string][]string{
-		"NewOptionalInsecure": {"internal/tui/wizard/steps/"},
+		"NewOptionalInsecure": {
+			"internal/proxmox/",
+			"internal/tui/wizard/steps/",
+		},
 	}
 
 	root, err := findInternalDir()

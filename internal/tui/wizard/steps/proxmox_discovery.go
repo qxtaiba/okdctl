@@ -12,7 +12,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/credentials"
 	"github.com/qxtaiba/okdctl/internal/httputil"
-	infraproxmox "github.com/qxtaiba/okdctl/internal/infrastructure/proxmox"
+	okdproxmox "github.com/qxtaiba/okdctl/internal/proxmox"
 )
 
 const (
@@ -50,7 +50,7 @@ func discoverProxmox(parent context.Context, creds *credentials.ProxmoxCredentia
 	ctx, cancel := context.WithTimeout(parent, discoveryTimeout)
 	defer cancel()
 	client := proxmox.NewClient(
-		infraproxmox.APIBaseURL(creds.Endpoint),
+		okdproxmox.APIBaseURL(creds.Endpoint),
 		proxmox.WithHTTPClient(httputil.NewOptionalInsecure(creds.Insecure, discoveryTimeout)),
 		proxmox.WithAPIToken(id, secret),
 	)
