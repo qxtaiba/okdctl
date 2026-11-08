@@ -13,7 +13,6 @@ require (
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/mod v0.41.0
 	golang.org/x/term v0.46.0
-	k8s.io/apimachinery v0.37.1
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -37,7 +36,6 @@ require (
 	github.com/diskfs/go-diskfs v1.9.3 // indirect
 	github.com/djherbis/times v1.6.0 // indirect
 	github.com/go-logfmt/logfmt v0.6.1 // indirect
-	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jinzhu/copier v0.4.0 // indirect
@@ -49,6 +47,4 @@ require (
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/exp v0.0.0-20260508232706-74f9aab9d74a // indirect
 	golang.org/x/sys v0.48.0 // indirect
-	k8s.io/klog/v2 v2.140.0 // indirect
-	k8s.io/utils v0.0.0-20260626114624-be93311217bd // indirect
 )

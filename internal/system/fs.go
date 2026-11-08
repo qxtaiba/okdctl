@@ -5,9 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"io"
 	"os"
-	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -26,48 +24,10 @@ func FileExists(path string) bool {
 	return !info.IsDir()
 }
 
-// DirExists reports whether path refers to an existing directory.
-func DirExists(path string) bool {
-	info, err := os.Stat(path)
-	if err != nil {
-		return false
-	}
-	return info.IsDir()
-}
-
-// EnsureDir creates path and any missing parents with mode 0o755.
-func EnsureDir(path string) error {
-	return os.MkdirAll(path, 0o755)
-}
-
 // EnsureDirForFile creates the parent directory of filePath, including any
 // missing intermediate directories, with mode 0o755.
 func EnsureDirForFile(filePath string) error {
-	return EnsureDir(filepath.Dir(filePath))
-}
-
-// WriteTempFile creates a temp file matching pattern with mode applied at
-// open time (no create-then-chmod window), calls writeFn with the open
-// handle, and removes the file on any error. On success the caller owns
-// cleanup, typically via `defer os.Remove(path)`.
-func WriteTempFile(pattern string, mode os.FileMode, writeFn func(*os.File) error) (string, error) {
-	f, err := openTempFile("", pattern, mode)
-	if err != nil {
-		return "", fmt.Errorf("create %s: %w", pattern, err)
-	}
-	cleanup := func() {
-		_ = f.Close()
-		_ = os.Remove(f.Name())
-	}
-	if err := writeFn(f); err != nil {
-		cleanup()
-		return "", err
-	}
-	if err := f.Close(); err != nil {
-		_ = os.Remove(f.Name())
-		return "", fmt.Errorf("close %s: %w", f.Name(), err)
-	}
-	return f.Name(), nil
+	return os.MkdirAll(filepath.Dir(filePath), 0o755)
 }
 
 // openTempFile opens an exclusive temp file with mode set at open time,
@@ -90,47 +50,6 @@ func openTempFile(dir, pattern string, mode os.FileMode) (*os.File, error) {
 		return f, err
 	}
 	return nil, fmt.Errorf("could not allocate temp file in %s after 10000 tries", dir)
-}
-
-// CopyFile copies src to dst, preserving the source's permission bits via
-// CopyFileMode (no window where dst is briefly world-readable). For
-// credential-bearing files, prefer CopyFileMode with an explicit 0o600 instead.
-func CopyFile(src, dst string) error {
-	info, err := os.Stat(src)
-	if err != nil {
-		return fmt.Errorf("stat source file: %w", err)
-	}
-	return CopyFileMode(src, dst, info.Mode().Perm())
-}
-
-// CopyFileMode atomically replaces dst with a synced copy of src at mode.
-// Existing destination symlinks are refused and old readers retain the old inode.
-func CopyFileMode(src, dst string, mode os.FileMode) error {
-	sourceFile, err := os.Open(src)
-	if err != nil {
-		return fmt.Errorf("open source file: %w", err)
-	}
-	defer func() { _ = sourceFile.Close() }()
-
-	return atomicWriteFile(dst, 0o600, func(f *os.File) error {
-		if _, err := io.Copy(f, sourceFile); err != nil {
-			return fmt.Errorf("copy file contents: %w", err)
-		}
-		if err := f.Chmod(mode); err != nil {
-			return fmt.Errorf("set file permissions: %w", err)
-		}
-		return nil
-	})
-}
-
-// SafeRemove removes path recursively, returning nil if it doesn't already
-// exist. Unlike cleanup.SafeRemoveWithLogger it has no critical-path or
-// symlink guard, so callers must pass only trusted, internally-constructed paths.
-func SafeRemove(path string) error {
-	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	return os.RemoveAll(path)
 }
 
 // ExpandPath expands a leading `~/` to the invoking user's home directory.
@@ -234,24 +153,6 @@ func fsyncDir(dir string) error {
 	return closeErr
 }
 
-// AtomicWriteString is a string-typed convenience wrapper around AtomicWrite;
-// the fsync + rename invariants are the same.
-func AtomicWriteString(path, content string, perm os.FileMode) error {
-	return AtomicWrite(path, []byte(content), perm)
-}
-
-// IsDirWritable probes by creating and removing a temp file; permission bits
-// alone can mislead when ACLs or mount options differ.
-func IsDirWritable(dir string) bool {
-	f, err := os.CreateTemp(dir, "")
-	if err != nil {
-		return false
-	}
-	_ = f.Close()
-	_ = os.Remove(f.Name())
-	return true
-}
-
 // MakeExecutable adds owner/group/other execute bits to path's existing mode
 // (chmod +x without a subprocess). The read and write both go through one
 // O_NOFOLLOW descriptor, so there's no stat/chmod TOCTOU window and a
@@ -267,32 +168,4 @@ func MakeExecutable(path string) error {
 		return fmt.Errorf("stat %s: %w", path, err)
 	}
 	return f.Chmod(info.Mode().Perm() | 0o111)
-}
-
-// ChownByName chowns path to a user:group spec (both parts required;
-// numeric-only forms are rejected so typos surface as errors, not a silent
-// chown to UID 0). Uses Lchown so a symlink planted at path is chowned
-// itself, not its target.
-func ChownByName(path, ownerSpec string) error {
-	userName, groupName, ok := strings.Cut(ownerSpec, ":")
-	if !ok || userName == "" || groupName == "" {
-		return fmt.Errorf("invalid owner spec %q: want user:group", ownerSpec)
-	}
-	u, err := user.Lookup(userName)
-	if err != nil {
-		return fmt.Errorf("lookup user %s: %w", userName, err)
-	}
-	g, err := user.LookupGroup(groupName)
-	if err != nil {
-		return fmt.Errorf("lookup group %s: %w", groupName, err)
-	}
-	uid, err := strconv.Atoi(u.Uid)
-	if err != nil {
-		return fmt.Errorf("parse uid %q: %w", u.Uid, err)
-	}
-	gid, err := strconv.Atoi(g.Gid)
-	if err != nil {
-		return fmt.Errorf("parse gid %q: %w", g.Gid, err)
-	}
-	return os.Lchown(path, uid, gid)
 }

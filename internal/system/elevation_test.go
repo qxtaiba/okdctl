@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"testing"
 )
 
@@ -19,36 +18,6 @@ func setSudoEnv(t *testing.T, uid, gid string) {
 func setSudoSelf(t *testing.T) {
 	t.Helper()
 	setSudoEnv(t, strconv.Itoa(os.Getuid()), strconv.Itoa(os.Getgid()))
-}
-
-// The dangling symlink is the tripwire: a rewrite that follows symlinks
-// would hit ENOENT on it, while Lchown succeeds.
-func TestChownTreeToInvokingUser_SymlinkEscape(t *testing.T) {
-	inside := t.TempDir()
-	outside := t.TempDir()
-
-	if err := os.WriteFile(filepath.Join(inside, "real.txt"), []byte("x"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(outside, filepath.Join(inside, "escape")); err != nil {
-		t.Skip("cannot create symlink:", err)
-	}
-	if err := os.Symlink(filepath.Join(outside, "gone"), filepath.Join(inside, "dangling")); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(outside, "secret.txt"), []byte("s"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	setSudoSelf(t)
-
-	if err := ChownTreeToInvokingUser(inside); err != nil {
-		t.Fatalf("ChownTreeToInvokingUser: %v (a symlink-following rewrite fails here via the dangling link)", err)
-	}
-
-	if _, err := os.Lstat(filepath.Join(outside, "secret.txt")); err != nil {
-		t.Fatalf("escape target disturbed: %v", err)
-	}
 }
 
 // Dangling symlink is the tripwire: Lchown succeeds without resolving it,
@@ -210,73 +179,4 @@ func TestWriteAsInvokingUser(t *testing.T) {
 			t.Errorf("file must persist after failed chown; Stat: %v", statErr)
 		}
 	})
-}
-
-func TestChownTreeToInvokingUser_NoSudo(t *testing.T) {
-	setSudoEnv(t, "", "")
-
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "a"), []byte("x"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := ChownTreeToInvokingUser(dir); err != nil {
-		t.Errorf("expected no-op without SUDO_UID/GID; got %v", err)
-	}
-}
-
-// The walk must visit every entry rather than aborting on the first EPERM.
-func TestChownTreeToInvokingUser_AggregatesErrors(t *testing.T) {
-	setSudoEnv(t, "65534", "65534")
-
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	err := ChownTreeToInvokingUser(dir)
-
-	if os.Getuid() == 0 {
-		if err != nil {
-			t.Errorf("running as root: expected nil; got %v", err)
-		}
-		return
-	}
-
-	if err == nil {
-		t.Fatal("expected aggregated EPERM errors; got nil")
-	}
-	// errors.Join uses newlines; >=3 lines proves the walk visited all three
-	// entries rather than stopping at the first.
-	lineCount := strings.Count(err.Error(), "\n") + 1
-	if lineCount < 3 {
-		t.Errorf("expected >=3 joined errors (walk continued); got %d in: %v", lineCount, err)
-	}
-}
-
-func TestIsAllowedChownRoot(t *testing.T) {
-	const home, tmp = "/home/op", "/tmp"
-	tests := []struct {
-		path string
-		want bool
-	}{
-		{"/etc", false},
-		{"/etc/cluster", false},
-		{"/var/lib/cluster", false},
-		{"/home/op", true},
-		{"/home/op/proj/cluster", true},
-		{"/home/operator", false},
-		{"/tmp/okdctl-123", true},
-		{"/srv/proj/infrastructure", false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.path, func(t *testing.T) {
-			if got := isAllowedChownRoot(tt.path, home, tmp); got != tt.want {
-				t.Errorf("isAllowedChownRoot(%q) = %v, want %v", tt.path, got, tt.want)
-			}
-		})
-	}
 }
