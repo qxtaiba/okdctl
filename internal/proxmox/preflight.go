@@ -406,7 +406,7 @@ func ExecPinger(ex *executor.Executor) Pinger {
 }
 
 func (p execPinger) Alive(ctx context.Context, addr netip.Addr) bool {
-	res, err := p.ex.RunDiscard(ctx, p.bin, "-c", "1", "-W", pingWait(runtime.GOOS), addr.String())
+	res, err := p.ex.Run(ctx, p.bin, "-c", "1", "-W", pingWait(runtime.GOOS), addr.String())
 	return err == nil && res.ExitCode == 0
 }
 
