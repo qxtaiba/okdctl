@@ -9,6 +9,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -22,7 +23,7 @@ type volumeRow struct {
 
 func (d *driver) ListISOs(ctx context.Context, node, storage string) ([]Volume, error) {
 	var rows []volumeRow
-	if err := d.get(ctx, "/nodes/"+node+"/storage/"+storage+"/content?content=iso", &rows); err != nil {
+	if err := d.get(ctx, storagePath(node, storage, "content?content=iso"), &rows); err != nil {
 		return nil, err
 	}
 	volumes := make([]Volume, 0, len(rows))
@@ -37,7 +38,11 @@ func (d *driver) ListISOs(ctx context.Context, node, storage string) ([]Volume, 
 }
 
 func (d *driver) DeleteVolume(ctx context.Context, node, storage, volid string) (Task, error) {
-	return d.task(ctx, http.MethodDelete, node, "/nodes/"+node+"/storage/"+storage+"/content/"+volid, nil)
+	return d.task(ctx, http.MethodDelete, node, storagePath(node, storage, "content/"+url.PathEscape(volid)), nil)
+}
+
+func storagePath(node, storage, rest string) string {
+	return nodePath(node, "storage/"+url.PathEscape(storage)+"/"+rest)
 }
 
 // UploadISO streams path to the node's storage without buffering the file;
@@ -58,9 +63,8 @@ func (d *driver) UploadISO(ctx context.Context, node, storage, path, sha256 stri
 	if err != nil {
 		return Task{}, fmt.Errorf("upload iso: %w", err)
 	}
-	url := d.baseURL + "/nodes/" + node + "/storage/" + storage + "/upload"
 	body := io.MultiReader(bytes.NewReader(head), file, bytes.NewReader(tail))
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, d.baseURL+storagePath(node, storage, "upload"), body)
 	if err != nil {
 		return Task{}, fmt.Errorf("upload iso: %w", err)
 	}
@@ -91,9 +95,8 @@ func (d *driver) UploadISO(ctx context.Context, node, storage, path, sha256 stri
 	return Task{Node: node, UPID: envelope.Data}, nil
 }
 
-// isoMultipart renders the text parts and file-part header (head) and the
-// closing boundary (tail) so the file itself can be streamed between them.
-// PVE reads content, checksum-algorithm and checksum before the file part.
+// isoMultipart renders the text parts PVE reads before the file (head) and
+// the closing boundary (tail) so the file itself streams between them.
 func isoMultipart(filename, sha256 string) (head, tail []byte, contentType string, err error) {
 	var buf bytes.Buffer
 	w := multipart.NewWriter(&buf)

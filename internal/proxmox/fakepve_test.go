@@ -67,6 +67,7 @@ var fakeWrites = map[string]string{
 type fakeCall struct {
 	Method        string
 	Key           string
+	RequestURI    string
 	Form          url.Values
 	ContentType   string
 	ContentLength int64
@@ -136,7 +137,7 @@ func (f *fakeAPI) serve(w http.ResponseWriter, r *http.Request) {
 }
 
 func (f *fakeAPI) record(r *http.Request, key string) {
-	call := fakeCall{Method: r.Method, Key: key, ContentType: r.Header.Get("Content-Type"), ContentLength: r.ContentLength}
+	call := fakeCall{Method: r.Method, Key: key, RequestURI: r.RequestURI, ContentType: r.Header.Get("Content-Type"), ContentLength: r.ContentLength}
 	switch {
 	case strings.HasPrefix(call.ContentType, "multipart/form-data"):
 		body, err := io.ReadAll(r.Body)

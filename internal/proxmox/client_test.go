@@ -3,10 +3,10 @@ package proxmox
 import (
 	"bytes"
 	"log/slog"
+	"net/http"
 	"strings"
 	"sync"
 	"testing"
-	"time"
 )
 
 func TestNormalizeEndpoint(t *testing.T) {
@@ -32,7 +32,7 @@ func TestNewProxmoxClientWarnsOnInsecureOnce(t *testing.T) {
 
 	build := func() {
 		t.Helper()
-		if _, _, err := newProxmoxClient("https://pve:8006", "", nil, []byte("user@pam!t=secret"), true, time.Second); err != nil {
+		if _, _, err := newProxmoxClient("https://pve:8006", []byte("user@pam!t=secret"), true); err != nil {
 			t.Fatalf("newProxmoxClient: %v", err)
 		}
 	}
@@ -45,5 +45,17 @@ func TestNewProxmoxClientWarnsOnInsecureOnce(t *testing.T) {
 	build()
 	if strings.Contains(buf.String(), "tls verification disabled") {
 		t.Errorf("warning must fire once per process, log = %q", buf.String())
+	}
+}
+
+func TestBadRequestRendersBodyOnce(t *testing.T) {
+	const detail = `{"vmid":"invalid format - value does not look like a valid VM ID"}`
+	f := newFakeAPI(t, map[string]http.HandlerFunc{
+		"POST /nodes/pve/qemu":           jsonHandler(http.StatusBadRequest, `{"data":null,"errors":`+detail+`}`),
+		"GET /nodes/pve/qemu/105/config": missingConfig(105),
+	})
+	_, err := f.driver(t).CreateVM(t.Context(), "pve", newSpec(105, "grappleberry"))
+	if err == nil || strings.Count(err.Error(), "invalid format") != 1 {
+		t.Fatalf("CreateVM() error = %v, want the 400 detail exactly once", err)
 	}
 }

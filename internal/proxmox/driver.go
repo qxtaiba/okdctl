@@ -225,9 +225,7 @@ type Driver interface {
 // New returns a Driver for the Proxmox API at endpoint authenticated with an
 // id=secret API token; token is caller-owned and may be zeroized after New returns.
 func New(endpoint string, token []byte, insecure bool) (Driver, error) {
-	// No transport timeout: ISO uploads outlive any fixed budget, so every
-	// method is bounded by its ctx instead.
-	client, httpClient, err := newProxmoxClient(endpoint, "", nil, token, insecure, 0)
+	client, httpClient, err := newProxmoxClient(endpoint, token, insecure)
 	if err != nil {
 		return nil, err
 	}
@@ -240,9 +238,7 @@ func New(endpoint string, token []byte, insecure bool) (Driver, error) {
 	}, nil
 }
 
-// driver holds the go-proxmox client plus the raw-request fields UploadISO
-// needs; auth is a private copy of the token header, so zeroizing the
-// caller's token never touches it.
+// driver pairs the go-proxmox client with the raw-request fields UploadISO needs.
 type driver struct {
 	client       *proxmox.Client
 	httpClient   *http.Client

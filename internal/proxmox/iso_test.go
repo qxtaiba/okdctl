@@ -50,7 +50,10 @@ func TestUploadISO(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parse multipart: %v", err)
 			}
-			data, _ := io.ReadAll(part)
+			data, err := io.ReadAll(part)
+			if err != nil {
+				t.Fatalf("read part %s: %v", part.FormName(), err)
+			}
 			names = append(names, part.FormName())
 			values[part.FormName()] = string(data)
 			if part.FormName() == "filename" {
@@ -136,6 +139,9 @@ func TestDeleteVolume(t *testing.T) {
 	}
 	if want := (Task{Node: "pve", UPID: upidImgDel}); task != want {
 		t.Fatalf("DeleteVolume() = %+v, want %+v", task, want)
+	}
+	if uri := f.last("DELETE /nodes/pve/storage/local/content/local:iso/grappleberry-worker.iso").RequestURI; !strings.HasSuffix(uri, "/content/local:iso%2Fgrappleberry-worker.iso") {
+		t.Fatalf("request uri %q does not escape the volid's slash", uri)
 	}
 }
 
