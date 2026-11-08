@@ -480,6 +480,14 @@ func TestHA(t *testing.T) {
 			t.Fatalf("put form = %v, want %v", got, want)
 		}
 	})
+	t.Run("clear of an unmanaged vm is not found", func(t *testing.T) {
+		f := newFakeAPI(t, map[string]http.HandlerFunc{
+			"DELETE /cluster/ha/resources/vm:105": pveErrorHandler("cannot delete service 'vm:105', not HA managed!"),
+		})
+		if err := f.driver(t).ClearHA(t.Context(), ref105); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("ClearHA() error = %v, want ErrNotFound", err)
+		}
+	})
 	t.Run("clear deletes the resource", func(t *testing.T) {
 		f := newFakeAPI(t, nil)
 		if err := f.driver(t).ClearHA(t.Context(), ref101); err != nil {
