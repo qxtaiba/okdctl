@@ -1,14 +1,12 @@
 # The wizard
 
-The wizard is the interactive TUI behind every hands-on okdctl operation:
-a hero hub screen offering five verbs, the data-driven configure flow
-underneath its `deploy`/`edit config` verbs, and the day-two flow its
-`manage nodes` verb swaps into in the same program. In particular, this
-is not a deploy-only walkthrough — the hub is a first-class entry point
-in its own right, and `okdctl node manage` deep-links straight into that
-flow.
+The wizard is the interactive TUI behind `okdctl init`: a hero hub screen
+offering five verbs over an existing `okdctl.yaml`, and the data-driven
+configure flow underneath its `edit config` verb (or `get started` on a
+blank slate). Until slice 7 replaces the hub, the configure flow is the
+only one it reaches.
 
-## The hub: one program, five verbs
+## The hub: one program, one live flow
 
 The wizard's entry point is `steps.WelcomeStep`, the hero-hub: a centered
 wordmark screen `okdctl init` opens on every time, offering five verbs
@@ -20,32 +18,15 @@ since a launcher has no fields to declare; it also implements
 chrome and gives it the frame's whole width — the block-letter
 wordmark is the whole screen's identity.
 
-That five-verb menu resolves one of three ways. The `deploy` and `edit
-config` verbs, plus `get started` on the blank slate, continue forward
-into the data-driven configure flow described below, in the same
-program, on the step-list diagram further down this page. The `manage
-nodes` verb instead swaps the wizard onto a different flow in-process,
-through `Model.SwapFlow`: the live step set and chrome are replaced, the
-hub's own steps and position are held in a single `suspendedFlow`, and
-escaping the swapped-in flow's first screen restores the hub exactly
-where the operator left it. That single-suspension rule is deliberate:
-`SwapFlow` accepts only one suspended flow at a time, since the hub is
-the only screen that swaps, and a sub-flow it swaps into never swaps
-again. The `cluster status` and `destroy` verbs resolve to neither: the
-hub reports them back to the CLI, which prints a handoff line once the
-TUI has released the terminal — `run: okdctl status` or `run: okdctl
-destroy`. That leaves `okdctl status` as the one place cluster health is
-probed and rendered, and `okdctl destroy`'s own confirmation ladder as
-the guard, rather than reimplementing either behind a menu entry.
-
-That said, `okdctl node manage` is a direct deep-link into the
-manage-nodes flow, not a hub verb: it builds the same Cluster Lifecycle
-session the hub's `manage nodes` verb would (`newLifecycleSession`, the
-same `lifecycle.Chrome()`) and runs it as its own top-level
-`wizard.RunFlow` program, skipping the hub screen entirely. This suits a
-scripted or automation-adjacent entry: `okdctl node manage` refuses
-outright without a terminal, naming `okdctl node resize/add/remove` as
-the alternative, while `okdctl init` always opens on the hub first.
+That menu resolves one of two ways. The `edit config` verb, and `get
+started` on the blank slate, continue forward into the data-driven
+configure flow described below, in the same program, on the step-list
+diagram further down this page. Every other verb completes the hub step
+and leaves the wizard: the CLI reads the highlighted verb back
+(`sessionVerb`) once the TUI has released the terminal and prints a
+handoff line. `deploy` prints `run: okdctl up`; `destroy`, `cluster
+status` and `manage nodes` print that the operation returns in a later
+release, until slice 7 replaces the hub with the live lifecycle flows.
 
 ## Unsaved edits: nothing persists until review
 
@@ -65,9 +46,8 @@ row; a second ctrl+c or `y` discards the edits and quits, and any other
 key returns to the form without reaching it. That comparison is a digest
 of the config's JSON form (`configDigest`), so an edit typed and then
 typed back is no edit at all, and ctrl+c with nothing changed quits
-immediately. This applies to the configure flow only: the hub and the
-day-two flows quit as before, and the screens that run an operation keep
-their own `QuitGuard`.
+immediately. This applies to the configure flow only: the hub quits as
+before.
 
 ## Data-driven, not code-driven
 
@@ -96,7 +76,7 @@ The wizard package lives under `internal/tui/wizard/`:
 - `datadriven.go` — the runtime that renders any `StepDefinition`
 - `steps/` — the step definitions themselves, one file per step (welcome,
   distribution, proxmox, basics, node_placement, networking, resources,
-  addons, files, advanced, review)
+  files, advanced, review)
 
 Each step's file declares a single `StepDefinition` literal plus its
 helper validators. Adding a new step takes three additive edits: create
@@ -208,9 +188,8 @@ to edge just because there's room. That cap's leftover columns become
 blank right-hand margin inside the frame, never a partial row for
 AltScreen to leave dirty, and it holds at every width — the frame itself
 has no wider tier that adds a second column. The one exemption is a step
-that owns the frame's width (`frameWidthOwner`: the hub, a full-screen
-log, the deploy done screen, an exec screen laying its log out beside
-its checklist), which renders across the whole content width instead.
+that owns the frame's width (`frameWidthOwner`: the hub), which renders
+across the whole content width instead.
 
 | Terminal      | Outer width (frame) | Content width | Body width | Viewport height (H−10) |
 | ------------- | -------------------- | -------------- | ----------- | ----------------------- |
@@ -259,8 +238,8 @@ user has actually had a chance to see it:
 This is followed by two steps that run regardless of which layer above
 caught something: `Apply` writes the step's values into `*config.Config`
 once validation passes, and `config.Config.Validate` runs once more at
-the end of the wizard, before `deploy` actually starts — the same
-validator `loadConfig` runs in `internal/cli/helpers.go`.
+the end of the wizard, before the file is written — the same validator
+`okdctl config validate` runs.
 
 That layering is also why a `Default` on a `FieldDefinition` counts as a
 real starting value rather than a placeholder: it satisfies a `Required`
@@ -285,9 +264,7 @@ flowchart TD
     basics -->|"provider != proxmox"| networking
     nodePlacement --> networking
     networking --> resources
-    resources --> addons
-    addons -->|"distribution == okd"| filesStep[files]
-    addons -->|"distribution != okd"| advanced
+    resources --> filesStep[files]
     filesStep --> advanced
     advanced --> review
     review --> E([complete])
