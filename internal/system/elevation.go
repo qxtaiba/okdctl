@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // invokingUser returns root under direct-root invocation (SUDO_USER unset);
@@ -121,11 +120,10 @@ func canonicalizePath(p string) string {
 }
 
 // isAllowedChownRoot guards recursive chown against paths like /etc; allowed
-// are okdctl's own cluster/infrastructure trees, subpaths of homeDir, and
-// subpaths of tmpDir.
+// are okdctl's own infrastructure tree, subpaths of homeDir, and subpaths of
+// tmpDir.
 func isAllowedChownRoot(absPath, homeDir, tmpDir string) bool {
-	base := filepath.Base(absPath)
-	if base == workspace.ClusterDirName || base == "infrastructure" {
+	if filepath.Base(absPath) == "infrastructure" {
 		return true
 	}
 	hasPrefix := func(prefix string) bool {

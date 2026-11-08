@@ -24,7 +24,7 @@ func seedKubeconfigWorkspace(t *testing.T) []byte {
 		t.Fatal(err)
 	}
 	want := []byte("apiVersion: v1\nkind: Config\nusers:\n- name: admin\n")
-	if err := os.WriteFile(filepath.Join(authDir, "kubeconfig"), want, 0o600); err != nil {
+	if err := os.WriteFile(workspace.KubeconfigPath(root), want, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return want

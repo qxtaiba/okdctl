@@ -256,3 +256,27 @@ func TestChownTreeToInvokingUser_AggregatesErrors(t *testing.T) {
 		t.Errorf("expected >=3 joined errors (walk continued); got %d in: %v", lineCount, err)
 	}
 }
+
+func TestIsAllowedChownRoot(t *testing.T) {
+	const home, tmp = "/home/op", "/tmp"
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{"/etc", false},
+		{"/etc/cluster", false},
+		{"/var/lib/cluster", false},
+		{"/home/op", true},
+		{"/home/op/proj/cluster", true},
+		{"/home/operator", false},
+		{"/tmp/okdctl-123", true},
+		{"/srv/proj/infrastructure", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			if got := isAllowedChownRoot(tt.path, home, tmp); got != tt.want {
+				t.Errorf("isAllowedChownRoot(%q) = %v, want %v", tt.path, got, tt.want)
+			}
+		})
+	}
+}
