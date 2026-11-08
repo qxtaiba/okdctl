@@ -20,35 +20,47 @@ func previewValues(start string) map[string]string {
 }
 
 func TestNetworkAllocationPreviewDerivesTheNodeRanges(t *testing.T) {
-	got := tuitest.StripANSI(renderNetworkAllocationPreview(previewValues("192.168.1.150"), 2))
-	for _, want := range []string{"masters 192.168.1.150–192.168.1.152", "workers 192.168.1.160–192.168.1.161", "api vip 192.168.1.158", "ingress vip 192.168.1.159"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("preview = %q, want %q", got, want)
-		}
-	}
-	if strings.Contains(got, "leaves machine cidr") {
-		t.Errorf("preview flags an in-range layout: %q", got)
+	for name, tc := range map[string]struct {
+		workers []int
+		want    string
+	}{
+		"two workers":      {[]int{0, 1}, "workers 192.168.1.160–192.168.1.161"},
+		"one worker":       {[]int{0}, "workers 192.168.1.160\n"},
+		"hole in the pool": {[]int{0, 3}, "workers 192.168.1.160, 192.168.1.163"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := tuitest.StripANSI(renderNetworkAllocationPreview(previewValues("192.168.1.150"), tc.workers))
+			for _, want := range []string{"masters 192.168.1.150–192.168.1.152", tc.want, "api vip 192.168.1.158", "ingress vip 192.168.1.159"} {
+				if !strings.Contains(got, want) {
+					t.Errorf("preview = %q, want %q", got, want)
+				}
+			}
+			if strings.Contains(got, "leaves machine cidr") {
+				t.Errorf("preview flags an in-range layout: %q", got)
+			}
+		})
 	}
 
-	single := tuitest.StripANSI(renderNetworkAllocationPreview(previewValues("192.168.1.150"), 1))
-	if !strings.Contains(single, "workers 192.168.1.160\n") && !strings.HasSuffix(single, "workers 192.168.1.160") && !strings.Contains(single, "workers 192.168.1.160\n") {
-		if !strings.Contains(single, "workers 192.168.1.160") || strings.Contains(single, "192.168.1.160–") {
-			t.Errorf("single worker preview = %q, want a bare address", single)
-		}
-	}
-
-	none := tuitest.StripANSI(renderNetworkAllocationPreview(previewValues("192.168.1.150"), 0))
+	none := tuitest.StripANSI(renderNetworkAllocationPreview(previewValues("192.168.1.150"), nil))
 	if strings.Contains(none, "workers") {
 		t.Errorf("preview with no workers lists a worker range: %q", none)
 	}
 }
 
 func TestNetworkAllocationPreviewWarnsOutsideTheCIDRAndOnBadStart(t *testing.T) {
-	leaves := tuitest.StripANSI(renderNetworkAllocationPreview(previewValues("192.168.1.250"), 2))
-	if !strings.Contains(leaves, "node range leaves machine cidr 192.168.1.0/24") {
-		t.Errorf("preview = %q, want the out-of-range warning", leaves)
+	for name, tc := range map[string]struct {
+		start   string
+		workers []int
+	}{
+		"contiguous": {"192.168.1.250", []int{0, 1}},
+		"hole":       {"192.168.1.240", []int{0, 6}},
+	} {
+		leaves := tuitest.StripANSI(renderNetworkAllocationPreview(previewValues(tc.start), tc.workers))
+		if !strings.Contains(leaves, "node range leaves machine cidr 192.168.1.0/24") {
+			t.Errorf("%s: preview = %q, want the out-of-range warning", name, leaves)
+		}
 	}
-	invalid := tuitest.StripANSI(renderNetworkAllocationPreview(previewValues("not-an-ip"), 1))
+	invalid := tuitest.StripANSI(renderNetworkAllocationPreview(previewValues("not-an-ip"), []int{0}))
 	if !strings.Contains(invalid, "invalid node ip start") || strings.Contains(invalid, "masters") {
 		t.Errorf("preview = %q, want invalid input with no fabricated allocations", invalid)
 	}
