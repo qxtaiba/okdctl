@@ -23,9 +23,10 @@ var doctorCmd = &cobra.Command{
 	Use:   "doctor",
 	Short: "Check the Proxmox cluster against the configuration",
 	Long: `Run the Proxmox preflight checks the installer relies on: API token
-privileges, PVE version, CPU flags, free memory, ISO storage space, VMID and
-MAC collisions, addresses already answering, storage content types and the
-bridge on every target node.
+privileges, PVE version, CPU flags, free memory, ISO storage space, storage
+content types and the bridge on every target node. The VMID, MAC and address
+collision checks need the node identities the v3 schema carries and are
+skipped until then.
 
 Read-only: nothing is created or changed. Exits 0 when every check passes or
 only warns, 1 when any check fails.`,
@@ -41,6 +42,10 @@ func init() {
 		cobra.FixedCompletions([]string{tui.FormatText, tui.FormatJSON}, cobra.ShellCompDirectiveNoFileComp))
 	rootCmd.AddCommand(doctorCmd)
 }
+
+// doctorChecks counts the preflight checks the v2 config can feed; the VMID,
+// MAC and address checks run vacuously until the v3 schema names the nodes.
+const doctorChecks = 7
 
 // runPreflight is the seam tests replace so doctor runs without a Proxmox server.
 var runPreflight = func(ctx context.Context, cfg *config.Config, creds *credentials.ProxmoxCredentials) ([]proxmox.Finding, error) {
@@ -128,7 +133,7 @@ func printFindings(w io.Writer, format string, findings []proxmox.Finding) error
 		return err
 	}
 	if len(findings) == 0 {
-		_, err := fmt.Fprintln(w, "preflight passed")
+		_, err := fmt.Fprintf(w, "preflight passed (%d checks)\n", doctorChecks)
 		return err
 	}
 	rows := make([][]string, 0, len(findings))

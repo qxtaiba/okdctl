@@ -311,6 +311,13 @@ func TestPreflight(t *testing.T) {
 			want: []Finding{{"mac-collision", "fail", "mac BC:24:11:00:00:03 already used by vmid 200 on node pve2"}},
 		},
 		{
+			name: "mac collision reads no configs without planned macs",
+			mutate: func(d *fakeDriver, in *PreflightInput, _ *fakePinger) {
+				in.MACs = nil
+				d.errs["config"] = errors.New("boom")
+			},
+		},
+		{
 			name:   "mac config read error warns",
 			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) { d.errs["config"] = errors.New("boom") },
 			want:   []Finding{{"mac-collision", "warn", "read config of vmid 200 on node pve2: boom"}},

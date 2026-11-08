@@ -121,8 +121,8 @@ func TestPrintFindingsText(t *testing.T) {
 	if err := printFindings(&buf, tui.FormatText, nil); err != nil {
 		t.Fatalf("printFindings(nil): %v", err)
 	}
-	if got := strings.TrimSpace(buf.String()); got != "preflight passed" {
-		t.Fatalf("printFindings(nil) = %q, want %q", got, "preflight passed")
+	if got := strings.TrimSpace(buf.String()); got != "preflight passed (7 checks)" {
+		t.Fatalf("printFindings(nil) = %q, want %q", got, "preflight passed (7 checks)")
 	}
 }
 
@@ -310,8 +310,8 @@ func TestDoctorCommand(t *testing.T) {
 		if err != nil {
 			t.Fatalf("err = %v, want nil", err)
 		}
-		if strings.TrimSpace(out) != "preflight passed" {
-			t.Fatalf("stdout = %q, want %q", out, "preflight passed")
+		if strings.TrimSpace(out) != "preflight passed (7 checks)" {
+			t.Fatalf("stdout = %q, want %q", out, "preflight passed (7 checks)")
 		}
 	})
 
