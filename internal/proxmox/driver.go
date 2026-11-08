@@ -78,7 +78,8 @@ type VMPatch struct {
 	OnBoot    *bool
 }
 
-// VMConfig is a VM's normalised configuration; Digest is the optimistic-lock token UpdateVM requires.
+// VMConfig is a VM's normalised configuration; Digest is the optimistic-lock
+// token UpdateVM requires.
 type VMConfig struct {
 	Digest string
 }
