@@ -227,8 +227,6 @@ func (s *Builder) String() string {
 	return s.b.String()
 }
 
-// DryRunStep is a single step entry for a dry-run plan listing.
-
 // ValidationSummary renders a config validation result, listing each error with
 // field context when present.
 func ValidationSummary(result *config.ValidationResult) string {
@@ -250,6 +248,3 @@ func ValidationSummary(result *config.ValidationResult) string {
 
 	return tui.Downsample(sb.String())
 }
-
-// deployURLs returns cfg's cluster FQDN and its console and api URLs, the
-// three strings the post-deploy summary and its recap both name.

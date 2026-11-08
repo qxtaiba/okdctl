@@ -277,8 +277,8 @@ func TestDeploy_SaveAndExitPrintsLaterRelease(t *testing.T) {
 func TestRunDeploy_HubVerbsPrintHandoffsAndChangeNothing(t *testing.T) {
 	for verb, want := range map[steps.HubVerb]string{
 		steps.HubVerbDeploy:        "installation returns in a later release",
-		steps.HubVerbDestroy:       "run: okdctl destroy",
-		steps.HubVerbClusterStatus: "run: okdctl status",
+		steps.HubVerbDestroy:       "destroy returns in a later release",
+		steps.HubVerbClusterStatus: "cluster status returns in a later release",
 		steps.HubVerbManageNodes:   "node management returns in a later release",
 	} {
 		t.Run(want, func(t *testing.T) {

@@ -109,16 +109,16 @@ func runDeploy(cmd *cobra.Command, _ []string) error {
 
 // runHubVerb handles the hub verbs that never walk the configure flow,
 // reporting whether verb was one of them so the caller skips the save
-// pipeline. Each prints the line that stands in for the command this release
-// does not carry.
+// pipeline. Each prints the line that stands in for the capability this
+// release does not carry.
 func runHubVerb(verb steps.HubVerb, out io.Writer) bool {
 	switch verb {
 	case steps.HubVerbDeploy:
 		fmt.Fprintln(out, laterReleaseHandoff)
 	case steps.HubVerbDestroy:
-		fmt.Fprintln(out, "run: okdctl destroy")
+		fmt.Fprintln(out, "destroy returns in a later release")
 	case steps.HubVerbClusterStatus:
-		fmt.Fprintln(out, "run: okdctl status")
+		fmt.Fprintln(out, "cluster status returns in a later release")
 	case steps.HubVerbManageNodes:
 		fmt.Fprintln(out, "node management returns in a later release")
 	case steps.HubVerbQuit:

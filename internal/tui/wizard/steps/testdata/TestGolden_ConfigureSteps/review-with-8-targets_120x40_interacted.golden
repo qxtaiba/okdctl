@@ -3,6 +3,9 @@
   │ O K D C T L                                                                                                      │  
   │ review your configuration                                                    connect · cluster · extras · review │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
+  │  netmask          255.255.255.0 (from cidr)                                                                      │  
+  │  vm dns           192.168.1.20 (bastion/dnsmasq)                                                                 │  
+  │                                                                                                                  │  
   │  [5] compute                                                                                                     │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄      │  
   │  control plane     3 × (4 vcpu, 12 GB RAM, 50 GB os disk)                                                        │  
@@ -30,9 +33,6 @@
   │                                                                                                                  │  
   │  WRITES                                                                                                          │  
   │  okdctl.yaml                                                                                                     │  
-  │                                                                                                                  │  
-  │  HEADLESS                                                                                                        │  
-  │  okdctl deploy --config 'okdctl.yaml' --yes --confirm-cluster 'mycluster'                                        │  
   │                                                                                                                  │  
   │──────────────────────────────── ↑ ↓  scroll up for more ──────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
   │  ● deploy now   ○ save and exit                  ←/→ choose • enter confirm • esc back … • ctrl+c quit • ? help  │  

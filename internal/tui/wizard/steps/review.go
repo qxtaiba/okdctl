@@ -222,8 +222,7 @@ func (s *ReviewStep) renderDeployOutcome(width int) string {
 	for _, row := range reviewPlanRows(s.cfg) {
 		lines = append(lines, tui.Truncate(row, width))
 	}
-	lines = append(lines, "", header.Render("WRITES"), tui.Truncate(path, width), "", header.Render("HEADLESS"))
-	lines = append(lines, tui.WrapLines(reviewHeadlessCommand(path, s.cfg.Cluster.Name), width)...)
+	lines = append(lines, "", header.Render("WRITES"), tui.Truncate(path, width))
 	return strings.Join(lines, "\n") + "\n"
 }
 
@@ -254,14 +253,6 @@ func reviewPlanRows(cfg *config.Config) []string {
 		{Header: "os disk", Align: tui.AlignRight, MinWidth: 7},
 	}
 	return tui.ColumnTable(columns, []tui.RowGroup{{Rows: rows}}, tui.TableOptions{Width: 58, Gap: 1})
-}
-
-func reviewHeadlessCommand(configPath, clusterName string) string {
-	return "okdctl deploy --config " + shellQuote(configPath) + " --yes --confirm-cluster " + shellQuote(clusterName)
-}
-
-func shellQuote(value string) string {
-	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }
 
 func (s *ReviewStep) renderConfigChanges(width int) string {
