@@ -1,346 +1,90 @@
 package credentials
 
 import (
-	"bytes"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 )
 
-func TestProxmoxCredentials_Zeroize(t *testing.T) {
-	t.Run("wipes password and api token", func(t *testing.T) {
-		pw := []byte("s3cret")
-		tok := []byte("token-abc")
-		c := &ProxmoxCredentials{Password: pw, APIToken: tok}
-
-		c.Zeroize()
-
-		if c.Password != nil {
-			t.Errorf("Password slice not nilled: %v", c.Password)
-		}
-		if c.APIToken != nil {
-			t.Errorf("APIToken slice not nilled: %v", c.APIToken)
-		}
-		// Zeroize wrote zeros into the elements before nilling the header.
-		for i, b := range pw {
-			if b != 0 {
-				t.Errorf("Password[%d] not zeroed: %d", i, b)
-			}
-		}
-		for i, b := range tok {
-			if b != 0 {
-				t.Errorf("APIToken[%d] not zeroed: %d", i, b)
-			}
-		}
-	})
-
-	t.Run("nil receiver is safe", func(_ *testing.T) {
-		var c *ProxmoxCredentials
-		c.Zeroize()
-	})
-
-	t.Run("empty slices are safe", func(_ *testing.T) {
-		c := &ProxmoxCredentials{}
-		c.Zeroize()
-	})
-}
-
-func TestProxmoxCredentials_StringMasks(t *testing.T) {
-	c := &ProxmoxCredentials{
-		Endpoint: "https://pve.example:8006",
-		Username: "root@pam",
-		Password: []byte("hunter2"),
-		APIToken: []byte("deadbeef-token"),
-		Source:   SourceEnv,
-	}
-
-	for _, fmtStr := range []string{"%s", "%v", "%+v", "%#v"} {
-		rendered := fmt.Sprintf(fmtStr, c)
-		if strings.Contains(rendered, "hunter2") {
-			t.Errorf("%s leaked password: %s", fmtStr, rendered)
-		}
-		if strings.Contains(rendered, "deadbeef-token") {
-			t.Errorf("%s leaked api token: %s", fmtStr, rendered)
-		}
-	}
-
-	s := c.String()
-	if !strings.Contains(s, "root@pam") || !strings.Contains(s, "pve.example") {
-		t.Errorf("String() dropped non-secret fields: %s", s)
-	}
-
-	var nilCreds *ProxmoxCredentials
-	if got := nilCreds.String(); got != "ProxmoxCredentials(nil)" {
-		t.Errorf("nil String() = %q", got)
-	}
-}
-
 func TestGetProxmoxCredentials(t *testing.T) {
-	// Cleared once here; each subtest's t.Setenv auto-restores on completion,
-	// so every subtest starts clean.
-	clearProxmoxEnv(t)
+	cfg := config.DefaultConfig()
 
-	cfgWithHost := func() *config.Config {
-		return &config.Config{
-			Provider: config.ProviderConfig{
-				Type:    config.ProviderProxmox,
-				Proxmox: &config.ProxmoxConfig{Host: "pve.example"},
-			},
+	t.Run("token and tls flag come from the environment, endpoint from the config", func(t *testing.T) {
+		t.Setenv(envProxmoxAPIToken, "root@pam!okdctl=secret")
+		t.Setenv(envProxmoxInsecure, "true")
+
+		creds := GetProxmoxCredentials(cfg)
+
+		if !creds.IsValid() || string(creds.APIToken) != "root@pam!okdctl=secret" {
+			t.Fatalf("APIToken = %q, want the environment's token", creds.APIToken)
 		}
-	}
+		if !creds.Insecure {
+			t.Error("Insecure = false, want PROXMOX_VE_INSECURE=true honoured")
+		}
+		if creds.Endpoint != cfg.Provider.Proxmox.Endpoint {
+			t.Errorf("Endpoint = %q, want %q from the config", creds.Endpoint, cfg.Provider.Proxmox.Endpoint)
+		}
+	})
 
-	t.Run("nil config returns SourceNone", func(t *testing.T) {
+	t.Run("no token in the environment is invalid", func(t *testing.T) {
+		t.Setenv(envProxmoxAPIToken, "")
+		t.Setenv(envProxmoxInsecure, "false")
+
+		creds := GetProxmoxCredentials(cfg)
+
+		if creds.IsValid() || creds.Insecure {
+			t.Fatalf("creds = %+v, want no token and tls verification on", creds.Redacted())
+		}
+		if creds.Endpoint != cfg.Provider.Proxmox.Endpoint {
+			t.Errorf("Endpoint = %q, want the config's even without a token", creds.Endpoint)
+		}
+	})
+
+	t.Run("nil config keeps the token and leaves the endpoint empty", func(t *testing.T) {
+		t.Setenv(envProxmoxAPIToken, "root@pam!okdctl=secret")
+
 		creds := GetProxmoxCredentials(nil)
-		if creds.Source != SourceNone {
-			t.Errorf("Source = %v, want SourceNone", creds.Source)
-		}
-	})
 
-	t.Run("empty host returns SourceNone", func(t *testing.T) {
-		cfg := &config.Config{Provider: config.ProviderConfig{Proxmox: &config.ProxmoxConfig{}}}
-		creds := GetProxmoxCredentials(cfg)
-		if creds.Source != SourceNone {
-			t.Errorf("Source = %v, want SourceNone", creds.Source)
-		}
-	})
-
-	t.Run("env api token wins over config", func(t *testing.T) {
-		t.Setenv("PROXMOX_VE_API_TOKEN", "EXAMPLE-ENV-TOKEN")
-		cfg := cfgWithHost()
-		cfg.Provider.Proxmox.APIToken.Set("EXAMPLE-CFG-TOKEN")
-		cfg.Provider.Proxmox.Username = "cfg-user"
-		cfg.Provider.Proxmox.Password.Set("EXAMPLE-CFG-PW")
-
-		creds := GetProxmoxCredentials(cfg)
-
-		if got := string(creds.APIToken); got != "EXAMPLE-ENV-TOKEN" {
-			t.Errorf("APIToken = %q, want env-token", got)
-		}
-		if creds.Source != SourceEnv {
-			t.Errorf("Source = %v, want SourceEnv", creds.Source)
-		}
-		if !creds.ConfigCredentialsOverridden {
-			t.Errorf("ConfigCredentialsOverridden = false; expected true (config also had creds)")
-		}
-		if !creds.EndpointFromConfig {
-			t.Errorf("EndpointFromConfig = false; expected true (PROXMOX_VE_ENDPOINT unset)")
-		}
-	})
-
-	t.Run("env endpoint override sets EndpointFromConfig=false", func(t *testing.T) {
-		t.Setenv("PROXMOX_VE_API_TOKEN", "EXAMPLE-ENV-TOKEN")
-		t.Setenv("PROXMOX_VE_ENDPOINT", "https://other.example:8006")
-
-		creds := GetProxmoxCredentials(cfgWithHost())
-
-		if creds.EndpointFromConfig {
-			t.Errorf("EndpointFromConfig = true; expected false")
-		}
-		if creds.Endpoint != "https://other.example:8006" {
-			t.Errorf("Endpoint = %q, want explicit env value", creds.Endpoint)
-		}
-	})
-
-	t.Run("env username+password path", func(t *testing.T) {
-		t.Setenv("PROXMOX_VE_USERNAME", "root@pam")
-		t.Setenv("PROXMOX_VE_PASSWORD", "pw")
-
-		creds := GetProxmoxCredentials(cfgWithHost())
-
-		if creds.Source != SourceEnv {
-			t.Errorf("Source = %v, want SourceEnv", creds.Source)
-		}
-		if !bytes.Equal(creds.Password, []byte("pw")) {
-			t.Errorf("Password = %q, want pw", creds.Password)
-		}
-	})
-
-	t.Run("no env creds returns SourceNone even when config has credentials", func(t *testing.T) {
-		cfg := cfgWithHost()
-		cfg.Provider.Proxmox.APIToken.Set("EXAMPLE-CFG-TOKEN")
-		cfg.Provider.Proxmox.Password.Set("EXAMPLE-CFG-PW")
-		cfg.Provider.Proxmox.Username = "cfg-user"
-
-		creds := GetProxmoxCredentials(cfg)
-
-		if creds.Source != SourceNone {
-			t.Errorf("Source = %v, want SourceNone (config-file fallback removed)", creds.Source)
-		}
-		if len(creds.APIToken) != 0 {
-			t.Errorf("APIToken should be empty without env creds; got %q", creds.APIToken)
-		}
-	})
-
-	t.Run("host without scheme gets https prefix and :8006 port", func(t *testing.T) {
-		cfg := cfgWithHost()
-		cfg.Provider.Proxmox.APIToken.Set("EXAMPLE-TINY")
-
-		creds := GetProxmoxCredentials(cfg)
-
-		if creds.Endpoint != "https://pve.example:8006" {
-			t.Errorf("Endpoint = %q, want https://pve.example:8006", creds.Endpoint)
-		}
-	})
-
-	t.Run("http host without insecure_http yields no credentials", func(t *testing.T) {
-		t.Setenv("PROXMOX_VE_API_TOKEN", "EXAMPLE-ENV-TOKEN")
-		cfg := cfgWithHost()
-		cfg.Provider.Proxmox.Host = "http://pve.example"
-
-		creds := GetProxmoxCredentials(cfg)
-
-		if creds.Source != SourceNone {
-			t.Errorf("Source = %v, want SourceNone (http gate)", creds.Source)
-		}
-		if creds.Endpoint != "" || len(creds.APIToken) != 0 {
-			t.Errorf("http endpoint without opt-in must not carry credentials; got endpoint=%q token=%q",
-				creds.Endpoint, creds.APIToken)
-		}
-	})
-
-	t.Run("http host with insecure_http opt-in resolves credentials", func(t *testing.T) {
-		t.Setenv("PROXMOX_VE_API_TOKEN", "EXAMPLE-ENV-TOKEN")
-		cfg := cfgWithHost()
-		cfg.Provider.Proxmox.Host = "http://pve.example"
-		cfg.Provider.Proxmox.InsecureHTTP = true
-
-		creds := GetProxmoxCredentials(cfg)
-
-		if creds.Source != SourceEnv {
-			t.Errorf("Source = %v, want SourceEnv", creds.Source)
-		}
-		if creds.Endpoint != "http://pve.example:8006" {
-			t.Errorf("Endpoint = %q, want http://pve.example:8006", creds.Endpoint)
-		}
-	})
-
-	// An http:// PROXMOX_VE_ENDPOINT must not slip past the config-file's https-only gate.
-	t.Run("env http endpoint without insecure_http yields no credentials", func(t *testing.T) {
-		t.Setenv("PROXMOX_VE_API_TOKEN", "EXAMPLE-ENV-TOKEN")
-		t.Setenv("PROXMOX_VE_ENDPOINT", "http://evil.example:8006")
-
-		creds := GetProxmoxCredentials(cfgWithHost())
-
-		if creds.Source != SourceNone {
-			t.Errorf("Source = %v, want SourceNone (env http gate)", creds.Source)
-		}
-		if creds.Endpoint != "" || len(creds.APIToken) != 0 {
-			t.Errorf("env http endpoint without opt-in must not carry credentials; got endpoint=%q token=%q",
-				creds.Endpoint, creds.APIToken)
-		}
-	})
-
-	t.Run("env http endpoint with insecure_http resolves and normalizes port", func(t *testing.T) {
-		t.Setenv("PROXMOX_VE_API_TOKEN", "EXAMPLE-ENV-TOKEN")
-		t.Setenv("PROXMOX_VE_ENDPOINT", "http://pve.example")
-		cfg := cfgWithHost()
-		cfg.Provider.Proxmox.InsecureHTTP = true
-
-		creds := GetProxmoxCredentials(cfg)
-
-		if creds.Source != SourceEnv {
-			t.Errorf("Source = %v, want SourceEnv", creds.Source)
-		}
-		if creds.Endpoint != "http://pve.example:8006" {
-			t.Errorf("Endpoint = %q, want http://pve.example:8006 (env endpoint normalized)", creds.Endpoint)
+		if !creds.IsValid() || creds.Endpoint != "" {
+			t.Fatalf("creds = %+v, want a token and no endpoint", creds.Redacted())
 		}
 	})
 }
 
-func TestProxmoxCredentials_Redacted(t *testing.T) {
-	c := &ProxmoxCredentials{
-		Endpoint:                    "https://pve.example:8006",
-		Username:                    "root@pam",
-		Password:                    []byte("s3cret"),
-		APIToken:                    []byte("tok"),
-		Insecure:                    true,
-		Source:                      SourceEnv,
-		EndpointFromConfig:          true,
-		ConfigCredentialsOverridden: true,
-	}
+func TestProxmoxCredentialsMaskAndZeroize(t *testing.T) {
+	creds := &ProxmoxCredentials{Endpoint: "https://pve:8006", APIToken: []byte("tok-secret"), Insecure: true}
 
-	got, ok := c.Redacted().(redactedCredentials)
-	if !ok {
-		t.Fatalf("Redacted() type = %T; want redactedCredentials", c.Redacted())
-	}
-	want := redactedCredentials{
-		Endpoint:                    c.Endpoint,
-		Username:                    c.Username,
-		Insecure:                    c.Insecure,
-		Source:                      c.Source,
-		EndpointFromConfig:          c.EndpointFromConfig,
-		ConfigCredentialsOverridden: c.ConfigCredentialsOverridden,
-	}
-	if got != want {
-		t.Errorf("Redacted() = %+v; want %+v", got, want)
-	}
-
-	var nilCreds *ProxmoxCredentials
-	if nilCreds.Redacted() != nil {
-		t.Errorf("nil.Redacted() = %v; want nil", nilCreds.Redacted())
-	}
-}
-
-// clearProxmoxEnv calls Setenv (registers t's auto-restore) then Unsetenv —
-// an empty-but-present var would make LookupEnv report ok=true and flip
-// Insecure logic.
-func clearProxmoxEnv(t *testing.T) {
-	t.Helper()
-	for _, k := range []string{
-		"PROXMOX_VE_ENDPOINT",
-		"PROXMOX_VE_USERNAME",
-		"PROXMOX_VE_PASSWORD",
-		"PROXMOX_VE_API_TOKEN",
-		"PROXMOX_VE_INSECURE",
+	for name, rendered := range map[string]string{
+		"String":   creds.String(),
+		"%v":       fmt.Sprintf("%v", creds),
+		"%+v":      fmt.Sprintf("%+v", creds),
+		"%#v":      fmt.Sprintf("%#v", creds),
+		"Redacted": fmt.Sprint(creds.Redacted()),
 	} {
-		t.Setenv(k, "")
-		_ = os.Unsetenv(k)
-	}
-}
-
-func TestProxmoxHostSchemeValidation(t *testing.T) {
-	makeConfig := func(host string, insecureHTTP bool) *config.Config {
-		return &config.Config{
-			Provider: config.ProviderConfig{
-				Type: config.ProviderProxmox,
-				Proxmox: &config.ProxmoxConfig{
-					Host:         host,
-					Node:         "pve",
-					Storage:      "local-lvm",
-					InsecureHTTP: insecureHTTP,
-				},
-			},
+		if strings.Contains(rendered, "tok-secret") {
+			t.Errorf("%s leaks the token: %s", name, rendered)
+		}
+		if !strings.Contains(rendered, "https://pve:8006") {
+			t.Errorf("%s dropped the endpoint: %s", name, rendered)
 		}
 	}
-	cases := []struct {
-		name          string
-		host          string
-		insecureHTTP  bool
-		wantSchemeErr bool
-	}{
-		{"schemeless host accepted", "192.168.1.100", false, false},
-		{"http rejected without flag", "http://pve.example", false, true},
-		{"http accepted with flag", "http://pve.example", true, false},
+
+	alias := creds.APIToken
+	creds.Zeroize()
+	if creds.APIToken != nil || creds.IsValid() {
+		t.Errorf("APIToken after Zeroize = %v, want nil", creds.APIToken)
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			cfg := makeConfig(tc.host, tc.insecureHTTP)
-			result := config.ValidateWithOptions(cfg, config.ValidationOptions{Scope: config.ScopeProvider})
-			hasSchemeErr := false
-			for _, e := range result.Errors {
-				if strings.Contains(e.Message, "insecure_http") {
-					hasSchemeErr = true
-				}
-			}
-			if tc.wantSchemeErr && !hasSchemeErr {
-				t.Errorf("host %q insecureHTTP=%v: expected scheme error; got %v", tc.host, tc.insecureHTTP, result.Errors)
-			}
-			if !tc.wantSchemeErr && hasSchemeErr {
-				t.Errorf("host %q insecureHTTP=%v: unexpected scheme error; got %v", tc.host, tc.insecureHTTP, result.Errors)
-			}
-		})
+	for i, b := range alias {
+		if b != 0 {
+			t.Fatalf("token byte %d not zeroed", i)
+		}
+	}
+
+	var none *ProxmoxCredentials
+	none.Zeroize()
+	if none.String() != "ProxmoxCredentials(nil)" || none.Redacted() != nil {
+		t.Errorf("nil receiver: String = %q, Redacted = %v", none.String(), none.Redacted())
 	}
 }

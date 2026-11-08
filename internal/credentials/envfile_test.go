@@ -21,13 +21,13 @@ func mustWriteEnv(t *testing.T, path, body string, perm os.FileMode) {
 func TestWriteEnvFile_BufferZeroedAfterWrite(t *testing.T) {
 	for _, fail := range []bool{false, true} {
 		t.Run(map[bool]string{false: "success", true: "failure"}[fail], func(t *testing.T) {
-			creds := &ProxmoxCredentials{Password: []byte("test-secret")}
+			creds := &ProxmoxCredentials{APIToken: []byte("test-secret")}
 			var retained []byte
 			want := errors.New("write failure")
 			err := writeEnvFileBody(creds, func(data []byte) error {
 				retained = data
-				if !bytes.Contains(data, creds.Password) {
-					t.Fatal("missing password")
+				if !bytes.Contains(data, creds.APIToken) {
+					t.Fatal("missing token")
 				}
 				if fail {
 					return want
@@ -40,8 +40,8 @@ func TestWriteEnvFile_BufferZeroedAfterWrite(t *testing.T) {
 			if len(retained) == 0 || !bytes.Equal(retained, make([]byte, len(retained))) {
 				t.Fatal("write buffer not cleared")
 			}
-			if string(creds.Password) != "test-secret" {
-				t.Fatal("caller password mutated")
+			if string(creds.APIToken) != "test-secret" {
+				t.Fatal("caller token mutated")
 			}
 		})
 	}
@@ -52,7 +52,7 @@ func TestWriteEnvFileRejectsLossyValues(t *testing.T) {
 		t.Run(value[:min(len(value), 20)], func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "credentials.env")
 			mustWriteEnv(t, path, "original", 0o600)
-			err := WriteEnvFile(path, &ProxmoxCredentials{Password: []byte(value)})
+			err := WriteEnvFile(path, &ProxmoxCredentials{APIToken: []byte(value)})
 			if err == nil {
 				t.Fatal("accepted unrepresentable value")
 			}
@@ -80,16 +80,10 @@ func TestEnvFilePath(t *testing.T) {
 	}
 }
 
-func TestWriteEnvFile_Perms(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "okdctl.env")
+func TestWriteEnvFile_TokenAndFlagOnly(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "okdctl.env")
+	creds := &ProxmoxCredentials{Endpoint: "https://pve:8006", APIToken: []byte("root@pam!okdctl=tok-abc"), Insecure: true}
 
-	creds := &ProxmoxCredentials{
-		Endpoint: "https://pve:8006",
-		Username: "root@pam",
-		Password: []byte("hunter2"),
-		Insecure: true,
-	}
 	if err := WriteEnvFile(path, creds); err != nil {
 		t.Fatalf("WriteEnvFile failed: %v", err)
 	}
@@ -101,40 +95,26 @@ func TestWriteEnvFile_Perms(t *testing.T) {
 	if perm := fi.Mode().Perm(); perm != 0o600 {
 		t.Errorf("perm = %#o, want 0o600", perm)
 	}
-
 	body, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
-	want := []string{
-		"PROXMOX_VE_ENDPOINT=https://pve:8006",
-		"PROXMOX_VE_USERNAME=root@pam",
-		"PROXMOX_VE_PASSWORD=hunter2",
-		"PROXMOX_VE_INSECURE=true",
-	}
-	for _, line := range want {
+	for _, line := range []string{"PROXMOX_VE_API_TOKEN=root@pam!okdctl=tok-abc", "PROXMOX_VE_INSECURE=true"} {
 		if !strings.Contains(string(body), line) {
 			t.Errorf("written .env missing %q; got:\n%s", line, body)
 		}
 	}
-}
-
-func TestWriteEnvFile_APITokenOnly(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "t.env")
-	creds := &ProxmoxCredentials{
-		Endpoint: "https://pve:8006",
-		APIToken: []byte("tok-abc"),
+	if strings.Contains(string(body), "pve:8006") || strings.Contains(string(body), "PROXMOX_VE_ENDPOINT") {
+		t.Errorf(".env carries the endpoint, which belongs in okdctl.yaml:\n%s", body)
 	}
-	if err := WriteEnvFile(path, creds); err != nil {
+
+	verifying := filepath.Join(t.TempDir(), "okdctl.env")
+	if err := WriteEnvFile(verifying, &ProxmoxCredentials{APIToken: []byte("tok")}); err != nil {
 		t.Fatal(err)
 	}
-	body, _ := os.ReadFile(path)
-	if strings.Contains(string(body), "PROXMOX_VE_USERNAME=") {
-		t.Errorf(".env leaked empty username: %s", body)
-	}
-	if !strings.Contains(string(body), "PROXMOX_VE_API_TOKEN=tok-abc") {
-		t.Errorf(".env missing api token; got:\n%s", body)
+	body, _ = os.ReadFile(verifying)
+	if strings.Contains(string(body), "PROXMOX_VE_INSECURE") {
+		t.Errorf(".env sets PROXMOX_VE_INSECURE for a verifying connection:\n%s", body)
 	}
 }
 
@@ -149,8 +129,7 @@ func TestWriteEnvFile_SymlinkRefused(t *testing.T) {
 	if err := os.Symlink(target, link); err != nil {
 		t.Fatal(err)
 	}
-	creds := &ProxmoxCredentials{Endpoint: "https://pve:8006"}
-	err := WriteEnvFile(link, creds)
+	err := WriteEnvFile(link, &ProxmoxCredentials{APIToken: []byte("tok")})
 	if err == nil {
 		t.Fatal("WriteEnvFile should have refused symlink target")
 	}
@@ -174,48 +153,40 @@ func TestLoadEnvFile_PermRefusal(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			dir := t.TempDir()
-			path := filepath.Join(dir, "perm.env")
+			path := filepath.Join(t.TempDir(), "perm.env")
 			mustWriteEnv(t, path, "PROXMOX_VE_API_TOKEN=tok\n", tc.perm)
-			// Explicit chmod in case umask narrowed the create mode.
 			if err := os.Chmod(path, tc.perm); err != nil {
 				t.Fatal(err)
 			}
 
-			// loadEnvFileOnce directly — LoadEnvFile's sync.Once would short-circuit.
 			err := loadEnvFileOnce(path)
 			var authErr *errtypes.AuthError
-			gotAuth := errors.As(err, &authErr)
-			if gotAuth != tc.wantAuthErr {
+			if gotAuth := errors.As(err, &authErr); gotAuth != tc.wantAuthErr {
 				t.Errorf("err = %v, wantAuthErr = %v", err, tc.wantAuthErr)
 			}
 		})
 	}
 
 	t.Run("missing file is not an error", func(t *testing.T) {
-		dir := t.TempDir()
-		path := filepath.Join(dir, "does-not-exist.env")
+		path := filepath.Join(t.TempDir(), "does-not-exist.env")
 		if err := loadEnvFileOnce(path); err != nil {
 			t.Errorf("missing file should be nil error; got %v", err)
 		}
 	})
 
 	t.Run("stat error on unreadable parent surfaces as ConfigError", func(t *testing.T) {
-		// stat on an unreadable dir returns "permission denied", not IsNotExist.
 		if os.Geteuid() == 0 {
 			t.Skip("root bypasses perm bits")
 		}
-		dir := t.TempDir()
-		inner := filepath.Join(dir, "locked")
+		inner := filepath.Join(t.TempDir(), "locked")
 		if err := os.Mkdir(inner, 0o000); err != nil {
 			t.Fatal(err)
 		}
 		defer os.Chmod(inner, 0o700) //nolint:errcheck // best-effort cleanup
-		path := filepath.Join(inner, "x.env")
 
-		err := loadEnvFileOnce(path)
+		err := loadEnvFileOnce(filepath.Join(inner, "x.env"))
 		if err == nil {
-			t.Skip("filesystem allowed read despite 0o000 — likely macOS APFS or similar")
+			t.Skip("filesystem allowed read despite 0o000")
 		}
 		var cfgErr *errtypes.ConfigError
 		if !errors.As(err, &cfgErr) {
@@ -224,10 +195,6 @@ func TestLoadEnvFile_PermRefusal(t *testing.T) {
 	})
 }
 
-// TestLoadEnvFile_SecondCallDifferentPath is the only test in this
-// package that calls the exported LoadEnvFile — its sync.Once is a
-// process-global singleton, so every other test calls loadEnvFileOnce
-// directly instead (see loadEnvFileOnce callers above).
 func TestLoadEnvFile_SecondCallDifferentPath(t *testing.T) {
 	dir := t.TempDir()
 	first := filepath.Join(dir, "first.env")
@@ -236,44 +203,35 @@ func TestLoadEnvFile_SecondCallDifferentPath(t *testing.T) {
 		t.Fatalf("first LoadEnvFile: %v", err)
 	}
 
-	second := filepath.Join(dir, "second.env")
-	err := LoadEnvFile(second)
-	if err == nil {
-		t.Fatal("expected error for second LoadEnvFile call with a different path")
-	}
+	err := LoadEnvFile(filepath.Join(dir, "second.env"))
 	if !errors.Is(err, errEnvFileAlreadyLoaded) {
 		t.Errorf("err = %v; want errors.Is(errEnvFileAlreadyLoaded)", err)
 	}
 }
 
-// TestLoadEnvFile_RejectsUnknownKeys pins the allowlist: a key outside the
-// PROXMOX_VE_* set must fail the whole load (naming the offender) and must not
-// be promoted into the process environment, where it would reach every
-// subprocess including terraform under the sudo re-exec.
 func TestLoadEnvFile_RejectsUnknownKeys(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "stray.env")
-	mustWriteEnv(t, path, "PROXMOX_VE_API_TOKEN=tok\nTF_LOG=DEBUG\n", 0o600)
+	for _, stray := range []string{"TF_LOG", "PROXMOX_VE_USERNAME", "PROXMOX_VE_PASSWORD", "PROXMOX_VE_ENDPOINT"} {
+		t.Run(stray, func(t *testing.T) {
+			if _, present := os.LookupEnv(stray); present {
+				t.Skipf("%s already set in the environment; cannot assert non-promotion", stray)
+			}
+			path := filepath.Join(t.TempDir(), "stray.env")
+			mustWriteEnv(t, path, "PROXMOX_VE_API_TOKEN=tok\n"+stray+"=x\n", 0o600)
 
-	if _, present := os.LookupEnv("TF_LOG"); present {
-		t.Skip("TF_LOG already set in the environment; cannot assert non-promotion")
-	}
-
-	err := loadEnvFileOnce(path)
-	if !errors.Is(err, ErrEnvFileUnknownKey) {
-		t.Fatalf("err = %v; want errors.Is(ErrEnvFileUnknownKey)", err)
-	}
-	if !strings.Contains(err.Error(), "TF_LOG") {
-		t.Errorf("error should name the rejected key; got %v", err)
-	}
-	if _, present := os.LookupEnv("TF_LOG"); present {
-		t.Errorf("rejected key TF_LOG was promoted into the environment despite the error")
+			err := loadEnvFileOnce(path)
+			if !errors.Is(err, ErrEnvFileUnknownKey) {
+				t.Fatalf("err = %v; want errors.Is(ErrEnvFileUnknownKey)", err)
+			}
+			if !strings.Contains(err.Error(), stray) {
+				t.Errorf("error should name the rejected key; got %v", err)
+			}
+			if _, present := os.LookupEnv(stray); present {
+				t.Errorf("rejected key %s was promoted into the environment despite the error", stray)
+			}
+		})
 	}
 }
 
-// TestLoadEnvFile_SymlinkRefused pins the O_NOFOLLOW gate: the permission
-// decision and the read must bind to one inode, so a symlinked .env path is
-// refused before its contents are read.
 func TestLoadEnvFile_SymlinkRefused(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root bypasses O_NOFOLLOW semantics differently")

@@ -16,36 +16,28 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// errEnvFileAlreadyLoaded lets callers errors.Is the second-call failure
-// instead of string-matching Msg.
 var errEnvFileAlreadyLoaded = errors.New("env file already loaded with different path")
 
-// ErrEnvFileUnknownKey is returned when the .env file contains a key outside
-// the PROXMOX_VE_* allowlist, so a typo or a smuggled TF_/KUBE/OC_ variable
-// fails loudly instead of silently reaching every subprocess.
+// ErrEnvFileUnknownKey reports a key outside the PROXMOX_VE_API_TOKEN and
+// PROXMOX_VE_INSECURE allowlist, so a typo or a smuggled variable fails
+// loudly instead of silently reaching the process environment.
 var ErrEnvFileUnknownKey = errors.New("env file contains an unrecognized key")
 
-// envFileAllowedKeys is an explicit allowlist: without it, TF_/KUBE/PROXMOX_/
-// HELM_/OC_-prefixed keys would pass DefaultEnvAllowlist into every
-// subprocess, including terraform under the sudo re-exec.
 var envFileAllowedKeys = map[string]bool{
-	envProxmoxEndpoint: true,
-	envProxmoxUsername: true,
-	envProxmoxPassword: true,
 	envProxmoxAPIToken: true,
 	envProxmoxInsecure: true,
 }
 
-// loadOnce guards against concurrent/repeated LoadEnvFile calls — env
-// mutation isn't goroutine-safe, and a second call with a different path
-// silently reuses the first result.
+// loadOnce guards LoadEnvFile: env mutation is not goroutine-safe, and a
+// second call with a different path must fail rather than reuse the first.
 var (
 	loadOnce   sync.Once
 	loadErr    error
 	loadedPath string
 )
 
-// EnvFilePath derives the .env path from a config path (e.g. "okdctl.yaml" becomes "okdctl.env").
+// EnvFilePath derives the sidecar path from a config path, okdctl.yaml
+// becoming okdctl.env.
 func EnvFilePath(configPath string) string {
 	if strings.HasSuffix(configPath, ".yaml") {
 		return strings.TrimSuffix(configPath, ".yaml") + ".env"
@@ -56,13 +48,9 @@ func EnvFilePath(configPath string) string {
 	return configPath + ".env"
 }
 
-// WriteEnvFile persists credentials in KEY=VALUE format with 0600
-// permissions. The buffer is zeroed after write so credential residue
-// doesn't outlive the call.
+// WriteEnvFile persists the token and TLS flag as KEY=VALUE lines at mode
+// 0600, refusing a symlinked path and zeroing its buffer after the write.
 func WriteEnvFile(path string, creds *ProxmoxCredentials) error {
-	// Refuse symlinks: a pre-planted symlink would redirect credential bytes
-	// to an attacker-chosen target; a missing file here is the normal
-	// first-write case.
 	if info, err := os.Lstat(path); err == nil {
 		if info.Mode()&os.ModeSymlink != 0 {
 			return &errtypes.AuthError{
@@ -83,87 +71,49 @@ func WriteEnvFile(path string, creds *ProxmoxCredentials) error {
 }
 
 func writeEnvFileBody(creds *ProxmoxCredentials, write func([]byte) error) error {
-	fields := []struct {
-		key   string
-		value []byte
-	}{
-		{envProxmoxEndpoint, []byte(creds.Endpoint)},
-		{envProxmoxUsername, []byte(creds.Username)},
-		{envProxmoxPassword, creds.Password},
-		{envProxmoxAPIToken, creds.APIToken},
-	}
-	for _, field := range fields {
-		v := field.value
-		quoted := len(v) >= 2 && ((v[0] == '\'' && v[len(v)-1] == '\'') ||
-			(v[0] == '"' && v[len(v)-1] == '"'))
-		if bytes.ContainsAny(v, "\r\n\x00") || !bytes.Equal(v, bytes.TrimSpace(v)) ||
-			quoted || len(field.key)+len(v)+2 >= bufio.MaxScanTokenSize {
-			return &errtypes.AuthError{Msg: "encode env file: " + field.key + " cannot be represented losslessly"}
-		}
+	v := creds.APIToken
+	quoted := len(v) >= 2 && ((v[0] == '\'' && v[len(v)-1] == '\'') ||
+		(v[0] == '"' && v[len(v)-1] == '"'))
+	if bytes.ContainsAny(v, "\r\n\x00") || !bytes.Equal(v, bytes.TrimSpace(v)) ||
+		quoted || len(envProxmoxAPIToken)+len(v)+2 >= bufio.MaxScanTokenSize {
+		return &errtypes.AuthError{Msg: "encode env file: " + envProxmoxAPIToken + " cannot be represented losslessly"}
 	}
 	data := buildEnvFileBody(creds)
 	defer clear(data)
 	return write(data)
 }
 
-// buildEnvFileBody serialises creds into KEY=VALUE format; the caller must
-// clear() the returned slice. The buffer is preallocated to its exact final
-// size so a mid-write grow can't orphan an un-zeroed secret copy in the old
-// backing array.
+// buildEnvFileBody preallocates the exact final size so a mid-write grow
+// cannot orphan an un-zeroed copy of the token in an old backing array.
 func buildEnvFileBody(creds *ProxmoxCredentials) []byte {
 	const header = "# Proxmox credentials (managed by okdctl)\n" +
 		"# This file has restricted permissions (0600). Do not commit to git.\n"
+	const insecureLine = envProxmoxInsecure + "=true\n"
 
 	n := len(header)
-	if creds.Endpoint != "" {
-		n += len(envProxmoxEndpoint) + 1 + len(creds.Endpoint) + 1
-	}
-	if creds.Username != "" {
-		n += len(envProxmoxUsername) + 1 + len(creds.Username) + 1
-	}
-	if len(creds.Password) > 0 {
-		n += len(envProxmoxPassword) + 1 + len(creds.Password) + 1
-	}
 	if len(creds.APIToken) > 0 {
 		n += len(envProxmoxAPIToken) + 1 + len(creds.APIToken) + 1
 	}
 	if creds.Insecure {
-		n += len(envProxmoxInsecure) + len("=true\n")
+		n += len(insecureLine)
 	}
 
 	buf := bytes.NewBuffer(make([]byte, 0, n))
 	buf.WriteString(header)
-
-	if creds.Endpoint != "" {
-		buf.WriteString(envProxmoxEndpoint + "=")
-		buf.WriteString(creds.Endpoint)
-		buf.WriteByte('\n')
-	}
-	if creds.Username != "" {
-		buf.WriteString(envProxmoxUsername + "=")
-		buf.WriteString(creds.Username)
-		buf.WriteByte('\n')
-	}
-	if len(creds.Password) > 0 {
-		buf.WriteString(envProxmoxPassword + "=")
-		buf.Write(creds.Password)
-		buf.WriteByte('\n')
-	}
 	if len(creds.APIToken) > 0 {
 		buf.WriteString(envProxmoxAPIToken + "=")
 		buf.Write(creds.APIToken)
 		buf.WriteByte('\n')
 	}
 	if creds.Insecure {
-		buf.WriteString(envProxmoxInsecure + "=true\n")
+		buf.WriteString(insecureLine)
 	}
 	return buf.Bytes()
 }
 
-// LoadEnvFile loads a .env file into the process environment once per
-// process (guarded by sync.Once); already-set variables are not overwritten
-// and a missing file is not an error. A non-nil return means nothing was
-// loaded — callers must treat it as fatal.
+// LoadEnvFile loads path into the process environment once per process;
+// already-set variables win and a missing file is not an error. A non-nil
+// return means nothing was loaded.
 func LoadEnvFile(path string) error {
 	loadOnce.Do(func() {
 		loadedPath = path
@@ -178,12 +128,9 @@ func LoadEnvFile(path string) error {
 	return loadErr
 }
 
-// loadEnvFileOnce is not concurrency-safe; call only via LoadEnvFile's
-// sync.Once.
+// loadEnvFileOnce opens O_NOFOLLOW so the permission check and the read
+// bind to one inode, closing the stat-then-open TOCTOU window.
 func loadEnvFileOnce(path string) error {
-	// O_NOFOLLOW binds the permission check and read to one inode, closing
-	// the TOCTOU window an os.Stat-then-Open pair leaves open, and refuses a
-	// symlinked .env just like WriteEnvFile's Lstat.
 	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -209,11 +156,9 @@ func loadEnvFileOnce(path string) error {
 	if err != nil {
 		return &errtypes.ConfigError{Msg: fmt.Sprintf("parse env file %s", path), Err: err}
 	}
-
 	if err := rejectUnknownEnvKeys(path, pairs); err != nil {
 		return err
 	}
-
 	for k, v := range pairs {
 		if _, exists := os.LookupEnv(k); !exists {
 			_ = os.Setenv(k, v)
@@ -222,9 +167,6 @@ func loadEnvFileOnce(path string) error {
 	return nil
 }
 
-// rejectUnknownEnvKeys names offending keys and, on error, leaves the
-// environment untouched — matching LoadEnvFile's "error means nothing
-// loaded" contract.
 func rejectUnknownEnvKeys(path string, pairs map[string]string) error {
 	var rejected []string
 	for k := range pairs {
@@ -237,14 +179,12 @@ func rejectUnknownEnvKeys(path string, pairs map[string]string) error {
 	}
 	slices.Sort(rejected)
 	return &errtypes.ConfigError{
-		Msg: fmt.Sprintf("env file %s contains unrecognized keys %v; only PROXMOX_VE_* credential keys are permitted",
-			path, rejected),
+		Msg: fmt.Sprintf("env file %s contains unrecognized keys %v; only %s and %s are permitted",
+			path, rejected, envProxmoxAPIToken, envProxmoxInsecure),
 		Err: ErrEnvFileUnknownKey,
 	}
 }
 
-// parseDotEnv reads key=value pairs from r, skipping blank/comment lines and
-// stripping surrounding quotes from values.
 func parseDotEnv(r io.Reader) (map[string]string, error) {
 	pairs := make(map[string]string)
 	sc := bufio.NewScanner(r)
