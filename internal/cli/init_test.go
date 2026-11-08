@@ -189,18 +189,32 @@ func TestRunInit_ExistingConfigSeedsWizard(t *testing.T) {
 	}
 }
 
-func TestRunInit_CorruptConfigFallsBackToDefaults(t *testing.T) {
-	resetInitState(t)
-	if err := os.WriteFile("okdctl.yaml", []byte("{{{ not yaml"), 0o600); err != nil {
-		t.Fatal(err)
+func TestRunInit_RejectedConfigIsRefused(t *testing.T) {
+	cases := map[string]struct{ seed, want string }{
+		"schema v2":    {"schemaVersion: v2\ncluster:\n  name: old\n", "okdctl.yaml is schema v2; this release reads v3 only"},
+		"no schema":    {"cluster:\n  name: old\n", "okdctl.yaml has no schemaVersion; this release reads v3 only"},
+		"corrupt yaml": {"{{{ not yaml", "parse config file okdctl.yaml"},
 	}
-	rec := stubWizard(t, &wizard.Result{Outcome: wizard.OutcomeCancelled}, steps.HubVerbGetStarted, nil)
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			resetInitState(t)
+			if err := os.WriteFile("okdctl.yaml", []byte(tc.seed), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			rec := stubWizard(t, &wizard.Result{Outcome: wizard.OutcomeCancelled}, steps.HubVerbGetStarted, nil)
 
-	if err := runInit(initCmd, nil); err != nil {
-		t.Fatalf("interactive run must fall back to defaults, got: %v", err)
-	}
-	if rec.configExists || rec.cfg.Cluster.Name != config.DefaultConfig().Cluster.Name {
-		t.Errorf("corrupt config must present as fresh defaults, got exists=%v name=%q", rec.configExists, rec.cfg.Cluster.Name)
+			err := runInit(initCmd, nil)
+			var ce *errtypes.ConfigError
+			if !errors.As(err, &ce) || exitCodeFor(err) != 2 || !strings.Contains(err.Error(), tc.want) || !strings.Contains(err.Error(), "--output-file") {
+				t.Fatalf("err = %v (exit %d); want a ConfigError exiting 2 with %q and the --output-file hint", err, exitCodeFor(err), tc.want)
+			}
+			if rec.called {
+				t.Error("wizard opened over a rejected config")
+			}
+			if data, _ := os.ReadFile("okdctl.yaml"); string(data) != tc.seed {
+				t.Errorf("init rewrote the rejected config:\n%s", data)
+			}
+		})
 	}
 }
 

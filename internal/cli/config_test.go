@@ -8,8 +8,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/model"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 func runValidate(t *testing.T, configFile, output string) (stdout, stderr string, err error) {
@@ -108,6 +112,67 @@ func TestConfigValidate_JSONCarriesInventoryOnly(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "configuration is valid") {
 		t.Errorf("summary must go to stderr in json mode; stderr = %q", stderr)
+	}
+}
+
+func TestConfigValidate_PreviewNoteWithoutRecord(t *testing.T) {
+	stdout, _, err := runValidate(t, standardExample, "")
+	if err != nil {
+		t.Fatalf("runConfigValidate: %v", err)
+	}
+	if !strings.Contains(stdout, "MACs are assigned at okdctl up") {
+		t.Errorf("preview note missing:\n%s", stdout)
+	}
+	stdout, _, err = runValidate(t, standardExample, "json")
+	if err != nil {
+		t.Fatalf("runConfigValidate json: %v", err)
+	}
+	if strings.Contains(stdout, "MACs are assigned") {
+		t.Errorf("json stdout carries the preview note:\n%s", stdout)
+	}
+}
+
+func TestConfigValidate_RecordInfraIDMakesMACsReal(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "okdctl.yaml")
+	cfg, err := config.NewLoader().LoadFile(standardExample)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := config.NewLoader().Save(cfg, path); err != nil {
+		t.Fatal(err)
+	}
+	const infraID = "standard-a1b2c3"
+	rec := &model.Record{InfraID: infraID, Cluster: "standard", Domain: "k8s.local", Created: time.Now(), Release: "4.22.0-okd-scos.10"}
+	if err := model.SaveRecord(workspace.RecordPath(dir), rec); err != nil {
+		t.Fatalf("SaveRecord: %v", err)
+	}
+
+	stdout, _, err := runValidate(t, path, "")
+	if err != nil {
+		t.Fatalf("runConfigValidate: %v", err)
+	}
+	if !strings.Contains(stdout, model.MAC(infraID, 6010)) || strings.Contains(stdout, "preview") {
+		t.Errorf("text output must carry the record's MACs and no preview note:\n%s", stdout)
+	}
+	stdout, _, err = runValidate(t, path, "json")
+	if err != nil {
+		t.Fatalf("runConfigValidate json: %v", err)
+	}
+	var inv struct {
+		InfraID string `json:"infra_id"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &inv); err != nil || inv.InfraID != infraID {
+		t.Errorf("json infra_id = %q, %v; want %q", inv.InfraID, err, infraID)
+	}
+
+	if err := os.WriteFile(workspace.RecordPath(dir), []byte("{broken"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = runValidate(t, path, "")
+	var cfgErr *errtypes.ConfigError
+	if !errors.As(err, &cfgErr) || !strings.Contains(err.Error(), "cluster record") {
+		t.Errorf("corrupt record: err = %v; want a ConfigError naming the record", err)
 	}
 }
 

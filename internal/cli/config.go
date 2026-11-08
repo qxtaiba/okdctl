@@ -2,8 +2,11 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -14,9 +17,17 @@ import (
 	"github.com/qxtaiba/okdctl/internal/model"
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 var configValidateOutput string
+
+// previewInfraID stands in for the record's infra-ID before okdctl up
+// writes one; the MACs it yields are a preview.
+const (
+	previewInfraID = "preview"
+	previewMACNote = "MACs are assigned at okdctl up; the ones above are a preview."
+)
 
 var configCmd = &cobra.Command{
 	Use:   "config",
@@ -41,9 +52,11 @@ var configValidateCmd = &cobra.Command{
 enum values, provider settings, topology constraints) and print every
 error found. A valid file is followed by the node table it produces:
 name, role, VMID, MAC, address, host, CPU, MEM (MiB) and DISKS (sizes in
-GiB). With --output json the inventory alone goes to stdout as an object
-with infra_id, api_vip, ingress_vip and nodes[] (memory_mib, disks[].size_gib),
-and the summary goes to stderr.
+GiB). MACs derive from the infra-ID in cluster/record.json; before okdctl
+up writes it they are a preview and the table says so. With --output json
+the inventory alone goes to stdout as an object with infra_id ("preview"
+before the record exists), api_vip, ingress_vip and nodes[] (memory_mib,
+disks[].size_gib), and the summary goes to stderr.
 
 Read-only: nothing is written or deployed. Exits 0 when the config is
 valid, 2 when validation reports errors, and 66 when the file does not
@@ -83,7 +96,11 @@ func runConfigValidate(cmd *cobra.Command, _ []string) error {
 		// The result stays in the Unwrap chain so callers can inspect the findings.
 		return (&errtypes.ConfigError{Msg: "config validation failed", Err: result}).WithHint("review the errors listed above")
 	}
-	inv, err := model.Build(cfg, "preview")
+	infraID, recorded, err := recordedInfraID(cfgFile)
+	if err != nil {
+		return err
+	}
+	inv, err := model.Build(cfg, infraID)
 	if err != nil {
 		return &errtypes.ConfigError{Msg: "derive node inventory: " + err.Error(), Err: err}
 	}
@@ -92,7 +109,27 @@ func runConfigValidate(cmd *cobra.Command, _ []string) error {
 		enc.SetIndent("", "  ")
 		return enc.Encode(inv)
 	}
-	return printNodeTable(cmd.OutOrStdout(), &inv)
+	if err := printNodeTable(cmd.OutOrStdout(), &inv); err != nil {
+		return err
+	}
+	if !recorded {
+		fmt.Fprintf(cmd.OutOrStdout(), "\n%s\n", previewMACNote)
+	}
+	return nil
+}
+
+// recordedInfraID returns the infra-ID of the cluster record in the
+// workspace holding configFile, or previewInfraID with recorded=false when
+// no record exists yet.
+func recordedInfraID(configFile string) (infraID string, recorded bool, err error) {
+	rec, err := model.LoadRecord(workspace.RecordPath(filepath.Dir(configFile)))
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		return previewInfraID, false, nil
+	case err != nil:
+		return "", false, &errtypes.ConfigError{Msg: err.Error(), Err: err}
+	}
+	return rec.InfraID, true, nil
 }
 
 func printNodeTable(w io.Writer, inv *model.Inventory) error {
