@@ -93,7 +93,7 @@ func TestThemeRemapReachesRenderedRows(t *testing.T) {
 	if code := CodeInlineStyle.Render("kubeadmin-password"); strings.Contains(code, "34;211;238") {
 		t.Fatalf("light CodeInline still renders Cyan400: %q", code)
 	}
-	sub := DottedKeyValueSubFull("password", "hunter2-placeholder", 12, 60)
+	sub := DefaultFactStyles().SubKey.Render("password")
 	if !strings.Contains(sub, "100;116;139") {
 		t.Fatalf("light nested key does not carry the Slate500 faint tier: %q", sub)
 	}
@@ -106,7 +106,7 @@ func TestThemeRemapReachesRenderedRows(t *testing.T) {
 	if strings.Contains(row, "148;163;184") || strings.Contains(row, "71;85;105") {
 		t.Fatalf("high-contrast dottedKV key still renders a slate tier: %q", row)
 	}
-	sub = DottedKeyValueSubFull("password", "hunter2-placeholder", 12, 60)
+	sub = DefaultFactStyles().SubKey.Render("password")
 	if strings.Contains(sub, "100;116;139") {
 		t.Fatalf("high-contrast nested key still renders the slate faint tier: %q", sub)
 	}

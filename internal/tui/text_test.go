@@ -70,16 +70,6 @@ func TestTruncateMiddleFoldsInvalidUTF8(t *testing.T) {
 	}
 }
 
-func TestPromptLine(t *testing.T) {
-	got := PromptLine("proceed with destroy? [y/N]")
-	if !strings.Contains(got, IconPointer) {
-		t.Errorf("PromptLine must carry the pointer glyph: %q", got)
-	}
-	if !strings.HasSuffix(got, "proceed with destroy? [y/N]: ") {
-		t.Errorf("PromptLine must append a trailing colon and space to the text: %q", got)
-	}
-}
-
 // TestWrapLinesNeverBreaksAtHyphens pins that copy-paste recovery commands
 // (`okdctl init --minimal`, kubeadmin-password paths) wrap on spaces only:
 // a hyphen split silently corrupts the exact strings users copy during

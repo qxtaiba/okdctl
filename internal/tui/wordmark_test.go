@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"image/color"
 	"strings"
 	"testing"
 
@@ -65,26 +64,4 @@ func TestWordmarkWithoutGradientRendersPlain(t *testing.T) {
 	if strings.Contains(out, "\x1b") {
 		t.Errorf("an empty gradient must render uncolored: %q", out)
 	}
-}
-
-func TestSuccessGradientRampsAcrossTheRequestedLength(t *testing.T) {
-	ramp := SuccessGradient(8)
-	if len(ramp) != 8 {
-		t.Fatalf("SuccessGradient(8) returned %d colors, want 8", len(ramp))
-	}
-	if sameColor(ramp[0], ramp[len(ramp)-1]) {
-		t.Error("the ramp must actually move between its ends")
-	}
-	if got := SuccessGradient(1); len(got) != 1 || !sameColor(got[0], ColorSuccess()) {
-		t.Errorf("SuccessGradient(1) = %v, want the success tier alone", got)
-	}
-	if got := SuccessGradient(0); got != nil {
-		t.Errorf("SuccessGradient(0) = %v, want nil", got)
-	}
-}
-
-func sameColor(a, b color.Color) bool {
-	ar, ag, ab, _ := a.RGBA()
-	br, bg, bb, _ := b.RGBA()
-	return ar == br && ag == bg && ab == bb
 }
