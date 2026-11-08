@@ -159,7 +159,7 @@ func TestWriteCredentialsEnv(t *testing.T) {
 			fi, err := os.Stat(envPath)
 			if !tc.wantFile {
 				after, _ := os.ReadFile(envPath)
-				if string(after) != string(before) {
+				if !bytes.Equal(after, before) {
 					t.Fatalf("sidecar changed by an untouched session:\n%s", after)
 				}
 				return
