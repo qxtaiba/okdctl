@@ -3,6 +3,7 @@ package proxmox
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -33,9 +34,19 @@ func newSpec(vmid int, tag string) VMSpec {
 	}
 }
 
+func missingConfig(vmid int) http.HandlerFunc {
+	return pveErrorHandler(fmt.Sprintf("Configuration file 'nodes/pve/qemu-server/%d.conf' does not exist", vmid))
+}
+
+func taggedConfig(tags string) http.HandlerFunc {
+	return jsonHandler(http.StatusOK, `{"data":{"name":"grappleberry-worker-0","cores":4,"memory":"16384","tags":"`+tags+`","digest":"7f3a0c2e"}}`)
+}
+
 func TestCreateVM(t *testing.T) {
+	const config105 = "GET /nodes/pve/qemu/105/config"
+
 	t.Run("new vmid posts the spec", func(t *testing.T) {
-		f := newFakeAPI(t, nil)
+		f := newFakeAPI(t, map[string]http.HandlerFunc{config105: missingConfig(105)})
 		spec := newSpec(105, "grappleberry")
 		task, err := f.driver(t).CreateVM(t.Context(), "pve", spec)
 		if err != nil {
@@ -78,6 +89,73 @@ func TestCreateVM(t *testing.T) {
 		f := newFakeAPI(t, nil)
 		if _, err := f.driver(t).CreateVM(t.Context(), "pve", newSpec(201, "lab-9f3a1c")); err == nil {
 			t.Fatal("CreateVM() treated tag lab-9f3a1cx as lab-9f3a1c")
+		}
+	})
+
+	t.Run("vmid unlisted but tagged on the node is a no-op", func(t *testing.T) {
+		f := newFakeAPI(t, map[string]http.HandlerFunc{config105: taggedConfig("grappleberry;okd")})
+		task, err := f.driver(t).CreateVM(t.Context(), "pve", newSpec(105, "grappleberry"))
+		if err != nil {
+			t.Fatalf("CreateVM(): %v", err)
+		}
+		if task != (Task{}) {
+			t.Fatalf("CreateVM() = %+v, want zero Task", task)
+		}
+		if f.called("POST /nodes/pve/qemu") {
+			t.Fatal("CreateVM() posted over a VM the listing had not published yet")
+		}
+	})
+
+	t.Run("vmid unlisted but foreign on the node is an error", func(t *testing.T) {
+		f := newFakeAPI(t, map[string]http.HandlerFunc{config105: taggedConfig("lab")})
+		_, err := f.driver(t).CreateVM(t.Context(), "pve", newSpec(105, "grappleberry"))
+		if err == nil || !strings.Contains(err.Error(), "105") {
+			t.Fatalf("CreateVM() error = %v, want it to name vm 105", err)
+		}
+		if f.called("POST /nodes/pve/qemu") {
+			t.Fatal("CreateVM() posted over a foreign VM")
+		}
+	})
+
+	t.Run("post refused as already existing is a no-op once tagged", func(t *testing.T) {
+		var reads atomic.Int32
+		f := newFakeAPI(t, map[string]http.HandlerFunc{
+			config105: func(w http.ResponseWriter, r *http.Request) {
+				if reads.Add(1) == 1 {
+					missingConfig(105)(w, r)
+					return
+				}
+				taggedConfig("grappleberry")(w, r)
+			},
+			"POST /nodes/pve/qemu": pveErrorHandler("unable to create VM 105: config file already exists"),
+		})
+		task, err := f.driver(t).CreateVM(t.Context(), "pve", newSpec(105, "grappleberry"))
+		if err != nil {
+			t.Fatalf("CreateVM(): %v", err)
+		}
+		if task != (Task{}) {
+			t.Fatalf("CreateVM() = %+v, want zero Task", task)
+		}
+		if got := f.count(config105); got != 2 {
+			t.Fatalf("config read %d times, want 2", got)
+		}
+	})
+
+	t.Run("post refused as already existing stays an error when foreign", func(t *testing.T) {
+		var reads atomic.Int32
+		f := newFakeAPI(t, map[string]http.HandlerFunc{
+			config105: func(w http.ResponseWriter, r *http.Request) {
+				if reads.Add(1) == 1 {
+					missingConfig(105)(w, r)
+					return
+				}
+				taggedConfig("lab")(w, r)
+			},
+			"POST /nodes/pve/qemu": pveErrorHandler("unable to create VM 105: config file already exists"),
+		})
+		_, err := f.driver(t).CreateVM(t.Context(), "pve", newSpec(105, "grappleberry"))
+		if err == nil || !strings.Contains(err.Error(), "already exists") {
+			t.Fatalf("CreateVM() error = %v, want PVE's already-exists message", err)
 		}
 	})
 }
@@ -402,13 +480,13 @@ func TestHA(t *testing.T) {
 			t.Fatalf("put form = %v, want %v", got, want)
 		}
 	})
-	t.Run("clear purges", func(t *testing.T) {
+	t.Run("clear deletes the resource", func(t *testing.T) {
 		f := newFakeAPI(t, nil)
 		if err := f.driver(t).ClearHA(t.Context(), ref101); err != nil {
 			t.Fatalf("ClearHA(): %v", err)
 		}
-		if !f.called("DELETE /cluster/ha/resources/vm:101?purge=1") {
-			t.Fatalf("ClearHA() calls = %+v, want a purging delete", f.calls)
+		if !f.called("DELETE /cluster/ha/resources/vm:101") {
+			t.Fatalf("ClearHA() calls = %+v, want a plain delete", f.calls)
 		}
 	})
 }

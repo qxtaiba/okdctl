@@ -59,7 +59,7 @@ var fakeWrites = map[string]string{
 	"POST /nodes/pve/qemu/101/status/reset":                                     upidReset,
 	"POST /cluster/ha/resources":                                                "",
 	"PUT /cluster/ha/resources/vm:101":                                          "",
-	"DELETE /cluster/ha/resources/vm:101?purge=1":                               "",
+	"DELETE /cluster/ha/resources/vm:101":                                       "",
 	"POST /nodes/pve/storage/local/upload":                                      upidUpload,
 	"DELETE /nodes/pve/storage/local/content/local:iso/grappleberry-worker.iso": upidImgDel,
 }
