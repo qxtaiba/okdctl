@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/qxtaiba/okdctl/internal/executor"
 )
@@ -66,9 +67,15 @@ func (f *fakeDriver) VMConfig(_ context.Context, ref VMRef) (VMConfig, error) {
 	return f.configs[ref.VMID], nil
 }
 
-type fakePinger struct{ alive map[netip.Addr]bool }
+type fakePinger struct {
+	alive map[netip.Addr]bool
+	delay time.Duration
+}
 
-func (p fakePinger) Alive(_ context.Context, addr netip.Addr) bool { return p.alive[addr] }
+func (p fakePinger) Alive(_ context.Context, addr netip.Addr) bool {
+	time.Sleep(p.delay)
+	return p.alive[addr]
+}
 
 func goodStorages() []StorageInfo {
 	return []StorageInfo{
@@ -231,6 +238,15 @@ func TestPreflight(t *testing.T) {
 			},
 		},
 		{
+			name: "memory counts the cluster's own vm the plan moves away",
+			mutate: func(d *fakeDriver, in *PreflightInput, _ *fakePinger) {
+				d.vms[0].Tags = []string{"okd-grappleberry"}
+				d.vms[0].MaxMemMiB = 57345
+				in.MemoryMiBByNode["pve1"] = 4096
+			},
+			want: []Finding{{"memory", "warn", "node pve1: planned 4096 MiB + running 53249 MiB + 8192 MiB reserve exceeds 65536 MiB"}},
+		},
+		{
 			name:   "memory exactly fits",
 			mutate: func(_ *fakeDriver, in *PreflightInput, _ *fakePinger) { in.MemoryMiBByNode["pve1"] = 49152 },
 		},
@@ -241,6 +257,16 @@ func TestPreflight(t *testing.T) {
 				{"iso-space", "fail", "storage local on node pve1 has 20480 MiB free; need 22528 MiB"},
 				{"iso-space", "fail", "storage local on node pve2 has 20480 MiB free; need 22528 MiB"},
 			},
+		},
+		{
+			name: "iso space on shared storage is reported once",
+			mutate: func(d *fakeDriver, in *PreflightInput, _ *fakePinger) {
+				in.ISOBytes = 11 * gibBytes
+				for _, n := range in.Nodes {
+					d.storages[n][1].Shared = true
+				}
+			},
+			want: []Finding{{"iso-space", "fail", "storage local (shared) has 20480 MiB free; need 22528 MiB"}},
 		},
 		{
 			name:   "vmid collision",
@@ -295,6 +321,19 @@ func TestPreflight(t *testing.T) {
 				p.alive[netip.MustParseAddr("10.0.0.5")] = true
 			},
 			want: []Finding{{"address-in-use", "fail", "address 10.0.0.5 answers ping"}},
+		},
+		{
+			name: "addresses in use are reported in address order",
+			mutate: func(_ *fakeDriver, _ *PreflightInput, p *fakePinger) {
+				for _, a := range []string{"10.0.0.11", "10.0.0.5", "10.0.0.10"} {
+					p.alive[netip.MustParseAddr(a)] = true
+				}
+			},
+			want: []Finding{
+				{"address-in-use", "fail", "address 10.0.0.5 answers ping"},
+				{"address-in-use", "fail", "address 10.0.0.10 answers ping"},
+				{"address-in-use", "fail", "address 10.0.0.11 answers ping"},
+			},
 		},
 		{
 			name:   "storage missing",
@@ -363,6 +402,17 @@ func TestPreflight(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestPreflightPingsConcurrently(t *testing.T) {
+	p := fakePinger{alive: map[netip.Addr]bool{}, delay: 30 * time.Millisecond}
+	began := time.Now()
+	if _, err := Preflight(context.Background(), goodDriver(), p, goodInput()); err != nil {
+		t.Fatalf("Preflight: %v", err)
+	}
+	if took := time.Since(began); took > 100*time.Millisecond {
+		t.Fatalf("four 30ms pings took %v, want them in parallel", took)
 	}
 }
 

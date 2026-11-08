@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/qxtaiba/okdctl/internal/executor"
 )
 
@@ -49,6 +51,7 @@ const (
 	severityWarn = "warn"
 
 	memoryReserveMiB = 8192
+	pingConcurrency  = 8
 )
 
 var (
@@ -248,13 +251,21 @@ func (st *preflightState) checkMemory(out *findings) {
 		if !ok {
 			continue
 		}
-		running := 0
+		running, owned := 0, 0
 		for _, vm := range st.vms {
-			if vm.Node == name && vm.Status == "running" && !st.owned(vm.Tags) {
+			switch {
+			case vm.Node != name || vm.Status != "running":
+			case st.owned(vm.Tags):
+				owned += vm.MaxMemMiB
+			default:
 				running += vm.MaxMemMiB
 			}
 		}
 		planned := st.in.MemoryMiBByNode[name]
+		// The plan reuses this cluster's own running VMs up to what it places
+		// here, so a re-run is not double counted while a VM it moves away
+		// still occupies its current node.
+		running += max(0, owned-planned)
 		if planned+running+memoryReserveMiB > node.MemTotalMiB {
 			out.add("memory",
 				"node %s: planned %d MiB + running %d MiB + %d MiB reserve exceeds %d MiB total",
@@ -270,13 +281,18 @@ func (st *preflightState) checkISOSpace(out *findings) {
 		if inv.storagesErr != nil {
 			continue
 		}
-		isISO := func(s StorageInfo) bool { return s.Name == st.in.ISOStorage }
-		i := slices.IndexFunc(inv.storages, isISO)
-		if i >= 0 && inv.storages[i].AvailBytes < need {
-			out.add("iso-space",
-				"storage %s on node %s has %d MiB free; need %d MiB (2 x iso size)",
-				st.in.ISOStorage, name,
-				inv.storages[i].AvailBytes/(1024*1024), need/(1024*1024))
+		i := slices.IndexFunc(inv.storages, func(s StorageInfo) bool { return s.Name == st.in.ISOStorage })
+		if i < 0 || inv.storages[i].AvailBytes >= need {
+			continue
+		}
+		where := "on node " + name
+		if inv.storages[i].Shared {
+			where = "(shared)"
+		}
+		out.add("iso-space", "storage %s %s has %d MiB free; need %d MiB (2 x iso size)",
+			st.in.ISOStorage, where, inv.storages[i].AvailBytes/(1024*1024), need/(1024*1024))
+		if inv.storages[i].Shared {
+			return
 		}
 	}
 }
@@ -317,8 +333,15 @@ func (st *preflightState) checkAddresses(ctx context.Context, ping Pinger, out *
 	}
 	addrs := slices.Clone(st.in.Addresses)
 	slices.SortFunc(addrs, netip.Addr.Compare)
-	for _, a := range addrs {
-		if ping.Alive(ctx, a) {
+	alive := make([]bool, len(addrs))
+	var g errgroup.Group
+	g.SetLimit(pingConcurrency)
+	for i, a := range addrs {
+		g.Go(func() error { alive[i] = ping.Alive(ctx, a); return nil })
+	}
+	_ = g.Wait() // Alive reports no error, so nothing to collect
+	for i, a := range addrs {
+		if alive[i] {
 			out.add("address-in-use", "address %s answers ping", a)
 		}
 	}
