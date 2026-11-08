@@ -171,24 +171,26 @@ func saveConfig(cfg *config.Config, path string, w io.Writer) error {
 }
 
 // writeCredentialsEnv rewrites the sidecar when a token was typed or the TLS
-// toggle moved from the loaded value, carrying the loaded token forward when
-// none was typed; an untouched session leaves the file alone.
+// toggle moved from the value the wizard was seeded with; an untouched
+// session leaves the file alone. Only the sidecar's own token is carried
+// forward: a shell export that differs from it never reaches the file.
 func writeCredentialsEnv(secrets *wizard.Secrets, configPath string) error {
-	loaded := credentials.GetProxmoxCredentials(nil)
-	defer loaded.Zeroize()
+	seeded := credentials.GetProxmoxCredentials(nil)
+	defer seeded.Zeroize()
 	typed := !secrets.ProxmoxToken.IsEmpty()
-	if !typed && secrets.ProxmoxInsecure == loaded.Insecure {
+	if !typed && secrets.ProxmoxInsecure == seeded.Insecure {
 		return nil
 	}
-	creds := &credentials.ProxmoxCredentials{
-		APIToken: bytes.Clone(loaded.APIToken),
-		Insecure: secrets.ProxmoxInsecure,
+	envPath := credentials.EnvFilePath(configPath)
+	creds, err := credentials.ReadEnvFile(envPath)
+	if err != nil {
+		return fmt.Errorf("read credentials: %w", err)
 	}
+	defer creds.Zeroize()
+	creds.Insecure = secrets.ProxmoxInsecure
 	if typed {
 		creds.APIToken = bytes.Clone(secrets.ProxmoxToken.Bytes())
 	}
-	defer creds.Zeroize()
-	envPath := credentials.EnvFilePath(configPath)
 	if err := credentials.WriteEnvFile(envPath, creds); err != nil {
 		return fmt.Errorf("save credentials: %w", err)
 	}

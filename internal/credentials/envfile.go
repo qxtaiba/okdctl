@@ -128,35 +128,9 @@ func LoadEnvFile(path string) error {
 	return loadErr
 }
 
-// loadEnvFileOnce opens O_NOFOLLOW so the permission check and the read
-// bind to one inode, closing the stat-then-open TOCTOU window.
 func loadEnvFileOnce(path string) error {
-	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	pairs, err := readEnvFile(path)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
-		return &errtypes.ConfigError{Msg: fmt.Sprintf("open env file %s", path), Err: err}
-	}
-	defer f.Close()
-
-	fi, err := f.Stat()
-	if err != nil {
-		return &errtypes.ConfigError{Msg: fmt.Sprintf("stat env file %s", path), Err: err}
-	}
-	if perm := fi.Mode().Perm(); perm&0o077 != 0 {
-		return &errtypes.AuthError{
-			Msg:  fmt.Sprintf(".env file has insecure permissions %#o; run 'chmod 600 <path>' to fix", perm),
-			Path: path,
-			Err:  os.ErrPermission,
-		}
-	}
-
-	pairs, err := parseDotEnv(f)
-	if err != nil {
-		return &errtypes.ConfigError{Msg: fmt.Sprintf("parse env file %s", path), Err: err}
-	}
-	if err := rejectUnknownEnvKeys(path, pairs); err != nil {
 		return err
 	}
 	for k, v := range pairs {
@@ -165,6 +139,54 @@ func loadEnvFileOnce(path string) error {
 		}
 	}
 	return nil
+}
+
+// ReadEnvFile returns the token and TLS flag the sidecar at path holds,
+// empty when the file is missing; the process environment is never consulted.
+func ReadEnvFile(path string) (*ProxmoxCredentials, error) {
+	pairs, err := readEnvFile(path)
+	if err != nil {
+		return nil, err
+	}
+	creds := &ProxmoxCredentials{Insecure: pairs[envProxmoxInsecure] == "true"}
+	if token := pairs[envProxmoxAPIToken]; token != "" {
+		creds.APIToken = []byte(token)
+	}
+	return creds, nil
+}
+
+// readEnvFile opens O_NOFOLLOW so the permission check and the read bind to
+// one inode, closing the stat-then-open TOCTOU window.
+func readEnvFile(path string) (map[string]string, error) {
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("open env file %s", path), Err: err}
+	}
+	defer f.Close()
+
+	fi, err := f.Stat()
+	if err != nil {
+		return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("stat env file %s", path), Err: err}
+	}
+	if perm := fi.Mode().Perm(); perm&0o077 != 0 {
+		return nil, &errtypes.AuthError{
+			Msg:  fmt.Sprintf(".env file has insecure permissions %#o; run 'chmod 600 <path>' to fix", perm),
+			Path: path,
+			Err:  os.ErrPermission,
+		}
+	}
+
+	pairs, err := parseDotEnv(f)
+	if err != nil {
+		return nil, &errtypes.ConfigError{Msg: fmt.Sprintf("parse env file %s", path), Err: err}
+	}
+	if err := rejectUnknownEnvKeys(path, pairs); err != nil {
+		return nil, err
+	}
+	return pairs, nil
 }
 
 func rejectUnknownEnvKeys(path string, pairs map[string]string) error {
