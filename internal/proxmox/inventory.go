@@ -12,7 +12,10 @@ import (
 // num decodes the integers PVE emits as either JSON numbers or strings.
 type num = proxmox.StringOrUint64
 
-const nodeStatusOnline = "online"
+const (
+	nodeStatusOnline = "online"
+	resourceTypeQEMU = "qemu"
+)
 
 func (d *driver) Version(ctx context.Context) (Version, error) {
 	var raw struct {
