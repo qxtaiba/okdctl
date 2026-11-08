@@ -96,7 +96,7 @@ func runConfigValidate(cmd *cobra.Command, _ []string) error {
 		// The result stays in the Unwrap chain so callers can inspect the findings.
 		return (&errtypes.ConfigError{Msg: "config validation failed", Err: result}).WithHint("review the errors listed above")
 	}
-	infraID, recorded, err := recordedInfraID(cfgFile)
+	infraID, recorded, err := recordedInfraID(cfgFile, cfg.Cluster.Name)
 	if err != nil {
 		return err
 	}
@@ -120,14 +120,20 @@ func runConfigValidate(cmd *cobra.Command, _ []string) error {
 
 // recordedInfraID returns the infra-ID of the cluster record in the
 // workspace holding configFile, or previewInfraID with recorded=false when
-// no record exists yet.
-func recordedInfraID(configFile string) (infraID string, recorded bool, err error) {
-	rec, err := model.LoadRecord(workspace.RecordPath(filepath.Dir(configFile)))
+// no record exists yet. A record naming a cluster other than clusterName is
+// refused, so a renamed config never adopts another cluster's identity.
+func recordedInfraID(configFile, clusterName string) (infraID string, recorded bool, err error) {
+	path := workspace.RecordPath(filepath.Dir(configFile))
+	rec, err := model.LoadRecord(path)
 	switch {
 	case errors.Is(err, os.ErrNotExist):
 		return previewInfraID, false, nil
 	case err != nil:
 		return "", false, &errtypes.ConfigError{Msg: err.Error(), Err: err}
+	case rec.Cluster != clusterName:
+		return "", false, &errtypes.ConfigError{
+			Msg: fmt.Sprintf("cluster record %s names cluster %q, config names %q", path, rec.Cluster, clusterName),
+		}
 	}
 	return rec.InfraID, true, nil
 }

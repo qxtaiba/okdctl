@@ -176,6 +176,39 @@ func TestConfigValidate_RecordInfraIDMakesMACsReal(t *testing.T) {
 	}
 }
 
+func TestConfigValidate_RecordNamingAnotherClusterIsRefused(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "okdctl.yaml")
+	cfg, err := config.NewLoader().LoadFile(standardExample)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := config.NewLoader().Save(cfg, path); err != nil {
+		t.Fatal(err)
+	}
+	rec := &model.Record{InfraID: "other-a1b2c3", Cluster: "other", Domain: "k8s.local", Created: time.Now(), Release: "4.22.0-okd-scos.10"}
+	if err := model.SaveRecord(workspace.RecordPath(dir), rec); err != nil {
+		t.Fatalf("SaveRecord: %v", err)
+	}
+	for _, output := range []string{"", "json"} {
+		t.Run("output="+output, func(t *testing.T) {
+			stdout, _, err := runValidate(t, path, output)
+			var cfgErr *errtypes.ConfigError
+			if !errors.As(err, &cfgErr) {
+				t.Fatalf("err = %v; want *errtypes.ConfigError", err)
+			}
+			for _, want := range []string{`"other"`, `"standard"`, "cluster record"} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("err %q missing %q", err, want)
+				}
+			}
+			if strings.Contains(stdout, model.MAC("other-a1b2c3", 6010)) || strings.Contains(stdout, "NAME") || strings.Contains(stdout, `"nodes"`) {
+				t.Errorf("stdout carries the other cluster's inventory:\n%s", stdout)
+			}
+		})
+	}
+}
+
 func TestConfigValidate_UnknownOutputIsUsageError(t *testing.T) {
 	_, _, err := runValidate(t, standardExample, "yaml")
 	var ue *errtypes.UsageError
