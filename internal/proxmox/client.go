@@ -117,16 +117,17 @@ func mapAPIError(err error) error {
 	return err
 }
 
-// newProxmoxClient builds the shared go-proxmox client; the credential
-// becomes an immutable Go string Zeroize can't reach, bounded to this call.
-func newProxmoxClient(endpoint, username string, password, apiToken []byte, insecure bool, timeout time.Duration) (*proxmox.Client, error) {
+// newProxmoxClient builds the shared go-proxmox client and returns the
+// *http.Client under it for raw requests; the credential becomes an
+// immutable Go string Zeroize can't reach, bounded to this call.
+func newProxmoxClient(endpoint, username string, password, apiToken []byte, insecure bool, timeout time.Duration) (client *proxmox.Client, httpClient *http.Client, err error) {
 	if endpoint == "" {
-		return nil, fmt.Errorf("proxmox client: endpoint is required")
+		return nil, nil, fmt.Errorf("proxmox client: endpoint is required")
 	}
 	if insecure {
 		warnInsecureTLS(endpoint)
 	}
-	httpClient := httputil.NewOptionalInsecure(insecure, timeout)
+	httpClient = httputil.NewOptionalInsecure(insecure, timeout)
 	httpClient.Transport = pveErrorTransport{next: httpClient.Transport}
 	base := APIBaseURL(endpoint)
 
@@ -136,19 +137,19 @@ func newProxmoxClient(endpoint, username string, password, apiToken []byte, inse
 			base,
 			proxmox.WithHTTPClient(httpClient),
 			proxmox.WithCredentials(&proxmox.Credentials{Username: username, Password: string(password)}),
-		), nil
+		), httpClient, nil
 	case len(apiToken) > 0:
 		id, secret, ok := strings.Cut(string(apiToken), "=")
 		if !ok {
-			return nil, fmt.Errorf("proxmox client: PROXMOX_VE_API_TOKEN must be in id=secret form")
+			return nil, nil, fmt.Errorf("proxmox client: PROXMOX_VE_API_TOKEN must be in id=secret form")
 		}
 		return proxmox.NewClient(
 			base,
 			proxmox.WithHTTPClient(httpClient),
 			proxmox.WithAPIToken(id, secret),
-		), nil
+		), httpClient, nil
 	default:
-		return nil, fmt.Errorf("proxmox client: no credentials (need password or api token)")
+		return nil, nil, fmt.Errorf("proxmox client: no credentials (need password or api token)")
 	}
 }
 
