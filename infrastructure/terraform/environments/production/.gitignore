@@ -1,3 +1,0 @@
-# Temporary destroy-override files (see modules/proxmox-okd/main.tf lifecycle comment).
-override.tf
-*_override.tf
