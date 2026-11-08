@@ -37,6 +37,9 @@ func Build(cfg *config.Config, infraID string) (Inventory, error) {
 	if cfg.Workers.Count < 0 {
 		return Inventory{}, fmt.Errorf("workers.count %d must be 0 or more", cfg.Workers.Count)
 	}
+	if cfg.Workers.Count > config.MaxWorkers {
+		return Inventory{}, fmt.Errorf("workers.count %d exceeds the maximum of %d", cfg.Workers.Count, config.MaxWorkers)
+	}
 	b := &builder{cfg: cfg, infraID: infraID, cidr: cidr, hosts: cfg.Provider.Proxmox.Nodes}
 
 	inv := Inventory{InfraID: infraID, APIVIP: apiVIP, IngressVIP: ingressVIP}

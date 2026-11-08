@@ -27,7 +27,6 @@ func DefaultConfig() *Config {
 			APIVIP:      "192.168.1.158",
 			IngressVIP:  "192.168.1.159",
 			NodeIPStart: "192.168.1.150",
-			NTP:         []string{},
 			PodCIDR:     "10.128.0.0/14",
 			ServiceCIDR: "172.30.0.0/16",
 			HostPrefix:  23,

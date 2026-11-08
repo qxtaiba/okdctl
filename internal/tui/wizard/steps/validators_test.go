@@ -39,7 +39,7 @@ func TestFieldValidators(t *testing.T) {
 		{"ip", validateIP, []string{"192.168.1.1", "fd00::1"}, []string{"", "999.1.1.1", "pve"}},
 		{"cidr", validateCIDR, []string{"192.168.1.0/24", "10.128.0.0/14"}, []string{"", "10.0.0.0/40", "192.168.1.1"}},
 		{"ip list", validateIPList, []string{"", "192.168.1.1", "192.168.1.1, 8.8.8.8", " 1.1.1.1 ,"}, []string{"not-an-ip", "192.168.1.1,not-an-ip"}},
-		{"endpoint", validateEndpoint, []string{"https://pve:8006", "http://10.0.0.5"}, []string{"", "pve", "pve:8006"}},
+		{"endpoint", validateEndpoint, []string{"https://pve:8006", "http://10.0.0.5"}, []string{"", "pve", "pve:8006", "ftp://pve:8006", "ssh://pve"}},
 		{"duration", validateDuration, []string{"15m", "1h30m", " 90s "}, []string{"", "soon", "15"}},
 		{"min int", minInt(4, "vcpu"), []string{"4", "128"}, []string{"3", "", "four"}},
 		{"int range", intRange(0, 4094), []string{"0", "4094"}, []string{"-1", "4095", "x"}},

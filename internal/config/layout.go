@@ -30,6 +30,10 @@ const (
 	MaxVMID          = 0xFFFFFF
 )
 
+// MaxWorkers bounds workers.count so the validators and Build never derive
+// an unbounded node list; a /20 of addresses, far above one Proxmox cluster.
+const MaxWorkers = 1 << 12
+
 // NodeName returns the name of node index of role.
 func (c *Config) NodeName(role Role, index int) string {
 	return fmt.Sprintf("%s-%s%d", c.Cluster.Name, role, index)
@@ -105,13 +109,4 @@ func (c *Config) WorkerIndices() []int {
 	}
 	slices.Sort(indices)
 	return indices
-}
-
-// lastNode returns the node with the highest VMID and address: the top
-// worker, or master2 when there are no workers.
-func (c *Config) lastNode() (role Role, index int) {
-	if indices := c.WorkerIndices(); len(indices) > 0 {
-		return RoleWorker, indices[len(indices)-1]
-	}
-	return RoleMaster, MasterCount - 1
 }

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -46,6 +47,26 @@ func TestSave_RoundTrip(t *testing.T) {
 			}
 			if !reflect.DeepEqual(loaded, tc.cfg) {
 				t.Errorf("round trip changed the config\n got: %+v\nwant: %+v", loaded, tc.cfg)
+			}
+		})
+	}
+}
+
+func TestSave_OmitsEmptyNTP(t *testing.T) {
+	for name, ntp := range map[string][]string{"nil": nil, "empty": {}} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "okdctl.yaml")
+			cfg := DefaultConfig()
+			cfg.Networking.NTP = ntp
+			if err := NewLoader().Save(cfg, path); err != nil {
+				t.Fatalf("Save: %v", err)
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(string(data), "ntp") {
+				t.Errorf("Save wrote an ntp key for an empty list:\n%s", data)
 			}
 		})
 	}

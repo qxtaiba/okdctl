@@ -84,6 +84,9 @@ func validateEndpoint(value string) error {
 	if err != nil || u.Scheme == "" || u.Host == "" {
 		return errors.New("use a url with scheme and host, such as https://pve:8006")
 	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return errors.New("use http or https, such as https://pve:8006")
+	}
 	return nil
 }
 

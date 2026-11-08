@@ -15,7 +15,7 @@ const (
 	cpuModelPrefix   = "x86-64-v"
 )
 
-func (c *Config) validateProvider(r *ValidationResult) {
+func (c *Config) validateProvider(r *ValidationResult, nodes []nodeRef) {
 	if c.Provider.Type != ProviderProxmox {
 		r.addf(FieldProviderType, "must be %s", ProviderProxmox)
 	}
@@ -47,8 +47,9 @@ func (c *Config) validateProvider(r *ValidationResult) {
 	if px.VMIDBase < minVMIDBase {
 		r.addf(FieldProxmoxVMIDBase, "%d must be at least %d", px.VMIDBase, minVMIDBase)
 	}
-	if top := c.NodeVMID(c.lastNode()); top > MaxVMID {
-		r.addf(FieldProxmoxVMIDBase, "highest vmid %d exceeds %d (24 bits)", top, MaxVMID)
+	// 24 bits also keeps the okd<vmid>d<n> disk serial within Proxmox's 20 characters.
+	if n := len(nodes); n > 0 && nodes[n-1].vmid > MaxVMID {
+		r.addf(FieldProxmoxVMIDBase, "highest vmid %d exceeds %d (24 bits)", nodes[n-1].vmid, MaxVMID)
 	}
 }
 
@@ -58,8 +59,11 @@ func validateEndpoint(r *ValidationResult, endpoint string) {
 		return
 	}
 	u, err := url.Parse(endpoint)
-	if err != nil || u.Scheme == "" || u.Host == "" {
+	switch {
+	case err != nil || u.Scheme == "" || u.Host == "":
 		r.addf(FieldProxmoxEndpoint, "%q must be a URL with scheme and host, such as https://pve:8006", endpoint)
+	case u.Scheme != "http" && u.Scheme != "https":
+		r.addf(FieldProxmoxEndpoint, "%q must use http or https", endpoint)
 	}
 }
 
