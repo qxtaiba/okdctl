@@ -46,7 +46,7 @@ func LoadRecord(path string) (*Record, error) {
 	var body recordBody
 	found, err := recordFile.Read(path, &body)
 	if err != nil {
-		return nil, fmt.Errorf("load cluster record: %w", err)
+		return nil, err
 	}
 	if !found {
 		if _, err := os.Stat(path); err != nil {
@@ -54,7 +54,10 @@ func LoadRecord(path string) (*Record, error) {
 		}
 		return nil, fmt.Errorf("load cluster record %s: unsupported schema_version %q", path, body.SchemaVersion)
 	}
-	if !recordFile.Trusted(&body, body.Cluster) {
+	switch {
+	case body.ClusterName == "":
+		return nil, fmt.Errorf("load cluster record %s: record has no cluster name", path)
+	case body.ClusterName != body.Cluster:
 		return nil, fmt.Errorf("load cluster record %s: %w (envelope %q, record %q)",
 			path, ErrRecordMismatch, body.ClusterName, body.Cluster)
 	}

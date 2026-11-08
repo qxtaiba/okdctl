@@ -1,6 +1,6 @@
 // Package marker is the schema-versioned JSON file primitive behind the
-// cluster record: payloads written atomically at mode 0600 and gated on load
-// by a cluster-name guard.
+// cluster record: payloads written atomically at mode 0600 and stamped with
+// the cluster name for the reader to check.
 package marker
 
 import (
@@ -15,8 +15,7 @@ import (
 )
 
 // Envelope is the header common to every marker payload. Concrete payload
-// types embed it; File.Write stamps it, File.Read validates SchemaVersion,
-// and File.Trusted keys trust on ClusterName.
+// types embed it; File.Write stamps it and File.Read validates SchemaVersion.
 type Envelope struct {
 	SchemaVersion string    `json:"schema_version"`
 	RunID         string    `json:"run_id"`
@@ -73,27 +72,6 @@ func (f File) Read(path string, p Payload) (bool, error) {
 		logutil.LF("schema_version", version),
 		logutil.LF("expected", f.Version))
 	return false, nil
-}
-
-// Trusted applies the cluster-name guard: an empty or mismatching cluster
-// name is rejected, since markers gate resume decisions and must
-// positively identify the current cluster.
-func (f File) Trusted(p Payload, clusterName string) bool {
-	e := p.envelope()
-	switch {
-	case e.ClusterName == "":
-		logutil.Warn("marker has no cluster name; treating as absent",
-			logutil.LF("marker", f.Label),
-			logutil.LF("current_cluster", clusterName))
-		return false
-	case e.ClusterName != clusterName:
-		logutil.Warn("marker is from a different cluster, ignoring",
-			logutil.LF("marker", f.Label),
-			logutil.LF("marker_cluster", e.ClusterName),
-			logutil.LF("current_cluster", clusterName))
-		return false
-	}
-	return true
 }
 
 // Clear removes the marker; a missing file is success.

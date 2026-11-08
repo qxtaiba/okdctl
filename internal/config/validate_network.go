@@ -3,8 +3,6 @@ package config
 import (
 	"fmt"
 	"net/netip"
-
-	"github.com/qxtaiba/okdctl/internal/netutil"
 )
 
 const (
@@ -86,12 +84,12 @@ func (c *Config) validateNodeRange(r *ValidationResult, machine netip.Prefix) {
 		r.addf(FieldNetworkingNodeIPStart, "%s is outside machine_cidr %s", start, machine)
 		return
 	}
-	last, err := netutil.CalculateVMIP(c.Networking.NodeIPStart, c.highestIPOffset())
+	end, err := c.DerivedNodeAddress(c.lastNode())
 	if err != nil {
 		r.addf(FieldNetworkingNodeIPStart, "derive the last node address: %v", err)
 		return
 	}
-	if end := netip.MustParseAddr(last); !machine.Contains(end) {
+	if !machine.Contains(end) {
 		r.addf(FieldNetworkingNodeIPStart, "node range %s-%s leaves machine_cidr %s", start, end, machine)
 	}
 }

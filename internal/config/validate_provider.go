@@ -47,8 +47,8 @@ func (c *Config) validateProvider(r *ValidationResult) {
 	if px.VMIDBase < minVMIDBase {
 		r.addf(FieldProxmoxVMIDBase, "%d must be at least %d", px.VMIDBase, minVMIDBase)
 	}
-	if top := c.highestVMID(); top > maxVMID {
-		r.addf(FieldProxmoxVMIDBase, "highest vmid %d exceeds %d (24 bits)", top, maxVMID)
+	if top := c.NodeVMID(c.lastNode()); top > MaxVMID {
+		r.addf(FieldProxmoxVMIDBase, "highest vmid %d exceeds %d (24 bits)", top, MaxVMID)
 	}
 }
 

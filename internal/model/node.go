@@ -3,15 +3,17 @@ package model
 import (
 	"net/netip"
 	"strings"
+
+	"github.com/qxtaiba/okdctl/internal/config"
 )
 
-// Role is a node's cluster role.
-type Role string
+// Role is a node's cluster role, config's layout vocabulary.
+type Role = config.Role
 
-// Role values match the openshift-install and ignition vocabulary verbatim.
+// Roles the inventory carries.
 const (
-	RoleMaster Role = "master"
-	RoleWorker Role = "worker"
+	RoleMaster = config.RoleMaster
+	RoleWorker = config.RoleWorker
 )
 
 // Disk is one virtual disk with its storage and serial resolved.

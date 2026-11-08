@@ -73,27 +73,6 @@ func TestFileReadAbsentAndError(t *testing.T) {
 	}
 }
 
-func TestFileTrusted(t *testing.T) {
-	tests := []struct {
-		name        string
-		markerName  string
-		clusterName string
-		want        bool
-	}{
-		{name: "matching name is trusted", markerName: "prod", clusterName: "prod", want: true},
-		{name: "empty name is rejected", markerName: "", clusterName: "prod", want: false},
-		{name: "mismatching name is rejected", markerName: "other", clusterName: "prod", want: false},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			p := &testPayload{Envelope: Envelope{ClusterName: tc.markerName}}
-			if got := testFile.Trusted(p, tc.clusterName); got != tc.want {
-				t.Errorf("Trusted = %v; want %v", got, tc.want)
-			}
-		})
-	}
-}
-
 func TestFileClear(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "marker.json")
 	if err := testFile.Write(path, &testPayload{}, "r", "c"); err != nil {

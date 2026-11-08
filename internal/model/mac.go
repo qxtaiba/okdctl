@@ -3,6 +3,8 @@ package model
 import (
 	"crypto/sha256"
 	"fmt"
+
+	"github.com/qxtaiba/okdctl/internal/config"
 )
 
 // MAC returns the locally administered unicast address 02:h1:h2:v2:v1:v0,
@@ -10,7 +12,7 @@ import (
 // VMID big-endian.
 func MAC(infraID string, vmid int) string {
 	sum := sha256.Sum256([]byte(infraID))
-	v := fmt.Sprintf("%06x", vmid&maxVMID)
+	v := fmt.Sprintf("%06x", vmid&config.MaxVMID)
 	return fmt.Sprintf("02:%02x:%02x:%s:%s:%s", sum[0], sum[1], v[0:2], v[2:4], v[4:6])
 }
 
