@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -16,20 +17,16 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// Loader reads and writes cluster Config YAML files, kept as a struct (not
-// package funcs) so a future stateful Loader can land without breaking call sites.
+// Loader reads and writes okdctl.yaml files.
 type Loader struct{}
 
 // NewLoader returns a Loader for okdctl YAML configs.
 func NewLoader() *Loader { return &Loader{} }
 
-// LoadFile parses the YAML config at path and returns it as authored —
-// omitted bootstrap/worker fields stay zero rather than being filled in, so
-// a later Save never materializes a value the operator did not write;
-// callers needing resolved topology values must call Effective. The static
-// netmask is the one field derived eagerly here (see DeriveStaticNetmask).
-// World/group-writable files are rejected, and unknown keys, a second YAML
-// document, or the wrong schemaVersion error instead of silently defaulting.
+// LoadFile parses the v3 config at path onto a zero Config, so an omitted
+// key stays zero for the validators rather than being defaulted. Group- or
+// world-writable files, unknown keys, a second YAML document and any
+// schemaVersion but v3 are refused.
 func (l *Loader) LoadFile(path string) (*Config, error) {
 	fi, err := os.Stat(path)
 	if err != nil {
@@ -57,12 +54,11 @@ func (l *Loader) LoadFile(path string) (*Config, error) {
 		return nil, err
 	}
 
-	cfg := fileDefaults()
-	if err := yaml.UnmarshalStrict(data, cfg); err != nil {
+	var cfg Config
+	if err := yaml.UnmarshalStrict(data, &cfg); err != nil {
 		return nil, parseError(path, err)
 	}
-	_ = DeriveStaticNetmask(cfg) // invalid/IPv6 CIDR is left for validators
-	return cfg, nil
+	return &cfg, nil
 }
 
 // envFileAssignment matches a line of okdctl.env; decoder errors can quote
@@ -99,8 +95,8 @@ func rejectMultipleDocuments(data []byte, path string) error {
 	return &errtypes.ConfigError{Msg: fmt.Sprintf(`config file %s contains more than one YAML document; merge them into one and remove the "---" separator`, path)}
 }
 
-// checkSchemaVersion runs before the strict unmarshal so a bad schema fails
-// with a clear version error, not an opaque unknown-field one.
+// checkSchemaVersion runs before the strict unmarshal so a legacy file fails
+// with the migration pointer, not an opaque unknown-field error.
 func checkSchemaVersion(data []byte, path string) error {
 	var probe struct {
 		SchemaVersion string `json:"schemaVersion"`
@@ -112,14 +108,14 @@ func checkSchemaVersion(data []byte, path string) error {
 	case SchemaVersionCurrent:
 		return nil
 	case "":
-		return &errtypes.ConfigError{Msg: fmt.Sprintf("config file %s missing required schemaVersion (expected %q)", path, SchemaVersionCurrent)}
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("%s has no schemaVersion; this release reads v3 only, see docs/migration.md", filepath.Base(path))}
 	default:
-		return &errtypes.ConfigError{Msg: fmt.Sprintf("config file %s has unsupported schemaVersion %q (expected %q)", path, probe.SchemaVersion, SchemaVersionCurrent)}
+		return &errtypes.ConfigError{Msg: fmt.Sprintf("%s is schema %s; this release reads v3 only, see docs/migration.md", filepath.Base(path), probe.SchemaVersion)}
 	}
 }
 
-// Save writes cfg to path with 0o600 perms via AtomicWrite. SchemaVersion is
-// set to SchemaVersionCurrent when empty.
+// Save writes cfg to path with 0o600 perms via AtomicWrite, filling
+// SchemaVersion when empty.
 func (l *Loader) Save(cfg *Config, path string) error {
 	if cfg.SchemaVersion == "" {
 		cfg.SchemaVersion = SchemaVersionCurrent

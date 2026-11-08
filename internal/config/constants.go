@@ -1,7 +1,12 @@
 package config
 
-// Field* constants name dotted Config paths, used to tag ValidationError.Field
-// for precise CLI error messages.
+// DefaultOKDVersion is the release a freshly generated config pins.
+const DefaultOKDVersion = "4.22.0-okd-scos.10"
+
+// DefaultVMIDBase is the VMID of the first cluster VM.
+const DefaultVMIDBase = 6000
+
+// Field* constants name dotted Config paths used to tag ValidationError.Field.
 const (
 	FieldClusterName   = "cluster.name"
 	FieldClusterDomain = "cluster.domain"
@@ -10,57 +15,16 @@ const (
 	FieldDistributionVersion = "distribution.version"
 
 	FieldProviderType    = "provider.type"
-	FieldProviderProxmox = "provider.proxmox"
+	FieldProxmoxEndpoint = "provider.proxmox.endpoint"
+	FieldProxmoxNodes    = "provider.proxmox.nodes"
+	FieldProxmoxStorage  = "provider.proxmox.storage"
 
-	FieldTopologyControlPlaneCount  = "topology.control_plane.count"
-	FieldTopologyControlPlaneCPU    = "topology.control_plane.cpu"
-	FieldTopologyControlPlaneMemory = "topology.control_plane.memory_mb"
-	FieldTopologyControlPlaneDisk   = "topology.control_plane.disk_gb"
-	FieldTopologyWorkersCount       = "topology.workers.count"
-	FieldTopologyWorkersCPU         = "topology.workers.cpu"
-	FieldTopologyWorkersMemory      = "topology.workers.memory_mb"
-	FieldTopologyWorkersDisk        = "topology.workers.disk_gb"
-	FieldTopologyVMIDBase           = "topology.vm_id_base"
-	FieldTopologyBootstrapCount     = "topology.bootstrap.count"
-	FieldTopologyBootstrapDisk      = "topology.bootstrap.disk_gb"
-
-	FieldNetworkingMachineCIDR     = "networking.machine_cidr"
-	FieldNetworkingPodCIDR         = "networking.pod_cidr"
-	FieldNetworkingServiceCIDR     = "networking.service_cidr"
-	FieldNetworkingGateway         = "networking.gateway"
-	FieldNetworkingDNS             = "networking.dns"
-	FieldNetworkingHostPrefix      = "networking.host_prefix"
-	FieldNetworkingBastionIP       = "networking.bastion.ip"
-	FieldNetworkingStaticIPStart   = "networking.static_ip.start"
-	FieldNetworkingStaticIPNetmask = "networking.static_ip.netmask"
-	FieldNetworkingStaticIPIface   = "networking.static_ip.interface"
-	FieldNetworkingStaticIPDNS     = "networking.static_ip.dns"
-	FieldNetworkingNTPServer       = "networking.ntp_server"
-
-	FieldProxmoxHost                     = "provider.proxmox.host"
-	FieldProxmoxNode                     = "provider.proxmox.node"
-	FieldProxmoxStorage                  = "provider.proxmox.storage"
-	FieldProxmoxISOStorage               = "provider.proxmox.iso_storage"
-	FieldProxmoxDataStorage              = "provider.proxmox.data_storage"
-	FieldProxmoxBridge                   = "provider.proxmox.bridge"
-	FieldProxmoxCPUType                  = "provider.proxmox.cpu_type"
-	FieldProxmoxInsecureHTTP             = "provider.proxmox.insecure_http"
-	FieldProxmoxRequirePinnedFingerprint = "provider.proxmox.require_pinned_fingerprint"
-	FieldProxmoxControlPlaneNodes        = "provider.proxmox.control_plane_nodes"
-	FieldProxmoxWorkerNodes              = "provider.proxmox.worker_nodes"
-
-	FieldFilesSSHPublicKey = "files.ssh_public_key"
-	FieldFilesPullSecret   = "files.pull_secret" //nolint:gosec // field name constant, not a credential
-
-	FieldHTTPServerIP   = "http_server.ip"
-	FieldHTTPServerRoot = "http_server.root"
-
-	FieldDeploymentAutoApprove      = "deployment.auto_approve"
-	FieldDeploymentTerraformEnv     = "deployment.terraform_env"
-	FieldDeploymentBinDir           = "deployment.bin_dir"
-	FieldDeploymentBootstrapTimeout = "deployment.bootstrap_timeout"
-	FieldDeploymentInstallTimeout   = "deployment.install_timeout"
-
-	FieldDisksWorkerDataSize       = "disks.worker_data_size_gb"
-	FieldDisksControlPlaneDataSize = "disks.control_plane_data_size_gb"
+	FieldNetworkingMachineCIDR = "networking.machine_cidr"
+	FieldNetworkingGateway     = "networking.gateway"
+	FieldNetworkingDNS         = "networking.dns"
+	FieldNetworkingAPIVIP      = "networking.api_vip"
+	FieldNetworkingIngressVIP  = "networking.ingress_vip"
+	FieldNetworkingNodeIPStart = "networking.node_ip_start"
+	FieldNetworkingPodCIDR     = "networking.pod_cidr"
+	FieldNetworkingServiceCIDR = "networking.service_cidr"
 )

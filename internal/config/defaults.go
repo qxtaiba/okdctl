@@ -1,129 +1,63 @@
 package config
 
-import (
-	"github.com/qxtaiba/okdctl/internal/netutil"
-)
+import "time"
 
-const (
-	defaultBastionIP = "192.168.1.20"
-	// defaultStaticIPStart avoids provider.proxmox.host so the bootstrap VM
-	// doesn't ARP-fight the hypervisor.
-	defaultStaticIPStart = "192.168.1.140"
-	defaultFluxAddon     = "flux"
-	defaultTerraformEnv  = "production"
-)
-
-// DefaultConfig returns a Config with defaults for a typical homelab environment.
+// DefaultConfig returns a 3+2 cluster on 192.168.1.0/24 placeholders.
 func DefaultConfig() *Config {
 	return &Config{
 		SchemaVersion: SchemaVersionCurrent,
-		Cluster: ClusterConfig{
-			Name:   "mycluster",
-			Domain: "k8s.local",
-		},
-		Distribution: DistributionConfig{
-			Type:    DistributionOKD,
-			Version: "4.22.0-okd-scos.7",
-		},
+		Cluster:       ClusterConfig{Name: "lab", Domain: "k8s.local"},
+		Distribution:  DistributionConfig{Type: DistributionOKD, Version: DefaultOKDVersion},
 		Provider: ProviderConfig{
 			Type: ProviderProxmox,
-			Proxmox: &ProxmoxConfig{
-				Host:        "192.168.1.100:8006",
-				Node:        "pve",
-				Storage:     "local-lvm",
-				DataStorage: "local-lvm",
-				ISOStorage:  "local",
-				Bridge:      "vmbr0",
-				Insecure:    false,
-				CPUType:     "host",
+			Proxmox: ProxmoxConfig{
+				Endpoint:   "https://192.168.1.100:8006",
+				Nodes:      []string{"pve"},
+				Storage:    "local-lvm",
+				ISOStorage: "local",
+				Bridge:     "vmbr0",
+				CPUType:    "host",
+				VMIDBase:   DefaultVMIDBase,
 			},
-		},
-		Topology: TopologyConfig{
-			ControlPlane: NodeConfig{
-				Count:    3,
-				CPU:      4,
-				MemoryMB: 12288,
-				DiskGB:   50,
-			},
-			Workers: NodeConfig{
-				Count:    3,
-				CPU:      8,
-				MemoryMB: 20480,
-				DiskGB:   50,
-			},
-			Bootstrap: NodeConfig{
-				Count:    1,
-				CPU:      4,
-				MemoryMB: 8192,
-				DiskGB:   50,
-			},
-			VMIDBase: DefaultVMIDBase,
 		},
 		Networking: NetworkingConfig{
 			MachineCIDR: "192.168.1.0/24",
+			Gateway:     "192.168.1.1",
+			DNS:         []string{"192.168.1.1"},
+			APIVIP:      "192.168.1.158",
+			IngressVIP:  "192.168.1.159",
+			NodeIPStart: "192.168.1.150",
+			NTP:         []string{},
 			PodCIDR:     "10.128.0.0/14",
 			ServiceCIDR: "172.30.0.0/16",
 			HostPrefix:  23,
-			Gateway:     "192.168.1.1",
-			DNS:         []string{"192.168.1.1"},
-			StaticIP: StaticIPConfig{
-				Start:     defaultStaticIPStart,
-				Netmask:   netutil.DefaultNetmask,
-				Interface: "ens18",
-				DNS:       defaultBastionIP,
-			},
-			Bastion: BastionConfig{
-				IP: defaultBastionIP,
+		},
+		ControlPlane: NodeDefaults{CPU: 4, MemoryMiB: 16384, Disks: []DiskSpec{{SizeGiB: 120}}},
+		Workers: WorkersConfig{
+			Count: 2,
+			NodeDefaults: NodeDefaults{
+				CPU:       8,
+				MemoryMiB: 16384,
+				Disks:     []DiskSpec{{SizeGiB: 120}, {SizeGiB: 500, Storage: "local-lvm", Wipe: new(true)}},
 			},
 		},
-		Addons: map[string]AddonConfig{
-			defaultFluxAddon: {Enabled: false, Settings: map[string]string{
-				"provider": defaultFluxAddon, "branch": "main", "path": "kubernetes/clusters/production",
-			}},
-			"secretstore": {Enabled: false, Settings: map[string]string{ //nolint:gosec // G101: addon name, not a credential
-				"secrets_dir":              "automation/config/secrets",
-				"provider":                 "onepassword",
-				"onepassword_vaults":       "homelab=1",
-				"vault_path":               "secret",
-				"vault_version":            "v2",
-				"bitwarden_api_url":        "https://api.bitwarden.com",
-				"bitwarden_identity_url":   "https://identity.bitwarden.com",
-				"bitwarden_sdk_server_url": "https://bitwarden-sdk-server.external-secrets.svc.cluster.local:9998",
-			}},
+		Files: FilesConfig{PullSecret: "./pull-secret.json", SSHPublicKey: "~/.ssh/id_ed25519.pub"}, //nolint:gosec // G101: file path, not a credential
+		Lifecycle: LifecycleConfig{
+			BeforeNextNode: Hook{Timeout: 15 * time.Minute},
+			DrainTimeout:   10 * time.Minute,
 		},
-		Files: FilesConfig{
-			PullSecret:   "",
-			SSHPublicKey: "",
-		},
-		HTTPServer: HTTPServerConfig{
-			Root:             "/var/www/html",
-			IgnitionServerIP: defaultBastionIP,
-		},
-		Deployment: DeploymentConfig{
-			TerraformEnv:     defaultTerraformEnv,
-			AutoApprove:      false,
-			BootstrapTimeout: 3600,
-			InstallTimeout:   7200,
-		},
-		Disks: DisksConfig{
-			WorkerDataSizeGB:       500,
-			ControlPlaneDataSizeGB: 0,
-			ControlPlaneMonSizeGB:  0,
-		},
+		Handoff:  HandoffConfig{Enabled: true},
+		Defaults: DefaultsConfig{DisableRedHatCatalogs: true},
 	}
 }
 
-// MinimalConfig returns a single-node configuration for testing.
+// MinimalConfig returns a 3+0 cluster whose control plane runs the workloads.
 func MinimalConfig() *Config {
 	cfg := DefaultConfig()
 	cfg.Cluster.Name = "minimal"
-	cfg.Topology = TopologyConfig{
-		ControlPlane: NodeConfig{Count: 1, CPU: 4, MemoryMB: 8192, DiskGB: 50},
-		Workers:      NodeConfig{Count: 0, CPU: 0, MemoryMB: 0, DiskGB: 0},
-		VMIDBase:     DefaultVMIDBase,
-	}
-	cfg.Addons = map[string]AddonConfig{
-		defaultFluxAddon: {Enabled: false},
+	cfg.Workers = WorkersConfig{
+		Count:        0,
+		NodeDefaults: NodeDefaults{CPU: 2, MemoryMiB: 8192, Disks: []DiskSpec{{SizeGiB: 100}}},
 	}
 	return cfg
 }

@@ -1,249 +1,187 @@
-// Package config defines the YAML-serializable deployment schema for okdctl.
-// Serialization uses sigs.k8s.io/yaml, mapping json struct tags to YAML keys.
+// Package config defines the okdctl.yaml schema (v3), its loader and its
+// validators. Serialization uses sigs.k8s.io/yaml, mapping json struct tags
+// to YAML keys.
 package config
 
-// Schema version markers for okdctl.yaml; bump only on a breaking change.
-const (
-	SchemaVersionV2 = "v2"
-
-	SchemaVersionCurrent = SchemaVersionV2
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"time"
 )
+
+// SchemaVersionCurrent is the only schemaVersion this release reads.
+const SchemaVersionCurrent = "v3"
 
 // Config is the root okdctl.yaml schema.
 type Config struct {
-	SchemaVersion string                 `json:"schemaVersion"`
-	Cluster       ClusterConfig          `json:"cluster"`
-	Distribution  DistributionConfig     `json:"distribution"`
-	Provider      ProviderConfig         `json:"provider"`
-	Topology      TopologyConfig         `json:"topology"`
-	Networking    NetworkingConfig       `json:"networking"`
-	Addons        map[string]AddonConfig `json:"addons,omitempty"`
-	Files         FilesConfig            `json:"files"`
-	HTTPServer    HTTPServerConfig       `json:"http_server"`
-	Deployment    DeploymentConfig       `json:"deployment"`
-	Disks         DisksConfig            `json:"disks,omitzero"`
+	SchemaVersion string                  `json:"schemaVersion"`
+	Cluster       ClusterConfig           `json:"cluster"`
+	Distribution  DistributionConfig      `json:"distribution"`
+	Provider      ProviderConfig          `json:"provider"`
+	Networking    NetworkingConfig        `json:"networking"`
+	ControlPlane  NodeDefaults            `json:"control_plane"`
+	Workers       WorkersConfig           `json:"workers"`
+	Nodes         map[string]NodeOverride `json:"nodes,omitempty"`
+	Files         FilesConfig             `json:"files"`
+	Lifecycle     LifecycleConfig         `json:"lifecycle"`
+	Handoff       HandoffConfig           `json:"handoff"`
+	Defaults      DefaultsConfig          `json:"defaults"`
 }
 
-// ClusterConfig configures the cluster's identity (name and base domain).
+// ClusterConfig names the cluster and its base domain.
 type ClusterConfig struct {
 	Name   string `json:"name"`
 	Domain string `json:"domain"`
 }
 
-// DistributionConfig selects the Kubernetes distribution and version.
+// DistributionConfig selects the Kubernetes distribution and release.
 type DistributionConfig struct {
 	Type    DistributionType `json:"type"`
 	Version string           `json:"version"`
 }
 
-// TopologyConfig configures the control-plane, worker, and bootstrap node
-// groups plus the VMID base used when numbering provisioned VMs.
-type TopologyConfig struct {
-	ControlPlane NodeConfig `json:"control_plane"`
-	Workers      NodeConfig `json:"workers"`
-	// Bootstrap sizes the single ephemeral pivot VM: Count must be 1 (or
-	// omitted); CPU/MemoryMB default to control-plane; DiskGB always
-	// matches the control-plane OS disk.
-	Bootstrap NodeConfig `json:"bootstrap,omitzero"`
-	VMIDBase  int        `json:"vm_id_base,omitempty"`
-}
-
-// NodeConfig configures the count and per-node resources for a node group.
-// DiskGB sizes only the root/OS disk — extra data disks live in DisksConfig,
-// and per-VM placement in ProxmoxConfig.ControlPlaneNodes/WorkerNodes.
-type NodeConfig struct {
-	Count    int `json:"count"`
-	CPU      int `json:"cpu"`
-	MemoryMB int `json:"memory_mb"`
-	DiskGB   int `json:"disk_gb"`
-}
-
-// NetworkingConfig configures the cluster's machine, pod, and service CIDRs
-// along with gateway, DNS, and optional static-IP / bastion settings.
-type NetworkingConfig struct {
-	MachineCIDR string   `json:"machine_cidr"`
-	PodCIDR     string   `json:"pod_cidr"`
-	ServiceCIDR string   `json:"service_cidr"`
-	HostPrefix  int      `json:"host_prefix,omitempty"`
-	Gateway     string   `json:"gateway"`
-	DNS         []string `json:"dns"`
-
-	StaticIP StaticIPConfig `json:"static_ip,omitzero"`
-	Bastion  BastionConfig  `json:"bastion,omitzero"`
-
-	// NTPServer is the chrony source for master/worker MachineConfig; empty
-	// uses HTTPServer.IgnitionServerIP.
-	NTPServer string `json:"ntp_server,omitempty"`
-}
-
-// StaticIPConfig describes the static address plan for cluster nodes.
-type StaticIPConfig struct {
-	// Start is the bootstrap node's IP (not the first free address):
-	// masters/workers allocate from Start+1, and the API VIP derives as
-	// .10 unless bastion.vip overrides. It must not equal a live host or
-	// the bootstrap VM ARP-fights it.
-	Start string `json:"start"`
-	// Netmask is derived from machine_cidr at load time — a YAML value is
-	// overwritten; persisted only to carry the dotted form for kernel args
-	// and HAProxy/dnsmasq templates.
-	Netmask   string `json:"netmask"`
-	Interface string `json:"interface"`
-	DNS       string `json:"dns"`
-}
-
-// BastionConfig defines the bastion host (runs HAProxy for API load balancing).
-type BastionConfig struct {
-	IP  string `json:"ip"`
-	VIP string `json:"vip,omitempty"`
-}
-
-// AddonConfig toggles an optional cluster feature and carries its settings.
-type AddonConfig struct {
-	Enabled  bool              `json:"enabled"`
-	Settings map[string]string `json:"settings,omitempty"`
-}
-
-// AdditionalNetwork describes an extra NIC attached to each VM.
-type AdditionalNetwork struct {
-	Bridge  string `json:"bridge"`
-	Model   string `json:"model,omitempty"`
-	VLANTag int    `json:"vlan_tag,omitempty"`
-}
-
 // ProviderConfig selects the infrastructure provider and its settings.
 type ProviderConfig struct {
-	Type    ProviderType   `json:"type"`
-	Proxmox *ProxmoxConfig `json:"proxmox,omitempty"`
+	Type    ProviderType  `json:"type"`
+	Proxmox ProxmoxConfig `json:"proxmox"`
 }
 
-// ProxmoxConfig configures the Proxmox VE provider.
+// ProxmoxConfig configures the Proxmox VE provider; the API token and the
+// insecure flag live in okdctl.env, never here.
 type ProxmoxConfig struct {
-	Host        string `json:"host"`
-	Node        string `json:"node"`
-	Storage     string `json:"storage"`
-	DataStorage string `json:"data_storage,omitempty"`
-	ISOStorage  string `json:"iso_storage,omitempty"`
-	Bridge      string `json:"bridge,omitempty"`
-
-	// Credentials come from internal/credentials (okdctl.env/env vars),
-	// never persisted; json:"-" excludes them from load and save.
-	Username string      `json:"-"`
-	Password SecretBytes `json:"-"`
-	APIToken SecretBytes `json:"-"`
-
-	TokenID  string `json:"token_id,omitempty"`
-	Insecure bool   `json:"insecure,omitempty"`
-	// InsecureHTTP allows http:// endpoints — basic-auth over plaintext, opt-in only.
-	InsecureHTTP       bool                `json:"insecure_http,omitempty"`
-	CPUType            string              `json:"cpu_type,omitempty"`
-	AdditionalNetworks []AdditionalNetwork `json:"additional_networks,omitempty"`
-	NUMAEnabled        bool                `json:"numa_enabled,omitempty"`
-	// HAEnabled provisions Proxmox HA-manager anti-affinity for masters
-	// (requires PVE 9+; see proxmox-okd/ha.tf).
-	HAEnabled bool `json:"ha_enabled,omitempty"`
-	// ControlPlaneNodes/WorkerNodes assign VMs by index to a Proxmox node
-	// (short lists pad with Node, long ones fail validation); rendered into
-	// terraform's master_target_nodes/worker_target_nodes vars.
-	ControlPlaneNodes []string `json:"control_plane_nodes,omitempty"`
-	WorkerNodes       []string `json:"worker_nodes,omitempty"`
-	// SSHHostFingerprint pins the Proxmox host key (SHA256:<base64> from
-	// ssh-keygen -lf); set means mismatches are refused, unset means
-	// accept-new TOFU with the fingerprint logged at WARN.
-	SSHHostFingerprint string `json:"ssh_host_fingerprint,omitempty"`
-	// RequirePinnedFingerprint fails closed when SSHHostFingerprint is unset
-	// (sshpin.Verify returns AuthError instead of WARN+TOFU); default false
-	// preserves accept-new.
-	RequirePinnedFingerprint bool `json:"require_pinned_fingerprint,omitempty"`
+	Endpoint   string   `json:"endpoint"`
+	Nodes      []string `json:"nodes"`
+	Storage    string   `json:"storage"`
+	ISOStorage string   `json:"iso_storage"`
+	Bridge     string   `json:"bridge"`
+	VLAN       int      `json:"vlan"`
+	CPUType    string   `json:"cpu_type"`
+	Pool       string   `json:"pool"`
+	HA         bool     `json:"ha"`
+	VMIDBase   int      `json:"vmid_base"`
 }
 
-// redactedProxmoxConfig is ProxmoxConfig's Redacted() projection, omitting
-// Username/Password/APIToken so slog.Any can't reach them via RedactHandler.
-type redactedProxmoxConfig struct {
-	Host                     string
-	Node                     string
-	Storage                  string
-	DataStorage              string
-	ISOStorage               string
-	Bridge                   string
-	TokenID                  string
-	Insecure                 bool
-	InsecureHTTP             bool
-	CPUType                  string
-	AdditionalNetworks       []AdditionalNetwork
-	NUMAEnabled              bool
-	HAEnabled                bool
-	ControlPlaneNodes        []string
-	WorkerNodes              []string
-	SSHHostFingerprint       string
-	RequirePinnedFingerprint bool
+// NetworkingConfig lays out the machine network, the VIPs, the node address
+// range and the cluster-internal CIDRs.
+type NetworkingConfig struct {
+	MachineCIDR string   `json:"machine_cidr"`
+	Gateway     string   `json:"gateway"`
+	DNS         []string `json:"dns"`
+	APIVIP      string   `json:"api_vip"`
+	IngressVIP  string   `json:"ingress_vip"`
+	NodeIPStart string   `json:"node_ip_start"`
+	NTP         []string `json:"ntp"`
+	PodCIDR     string   `json:"pod_cidr"`
+	ServiceCIDR string   `json:"service_cidr"`
+	HostPrefix  int      `json:"host_prefix"`
 }
 
-// Redacted returns p's non-credential fields for logutil.redactAny.
-func (p *ProxmoxConfig) Redacted() any {
-	if p == nil {
-		return nil
-	}
-	return redactedProxmoxConfig{
-		Host:                     p.Host,
-		Node:                     p.Node,
-		Storage:                  p.Storage,
-		DataStorage:              p.DataStorage,
-		ISOStorage:               p.ISOStorage,
-		Bridge:                   p.Bridge,
-		TokenID:                  p.TokenID,
-		Insecure:                 p.Insecure,
-		InsecureHTTP:             p.InsecureHTTP,
-		CPUType:                  p.CPUType,
-		AdditionalNetworks:       p.AdditionalNetworks,
-		NUMAEnabled:              p.NUMAEnabled,
-		HAEnabled:                p.HAEnabled,
-		ControlPlaneNodes:        p.ControlPlaneNodes,
-		WorkerNodes:              p.WorkerNodes,
-		SSHHostFingerprint:       p.SSHHostFingerprint,
-		RequirePinnedFingerprint: p.RequirePinnedFingerprint,
-	}
+// NodeDefaults sizes every node of a role; Disks[0] is the root disk.
+type NodeDefaults struct {
+	CPU       int        `json:"cpu"`
+	MemoryMiB int        `json:"memory_mib"`
+	Disks     []DiskSpec `json:"disks"`
 }
 
-// FilesConfig points at the pull-secret and SSH public key files injected
-// into ignition/cloud-init.
+// WorkersConfig sizes the worker pool; Count is how many, indices come from
+// the nodes overrides or are filled from zero.
+type WorkersConfig struct {
+	Count int `json:"count"`
+	NodeDefaults
+}
+
+// NodeOverride replaces role defaults for one named node; nil fields inherit.
+type NodeOverride struct {
+	CPU       *int       `json:"cpu,omitempty"`
+	MemoryMiB *int       `json:"memory_mib,omitempty"`
+	Disks     []DiskSpec `json:"disks,omitempty"`
+	Host      string     `json:"host,omitempty"`
+	IP        string     `json:"ip,omitempty"`
+}
+
+// DiskSpec describes one virtual disk; an empty Storage uses provider.proxmox.storage.
+type DiskSpec struct {
+	SizeGiB int    `json:"size_gib"`
+	Storage string `json:"storage,omitempty"`
+	Wipe    *bool  `json:"wipe,omitempty"`
+}
+
+// FilesConfig points at the pull secret and SSH public key baked into the ISO.
 type FilesConfig struct {
 	PullSecret   string `json:"pull_secret"`
 	SSHPublicKey string `json:"ssh_public_key"`
 }
 
-// HTTPServerConfig configures the local HTTP server that hosts ignition
-// payloads during install.
-type HTTPServerConfig struct {
-	Root             string `json:"root"`
-	IgnitionServerIP string `json:"ignition_server_ip"`
+// LifecycleConfig tunes rolling node operations; durations read and write
+// Go duration strings such as 15m.
+type LifecycleConfig struct {
+	BeforeNextNode Hook
+	DrainTimeout   time.Duration
 }
 
-// DeploymentConfig tunes deployment-time behavior: Terraform environment,
-// auto-approve, timeouts, and the directory where setup installs managed
-// binaries.
-type DeploymentConfig struct {
-	TerraformEnv     string `json:"terraform_env,omitempty"`
-	AutoApprove      bool   `json:"auto_approve,omitempty"`
-	BootstrapTimeout int    `json:"bootstrap_timeout,omitempty"`
-	InstallTimeout   int    `json:"install_timeout,omitempty"`
-	BinDir           string `json:"bin_dir,omitempty"`
+// Hook is a command run between node operations; an empty Command disables it.
+type Hook struct {
+	Command string
+	Timeout time.Duration
 }
 
-// TerraformEnvName returns the active Terraform environment name from
-// deployment.terraform_env, defaulting to "production" when unset.
-func (c *Config) TerraformEnvName() string {
-	if c.Deployment.TerraformEnv != "" {
-		return c.Deployment.TerraformEnv
+// HandoffConfig toggles applying handoff/secrets and handoff/manifests after install.
+type HandoffConfig struct {
+	Enabled bool `json:"enabled"`
+}
+
+// DefaultsConfig holds cluster-wide switches applied at install time.
+type DefaultsConfig struct {
+	DisableRedHatCatalogs bool `json:"disable_redhat_catalogs"`
+}
+
+type lifecycleWire struct {
+	BeforeNextNode hookWire `json:"before_next_node"`
+	DrainTimeout   string   `json:"drain_timeout"`
+}
+
+type hookWire struct {
+	Command string `json:"command"`
+	Timeout string `json:"timeout"`
+}
+
+// MarshalJSON writes durations as Go duration strings.
+func (l LifecycleConfig) MarshalJSON() ([]byte, error) {
+	return json.Marshal(lifecycleWire{
+		BeforeNextNode: hookWire{Command: l.BeforeNextNode.Command, Timeout: l.BeforeNextNode.Timeout.String()},
+		DrainTimeout:   l.DrainTimeout.String(),
+	})
+}
+
+// UnmarshalJSON parses durations from Go duration strings and refuses unknown keys.
+func (l *LifecycleConfig) UnmarshalJSON(data []byte) error {
+	var w lifecycleWire
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&w); err != nil {
+		return err
 	}
-	return defaultTerraformEnv
+	timeout, err := parseDuration("lifecycle.before_next_node.timeout", w.BeforeNextNode.Timeout)
+	if err != nil {
+		return err
+	}
+	drain, err := parseDuration("lifecycle.drain_timeout", w.DrainTimeout)
+	if err != nil {
+		return err
+	}
+	l.BeforeNextNode = Hook{Command: w.BeforeNextNode.Command, Timeout: timeout}
+	l.DrainTimeout = drain
+	return nil
 }
 
-// DisksConfig sizes the optional extra disks per node group (data disk per
-// role, ceph mon-store on control-plane); the OS disk is
-// topology.<group>.disk_gb. A size of 0 omits the disk — zeroing one after
-// apply makes terraform destroy it on the next run.
-type DisksConfig struct {
-	WorkerDataSizeGB       int `json:"worker_data_size_gb"`
-	ControlPlaneDataSizeGB int `json:"control_plane_data_size_gb"`
-	ControlPlaneMonSizeGB  int `json:"control_plane_mon_size_gb"`
+func parseDuration(field, value string) (time.Duration, error) {
+	if value == "" {
+		return 0, nil
+	}
+	d, err := time.ParseDuration(value)
+	if err != nil {
+		return 0, fmt.Errorf("%s: invalid duration %q (use Go syntax such as 15m)", field, value)
+	}
+	return d, nil
 }
