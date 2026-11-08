@@ -46,18 +46,18 @@ func Build(cfg *config.Config, infraID string) (Inventory, error) {
 	if len(cfg.Provider.Proxmox.Nodes) == 0 {
 		return Inventory{}, errors.New("provider.proxmox.nodes is empty")
 	}
-	b := builder{cfg: cfg, infraID: infraID, cidr: cidr, hosts: cfg.Provider.Proxmox.Nodes}
+	b := &builder{cfg: cfg, infraID: infraID, cidr: cidr, hosts: cfg.Provider.Proxmox.Nodes}
 
 	inv := Inventory{InfraID: infraID, APIVIP: apiVIP, IngressVIP: ingressVIP}
 	for i := range masterCount {
-		node, err := b.node(RoleMaster, i, len(inv.Nodes))
+		node, err := b.node(RoleMaster, i)
 		if err != nil {
 			return Inventory{}, err
 		}
 		inv.Nodes = append(inv.Nodes, node)
 	}
 	for _, i := range b.workerIndices() {
-		node, err := b.node(RoleWorker, i, len(inv.Nodes))
+		node, err := b.node(RoleWorker, i)
 		if err != nil {
 			return Inventory{}, err
 		}
@@ -68,7 +68,7 @@ func Build(cfg *config.Config, infraID string) (Inventory, error) {
 
 // workerIndices keeps the indices named under nodes: so a removed worker's
 // slot is the one a later add reuses, then fills from zero up to count.
-func (b builder) workerIndices() []int {
+func (b *builder) workerIndices() []int {
 	count := b.cfg.Workers.Count
 	prefix := b.cfg.Cluster.Name + "-" + string(RoleWorker)
 	var explicit []int
@@ -95,12 +95,14 @@ func (b builder) workerIndices() []int {
 	return indices
 }
 
-func (b builder) node(role Role, index, position int) (NodeSpec, error) {
+// node places hosts by role and index, never by list position, so a
+// refilled worker slot cannot move an existing VM.
+func (b *builder) node(role Role, index int) (NodeSpec, error) {
 	name := fmt.Sprintf("%s-%s%d", b.cfg.Cluster.Name, role, index)
 	override := b.cfg.Nodes[name]
-	defaults, vmidOffset, ipOffset := b.cfg.ControlPlane, masterVMIDOffset, 0
+	defaults, vmidOffset, ipOffset, hostSlot := b.cfg.ControlPlane, masterVMIDOffset, 0, index
 	if role == RoleWorker {
-		defaults, vmidOffset, ipOffset = b.cfg.Workers.NodeDefaults, workerVMIDOffset, workerIPOffset
+		defaults, vmidOffset, ipOffset, hostSlot = b.cfg.Workers.NodeDefaults, workerVMIDOffset, workerIPOffset, masterCount+index
 	}
 
 	vmid := b.cfg.Provider.Proxmox.VMIDBase + vmidOffset + index
@@ -114,7 +116,7 @@ func (b builder) node(role Role, index, position int) (NodeSpec, error) {
 
 	spec := NodeSpec{
 		Role: role, Index: index, Name: name, VMID: vmid, MAC: MAC(b.infraID, vmid), IP: ip,
-		Host: b.hosts[position%len(b.hosts)], CPU: defaults.CPU, MemoryMiB: defaults.MemoryMiB,
+		Host: b.hosts[hostSlot%len(b.hosts)], CPU: defaults.CPU, MemoryMiB: defaults.MemoryMiB,
 	}
 	if override.Host != "" {
 		spec.Host = override.Host
@@ -133,7 +135,7 @@ func (b builder) node(role Role, index, position int) (NodeSpec, error) {
 	return spec, nil
 }
 
-func (b builder) address(name, override string, offset int) (netip.Addr, error) {
+func (b *builder) address(name, override string, offset int) (netip.Addr, error) {
 	raw := override
 	if raw == "" {
 		var err error
@@ -151,7 +153,7 @@ func (b builder) address(name, override string, offset int) (netip.Addr, error) 
 	return ip, nil
 }
 
-func (b builder) disks(vmid int, specs []config.DiskSpec) []Disk {
+func (b *builder) disks(vmid int, specs []config.DiskSpec) []Disk {
 	disks := make([]Disk, 0, len(specs))
 	for n, d := range specs {
 		disk := Disk{SizeGiB: d.SizeGiB, Storage: d.Storage, Serial: DiskSerial(vmid, n)}

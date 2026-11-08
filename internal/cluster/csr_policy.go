@@ -26,12 +26,13 @@ type CSRIdentity struct {
 
 // ExpectedCSRIdentities returns each node's short and fully qualified name
 // plus its address; domain is the cluster domain, <cluster>.<base-domain>.
-func ExpectedCSRIdentities(inv model.Inventory, domain string) ([]CSRIdentity, error) {
-	if len(inv.Nodes) == 0 {
+func ExpectedCSRIdentities(inv *model.Inventory, domain string) ([]CSRIdentity, error) {
+	if inv == nil || len(inv.Nodes) == 0 {
 		return nil, errors.New("no expected node identities for CSR approval")
 	}
 	identities := make([]CSRIdentity, 0, len(inv.Nodes))
-	for _, node := range inv.Nodes {
+	for i := range inv.Nodes {
+		node := &inv.Nodes[i]
 		identities = append(identities, CSRIdentity{Names: []string{node.Name, node.Name + "." + domain}, IP: node.IP.String()})
 	}
 	return identities, nil

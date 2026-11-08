@@ -2,6 +2,8 @@ package model
 
 import (
 	"net/netip"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/config"
@@ -42,7 +44,7 @@ func TestBuild_ThreePlusZero(t *testing.T) {
 		t.Fatalf("Nodes = %+v; want %d masters", inv.Nodes, len(want))
 	}
 	for i := range want {
-		assertNode(t, inv.Nodes[i], want[i])
+		assertNode(t, &inv.Nodes[i], &want[i])
 	}
 	if len(inv.Workers()) != 0 || len(inv.Masters()) != 3 {
 		t.Errorf("Masters/Workers = %d/%d", len(inv.Masters()), len(inv.Workers()))
@@ -66,11 +68,11 @@ func TestBuild_ThreePlusTwoWithOverride(t *testing.T) {
 	if len(workers) != 2 {
 		t.Fatalf("Workers = %+v", workers)
 	}
-	assertNode(t, workers[0], NodeSpec{
+	assertNode(t, &workers[0], &NodeSpec{
 		Role: RoleWorker, Index: 0, Name: "lab-worker0", VMID: 6100, MAC: "02:12:83:00:17:d4", IP: netip.MustParseAddr("192.168.1.160"), Host: "pve2", CPU: 8, MemoryMiB: 16384,
 		Disks: []Disk{{SizeGiB: 120, Storage: "local-lvm", Serial: "okd6100d0"}, {SizeGiB: 500, Storage: "local-lvm", Serial: "okd6100d1", Wipe: true}},
 	})
-	assertNode(t, workers[1], NodeSpec{
+	assertNode(t, &workers[1], &NodeSpec{
 		Role: RoleWorker, Index: 1, Name: "lab-worker1", VMID: 6101, MAC: "02:12:83:00:17:d5", IP: netip.MustParseAddr("192.168.1.161"), Host: "pve2", CPU: 8, MemoryMiB: 32768,
 		Disks: []Disk{{SizeGiB: 120, Storage: "local-lvm", Serial: "okd6101d0"}, {SizeGiB: 500, Storage: "local-lvm", Serial: "okd6101d1", Wipe: true}},
 	})
@@ -78,21 +80,27 @@ func TestBuild_ThreePlusTwoWithOverride(t *testing.T) {
 
 func TestBuild_WorkerIndexHole(t *testing.T) {
 	cfg := testConfig(2)
+	cfg.Provider.Proxmox.Nodes = []string{"pve1", "pve2"}
 	cfg.Nodes = map[string]config.NodeOverride{"lab-worker0": {}, "lab-worker2": {}}
-	before := mustBuild(t, cfg).Workers()
+	beforeInv := mustBuild(t, cfg)
+	before := beforeInv.Workers()
 	if got := indices(before); got != "0,2" {
 		t.Fatalf("count 2 indices = %s; want 0,2", got)
 	}
 
 	cfg.Workers.Count = 3
-	after := mustBuild(t, cfg).Workers()
+	afterInv := mustBuild(t, cfg)
+	after := afterInv.Workers()
 	if got := indices(after); got != "0,1,2" {
 		t.Fatalf("count 3 indices = %s; want 0,1,2", got)
 	}
-	assertNode(t, after[0], before[0])
-	assertNode(t, after[2], before[1])
-	if after[1].Name != "lab-worker1" || after[1].VMID != 6101 || after[1].IP != netip.MustParseAddr("192.168.1.161") {
+	assertNode(t, &after[0], &before[0])
+	assertNode(t, &after[2], &before[1])
+	if after[1].Name != "lab-worker1" || after[1].VMID != 6101 || after[1].IP != netip.MustParseAddr("192.168.1.161") || after[1].Host != "pve1" {
 		t.Errorf("filled worker = %+v", after[1])
+	}
+	if before[1].Host != "pve2" || after[2].Host != "pve2" {
+		t.Errorf("lab-worker2 host moved from %q to %q", before[1].Host, after[2].Host)
 	}
 }
 
@@ -110,7 +118,7 @@ func TestBuild_Overrides(t *testing.T) {
 	}
 	worker0, _ := inv.ByName("lab-worker0")
 	wantDisks := []Disk{{SizeGiB: 200, Storage: "fast", Serial: "okd6100d0"}}
-	assertNode(t, worker0, NodeSpec{Role: RoleWorker, Name: "lab-worker0", VMID: 6100, MAC: "02:12:83:00:17:d4", IP: netip.MustParseAddr("192.168.1.160"), Host: "pve", CPU: 8, MemoryMiB: 16384, Disks: wantDisks})
+	assertNode(t, &worker0, &NodeSpec{Role: RoleWorker, Name: "lab-worker0", VMID: 6100, MAC: "02:12:83:00:17:d4", IP: netip.MustParseAddr("192.168.1.160"), Host: "pve", CPU: 8, MemoryMiB: 16384, Disks: wantDisks})
 }
 
 func TestBuild_Errors(t *testing.T) {
@@ -162,7 +170,7 @@ func TestInventory_Lookups(t *testing.T) {
 	}
 }
 
-func assertNode(t *testing.T, got, want NodeSpec) {
+func assertNode(t *testing.T, got, want *NodeSpec) {
 	t.Helper()
 	if got.Role != want.Role || got.Index != want.Index || got.Name != want.Name || got.VMID != want.VMID || got.MAC != want.MAC ||
 		got.IP != want.IP || got.Host != want.Host || got.CPU != want.CPU || got.MemoryMiB != want.MemoryMiB {
@@ -179,12 +187,9 @@ func assertNode(t *testing.T, got, want NodeSpec) {
 }
 
 func indices(nodes []NodeSpec) string {
-	out := ""
-	for i, n := range nodes {
-		if i > 0 {
-			out += ","
-		}
-		out += string(rune('0' + n.Index))
+	out := make([]string, 0, len(nodes))
+	for i := range nodes {
+		out = append(out, strconv.Itoa(nodes[i].Index))
 	}
-	return out
+	return strings.Join(out, ",")
 }

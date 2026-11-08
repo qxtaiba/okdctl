@@ -25,7 +25,7 @@ func TestExpectedCSRIdentities(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	identities, err := ExpectedCSRIdentities(inv, "lab.k8s.local")
+	identities, err := ExpectedCSRIdentities(&inv, "lab.k8s.local")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,8 +36,11 @@ func TestExpectedCSRIdentities(t *testing.T) {
 	if got := identities[3]; !slices.Equal(got.Names, want.Names) || got.IP != want.IP {
 		t.Errorf("worker identity = %+v; want %+v", got, want)
 	}
-	if _, err := ExpectedCSRIdentities(model.Inventory{}, "lab.k8s.local"); err == nil {
+	if _, err := ExpectedCSRIdentities(&model.Inventory{}, "lab.k8s.local"); err == nil {
 		t.Error("empty inventory accepted")
+	}
+	if _, err := ExpectedCSRIdentities(nil, "lab.k8s.local"); err == nil {
+		t.Error("nil inventory accepted")
 	}
 }
 

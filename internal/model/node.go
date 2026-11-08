@@ -45,44 +45,44 @@ type Inventory struct {
 }
 
 // ByName returns the node called name.
-func (inv Inventory) ByName(name string) (NodeSpec, bool) {
-	return inv.find(func(n NodeSpec) bool { return n.Name == name })
+func (inv *Inventory) ByName(name string) (NodeSpec, bool) {
+	return inv.find(func(n *NodeSpec) bool { return n.Name == name })
 }
 
 // ByVMID returns the node with VMID id.
-func (inv Inventory) ByVMID(id int) (NodeSpec, bool) {
-	return inv.find(func(n NodeSpec) bool { return n.VMID == id })
+func (inv *Inventory) ByVMID(id int) (NodeSpec, bool) {
+	return inv.find(func(n *NodeSpec) bool { return n.VMID == id })
 }
 
 // ByMAC returns the node with the given MAC, compared case-insensitively.
-func (inv Inventory) ByMAC(mac string) (NodeSpec, bool) {
-	return inv.find(func(n NodeSpec) bool { return strings.EqualFold(n.MAC, mac) })
+func (inv *Inventory) ByMAC(mac string) (NodeSpec, bool) {
+	return inv.find(func(n *NodeSpec) bool { return strings.EqualFold(n.MAC, mac) })
 }
 
 // Masters returns the control-plane nodes in index order.
-func (inv Inventory) Masters() []NodeSpec {
+func (inv *Inventory) Masters() []NodeSpec {
 	return inv.withRole(RoleMaster)
 }
 
 // Workers returns the worker nodes in index order.
-func (inv Inventory) Workers() []NodeSpec {
+func (inv *Inventory) Workers() []NodeSpec {
 	return inv.withRole(RoleWorker)
 }
 
-func (inv Inventory) find(match func(NodeSpec) bool) (NodeSpec, bool) {
-	for _, n := range inv.Nodes {
-		if match(n) {
-			return n, true
+func (inv *Inventory) find(match func(*NodeSpec) bool) (NodeSpec, bool) {
+	for i := range inv.Nodes {
+		if n := &inv.Nodes[i]; match(n) {
+			return *n, true
 		}
 	}
 	return NodeSpec{}, false
 }
 
-func (inv Inventory) withRole(role Role) []NodeSpec {
+func (inv *Inventory) withRole(role Role) []NodeSpec {
 	var out []NodeSpec
-	for _, n := range inv.Nodes {
-		if n.Role == role {
-			out = append(out, n)
+	for i := range inv.Nodes {
+		if inv.Nodes[i].Role == role {
+			out = append(out, inv.Nodes[i])
 		}
 	}
 	return out
