@@ -76,6 +76,7 @@ type VMPatch struct {
 	MemoryMiB *int
 	Tags      []string
 	OnBoot    *bool
+	Delete    []string
 }
 
 // VMConfig is a VM's normalised configuration; Digest is the optimistic-lock

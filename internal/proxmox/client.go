@@ -1,11 +1,14 @@
 package proxmox
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"strings"
 	"sync"
@@ -15,6 +18,51 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/httputil"
 )
+
+// errorBodyLimit bounds how much of a failed reply's body is read for its message.
+const errorBodyLimit = 64 << 10
+
+// notFoundPhrases are how PVE's die() paths report a missing VM, config or
+// HA resource; pveproxy sends them as the reason phrase and in the body.
+var notFoundPhrases = []string{"does not exist", "no such resource"}
+
+// pveErrorTransport appends a failed reply's JSON message to its status
+// line, because go-proxmox reports a 5xx as errors.New(res.Status) and
+// discards the body; the body itself is replayed for callers that read it.
+type pveErrorTransport struct {
+	next http.RoundTripper
+}
+
+func (t pveErrorTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	res, err := t.next.RoundTrip(req)
+	if err != nil || res.StatusCode < http.StatusBadRequest {
+		return res, err
+	}
+	body, err := io.ReadAll(io.LimitReader(res.Body, errorBodyLimit))
+	_ = res.Body.Close()
+	if err != nil {
+		return nil, fmt.Errorf("read %s %s error body: %w", req.Method, req.URL.Path, err)
+	}
+	res.Body = io.NopCloser(bytes.NewReader(body))
+	if msg := pveMessage(body); msg != "" && !strings.Contains(res.Status, msg) {
+		res.Status += ": " + msg
+	}
+	return res, nil
+}
+
+func pveMessage(body []byte) string {
+	var envelope struct {
+		Message string          `json:"message"`
+		Errors  json.RawMessage `json:"errors"`
+	}
+	if json.Unmarshal(body, &envelope) != nil {
+		return ""
+	}
+	if msg := strings.TrimSpace(envelope.Message); msg != "" {
+		return msg
+	}
+	return strings.TrimSpace(string(envelope.Errors))
+}
 
 // get decodes the data envelope of an authenticated GET on an
 // /api2/json-relative path into v, translating go-proxmox's auth failure
@@ -55,9 +103,16 @@ func (d *driver) task(ctx context.Context, method, node, path string, form url.V
 	return Task{Node: node, UPID: upid}, nil
 }
 
+// mapAPIError is the one place transport failures become this package's
+// sentinels; the PVE message is kept behind ErrNotFound for diagnostics.
 func mapAPIError(err error) error {
 	if errors.Is(err, proxmox.ErrNotAuthorized) {
 		return ErrPermission
+	}
+	for _, phrase := range notFoundPhrases {
+		if strings.Contains(err.Error(), phrase) {
+			return fmt.Errorf("%w: %w", ErrNotFound, err)
+		}
 	}
 	return err
 }
@@ -72,6 +127,7 @@ func newProxmoxClient(endpoint, username string, password, apiToken []byte, inse
 		warnInsecureTLS(endpoint)
 	}
 	httpClient := httputil.NewOptionalInsecure(insecure, timeout)
+	httpClient.Transport = pveErrorTransport{next: httpClient.Transport}
 	base := APIBaseURL(endpoint)
 
 	switch {

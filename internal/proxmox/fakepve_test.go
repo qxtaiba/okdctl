@@ -35,6 +35,7 @@ var fakeFixtures = map[string]string{
 	"GET /access/permissions":                       "access_permissions.json",
 	"GET /nodes/pve/qemu/101/status/current":        "nodes_pve_qemu_101_status_current.json",
 	"GET /nodes/pve/tasks/" + upidStart + "/status": "nodes_pve_tasks_qmstart_status.json",
+	"GET /cluster/ha/resources/vm:101":              "cluster_ha_resources_vm_101.json",
 }
 
 // fakeWrites maps a write call to the UPID it returns; "" answers {"data":null}.
@@ -48,6 +49,7 @@ var fakeWrites = map[string]string{
 	"POST /nodes/pve/qemu/101/status/stop":                            upidStop,
 	"POST /nodes/pve/qemu/101/status/reset":                           upidReset,
 	"POST /cluster/ha/resources":                                      "",
+	"PUT /cluster/ha/resources/vm:101":                                "",
 	"DELETE /cluster/ha/resources/vm:101?purge=1":                     "",
 }
 
@@ -173,6 +175,14 @@ func (f *fakeAPI) driver(t *testing.T) Driver {
 		t.Fatalf("New(): %v", err)
 	}
 	return d
+}
+
+// pveErrorHandler answers the way pveproxy reports a die(): HTTP 500 with the
+// message in the body (the reason phrase, which pveproxy also sets, cannot be
+// written through net/http).
+func pveErrorHandler(msg string) http.HandlerFunc {
+	body, _ := json.Marshal(map[string]any{"data": nil, "message": msg + "\n"})
+	return jsonHandler(http.StatusInternalServerError, string(body))
 }
 
 func jsonHandler(status int, body string) http.HandlerFunc {

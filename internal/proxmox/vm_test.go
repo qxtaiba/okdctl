@@ -97,6 +97,18 @@ func TestUpdateVM(t *testing.T) {
 		t.Fatalf("posted form = %v, want %v", got, want)
 	}
 
+	t.Run("delete unsets keys", func(t *testing.T) {
+		f := newFakeAPI(t, nil)
+		patch := VMPatch{Delete: []string{"ide2", "balloon"}}
+		if _, err := f.driver(t).UpdateVM(t.Context(), ref101, patch, "d2"); err != nil {
+			t.Fatalf("UpdateVM(): %v", err)
+		}
+		want := url.Values{"digest": {"d2"}, "delete": {"ide2,balloon"}}
+		if got := f.form("POST /nodes/pve/qemu/101/config"); !reflect.DeepEqual(got, want) {
+			t.Fatalf("posted form = %v, want %v", got, want)
+		}
+	})
+
 	t.Run("nil fields are left out", func(t *testing.T) {
 		f := newFakeAPI(t, nil)
 		if _, err := f.driver(t).UpdateVM(t.Context(), ref101, VMPatch{Cores: intp(2)}, "d1"); err != nil {
@@ -218,6 +230,29 @@ func TestStatus(t *testing.T) {
 		t.Fatalf("Status() = %+v, want %+v", got, want)
 	}
 
+	t.Run("missing vm on real pve is not found", func(t *testing.T) {
+		f := newFakeAPI(t, map[string]http.HandlerFunc{
+			"GET /nodes/pve/qemu/999/status/current": pveErrorHandler("Configuration file 'nodes/pve/qemu-server/999.conf' does not exist"),
+		})
+		_, err := f.driver(t).Status(t.Context(), VMRef{Node: "pve", VMID: 999})
+		if !errors.Is(err, ErrNotFound) {
+			t.Fatalf("Status() error = %v, want ErrNotFound", err)
+		}
+		if !strings.Contains(err.Error(), "999.conf") {
+			t.Fatalf("Status() error = %v, want PVE's message preserved", err)
+		}
+	})
+
+	t.Run("other 500s stay generic", func(t *testing.T) {
+		f := newFakeAPI(t, map[string]http.HandlerFunc{
+			"GET /nodes/pve/qemu/101/status/current": pveErrorHandler("got timeout"),
+		})
+		_, err := f.driver(t).Status(t.Context(), ref101)
+		if err == nil || errors.Is(err, ErrNotFound) || !strings.Contains(err.Error(), "got timeout") {
+			t.Fatalf("Status() error = %v, want a generic error carrying the message", err)
+		}
+	})
+
 	t.Run("null data is not found", func(t *testing.T) {
 		f := newFakeAPI(t, map[string]http.HandlerFunc{
 			"GET /nodes/pve/qemu/999/status/current": jsonHandler(http.StatusOK, `{"data":null}`),
@@ -319,24 +354,52 @@ func TestWaitTask(t *testing.T) {
 }
 
 func TestHA(t *testing.T) {
-	t.Run("set with group", func(t *testing.T) {
-		f := newFakeAPI(t, nil)
-		if err := f.driver(t).SetHA(t.Context(), ref101, HASpec{State: "started", Group: "okd"}); err != nil {
+	ref105 := VMRef{Node: "pve", VMID: 105}
+	missing := map[string]http.HandlerFunc{
+		"GET /cluster/ha/resources/vm:105": pveErrorHandler("no such resource 'vm:105'"),
+	}
+
+	t.Run("unregistered vm is posted with group", func(t *testing.T) {
+		f := newFakeAPI(t, missing)
+		if err := f.driver(t).SetHA(t.Context(), ref105, HASpec{State: "started", Group: "okd"}); err != nil {
 			t.Fatalf("SetHA(): %v", err)
 		}
-		want := url.Values{"sid": {"vm:101"}, "state": {"started"}, "group": {"okd"}}
+		want := url.Values{"sid": {"vm:105"}, "state": {"started"}, "group": {"okd"}}
 		if got := f.form("POST /cluster/ha/resources"); !reflect.DeepEqual(got, want) {
 			t.Fatalf("posted form = %v, want %v", got, want)
 		}
 	})
-	t.Run("set without group", func(t *testing.T) {
+	t.Run("unregistered vm is posted without group", func(t *testing.T) {
+		f := newFakeAPI(t, missing)
+		if err := f.driver(t).SetHA(t.Context(), ref105, HASpec{State: "started"}); err != nil {
+			t.Fatalf("SetHA(): %v", err)
+		}
+		want := url.Values{"sid": {"vm:105"}, "state": {"started"}}
+		if got := f.form("POST /cluster/ha/resources"); !reflect.DeepEqual(got, want) {
+			t.Fatalf("posted form = %v, want %v", got, want)
+		}
+	})
+	t.Run("registered vm is updated in place", func(t *testing.T) {
+		f := newFakeAPI(t, nil)
+		if err := f.driver(t).SetHA(t.Context(), ref101, HASpec{State: "stopped", Group: "lab"}); err != nil {
+			t.Fatalf("SetHA(): %v", err)
+		}
+		want := url.Values{"state": {"stopped"}, "group": {"lab"}}
+		if got := f.form("PUT /cluster/ha/resources/vm:101"); !reflect.DeepEqual(got, want) {
+			t.Fatalf("put form = %v, want %v", got, want)
+		}
+		if f.called("POST /cluster/ha/resources") {
+			t.Fatal("SetHA() re-posted a registered resource")
+		}
+	})
+	t.Run("registered vm drops its group", func(t *testing.T) {
 		f := newFakeAPI(t, nil)
 		if err := f.driver(t).SetHA(t.Context(), ref101, HASpec{State: "started"}); err != nil {
 			t.Fatalf("SetHA(): %v", err)
 		}
-		want := url.Values{"sid": {"vm:101"}, "state": {"started"}}
-		if got := f.form("POST /cluster/ha/resources"); !reflect.DeepEqual(got, want) {
-			t.Fatalf("posted form = %v, want %v", got, want)
+		want := url.Values{"state": {"started"}, "delete": {"group"}}
+		if got := f.form("PUT /cluster/ha/resources/vm:101"); !reflect.DeepEqual(got, want) {
+			t.Fatalf("put form = %v, want %v", got, want)
 		}
 	})
 	t.Run("clear purges", func(t *testing.T) {
