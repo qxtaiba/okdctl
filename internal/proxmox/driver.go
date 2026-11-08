@@ -98,6 +98,7 @@ type VMConfig struct {
 	Tags         []string
 	NICModel     string
 	MAC          string
+	MACs         []string // every net<N> MAC in slot order; MAC is net0's
 	Bridge       string
 	VLAN         int
 	Disks        map[string]DiskConfig

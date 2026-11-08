@@ -43,7 +43,7 @@ func spikeConfig() VMConfig {
 		Name: "spike-agent", Cores: 4, Sockets: 1, CPUType: "host", MemoryMiB: 30720,
 		BIOS: "ovmf", Machine: "q35", SCSIHW: "virtio-scsi-single", OSType: "l26", OnBoot: true,
 		BootOrder: []string{"scsi0", "ide2", "net0"}, Tags: []string{"grappleberry", "okd"},
-		NICModel: "virtio", MAC: "02:d8:f7:00:23:32", Bridge: "vmbr0",
+		NICModel: "virtio", MAC: "02:d8:f7:00:23:32", MACs: []string{"02:d8:f7:00:23:32"}, Bridge: "vmbr0",
 		Disks: map[string]DiskConfig{"scsi0": {
 			Storage: "local-lvm", VolID: "local-lvm:vm-9010-disk-1", SizeGiB: 120, Serial: "OS-DISK",
 			IOThread: true, Discard: true, Cache: "none", AIO: "io_uring",
@@ -127,6 +127,18 @@ func TestParseVMConfigDevices(t *testing.T) {
 		c := mustParse(t, raw)
 		if c.NICModel != "e1000" || c.MAC != "BC:24:11:AA:BB:CC" || c.Bridge != "vmbr1" || c.VLAN != 42 {
 			t.Fatalf("nic = %q %q %q %d", c.NICModel, c.MAC, c.Bridge, c.VLAN)
+		}
+	})
+
+	t.Run("every nic mac in slot order", func(t *testing.T) {
+		raw := spikeRaw()
+		raw["net2"] = "virtio=BC:24:11:00:00:02,bridge=vmbr0"
+		raw["net1"] = "model=e1000,macaddr=bc:24:11:00:00:01,bridge=vmbr1"
+		raw["net10"] = "vmxnet3=BC:24:11:00:00:10,bridge=vmbr0"
+		c := mustParse(t, raw)
+		want := []string{"02:d8:f7:00:23:32", "bc:24:11:00:00:01", "BC:24:11:00:00:02", "BC:24:11:00:00:10"}
+		if !reflect.DeepEqual(c.MACs, want) || c.MAC != want[0] {
+			t.Fatalf("MACs = %v (MAC %q), want %v", c.MACs, c.MAC, want)
 		}
 	})
 
@@ -399,7 +411,7 @@ func TestDriverVMConfig(t *testing.T) {
 		Name: "grappleberry-master-0", Cores: 4, Sockets: 1, CPUType: "host", MemoryMiB: 16384,
 		BIOS: "ovmf", Machine: "q35", SCSIHW: "virtio-scsi-single", OSType: "l26", OnBoot: true, AgentEnabled: true,
 		BootOrder: []string{"scsi0", "ide2"}, Tags: []string{"grappleberry"},
-		NICModel: "virtio", MAC: "BC:24:11:AA:BB:CC", Bridge: "vmbr0",
+		NICModel: "virtio", MAC: "BC:24:11:AA:BB:CC", MACs: []string{"BC:24:11:AA:BB:CC"}, Bridge: "vmbr0",
 		Disks: map[string]DiskConfig{"scsi0": {
 			Storage: "local-lvm", VolID: "local-lvm:vm-101-disk-1", SizeGiB: 120, Serial: "master-0-root",
 			IOThread: true, Discard: true, Cache: "none", AIO: "io_uring",

@@ -175,7 +175,12 @@ func (st *preflightState) requiredPrivileges() []privReq {
 	if in.Tag != "" {
 		reqs = append(reqs, privReq{"/", "Sys.Modify"})
 	}
-	return reqs
+	seen := make(map[privReq]bool, len(reqs))
+	return slices.DeleteFunc(reqs, func(r privReq) bool {
+		dup := seen[r]
+		seen[r] = true
+		return dup
+	})
 }
 
 func (st *preflightState) checkPermissions(out *findings) {
@@ -289,8 +294,10 @@ func (st *preflightState) checkMACCollision(ctx context.Context, d Driver, out *
 			out.warn("mac-collision", "read config of vmid %d on node %s: %v", vm.VMID, vm.Node, err)
 			continue
 		}
-		if mac, ok := planned[strings.ToLower(cfg.MAC)]; ok && cfg.MAC != "" {
-			out.add("mac-collision", "mac %s already used by vmid %d on node %s", mac, vm.VMID, vm.Node)
+		for _, have := range cfg.MACs {
+			if mac, ok := planned[strings.ToLower(have)]; ok {
+				out.add("mac-collision", "mac %s already used by vmid %d on node %s", mac, vm.VMID, vm.Node)
+			}
 		}
 	}
 }
