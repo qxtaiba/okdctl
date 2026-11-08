@@ -153,3 +153,15 @@ func TestValidateNodes(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateNodes_HostRuleSkipsEmptyPool(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Provider.Proxmox.Nodes = nil
+	cfg.Nodes = map[string]NodeOverride{"lab-worker0": {Host: "pve9"}}
+	assertFinding(t, cfg, finding{FieldProxmoxNodes, "at least one"})
+	for _, e := range cfg.Validate().Errors {
+		if e.Field == "nodes.lab-worker0.host" {
+			t.Errorf("host rule fired on an empty pool: %v", e)
+		}
+	}
+}

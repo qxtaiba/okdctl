@@ -19,9 +19,8 @@ const (
 	RoleWorker Role = "worker"
 )
 
-// The node layout: <cluster>-master<0..2> at vmid_base+10+i and
-// node_ip_start+i, <cluster>-worker<i> at vmid_base+100+i and
-// node_ip_start+10+i. internal/model derives every node from these.
+// MasterCount and the offsets place <cluster>-master<i> at vmid_base+10+i
+// and node_ip_start+i, <cluster>-worker<i> at vmid_base+100+i and node_ip_start+10+i.
 const (
 	MasterCount      = 3
 	MasterVMIDOffset = 10

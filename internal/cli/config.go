@@ -40,9 +40,10 @@ var configValidateCmd = &cobra.Command{
 	Long: `Validate the configuration file against the schema (required fields,
 enum values, provider settings, topology constraints) and print every
 error found. A valid file is followed by the node table it produces:
-name, role, VMID, MAC, address, host, CPU, memory and disks. With
---output json the inventory alone goes to stdout and the summary to
-stderr.
+name, role, VMID, MAC, address, host, CPU, MEM (MiB) and DISKS (sizes in
+GiB). With --output json the inventory alone goes to stdout as an object
+with infra_id, api_vip, ingress_vip and nodes[] (memory_mib, disks[].size_gib),
+and the summary goes to stderr.
 
 Read-only: nothing is written or deployed. Exits 0 when the config is
 valid, 2 when validation reports errors, and 66 when the file does not
