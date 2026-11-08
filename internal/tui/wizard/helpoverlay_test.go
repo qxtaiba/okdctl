@@ -261,7 +261,7 @@ func TestHelpOverlay_ListsVimGroup(t *testing.T) {
 
 	m = update(t, m, questionMark())
 	frame := tuitest.StripANSI(m.View().Content)
-	for _, want := range []string{"vim", "j/k", "ctrl+d/u", "gg/G"} {
+	for _, want := range []string{"vim", "ctrl+d/u", "gg/G"} {
 		if !strings.Contains(frame, want) {
 			t.Errorf("overlay missing %q from the vim group:\n%s", want, frame)
 		}

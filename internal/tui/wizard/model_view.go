@@ -452,7 +452,6 @@ func (m *Model) renderHelpOverlay() string {
 	// The footer-silent vim vocabulary surfaces only here, under its own
 	// overlay group.
 	hints = append(hints,
-		components.KeyHint{Key: "j/k", Help: "scroll"},
 		components.KeyHint{Key: "ctrl+d/u", Help: "half page"},
 		components.KeyHint{Key: "gg/G", Help: "top/bottom"},
 	)
