@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
 
 // OperatorHealth summarizes ClusterOperator conditions.
@@ -50,13 +49,13 @@ func parseOperatorHealth(data []byte) (OperatorHealth, error) {
 	for _, op := range col.Items {
 		var available, degraded, progressing bool
 		for _, cond := range op.Status.Conditions {
-			isTrue := cond.Status == string(nodetypes.ConditionStatusTrue)
-			switch nodetypes.ConditionType(cond.Type) {
-			case nodetypes.ConditionTypeAvailable:
+			isTrue := cond.Status == string(ConditionStatusTrue)
+			switch ConditionType(cond.Type) {
+			case ConditionTypeAvailable:
 				available = isTrue
-			case nodetypes.ConditionTypeDegraded:
+			case ConditionTypeDegraded:
 				degraded = isTrue
-			case nodetypes.ConditionTypeProgressing:
+			case ConditionTypeProgressing:
 				progressing = isTrue
 			}
 		}

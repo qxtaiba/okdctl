@@ -12,8 +12,6 @@ import (
 	"time"
 
 	"github.com/luthermonson/go-proxmox"
-
-	"github.com/qxtaiba/okdctl/internal/nodetypes"
 )
 
 func TestSelectNodeMem(t *testing.T) {
@@ -59,11 +57,11 @@ func TestMapVMStates(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("mapVMStates = %v; want 3 entries", got)
 	}
-	if got[110] != nodetypes.StateRunning || got[111] != nodetypes.StateStopped {
+	if got[110] != StateRunning || got[111] != StateStopped {
 		t.Errorf("wire states = %v/%v; want running/stopped", got[110], got[111])
 	}
-	if got[200] != nodetypes.StateUnknown {
-		t.Errorf("unrecognized status = %v; want %v", got[200], nodetypes.StateUnknown)
+	if got[200] != StateUnknown {
+		t.Errorf("unrecognized status = %v; want %v", got[200], StateUnknown)
 	}
 	if _, ok := got[300]; ok {
 		t.Error("vm absent from the listing must be omitted, not defaulted")

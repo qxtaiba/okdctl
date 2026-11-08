@@ -11,7 +11,17 @@ import (
 	"github.com/luthermonson/go-proxmox"
 
 	"github.com/qxtaiba/okdctl/internal/httputil"
-	"github.com/qxtaiba/okdctl/internal/nodetypes"
+)
+
+// VMState is a Proxmox VM's power state as pvesh reports it.
+type VMState string
+
+// Wire states matching pvesh's "status" field verbatim; StateUnknown is
+// okdctl's own value for anything else, such as a suspended VM.
+const (
+	StateRunning VMState = "running"
+	StateStopped VMState = "stopped"
+	StateUnknown VMState = "unknown"
 )
 
 // defaultProbeTimeout bounds every read in a single ProbeHost call.
@@ -165,7 +175,7 @@ func ProbeHost(ctx context.Context, opts *ProbeOptions) (*HostProbe, error) {
 
 // VMPowerStates reads vmids' power state from the cluster-wide resources
 // listing (opts.Node is not required); absent VMs are omitted, not defaulted.
-func VMPowerStates(ctx context.Context, opts *ProbeOptions, vmids []int) (map[int]nodetypes.VMState, error) {
+func VMPowerStates(ctx context.Context, opts *ProbeOptions, vmids []int) (map[int]VMState, error) {
 	timeout := opts.Timeout
 	if timeout <= 0 {
 		timeout = defaultProbeTimeout
@@ -190,21 +200,21 @@ func VMPowerStates(ctx context.Context, opts *ProbeOptions, vmids []int) (map[in
 
 // mapVMStates maps qemu entries in vmids to the VMState vocabulary;
 // unrecognized statuses become StateUnknown.
-func mapVMStates(resources proxmox.ClusterResources, vmids []int) map[int]nodetypes.VMState {
+func mapVMStates(resources proxmox.ClusterResources, vmids []int) map[int]VMState {
 	want := make(map[uint64]bool, len(vmids))
 	for _, id := range vmids {
 		if id > 0 {
 			want[uint64(id)] = true
 		}
 	}
-	states := make(map[int]nodetypes.VMState, len(vmids))
+	states := make(map[int]VMState, len(vmids))
 	for _, r := range resources {
 		if r.Type != resourceTypeQEMU || !want[r.VMID] {
 			continue
 		}
-		state := nodetypes.VMState(r.Status)
-		if state != nodetypes.StateRunning && state != nodetypes.StateStopped {
-			state = nodetypes.StateUnknown
+		state := VMState(r.Status)
+		if state != StateRunning && state != StateStopped {
+			state = StateUnknown
 		}
 		states[int(r.VMID)] = state //nolint:gosec // G115: qemu vmids are small positive integers
 	}
@@ -269,7 +279,7 @@ func selectNodeMem(nodes proxmox.NodeStatuses, name string) (uint64, error) {
 func sumRunningGuestMem(resources proxmox.ClusterResources, node string) uint64 {
 	var total uint64
 	for _, r := range resources {
-		if r.Type == "qemu" && r.Node == node && r.Status == string(nodetypes.StateRunning) {
+		if r.Type == "qemu" && r.Node == node && r.Status == string(StateRunning) {
 			total += r.MaxMem
 		}
 	}

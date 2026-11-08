@@ -12,7 +12,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
 	"github.com/qxtaiba/okdctl/internal/logutil"
-	"github.com/qxtaiba/okdctl/internal/nodetypes"
+	"github.com/qxtaiba/okdctl/internal/model"
 	"github.com/qxtaiba/okdctl/internal/testutil"
 )
 
@@ -51,10 +51,10 @@ func TestParseNodeList(t *testing.T) {
 	if len(nodes) != 2 {
 		t.Fatalf("want 2 nodes, got %d", len(nodes))
 	}
-	if nodes[0].Role != nodetypes.RoleMaster || !nodes[0].Ready {
+	if nodes[0].Role != model.RoleMaster || !nodes[0].Ready {
 		t.Errorf("master0 parsed wrong: %+v", nodes[0])
 	}
-	if nodes[1].Role != nodetypes.RoleWorker || nodes[1].Ready {
+	if nodes[1].Role != model.RoleWorker || nodes[1].Ready {
 		t.Errorf("worker1 parsed wrong: %+v", nodes[1])
 	}
 }

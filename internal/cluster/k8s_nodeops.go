@@ -11,7 +11,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
-	"github.com/qxtaiba/okdctl/internal/nodetypes"
+	"github.com/qxtaiba/okdctl/internal/model"
 )
 
 // DrainOptions tunes a node drain: Force evicts pods not owned by a
@@ -95,7 +95,7 @@ func parseMastersSchedulable(data []byte) (bool, error) {
 // used by lifecycle guards.
 type NodeDetail struct {
 	Name           string
-	Role           nodetypes.NodeRole
+	Role           model.Role
 	Ready          bool
 	ReadyCondition corev1.NodeCondition
 }
@@ -131,13 +131,13 @@ func parseNodeList(data []byte) ([]NodeDetail, error) {
 }
 
 func observeNode(n *corev1.Node) NodeDetail {
-	d := NodeDetail{Name: n.Name, Role: nodetypes.RoleUnknown, ReadyCondition: corev1.NodeCondition{Type: corev1.NodeReady, Status: corev1.ConditionUnknown}}
+	d := NodeDetail{Name: n.Name, ReadyCondition: corev1.NodeCondition{Type: corev1.NodeReady, Status: corev1.ConditionUnknown}}
 	_, master := n.Labels["node-role.kubernetes.io/master"]
 	_, controlPlane := n.Labels["node-role.kubernetes.io/control-plane"]
 	if master || controlPlane {
-		d.Role = nodetypes.RoleMaster
+		d.Role = model.RoleMaster
 	} else if _, worker := n.Labels["node-role.kubernetes.io/worker"]; worker {
-		d.Role = nodetypes.RoleWorker
+		d.Role = model.RoleWorker
 	}
 	for _, condition := range n.Status.Conditions {
 		if condition.Type == corev1.NodeReady {
