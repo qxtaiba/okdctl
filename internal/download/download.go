@@ -1,5 +1,5 @@
-// Package download fetches remote artifacts with retries and progress
-// reporting, and extracts archives, for OKD installer tooling.
+// Package download fetches remote artifacts with retries and extracts
+// archives, for OKD installer tooling.
 package download
 
 import (
@@ -29,7 +29,6 @@ type dlConfig struct {
 	description      string
 	timeout          time.Duration
 	overwrite        bool
-	progress         bool
 	logger           *slog.Logger
 }
 
@@ -49,11 +48,6 @@ func WithTimeout(d time.Duration) FetchOption { return func(c *dlConfig) { c.tim
 
 // WithOverwrite forces a re-download even when a file with a matching checksum exists.
 func WithOverwrite(v bool) FetchOption { return func(c *dlConfig) { c.overwrite = v } }
-
-// WithProgress enables the stderr progress bar (off by default).
-// TTY gating is the caller's job (pass logutil.ProgressBarsEnabled()), keeping
-// this package free of presentation imports.
-func WithProgress(v bool) FetchOption { return func(c *dlConfig) { c.progress = v } }
 
 // WithLogger injects a structured logger; nil falls back to logutil.NopLogger.
 func WithLogger(l *slog.Logger) FetchOption {
@@ -125,7 +119,7 @@ func Fetch(ctx context.Context, url, dst string, opts ...FetchOption) error {
 	client := httputil.New(cfg.timeout)
 
 	attempts, err := retryDownload(ctx, func() error {
-		return fetchToFile(ctx, client, cfg, filename)
+		return fetchToFile(ctx, client, cfg)
 	})
 	if err != nil {
 		cfg.logger.Warn("download: giving up after retries", "file", filename, "attempts", attempts, "err", err)
@@ -141,7 +135,7 @@ func Fetch(ctx context.Context, url, dst string, opts ...FetchOption) error {
 
 // fetchToFile runs one attempt; a mid-attempt failure removes the partial file
 // so the next retry starts clean.
-func fetchToFile(ctx context.Context, client *http.Client, cfg *dlConfig, filename string) error {
+func fetchToFile(ctx context.Context, client *http.Client, cfg *dlConfig) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, cfg.url, http.NoBody)
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
@@ -171,14 +165,11 @@ func fetchToFile(ctx context.Context, client *http.Client, cfg *dlConfig, filena
 		return fmt.Errorf("create output file: %w", err)
 	}
 
-	pw := newProgressWriter(outFile, resp.ContentLength, filename, cfg.progress)
-	if _, err := io.Copy(pw, resp.Body); err != nil {
-		_ = pw.Close()
+	if _, err := io.Copy(outFile, resp.Body); err != nil {
 		_ = outFile.Close()
 		_ = os.Remove(cfg.outputPath)
 		return fmt.Errorf("write file: %w", err)
 	}
-	_ = pw.Close()
 
 	if err := outFile.Sync(); err != nil {
 		_ = outFile.Close()

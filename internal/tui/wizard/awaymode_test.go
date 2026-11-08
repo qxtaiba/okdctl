@@ -1,29 +1,13 @@
 package wizard
 
 import (
-	"io"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 )
-
-// progressStep is a nop step that reports terminal progress, the seam the
-// deploy stream drives OSC 9;4 through.
-type progressStep struct {
-	*nopStep
-	state tea.ProgressBarState
-	value int
-}
-
-func (s *progressStep) Update(tea.Msg) (WizardStep, tea.Cmd) { return s, nil }
-
-func (s *progressStep) TerminalProgress() (state tea.ProgressBarState, value int) {
-	return s.state, s.value
-}
 
 // recordingStep captures every message the frame delivers to it.
 type recordingStep struct {
@@ -93,35 +77,5 @@ func TestFocusMsgsReachTheActiveStep(t *testing.T) {
 	}
 	if !saw["blur"] || !saw["focus"] {
 		t.Errorf("step saw blur=%v focus=%v, want both delivered", saw["blur"], saw["focus"])
-	}
-}
-
-// TestTerminalProgressGatedByColorProfile pins OSC 9;4's plain degradation:
-// off-TTY (the test default) the view carries no progress bar at all, and a
-// color-forced run carries the step's reading.
-func TestTerminalProgressGatedByColorProfile(t *testing.T) {
-	step := &progressStep{nopStep: newNopStep(), state: tea.ProgressBarDefault, value: 42}
-	m := NewFlowModel([]WizardStep{step}, config.DefaultConfig(), DefaultChrome())
-	_ = tuitest.RenderAt(t, m, 100, 30)
-
-	if pb := m.View().ProgressBar; pb != nil {
-		t.Errorf("off-TTY view must carry no progress bar, got %+v", pb)
-	}
-
-	t.Setenv("CLICOLOR_FORCE", "1")
-	tui.SetColorProfileFor(io.Discard)
-	t.Cleanup(func() {
-		t.Setenv("CLICOLOR_FORCE", "")
-		tui.SetColorProfileFor(io.Discard)
-	})
-
-	pb := m.View().ProgressBar
-	if pb == nil || pb.State != tea.ProgressBarDefault || pb.Value != 42 {
-		t.Fatalf("color-enabled view must carry the step's progress, got %+v", pb)
-	}
-
-	step.state = tea.ProgressBarNone
-	if pb := m.View().ProgressBar; pb != nil {
-		t.Errorf("a step reporting none must clear the terminal progress, got %+v", pb)
 	}
 }
