@@ -18,7 +18,7 @@ var (
 		"e1000-82545em": true, "rtl8139": true, "vmxnet3": true, "i82551": true, "i82557b": true,
 		"i82559er": true, "ne2k_isa": true, "ne2k_pci": true, "pcnet": true,
 	}
-	sizeUnits = map[byte]int{'K': 1 << 10, 'M': 1 << 20, 'G': 1 << 30, 'T': 1 << 40}
+	sizeUnits = map[byte]int64{'K': 1 << 10, 'M': 1 << 20, 'G': 1 << 30, 'T': 1 << 40}
 )
 
 // ParseVMConfig normalises the data object of GET /nodes/{node}/qemu/{vmid}/config.
@@ -238,7 +238,7 @@ func (c *VMConfig) setDisk(slot, s string) error {
 		}
 		return nil
 	}
-	bytes, err := parseSize(kv["size"])
+	bytes, err := ParseSize(kv["size"])
 	if err != nil {
 		return err
 	}
@@ -249,7 +249,7 @@ func (c *VMConfig) setDisk(slot, s string) error {
 	c.Disks[slot] = DiskConfig{
 		Storage:  storage,
 		VolID:    volid,
-		SizeGiB:  bytes >> 30,
+		SizeGiB:  int(bytes >> 30),
 		Serial:   kv["serial"],
 		IOThread: kv["iothread"] == "1",
 		Discard:  kv["discard"] == "on",
@@ -259,18 +259,18 @@ func (c *VMConfig) setDisk(slot, s string) error {
 	return nil
 }
 
-// parseSize reads PVE's size notation: bytes, or a number with a K/M/G/T
-// binary suffix.
-func parseSize(s string) (int, error) {
+// ParseSize reads PVE's size notation, as Change.Want and Change.Have
+// spell disk sizes: bytes, or a number with a K/M/G/T binary suffix.
+func ParseSize(s string) (int64, error) {
 	if s == "" {
 		return 0, nil
 	}
-	unit := 1
+	unit := int64(1)
 	if mul, ok := sizeUnits[s[len(s)-1]&^0x20]; ok {
 		unit = mul
 		s = s[:len(s)-1]
 	}
-	n, err := strconv.Atoi(s)
+	n, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
 		return 0, fmt.Errorf("size: %w", err)
 	}

@@ -494,3 +494,17 @@ func TestDriverVMPending(t *testing.T) {
 		}
 	})
 }
+
+func TestParseSize(t *testing.T) {
+	for in, want := range map[string]int64{"": 0, "4096": 4096, "1K": 1024, "512m": 512 << 20, "120G": 120 << 30, "2T": 2 << 40} {
+		got, err := ParseSize(in)
+		if err != nil || got != want {
+			t.Errorf("ParseSize(%q) = %d, %v; want %d", in, got, err, want)
+		}
+	}
+	for _, in := range []string{"big", "12X", "G"} {
+		if _, err := ParseSize(in); err == nil {
+			t.Errorf("ParseSize(%q) = nil error", in)
+		}
+	}
+}
