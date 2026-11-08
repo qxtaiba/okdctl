@@ -20,10 +20,11 @@ type Inputs struct {
 	ExtraManifests map[string][]byte
 }
 
-// Hash returns the sha256 hex of a canonical encoding of the node identities
-// (role, index, name, VMID, MAC, IP), the VIPs, the release, the pull secret,
-// the SSH key and the extra manifests by sorted name; sizing and placement
-// are excluded because the driver reconciles them.
+// Hash returns the sha256 hex of a canonical encoding of the infra-ID, the
+// master identities (role, index, name, VMID, MAC, IP), the VIPs, the
+// release, the pull secret, the SSH key and the extra manifests by sorted
+// name. Workers are excluded so node add and remove stay ordinary apply
+// work; sizing and placement are excluded because the driver reconciles them.
 func (in *Inputs) Hash() string {
 	var buf bytes.Buffer
 	field := func(parts ...string) {
@@ -32,9 +33,10 @@ func (in *Inputs) Hash() string {
 		}
 	}
 	field("infra", in.Inventory.InfraID)
-	for i := range in.Inventory.Nodes {
-		n := &in.Inventory.Nodes[i]
-		field("node", string(n.Role), strconv.Itoa(n.Index), n.Name, strconv.Itoa(n.VMID), n.MAC, n.IP.String())
+	masters := in.Inventory.Masters()
+	for i := range masters {
+		n := &masters[i]
+		field("master", string(n.Role), strconv.Itoa(n.Index), n.Name, strconv.Itoa(n.VMID), n.MAC, n.IP.String())
 	}
 	field("vip", in.Inventory.APIVIP.String(), in.Inventory.IngressVIP.String())
 	field("release", in.Release)

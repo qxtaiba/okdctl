@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -27,6 +28,7 @@ func TestRecordRoundTrip(t *testing.T) {
 		InfraID: "lab-a1b2c3", Cluster: "lab", Domain: "example.com",
 		Created: time.Now().UTC().Truncate(time.Second), Release: "4.20.0",
 		InputsHash: strings.Repeat("ab", 32),
+		Nodes:      []string{"lab-master0", "lab-master1", "lab-master2", "lab-worker0"},
 	}
 	if err := SaveRecord(path, want); err != nil {
 		t.Fatalf("SaveRecord: %v", err)
@@ -43,7 +45,8 @@ func TestRecordRoundTrip(t *testing.T) {
 		t.Fatalf("LoadRecord: %v", err)
 	}
 	if got.InfraID != want.InfraID || got.Cluster != want.Cluster || got.Domain != want.Domain ||
-		got.Release != want.Release || got.InputsHash != want.InputsHash || !got.Created.Equal(want.Created) {
+		got.Release != want.Release || got.InputsHash != want.InputsHash || !got.Created.Equal(want.Created) ||
+		!slices.Equal(got.Nodes, want.Nodes) {
 		t.Errorf("LoadRecord = %+v; want %+v", got, want)
 	}
 }
