@@ -3,15 +3,9 @@ package httputil
 
 import (
 	"crypto/tls"
-	"crypto/x509"
-	"encoding/base64"
 	"errors"
-	"fmt"
 	"net/http"
-	"os"
 	"time"
-
-	"sigs.k8s.io/yaml"
 )
 
 // Standard request timeouts tiered by expected response size;
@@ -19,7 +13,6 @@ import (
 // the download-tier value.
 const (
 	TimeoutShort    = 10 * time.Second // API calls, connectivity checks
-	TimeoutMedium   = 30 * time.Second // Metadata, checksum fetches
 	TimeoutDownload = 5 * time.Minute  // File downloads
 )
 
@@ -41,38 +34,11 @@ func NewOptionalInsecure(insecure bool, timeout time.Duration) *http.Client {
 	}
 }
 
-// NewWithCA returns a client whose TLS transport trusts only pool's certs,
-// pinned at TLS 1.2 minimum; a chain that doesn't root in pool fails the request.
-func NewWithCA(pool *x509.CertPool, timeout time.Duration) *http.Client {
-	return &http.Client{
-		Timeout:       timeout,
-		CheckRedirect: capRedirects,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				RootCAs:    pool,
-				MinVersion: tls.VersionTLS12,
-			},
-		},
-	}
-}
-
-// NewWithCAServerName verifies the CA and DNS identity while dialing another address.
-func NewWithCAServerName(pool *x509.CertPool, serverName string, timeout time.Duration) *http.Client {
-	client := NewWithCA(pool, timeout)
-	transport := client.Transport.(*http.Transport)
-	transport.TLSClientConfig.ServerName = serverName
-	return client
-}
-
-// ErrTooManyRedirects is returned by capRedirects after 5 consecutive hops.
-var ErrTooManyRedirects = errors.New("httputil: stopped after 5 redirects")
-
-// ErrCrossHostAuthHeader is returned when a redirect would carry an
-// Authorization header to a different host.
-var ErrCrossHostAuthHeader = errors.New("httputil: refusing cross-host redirect with Authorization header")
-
-// ErrInsecureRedirect identifies a redirect that would downgrade HTTPS to HTTP.
-var ErrInsecureRedirect = errors.New("httputil: refusing HTTPS downgrade redirect")
+var (
+	errTooManyRedirects    = errors.New("httputil: stopped after 5 redirects")
+	errCrossHostAuthHeader = errors.New("httputil: refusing cross-host redirect with Authorization header")
+	errInsecureRedirect    = errors.New("httputil: refusing HTTPS downgrade redirect")
+)
 
 // capRedirects caps redirects at 5 and blocks cross-host redirects carrying
 // an Authorization header, since Go's stdlib only strips headers it manages
@@ -80,56 +46,16 @@ var ErrInsecureRedirect = errors.New("httputil: refusing HTTPS downgrade redirec
 // attacker-controlled host).
 func capRedirects(req *http.Request, via []*http.Request) error {
 	if len(via) >= 5 {
-		return ErrTooManyRedirects
+		return errTooManyRedirects
 	}
 	if len(via) == 0 {
 		return nil
 	}
 	if via[len(via)-1].URL.Scheme == "https" && req.URL.Scheme != "https" {
-		return ErrInsecureRedirect
+		return errInsecureRedirect
 	}
 	if req.URL.Host != via[0].URL.Host && req.Header.Get("Authorization") != "" {
-		return ErrCrossHostAuthHeader
+		return errCrossHostAuthHeader
 	}
 	return nil
-}
-
-// kubeconfigCA is the minimal kubeconfig shape needed to extract the cluster CA.
-type kubeconfigCA struct {
-	Clusters []struct {
-		Cluster struct {
-			CertificateAuthorityData string `json:"certificate-authority-data"`
-		} `json:"cluster"`
-	} `json:"clusters"`
-}
-
-// KubeconfigCAPool reads kubeconfigPath and returns a cert pool for the
-// cluster's CA; the kubeconfig must have at least one cluster entry with
-// certificate-authority-data (base64 PEM).
-func KubeconfigCAPool(kubeconfigPath string) (*x509.CertPool, error) {
-	raw, err := os.ReadFile(kubeconfigPath)
-	if err != nil {
-		return nil, fmt.Errorf("read kubeconfig: %w", err)
-	}
-
-	var kc kubeconfigCA
-	if err := yaml.Unmarshal(raw, &kc); err != nil {
-		return nil, fmt.Errorf("parse kubeconfig: %w", err)
-	}
-
-	if len(kc.Clusters) == 0 || kc.Clusters[0].Cluster.CertificateAuthorityData == "" {
-		return nil, fmt.Errorf("kubeconfig has no certificate-authority-data")
-	}
-
-	pemBytes, err := base64.StdEncoding.DecodeString(kc.Clusters[0].Cluster.CertificateAuthorityData)
-	if err != nil {
-		return nil, fmt.Errorf("decode certificate-authority-data: %w", err)
-	}
-
-	pool := x509.NewCertPool()
-	if !pool.AppendCertsFromPEM(pemBytes) {
-		return nil, fmt.Errorf("no valid PEM certificates in certificate-authority-data")
-	}
-
-	return pool, nil
 }
