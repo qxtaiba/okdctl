@@ -38,12 +38,6 @@ const (
 	httpTimeout  = 60 * time.Second
 )
 
-var keptFixtures = map[string]string{
-	"access_permissions.json":          "the live body is the production token's whole ACL; encoding verified",
-	"cluster_ha_resources_vm_101.json": "recording it would register an HA resource on the production host",
-	"nodes_pve_qemu_101_pending.json":  "queued changes need a running VM; the rows exercise pending and delete",
-}
-
 type settings struct {
 	endpoint   string
 	token      []byte
@@ -170,16 +164,18 @@ func run(ctx context.Context) (err error) {
 	return r.record(ctx, task.UPID)
 }
 
+// The HA resource and pending fixtures stay hand-written: recording them
+// would register an HA resource and queue changes on the production host.
 func (r *recorder) fixtures(upid string) []fixture {
 	node, vmid := url.PathEscape(r.s.node), strconv.Itoa(r.s.vmid)
 	return []fixture{
 		{"version.json", "/version", mergeObject},
-		{"nodes.json", "/nodes", mergeRows("node", fakeFingerprint)},
+		{"nodes.json", "/nodes", mergeRows("node")},
 		{"nodes_pve_status.json", "/nodes/" + node + "/status", mergeObject},
-		{"nodes_pve_storage.json", "/nodes/" + node + "/storage", mergeRows("storage", nil)},
-		{"nodes_pve_network_any_bridge.json", "/nodes/" + node + "/network?type=any_bridge", mergeRows("iface", fakeAddresses)},
+		{"nodes_pve_storage.json", "/nodes/" + node + "/storage", mergeRows("storage")},
+		{"nodes_pve_network_any_bridge.json", "/nodes/" + node + "/network?type=any_bridge", mergeRows("iface", "cidr6", "address6", "gateway6", "comments")},
 		{"cluster_resources_vm.json", "/cluster/resources?type=vm", mergeResources},
-		{"nodes_pve_storage_local_content_iso.json", "/nodes/" + node + "/storage/" + r.s.isoStorage + "/content?content=iso", mergeRows("volid", nil)},
+		{"nodes_pve_storage_local_content_iso.json", "/nodes/" + node + "/storage/" + r.s.isoStorage + "/content?content=iso", mergeRows("volid")},
 		{"access_permissions.json", "/access/permissions", checkPermissions},
 		{configFile, "/nodes/" + node + "/qemu/" + vmid + "/config", pinKeys("digest", "smbios1", "vmgenid", "ide2", "boot")},
 		{"nodes_pve_qemu_101_status_current.json", "/nodes/" + node + "/qemu/" + vmid + "/status/current", pinKeys("status", "qmpstatus", "ha", "uptime", "pid")},
@@ -245,24 +241,9 @@ func (r *recorder) proofName() string {
 	return "okdctl-proof-" + strconv.Itoa(r.s.vmid)
 }
 
-// create posts the VM and returns its task unawaited; the listing lags, so
-// the per-VM status endpoint is the authoritative absence check.
+// create posts the VM and returns its task unawaited; CreateVM itself refuses
+// a VMID another VM holds.
 func (r *recorder) create(ctx context.Context) (proxmox.Task, error) {
-	vms, err := r.d.ListVMs(ctx)
-	if err != nil {
-		return proxmox.Task{}, fmt.Errorf("list vms: %w", err)
-	}
-	if i := slices.IndexFunc(vms, func(vm proxmox.VMSummary) bool { return vm.VMID == r.s.vmid }); i >= 0 {
-		return proxmox.Task{}, fmt.Errorf("vmid %d is taken by %q on %s; refusing to touch it", r.s.vmid, vms[i].Name, vms[i].Node)
-	}
-	ref := proxmox.VMRef{Node: r.s.node, VMID: r.s.vmid}
-	st, err := r.d.Status(ctx, ref)
-	switch {
-	case err == nil:
-		return proxmox.Task{}, fmt.Errorf("vmid %d exists (%s); refusing to touch it", r.s.vmid, st.Status)
-	case !errors.Is(err, proxmox.ErrNotFound):
-		return proxmox.Task{}, fmt.Errorf("status vm %d: %w", r.s.vmid, err)
-	}
 	spec := proxmox.VMSpec{
 		VMID:       r.s.vmid,
 		Name:       r.proofName(),
@@ -292,11 +273,7 @@ func (r *recorder) destroy(ctx context.Context, created proxmox.Task) error {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
 	defer cancel()
 	_ = r.d.WaitTask(ctx, created)
-	ref := proxmox.VMRef{Node: r.s.node, VMID: r.s.vmid}
-	if _, err := r.d.Status(ctx, ref); errors.Is(err, proxmox.ErrNotFound) {
-		return nil
-	}
-	task, err := r.d.DeleteVM(ctx, ref)
+	task, err := r.d.DeleteVM(ctx, proxmox.VMRef{Node: r.s.node, VMID: r.s.vmid})
 	if err == nil {
 		err = r.d.WaitTask(ctx, task)
 	}
@@ -340,18 +317,13 @@ func (r *recorder) record(ctx context.Context, upid string) error {
 			return fmt.Errorf("%s: %w", f.file, err)
 		}
 		if data == nil {
-			fmt.Printf("kept      %s: %s\n", f.file, keptFixtures[f.file])
+			fmt.Printf("kept      %s\n", f.file)
 			continue
 		}
 		if err := r.write(f.file, data); err != nil {
 			return err
 		}
 		fmt.Printf("refreshed %s\n", f.file)
-	}
-	for _, file := range slices.Sorted(maps.Keys(keptFixtures)) {
-		if _, fetched := r.old[file]; !fetched {
-			fmt.Printf("kept      %s: %s\n", file, keptFixtures[file])
-		}
 	}
 	return nil
 }
@@ -472,8 +444,8 @@ func mergeObject(old, live any) (any, error) {
 }
 
 // mergeRows rebuilds every old row on the live row sharing its key (the
-// first live row when none does); fix then scrubs host-specific values.
-func mergeRows(key string, fix func(map[string]any)) merge {
+// first live row when none does), less the host-specific keys in drop.
+func mergeRows(key string, drop ...string) merge {
 	return func(old, live any) (any, error) {
 		oldRows, liveRows, err := rowPair(old, live)
 		if err != nil || len(liveRows) == 0 {
@@ -486,8 +458,8 @@ func mergeRows(key string, fix func(map[string]any)) merge {
 				tmpl = liveRows[i]
 			}
 			row := mergeOld(o, tmpl)
-			if fix != nil {
-				fix(row)
+			for _, k := range drop {
+				delete(row, k)
 			}
 			out = append(out, row)
 		}
@@ -536,7 +508,8 @@ func pinKeys(keys ...string) merge {
 	}
 }
 
-// checkPermissions verifies the {path: {privilege: 1}} encoding and keeps the file.
+// checkPermissions verifies the {path: {privilege: 1}} encoding and keeps the
+// file, whose live body would be the production token's whole ACL.
 func checkPermissions(_, live any) (any, error) {
 	perms, err := object(live)
 	if err != nil {
@@ -554,25 +527,6 @@ func checkPermissions(_, live any) (any, error) {
 		}
 	}
 	return nil, nil
-}
-
-func fakeFingerprint(row map[string]any) {
-	if _, ok := row["ssl_fingerprint"]; ok {
-		row["ssl_fingerprint"] = strings.Repeat("AB:", 31) + "AB"
-	}
-}
-
-func fakeAddresses(row map[string]any) {
-	docs := map[string]string{
-		"cidr": "192.0.2.10/24", "address": "192.0.2.10", "gateway": "192.0.2.1",
-		"cidr6": "2001:db8::10/64", "address6": "2001:db8::10", "gateway6": "2001:db8::1",
-	}
-	for k, v := range docs {
-		if _, ok := row[k]; ok {
-			row[k] = v
-		}
-	}
-	delete(row, "comments")
 }
 
 func rowPair(old, live any) (oldRows, liveRows []map[string]any, err error) {
