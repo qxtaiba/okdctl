@@ -6,30 +6,40 @@ import (
 	"strings"
 )
 
-// bootDisk is the SCSI slot every okdctl VM boots from once the ISO is detached.
-const bootDisk = "scsi0"
+// The fixed shape every okdctl VM is created with; Diff holds configs to it.
+const (
+	bootDisk   = "scsi0"
+	cdromSlot  = "ide2"
+	vmMachine  = "q35"
+	vmBIOS     = "ovmf"
+	vmSCSIHW   = "virtio-scsi-single"
+	vmOSType   = "l26"
+	vmNICModel = "virtio"
+	vmSockets  = 1
+	vmBalloon  = 0
+)
 
 // values renders s as the form POST /nodes/{node}/qemu expects.
 func (s *VMSpec) values() url.Values {
 	v := url.Values{
 		"vmid":     {strconv.Itoa(s.VMID)},
 		"name":     {s.Name},
-		"machine":  {"q35"},
-		"bios":     {"ovmf"},
+		"machine":  {vmMachine},
+		"bios":     {vmBIOS},
 		"efidisk0": {s.EFIStorage + ":1,efitype=4m,pre-enrolled-keys=0"},
-		"scsihw":   {"virtio-scsi-single"},
+		"scsihw":   {vmSCSIHW},
 		"net0":     {s.net0()},
-		"ide2":     {s.ISOVolID + ",media=cdrom"},
-		"boot":     {"order=" + bootDisk + ";ide2"},
+		cdromSlot:  {s.ISOVolID + ",media=cdrom"},
+		"boot":     {s.bootOrder()},
 		"cpu":      {s.CPUType},
 		"cores":    {strconv.Itoa(s.Cores)},
-		"sockets":  {"1"},
+		"sockets":  {strconv.Itoa(vmSockets)},
 		"memory":   {strconv.Itoa(s.MemoryMiB)},
-		"balloon":  {"0"},
+		"balloon":  {strconv.Itoa(vmBalloon)},
 		"agent":    {"enabled=1"},
 		"tags":     {s.Tag},
 		"onboot":   {"1"},
-		"ostype":   {"l26"},
+		"ostype":   {vmOSType},
 	}
 	for _, d := range s.Disks {
 		v.Set(d.Slot, d.Storage+":"+strconv.Itoa(d.SizeGiB)+",serial="+d.Serial+",iothread=1,discard=on,cache=none,aio=io_uring")
@@ -40,9 +50,17 @@ func (s *VMSpec) values() url.Values {
 	return v
 }
 
+// bootOrder lists the CD-ROM only while the spec still mounts an ISO.
+func (s *VMSpec) bootOrder() string {
+	if s.ISOVolID == "" {
+		return "order=" + bootDisk
+	}
+	return "order=" + bootDisk + ";" + cdromSlot
+}
+
 func (s *VMSpec) net0() string {
 	var b strings.Builder
-	b.WriteString("virtio=" + s.MAC + ",bridge=" + s.Bridge)
+	b.WriteString(vmNICModel + "=" + s.MAC + ",bridge=" + s.Bridge)
 	if s.VLAN > 0 {
 		b.WriteString(",tag=" + strconv.Itoa(s.VLAN))
 	}
