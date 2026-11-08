@@ -1,8 +1,6 @@
-// Package marker implements the on-disk resume-marker primitive shared by
-// the deploy engine (.okdctl-deploy-state.json) and node ops
-// (.okdctl-node-op.json): schema-versioned JSON payloads written atomically
-// at mode 0600 and gated on load by a cluster-name guard. Payload semantics
-// stay with the owning package; only write/read/guard mechanics live here.
+// Package marker is the schema-versioned JSON file primitive behind the
+// cluster record: payloads written atomically at mode 0600 and gated on load
+// by a cluster-name guard.
 package marker
 
 import (
@@ -16,9 +14,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// StaleAfter is the age past which a marker is presumed abandoned debris.
-const StaleAfter = 7 * 24 * time.Hour
-
 // Envelope is the header common to every marker payload. Concrete payload
 // types embed it; File.Write stamps it, File.Read validates SchemaVersion,
 // and File.Trusted keys trust on ClusterName.
@@ -30,12 +25,6 @@ type Envelope struct {
 }
 
 func (e *Envelope) envelope() *Envelope { return e }
-
-// Age reports how long ago the marker was written.
-func (e *Envelope) Age() time.Duration { return time.Since(e.Timestamp) }
-
-// Stale reports whether the marker is older than StaleAfter.
-func (e *Envelope) Stale() bool { return e.Age() >= StaleAfter }
 
 // Payload is a marker payload; satisfied by embedding Envelope.
 type Payload interface{ envelope() *Envelope }

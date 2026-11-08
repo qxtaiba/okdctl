@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 )
 
 type testPayload struct {
@@ -108,16 +107,5 @@ func TestFileClear(t *testing.T) {
 	}
 	if err := testFile.Clear(path); err != nil {
 		t.Fatalf("Clear on absent file: %v", err)
-	}
-}
-
-func TestEnvelopeStale(t *testing.T) {
-	fresh := Envelope{Timestamp: time.Now().UTC()}
-	if fresh.Stale() {
-		t.Error("fresh marker must not be stale")
-	}
-	old := Envelope{Timestamp: time.Now().UTC().Add(-StaleAfter - time.Hour)}
-	if !old.Stale() {
-		t.Error("week-old marker must be stale")
 	}
 }
