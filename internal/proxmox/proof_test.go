@@ -23,7 +23,6 @@ const (
 	proofTimeout = 3 * time.Minute
 )
 
-// proofEnv is the live-host configuration the PVEPROOF_* variables carry.
 type proofEnv struct {
 	endpoint   string
 	token      []byte
@@ -88,6 +87,7 @@ func TestProof(t *testing.T) {
 	t.Run("Upload", func(t *testing.T) { proofUpload(t, d, env) })
 	t.Run("CreateUnderToken", func(t *testing.T) { proofCreateUnderToken(t, d, env, env.vmid+1) })
 	t.Run("ShutdownSemantics", func(t *testing.T) { proofShutdownSemantics(t, d, env, env.vmid+2) })
+	requireNothingLeft(t, d, env)
 }
 
 func proofUpload(t *testing.T, d Driver, env *proofEnv) {
@@ -135,13 +135,8 @@ func proofCreateUnderToken(t *testing.T, d Driver, env *proofEnv, vmid int) {
 		DiskSpec{Slot: "scsi0", Storage: env.storage, SizeGiB: 1, Serial: "proof-root"},
 		DiskSpec{Slot: "scsi1", Storage: env.storage, SizeGiB: 1, Serial: "proof-data"},
 	)
-	requireVMAbsent(t, d, vmid)
-	t.Cleanup(func() { cleanupVM(t, d, ref) })
-
 	began := time.Now()
-	if err := finish(ctx, d)(d.CreateVM(ctx, env.node, spec)); err != nil {
-		t.Fatalf("CreateVM(): %v", err)
-	}
+	createVM(t, d, ref, &spec)
 	t.Logf("created vm %d in %s", vmid, time.Since(began).Round(time.Second))
 	cfg, err := d.VMConfig(ctx, ref)
 	if err != nil {
@@ -164,12 +159,7 @@ func proofShutdownSemantics(t *testing.T, d Driver, env *proofEnv, vmid int) {
 	ref := VMRef{Node: env.node, VMID: vmid}
 	// A blank disk gives the firmware nothing to boot, so no guest ever answers ACPI or the agent.
 	spec := proofSpec(env, vmid, 1, 1024, DiskSpec{Slot: "scsi0", Storage: env.storage, SizeGiB: 1, Serial: "proof-blank"})
-	requireVMAbsent(t, d, vmid)
-	t.Cleanup(func() { cleanupVM(t, d, ref) })
-
-	if err := finish(ctx, d)(d.CreateVM(ctx, env.node, spec)); err != nil {
-		t.Fatalf("CreateVM(): %v", err)
-	}
+	createVM(t, d, ref, &spec)
 	if err := finish(ctx, d)(d.Start(ctx, ref)); err != nil {
 		t.Fatalf("Start(): %v", err)
 	}
@@ -217,7 +207,6 @@ func proofSpec(env *proofEnv, vmid, cores, memoryMiB int, disks ...DiskSpec) VMS
 	}
 }
 
-// finish turns a (Task, error) pair into the task's outcome.
 func finish(ctx context.Context, d Driver) func(Task, error) error {
 	return func(task Task, err error) error {
 		if err != nil {
@@ -227,15 +216,55 @@ func finish(ctx context.Context, d Driver) func(Task, error) error {
 	}
 }
 
-func requireVMAbsent(t *testing.T, d Driver, vmid int) {
+// createVM arms the cleanup only once PVE has accepted the POST, so a refused
+// create never deletes a VM the proof did not make.
+func createVM(t *testing.T, d Driver, ref VMRef, spec *VMSpec) {
+	t.Helper()
+	ctx := t.Context()
+	requireVMAbsent(t, d, ref)
+	task, err := d.CreateVM(ctx, ref.Node, *spec)
+	if err != nil {
+		t.Fatalf("CreateVM(): %v", err)
+	}
+	if task.UPID == "" {
+		t.Fatalf("CreateVM() returned no task: vm %d already carries tag %s", ref.VMID, proofTag)
+	}
+	t.Cleanup(func() { cleanupVM(t, d, ref, task) })
+	if err := d.WaitTask(ctx, task); err != nil {
+		t.Fatalf("CreateVM(): %v", err)
+	}
+}
+
+// requireVMAbsent checks the per-VM status endpoint as well as the listing,
+// which pvestatd publishes with a lag of several seconds.
+func requireVMAbsent(t *testing.T, d Driver, ref VMRef) {
 	t.Helper()
 	vms, err := d.ListVMs(t.Context())
 	if err != nil {
 		t.Fatalf("ListVMs(): %v", err)
 	}
-	if i := slices.IndexFunc(vms, func(vm VMSummary) bool { return vm.VMID == vmid }); i >= 0 {
-		t.Fatalf("vmid %d is taken by %q on %s; refusing to touch it", vmid, vms[i].Name, vms[i].Node)
+	if i := slices.IndexFunc(vms, func(vm VMSummary) bool { return vm.VMID == ref.VMID }); i >= 0 {
+		t.Fatalf("vmid %d is taken by %q on %s; refusing to touch it", ref.VMID, vms[i].Name, vms[i].Node)
 	}
+	if st, err := d.Status(t.Context(), ref); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Status(%d) = %+v, %v; want ErrNotFound before creating", ref.VMID, st, err)
+	}
+}
+
+// requireNothingLeft reads the per-VM status endpoint rather than the lagging listing.
+func requireNothingLeft(t *testing.T, d Driver, env *proofEnv) {
+	t.Helper()
+	ctx := t.Context()
+	for vmid := env.vmid; vmid <= env.vmid+2; vmid++ {
+		if _, err := d.Status(ctx, VMRef{Node: env.node, VMID: vmid}); !errors.Is(err, ErrNotFound) {
+			t.Errorf("vm %d still present after the proof: %v", vmid, err)
+		}
+	}
+	volid := fmt.Sprintf("%s:iso/okdctl-proof-%d.iso", env.isoStorage, env.vmid)
+	if v := lookupVolume(ctx, t, d, env, volid); v != nil {
+		t.Errorf("volume %s still present after the proof", volid)
+	}
+	t.Logf("vms %d-%d and %s absent", env.vmid, env.vmid+2, volid)
 }
 
 func status(t *testing.T, d Driver, ref VMRef) VMStatus {
@@ -274,10 +303,12 @@ func sha256File(t *testing.T, path string) (sum string, size int64) {
 	return hex.EncodeToString(h.Sum(nil)), n
 }
 
-// cleanupVM runs after t.Context is cancelled, so it carries its own deadline.
-func cleanupVM(t *testing.T, d Driver, ref VMRef) {
+// cleanupVM runs after t.Context is cancelled, so it carries its own deadline;
+// it awaits the create task first because PVE holds a create lock until then.
+func cleanupVM(t *testing.T, d Driver, ref VMRef, created Task) {
 	ctx, cancel := context.WithTimeout(context.Background(), proofTimeout)
 	defer cancel()
+	_ = d.WaitTask(ctx, created)
 	st, err := d.Status(ctx, ref)
 	if errors.Is(err, ErrNotFound) {
 		return
@@ -286,7 +317,7 @@ func cleanupVM(t *testing.T, d Driver, ref VMRef) {
 		t.Errorf("cleanup vm %d: status: %v (vm may be left on host)", ref.VMID, err)
 		return
 	}
-	if st.Status == "running" {
+	if st.Status != "stopped" {
 		if err := finish(ctx, d)(d.Stop(ctx, ref)); err != nil {
 			t.Errorf("cleanup vm %d: stop: %v", ref.VMID, err)
 		}

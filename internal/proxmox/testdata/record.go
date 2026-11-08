@@ -154,15 +154,20 @@ func run(ctx context.Context) (err error) {
 	if err := r.loadOld(); err != nil {
 		return err
 	}
-	upid, err := r.create(ctx)
+	task, err := r.create(ctx)
 	if err != nil {
 		return err
 	}
-	defer func() { err = errors.Join(err, r.destroy(ctx)) }()
+	// Armed as soon as PVE accepted the POST, so a failed wait or Ctrl-C still destroys the VM.
+	defer func() { err = errors.Join(err, r.destroy(ctx, task)) }()
+	if err := r.d.WaitTask(ctx, task); err != nil {
+		return fmt.Errorf("create vm %d: %w", r.s.vmid, err)
+	}
+	fmt.Printf("created vm %d on %s\n", r.s.vmid, r.s.node)
 	if err := r.awaitResource(ctx); err != nil {
 		return err
 	}
-	return r.record(ctx, upid)
+	return r.record(ctx, task.UPID)
 }
 
 func (r *recorder) fixtures(upid string) []fixture {
@@ -232,7 +237,7 @@ func (r *recorder) loadOld() error {
 	if err != nil {
 		return fmt.Errorf("parse endpoint: %w", err)
 	}
-	r.forbidden = []string{id, tokenID, secret, host.Hostname(), proofName, proofTag, proofMAC}
+	r.forbidden = []string{id, tokenID, secret, "PVEAPIToken", host.Hostname(), proofName, proofTag, proofMAC}
 	return nil
 }
 
@@ -240,13 +245,23 @@ func (r *recorder) proofName() string {
 	return "okdctl-proof-" + strconv.Itoa(r.s.vmid)
 }
 
-func (r *recorder) create(ctx context.Context) (string, error) {
+// create posts the VM and returns its task unawaited; the listing lags, so
+// the per-VM status endpoint is the authoritative absence check.
+func (r *recorder) create(ctx context.Context) (proxmox.Task, error) {
 	vms, err := r.d.ListVMs(ctx)
 	if err != nil {
-		return "", fmt.Errorf("list vms: %w", err)
+		return proxmox.Task{}, fmt.Errorf("list vms: %w", err)
 	}
 	if i := slices.IndexFunc(vms, func(vm proxmox.VMSummary) bool { return vm.VMID == r.s.vmid }); i >= 0 {
-		return "", fmt.Errorf("vmid %d is taken by %q on %s; refusing to touch it", r.s.vmid, vms[i].Name, vms[i].Node)
+		return proxmox.Task{}, fmt.Errorf("vmid %d is taken by %q on %s; refusing to touch it", r.s.vmid, vms[i].Name, vms[i].Node)
+	}
+	ref := proxmox.VMRef{Node: r.s.node, VMID: r.s.vmid}
+	st, err := r.d.Status(ctx, ref)
+	switch {
+	case err == nil:
+		return proxmox.Task{}, fmt.Errorf("vmid %d exists (%s); refusing to touch it", r.s.vmid, st.Status)
+	case !errors.Is(err, proxmox.ErrNotFound):
+		return proxmox.Task{}, fmt.Errorf("status vm %d: %w", r.s.vmid, err)
 	}
 	spec := proxmox.VMSpec{
 		VMID:       r.s.vmid,
@@ -262,20 +277,21 @@ func (r *recorder) create(ctx context.Context) (string, error) {
 		Pool:       r.s.pool,
 	}
 	task, err := r.d.CreateVM(ctx, r.s.node, spec)
-	if err == nil {
-		err = r.d.WaitTask(ctx, task)
-	}
 	if err != nil {
-		return "", fmt.Errorf("create vm %d: %w", r.s.vmid, err)
+		return proxmox.Task{}, fmt.Errorf("create vm %d: %w", r.s.vmid, err)
 	}
-	fmt.Printf("created vm %d on %s\n", r.s.vmid, r.s.node)
-	return task.UPID, nil
+	if task.UPID == "" {
+		return proxmox.Task{}, fmt.Errorf("create vm %d: already carries tag %s", r.s.vmid, proofTag)
+	}
+	return task, nil
 }
 
-// destroy runs even after ctx is cancelled, so it carries its own deadline.
-func (r *recorder) destroy(ctx context.Context) error {
+// destroy runs even after ctx is cancelled, so it carries its own deadline;
+// it awaits the create task first because PVE holds a create lock until then.
+func (r *recorder) destroy(ctx context.Context, created proxmox.Task) error {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
 	defer cancel()
+	_ = r.d.WaitTask(ctx, created)
 	ref := proxmox.VMRef{Node: r.s.node, VMID: r.s.vmid}
 	if _, err := r.d.Status(ctx, ref); errors.Is(err, proxmox.ErrNotFound) {
 		return nil
@@ -291,7 +307,7 @@ func (r *recorder) destroy(ctx context.Context) error {
 	return nil
 }
 
-// awaitResource waits for pvestatd to publish the new VM in /cluster/resources.
+// pvestatd publishes /cluster/resources on its own tick, so a fresh VM shows up seconds later.
 func (r *recorder) awaitResource(ctx context.Context) error {
 	deadline := time.Now().Add(resourceWait)
 	for {
@@ -365,7 +381,6 @@ func (r *recorder) get(ctx context.Context, path string) (any, error) {
 	return envelope.Data, nil
 }
 
-// sanitize rewrites the live VM's identifiers to the fixture's in place.
 func (r *recorder) sanitize(v any) any {
 	switch v := v.(type) {
 	case string:
@@ -407,7 +422,6 @@ func (r *recorder) write(file string, data any) error {
 	return nil
 }
 
-// encode renders the data envelope compactly, one row per line for arrays.
 func encode(data any) ([]byte, error) {
 	rows, ok := data.([]any)
 	if !ok {
