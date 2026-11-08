@@ -26,10 +26,10 @@ func ParseVMConfig(raw map[string]any) (VMConfig, error) {
 	r := cfgReader{raw: raw}
 	c := VMConfig{
 		Name:      r.str("name"),
-		Cores:     r.int("cores"),
-		Sockets:   r.int("sockets"),
+		Cores:     cmp.Or(r.int("cores"), 1),
+		Sockets:   cmp.Or(r.int("sockets"), 1),
 		CPUType:   parseCPU(r.str("cpu")),
-		MemoryMiB: r.memory(),
+		MemoryMiB: cmp.Or(r.memory(), 512),
 		Balloon:   r.int("balloon"),
 		BIOS:      r.str("bios"),
 		Machine:   parseMachine(r.str("machine")),
@@ -39,6 +39,9 @@ func ParseVMConfig(raw map[string]any) (VMConfig, error) {
 		BootOrder: parseBoot(r.str("boot")),
 		Tags:      splitList(r.str("tags"), ';'),
 		Digest:    r.str("digest"),
+	}
+	if _, ok := raw["balloon"]; !ok {
+		c.Balloon = c.MemoryMiB // PVE balloons to the full memory unless told otherwise
 	}
 	c.AgentEnabled = parseAgent(r.str("agent"))
 	if err := c.setNIC(r.str("net0")); err != nil {

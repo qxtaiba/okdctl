@@ -175,10 +175,10 @@ func TestParseVMConfigDevices(t *testing.T) {
 		}
 	})
 
-	t.Run("unset keys stay zero", func(t *testing.T) {
+	t.Run("unset keys carry pve defaults", func(t *testing.T) {
 		c := mustParse(t, map[string]any{"digest": "d"})
-		if !reflect.DeepEqual(c, VMConfig{Digest: "d"}) {
-			t.Fatalf("ParseVMConfig(digest only) = %+v", c)
+		if want := (VMConfig{Digest: "d", Cores: 1, Sockets: 1, MemoryMiB: 512, Balloon: 512}); !reflect.DeepEqual(c, want) {
+			t.Fatalf("ParseVMConfig(digest only) = %+v, want %+v", c, want)
 		}
 	})
 
@@ -340,20 +340,22 @@ func TestVMConfigDiff(t *testing.T) {
 	t.Run("keys the vm lacks are drift", func(t *testing.T) {
 		cases := []struct {
 			key  string
-			want Change
+			want []Change
 		}{
-			{"bios", Change{Field: "bios", Want: "ovmf", Have: "", NeedsPowerCycle: true}},
-			{"cores", Change{Field: "cores", Want: "4", Have: "0", NeedsPowerCycle: true}},
-			{"scsihw", Change{Field: "scsihw", Want: "virtio-scsi-single", Have: "", NeedsPowerCycle: true}},
-			{"net0", Change{Field: "net0", Want: "virtio=BC:24:11:AA:BB:CC,bridge=vmbr0,tag=227", Have: "", NeedsPowerCycle: true}},
-			{"efidisk0", Change{Field: "efidisk0.storage", Want: "local-lvm", Have: ""}},
-			{"boot", Change{Field: "boot", Want: "order=scsi0;ide2", Have: "", NeedsPowerCycle: true}},
+			{"bios", []Change{{Field: "bios", Want: "ovmf", Have: "", NeedsPowerCycle: true}}},
+			{"cores", []Change{{Field: "cores", Want: "4", Have: "1", NeedsPowerCycle: true}}},
+			{"sockets", nil},
+			{"balloon", []Change{{Field: "balloon", Want: "0", Have: "16384"}}},
+			{"scsihw", []Change{{Field: "scsihw", Want: "virtio-scsi-single", Have: "", NeedsPowerCycle: true}}},
+			{"net0", []Change{{Field: "net0", Want: "virtio=BC:24:11:AA:BB:CC,bridge=vmbr0,tag=227", Have: "", NeedsPowerCycle: true}}},
+			{"efidisk0", []Change{{Field: "efidisk0.storage", Want: "local-lvm", Have: ""}}},
+			{"boot", []Change{{Field: "boot", Want: "order=scsi0;ide2", Have: "", NeedsPowerCycle: true}}},
 		}
 		for _, tc := range cases {
 			t.Run(tc.key, func(t *testing.T) {
 				raw := pveStore(spec.values())
 				delete(raw, tc.key)
-				if changes := mustParse(t, raw).Diff(spec); !reflect.DeepEqual(changes, []Change{tc.want}) {
+				if changes := mustParse(t, raw).Diff(spec); !reflect.DeepEqual(changes, tc.want) {
 					t.Fatalf("Diff() = %+v, want %+v", changes, tc.want)
 				}
 			})
