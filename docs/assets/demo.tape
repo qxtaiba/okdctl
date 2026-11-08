@@ -30,7 +30,7 @@ Enter
 Show
 
 # launch
-Type "okdctl deploy"
+Type "okdctl init"
 Sleep 600ms
 Enter
 Wait+Screen@10s /cluster status/

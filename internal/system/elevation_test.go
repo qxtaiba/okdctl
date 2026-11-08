@@ -270,7 +270,7 @@ func TestIsAllowedChownRoot(t *testing.T) {
 		{"/home/op/proj/cluster", true},
 		{"/home/operator", false},
 		{"/tmp/okdctl-123", true},
-		{"/srv/proj/infrastructure", true},
+		{"/srv/proj/infrastructure", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {

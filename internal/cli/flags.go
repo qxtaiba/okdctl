@@ -20,6 +20,6 @@ const (
 // Kept as consts: a typo between cobra registration and the policy tables would
 // silently drop a command.
 const (
-	cmdNameDeploy = "deploy"
-	cmdNameList   = "list"
+	cmdNameInit = "init"
+	cmdNameList = "list"
 )

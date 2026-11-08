@@ -32,9 +32,9 @@ func loadConfig(configFile string) (*config.Config, error) {
 // errConfigNotFound builds the family error every command uses when its
 // config file is missing, so the message never drifts between them.
 func errConfigNotFound(configFile string) error {
-	hint := "run 'okdctl deploy' to create it"
+	hint := "run 'okdctl init' to create it"
 	if configFile != "okdctl.yaml" {
-		hint = fmt.Sprintf("run 'okdctl deploy --output-file %s' to create it", configFile)
+		hint = fmt.Sprintf("run 'okdctl init --output-file %s' to create it", configFile)
 	}
 	configErr := &errtypes.ConfigError{Msg: "configuration file not found: " + configFile, Err: errtypes.ErrConfigMissing}
 	return configErr.WithHint(hint)
@@ -69,8 +69,8 @@ func resolveProjectRoot() (string, error) {
 	return resolved, nil
 }
 
-// resolveWorkspaceRoot resolves cwd without requiring project markers; deploy
-// uses it directly since deploy is what creates the markers.
+// resolveWorkspaceRoot resolves cwd without requiring project markers; init
+// uses it directly since init is what creates the markers.
 func resolveWorkspaceRoot() (string, error) {
 	root, err := resolveProjectRoot()
 	if err != nil {
@@ -89,7 +89,7 @@ func resolveProjectRootOrDie() (string, error) {
 	}
 	if !hasPrimaryMarker(root) {
 		return "", &errtypes.ConfigError{
-			Msg: fmt.Sprintf("no cluster in %s (checked okdctl.yaml, okdctl.env); run 'okdctl deploy' first", root),
+			Msg: fmt.Sprintf("no cluster in %s (checked okdctl.yaml, okdctl.env); run 'okdctl init' first", root),
 			Err: errtypes.ErrConfigMissing,
 		}
 	}

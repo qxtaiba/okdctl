@@ -6,7 +6,6 @@ import (
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 
-	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/render"
 )
@@ -19,9 +18,9 @@ var configCmd = &cobra.Command{
 
 var configShowCmd = &cobra.Command{
 	Use:   "show",
-	Short: "Print the resolved configuration with secrets redacted",
-	Long: `Print the fully-resolved okdctl configuration as YAML with all secret
-fields replaced by "***".`,
+	Short: "Print the configuration as the loader read it",
+	Long: `Print the okdctl configuration as YAML. The file carries no secrets; the
+Proxmox API token lives in okdctl.env beside it.`,
 	Example: "  okdctl config show",
 	Args:    cobra.NoArgs,
 	RunE:    runConfigShow,
@@ -69,7 +68,7 @@ func runConfigShow(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	out, err := yaml.Marshal(config.Redacted(cfg))
+	out, err := yaml.Marshal(cfg)
 	if err != nil {
 		return fmt.Errorf("marshal config: %w", err)
 	}

@@ -67,23 +67,13 @@ func logBookend(msg string, mutates bool, fields ...logutil.LogField) {
 	logutil.Debug(msg, fields...)
 }
 
-// preflightWarns holds pre-Execute warnings; PersistentPreRunE drains them
-// after configureLogging so they use the final formatter.
-var preflightWarns []func()
-
-// DeferWarn enqueues fn for PersistentPreRunE to call after configureLogging,
-// for warnings raised before cli.Execute (e.g. main.preflight).
-func DeferWarn(fn func()) {
-	preflightWarns = append(preflightWarns, fn)
-}
-
 var rootCmd = &cobra.Command{
 	Use:   "okdctl",
 	Short: "Run OKD clusters on Proxmox VE",
 	Long: `okdctl defines, installs and operates one OKD cluster on Proxmox VE from
-a single configuration file. This release configures a cluster through the
-wizard; installation on the agent-based installer returns in a later release.`,
-	Example: `  okdctl deploy
+a single configuration file. This release defines a cluster with okdctl init;
+installing it (okdctl up) returns in a later release.`,
+	Example: `  okdctl init
   okdctl config validate
   okdctl releases list`,
 	Version:       version.Version,
@@ -98,10 +88,6 @@ wizard; installation on the agent-based installer returns in a later release.`,
 		startBookendMutates = mutatesState(cmd)
 		logBookend("okdctl: started", startBookendMutates, logutil.LF("argv", logutil.RedactableArgv(os.Args[1:])))
 		startLogged = true
-		for _, fn := range preflightWarns {
-			fn()
-		}
-		preflightWarns = nil
 		return nil
 	},
 }
@@ -190,10 +176,10 @@ func execute() (code int) {
 
 	var caughtSig atomic.Value // os.Signal
 	// mainDone tells signalLoop's second-strike wait that ExecuteContext has
-	// returned, so credential Zeroize/ZeroizeEnv and model.shutdown — all
-	// deferred inside the command tree ctx cancellation already unwound —
-	// have already run; closed first among execute()'s defers (registered
-	// last, LIFO-first) so the signal is as timely as possible.
+	// returned, so credential Zeroize and model.shutdown — all deferred
+	// inside the command tree ctx cancellation already unwound — have
+	// already run; closed first among execute()'s defers (registered last,
+	// LIFO-first) so the signal is as timely as possible.
 	mainDone := make(chan struct{})
 	defer close(mainDone)
 	go signalLoop(sigCh, cancel, &caughtSig, os.Exit, mainDone, secondSignalGrace)
@@ -214,7 +200,7 @@ func execute() (code int) {
 
 // secondSignalGrace bounds how long a second real signal waits for the
 // first signal's ctx cancellation to finish unwinding (credential
-// Zeroize/ZeroizeEnv, model.shutdown) before forcing exit — long enough to
+// Zeroize, model.shutdown) before forcing exit — long enough to
 // cover the common case where that unwind is already near done, short
 // enough that a second signal still terminates promptly if it is not (e.g.
 // an orchestrator's stop-timeout escalation landing mid-execution).
@@ -416,7 +402,7 @@ func init() {
 	// contradicting the auto-switch prose; keep in sync with the flag's Usage
 	// string
 	rootCmd.PersistentFlags().Lookup(flagLogFormat).DefValue = ""
-	rootCmd.PersistentFlags().StringVar(&logFile, flagLogFile, "", "also write logs to this file (replaces deploy's default okdctl.log)")
+	rootCmd.PersistentFlags().StringVar(&logFile, flagLogFile, "", "also write logs to this file (replaces init's default okdctl.log)")
 	rootCmd.PersistentFlags().BoolVarP(&logQuiet, flagQuiet, "q", false, "suppress info/warn logs (alias for --log-level=error)")
 	rootCmd.PersistentFlags().BoolVarP(&logVerbose, flagVerbose, "v", false, "enable debug logging (alias for --log-level=debug)")
 	rootCmd.MarkFlagsMutuallyExclusive(flagQuiet, flagVerbose)
@@ -427,7 +413,7 @@ func init() {
 		return usageErr.WithHint(fmt.Sprintf("see '%s --help'", c.CommandPath()))
 	})
 
-	rootCmd.AddCommand(deployCmd)
+	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(versionCmd)
 
 	installHelp(rootCmd)

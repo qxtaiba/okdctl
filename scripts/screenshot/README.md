@@ -1,7 +1,7 @@
 # Wizard screenshots
 
 `make screenshots` (or `scripts/screenshot/run.sh` directly) renders the
-ten-step `okdctl deploy` wizard and a distribution-step failure against the
+ten-step `okdctl init` wizard and a distribution-step failure against the
 fakepve fixture, and screenshots every step, at four terminal sizes:
 80x24, 100x30, 120x40, 180x48. Requires `vhs` (`brew install vhs`) and
 `go`; nothing touches a real hypervisor or deploys.
@@ -17,7 +17,7 @@ and size (`<size>-<step>.png`, e.g. `80x24-basics.png`), a `<size>.txt` and
   a given pixel size, so `run.sh` can confirm a preset's `Set Width`/`Set
   Height` actually maps to its named column/row count before rendering.
 - `wizard.tape.in` is a template that drives the full wizard walkthrough —
-  `okdctl deploy` against the fake Proxmox API from `scripts/demo/fakepve.go`.
+  `okdctl init` against the fake Proxmox API from `scripts/demo/fakepve.go`.
   The wait gates match the header's phase trail (`connect · cluster ·
   extras · review`), not a step count: each step renders a distinct trail
   string — its phase bolded, plus an inline dot ribbon once that phase has

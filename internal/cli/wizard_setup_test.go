@@ -96,7 +96,6 @@ func TestWizardAssemblyResourcesAndReviewTotalsAgree(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv(wizardDemoEnv, tc.demo)
 			cfg := config.DefaultConfig()
-			cfg.Topology.Bootstrap = config.NodeConfig{}
 			spec := wizard.DefaultConfig()
 			spec.InitialConfig = cfg
 			spec.ConfigExists = true
@@ -158,7 +157,7 @@ func TestSessionVerb(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := sessionVerb(wizard.Result{Outcome: wizard.OutcomeCompleted, ExitStep: c.exit}, c.hub)
+			got := sessionVerb(&wizard.Result{Outcome: wizard.OutcomeCompleted, ExitStep: c.exit}, c.hub)
 			if got != c.want {
 				t.Errorf("sessionVerb = %v; want %v", got, c.want)
 			}

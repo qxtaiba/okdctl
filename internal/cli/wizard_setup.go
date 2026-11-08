@@ -47,13 +47,13 @@ func runWizardWithMode(cmd *cobra.Command, cfg *config.Config, configExists bool
 	}
 
 	result, err := runHubSession(cmd, built.Steps, cfg)
-	return hubOutcome{Result: result, Verb: sessionVerb(result, hub)}, err
+	return hubOutcome{Result: result, Verb: sessionVerb(&result, hub)}, err
 }
 
 // sessionVerb returns the hub verb that ended the session. A session the
 // review step ended ran the configure flow whatever row the hub still
 // highlights.
-func sessionVerb(result wizard.Result, hub *steps.WelcomeStep) steps.HubVerb {
+func sessionVerb(result *wizard.Result, hub *steps.WelcomeStep) steps.HubVerb {
 	if hub == nil || result.ExitStep == wizard.StepIDReview {
 		return steps.HubVerbGetStarted
 	}
@@ -145,7 +145,7 @@ func configureReviewStep(built wizard.BuiltSteps, cfg *config.Config, configExis
 			continue
 		}
 		rs.SetConfig(cfg)
-		rs.SetConfigPath(deployOutputFile)
+		rs.SetConfigPath(initOutputFile)
 		if capacity, ok := built.States[wizard.StepTypeReview].(*steps.WizardCapacitySnapshot); ok {
 			rs.SetCapacity(capacity)
 		}
