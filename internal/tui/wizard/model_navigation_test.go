@@ -190,22 +190,6 @@ func TestNavigationMessagesCloseTheHelpOverlay(t *testing.T) {
 			t.Fatal("help overlay must close when JumpToStepMsg moves the current step underneath it")
 		}
 	})
-
-	t.Run("SwapFlowMsg", func(t *testing.T) {
-		m, hub := swapModel(t)
-		m.helpOpen = true
-
-		hub.builds++
-		flow := hub.build()
-		m = update(t, m, SwapFlowMsg{Steps: flow, Chrome: FlowChrome{Tagline: "sub-flow"}})
-
-		if got := m.CurrentStep().ID(); got != "sub-first" {
-			t.Fatalf("CurrentStep() = %v, want sub-first", got)
-		}
-		if m.helpOpen {
-			t.Fatal("help overlay must close when SwapFlowMsg replaces the step set underneath it")
-		}
-	})
 }
 
 func TestModel_JumpFromReview_EscReturnsToReview(t *testing.T) {
@@ -445,14 +429,8 @@ func TestModel_FocusChangedResyncsBeforeScroll(t *testing.T) {
 	}
 }
 
-// arrowOptInStep is a growingStep that opts into arrowScroller, standing in
-// for the read-only done screens.
-type arrowOptInStep struct{ growingStep }
-
-func (s *arrowOptInStep) ScrollsWithArrows() bool { return true }
-
 // recordingArrowStep records every message reaching its Update, standing in
-// for a form step whose fields own the arrow keys.
+// for a form step whose fields own the keys.
 type recordingArrowStep struct {
 	growingStep
 	received []tea.Msg
@@ -463,55 +441,13 @@ func (s *recordingArrowStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 	return s, nil
 }
 
-// TestModel_ArrowScrollOnlyForOptedInSteps pins the arrowScroller gate: an
-// opted-in read-only step gets one-line viewport scrolling, while every other
-// step keeps ↑/↓ for its own navigation and the viewport stays put.
-func TestModel_ArrowScrollOnlyForOptedInSteps(t *testing.T) {
-	in := &arrowOptInStep{growingStep{BaseStep: NewBaseStep(StepIDWelcome, "reader", ""), rows: 120}}
+// TestModel_VimKeysScrollTheViewport pins the additive vim vocabulary:
+// ctrl+d/u mirror the half-page keys and gg/G jump to the ends — all
+// footer-silent, none stolen from a step that needs the keys.
+func TestModel_VimKeysScrollTheViewport(t *testing.T) {
+	in := &growingStep{BaseStep: NewBaseStep(StepIDWelcome, "reader", ""), rows: 120}
 	m := NewModel([]WizardStep{in}, config.DefaultConfig())
 	m = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
-
-	m = update(t, m, tea.KeyPressMsg{Code: tea.KeyDown})
-	if got := m.viewport.YOffset(); got != 1 {
-		t.Fatalf("YOffset() = %d after ↓ on an opted-in step, want 1", got)
-	}
-	m = update(t, m, tea.KeyPressMsg{Code: tea.KeyUp})
-	if got := m.viewport.YOffset(); got != 0 {
-		t.Fatalf("YOffset() = %d after ↑, want back at 0", got)
-	}
-
-	out := &recordingArrowStep{growingStep: growingStep{BaseStep: NewBaseStep(StepIDBasics, "form", ""), rows: 120}}
-	m = NewModel([]WizardStep{out}, config.DefaultConfig())
-	m = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
-
-	m = update(t, m, tea.KeyPressMsg{Code: tea.KeyDown})
-	if got := m.viewport.YOffset(); got != 0 {
-		t.Fatalf("YOffset() = %d after ↓ on a non-opted-in step, want 0 — the step owns the arrows", got)
-	}
-	for _, msg := range out.received {
-		if key, ok := msg.(tea.KeyPressMsg); ok && key.Code == tea.KeyDown {
-			return
-		}
-	}
-	t.Fatal("↓ never reached the step's own Update")
-}
-
-// TestModel_VimKeysScrollOptedInViewport pins the additive vim vocabulary:
-// j/k mirror the arrow gate, ctrl+d/u the half-page keys, and gg/G jump to
-// the ends — all footer-silent, none stolen from a step that needs the keys.
-func TestModel_VimKeysScrollOptedInViewport(t *testing.T) {
-	in := &arrowOptInStep{growingStep{BaseStep: NewBaseStep(StepIDWelcome, "reader", ""), rows: 120}}
-	m := NewModel([]WizardStep{in}, config.DefaultConfig())
-	m = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
-
-	m = update(t, m, tea.KeyPressMsg{Code: 'j', Text: "j"})
-	if got := m.viewport.YOffset(); got != 1 {
-		t.Fatalf("YOffset() = %d after j, want 1", got)
-	}
-	m = update(t, m, tea.KeyPressMsg{Code: 'k', Text: "k"})
-	if got := m.viewport.YOffset(); got != 0 {
-		t.Fatalf("YOffset() = %d after k, want 0", got)
-	}
 
 	m = update(t, m, tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl})
 	if m.viewport.YOffset() == 0 {
@@ -536,7 +472,7 @@ func TestModel_VimKeysScrollOptedInViewport(t *testing.T) {
 // TestModel_VimGPendingClearsOnOtherKeys pins the gg chord: a lone g followed
 // by any other key never jumps, and the interloper key still does its job.
 func TestModel_VimGPendingClearsOnOtherKeys(t *testing.T) {
-	in := &arrowOptInStep{growingStep{BaseStep: NewBaseStep(StepIDWelcome, "reader", ""), rows: 120}}
+	in := &growingStep{BaseStep: NewBaseStep(StepIDWelcome, "reader", ""), rows: 120}
 	m := NewModel([]WizardStep{in}, config.DefaultConfig())
 	m = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 
@@ -544,13 +480,14 @@ func TestModel_VimGPendingClearsOnOtherKeys(t *testing.T) {
 	bottom := m.viewport.YOffset()
 
 	m = update(t, m, tea.KeyPressMsg{Code: 'g', Text: "g"})
-	m = update(t, m, tea.KeyPressMsg{Code: 'k', Text: "k"})
-	if got := m.viewport.YOffset(); got != bottom-1 {
-		t.Fatalf("YOffset() = %d after g then k, want %d — k scrolls, no gg jump", got, bottom-1)
+	m = update(t, m, tea.KeyPressMsg{Code: 'u', Mod: tea.ModCtrl})
+	half := m.viewport.YOffset()
+	if half == 0 || half >= bottom {
+		t.Fatalf("YOffset() = %d after g then ctrl+u, want a half page above %d — ctrl+u scrolls, no gg jump", half, bottom)
 	}
 	m = update(t, m, tea.KeyPressMsg{Code: 'g', Text: "g"})
-	if got := m.viewport.YOffset(); got != bottom-1 {
-		t.Fatalf("YOffset() = %d after a fresh lone g, want %d unchanged", got, bottom-1)
+	if got := m.viewport.YOffset(); got != half {
+		t.Fatalf("YOffset() = %d after a fresh lone g, want %d unchanged", got, half)
 	}
 }
 

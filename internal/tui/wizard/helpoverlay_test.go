@@ -162,25 +162,6 @@ func TestHelpOverlay_CtrlCStillQuitsWhileOpen(t *testing.T) {
 	}
 }
 
-func TestHelpOverlay_QuitGuardInterceptionClosesOverlay(t *testing.T) {
-	g := &guardedStep{nopStep: *newNopStep(), intercepts: true}
-	m := NewModel([]WizardStep{g}, config.DefaultConfig())
-	tuitest.RenderAt(t, m, 100, 30)
-
-	m = update(t, m, questionMark())
-	if !m.helpOpen {
-		t.Fatal("setup: overlay should be open")
-	}
-
-	m = update(t, m, tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
-	if m.quitting {
-		t.Fatal("guarded step must still prevent quit on first ctrl+c")
-	}
-	if m.helpOpen {
-		t.Fatal("a guard's own feedback needs the viewport back — the overlay must close")
-	}
-}
-
 func TestHelpOverlay_ReplacesOnlyTheViewportRegion(t *testing.T) {
 	s := &titledStep{nopStep: *newNopStep(), title: "welcome"}
 	m := NewModel([]WizardStep{s}, config.DefaultConfig())

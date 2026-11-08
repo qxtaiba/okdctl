@@ -96,24 +96,18 @@ func buildWizardStepsWithState(wizardCfg wizard.Config) (wizard.BuiltSteps, erro
 }
 
 // configureWelcomeStep marks the hub's config state, passing the loaded config
-// and its save-slot state through for the dim slot line when one exists.
+// through for the dim slot line when one exists.
 func configureWelcomeStep(built wizard.BuiltSteps, wizardCfg wizard.Config) {
 	for _, step := range built.Steps {
 		if ws, ok := step.(*steps.WelcomeStep); ok {
 			if wizardCfg.ConfigExists && wizardCfg.InitialConfig != nil {
-				ws.SetExistingConfig(wizardCfg.InitialConfig, saveSlotState(wizardCfg.InitialConfig))
+				ws.SetExistingConfig(wizardCfg.InitialConfig)
 			} else {
 				ws.SetConfigExists(wizardCfg.ConfigExists)
 			}
 			break
 		}
 	}
-}
-
-// saveSlotState reports how far the saved configuration has got. Until the
-// cluster record exists, a saved file is a configuration and nothing more.
-func saveSlotState(*config.Config) steps.SaveSlotState {
-	return steps.SaveSlotConfigured
 }
 
 // configureDemoVersionFetcher injects a deterministic release-catalog

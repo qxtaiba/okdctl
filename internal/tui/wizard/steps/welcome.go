@@ -1,7 +1,6 @@
 package steps
 
 import (
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -29,17 +28,6 @@ const (
 	HubVerbDestroy
 	HubVerbGetStarted
 	HubVerbQuit
-)
-
-// SaveSlotState is how far the loaded configuration has got, as far as the hub
-// can honestly tell from local files alone.
-type SaveSlotState string
-
-// SaveSlotState values, ordered by how much of a cluster each implies exists.
-const (
-	SaveSlotConfigured SaveSlotState = "configured"
-	SaveSlotDeploying  SaveSlotState = "deploying"
-	SaveSlotDeployed   SaveSlotState = "deployed"
 )
 
 // hubEntry pairs a menu label with the verb it selects; accel is the verb's
@@ -70,26 +58,6 @@ var hubFreshVerbs = []hubEntry{
 	{HubVerbQuit, "quit", ""},
 }
 
-// HubFlow builds the flow a hub verb swaps into. Building is deferred to the
-// moment the verb is confirmed: the manage-nodes flow's hooks load
-// credentials and probe the Proxmox host, work no plain `okdctl init` should
-// pay for unless the operator asks for it.
-type HubFlow func() ([]wizard.WizardStep, wizard.FlowChrome, error)
-
-// HubFlows are the in-process flows the hub's verbs reach; a nil provider
-// leaves its verb to the CLI, which handles it after the wizard exits.
-type HubFlows struct {
-	ManageNodes HubFlow
-}
-
-// errEmptyHubFlow reports a hub flow provider that produced no screens.
-var errEmptyHubFlow = errors.New("open flow: no screens to show")
-
-// hubFlowFailedMsg carries a flow that could not be built back to the hub.
-type hubFlowFailedMsg struct {
-	err error
-}
-
 // WelcomeStep is okdctl's hub for cluster operations and configuration flows.
 type WelcomeStep struct {
 	wizard.BaseStep
@@ -97,14 +65,6 @@ type WelcomeStep struct {
 	saveSlot     string
 	entries      []hubEntry
 	nav          *components.CompactSelector
-	flows        HubFlows
-
-	// opening names the flow being assembled off the update loop, so a verb
-	// whose hooks take a moment to build says so instead of looking wedged.
-	opening string
-	// frame is the shared clock's counter, animating the opening notice
-	// while Animating reports true.
-	frame uint64
 
 	// termWidth and termHeight are the terminal's own dimensions, not the
 	// content box View renders into — the hero's double-scale gate is stated
@@ -120,11 +80,6 @@ func NewWelcomeStep() *WelcomeStep {
 	}
 	s.setEntries(hubFreshVerbs)
 	return s
-}
-
-// Animating reports whether the opening notice needs frame ticks.
-func (s *WelcomeStep) Animating() bool {
-	return s.opening != ""
 }
 
 // setEntries rebuilds the menu over entries, clamped so up/down never wraps
@@ -171,15 +126,16 @@ func (s *WelcomeStep) SetConfigExists(exists bool) {
 }
 
 // SetExistingConfig switches the hub to its five-verb menu and derives the dim
-// save-slot line from cfg and the state the caller could honestly determine.
-func (s *WelcomeStep) SetExistingConfig(cfg *config.Config, state SaveSlotState) {
+// save-slot line from cfg; until the cluster record exists, a saved file is a
+// configuration and nothing more.
+func (s *WelcomeStep) SetExistingConfig(cfg *config.Config) {
 	s.SetConfigExists(true)
 	if cfg == nil {
 		return
 	}
 	nodes := config.MasterCount + cfg.Workers.Count
-	s.saveSlot = fmt.Sprintf("%s · okd %s · %s · %s",
-		cfg.Cluster.Name, cfg.Distribution.Version, pluralNodes(nodes), state)
+	s.saveSlot = fmt.Sprintf("%s · okd %s · %s · configured",
+		cfg.Cluster.Name, cfg.Distribution.Version, pluralNodes(nodes))
 }
 
 // SuppressesBadge hides the chrome's version badge on the blank-slate hub,
@@ -211,69 +167,26 @@ func (s *WelcomeStep) Init() tea.Cmd {
 	return nil
 }
 
-// SetFlows wires the in-process flow the manage-nodes verb swaps into.
-func (s *WelcomeStep) SetFlows(flows HubFlows) {
-	s.flows = flows
-}
-
 // Update moves the pointer down the verb menu (arrows remapped onto the
 // selector's vertical bindings) and confirms on enter or space.
 func (s *WelcomeStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
-	switch msg := msg.(type) {
-	case hubFlowFailedMsg:
-		s.opening = ""
-		err := msg.err
-		return s, func() tea.Msg { return wizard.ErrorSetMsg{Error: err} }
-	case tea.KeyPressMsg:
+	if msg, ok := msg.(tea.KeyPressMsg); ok {
 		if msg.Code == tea.KeyEnter || msg.Code == tea.KeySpace {
-			cmd := s.confirm()
-			return s, cmd
+			return s, s.confirm()
 		}
 		if i, ok := s.acceleratedEntry(msg.Text); ok {
 			s.nav.Select(i)
-			cmd := s.confirm()
-			return s, cmd
+			return s, s.confirm()
 		}
 		s.nav, _ = s.nav.Update(components.ArrowsAsVertical(msg))
-	case wizard.FrameMsg:
-		s.frame = msg.Frame
 	}
 	return s, nil
 }
 
-// confirm dispatches the highlighted verb: one with an in-process flow behind
-// it swaps the wizard onto that flow, everything else completes the step and is
-// handled by the configure flow or by the CLI once the wizard exits.
+// confirm completes the step with the highlighted verb, which the configure
+// flow or the CLI handles once the hub is left.
 func (s *WelcomeStep) confirm() tea.Cmd {
-	// A flow is already being assembled off the update loop. A second confirm
-	// would build a second one and queue a second swap, and the wizard can only
-	// hold one return target — so the first flow would become unreachable, with
-	// its credentials already released by the session the second one displaced.
-	if s.opening != "" {
-		return nil
-	}
-
-	verb := s.SelectedVerb()
-	flow := s.flowFor(verb)
-	if flow == nil {
-		return func() tea.Msg { return wizard.StepCompleteMsg{StepID: wizard.StepIDWelcome} }
-	}
-
-	s.opening = s.labelFor(verb)
-	buildFlow := func() tea.Msg {
-		flowSteps, chrome, err := flow()
-		if err != nil {
-			return hubFlowFailedMsg{err: err}
-		}
-		// A provider that returns nothing would have the wizard decline the
-		// swap silently, leaving the notice up and every later confirm refused
-		// by the guard above — a dead hub. Report it as the failure it is.
-		if len(flowSteps) == 0 {
-			return hubFlowFailedMsg{err: errEmptyHubFlow}
-		}
-		return wizard.SwapFlowMsg{Steps: flowSteps, Chrome: chrome}
-	}
-	return buildFlow
+	return func() tea.Msg { return wizard.StepCompleteMsg{StepID: wizard.StepIDWelcome} }
 }
 
 // acceleratedEntry maps a pressed key to its menu entry: a verb's letter
@@ -292,33 +205,6 @@ func (s *WelcomeStep) acceleratedEntry(text string) (int, bool) {
 		}
 	}
 	return 0, false
-}
-
-// flowFor returns the in-process flow behind verb, or nil when the verb has none.
-func (s *WelcomeStep) flowFor(verb HubVerb) HubFlow {
-	if verb == HubVerbManageNodes {
-		return s.flows.ManageNodes
-	}
-	return nil
-}
-
-// labelFor returns verb's menu label.
-func (s *WelcomeStep) labelFor(verb HubVerb) string {
-	for _, e := range s.entries {
-		if e.verb == verb {
-			return e.label
-		}
-	}
-	return ""
-}
-
-// SetFocused clears any in-flight open notice as the hub regains focus: the
-// flow it was opening has since been entered and escaped.
-func (s *WelcomeStep) SetFocused(focused bool) {
-	s.BaseStep.SetFocused(focused)
-	if focused {
-		s.opening = ""
-	}
 }
 
 // IsCentered keeps the launcher centered in the frame.
@@ -351,9 +237,6 @@ func (s *WelcomeStep) View(width, height int) string {
 		parts = append(parts, tui.MutedStyle.Render(s.saveSlot), "")
 	}
 	parts = append(parts, s.nav.ViewPointer())
-	if s.opening != "" {
-		parts = append(parts, "", wizard.Spinner(s.frame)+" "+tui.MutedStyle.Render("opening "+s.opening+"…"))
-	}
 	launcher := lipgloss.JoinVertical(lipgloss.Center, parts...)
 
 	// The "get started" panel only describes what's ahead for a truly
@@ -380,7 +263,7 @@ const (
 // renderGetStartedPanel renders the blank-slate hub's second column: an
 // honest preview of the four phases "get started" walks through, drawn
 // from the same connect/cluster/extras/review grouping the header trail
-// and deployPhases use, not invented marketing copy.
+// uses, not invented marketing copy.
 func renderGetStartedPanel() string {
 	phases := []struct{ label, detail string }{
 		{"connect", "provider, distribution, credentials"},
