@@ -217,14 +217,14 @@ func padContent(content string, width int) (padded string, rows []int) {
 		Width(width)
 
 	lines := strings.Split(content, "\n")
-	rows = make([]int, len(lines)+1)
+	rows = make([]int, 0, len(lines))
 
 	out := make([]string, 0, len(lines))
-	for i, line := range lines {
-		rows[i] = len(out)
+	for _, line := range lines {
+		rows = append(rows, len(out))
 		out = append(out, strings.Split(style.Render(line), "\n")...)
 	}
-	rows[len(lines)] = len(out)
+	rows = append(rows, len(out))
 
 	return strings.Join(out, "\n"), rows
 }
