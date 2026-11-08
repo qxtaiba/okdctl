@@ -45,8 +45,7 @@ func (m *Model) View() tea.View {
 	// ReportFocus is away mode's wire: BlurMsg drops the shared clock to
 	// 1Hz, FocusMsg plays the catch-up sweep.
 	v := tea.View{AltScreen: true, ReportFocus: true}
-	v.WindowTitle = "okdctl · " + m.windowTitle()
-	v.ProgressBar = m.terminalProgress()
+	v.WindowTitle = "okdctl · " + m.headerTitle()
 
 	if m.quitting {
 		return v
@@ -381,51 +380,6 @@ func (m *Model) footerBindings() []KeyBinding {
 		bindings = append(bindings, KeyBinding{Key: "pgup/pgdn", Help: "scroll"})
 	}
 	return append(bindings, KeyBinding{Key: HelpQuestion, Help: HelpOverlay})
-}
-
-// windowTitler is implemented by steps whose terminal-tab title carries
-// live state richer than the on-screen header (the install's percent and
-// phase); an empty return falls back to the header title.
-type windowTitler interface {
-	WindowTitle() string
-}
-
-// terminalProgressStep is implemented by steps that drive the terminal's
-// own progress indication (OSC 9;4 — taskbar and tab progress in the
-// terminals that render it); ProgressBarNone means nothing to report.
-type terminalProgressStep interface {
-	TerminalProgress() (tea.ProgressBarState, int)
-}
-
-// terminalProgress asks the active step for its OSC 9;4 reading, gated on
-// the color profile: a pipe or NO_COLOR run stays byte-identical, and
-// terminals that don't understand the bytes ignore them silently. Nil — the
-// renderer's reset — the moment no step reports one, so the indicator
-// clears on exit.
-func (m *Model) terminalProgress() *tea.ProgressBar {
-	if !tui.ColorEnabled() {
-		return nil
-	}
-	tp, ok := m.CurrentStep().(terminalProgressStep)
-	if !ok {
-		return nil
-	}
-	state, value := tp.TerminalProgress()
-	if state == tea.ProgressBarNone {
-		return nil
-	}
-	return tea.NewProgressBar(state, value)
-}
-
-// windowTitle names the terminal tab: the active step's own live title when
-// it provides one, the header title otherwise.
-func (m *Model) windowTitle() string {
-	if wt, ok := m.CurrentStep().(windowTitler); ok {
-		if t := wt.WindowTitle(); t != "" {
-			return t
-		}
-	}
-	return m.headerTitle()
 }
 
 // renderHelpOverlay renders the full, untruncated key-binding list — the
