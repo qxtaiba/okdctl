@@ -46,9 +46,7 @@ type FieldType int
 const (
 	FieldTypeText FieldType = iota
 	FieldTypePassword
-	FieldTypeSelect      // dropdown selector
-	FieldTypeMultiSelect // checklist, multiple toggles
-	FieldTypeKeyValue    // editable key=value table
+	FieldTypeSelect // dropdown selector
 )
 
 // ConfigSetter writes a field's value into a Config.
@@ -103,7 +101,7 @@ type FieldDefinition struct {
 	Width       FieldWidth
 	Help        string
 	Type        FieldType
-	Options     []string // used by FieldTypeSelect and FieldTypeMultiSelect
+	Options     []string // used by FieldTypeSelect
 	Required    bool
 	Validate    func(string) error
 
@@ -867,25 +865,6 @@ func foldSummaryFunc(sectionDef *SectionDefinition, step *DataDrivenStep) func()
 
 func buildFormField(def *FieldDefinition) components.FormField {
 	switch def.Type {
-	case FieldTypeKeyValue:
-		kv := components.NewKeyValueField(def.Label)
-		kv.Help = def.Help
-		if def.Validate != nil {
-			kv.Validator = def.Validate
-		}
-		if def.Default != "" {
-			kv.SetValue(def.Default)
-		}
-		return kv
-
-	case FieldTypeMultiSelect:
-		mf := components.NewMultiSelectField(def.Label, def.Options)
-		mf.Help = def.Help
-		if def.Default != "" {
-			mf.SetValue(def.Default)
-		}
-		return mf
-
 	case FieldTypeSelect:
 		sf := components.NewSelectField(def.Label, def.Options)
 		sf.Help = def.Help

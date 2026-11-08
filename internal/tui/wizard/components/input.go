@@ -56,9 +56,9 @@ type TextInputField interface {
 }
 
 // EnterConsumer is implemented by form fields that use the enter key inside
-// their own editing flow (e.g. KeyValueField committing a cell edit) — the
-// form routes enter to such a field instead of treating it as step
-// submission while ConsumesEnter reports true.
+// their own flow (e.g. FoldToggleField flipping its latch) — the form routes
+// enter to such a field instead of treating it as step submission while
+// ConsumesEnter reports true.
 type EnterConsumer interface {
 	ConsumesEnter() bool
 }
