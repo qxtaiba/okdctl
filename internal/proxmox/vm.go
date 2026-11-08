@@ -21,23 +21,48 @@ func haSID(ref VMRef) string {
 
 // CreateVM is idempotent by VMID: a VM already carrying spec.Tag yields a
 // zero Task and any other existing VM is an error, so a create whose
-// WaitTask timed out can be retried. It probes /cluster/resources because
-// PVE answers a missing VM's config read with HTTP 500, which go-proxmox
-// strips of its body.
+// WaitTask timed out can be retried. The cluster listing catches a VMID on
+// another node; the target node's config catches one pvestatd has not
+// published yet.
 func (d *driver) CreateVM(ctx context.Context, node string, spec VMSpec) (Task, error) { //nolint:gocritic // hugeParam: Driver passes specs by value
 	vms, err := d.ListVMs(ctx)
 	if err != nil {
 		return Task{}, fmt.Errorf("create vm %d: %w", spec.VMID, err)
 	}
 	if i := slices.IndexFunc(vms, func(vm VMSummary) bool { return vm.VMID == spec.VMID }); i >= 0 {
-		vm := vms[i]
-		if slices.Contains(vm.Tags, spec.Tag) {
+		return Task{}, existingVM(&spec, vms[i].Node, vms[i].Name, vms[i].Tags)
+	}
+	ref := VMRef{Node: node, VMID: spec.VMID}
+	if exists, err := d.vmExists(ctx, ref, &spec); exists || err != nil {
+		return Task{}, err
+	}
+	task, err := d.task(ctx, http.MethodPost, node, nodePath(node, "qemu"), spec.values())
+	if err != nil && strings.Contains(err.Error(), "already exists") {
+		if exists, confirmErr := d.vmExists(ctx, ref, &spec); exists && confirmErr == nil {
 			return Task{}, nil
 		}
-		return Task{}, fmt.Errorf("create vm %d: vm %q on %s already exists with tags %q",
-			spec.VMID, vm.Name, vm.Node, strings.Join(vm.Tags, ";"))
 	}
-	return d.task(ctx, http.MethodPost, node, nodePath(node, "qemu"), spec.values())
+	return task, err
+}
+
+// vmExists reads ref's config; a VM without spec.Tag is reported as an error.
+func (d *driver) vmExists(ctx context.Context, ref VMRef, spec *VMSpec) (bool, error) {
+	cfg, err := d.VMConfig(ctx, ref)
+	switch {
+	case errors.Is(err, ErrNotFound):
+		return false, nil
+	case err != nil:
+		return false, fmt.Errorf("create vm %d: %w", spec.VMID, err)
+	}
+	return true, existingVM(spec, ref.Node, cfg.Name, cfg.Tags)
+}
+
+func existingVM(spec *VMSpec, node, name string, tags []string) error {
+	if slices.Contains(tags, spec.Tag) {
+		return nil
+	}
+	return fmt.Errorf("create vm %d: vm %q on %s already exists with tags %q",
+		spec.VMID, name, node, strings.Join(tags, ";"))
 }
 
 func (d *driver) VMConfig(ctx context.Context, ref VMRef) (VMConfig, error) {
@@ -146,7 +171,7 @@ func (d *driver) SetHA(ctx context.Context, ref VMRef, spec HASpec) error {
 }
 
 func (d *driver) ClearHA(ctx context.Context, ref VMRef) error {
-	return d.write(ctx, http.MethodDelete, "/cluster/ha/resources/"+url.PathEscape(haSID(ref))+"?purge=1", nil, nil)
+	return d.write(ctx, http.MethodDelete, "/cluster/ha/resources/"+url.PathEscape(haSID(ref)), nil, nil)
 }
 
 func boolFlag(b bool) string {
