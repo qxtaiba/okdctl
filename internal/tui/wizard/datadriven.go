@@ -154,6 +154,7 @@ type StepDefinition struct {
 
 	Validate          func(values map[string]string) error
 	Apply             func(step *DataDrivenStep, cfg *config.Config) error // runs after auto-binding
+	Secrets           func(step *DataDrivenStep) Secrets                   // env-only values the caller writes to okdctl.env
 	ShouldShow        func(*config.Config) bool
 	ExtraContent      func(values map[string]string, width int) string
 	ExtraContentTitle string // info card title used when ExtraContent renders non-empty content
@@ -1214,6 +1215,14 @@ func (s *DataDrivenStep) Apply(cfg *config.Config) error {
 		return s.definition.Apply(s, cfg)
 	}
 	return nil
+}
+
+// Secrets returns the definition's env-only values, zero when it declares none.
+func (s *DataDrivenStep) Secrets() Secrets {
+	if s.definition.Secrets == nil {
+		return Secrets{}
+	}
+	return s.definition.Secrets(s)
 }
 
 // FocusedSpan reports the line range the focused field occupied in the last

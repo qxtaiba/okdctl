@@ -3,22 +3,22 @@
   │ O K D C T L                                                              │  
   │ review your configuration            connect · cluster · extras · review │  
   │──────────────────────────────────────────────────────────────────────────│  
-  │  [6] advanced                                                            │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
-  │  vm id base             6000                                             │  
-  │  timeouts               bootstrap 60m, install 120m                      │  
-  │  terraform environment  production                                       │  
+  │  pull secret     ./pull-secret.json                                      │  
+  │  ssh public key  ./id_ed25519.pub                                        │  
   │                                                                          │  
-  │  DEPLOY PLAN                                                             │  
-  │  role      vms vcpu   ram os disk                                        │  
-  │  bootstrap   1    4  8 gb   50 gb                                        │  
-  │  masters     3    4 12 gb   50 gb                                        │  
-  │  workers     3    8 20 gb   50 gb                                        │  
+  │  [7] advanced                                                            │  
+  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
+  │  pod cidr          10.128.0.0/14                                         │  
+  │  service cidr      172.30.0.0/16                                         │  
+  │  host prefix       23                                                    │  
+  │  drain timeout     10m                                                   │  
+  │  handoff           yes                                                   │  
+  │  red hat catalogs  disabled                                              │  
   │                                                                          │  
   │  WRITES                                                                  │  
   │  okdctl.yaml                                                             │  
   │                                                                          │  
-  │──────────── ↑ ↓  scroll up for more ───────────── ▸ okd 4.22.0-okd-scos.7│  
+  │──────────── ↑ ↓  scroll up for more ───────────── ▸ okd 4.22.0-okd-scos.1│  
   │  ○ deploy now   ● save and exit     ←/→ choose … • ctrl+c quit • ? help  │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

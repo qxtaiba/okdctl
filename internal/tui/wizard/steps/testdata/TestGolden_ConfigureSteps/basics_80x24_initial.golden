@@ -8,17 +8,17 @@
   │                                                                          │  
   │    cluster name                                                          │  
   │    ╭────────────────────────────────────────────────────────╮            │  
-  │    │ mycluster                                              │            │  
+  │    │ lab                                                    │            │  
   │    ╰────────────────────────────────────────────────────────╯            │  
-  │    lowercase letters, numbers, and hyphens only                          │  
+  │    lowercase letters, numbers, and hyphens only — nodes are named        │  
+  │    <cluster>-master0..2 and <cluster>-worker<n>                          │  
   │                                                                          │  
   │    domain                                                                │  
   │    ╭────────────────────────────────────────────────────────╮            │  
   │    │ k8s.local                                              │            │  
   │    ╰────────────────────────────────────────────────────────╯            │  
   │                                                                          │  
-  │                                                                          │  
-  │─────────── ↑ ↓  scroll down for more ──────────── ▸ okd 4.22.0-okd-scos.7│  
+  │─────────── ↑ ↓  scroll down for more ──────────── ▸ okd 4.22.0-okd-scos.1│  
   │  ↑↓/tab navigate • enter continue • esc back … • ctrl+c quit • ? help    │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

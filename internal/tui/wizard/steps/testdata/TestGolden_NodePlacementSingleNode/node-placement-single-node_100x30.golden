@@ -3,28 +3,28 @@
   │ O K D C T L                                                                                  │  
   │ configure node placement                            connect · cluster ✓●○○ · extras · review │  
   │──────────────────────────────────────────────────────────────────────────────────────────────│  
-  │    ╰───────────────────────────╯                                                             │  
+  │    discovered 1 node(s)                                                                      │  
+  │    pve ✓ online · 32c · 128g                                                                 │  
+  │    assigned demand · pve: 28c/80g/1600gb                                                     │  
   │                                                                                              │  
-  │    data storage                                                                              │  
-  │    ╭───────────────────────────╮                                                             │  
-  │    │ ◂ local-lvm — pve 1.8tb ▸ │                                                             │  
-  │    ╰───────────────────────────╯                                                             │  
   │                                                                                              │  
-  │    iso storage                                                                               │  
-  │    ╭───────────────────────╮                                                                 │  
-  │    │ local — pve 200gb     │                                                                 │  
-  │    ╰───────────────────────╯                                                                 │  
+  │    ✓ proxmox nodes                                                                           │  
   │                                                                                              │  
-  │    ● bootstrap                                                                               │  
+  │    placement pool                                                                            │  
+  │    ╭────────────────────────────────────────────────────────────────────────────────────╮    │  
+  │    │   [✓] pve                                                                          │    │  
+  │    ╰────────────────────────────────────────────────────────────────────────────────────╯    │  
   │                                                                                              │  
-  │    mycluster-bootstrap                                                                       │  
+  │    ● control plane                                                                           │  
+  │                                                                                              │  
+  │    lab-master0                                                                               │  
   │    ╭────────────────────╮                                                                    │  
-  │    │ pve — 32c/128g     │                                                                    │  
+  │    │ pve — 32c/128g     │ default                                                            │  
   │    ╰────────────────────╯                                                                    │  
-  │    proxmox node for bootstrap vm                                                             │  
+  │    proxmox node (nodes.lab-master0.host)                                                     │  
   │                                                                                              │  
   │                                                                                              │  
-  │──────────────────── ↑ ↓  37% • scroll for more ───────────────────── ▸ okd 4.22.0-okd-scos.7 │  
+  │──────────────────── ↑ ↓  scroll down for more ───────────────────── ▸ okd 4.22.0-okd-scos.10 │  
   │  ↑↓ navigate • ← → change value • enter continue • esc back … • ctrl+c quit • ? help         │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                     

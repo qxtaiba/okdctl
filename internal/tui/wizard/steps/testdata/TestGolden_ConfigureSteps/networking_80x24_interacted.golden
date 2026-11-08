@@ -4,7 +4,7 @@
   │ configure cluster networking    connect · cluster ✓✓●○ · extras · review │  
   │──────────────────────────────────────────────────────────────────────────│  
   │                                                                          │  
-  │    ● infrastructure network                                              │  
+  │    ● machine network                                                     │  
   │                                                                          │  
   │    machine cidr                                                          │  
   │    ╭────────────────────────────────────────────────────────╮            │  
@@ -15,10 +15,10 @@
   │    ╭────────────────────────────────────────────────────────╮            │  
   │    │ 192.168.1.1                                            │            │  
   │    ╰────────────────────────────────────────────────────────╯            │  
-  │    network gateway ip address                                            │  
+  │    default gateway ip address inside the machine cidr                    │  
   │                                                                          │  
   │                                                                          │  
-  │─────────── ↑ ↓  scroll down for more ──────────── ▸ okd 4.22.0-okd-scos.7│  
+  │─────────── ↑ ↓  scroll down for more ──────────── ▸ okd 4.22.0-okd-scos.1│  
   │  ↑↓/tab navigate • enter continue • esc back … • ctrl+c quit • ? help    │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

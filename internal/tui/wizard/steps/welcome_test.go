@@ -29,8 +29,7 @@ func hubConfig() *config.Config {
 	cfg := config.DefaultConfig()
 	cfg.Cluster.Name = "prod-cluster"
 	cfg.Distribution.Version = "4.20.1-okd-scos.7"
-	cfg.Topology.ControlPlane.Count = 3
-	cfg.Topology.Workers.Count = 3
+	cfg.Workers.Count = 3
 	return cfg
 }
 
@@ -124,19 +123,6 @@ func TestHubSaveSlotLineFromConfig(t *testing.T) {
 	want := "prod-cluster · okd 4.20.1-okd-scos.7 · 6 nodes · deployed"
 	if s.saveSlot != want {
 		t.Errorf("saveSlot = %q, want %q", s.saveSlot, want)
-	}
-}
-
-func TestHubSaveSlotLineSingularNode(t *testing.T) {
-	cfg := hubConfig()
-	cfg.Topology.ControlPlane.Count = 1
-	cfg.Topology.Workers.Count = 0
-
-	s := NewWelcomeStep()
-	s.SetExistingConfig(cfg, SaveSlotConfigured)
-
-	if !strings.Contains(s.saveSlot, "1 node ·") {
-		t.Errorf("saveSlot = %q, want a singular \"1 node\" segment", s.saveSlot)
 	}
 }
 

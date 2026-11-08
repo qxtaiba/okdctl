@@ -35,8 +35,8 @@ func testStepDefinition() *StepDefinition {
 					{
 						Key:       "count",
 						Label:     "count",
-						ConfigSet: SetInt(func(c *config.Config, v int) { c.Topology.ControlPlane.Count = v }),
-						ConfigGet: GetInt(func(c *config.Config) int { return c.Topology.ControlPlane.Count }),
+						ConfigSet: SetInt(func(c *config.Config, v int) { c.Workers.Count = v }),
+						ConfigGet: GetInt(func(c *config.Config) int { return c.Workers.Count }),
 					},
 					{
 						Key:       "approve",
@@ -44,9 +44,9 @@ func testStepDefinition() *StepDefinition {
 						Default:   "no",
 						Type:      FieldTypeSelect,
 						Options:   []string{"no", testValYes},
-						ConfigSet: SetBool(func(c *config.Config, v bool) { c.Deployment.AutoApprove = v }),
+						ConfigSet: SetBool(func(c *config.Config, v bool) { c.Handoff.Enabled = v }),
 						ConfigGet: func(c *config.Config) string {
-							if c.Deployment.AutoApprove {
+							if c.Handoff.Enabled {
 								return testValYes
 							}
 							return "no"
@@ -112,8 +112,8 @@ func TestDataDrivenStep_LoadFromConfig(t *testing.T) {
 	step := NewDataDrivenStep(testStepDefinition())
 	cfg := &config.Config{}
 	cfg.Cluster.Name = "loaded-cluster"
-	cfg.Topology.ControlPlane.Count = 5
-	cfg.Deployment.AutoApprove = true
+	cfg.Workers.Count = 5
+	cfg.Handoff.Enabled = true
 
 	step.LoadFromConfig(cfg, true)
 
@@ -217,11 +217,11 @@ func TestDataDrivenStep_Apply(t *testing.T) {
 	if cfg.Cluster.Name != "cluster-a" {
 		t.Errorf("cfg.Cluster.Name = %q, want cluster-a", cfg.Cluster.Name)
 	}
-	if cfg.Topology.ControlPlane.Count != 7 {
-		t.Errorf("cfg.Topology.ControlPlane.Count = %d, want 7", cfg.Topology.ControlPlane.Count)
+	if cfg.Workers.Count != 7 {
+		t.Errorf("cfg.Workers.Count = %d, want 7", cfg.Workers.Count)
 	}
-	if !cfg.Deployment.AutoApprove {
-		t.Error("cfg.Deployment.AutoApprove = false, want true")
+	if !cfg.Handoff.Enabled {
+		t.Error("cfg.Handoff.Enabled = false, want true")
 	}
 	// Step-level Apply runs after field auto-binding, so step.Value already reflects it.
 	if cfg.Cluster.Domain != "applied.cluster-a" {
@@ -673,33 +673,33 @@ func TestDataDrivenStep_ShouldShow_DefaultsToTrue(t *testing.T) {
 func TestSetIntSetBool(t *testing.T) {
 	cfg := &config.Config{}
 
-	setInt := SetInt(func(c *config.Config, v int) { c.Topology.ControlPlane.Count = v })
+	setInt := SetInt(func(c *config.Config, v int) { c.Workers.Count = v })
 	if err := setInt(cfg, "5"); err != nil {
 		t.Fatalf("SetInt: %v", err)
 	}
-	if cfg.Topology.ControlPlane.Count != 5 {
-		t.Errorf("SetInt did not set value: got %d", cfg.Topology.ControlPlane.Count)
+	if cfg.Workers.Count != 5 {
+		t.Errorf("SetInt did not set value: got %d", cfg.Workers.Count)
 	}
 	if err := setInt(cfg, "not-an-int"); err == nil {
 		t.Fatal("SetInt with non-numeric input: want error, got nil")
 	}
 
-	setBool := SetBool(func(c *config.Config, v bool) { c.Deployment.AutoApprove = v })
+	setBool := SetBool(func(c *config.Config, v bool) { c.Handoff.Enabled = v })
 	for _, truthy := range []string{testValYes, "true", "1", "y", "YES"} {
-		cfg.Deployment.AutoApprove = false
+		cfg.Handoff.Enabled = false
 		if err := setBool(cfg, truthy); err != nil {
 			t.Fatalf("SetBool(%q): %v", truthy, err)
 		}
-		if !cfg.Deployment.AutoApprove {
+		if !cfg.Handoff.Enabled {
 			t.Errorf("SetBool(%q) did not set true", truthy)
 		}
 	}
 	for _, falsy := range []string{"no", ""} {
-		cfg.Deployment.AutoApprove = true
+		cfg.Handoff.Enabled = true
 		if err := setBool(cfg, falsy); err != nil {
 			t.Fatalf("SetBool(%q): %v", falsy, err)
 		}
-		if cfg.Deployment.AutoApprove {
+		if cfg.Handoff.Enabled {
 			t.Errorf("SetBool(%q) did not set false", falsy)
 		}
 	}
@@ -1010,14 +1010,14 @@ func TestDataDrivenStep_LoadFromConfig_SelectOutsideOptionsRoundTrips(t *testing
 				Default:   "3",
 				Type:      FieldTypeSelect,
 				Options:   []string{"1", "3", "5"},
-				ConfigSet: SetInt(func(c *config.Config, v int) { c.Topology.ControlPlane.Count = v }),
-				ConfigGet: GetInt(func(c *config.Config) int { return c.Topology.ControlPlane.Count }),
+				ConfigSet: SetInt(func(c *config.Config, v int) { c.Workers.Count = v }),
+				ConfigGet: GetInt(func(c *config.Config) int { return c.Workers.Count }),
 			}},
 		}},
 	}
 	step := NewDataDrivenStep(def)
 	cfg := &config.Config{}
-	cfg.Topology.ControlPlane.Count = 7
+	cfg.Workers.Count = 7
 
 	step.LoadFromConfig(cfg, true)
 
@@ -1025,8 +1025,8 @@ func TestDataDrivenStep_LoadFromConfig_SelectOutsideOptionsRoundTrips(t *testing
 	if err := step.Apply(out); err != nil {
 		t.Fatalf("Apply(): %v", err)
 	}
-	if out.Topology.ControlPlane.Count != 7 {
-		t.Fatalf("Apply() wrote count %d, want 7 preserved", out.Topology.ControlPlane.Count)
+	if out.Workers.Count != 7 {
+		t.Fatalf("Apply() wrote count %d, want 7 preserved", out.Workers.Count)
 	}
 }
 

@@ -3,22 +3,22 @@
   │ O K D C T L                                                              │  
   │ review your configuration            connect · cluster · extras · review │  
   │──────────────────────────────────────────────────────────────────────────│  
-  │  PREFLIGHT · 1 passed · 0 warnings · 2 failed · 0 not checked            │  
-  │  ✗ pull secret · not configured                                          │  
-  │  ✗ ssh public key · not configured                                       │  
-  │  ✓ CIDR ranges · no overlap · 192.168.1.0/24 · 10.128.0.0/14 ·           │  
-  │    172.30.0.0/16                                                         │  
-  │  [1] cluster identity                                                    │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
-  │  name          mycluster                                                 │  
-  │  domain        k8s.local                                                 │  
-  │  distribution  OKD 4.22.0-okd-scos.7                                     │  
+  │  pull secret     ./pull-secret.json                                      │  
+  │  ssh public key  ./id_ed25519.pub                                        │  
   │                                                                          │  
-  │  [2] proxmox                                                             │  
+  │  [7] advanced                                                            │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄  │  
-  │  host            192.168.1.100:8006                                      │  
+  │  pod cidr          10.128.0.0/14                                         │  
+  │  service cidr      172.30.0.0/16                                         │  
+  │  host prefix       23                                                    │  
+  │  drain timeout     10m                                                   │  
+  │  handoff           yes                                                   │  
+  │  red hat catalogs  disabled                                              │  
   │                                                                          │  
-  │─────────── ↑ ↓  scroll down for more ──────────── ▸ okd 4.22.0-okd-scos.7│  
+  │  WRITES                                                                  │  
+  │  okdctl.yaml                                                             │  
+  │                                                                          │  
+  │──────────── ↑ ↓  scroll up for more ───────────── ▸ okd 4.22.0-okd-scos.1│  
   │  ● deploy now   ○ save and exit     ←/→ choose … • ctrl+c quit • ? help  │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

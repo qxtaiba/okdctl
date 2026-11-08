@@ -8,46 +8,45 @@ import (
 )
 
 // wizardFieldParity maps a validated wizard field to a bad value and the
-// file-load field that must also reject it.
+// cfg.Validate() field that must also reject it; loaderOnly marks shapes the
+// yaml loader enforces at parse time, which Validate() never sees.
 var wizardFieldParity = map[string]struct {
-	bad       string
-	wantField string
+	bad        string
+	wantField  string
+	loaderOnly bool
 }{
-	"cluster_name":      {"a", config.FieldClusterName},
-	"domain":            {"ab", config.FieldClusterDomain},
-	"worker_count":      {"101", config.FieldTopologyWorkersCount},
-	"machine_cidr":      {"10.0.0.0/40", config.FieldNetworkingMachineCIDR},
-	"gateway":           {"999.1.1.1", config.FieldNetworkingGateway},
-	"dns_servers":       {"999.1.1.1", config.FieldNetworkingDNS + "[0]"},
-	"pod_cidr":          {"10.128.0.0/40", config.FieldNetworkingPodCIDR},
-	"service_cidr":      {"not-a-cidr", config.FieldNetworkingServiceCIDR},
-	"start_ip":          {"999.1.1.1", config.FieldNetworkingStaticIPStart},
-	"bastion_ip":        {"999.1.1.1", config.FieldNetworkingBastionIP},
-	"vip":               {"999.1.1.1", "networking.bastion.vip"},
-	"ntp_server":        {"!bad host!", config.FieldNetworkingNTPServer},
-	"host":              {"-bad.host", config.FieldProxmoxHost},
-	"pull_secret":       {"/nonexistent/pull-secret.json", config.FieldFilesPullSecret},
-	"ssh_public_key":    {"/nonexistent/key.pub", config.FieldFilesSSHPublicKey},
-	"cp_vcpus":          {"129", config.FieldTopologyControlPlaneCPU},
-	"cp_memory":         {"2000000", config.FieldTopologyControlPlaneMemory},
-	"cp_disk":           {"1001", config.FieldTopologyControlPlaneDisk},
-	"worker_vcpus":      {"129", config.FieldTopologyWorkersCPU},
-	"worker_memory":     {"2000000", config.FieldTopologyWorkersMemory},
-	"worker_disk":       {"1001", config.FieldTopologyWorkersDisk},
-	"worker_data_disk":  {"5001", config.FieldDisksWorkerDataSize},
-	"cp_data_disk":      {"5001", config.FieldDisksControlPlaneDataSize},
-	"vm_id_base":        {"5", config.FieldTopologyVMIDBase},
-	"bootstrap_timeout": {"10", config.FieldDeploymentBootstrapTimeout},
-	"install_timeout":   {"10", config.FieldDeploymentInstallTimeout},
-	"terraform_env":     {"../evil", config.FieldDeploymentTerraformEnv},
-	"bin_dir":           {"relative/bin", config.FieldDeploymentBinDir},
+	config.FieldClusterName:           {bad: "Bad_Name", wantField: config.FieldClusterName},
+	config.FieldClusterDomain:         {bad: "bad..domain", wantField: config.FieldClusterDomain},
+	config.FieldProxmoxEndpoint:       {bad: "pve", wantField: config.FieldProxmoxEndpoint},
+	config.FieldProxmoxVLAN:           {bad: "5000", wantField: config.FieldProxmoxVLAN},
+	config.FieldProxmoxVMIDBase:       {bad: "5", wantField: config.FieldProxmoxVMIDBase},
+	config.FieldNetworkingMachineCIDR: {bad: "10.0.0.0/40", wantField: config.FieldNetworkingMachineCIDR},
+	config.FieldNetworkingGateway:     {bad: "999.1.1.1", wantField: config.FieldNetworkingGateway},
+	config.FieldNetworkingDNS:         {bad: "999.1.1.1", wantField: config.FieldNetworkingDNS + "[0]"},
+	config.FieldNetworkingAPIVIP:      {bad: "999.1.1.1", wantField: config.FieldNetworkingAPIVIP},
+	config.FieldNetworkingIngressVIP:  {bad: "999.1.1.1", wantField: config.FieldNetworkingIngressVIP},
+	config.FieldNetworkingNodeIPStart: {bad: "999.1.1.1", wantField: config.FieldNetworkingNodeIPStart},
+	config.FieldNetworkingPodCIDR:     {bad: "10.128.0.0/40", wantField: config.FieldNetworkingPodCIDR},
+	config.FieldNetworkingServiceCIDR: {bad: "not-a-cidr", wantField: config.FieldNetworkingServiceCIDR},
+	fieldCPCPU:                        {bad: "1", wantField: fieldCPCPU},
+	fieldCPMemory:                     {bad: "100", wantField: fieldCPMemory},
+	fieldCPRootDisk:                   {bad: "10", wantField: fieldCPRootDisk},
+	fieldWorkerCount:                  {bad: "-1", wantField: fieldWorkerCount},
+	fieldWorkerCPU:                    {bad: "1", wantField: fieldWorkerCPU},
+	fieldWorkerMemory:                 {bad: "100", wantField: fieldWorkerMemory},
+	fieldWorkerRootDisk:               {bad: "10", wantField: fieldWorkerRootDisk},
+	fieldWorkerDataDisk:               {bad: "-5", wantField: fieldWorkerDataDisk},
+	config.FieldFilesPullSecret:       {bad: "", wantField: config.FieldFilesPullSecret},
+	config.FieldFilesSSHPublicKey:     {bad: "", wantField: config.FieldFilesSSHPublicKey},
+	fieldHookTimeout:                  {bad: "soon", loaderOnly: true},
+	fieldDrainTimeout:                 {bad: "soon", loaderOnly: true},
 }
 
 func allStepDefinitions() []*wizard.StepDefinition {
 	return []*wizard.StepDefinition{
 		&BasicsStepDefinition,
-		&NetworkingStepDefinition,
 		&ProxmoxStepDefinition,
+		&NetworkingStepDefinition,
 		&ResourcesStepDefinition,
 		&FilesStepDefinition,
 		&AdvancedStepDefinition,
@@ -81,12 +80,13 @@ func TestWizardFieldValidatorsHaveFileLoadParity(t *testing.T) {
 					t.Errorf("wizard validator for %q accepts the parity table's bad value %q", fd.Key, entry.bad)
 					continue
 				}
+				if entry.loaderOnly {
+					continue
+				}
 				cfg := config.DefaultConfig()
-				if fd.ConfigSet != nil {
-					if err := fd.ConfigSet(cfg, entry.bad); err != nil {
-						t.Errorf("ConfigSet(%q, %q): %v", fd.Key, entry.bad, err)
-						continue
-					}
+				if err := fd.ConfigSet(cfg, entry.bad); err != nil {
+					t.Errorf("ConfigSet(%q, %q): %v", fd.Key, entry.bad, err)
+					continue
 				}
 				if result := cfg.Validate(); !hasField(result, entry.wantField) {
 					t.Errorf("file-load validation misses %q after wizard field %q is set to %q; errors: %v",

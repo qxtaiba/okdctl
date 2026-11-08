@@ -10,54 +10,56 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-func TestReviewPreflightChecksFilesAndCIDROverlap(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "pull-secret.json")
+func writeSecret(t *testing.T, name string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), name)
 	if err := os.WriteFile(path, []byte(`{"auths":{}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	return path
+}
+
+func TestReviewPreflightChecksFilesAndRunsValidate(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cfg.Files.PullSecret = path
+	cfg.Files.PullSecret = writeSecret(t, "pull-secret.json")
 	cfg.Files.SSHPublicKey = filepath.Join(t.TempDir(), "missing.pub")
-	cfg.Networking.MachineCIDR = "10.0.0.0/16"
-	cfg.Networking.PodCIDR = "10.0.1.0/24"
-	cfg.Networking.ServiceCIDR = "172.30.0.0/16"
+	cfg.Networking.APIVIP = "10.0.0.5"
 
 	got := reviewPreflight(cfg)
-	want := []reviewCheck{
-		{label: "pull secret", status: "readable", detail: path, passed: true},
-		{label: "ssh public key", status: "unavailable", detail: cfg.Files.SSHPublicKey, failed: true},
-		{label: "CIDR ranges", status: "overlap detected", detail: "10.0.0.0/16 · 10.0.1.0/24 · 172.30.0.0/16", warning: true},
+	if len(got) != 3 {
+		t.Fatalf("reviewPreflight() returned %d checks, want 3: %#v", len(got), got)
 	}
-	if len(got) != len(want) {
-		t.Fatalf("reviewPreflight() returned %d checks, want %d: %#v", len(got), len(want), got)
+	if got[0] != (reviewCheck{label: "pull secret", status: "readable", detail: cfg.Files.PullSecret, passed: true}) {
+		t.Errorf("pull secret check = %#v", got[0])
 	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Errorf("check %d = %#v, want %#v", i, got[i], want[i])
+	if got[1] != (reviewCheck{label: "ssh public key", status: statusUnavailable, detail: cfg.Files.SSHPublicKey, failed: true}) {
+		t.Errorf("ssh key check = %#v", got[1])
+	}
+	if !got[2].failed || got[2].status != "1 error(s)" || !strings.Contains(got[2].detail, "networking.api_vip") {
+		t.Errorf("configuration check = %#v, want one failing api_vip error", got[2])
+	}
+}
+
+func TestReviewPreflightValidConfigPasses(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Files.PullSecret = writeSecret(t, "pull-secret.json")
+	cfg.Files.SSHPublicKey = writeSecret(t, "id.pub")
+
+	checks := reviewPreflight(cfg)
+	for _, check := range checks {
+		if !check.passed {
+			t.Errorf("%s = %+v, want passed", check.label, check)
 		}
 	}
-}
-
-func TestReviewPreflightLeavesAbsentChecksUnconfirmed(t *testing.T) {
-	cfg := config.DefaultConfig()
-	cfg.Networking.MachineCIDR = ""
-	cfg.Networking.PodCIDR = ""
-	cfg.Networking.ServiceCIDR = ""
-	got := reviewPreflight(cfg)
-	if got[0].status != "not configured" || got[1].status != "not configured" || got[2].status != "not checked" {
-		t.Fatalf("reviewPreflight() = %#v, want absent inputs called out without false passes", got)
+	if rendered := renderReviewPreflight(checks, 80); !strings.Contains(rendered, "3 passed · 0 warnings · 0 failed · 0 not checked") {
+		t.Errorf("rendered header = %q", rendered)
 	}
 }
 
-// TestReviewPreflightMissingRequiredFileIsBlockingNotUnchecked pins the
-// honest-state fix: a required input that is missing or unreadable must
-// read as a blocking failure with the error glyph and its own "failed"
-// count, never the same pending state as a check that simply hasn't run.
 func TestReviewPreflightMissingRequiredFileIsBlockingNotUnchecked(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cfg.Networking.MachineCIDR = ""
-	cfg.Networking.PodCIDR = ""
-	cfg.Networking.ServiceCIDR = ""
+	cfg.Files.PullSecret = filepath.Join(t.TempDir(), "missing.json")
+	cfg.Files.SSHPublicKey = filepath.Join(t.TempDir(), "missing.pub")
 	checks := reviewPreflight(cfg)
 
 	for _, label := range []string{"pull secret", "ssh public key"} {
@@ -68,7 +70,7 @@ func TestReviewPreflightMissingRequiredFileIsBlockingNotUnchecked(t *testing.T) 
 			}
 			found = true
 			if !check.failed || check.passed || check.warning {
-				t.Errorf("%s = %+v, want a blocking failure, not an unchecked/warning state", label, check)
+				t.Errorf("%s = %+v, want a blocking failure", label, check)
 			}
 		}
 		if !found {
@@ -77,27 +79,14 @@ func TestReviewPreflightMissingRequiredFileIsBlockingNotUnchecked(t *testing.T) 
 	}
 
 	rendered := renderReviewPreflight(checks, 80)
-	if !strings.Contains(rendered, tui.IconError) {
-		t.Errorf("rendered preflight has no error glyph for the missing required files:\n%s", rendered)
-	}
-	if !strings.Contains(rendered, "2 failed") {
-		t.Errorf("rendered preflight header omits its own failed count:\n%s", rendered)
+	if !strings.Contains(rendered, tui.IconError) || !strings.Contains(rendered, "2 failed") {
+		t.Errorf("rendered preflight lacks the error glyph or the failed count:\n%s", rendered)
 	}
 }
 
-// TestReviewPreflightNonProxmoxCapacityIsNotApplicableNotUnchecked pins the
-// other honest-state fix: a capacity check that doesn't apply to a
-// non-Proxmox provider must never inflate the "not checked" count, which
-// otherwise could never reach zero on such a config.
 func TestReviewPreflightNonProxmoxCapacityIsNotApplicableNotUnchecked(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cfg.Files.PullSecret = "/nonexistent/pull-secret.json"
-	cfg.Files.SSHPublicKey = "/nonexistent/id_ed25519.pub"
 	cfg.Provider.Type = "aws"
-	cfg.Provider.Proxmox = nil
-	cfg.Networking.MachineCIDR = "10.0.0.0/16"
-	cfg.Networking.PodCIDR = "10.0.1.0/24"
-	cfg.Networking.ServiceCIDR = "172.30.0.0/16"
 	checks := reviewPreflight(cfg, &WizardCapacitySnapshot{})
 
 	var capacity reviewCheck
@@ -109,23 +98,25 @@ func TestReviewPreflightNonProxmoxCapacityIsNotApplicableNotUnchecked(t *testing
 	if !capacity.notApplicable {
 		t.Fatalf("selected capacity check = %+v, want notApplicable", capacity)
 	}
+	if rendered := renderReviewPreflight(checks, 80); !strings.Contains(rendered, "0 not checked") {
+		t.Errorf("not-applicable check inflated the not-checked count:\n%s", rendered)
+	}
+}
 
-	rendered := renderReviewPreflight(checks, 80)
-	if !strings.Contains(rendered, "0 not checked") {
-		t.Errorf("not-applicable check inflated the not-checked count above zero:\n%s", rendered)
+func TestReviewPreflightCapacityWithoutDiscoveryIsUnchecked(t *testing.T) {
+	checks := reviewPreflight(config.DefaultConfig(), &WizardCapacitySnapshot{})
+	if last := checks[len(checks)-1]; last.label != labelSelectedCapacity || last.status != statusNotChecked {
+		t.Fatalf("capacity check without discovery = %+v, want not checked", last)
 	}
 }
 
 func TestReviewPreflightRejectsSymlinkedSecretFiles(t *testing.T) {
-	secret := filepath.Join(t.TempDir(), "secret")
+	secret := writeSecret(t, "secret")
 	link := filepath.Join(t.TempDir(), "pull-secret")
-	if err := os.WriteFile(secret, []byte("{}"), 0o600); err != nil {
-		t.Fatal(err)
-	}
 	if err := os.Symlink(secret, link); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
-	if got := readableFileStatus(link); got != "unavailable" {
+	if got := readableFileStatus(link); got != statusUnavailable {
 		t.Fatalf("readableFileStatus(symlink) = %q, want unavailable", got)
 	}
 }

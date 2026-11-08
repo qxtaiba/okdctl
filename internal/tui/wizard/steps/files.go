@@ -4,87 +4,53 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
-// FilesStepDefinition declares the files / ignition-server step fields.
+// FilesStepDefinition declares the pull-secret and SSH-key fields.
 var FilesStepDefinition = wizard.StepDefinition{
 	ID:           wizard.StepIDFiles,
-	Title:        "files & ignition",
-	DisplayTitle: "configure files & ignition server",
-	Description:  "configure required files and ignition server",
+	Title:        "files",
+	DisplayTitle: "configure required files",
+	Description:  "point at the pull secret and ssh key baked into the iso",
 	Sections: []wizard.SectionDefinition{
 		{
 			Title: "required files",
 			Fields: []wizard.FieldDefinition{
 				{
-					Key:         "pull_secret",
+					Key:         config.FieldFilesPullSecret,
 					Label:       "pull secret",
 					Placeholder: "~/pull-secret.json",
-					Help:        "path to okd pull-secret.json from red hat",
+					Help:        "path to the okd pull secret json from red hat",
 					Width:       wizard.FieldWidthPath,
 					Required:    true,
 					Validate:    ValidateFilePath,
-					ConfigSet: func(cfg *config.Config, value string) error {
-						cfg.Files.PullSecret = system.ExpandPath(value)
-						return nil
-					},
-					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Files.PullSecret }),
+					ConfigSet:   wizard.SetString(func(c *config.Config, v string) { c.Files.PullSecret = v }),
+					ConfigGet:   wizard.GetString(func(c *config.Config) string { return c.Files.PullSecret }),
 				},
 				{
-					Key:         "ssh_public_key",
+					Key:         config.FieldFilesSSHPublicKey,
 					Label:       "ssh public key",
 					Placeholder: "~/.ssh/id_ed25519.pub",
-					Help:        "path to ssh public key for node access",
+					Help:        "path to the ssh public key for node access",
 					Width:       wizard.FieldWidthPath,
 					Required:    true,
 					Validate:    ValidateFilePath,
-					ConfigSet: func(cfg *config.Config, value string) error {
-						cfg.Files.SSHPublicKey = system.ExpandPath(value)
-						return nil
-					},
-					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Files.SSHPublicKey }),
+					ConfigSet:   wizard.SetString(func(c *config.Config, v string) { c.Files.SSHPublicKey = v }),
+					ConfigGet:   wizard.GetString(func(c *config.Config) string { return c.Files.SSHPublicKey }),
 				},
 			},
 		},
-		{
-			Title: "ignition server",
-			Fields: []wizard.FieldDefinition{
-				{
-					Key:       "web_root",
-					Label:     "web root",
-					Default:   "/var/www/html",
-					Help:      "directory to serve ignition files from",
-					Width:     wizard.FieldWidthPath,
-					Required:  true,
-					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.HTTPServer.Root = v }),
-					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.HTTPServer.Root }),
-				},
-			},
-		},
-	},
-	ShouldShow: func(cfg *config.Config) bool {
-		return cfg.Distribution.Type == config.DistributionOKD
-	},
-	Apply: func(_ *wizard.DataDrivenStep, cfg *config.Config) error {
-		cfg.HTTPServer.IgnitionServerIP = cfg.Networking.Bastion.IP
-		return nil
 	},
 	ExtraContentTitle: "notes",
 	ExtraContent: func(_ map[string]string, _ int) string {
-		helpStyle := lipgloss.NewStyle().
-			Foreground(tui.ColorTextFaint()).
-			Italic(true)
-
-		return helpStyle.Render(
-			"pull secret: get from https://cloud.redhat.com/openshift/install/pull-secret\n" +
-				"ignition server runs on bastion — ip is derived from networking step.")
+		return lipgloss.NewStyle().Foreground(tui.ColorTextFaint()).Italic(true).
+			Render("pull secret: get from https://console.redhat.com/openshift/install/pull-secret")
 	},
 }
 
-// NewFilesStep returns the files / ignition wizard step.
+// NewFilesStep returns the files wizard step.
 func NewFilesStep() *wizard.DataDrivenStep {
 	return wizard.NewDataDrivenStep(&FilesStepDefinition)
 }

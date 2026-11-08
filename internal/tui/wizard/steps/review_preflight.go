@@ -9,6 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/model"
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
@@ -19,177 +20,109 @@ type reviewCheck struct {
 	detail        string
 	passed        bool
 	warning       bool
-	failed        bool // a required input is missing or unusable — blocks deploy
-	notApplicable bool // the check doesn't apply to this config, not merely unrun
+	failed        bool // a required input is missing or invalid — blocks the install
+	notApplicable bool
 }
 
+// reviewPreflight checks the two input files, runs cfg.Validate() and, with
+// a discovery snapshot, the chosen hosts' capacity.
 func reviewPreflight(cfg *config.Config, capacity ...*WizardCapacitySnapshot) []reviewCheck {
 	if cfg == nil {
 		return nil
 	}
 	checks := []reviewCheck{
-		reviewFileCheck("pull secret", cfg.Files.PullSecret, true),
-		reviewFileCheck("ssh public key", cfg.Files.SSHPublicKey, true),
+		reviewFileCheck("pull secret", cfg.Files.PullSecret),
+		reviewFileCheck("ssh public key", cfg.Files.SSHPublicKey),
+		reviewConfigCheck(cfg),
 	}
-
-	networks := []string{
-		cfg.Networking.MachineCIDR,
-		cfg.Networking.PodCIDR,
-		cfg.Networking.ServiceCIDR,
-	}
-	configuredNetworks := 0
-	validNetworks := true
-	for _, cidr := range networks {
-		if cidr == "" {
-			continue
-		}
-		configuredNetworks++
-		if config.ValidateCIDR(cidr) != nil {
-			validNetworks = false
-		}
-	}
-	networkStatus := statusNotChecked
-	networkWarning := false
-	switch {
-	case configuredNetworks == 0:
-	case !validNetworks:
-		networkStatus = "invalid CIDR"
-		networkWarning = true
-	case configuredNetworks != len(networks):
-		networkStatus = "incomplete"
-		networkWarning = true
-	default:
-		networkStatus = "no overlap"
-		result := config.ValidateWithOptions(cfg, config.ValidationOptions{Scope: config.ScopeNetworking})
-		for _, err := range result.Errors {
-			if err.Code == config.ValidationErrorCodeCIDROverlap {
-				networkStatus = "overlap detected"
-				networkWarning = true
-				break
-			}
-		}
-	}
-	checks = append(checks, reviewCheck{
-		label: "CIDR ranges", status: networkStatus,
-		detail: strings.Join(configuredCIDRs(networks), " · "),
-		passed: networkStatus == "no overlap", warning: networkWarning,
-	})
 	if len(capacity) > 0 && capacity[0] != nil {
 		checks = append(checks, reviewCapacityCheck(cfg, capacity[0]))
 	}
 	return checks
 }
 
-func configuredCIDRs(networks []string) []string {
-	configured := make([]string, 0, len(networks))
-	for _, network := range networks {
-		if network != "" {
-			configured = append(configured, network)
-		}
-	}
-	return configured
-}
-
-// reviewFileCheck checks path's readability for a preflight row; required
-// marks a missing or unreadable path as a blocking failure rather than a
-// mere warning, since the deploy cannot proceed without it.
-func reviewFileCheck(label, path string, required bool) reviewCheck {
+func reviewFileCheck(label, path string) reviewCheck {
 	status := readableFileStatus(path)
 	readable := status == "readable"
-	check := reviewCheck{label: label, status: status, detail: path, passed: readable}
-	switch {
-	case readable:
-	case required:
-		check.failed = true
-	case status == statusUnavailable:
-		check.warning = true
-	}
-	return check
+	return reviewCheck{label: label, status: status, detail: path, passed: readable, failed: !readable}
 }
 
+func reviewConfigCheck(cfg *config.Config) reviewCheck {
+	result := cfg.Validate()
+	if result.IsValid() {
+		return reviewCheck{label: "configuration", status: "valid", passed: true}
+	}
+	return reviewCheck{
+		label:  "configuration",
+		status: fmt.Sprintf("%d error(s)", len(result.Errors)),
+		detail: result.Error(),
+		failed: true,
+	}
+}
+
+// reviewCapacityCheck sums each chosen host's demand from the model's
+// inventory against the discovered capacity.
 func reviewCapacityCheck(cfg *config.Config, snapshot *WizardCapacitySnapshot) reviewCheck {
-	if cfg.Provider.Proxmox == nil {
+	if cfg.Provider.Type != config.ProviderProxmox {
 		return reviewCheck{label: labelSelectedCapacity, status: "not applicable", notApplicable: true}
 	}
-	nodes := snapshot.Nodes()
+	nodes := snapshot.nodes()
 	if len(nodes) == 0 {
 		return reviewCheck{label: labelSelectedCapacity, status: statusNotChecked}
 	}
-	byName := make(map[string]*CapacityNode, len(nodes))
-	for i := range nodes {
-		node := &nodes[i]
-		byName[node.Name] = node
+	inv, err := model.Build(cfg, "")
+	if err != nil {
+		return reviewCheck{label: labelSelectedCapacity, status: statusNotChecked, detail: err.Error()}
 	}
-	use := make(map[string]capacityDemand)
-	add := func(node string, cpu, memoryMB int) {
-		if node == "" {
-			return
+	type demand struct{ cpu, memoryMiB int }
+	use := make(map[string]*demand)
+	for i := range inv.Nodes {
+		n := &inv.Nodes[i]
+		d := use[n.Host]
+		if d == nil {
+			d = &demand{}
+			use[n.Host] = d
 		}
-		demand := use[node]
-		demand.cpu += cpu
-		demand.memoryMB += memoryMB
-		use[node] = demand
-	}
-	p := cfg.Provider.Proxmox
-	bootstrapCPU, bootstrapMemory := cfg.Topology.Bootstrap.CPU, cfg.Topology.Bootstrap.MemoryMB
-	if bootstrapCPU == 0 && bootstrapMemory == 0 {
-		bootstrapCPU = cfg.Topology.ControlPlane.CPU
-		bootstrapMemory = cfg.Topology.ControlPlane.MemoryMB
-	}
-	add(p.Node, bootstrapCPU, bootstrapMemory)
-	for _, node := range p.ControlPlaneNodes {
-		add(node, cfg.Topology.ControlPlane.CPU, cfg.Topology.ControlPlane.MemoryMB)
-	}
-	for _, node := range p.WorkerNodes {
-		add(node, cfg.Topology.Workers.CPU, cfg.Topology.Workers.MemoryMB)
-	}
-	if len(use) == 0 {
-		return reviewCheck{label: labelSelectedCapacity, status: statusNotChecked}
+		d.cpu += n.CPU
+		d.memoryMiB += n.MemoryMiB
 	}
 	rows := make([]string, 0, len(use))
-	warning := false
-	unknown := false
-	for nodeIndex := range nodes {
-		node := &nodes[nodeIndex]
-		demand, assigned := use[node.Name]
+	warning, unknown := false, false
+	for i := range nodes {
+		node := &nodes[i]
+		d, assigned := use[node.Name]
 		if !assigned {
 			continue
 		}
+		delete(use, node.Name)
 		cpu, memory := "?", "?"
 		if node.CPUsKnown {
 			cpu = fmt.Sprint(node.CPUs)
 		}
-		if node.MemoryKnown {
-			memory = fmt.Sprintf("%d GB", node.MemoryGB)
+		if node.MemKnown {
+			memory = fmt.Sprintf("%d GB", node.MemGB)
 		}
-		over := (node.CPUsKnown && demand.cpu > node.CPUs) || (node.MemoryKnown && demand.memoryMB > node.MemoryGB*1024)
+		over := (node.CPUsKnown && d.cpu > node.CPUs) || (node.MemKnown && d.memoryMiB > node.MemGB*1024)
 		state := "fits"
 		switch {
-		case node.Status != "online":
+		case node.Status != proxmoxStatusOnline:
 			state, warning = "offline", true
 		case over:
 			state, warning = "over capacity", true
-		case !node.CPUsKnown || !node.MemoryKnown:
+		case !node.CPUsKnown || !node.MemKnown:
 			state, unknown = "capacity unknown", true
 		}
-		rows = append(rows, fmt.Sprintf("%s %s · %dc/%d GB → %sc/%s", tui.SanitizeTerminalEscapes(node.Name), state, demand.cpu, demand.memoryMB/1024, cpu, memory))
+		rows = append(rows, fmt.Sprintf("%s %s · %dc/%d GB → %sc/%s", tui.SanitizeTerminalEscapes(node.Name), state, d.cpu, d.memoryMiB/1024, cpu, memory))
 	}
-	for name := range use {
-		if _, found := byName[name]; !found {
-			rows = append(rows, tui.SanitizeTerminalEscapes(name)+" unavailable")
-			warning = true
-		}
+	for host := range use {
+		rows = append(rows, tui.SanitizeTerminalEscapes(host)+" unavailable")
+		warning = true
 	}
 	slices.Sort(rows)
 	return reviewCheck{
 		label: labelSelectedCapacity, status: strings.Join(rows, "; "),
 		passed: !warning && !unknown, warning: warning,
 	}
-}
-
-type capacityDemand struct {
-	cpu      int
-	memoryMB int
 }
 
 func readableFileStatus(path string) string {

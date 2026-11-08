@@ -32,6 +32,11 @@ func RunFlow(ctx context.Context, steps []WizardStep, cfg *config.Config, chrome
 	result := m.Result()
 	if result.Outcome == OutcomeCompleted {
 		result.Config = m.Config()
+		for _, step := range steps {
+			if p, ok := step.(SecretsProvider); ok {
+				result.Secrets = p.Secrets()
+			}
+		}
 	}
 
 	return result, nil

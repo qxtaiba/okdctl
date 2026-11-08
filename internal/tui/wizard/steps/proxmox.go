@@ -6,129 +6,159 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
-// pairKeyCredentials joins username and password into one paired row;
-// named apart from the "credentials" section title since the two strings
-// serve different purposes and a shared literal would read as accidental.
-const pairKeyCredentials = "username_password"
+const cpuTypeHost = "host"
 
-func proxmoxGet(getter func(p *config.ProxmoxConfig) string) wizard.ConfigGetter {
-	return func(cfg *config.Config) string {
-		if cfg.Provider.Proxmox == nil {
-			return ""
-		}
-		return getter(cfg.Provider.Proxmox)
-	}
+func proxmoxGet(get func(p *config.ProxmoxConfig) string) wizard.ConfigGetter {
+	return func(cfg *config.Config) string { return get(&cfg.Provider.Proxmox) }
 }
 
-func proxmoxSet(setter func(p *config.ProxmoxConfig, v string)) wizard.ConfigSetter {
-	return func(cfg *config.Config, value string) error {
-		if cfg.Provider.Proxmox == nil {
-			cfg.Provider.Proxmox = &config.ProxmoxConfig{}
-		}
-		setter(cfg.Provider.Proxmox, value)
-		return nil
-	}
+func proxmoxSet(set func(p *config.ProxmoxConfig, v string)) wizard.ConfigSetter {
+	return wizard.SetString(func(cfg *config.Config, v string) { set(&cfg.Provider.Proxmox, v) })
 }
 
-// ProxmoxStepDefinition declares the Proxmox connection step fields.
+// ProxmoxStepDefinition declares the Proxmox connection and placement fields.
 var ProxmoxStepDefinition = wizard.StepDefinition{
 	ID:           wizard.StepIDProxmox,
 	Title:        "proxmox configuration",
-	DisplayTitle: "configure proxmox ve connection",
-	Description:  "configure proxmox connection",
+	DisplayTitle: "configure proxmox ve",
+	Description:  "connect to proxmox and pick where the vms live",
 	Sections: []wizard.SectionDefinition{
 		{
 			Title: "connection",
 			Fields: []wizard.FieldDefinition{
 				{
-					Key:         fieldHost,
-					Label:       fieldHost,
-					Default:     "192.168.1.100:8006",
-					Placeholder: "192.168.1.100:8006",
-					Help:        "proxmox host ip:port (e.g., 192.168.1.100:8006)",
+					Key:         config.FieldProxmoxEndpoint,
+					Label:       "endpoint",
+					Default:     "https://192.168.1.100:8006",
+					Placeholder: "https://192.168.1.100:8006",
+					Help:        "proxmox api url with scheme and host, e.g. https://192.168.1.100:8006",
 					Required:    true,
-					Validate:    config.ValidateProxmoxHost,
-					ConfigSet:   proxmoxSet(func(p *config.ProxmoxConfig, v string) { p.Host = v }),
-					ConfigGet:   proxmoxGet(func(p *config.ProxmoxConfig) string { return p.Host }),
+					Validate:    validateEndpoint,
+					ConfigSet:   proxmoxSet(func(p *config.ProxmoxConfig, v string) { p.Endpoint = v }),
+					ConfigGet:   proxmoxGet(func(p *config.ProxmoxConfig) string { return p.Endpoint }),
+				},
+				{
+					Key:   fieldAPIToken,
+					Label: "api token",
+					Help:  "user@realm!tokenname=secret, as PROXMOX_VE_API_TOKEN expects — saved to okdctl.env, never okdctl.yaml; blank keeps the saved token",
+					Type:  wizard.FieldTypePassword,
+				},
+				{
+					Key:     fieldInsecure,
+					Label:   "skip tls verify",
+					Default: valNo,
+					Help:    "skip tls certificate verification — yes only for self-signed certs; saved to okdctl.env as PROXMOX_VE_INSECURE",
+					Type:    wizard.FieldTypeSelect,
+					Options: []string{valNo, valYes},
 				},
 			},
 		},
 		{
-			Title: "credentials",
+			Title: "placement",
 			Fields: []wizard.FieldDefinition{
 				{
-					Key:       fieldUsername,
-					Label:     fieldUsername,
-					Default:   "root@pam",
-					Help:      "proxmox username (user@realm)",
+					Key:       config.FieldProxmoxNodes,
+					Label:     "nodes",
+					Default:   "pve",
+					Help:      "comma-separated proxmox node names the vms spread across, e.g. pve1, pve2 — node placement refines this from discovery",
 					Required:  true,
-					PairKey:   pairKeyCredentials,
-					ConfigSet: proxmoxSet(func(p *config.ProxmoxConfig, v string) { p.Username = v }),
-					ConfigGet: proxmoxGet(func(p *config.ProxmoxConfig) string { return p.Username }),
+					ConfigSet: setList(func(c *config.Config, v []string) { c.Provider.Proxmox.Nodes = v }),
+					ConfigGet: getList(func(c *config.Config) []string { return c.Provider.Proxmox.Nodes }),
 				},
 				{
-					Key:       "password",
-					Label:     "password",
-					Default:   "",
-					Help:      "proxmox password",
-					Type:      wizard.FieldTypePassword,
+					Key:       config.FieldProxmoxStorage,
+					Label:     "storage",
+					Default:   "local-lvm",
+					Help:      "storage pool for vm disks (content: images)",
 					Required:  true,
-					PairKey:   pairKeyCredentials,
-					ConfigSet: proxmoxSet(func(p *config.ProxmoxConfig, v string) { p.Password.Set(v) }),
-					// Don't load password from config
+					ConfigSet: proxmoxSet(func(p *config.ProxmoxConfig, v string) { p.Storage = v }),
+					ConfigGet: proxmoxGet(func(p *config.ProxmoxConfig) string { return p.Storage }),
+				},
+				{
+					Key:       config.FieldProxmoxISOStorage,
+					Label:     "iso storage",
+					Default:   "local",
+					Help:      "storage the agent iso is uploaded to (content: iso)",
+					Required:  true,
+					ConfigSet: proxmoxSet(func(p *config.ProxmoxConfig, v string) { p.ISOStorage = v }),
+					ConfigGet: proxmoxGet(func(p *config.ProxmoxConfig) string { return p.ISOStorage }),
+				},
+				{
+					Key:       config.FieldProxmoxBridge,
+					Label:     "bridge",
+					Default:   "vmbr0",
+					Help:      "network bridge for the vm nics, e.g. vmbr0",
+					Required:  true,
+					ConfigSet: proxmoxSet(func(p *config.ProxmoxConfig, v string) { p.Bridge = v }),
+					ConfigGet: proxmoxGet(func(p *config.ProxmoxConfig) string { return p.Bridge }),
 				},
 			},
 		},
 		{
 			Title:       "advanced",
 			Collapsible: true,
-			// Neither field here is Required nor can ever fail Check (a
-			// select with a default can't error), so the fold's collapse
-			// is accidentally safe today — isComplete() still forces it
-			// open the moment either changes, which is the structural
-			// guarantee the HARD CONSTRAINT needs regardless.
 			FoldSummary: func(values map[string]string) []tui.FactRow {
-				tokenStatus := "not set"
-				if values["token_id"] != "" {
-					tokenStatus = "set"
-				}
-				verification := "enabled"
-				if values["skip_tls_verify"] == valYes {
-					verification = "disabled"
+				vlan := values[config.FieldProxmoxVLAN]
+				if vlan == "" || vlan == "0" {
+					vlan = "untagged"
 				}
 				return []tui.FactRow{
-					{Key: labelTokenID, Value: tokenStatus},
-					{Key: "verification", Value: verification},
+					{Key: labelVLAN, Value: vlan},
+					{Key: labelCPUType, Value: values[config.FieldProxmoxCPUType]},
+					{Key: "ha", Value: values[fieldHA]},
+					{Key: labelVMIDBase, Value: values[config.FieldProxmoxVMIDBase]},
 				}
 			},
 			Fields: []wizard.FieldDefinition{
 				{
-					Key:         "token_id",
-					Label:       labelTokenID,
-					Default:     "",
-					Placeholder: "user@pve!okdctl",
-					Help:        "api token id (user@realm!tokenname) — saved to config; combined with the token secret at deploy time via PROXMOX_VE_API_TOKEN in id=secret form",
-					ConfigSet:   proxmoxSet(func(p *config.ProxmoxConfig, v string) { p.TokenID = v }),
-					ConfigGet:   proxmoxGet(func(p *config.ProxmoxConfig) string { return p.TokenID }),
+					Key:       config.FieldProxmoxVLAN,
+					Label:     labelVLAN,
+					Default:   "0",
+					Help:      "vlan tag for the vm nics — 0 is untagged, else 1-4094",
+					Width:     wizard.FieldWidthNumber,
+					Required:  true,
+					Validate:  intRange(0, 4094),
+					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Provider.Proxmox.VLAN = v }),
+					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Provider.Proxmox.VLAN }),
 				},
 				{
-					Key:     "skip_tls_verify",
-					Label:   "skip tls verify",
-					Default: valNo,
-					Help:    "skip tls certificate verification — set to yes only for self-signed certs",
-					Type:    wizard.FieldTypeSelect,
-					Options: []string{valNo, valYes},
-					ConfigSet: wizard.SetBool(func(c *config.Config, v bool) {
-						if c.Provider.Proxmox != nil {
-							c.Provider.Proxmox.Insecure = v
-						}
-					}),
-					ConfigGet: func(c *config.Config) string {
-						if c.Provider.Proxmox != nil && c.Provider.Proxmox.Insecure {
-							return valYes
-						}
-						return valNo
-					},
+					Key:       config.FieldProxmoxCPUType,
+					Label:     labelCPUType,
+					Default:   cpuTypeHost,
+					Help:      "host gives best performance; x86-64-v3 or newer allows live migration",
+					Type:      wizard.FieldTypeSelect,
+					Options:   []string{cpuTypeHost, "x86-64-v3", "x86-64-v4"},
+					ConfigSet: proxmoxSet(func(p *config.ProxmoxConfig, v string) { p.CPUType = v }),
+					ConfigGet: proxmoxGet(func(p *config.ProxmoxConfig) string { return p.CPUType }),
+				},
+				{
+					Key:         fieldPool,
+					Label:       "pool",
+					Placeholder: "none",
+					Help:        "proxmox resource pool the vms join — blank for none",
+					ConfigSet:   proxmoxSet(func(p *config.ProxmoxConfig, v string) { p.Pool = v }),
+					ConfigGet:   proxmoxGet(func(p *config.ProxmoxConfig) string { return p.Pool }),
+				},
+				{
+					Key:       fieldHA,
+					Label:     "ha",
+					Default:   valNo,
+					Help:      "register the vms with ha-manager so a failed node's vms restart elsewhere",
+					Type:      wizard.FieldTypeSelect,
+					Options:   []string{valNo, valYes},
+					ConfigSet: wizard.SetBool(func(c *config.Config, v bool) { c.Provider.Proxmox.HA = v }),
+					ConfigGet: getBool(func(c *config.Config) bool { return c.Provider.Proxmox.HA }),
+				},
+				{
+					Key:       config.FieldProxmoxVMIDBase,
+					Label:     labelVMIDBase,
+					Default:   "6000",
+					Help:      "first vm id — masters take base+10..12 and workers base+100 onward, e.g. 6000",
+					Width:     wizard.FieldWidthNumber,
+					Required:  true,
+					Validate:  minInt(100, ""),
+					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Provider.Proxmox.VMIDBase = v }),
+					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Provider.Proxmox.VMIDBase }),
 				},
 			},
 		},
@@ -136,6 +166,12 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 	Apply: func(_ *wizard.DataDrivenStep, cfg *config.Config) error {
 		cfg.Provider.Type = config.ProviderProxmox
 		return nil
+	},
+	Secrets: func(s *wizard.DataDrivenStep) wizard.Secrets {
+		var secrets wizard.Secrets
+		secrets.ProxmoxToken.Set(s.Value(fieldAPIToken))
+		secrets.ProxmoxInsecure = s.Value(fieldInsecure) == valYes
+		return secrets
 	},
 }
 

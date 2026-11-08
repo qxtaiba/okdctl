@@ -12,76 +12,50 @@ import (
 )
 
 func reviewTestConfig() *config.Config {
-	cfg := &config.Config{}
-	cfg.Provider.Proxmox = &config.ProxmoxConfig{
-		Host:              "pve.local",
-		ControlPlaneNodes: []string{"pve1", "pve2", "pve3"},
-		WorkerNodes:       []string{"pve1", "pve2"},
-	}
-	cfg.Deployment.AutoApprove = true
+	cfg := config.DefaultConfig()
+	cfg.Provider.Proxmox.Nodes = []string{"pve1", "pve2"}
 	return cfg
 }
 
-// TestReviewStep_AdvancedShowsAllAppliedSettings pins bug 8: cpu type, numa,
-// ha anti-affinity, ntp server, and bin dir are applied by the wizard and
-// must be visible at the deploy gate.
-func TestReviewStep_AdvancedShowsAllAppliedSettings(t *testing.T) {
-	cfg := reviewTestConfig()
-	cfg.Provider.Proxmox.CPUType = "x86-64-v2"
-	cfg.Provider.Proxmox.NUMAEnabled = true
-	cfg.Provider.Proxmox.HAEnabled = true
-	cfg.Networking.NTPServer = "pool.ntp.org"
-	cfg.Deployment.BinDir = "/opt/okd/bin"
+func TestReviewStep_DerivesEverySectionFromTheModel(t *testing.T) {
 	s := NewReviewStep()
-	s.SetConfig(cfg)
+	s.SetConfig(reviewTestConfig())
 
-	out := tuitest.StripANSI(s.View(100, 100))
-
-	for _, want := range []string{"x86-64-v2", "numa", "ha anti-affinity", "pool.ntp.org", "/opt/okd/bin"} {
+	out := tuitest.StripANSI(s.View(120, 100))
+	for _, want := range []string{
+		"cluster identity", "proxmox", "nodes", "networking", "compute", "files", "advanced", "WRITES",
+		"lab-master0", "6010", "192.168.1.150", "pve1",
+		"lab-worker1", "6101", "192.168.1.161", "pve2",
+		"3 × (4 vcpu, 16 gb ram, disks 120 gb)",
+		"2 × (8 vcpu, 16 gb ram, disks 120+500 gb)",
+		"28 vcpu, 80 gb ram, 1600 gb disk",
+		"drain timeout", "10m", "red hat catalogs", "disabled",
+	} {
 		if !strings.Contains(out, want) {
-			t.Errorf("View() missing applied advanced setting %q", want)
+			t.Errorf("View() missing %q:\n%s", want, out)
 		}
 	}
 }
 
-func TestReviewStep_ShowsChangesFromSavedConfig(t *testing.T) {
+func TestReviewStep_ShowsChangesFromSavedConfigByJSONPath(t *testing.T) {
 	saved := reviewTestConfig()
-	saved.Cluster.Domain = "k8s.local"
-	saved.Topology.ControlPlane.CPU = 4
 	cfg := reviewTestConfig()
-	cfg.Cluster.Domain = saved.Cluster.Domain
-	cfg.Topology.ControlPlane.CPU = saved.Topology.ControlPlane.CPU
-	cfg.Networking.NTPServer = saved.Networking.NTPServer
-	cfg.Deployment.BinDir = saved.Deployment.BinDir
 	s := NewReviewStep()
 	s.SetConfig(cfg)
 	s.SetSavedConfig(saved)
 
 	cfg.Cluster.Domain = "prod.example"
-	cfg.Topology.ControlPlane.CPU = 8
-	cfg.Networking.NTPServer = "time.example"
-	cfg.Deployment.BinDir = "/opt/okd/bin"
+	cfg.ControlPlane.CPU = 8
+	cfg.Nodes = map[string]config.NodeOverride{"lab-master0": {Host: "pve2"}}
 
 	frame := s.View(120, 100)
 	tuitest.AssertFits(t, frame, 120, 100)
 	out := tuitest.StripANSI(frame)
-	// Both snapshots resolve through config.Effective (loading no longer
-	// bakes a mirrored bootstrap size into a saved config, so the raw
-	// configs on either side of the diff must be resolved identically
-	// before comparing) — so control plane vcpus 4→8 ripples into a real,
-	// not spurious, bootstrap vcpus 4→8: the transient bootstrap VM mirrors
-	// control-plane sizing, and the operator should see that consequence.
 	for _, want := range []string{
-		"CONFIG CHANGES · 5",
-		"domain",
-		"k8s.local → prod.example",
-		"control plane vcpus",
-		"4 → 8",
-		"ntp server",
-		"→ time.example",
-		"binary directory",
-		"→ /opt/okd/bin",
-		"bootstrap vcpus",
+		"CONFIG CHANGES · 3",
+		"cluster.domain", "k8s.local → prod.example",
+		"control_plane.cpu", "4 → 8",
+		"nodes.lab-master0.host", " → pve2",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("View() missing config change %q:\n%s", want, out)
@@ -89,48 +63,42 @@ func TestReviewStep_ShowsChangesFromSavedConfig(t *testing.T) {
 	}
 }
 
-func TestReviewStep_ShowsNewProviderValues(t *testing.T) {
-	saved := reviewTestConfig()
-	saved.Provider.Proxmox = nil
+func TestReviewStep_NoChangesWhenSavedMatches(t *testing.T) {
 	cfg := reviewTestConfig()
-	cfg.Provider.Proxmox.AdditionalNetworks = []config.AdditionalNetwork{{Bridge: "vmbr1", Model: "virtio", VLANTag: 42}}
-	cfg.Provider.Proxmox.Password.Set("new-secret")
-	t.Cleanup(cfg.Provider.Proxmox.Password.Zeroize)
-	cfg.Provider.Proxmox.APIToken.Set("api-secret")
-	t.Cleanup(cfg.Provider.Proxmox.APIToken.Zeroize)
 	s := NewReviewStep()
 	s.SetConfig(cfg)
-	s.SetSavedConfig(saved)
-
-	frame := s.View(80, 100)
-	tuitest.AssertFits(t, frame, 80, 100)
-	out := tuitest.StripANSI(frame)
-	for _, want := range []string{"proxmox host", "pve.local", "additional_networks.1", "vmbr1 / virtio / vlan 42"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("View() omitted newly configured value %q:\n%s", want, out)
-		}
-	}
-	for _, secret := range []string{"new-secret", "api-secret"} {
-		if strings.Contains(out, secret) {
-			t.Errorf("View() exposed a credential %q:\n%s", secret, out)
-		}
+	s.SetSavedConfig(cfg)
+	if out := tuitest.StripANSI(s.View(120, 100)); strings.Contains(out, "CONFIG CHANGES") {
+		t.Fatalf("identical configs rendered a diff:\n%s", out)
 	}
 }
 
-// TestReviewStep_SanitizesHostileProxmoxFieldText drives a tampered node
-// name (as it would arrive stored in cfg.Provider.Proxmox after a hostile
-// discovery response was selected in the node placement step) through both
-// renderProxmox/renderNodePlacement and the config-changes diff path
-// (reviewConfigSnapshot's downstream renderConfigChanges), which read the
-// same field independently.
-func TestReviewStep_SanitizesHostileProxmoxFieldText(t *testing.T) {
-	const payload = "\x1b[2J\x1b[H"
+func TestReviewConfigSnapshotFlattensJSONPaths(t *testing.T) {
+	snap := reviewConfigSnapshot(reviewTestConfig())
+	for key, want := range map[string]string{
+		"cluster.name":              "lab",
+		"provider.proxmox.nodes":    "pve1, pve2",
+		"workers.disks[1].size_gib": "500",
+		"workers.disks[1].wipe":     "true",
+		"lifecycle.drain_timeout":   "10m0s",
+		"handoff.enabled":           "true",
+		"networking.ntp":            "",
+	} {
+		if got := snap[key]; got != want {
+			t.Errorf("snapshot[%q] = %q, want %q", key, got, want)
+		}
+	}
+	if reviewConfigSnapshot(nil) != nil {
+		t.Error("nil config must snapshot to nil")
+	}
+}
 
+func TestReviewStep_SanitizesHostileProxmoxText(t *testing.T) {
+	const payload = "\x1b[2J\x1b[H"
 	saved := reviewTestConfig()
 	cfg := reviewTestConfig()
-	cfg.Provider.Proxmox.Node = "pve1" + payload
-	cfg.Provider.Proxmox.Bridge = "vmbr0" + payload
-	cfg.Provider.Proxmox.ControlPlaneNodes = []string{"pve1" + payload, "pve2", "pve3"}
+	cfg.Provider.Proxmox.Nodes = []string{"pve1" + payload, "pve2"}
+	cfg.Nodes = map[string]config.NodeOverride{"lab-master1": {Host: "pve1" + payload}}
 	s := NewReviewStep()
 	s.SetConfig(cfg)
 	s.SetSavedConfig(saved)
@@ -140,19 +108,18 @@ func TestReviewStep_SanitizesHostileProxmoxFieldText(t *testing.T) {
 		t.Fatalf("View() carries the raw clear-screen/cursor-home payload:\n%q", frame)
 	}
 	if !strings.Contains(frame, "�") {
-		t.Fatalf("View() shows no sanitization marker for the tampered node/bridge:\n%q", frame)
+		t.Fatalf("View() shows no sanitization marker for the tampered node:\n%q", frame)
 	}
 }
 
-func TestReviewStep_PreflightChecksSelectedNodeCapacity(t *testing.T) {
+func TestReviewStep_PreflightChecksSelectedHostCapacity(t *testing.T) {
 	cfg := reviewTestConfig()
-	cfg.Provider.Proxmox.Node = "pve1"
-	cfg.Provider.Proxmox.ControlPlaneNodes = []string{"pve1", "pve1", "pve1"}
-	cfg.Provider.Proxmox.WorkerNodes = []string{"pve2", "pve2", "missing"}
-	cfg.Topology.ControlPlane = config.NodeConfig{Count: 3, CPU: 8, MemoryMB: 32768}
-	cfg.Topology.Workers = config.NodeConfig{Count: 3, CPU: 4, MemoryMB: 16384}
+	cfg.Nodes = map[string]config.NodeOverride{
+		"lab-master0": {Host: "pve1"}, "lab-master1": {Host: "pve1"}, "lab-master2": {Host: "pve1"},
+		"lab-worker0": {Host: "pve2"}, "lab-worker1": {Host: "missing"},
+	}
 	snapshot := &WizardCapacitySnapshot{discovery: &proxmoxDiscovery{Nodes: []proxmoxNode{
-		{Name: "pve1", Status: "online", CPUs: 24, CPUsKnown: true, MemGB: 96, MemKnown: true},
+		{Name: "pve1", Status: "online", CPUs: 8, CPUsKnown: true, MemGB: 32, MemKnown: true},
 		{Name: "pve2", Status: "online", CPUs: 24, CPUsKnown: true, MemGB: 96, MemKnown: true},
 	}}}
 	s := NewReviewStep()
@@ -169,40 +136,21 @@ func TestReviewStep_PreflightChecksSelectedNodeCapacity(t *testing.T) {
 	}
 }
 
-// TestReviewStep_PreflightSanitizesHostileCapacityNodeText drives a
-// tampered Proxmox node name — both a node present in the discovery
-// snapshot and one assigned but missing from it — through the capacity
-// preflight check's real View path.
-func TestReviewStep_PreflightSanitizesHostileCapacityNodeText(t *testing.T) {
-	const payload = "\x1b[2J\x1b[H"
-
+func TestReviewStep_NodesUnavailableWhenTheModelCannotBuild(t *testing.T) {
 	cfg := reviewTestConfig()
-	cfg.Provider.Proxmox.Node = "pve1" + payload
-	cfg.Provider.Proxmox.ControlPlaneNodes = []string{"pve1" + payload}
-	cfg.Provider.Proxmox.WorkerNodes = []string{"missing" + payload}
-	cfg.Topology.ControlPlane = config.NodeConfig{Count: 1, CPU: 8, MemoryMB: 32768}
-	cfg.Topology.Workers = config.NodeConfig{Count: 1, CPU: 4, MemoryMB: 16384}
-	snapshot := &WizardCapacitySnapshot{discovery: &proxmoxDiscovery{Nodes: []proxmoxNode{
-		{Name: "pve1" + payload, Status: "online", CPUs: 24, CPUsKnown: true, MemGB: 96, MemKnown: true},
-	}}}
+	cfg.Networking.MachineCIDR = "not-a-cidr"
 	s := NewReviewStep()
 	s.SetConfig(cfg)
-	s.SetCapacity(snapshot)
 
-	frame := s.View(70, 100)
-	if strings.Contains(frame, payload) {
-		t.Fatalf("View() carries the raw clear-screen/cursor-home payload:\n%q", frame)
-	}
-	if !strings.Contains(frame, "�") {
-		t.Fatalf("View() shows no sanitization marker:\n%q", frame)
+	out := tuitest.StripANSI(s.View(100, 100))
+	if !strings.Contains(out, "node identities unavailable") || !strings.Contains(out, "configuration · ") {
+		t.Fatalf("View() must say why the node table is missing and fail the config check:\n%s", out)
 	}
 }
 
 func TestReviewStep_HiddenStepGetsNoIndex(t *testing.T) {
 	s := NewReviewStep()
 	s.SetConfig(reviewTestConfig())
-
-	// files omitted, simulating a step hidden by ShouldShow — header must render without a digit.
 	s.SetJumpTargets([]wizard.JumpTarget{
 		{StepID: wizard.StepIDBasics, Digit: 1},
 		{StepID: wizard.StepIDProxmox, Digit: 2},
@@ -212,130 +160,72 @@ func TestReviewStep_HiddenStepGetsNoIndex(t *testing.T) {
 	if !strings.Contains(out, "[2] proxmox") {
 		t.Error("View() dropped the jump index for a mapped step")
 	}
-	if strings.Contains(out, "] files & ignition") {
-		t.Error("View() shows a jump index for files & ignition, want none (hidden step)")
+	if strings.Contains(out, "] files") {
+		t.Error("View() shows a jump index for files, want none (hidden step)")
 	}
-	if !strings.Contains(out, "files & ignition") {
-		t.Error("View() dropped the files & ignition header entirely, want header without an index")
+	if !strings.Contains(out, "files") {
+		t.Error("View() dropped the files header entirely, want header without an index")
 	}
 }
 
 func TestReviewStep_DigitKeyEmitsJumpToStepMsg(t *testing.T) {
 	s := NewReviewStep()
-	s.SetJumpTargets([]wizard.JumpTarget{
-		{StepID: wizard.StepIDProxmox, Digit: 2},
-	})
+	s.SetJumpTargets([]wizard.JumpTarget{{StepID: wizard.StepIDProxmox, Digit: 2}})
 
 	_, cmd := s.Update(tea.KeyPressMsg{Code: '2', Text: "2"})
 	if cmd == nil {
 		t.Fatal("Update(digit 2) returned a nil cmd, want a JumpToStepMsg command")
 	}
-	msg := cmd()
-	jump, ok := msg.(wizard.JumpToStepMsg)
-	if !ok {
-		t.Fatalf("Update(digit 2) cmd produced %T, want wizard.JumpToStepMsg", msg)
+	jump, ok := cmd().(wizard.JumpToStepMsg)
+	if !ok || jump.StepID != wizard.StepIDProxmox {
+		t.Fatalf("Update(digit 2) produced %#v, want JumpToStepMsg{proxmox}", cmd())
 	}
-	if jump.StepID != wizard.StepIDProxmox {
-		t.Errorf("JumpToStepMsg.StepID = %v, want StepIDProxmox", jump.StepID)
-	}
-}
 
-func TestReviewStep_UnmappedDigitDoesNotJump(t *testing.T) {
-	s := NewReviewStep()
-	s.SetJumpTargets([]wizard.JumpTarget{
-		{StepID: wizard.StepIDProxmox, Digit: 2},
-	})
-
-	// Digit 9 has no target; the keypress must fall through, not be swallowed.
-	_, cmd := s.Update(tea.KeyPressMsg{Code: '9', Text: "9"})
-	if cmd == nil {
-		return
-	}
-	if _, ok := cmd().(wizard.JumpToStepMsg); ok {
-		t.Fatal("Update(unmapped digit) produced a JumpToStepMsg, want none")
+	if _, cmd := s.Update(tea.KeyPressMsg{Code: '9', Text: "9"}); cmd != nil {
+		if _, ok := cmd().(wizard.JumpToStepMsg); ok {
+			t.Fatal("Update(unmapped digit) produced a JumpToStepMsg, want none")
+		}
 	}
 }
 
 func TestReviewStep_ShortHelp_AdvertisesJumpOnlyWhenTargetsExist(t *testing.T) {
 	s := NewReviewStep()
-
 	for _, b := range s.ShortHelp() {
 		if b.Help == wizard.HelpJump {
 			t.Fatal("ShortHelp() advertises jump before any targets are set")
 		}
 	}
-
 	s.SetJumpTargets([]wizard.JumpTarget{{StepID: wizard.StepIDProxmox, Digit: 1}})
-
 	found := false
 	for _, b := range s.ShortHelp() {
-		if b.Help == wizard.HelpJump {
-			found = true
-		}
+		found = found || b.Help == wizard.HelpJump
 	}
 	if !found {
 		t.Error("ShortHelp() does not advertise jump once targets are set")
 	}
 }
 
-func TestReviewStep_PinnedFooterShowsActions(t *testing.T) {
+func TestReviewStep_ActionsLiveInTheFooterOnly(t *testing.T) {
 	s := NewReviewStep()
-
 	if got := s.PinnedFooter(80); got != "" {
 		t.Errorf("PinnedFooter() before SetConfig = %q, want empty", got)
 	}
-
 	s.SetConfig(reviewTestConfig())
 	footer := s.PinnedFooter(80)
 	if !strings.Contains(footer, "deploy now") || !strings.Contains(footer, "save and exit") {
 		t.Errorf("PinnedFooter() = %q, want both actions", footer)
 	}
-}
-
-func TestReviewStep_LongLabelNotClipped(t *testing.T) {
-	cfg := reviewTestConfig()
-	cfg.Disks.ControlPlaneDataSizeGB = 50
-	cfg.Topology.ControlPlane.Count = 3
-
-	s := NewReviewStep()
-	s.SetConfig(cfg)
-	out := tuitest.StripANSI(s.View(80, 100))
-
-	idx := strings.Index(out, "control plane data disk")
-	if idx == -1 {
-		t.Fatal("View() dropped the control plane data disk label entirely")
-	}
-	line := out[idx:]
-	if nl := strings.IndexByte(line, '\n'); nl != -1 {
-		line = line[:nl]
-	}
-	if !strings.Contains(line, "gb per control plane node") {
-		t.Errorf("control plane data disk value is not on the label's line, got %q", line)
-	}
-}
-
-// TestReviewChangeLabel_UnmappedFieldFallsBackToPathNotBlank pins the fix:
-// a field path with no entry in reviewChangeLabel's table must fall back to
-// the path itself, never the empty string a map miss used to produce.
-func TestReviewChangeLabel_UnmappedFieldFallsBackToPathNotBlank(t *testing.T) {
-	if got := reviewChangeLabel("some.unmapped.field"); got != "some.unmapped.field" {
-		t.Errorf("reviewChangeLabel(unmapped) = %q, want the raw path, not blank", got)
-	}
-}
-
-func TestReviewStep_BodyHasNoActionRadio(t *testing.T) {
-	s := NewReviewStep()
-	s.SetConfig(reviewTestConfig())
-
-	out := s.View(100, 100)
-	if strings.Contains(out, "deploy now") || strings.Contains(out, "save and exit") {
+	if out := s.View(100, 100); strings.Contains(out, "deploy now") || strings.Contains(out, "save and exit") {
 		t.Error("View() body still renders the action radio, want it pinned to the footer only")
+	}
+	if got := s.GetSelectedAction(); got != wizard.ActionDeploy {
+		t.Errorf("GetSelectedAction() = %q, want deploy by default", got)
 	}
 }
 
 func TestReviewActionsVisibleAfterSummaryWraps(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cfg.Provider.Proxmox.Host = "https://long-hostname.cluster.example.com:8006"
+	cfg.Provider.Proxmox.Endpoint = "https://long-hostname.cluster.example.com:8006"
 	step := NewReviewStep()
 	step.SetConfig(cfg)
 	m := wizard.NewModel([]wizard.WizardStep{step}, cfg)

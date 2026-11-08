@@ -4,21 +4,21 @@
   │ configure node placement        connect · cluster ✓●○○ · extras · review │  
   │──────────────────────────────────────────────────────────────────────────│  
   │                                                                          │  
-  │    ● infrastructure                                                      │  
-  │                                                                          │  
-  │    bridge                                                                │  
-  │    ╭────────────╮                                                        │  
-  │    │ ◂ vmbr0 ▸  │                                                        │  
-  │    ╰────────────╯                                                        │  
-  │                                                                          │  
-  │    additional networks                                                   │  
+  │    placement pool                                                        │  
   │    ╭────────────────────────────────────────────────────────────────╮    │  
-  │    │ > [ ] vmbr0    [ ] vmbr1                                       │    │  
+  │    │   [✓] pve1    [✓] pve2                                         │    │  
   │    ╰────────────────────────────────────────────────────────────────╯    │  
-  │    extra bridges to attach to all vms — leave empty for none             │  
+  │                                                                          │  
+  │    ● control plane                                                       │  
+  │                                                                          │  
+  │    lab-master0                                                           │  
+  │    ╭─────────────────────╮                                               │  
+  │    │ ◂ pve1 — 32c/128g ▸ │ default                                       │  
+  │    ╰─────────────────────╯                                               │  
+  │    proxmox node (nodes.lab-master0.host)                                 │  
   │                                                                          │  
   │                                                                          │  
-  │─────────── ↑ ↓  8% • scroll for more ──────────── ▸ okd 4.22.0-okd-scos.7│  
+  │─────────── ↑ ↓  24% • scroll for more ─────────── ▸ okd 4.22.0-okd-scos.1│  
   │  ↑↓ navigate • ← → change value … • ctrl+c quit • ? help                 │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 
