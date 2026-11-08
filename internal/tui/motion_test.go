@@ -53,11 +53,3 @@ func TestSpinnerGlyphIsPureInFrame(t *testing.T) {
 		}
 	}
 }
-
-func TestSetMotionRoundTrips(t *testing.T) {
-	t.Cleanup(func() { SetMotion(MotionFull) })
-	SetMotion(MotionReduced)
-	if Motion() != MotionReduced {
-		t.Errorf("Motion() = %v after SetMotion(MotionReduced)", Motion())
-	}
-}

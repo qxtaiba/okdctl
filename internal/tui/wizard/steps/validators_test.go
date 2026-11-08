@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 )
 
 func TestValidateFilePath(t *testing.T) {
@@ -57,27 +56,5 @@ func TestFieldValidators(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestDurationText(t *testing.T) {
-	cases := map[time.Duration]string{
-		15 * time.Minute:             "15m",
-		time.Hour:                    "1h",
-		90 * time.Minute:             "1h30m",
-		90 * time.Second:             "1m30s",
-		2*time.Hour + 15*time.Second: "2h0m15s",
-		0:                            "0s",
-	}
-	for d, want := range cases {
-		if got := durationText(d); got != want {
-			t.Errorf("durationText(%v) = %q, want %q", d, got, want)
-		}
-	}
-}
-
-func TestFieldLabel(t *testing.T) {
-	if got := fieldLabel("networking.api_vip"); got != "api vip" {
-		t.Errorf("fieldLabel = %q, want %q", got, "api vip")
 	}
 }

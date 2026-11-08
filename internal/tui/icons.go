@@ -16,8 +16,7 @@ const (
 
 // IconLevelInfo is the log gutter's quiet-stream mark; warn and error rows
 // carry their initial letter instead, so severity survives NO_COLOR in one
-// column. The AST guard cannot police this glyph — a middle dot is also the
-// house's text separator — so spell it from here by discipline.
+// column.
 const IconLevelInfo = "·"
 
 // Progress-bar glyphs: the filled cell, the empty track, and the

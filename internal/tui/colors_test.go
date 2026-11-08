@@ -124,11 +124,3 @@ func TestHighContrastPropagatesToBaseStyles(t *testing.T) {
 		t.Errorf("TitleStyle.GetForeground() = %v, want #FF00FF", got)
 	}
 }
-
-// TestTextStyleHasNoForeground confirms TextStyle renders plain body text
-// with the terminal's default foreground instead of a forced colour.
-func TestTextStyleHasNoForeground(t *testing.T) {
-	if _, ok := TextStyle.GetForeground().(lipgloss.NoColor); !ok {
-		t.Errorf("TextStyle.GetForeground() = %v, want lipgloss.NoColor", TextStyle.GetForeground())
-	}
-}

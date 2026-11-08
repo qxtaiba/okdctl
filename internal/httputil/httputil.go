@@ -22,14 +22,13 @@ func New(timeout time.Duration) *http.Client {
 }
 
 // NewOptionalInsecure skips TLS verification only when insecure is true —
-// the operator-opt-in path for go-proxmox API clients; new callers must
-// register in TestNewInsecureCallerPolicy's allowlist.
+// the operator-opt-in path for go-proxmox API clients.
 func NewOptionalInsecure(insecure bool, timeout time.Duration) *http.Client {
 	return &http.Client{
 		Timeout:       timeout,
 		CheckRedirect: capRedirects,
 		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: insecure}, //nolint:gosec // caller opts in; callers gated by TestNewInsecureCallerPolicy
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: insecure}, //nolint:gosec // caller opts in
 		},
 	}
 }

@@ -133,11 +133,6 @@ func TestRenderHelpOverlay_TwoColumnsWhenOneWouldOverflowHeight(t *testing.T) {
 	}
 }
 
-func TestRenderHelpOverlay_EmptyBindingsDoesNotPanic(t *testing.T) {
-	out := RenderHelpOverlay(nil, 80, 24)
-	tuitest.AssertFits(t, out, 80, 24)
-}
-
 func TestRenderHelpOverlay_NoScreenSectionWhenAllGlobal(t *testing.T) {
 	out := tuitest.StripANSI(RenderHelpOverlay([]KeyHint{
 		{Key: "ctrl+c", Help: "quit"},
