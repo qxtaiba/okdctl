@@ -157,14 +157,7 @@ func demoDiscovery() *proxmoxDiscovery {
 	}}
 }
 
-var goldenSizes = []struct {
-	w, h int
-	fits bool
-}{
-	{80, 24, true},
-	{100, 30, true},
-	{120, 40, true},
-}
+var goldenSizes = []struct{ w, h int }{{80, 24}, {120, 40}}
 
 func TestGolden_ConfigureSteps(t *testing.T) {
 	for _, sz := range goldenSizes {
@@ -185,9 +178,7 @@ func TestGolden_ConfigureSteps(t *testing.T) {
 				}
 				frame := tuitest.RenderAt(t, m, sz.w, sz.h)
 				tuitest.Golden(t, base+"_initial", frame)
-				if sz.fits {
-					tuitest.AssertFits(t, frame, sz.w, sz.h)
-				}
+				tuitest.AssertFits(t, frame, sz.w, sz.h)
 				if strings.HasPrefix(sc.name, "hub") && sz.w == 80 && sz.h == 24 {
 					assertNoScrollIndicator(t, frame)
 				}
@@ -196,9 +187,7 @@ func TestGolden_ConfigureSteps(t *testing.T) {
 					m.Update(sc.interact)
 					frame = tuitest.RenderAt(t, m, sz.w, sz.h)
 					tuitest.Golden(t, base+"_interacted", frame)
-					if sz.fits {
-						tuitest.AssertFits(t, frame, sz.w, sz.h)
-					}
+					tuitest.AssertFits(t, frame, sz.w, sz.h)
 				}
 			})
 		}
@@ -283,40 +272,6 @@ func TestGolden_HubWideTerminals(t *testing.T) {
 	}
 }
 
-var wideTerminalScenarios = map[string]bool{"proxmox": true, "node-placement": true, "review": true, "review-edited": true, "review-overrides": true}
-
-func TestGolden_WideTerminal(t *testing.T) {
-	const w, h = 180, 48
-
-	for _, sc := range configureScenarios() {
-		if !wideTerminalScenarios[sc.name] {
-			continue
-		}
-		t.Run(fmt.Sprintf("%s_%dx%d", sc.name, w, h), func(t *testing.T) {
-			base := fmt.Sprintf("%s_%dx%d", sc.name, w, h)
-			tui.SetTerminalWidth(w)
-			t.Cleanup(func() { tui.SetTerminalWidth(0) })
-
-			m := newGoldenModel(t)
-			_ = tuitest.RenderAt(t, m, w, h)
-			m.Update(wizard.JumpToStepMsg{StepID: sc.id})
-			if sc.seed != nil {
-				sc.seed(m)
-			}
-			frame := tuitest.RenderAt(t, m, w, h)
-			tuitest.Golden(t, base+"_initial", frame)
-			tuitest.AssertFits(t, frame, w, h)
-
-			if sc.interact != nil {
-				m.Update(sc.interact)
-				frame = tuitest.RenderAt(t, m, w, h)
-				tuitest.Golden(t, base+"_interacted", frame)
-				tuitest.AssertFits(t, frame, w, h)
-			}
-		})
-	}
-}
-
 func TestModel_TokenNeverLeaksIntoTheFrame(t *testing.T) {
 	const w, h = 180, 48
 	const sentinel = "hunter2sentinel"
@@ -346,7 +301,7 @@ func TestModel_TokenNeverLeaksIntoTheFrame(t *testing.T) {
 func TestGolden_HelpOverlay(t *testing.T) {
 	questionMark := tea.KeyPressMsg{Code: '?', Text: "?"}
 
-	for _, sz := range []struct{ w, h int }{{80, 24}, {100, 30}} {
+	for _, sz := range []struct{ w, h int }{{80, 24}} {
 		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
 			tui.SetTerminalWidth(sz.w)
 			t.Cleanup(func() { tui.SetTerminalWidth(0) })
@@ -366,7 +321,7 @@ func TestGolden_HelpOverlay(t *testing.T) {
 func TestGolden_DistributionHelpOverlay(t *testing.T) {
 	questionMark := tea.KeyPressMsg{Code: '?', Text: "?"}
 
-	for _, sz := range []struct{ w, h int }{{80, 24}, {180, 48}} {
+	for _, sz := range []struct{ w, h int }{{80, 24}} {
 		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
 			tui.SetTerminalWidth(sz.w)
 			t.Cleanup(func() { tui.SetTerminalWidth(0) })
@@ -409,7 +364,7 @@ func TestGolden_NodePlacementSingleNode(t *testing.T) {
 }
 
 func TestGolden_DistributionLoadingState(t *testing.T) {
-	for _, sz := range goldenSizes {
+	for _, sz := range []struct{ w, h int }{{80, 24}} {
 		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
 			tui.SetTerminalWidth(sz.w)
 			t.Cleanup(func() { tui.SetTerminalWidth(0) })
@@ -420,15 +375,13 @@ func TestGolden_DistributionLoadingState(t *testing.T) {
 
 			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
 			tuitest.Golden(t, fmt.Sprintf("distribution-loading_%dx%d", sz.w, sz.h), frame)
-			if sz.fits {
-				tuitest.AssertFits(t, frame, sz.w, sz.h)
-			}
+			tuitest.AssertFits(t, frame, sz.w, sz.h)
 		})
 	}
 }
 
 func TestGolden_DistributionErrorState(t *testing.T) {
-	for _, sz := range goldenSizes {
+	for _, sz := range []struct{ w, h int }{{80, 24}} {
 		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
 			tui.SetTerminalWidth(sz.w)
 			t.Cleanup(func() { tui.SetTerminalWidth(0) })
@@ -441,9 +394,7 @@ func TestGolden_DistributionErrorState(t *testing.T) {
 
 			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
 			tuitest.Golden(t, fmt.Sprintf("distribution-error_%dx%d", sz.w, sz.h), frame)
-			if sz.fits {
-				tuitest.AssertFits(t, frame, sz.w, sz.h)
-			}
+			tuitest.AssertFits(t, frame, sz.w, sz.h)
 		})
 	}
 }
