@@ -12,12 +12,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
-// Node address offsets mirror internal/model: masters at +0..2, workers at +10 onward.
-const (
-	masterCount    = 3
-	workerIPOffset = 10
-)
-
 const pairKeyVIPs = "vips"
 
 // NetworkingStepDefinition declares the machine network, VIP and node
@@ -166,22 +160,33 @@ func NewNetworkingStep(capacity *WizardCapacitySnapshot) *wizard.DataDrivenStep 
 		for _, key := range append([]string{config.FieldNetworkingMachineCIDR}, networkingAddressKeys...) {
 			values[key] = s.Value(key)
 		}
-		return renderNetworkAllocationPreview(values, capacity.cfg.Workers.Count)
+		return renderNetworkAllocationPreview(values, capacity.cfg.WorkerIndices())
 	})
 	return step
 }
 
-func renderNetworkAllocationPreview(values map[string]string, workers int) string {
+// renderNetworkAllocationPreview lays out the master block and the worker
+// indices the config produces; a pool with nodes: holes lists each address.
+func renderNetworkAllocationPreview(values map[string]string, workers []int) string {
 	warning := lipgloss.NewStyle().Foreground(tui.ColorWarning())
 	start, err := netip.ParseAddr(values[config.FieldNetworkingNodeIPStart])
 	if err != nil || !start.Is4() {
 		return warning.Render("invalid node ip start — allocation unavailable")
 	}
-	last := masterCount - 1
+	last := config.MasterCount - 1
 	rows := []string{"masters " + addressRange(start, 0, last)}
-	if workers > 0 {
-		last = workerIPOffset + workers - 1
-		rows = append(rows, "workers "+addressRange(start, workerIPOffset, last))
+	if len(workers) > 0 {
+		first, lastWorker := workers[0], workers[len(workers)-1]
+		last = config.NodeIPOffset(config.RoleWorker, lastWorker)
+		addresses := addressRange(start, config.NodeIPOffset(config.RoleWorker, first), last)
+		if lastWorker-first != len(workers)-1 {
+			each := make([]string, len(workers))
+			for i, w := range workers {
+				each[i] = addressAt(start, config.NodeIPOffset(config.RoleWorker, w)).String()
+			}
+			addresses = strings.Join(each, ", ")
+		}
+		rows = append(rows, "workers "+addresses)
 	}
 	for _, key := range []string{config.FieldNetworkingAPIVIP, config.FieldNetworkingIngressVIP} {
 		if v := values[key]; v != "" {

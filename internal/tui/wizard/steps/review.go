@@ -365,7 +365,7 @@ func roleSpec(count int, d *config.NodeDefaults) string {
 // warnings when the total exceeds the discovered online capacity.
 func (s *ReviewStep) renderCompute(st *wizard.SectionStyles, width int) string {
 	entries := []wizard.KVEntry{
-		{Label: roleLabelControlPlane, Value: roleSpec(masterCount, &s.cfg.ControlPlane)},
+		{Label: roleLabelControlPlane, Value: roleSpec(config.MasterCount, &s.cfg.ControlPlane)},
 		{Label: roleLabelWorkers, Value: roleSpec(s.cfg.Workers.Count, &s.cfg.Workers.NodeDefaults), Skip: s.cfg.Workers.Count == 0},
 		{Label: roleLabelWorkers, Value: "none — the control plane runs the workloads", Skip: s.cfg.Workers.Count != 0},
 	}

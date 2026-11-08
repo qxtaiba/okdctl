@@ -177,7 +177,7 @@ func (s *WelcomeStep) SetExistingConfig(cfg *config.Config, state SaveSlotState)
 	if cfg == nil {
 		return
 	}
-	nodes := masterCount + cfg.Workers.Count
+	nodes := config.MasterCount + cfg.Workers.Count
 	s.saveSlot = fmt.Sprintf("%s · okd %s · %s · %s",
 		cfg.Cluster.Name, cfg.Distribution.Version, pluralNodes(nodes), state)
 }
