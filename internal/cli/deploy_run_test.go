@@ -4,26 +4,19 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/credentials"
-	"github.com/qxtaiba/okdctl/internal/deploy"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/node"
-	"github.com/qxtaiba/okdctl/internal/runlock"
-	"github.com/qxtaiba/okdctl/internal/testutil"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/steps"
-	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 const (
@@ -33,37 +26,15 @@ const (
 
 func resetDeployState(t *testing.T) {
 	t.Helper()
-	savedOutputFile, savedConfirm := deployOutputFile, deployConfirmCluster
-	savedMinimal, savedYes, savedWriteConfig := deployMinimal, deployYes, deployWriteConfig
-	savedDryRun, savedFresh, savedKeep := deployDryRun, deployFresh, deployKeepRedHatCatalogs
-	savedAck := deployAcknowledgeInterrupted
+	savedOutputFile, savedMinimal, savedWriteConfig := deployOutputFile, deployMinimal, deployWriteConfig
 	t.Cleanup(func() {
-		deployOutputFile, deployConfirmCluster = savedOutputFile, savedConfirm
-		deployMinimal, deployYes, deployWriteConfig = savedMinimal, savedYes, savedWriteConfig
-		deployDryRun, deployFresh, deployKeepRedHatCatalogs = savedDryRun, savedFresh, savedKeep
-		deployAcknowledgeInterrupted = savedAck
+		deployOutputFile, deployMinimal, deployWriteConfig = savedOutputFile, savedMinimal, savedWriteConfig
 		runWizardFn = runWizardWithMode
-		deployExecuteFn = deploy.Execute
 		deployCmd.SetOut(nil)
 	})
-	deployOutputFile, deployConfirmCluster = "okdctl.yaml", ""
-	deployMinimal, deployYes, deployWriteConfig = false, false, false
-	deployDryRun, deployFresh, deployKeepRedHatCatalogs = false, false, false
-	deployAcknowledgeInterrupted = false
+	deployOutputFile, deployMinimal, deployWriteConfig = "okdctl.yaml", false, false
 	deployCmd.SetContext(context.Background())
 	deployCmd.SetOut(io.Discard)
-}
-
-// isolateProxmoxEnv blanks credential env vars so LoadEnvFile (which skips
-// existing keys) can't leak real values into the test.
-func isolateProxmoxEnv(t *testing.T) {
-	t.Helper()
-	for _, k := range []string{
-		"PROXMOX_VE_ENDPOINT", "PROXMOX_VE_USERNAME", "PROXMOX_VE_PASSWORD",
-		"PROXMOX_VE_API_TOKEN", "PROXMOX_VE_INSECURE",
-	} {
-		t.Setenv(k, "")
-	}
 }
 
 type wizardCapture struct {
@@ -89,36 +60,6 @@ func forbidWizard(t *testing.T) {
 	runWizardFn = func(*cobra.Command, *config.Config, bool) (hubOutcome, error) {
 		t.Error("wizard must not be constructed on this path")
 		return hubOutcome{Result: wizard.Result{Outcome: wizard.OutcomeCancelled}, Verb: steps.HubVerbEditConfig}, nil
-	}
-}
-
-// executeCapture snapshots credsValid at call time because the caller's
-// deferred Zeroize wipes credential bytes before assertions run.
-type executeCapture struct {
-	called     bool
-	cfg        *config.Config
-	opts       deploy.Options
-	credsValid bool
-}
-
-func stubExecute(t *testing.T) *executeCapture {
-	t.Helper()
-	rec := &executeCapture{}
-	deployExecuteFn = func(_ context.Context, cfg *config.Config, opts *deploy.Options, _ io.Writer) (*deploy.Outcome, error) {
-		rec.called = true
-		rec.cfg = cfg
-		rec.opts = *opts
-		rec.credsValid = opts.Credentials != nil && opts.Credentials.IsValid()
-		return &deploy.Outcome{}, nil
-	}
-	return rec
-}
-
-func forbidExecute(t *testing.T) {
-	t.Helper()
-	deployExecuteFn = func(context.Context, *config.Config, *deploy.Options, io.Writer) (*deploy.Outcome, error) {
-		t.Error("deployment engine must not run on this path")
-		return nil, nil
 	}
 }
 
@@ -195,7 +136,6 @@ func TestPersistWizardConfig_NoCredentialsWritesNoSidecar(t *testing.T) {
 func TestRunDeploy_WizardCancelMakesNoChanges(t *testing.T) {
 	resetDeployState(t)
 	t.Chdir(t.TempDir())
-	forbidExecute(t)
 	stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCancelled}, steps.HubVerbGetStarted, nil)
 
 	if err := runDeploy(deployCmd, nil); err != nil {
@@ -210,7 +150,6 @@ func TestRunDeploy_ExistingConfigSeedsWizard(t *testing.T) {
 	resetDeployState(t)
 	t.Chdir(t.TempDir())
 	seedDeployConfig(t)
-	forbidExecute(t)
 	rec := stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCancelled}, steps.HubVerbEditConfig, nil)
 
 	if err := runDeploy(deployCmd, nil); err != nil {
@@ -230,7 +169,6 @@ func TestRunDeploy_CorruptConfigFallsBackToDefaultsInteractively(t *testing.T) {
 	if err := os.WriteFile("okdctl.yaml", []byte("{{{ not yaml"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	forbidExecute(t)
 	rec := stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCancelled}, steps.HubVerbGetStarted, nil)
 
 	if err := runDeploy(deployCmd, nil); err != nil {
@@ -244,30 +182,9 @@ func TestRunDeploy_CorruptConfigFallsBackToDefaultsInteractively(t *testing.T) {
 	}
 }
 
-func TestRunDeploy_YesWithCorruptConfigIsConfigError(t *testing.T) {
-	resetDeployState(t)
-	t.Chdir(t.TempDir())
-	if err := os.WriteFile("okdctl.yaml", []byte("{{{ not yaml"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	forbidExecute(t)
-	forbidWizard(t)
-	deployYes = true
-
-	err := runDeploy(deployCmd, nil)
-	var ce *errtypes.ConfigError
-	if !errors.As(err, &ce) {
-		t.Fatalf("want *errtypes.ConfigError, got %T: %v", err, err)
-	}
-	if !strings.Contains(err.Error(), "non-interactive") {
-		t.Errorf("refusal should say the non-interactive mode is the reason: %v", err)
-	}
-}
-
 func TestRunDeploy_MinimalSeedsMinimalDefaults(t *testing.T) {
 	resetDeployState(t)
 	t.Chdir(t.TempDir())
-	forbidExecute(t)
 	rec := stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCancelled}, steps.HubVerbGetStarted, nil)
 	deployMinimal = true
 
@@ -285,7 +202,6 @@ func TestRunDeploy_MinimalSeedsMinimalDefaults(t *testing.T) {
 func TestRunDeploy_WizardErrorIsConfigError(t *testing.T) {
 	resetDeployState(t)
 	t.Chdir(t.TempDir())
-	forbidExecute(t)
 	stubWizard(t, wizard.Result{}, steps.HubVerbGetStarted, errors.New("tty exploded"))
 
 	err := runDeploy(deployCmd, nil)
@@ -301,7 +217,6 @@ func TestRunDeploy_WizardErrorIsConfigError(t *testing.T) {
 func TestRunDeploy_WizardSaveExitPersistsConfigAndSidecar(t *testing.T) {
 	resetDeployState(t)
 	t.Chdir(t.TempDir())
-	forbidExecute(t)
 
 	wizardCfg := config.DefaultConfig()
 	wizardCfg.Cluster.Name = "wizarded"
@@ -336,139 +251,9 @@ func TestRunDeploy_WizardSaveExitPersistsConfigAndSidecar(t *testing.T) {
 	}
 }
 
-func TestRunDeploy_WizardDeployActionExecutes(t *testing.T) {
-	resetDeployState(t)
-	isolateProxmoxEnv(t)
-	t.Chdir(t.TempDir())
-	exec := stubExecute(t)
-
-	wizardCfg := config.DefaultConfig()
-	wizardCfg.Cluster.Name = "deployme"
-	stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCompleted, Config: wizardCfg, Action: wizard.ActionDeploy}, steps.HubVerbGetStarted, nil)
-
-	if err := runDeploy(deployCmd, nil); err != nil {
-		t.Fatalf("runDeploy: %v", err)
-	}
-	if !exec.called {
-		t.Fatal("ActionDeploy must invoke the deployment engine")
-	}
-	if exec.cfg.Cluster.Name != "deployme" {
-		t.Errorf("engine received cluster %q; want the wizard config", exec.cfg.Cluster.Name)
-	}
-	if !exec.opts.ShowStartMessage {
-		t.Error("cli deploy must request the start message")
-	}
-	if exec.opts.ProjectRoot == "" || !filepath.IsAbs(exec.opts.ProjectRoot) {
-		t.Errorf("ProjectRoot must be a resolved absolute path, got %q", exec.opts.ProjectRoot)
-	}
-	if _, err := os.Stat("okdctl.yaml"); err != nil {
-		t.Errorf("config must be saved before deploying: %v", err)
-	}
-}
-
-func TestRunDeploy_HubDeployVerbSkipsSave(t *testing.T) {
-	resetDeployState(t)
-	isolateProxmoxEnv(t)
-	t.Chdir(t.TempDir())
-	seedDeployConfig(t)
-	exec := stubExecute(t)
-	stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCompleted}, steps.HubVerbDeploy, nil)
-
-	if err := runDeploy(deployCmd, nil); err != nil {
-		t.Fatalf("runDeploy: %v", err)
-	}
-	if !exec.called {
-		t.Fatal("welcome-mode deploy must invoke the deployment engine")
-	}
-	if exec.cfg.Cluster.Name != "prod" {
-		t.Errorf("engine received cluster %q; want the pre-wizard on-disk config", exec.cfg.Cluster.Name)
-	}
-	if _, err := os.Stat("okdctl.env"); !os.IsNotExist(err) {
-		t.Errorf("welcome-mode deploy must skip the save pipeline, got stat err %v", err)
-	}
-}
-
-func TestRunDeploy_HubDestroyVerbPrintsHandoffAndDestroysNothing(t *testing.T) {
-	resetDeployState(t)
-	isolateProxmoxEnv(t)
-	t.Chdir(t.TempDir())
-	seedDeployConfig(t)
-	forbidExecute(t)
-
-	before, err := os.ReadFile("okdctl.yaml")
-	if err != nil {
-		t.Fatalf("read seeded config: %v", err)
-	}
-
-	var out bytes.Buffer
-	deployCmd.SetOut(&out)
-	stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCompleted}, steps.HubVerbDestroy, nil)
-
-	if err := runDeploy(deployCmd, nil); err != nil {
-		t.Fatalf("runDeploy: %v", err)
-	}
-
-	if !strings.Contains(out.String(), destroyHandoff) {
-		t.Errorf("destroy verb must print the handoff line %q:\n%s", destroyHandoff, out.String())
-	}
-	after, err := os.ReadFile("okdctl.yaml")
-	if err != nil {
-		t.Fatalf("read config after: %v", err)
-	}
-	if !bytes.Equal(before, after) {
-		t.Error("the destroy verb must not run the save pipeline over the on-disk config")
-	}
-	if _, err := os.Stat("okdctl.env"); !os.IsNotExist(err) {
-		t.Errorf("the destroy verb must not write a credential sidecar, got stat err %v", err)
-	}
-	if _, err := os.Stat(workspace.WorkDirName); err == nil {
-		t.Error("the destroy verb must not touch the work directory")
-	}
-}
-
-func TestRunDeploy_HubClusterStatusVerbPrintsHandoffAndChangesNothing(t *testing.T) {
-	resetDeployState(t)
-	isolateProxmoxEnv(t)
-	t.Chdir(t.TempDir())
-	seedDeployConfig(t)
-	forbidExecute(t)
-
-	before, err := os.ReadFile("okdctl.yaml")
-	if err != nil {
-		t.Fatalf("read seeded config: %v", err)
-	}
-
-	var out bytes.Buffer
-	deployCmd.SetOut(&out)
-	stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCompleted}, steps.HubVerbClusterStatus, nil)
-
-	if err := runDeploy(deployCmd, nil); err != nil {
-		t.Fatalf("runDeploy: %v", err)
-	}
-
-	if !strings.Contains(out.String(), "run: okdctl status") {
-		t.Errorf("cluster status verb must print the handoff line %q:\n%s", "run: okdctl status", out.String())
-	}
-	after, err := os.ReadFile("okdctl.yaml")
-	if err != nil {
-		t.Fatalf("read config after: %v", err)
-	}
-	if !bytes.Equal(before, after) {
-		t.Error("the cluster status verb must not run the save pipeline over the on-disk config")
-	}
-	if _, err := os.Stat("okdctl.env"); !os.IsNotExist(err) {
-		t.Errorf("the cluster status verb must not write a credential sidecar, got stat err %v", err)
-	}
-	if _, err := os.Stat(workspace.WorkDirName); err == nil {
-		t.Error("the cluster status verb must not touch the work directory")
-	}
-}
-
 func TestRunDeploy_HubQuitVerbChangesNothing(t *testing.T) {
 	resetDeployState(t)
-	isolateProxmoxEnv(t)
 	t.Chdir(t.TempDir())
-	forbidExecute(t)
 	stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCompleted}, steps.HubVerbQuit, nil)
 
 	if err := runDeploy(deployCmd, nil); err != nil {
@@ -479,221 +264,45 @@ func TestRunDeploy_HubQuitVerbChangesNothing(t *testing.T) {
 	}
 }
 
-func TestRunDeploy_DryRunShortCircuitsBeforeWizard(t *testing.T) {
+func TestDeploy_SaveAndExitPrintsLaterRelease(t *testing.T) {
 	resetDeployState(t)
-	isolateProxmoxEnv(t)
 	t.Chdir(t.TempDir())
-	// Item 6 of the second-cut safety findings: dry-run now requires an
-	// existing config rather than silently planning compiled-in defaults
-	// against whatever terraform workspace sits in cwd.
-	seedDeployConfig(t)
-	forbidWizard(t)
-	forbidExecute(t)
-	testutil.InstallFakeBin(t, "terraform", "#!/bin/sh\nexit 0\n")
-	deployDryRun = true
-
 	var out bytes.Buffer
 	deployCmd.SetOut(&out)
+	stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCompleted, Config: config.DefaultConfig(), Action: wizard.ActionDeploy}, steps.HubVerbGetStarted, nil)
 
 	if err := runDeploy(deployCmd, nil); err != nil {
-		t.Fatalf("dry-run must succeed with a clean plan: %v", err)
+		t.Fatalf("runDeploy: %v", err)
 	}
-	if !strings.Contains(out.String(), "dry-run — no changes made") {
-		t.Errorf("dry-run summary missing from output:\n%s", out.String())
+	if want := "installation returns in a later release; the config was saved to okdctl.yaml\n"; !strings.Contains(out.String(), want) {
+		t.Errorf("stdout = %q, want it to contain %q", out.String(), want)
 	}
-	if !strings.Contains(out.String(), "DEPLOY STEP LISTING") {
-		t.Errorf("step listing missing from output:\n%s", out.String())
-	}
-}
-
-// TestRunDeployDryRun_SurfacesLockConflictNotGenericWrap pins the fix: a
-// concurrent-lock conflict from runlock.Acquire must reach the user as its
-// own specific message, not get buried behind runDeployDryRun's generic
-// "dry-run: plan preview failed" wrap (which errors.As/Describe can't see
-// past, since they only look at the outermost *errtypes.ConfigError).
-//
-// Calls runDeployDryRun directly rather than through runDeploy: runDeploy
-// itself takes an unrelated project lock first (for MaterializeTerraform),
-// which would conflict with a pre-held lock before ever reaching the code
-// under test.
-func TestRunDeployDryRun_SurfacesLockConflictNotGenericWrap(t *testing.T) {
-	resetDeployState(t)
-	isolateProxmoxEnv(t)
-	t.Chdir(t.TempDir())
-	testutil.InstallFakeBin(t, "terraform", "#!/bin/sh\nexit 0\n")
-
-	root, err := resolveWorkspaceRoot()
-	if err != nil {
-		t.Fatalf("resolveWorkspaceRoot: %v", err)
-	}
-	lock, err := runlock.Acquire(root, "some-other-command")
-	if err != nil {
-		t.Fatalf("pre-acquire lock: %v", err)
-	}
-	defer lock.Release()
-
-	var out bytes.Buffer
-	runErr := runDeployDryRun(context.Background(), config.DefaultConfig(), &out)
-	var cfgErr *errtypes.ConfigError
-	if !errors.As(runErr, &cfgErr) {
-		t.Fatalf("want *errtypes.ConfigError, got %T: %v", runErr, runErr)
-	}
-	if !strings.Contains(cfgErr.Msg, "another okdctl process holds the project lock") {
-		t.Fatalf("dry-run must surface the lock-conflict message unwrapped, got Msg=%q", cfgErr.Msg)
+	if _, err := os.Stat("okdctl.yaml"); err != nil {
+		t.Errorf("the config must be saved before the handoff line: %v", err)
 	}
 }
 
-func TestRunDeploy_HeadlessGuard(t *testing.T) {
-	t.Run("--yes without --confirm-cluster names the required flag", func(t *testing.T) {
-		resetDeployState(t)
-		t.Chdir(t.TempDir())
-		seedDeployConfig(t)
-		forbidWizard(t)
-		forbidExecute(t)
-		deployYes = true
+func TestRunDeploy_HubVerbsPrintHandoffsAndChangeNothing(t *testing.T) {
+	for verb, want := range map[steps.HubVerb]string{
+		steps.HubVerbDeploy:        "installation returns in a later release",
+		steps.HubVerbDestroy:       "run: okdctl destroy",
+		steps.HubVerbClusterStatus: "run: okdctl status",
+		steps.HubVerbManageNodes:   "node management returns in a later release",
+	} {
+		t.Run(want, func(t *testing.T) {
+			resetDeployState(t)
+			t.Chdir(t.TempDir())
+			seedDeployConfig(t)
+			var out bytes.Buffer
+			deployCmd.SetOut(&out)
+			stubWizard(t, wizard.Result{Outcome: wizard.OutcomeCompleted}, verb, nil)
 
-		err := runDeploy(deployCmd, nil)
-		var ue *errtypes.UsageError
-		if !errors.As(err, &ue) {
-			t.Fatalf("want *errtypes.UsageError, got %T: %v", err, err)
-		}
-		if !strings.Contains(err.Error(), "--confirm-cluster") {
-			t.Errorf("refusal must point at --confirm-cluster: %v", err)
-		}
-	})
-
-	t.Run("--yes with mismatched --confirm-cluster refuses", func(t *testing.T) {
-		resetDeployState(t)
-		t.Chdir(t.TempDir())
-		seedDeployConfig(t)
-		forbidWizard(t)
-		forbidExecute(t)
-		deployYes = true
-		deployConfirmCluster = "staging"
-
-		err := runDeploy(deployCmd, nil)
-		var ue *errtypes.UsageError
-		if !errors.As(err, &ue) {
-			t.Fatalf("want *errtypes.UsageError, got %T: %v", err, err)
-		}
-		if !strings.Contains(err.Error(), "does not match") {
-			t.Errorf("refusal must state the mismatch: %v", err)
-		}
-	})
-
-	t.Run("--yes --confirm-cluster deploys headless with env credentials", func(t *testing.T) {
-		resetDeployState(t)
-		isolateProxmoxEnv(t)
-		t.Setenv("PROXMOX_VE_API_TOKEN", fixtureAPIToken)
-		t.Chdir(t.TempDir())
-		seedDeployConfig(t)
-		forbidWizard(t)
-		exec := stubExecute(t)
-		deployYes = true
-		deployConfirmCluster = "prod"
-
-		if err := runDeploy(deployCmd, nil); err != nil {
-			t.Fatalf("headless deploy: %v", err)
-		}
-		if !exec.called {
-			t.Fatal("headless deploy must invoke the deployment engine")
-		}
-		if exec.cfg.Cluster.Name != "prod" {
-			t.Errorf("engine received cluster %q; want the on-disk config", exec.cfg.Cluster.Name)
-		}
-		if !exec.credsValid {
-			t.Error("engine must receive the resolved env credentials")
-		}
-		if !exec.opts.ShowStartMessage {
-			t.Error("headless deploy must keep the start message")
-		}
-	})
-}
-
-// writeNodeOpMarker writes a raw v1-schema marker, mirroring the node package's own fixtures.
-func writeNodeOpMarker(t *testing.T, root, clusterName, op, target, step string) {
-	t.Helper()
-	workDir := filepath.Join(root, "okd-install")
-	if err := os.MkdirAll(workDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	payload := fmt.Sprintf(
-		`{"schema_version":"v1","run_id":"r1","timestamp":%q,"cluster_name":%q,"op":%q,"target":%q,"step":%q}`,
-		time.Now().UTC().Format(time.RFC3339), clusterName, op, target, step)
-	if err := os.WriteFile(filepath.Join(workDir, node.OpMarkerFileName), []byte(payload), 0o600); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestRunDeploy_InFlightNodeOpGuard(t *testing.T) {
-	headless := func(t *testing.T) string {
-		t.Helper()
-		resetDeployState(t)
-		isolateProxmoxEnv(t)
-		root := t.TempDir()
-		t.Chdir(root)
-		seedDeployConfig(t)
-		forbidWizard(t)
-		deployYes = true
-		deployConfirmCluster = "prod"
-		return root
-	}
-
-	t.Run("in-flight op refuses and names op, target, and flag", func(t *testing.T) {
-		root := headless(t)
-		forbidExecute(t)
-		writeNodeOpMarker(t, root, "prod", "add", "worker9", "wait-join")
-
-		err := runDeploy(deployCmd, nil)
-		var ce *errtypes.ConfigError
-		if !errors.As(err, &ce) {
-			t.Fatalf("want *errtypes.ConfigError, got %T: %v", err, err)
-		}
-		for _, want := range []string{"node add", `"worker9"`, "--acknowledge-interrupted-op"} {
-			if !strings.Contains(err.Error(), want) {
-				t.Errorf("refusal %q must contain %q", err.Error(), want)
+			if err := runDeploy(deployCmd, nil); err != nil {
+				t.Fatalf("runDeploy: %v", err)
 			}
-		}
-	})
-
-	t.Run("--acknowledge-interrupted-op overrides the guard", func(t *testing.T) {
-		root := headless(t)
-		exec := stubExecute(t)
-		writeNodeOpMarker(t, root, "prod", "add", "worker9", "wait-join")
-		deployAcknowledgeInterrupted = true
-
-		if err := runDeploy(deployCmd, nil); err != nil {
-			t.Fatalf("acknowledged deploy must proceed: %v", err)
-		}
-		if !exec.called {
-			t.Fatal("acknowledged deploy must invoke the deployment engine")
-		}
-	})
-
-	t.Run("marker from a different cluster does not trigger the guard", func(t *testing.T) {
-		root := headless(t)
-		exec := stubExecute(t)
-		writeNodeOpMarker(t, root, "some-other-cluster", "add", "worker9", "wait-join")
-
-		if err := runDeploy(deployCmd, nil); err != nil {
-			t.Fatalf("foreign-cluster marker must be treated as absent: %v", err)
-		}
-		if !exec.called {
-			t.Fatal("deploy must proceed when the marker belongs to a different cluster")
-		}
-	})
-
-	t.Run("completed add-batch residue does not trigger the guard", func(t *testing.T) {
-		root := headless(t)
-		exec := stubExecute(t)
-		// worker0 sits below the persisted worker count (3); its batch already completed.
-		writeNodeOpMarker(t, root, "prod", "add", "worker0", "wait-join")
-
-		if err := runDeploy(deployCmd, nil); err != nil {
-			t.Fatalf("completed-batch residue must not refuse the deploy: %v", err)
-		}
-		if !exec.called {
-			t.Fatal("deploy must proceed past completed-batch residue")
-		}
-	})
+			if !strings.Contains(out.String(), want) {
+				t.Errorf("stdout = %q, want %q", out.String(), want)
+			}
+		})
+	}
 }

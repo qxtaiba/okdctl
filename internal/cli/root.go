@@ -54,15 +54,7 @@ func mutatesState(cmd *cobra.Command) bool {
 	if wantsDefaultLogSink(cmd) {
 		return true
 	}
-	if cmd.Flags().Lookup("yes") != nil {
-		return true
-	}
-	for c := cmd; c != nil; c = c.Parent() {
-		if c.Annotations[annotationKeyRequiresRoot] == annotationValueTrue {
-			return true
-		}
-	}
-	return false
+	return cmd.Flags().Lookup("yes") != nil
 }
 
 // logBookend logs msg at Info when mutates else Debug, keeping the
@@ -93,9 +85,8 @@ It's for the homelab operator with one or two Proxmox nodes who wants a
 real Kubernetes cluster without hand-rolling Terraform, Ignition, and
 bootstrap glue.`,
 	Example: `  okdctl deploy
-  okdctl status
-  okdctl node manage
-  okdctl destroy`,
+  okdctl config validate
+  okdctl releases list`,
 	Version:       version.Version,
 	SilenceUsage:  true,
 	SilenceErrors: true,
@@ -112,7 +103,7 @@ bootstrap glue.`,
 			fn()
 		}
 		preflightWarns = nil
-		return ensureRoot(cmd)
+		return nil
 	},
 }
 
@@ -315,10 +306,9 @@ func shouldRenderErrorBox(stderrTTY, stdoutTTY bool, format string, err error) b
 	return stderrTTY && stdoutTTY && format != tui.FormatJSON && !render.IsPresented(err)
 }
 
-// shouldAnnounceFailure reports whether to print "command failed", excluding
-// errDoctorWarn/errPlanDrift since each already summarizes itself.
-func shouldAnnounceFailure(err error) bool {
-	return !errors.Is(err, errDoctorWarn) && !errors.Is(err, errPlanDrift)
+// shouldAnnounceFailure reports whether to print "command failed".
+func shouldAnnounceFailure(error) bool {
+	return true
 }
 
 // signalExitCode reports the exit code for a caught signal (130 SIGINT, 143
@@ -353,15 +343,6 @@ func exitCodeFor(err error) int {
 	}
 	if errors.Is(err, errtypes.ErrSudoMissing) {
 		return 71
-	}
-	// errDoctorWarn/errPlanDrift are cli-local sentinels with their own codes,
-	// not folded into ConfigError(2), so they stay distinguishable from real
-	// failures
-	if errors.Is(err, errDoctorWarn) {
-		return 6
-	}
-	if errors.Is(err, errPlanDrift) {
-		return 7
 	}
 	var cfgErr *errtypes.ConfigError
 	if errors.As(err, &cfgErr) {
@@ -448,8 +429,6 @@ func init() {
 	})
 
 	rootCmd.AddCommand(deployCmd)
-	rootCmd.AddCommand(destroyCmd)
-	rootCmd.AddCommand(updateIngressCmd)
 	rootCmd.AddCommand(versionCmd)
 
 	installHelp(rootCmd)

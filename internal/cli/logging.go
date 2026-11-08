@@ -31,7 +31,7 @@ var runLogSink io.Writer
 
 // defaultLogSinkCmds lists commands that tee logs to <workspace>/okdctl.log by
 // default; matching walks the parent chain.
-var defaultLogSinkCmds = []string{cmdNameDeploy, cmdNameDestroy, cmdNameCleanup, cmdNameManage}
+var defaultLogSinkCmds = []string{cmdNameDeploy}
 
 func wantsDefaultLogSink(cmd *cobra.Command) bool {
 	for c := cmd; c != nil; c = c.Parent() {
@@ -165,4 +165,13 @@ func effectiveLogLevel() string {
 	default:
 		return logLevel
 	}
+}
+
+// subprocSink routes subprocess streams to the okdctl.log sink while the wizard
+// owns the terminal, or discards when no sink is open.
+func subprocSink() io.Writer {
+	if runLogSink == nil {
+		return io.Discard
+	}
+	return runLogSink
 }

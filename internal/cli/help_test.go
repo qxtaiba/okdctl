@@ -20,14 +20,14 @@ func TestHelpFitsEightyColumnsAndIsPlain(t *testing.T) {
 
 	var out bytes.Buffer
 	rootCmd.SetOut(&out)
-	rootCmd.SetArgs([]string{"node", "resize", "--help"})
+	rootCmd.SetArgs([]string{"config", "validate", "--help"})
 	t.Cleanup(func() {
 		rootCmd.SetOut(nil)
 		rootCmd.SetArgs(nil)
 	})
 
 	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("rootCmd.Execute(node resize --help) = %v", err)
+		t.Fatalf("rootCmd.Execute(config validate --help) = %v", err)
 	}
 	got := out.String()
 
@@ -45,8 +45,8 @@ func TestHelpFitsEightyColumnsAndIsPlain(t *testing.T) {
 	}
 
 	lines := strings.Split(got, "\n")
-	if len(lines) == 0 || !strings.HasPrefix(lines[0], "okdctl › node resize") {
-		t.Fatalf("first line = %q, want prefix %q", lines[0], "okdctl › node resize")
+	if len(lines) == 0 || !strings.HasPrefix(lines[0], "okdctl › config validate") {
+		t.Fatalf("first line = %q, want prefix %q", lines[0], "okdctl › config validate")
 	}
 	for i, line := range lines {
 		if w := utf8.RuneCountInString(line); w > 80 {
@@ -76,9 +76,9 @@ func TestHelpRespectsNoColor(t *testing.T) {
 
 	var baseline bytes.Buffer
 	rootCmd.SetOut(&baseline)
-	rootCmd.SetArgs([]string{"node", "resize", "--help"})
+	rootCmd.SetArgs([]string{"config", "validate", "--help"})
 	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("rootCmd.Execute(node resize --help) = %v", err)
+		t.Fatalf("rootCmd.Execute(config validate --help) = %v", err)
 	}
 	if !strings.Contains(baseline.String(), "\x1b[") {
 		t.Fatalf("test setup failed to force colourful help output: %q", baseline.String())
@@ -86,7 +86,7 @@ func TestHelpRespectsNoColor(t *testing.T) {
 
 	var out bytes.Buffer
 	rootCmd.SetOut(&out)
-	rootCmd.SetArgs([]string{"--no-color", "node", "resize", "--help"})
+	rootCmd.SetArgs([]string{"--no-color", "config", "validate", "--help"})
 	t.Cleanup(func() {
 		rootCmd.SetOut(nil)
 		rootCmd.SetArgs(nil)
@@ -94,10 +94,10 @@ func TestHelpRespectsNoColor(t *testing.T) {
 	})
 
 	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("rootCmd.Execute(--no-color node resize --help) = %v", err)
+		t.Fatalf("rootCmd.Execute(--no-color config validate --help) = %v", err)
 	}
 	if strings.Contains(out.String(), "\x1b[") {
-		t.Errorf("node resize --help leaked ANSI under --no-color: %q", out.String())
+		t.Errorf("config validate --help leaked ANSI under --no-color: %q", out.String())
 	}
 }
 

@@ -1,12 +1,10 @@
 package system
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
-	"os/exec"
 	"os/user"
 	"path/filepath"
 	"strconv"
@@ -183,23 +181,4 @@ func ChownTreeToInvokingUser(root string) error {
 		errs = append(errs, walkErr)
 	}
 	return errors.Join(errs...)
-}
-
-// HasPasswordlessSudo returns nil if `sudo -n true` succeeds, used as an
-// advisory pre-flight before a sudo prompt might appear.
-func HasPasswordlessSudo(ctx context.Context) error {
-	cmd := exec.CommandContext(ctx, "sudo", "-n", "true")
-	// Minimal PATH-only env: the allowlisted parent env deliberately keeps
-	// secret-keyed entries for okdctl's own re-exec, and this child has no use for them.
-	cmd.Env = []string{"PATH=" + os.Getenv("PATH")}
-	cmd.Stdin = nil
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-	err := cmd.Run()
-	// Mirrors executor.NewExitError: surfaces ctx.Err() on a ctx-killed sudo so
-	// errors.Is(context.Canceled/DeadlineExceeded) sees cancellation, not an opaque exec.ExitError.
-	if ctxErr := ctx.Err(); err != nil && ctxErr != nil {
-		return ctxErr
-	}
-	return err
 }
