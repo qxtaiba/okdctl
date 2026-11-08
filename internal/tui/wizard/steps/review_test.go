@@ -5,10 +5,8 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
@@ -20,7 +18,6 @@ func reviewTestConfig() *config.Config {
 		ControlPlaneNodes: []string{"pve1", "pve2", "pve3"},
 		WorkerNodes:       []string{"pve1", "pve2"},
 	}
-	cfg.Addons = map[string]config.AddonConfig{"flux": {Enabled: true}}
 	cfg.Deployment.AutoApprove = true
 	return cfg
 }
@@ -43,35 +40,6 @@ func TestReviewStep_AdvancedShowsAllAppliedSettings(t *testing.T) {
 	for _, want := range []string{"x86-64-v2", "numa", "ha anti-affinity", "pool.ntp.org", "/opt/okd/bin"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("View() missing applied advanced setting %q", want)
-		}
-	}
-}
-
-// TestReviewStep_AddonRowsSortedWithoutSelfDuplication pins bug 9: addon
-// rows render in deterministic sorted order, and an addon without detail
-// settings never renders its own name as its value.
-func TestReviewStep_AddonRowsSortedWithoutSelfDuplication(t *testing.T) {
-	cfg := reviewTestConfig()
-	cfg.Addons = map[string]config.AddonConfig{
-		"secretstore": {Enabled: true, Settings: map[string]string{"type": "vault"}},
-		"flux":        {Enabled: true},
-	}
-	s := NewReviewStep()
-	s.SetConfig(cfg)
-
-	out := tuitest.StripANSI(s.View(100, 100))
-
-	fluxAt := strings.Index(out, "flux")
-	storeAt := strings.Index(out, "secretstore")
-	if fluxAt < 0 || storeAt < 0 {
-		t.Fatalf("View() missing addon rows:\n%s", out)
-	}
-	if fluxAt > storeAt {
-		t.Fatalf("addon rows not sorted: flux at %d after secretstore at %d", fluxAt, storeAt)
-	}
-	for _, line := range strings.Split(out, "\n") {
-		if strings.HasPrefix(strings.TrimSpace(line), "flux ") && strings.Count(line, "flux") > 1 {
-			t.Fatalf("flux row duplicates its own name: %q", line)
 		}
 	}
 }
@@ -130,7 +98,6 @@ func TestReviewStep_ShowsNewProviderValues(t *testing.T) {
 	t.Cleanup(cfg.Provider.Proxmox.Password.Zeroize)
 	cfg.Provider.Proxmox.APIToken.Set("api-secret")
 	t.Cleanup(cfg.Provider.Proxmox.APIToken.Zeroize)
-	cfg.Addons["secretstore"] = config.AddonConfig{Enabled: true, Settings: map[string]string{"token": "addon-secret"}}
 	s := NewReviewStep()
 	s.SetConfig(cfg)
 	s.SetSavedConfig(saved)
@@ -143,7 +110,7 @@ func TestReviewStep_ShowsNewProviderValues(t *testing.T) {
 			t.Errorf("View() omitted newly configured value %q:\n%s", want, out)
 		}
 	}
-	for _, secret := range []string{"new-secret", "api-secret", "addon-secret"} {
+	for _, secret := range []string{"new-secret", "api-secret"} {
 		if strings.Contains(out, secret) {
 			t.Errorf("View() exposed a credential %q:\n%s", secret, out)
 		}
@@ -231,90 +198,6 @@ func TestReviewStep_PreflightSanitizesHostileCapacityNodeText(t *testing.T) {
 	}
 }
 
-func TestReviewStep_PreviewShowsRedactedInstallConfigAndEscReturns(t *testing.T) {
-	cfg := reviewTestConfig()
-	cfg.Cluster.Name = "qa-cluster"
-	cfg.Cluster.Domain = "example.test"
-	cfg.Provider.Proxmox.Password.Set("never-render-this-password")
-	t.Cleanup(cfg.Provider.Proxmox.Password.Zeroize)
-	cfg.Provider.Proxmox.APIToken.Set("never-render-this-token")
-	t.Cleanup(cfg.Provider.Proxmox.APIToken.Zeroize)
-	s := NewReviewStep()
-	s.SetConfig(cfg)
-
-	_, _ = s.Update(tea.KeyPressMsg{Code: 'p', Text: "p"})
-	if !s.showPreview {
-		t.Fatal("p did not open the install-config preview")
-	}
-	frame := s.View(100, 100)
-	tuitest.AssertFits(t, frame, 100, 100)
-	out := tuitest.StripANSI(frame)
-	for _, want := range []string{"INSTALL-CONFIG PREVIEW", "qa-cluster", "[redacted]"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("preview omitted %q:\n%s", want, out)
-		}
-	}
-	for _, secret := range []string{"never-render-this-password", "never-render-this-token"} {
-		if strings.Contains(out, secret) {
-			t.Errorf("preview exposed secret %q", secret)
-		}
-	}
-	if !s.InterceptBack() || s.showPreview {
-		t.Fatal("esc did not close the preview without leaving the review step")
-	}
-}
-
-func TestReviewStep_PreviewShowsClusterArchitecture(t *testing.T) {
-	s := NewReviewStep()
-	s.SetConfig(reviewTestConfig())
-	_, _ = s.Update(tea.KeyPressMsg{Code: 'p', Text: "p"})
-
-	out := tuitest.StripANSI(s.View(100, 100))
-	if got := strings.Count(out, "architecture: amd64\n"); got != 2 {
-		t.Errorf("preview sets amd64 on %d of its 2 machine pools:\n%s", got, out)
-	}
-}
-
-func previewKeyColumn(t *testing.T, frame, key string) int {
-	t.Helper()
-	for _, line := range strings.Split(frame, "\n") {
-		if before, _, ok := strings.Cut(line, key); ok {
-			return lipgloss.Width(before)
-		}
-	}
-	t.Fatalf("preview frame has no %q:\n%s", key, frame)
-	return 0
-}
-
-func TestReviewStep_PreviewKeepsYAMLIndentation(t *testing.T) {
-	tui.SetTerminalWidth(120)
-	t.Cleanup(func() { tui.SetTerminalWidth(0) })
-	m := newGoldenModel(t)
-	_ = tuitest.RenderAt(t, m, 120, 40)
-	m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDReview})
-	m.CurrentStep().(*ReviewStep).SetConfig(m.Config())
-	m.Update(tea.KeyPressMsg{Code: 'p', Text: "p"})
-	frame := tuitest.StripANSI(tuitest.RenderAt(t, m, 120, 40))
-
-	for _, tc := range []struct {
-		parent, child string
-		indent        int
-	}{
-		{"compute:", "hyperthreading:", 2},
-		{"controlPlane:", "replicas: 3", 2},
-		{"networking:", "clusterNetwork:", 2},
-		{"clusterNetwork:", "hostPrefix:", 2},
-	} {
-		got := previewKeyColumn(t, frame, tc.child) - previewKeyColumn(t, frame, tc.parent)
-		if got != tc.indent {
-			t.Errorf("%q sits %d columns right of %q, want %d", tc.child, got, tc.parent, tc.indent)
-		}
-	}
-	if t.Failed() {
-		t.Logf("frame:\n%s", frame)
-	}
-}
-
 func TestReviewPlanIncludesHeadlessCommandAndConfigPath(t *testing.T) {
 	s := NewReviewStep()
 	s.SetConfig(reviewTestConfig())
@@ -336,28 +219,6 @@ func TestReviewPlanIncludesHeadlessCommandAndConfigPath(t *testing.T) {
 				t.Errorf("review at width %d omitted %q:\n%s", width, want, frame)
 			}
 		}
-	}
-}
-
-func TestReviewShowsAddonPreflightAndLoadedDiff(t *testing.T) {
-	t.Setenv("PATH", t.TempDir())
-	cfg := reviewTestConfig()
-	cfg.Cluster.Domain = "k8s.local"
-	cfg.Addons["secretstore"] = config.AddonConfig{Enabled: true}
-	s := NewReviewStep()
-	s.SetConfig(cfg)
-	s.SetSavedConfig(cfg)
-	cfg.Cluster.Domain = "prod.example"
-	s.SetConfig(cfg)
-
-	out := tuitest.StripANSI(s.View(70, 100))
-	for _, want := range []string{"flux deploy key", "~/.ssh/flux-deploy-key", "sops", "not found", "CONFIG CHANGES · 1", "k8s.local → prod.example"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("review omitted %q:\n%s", want, out)
-		}
-	}
-	if strings.Contains(out, "api-secret") || strings.Contains(out, "never-render") {
-		t.Fatalf("review exposed a credential:\n%s", out)
 	}
 }
 
@@ -456,26 +317,6 @@ func reviewFullJumpTargets() []wizard.JumpTarget {
 		targets[i] = wizard.JumpTarget{StepID: id, Digit: i + 1}
 	}
 	return targets
-}
-
-func TestReviewStep_LegendDigitsContiguousWhenAddonsHidden(t *testing.T) {
-	cfg := reviewTestConfig()
-	cfg.Addons = map[string]config.AddonConfig{"flux": {Enabled: false}}
-
-	s := NewReviewStep()
-	s.SetConfig(cfg)
-	s.SetJumpTargets(reviewFullJumpTargets())
-
-	out := s.View(100, 100)
-	if !strings.Contains(out, "[7] advanced") {
-		t.Error("View() did not renumber advanced to [7] once the hidden addons section closed the gap")
-	}
-	if strings.Contains(out, "[8]") {
-		t.Error("View() still shows digit 8, want the legend compacted to 1-7")
-	}
-	if strings.Contains(out, "] addons") {
-		t.Error("View() shows a jump index for addons, want the section (and its digit) absent entirely")
-	}
 }
 
 func TestReviewStep_PinnedFooterShowsActions(t *testing.T) {

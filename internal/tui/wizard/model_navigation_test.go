@@ -283,7 +283,7 @@ func TestModel_DigitKeyOutsideReviewUnaffected(t *testing.T) {
 	}
 }
 
-// scrollTestDefinition mirrors the addons step's shape: several sections of
+// scrollTestDefinition mirrors a long data-driven step's shape: several sections of
 // text and select fields, with help text long enough to wrap at 80 columns.
 func scrollTestDefinition() *StepDefinition {
 	sections := make([]SectionDefinition, 0, 4)
@@ -309,7 +309,7 @@ func scrollTestDefinition() *StepDefinition {
 		})
 	}
 	return &StepDefinition{
-		ID:       StepIDAddons,
+		ID:       StepID("scroll-test"),
 		Title:    "scroll fixture",
 		Sections: sections,
 	}

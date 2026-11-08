@@ -171,7 +171,7 @@ func TestCtrlCOffTheConfigureFlowQuitsImmediately(t *testing.T) {
 func TestCtrlCAsksOnEveryConfigureStep(t *testing.T) {
 	for _, id := range []StepID{
 		StepIDDistribution, StepIDProxmox, StepIDBasics, StepIDNodePlacement, StepIDNetworking,
-		StepIDResources, StepIDAddons, StepIDFiles, StepIDAdvanced, StepIDReview,
+		StepIDResources, StepIDFiles, StepIDAdvanced, StepIDReview,
 	} {
 		t.Run(string(id), func(t *testing.T) {
 			m, _ := configureModel(t, id)

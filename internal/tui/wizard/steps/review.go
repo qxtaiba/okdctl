@@ -11,11 +11,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/qxtaiba/okdctl/internal/addon/catalog/flux"
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/distribution/okd/templates"
 	"github.com/qxtaiba/okdctl/internal/netutil"
-	"github.com/qxtaiba/okdctl/internal/platform"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
@@ -30,7 +27,6 @@ var reviewJumpOrder = []wizard.StepID{
 	wizard.StepIDNetworking,
 	wizard.StepIDResources,
 	wizard.StepIDFiles,
-	wizard.StepIDAddons,
 	wizard.StepIDAdvanced,
 }
 
@@ -41,7 +37,6 @@ type ReviewStep struct {
 	saved       map[string]string
 	preflight   []reviewCheck
 	configPath  string
-	showPreview bool
 	capacity    *WizardCapacitySnapshot
 	actions     *components.CompactSelector
 	jumpTargets []wizard.JumpTarget
@@ -108,10 +103,6 @@ func (s *ReviewStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 			return s, func() tea.Msg { return wizard.JumpToStepMsg{StepID: id} }
 		}
 	}
-	if key.Matches(keyMsg, key.NewBinding(key.WithKeys("p"))) {
-		s.showPreview = !s.showPreview
-		return s, nil
-	}
 
 	if keyMsg.Code == tea.KeyEnter {
 		return s, func() tea.Msg { return wizard.StepCompleteMsg{StepID: wizard.StepIDReview} }
@@ -120,15 +111,6 @@ func (s *ReviewStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	var cmd tea.Cmd
 	s.actions, cmd = s.actions.Update(components.ArrowsAsVertical(keyMsg))
 	return s, cmd
-}
-
-// InterceptBack closes the install-config preview before navigating away.
-func (s *ReviewStep) InterceptBack() bool {
-	if !s.showPreview {
-		return false
-	}
-	s.showPreview = false
-	return true
 }
 
 // JumpOrder returns the steps a digit keypress may route to; see reviewJumpOrder.
@@ -182,8 +164,6 @@ func (s *ReviewStep) sectionVisible(stepID wizard.StepID) bool {
 	case wizard.StepIDNodePlacement:
 		p := s.cfg.Provider.Proxmox
 		return p != nil && (len(p.ControlPlaneNodes) > 0 || len(p.WorkerNodes) > 0)
-	case wizard.StepIDAddons:
-		return s.anyAddonEnabled()
 	case wizard.StepIDAdvanced:
 		dep := s.cfg.Deployment
 		proxmoxTuned := false
@@ -199,16 +179,6 @@ func (s *ReviewStep) sectionVisible(stepID wizard.StepID) bool {
 	}
 }
 
-// anyAddonEnabled reports whether any configured addon is enabled.
-func (s *ReviewStep) anyAddonEnabled() bool {
-	for _, ac := range s.cfg.Addons {
-		if ac.Enabled {
-			return true
-		}
-	}
-	return false
-}
-
 // View renders the full configuration summary; the deploy-or-save action
 // selector renders separately, pinned to the footer via PinnedFooter.
 func (s *ReviewStep) View(width, height int) string {
@@ -216,9 +186,6 @@ func (s *ReviewStep) View(width, height int) string {
 
 	if s.cfg == nil {
 		return "no configuration to review"
-	}
-	if s.showPreview {
-		return s.renderInstallConfigPreview(width)
 	}
 
 	resolved := *s
@@ -238,7 +205,6 @@ func (s *ReviewStep) renderSummary(width int) string {
 	content.WriteString(s.renderNetworking(&st))
 	content.WriteString(s.renderCompute(&st, width))
 	content.WriteString(s.renderFilesIgnition(&st))
-	content.WriteString(s.renderFeatures(&st))
 	content.WriteString(s.renderAdvanced(&st))
 	content.WriteString(s.renderDeployOutcome(width))
 
@@ -296,33 +262,6 @@ func reviewHeadlessCommand(configPath, clusterName string) string {
 
 func shellQuote(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
-}
-
-func (s *ReviewStep) renderInstallConfigPreview(width int) string {
-	hostPrefix := s.cfg.Networking.HostPrefix
-	if hostPrefix == 0 {
-		hostPrefix = 23
-	}
-	content, err := templates.RenderInstallConfig(&templates.InstallConfigData{
-		ClusterName: s.cfg.Cluster.Name, BaseDomain: s.cfg.Cluster.Domain,
-		MasterReplicas: s.cfg.Topology.ControlPlane.Count,
-		WorkerReplicas: s.cfg.Topology.Workers.Count,
-		ClusterCIDR:    s.cfg.Networking.PodCIDR, HostPrefix: hostPrefix,
-		MachineCIDR: s.cfg.Networking.MachineCIDR, ServiceCIDR: s.cfg.Networking.ServiceCIDR,
-		PullSecret: "[redacted]", SSHKey: "[redacted]", Architecture: platform.ClusterArch,
-	})
-	if err != nil {
-		return "install-config preview unavailable: " + err.Error()
-	}
-	lines := []string{"INSTALL-CONFIG PREVIEW · secrets redacted · p or esc to return"}
-	for _, source := range strings.Split(strings.TrimSuffix(content, "\n"), "\n") {
-		// WrapLines rebuilds the line from its words, dropping the YAML indentation.
-		indent := source[:len(source)-len(strings.TrimLeft(source, " "))]
-		for _, line := range tui.WrapLines(source, width-len(indent)) {
-			lines = append(lines, indent+line)
-		}
-	}
-	return strings.Join(lines, "\n")
 }
 
 func (s *ReviewStep) renderConfigChanges(width int) string {
@@ -455,9 +394,6 @@ func reviewConfigSnapshot(cfg *config.Config) map[string]string {
 		}
 	}
 	values["disks.control_plane_mon_size_gb"] = strconv.Itoa(cfg.Disks.ControlPlaneMonSizeGB)
-	for name, addon := range cfg.Addons {
-		values["addons."+name+".enabled"] = strconv.FormatBool(addon.Enabled)
-	}
 	return values
 }
 
@@ -502,9 +438,6 @@ func reviewChangeLabel(fieldPath string) string {
 	}
 	if strings.HasPrefix(fieldPath, "proxmox.additional_networks.") {
 		return strings.TrimPrefix(fieldPath, "proxmox.")
-	}
-	if strings.HasPrefix(fieldPath, "addons.") {
-		return strings.TrimSuffix(strings.TrimPrefix(fieldPath, "addons."), ".enabled") + " enabled"
 	}
 	if label, ok := labels[fieldPath]; ok {
 		return label
@@ -754,46 +687,6 @@ func (s *ReviewStep) renderFilesIgnition(st *wizard.SectionStyles) string {
 	return b.String()
 }
 
-// renderFeatures renders one row per enabled addon in sorted (deterministic)
-// name order, valued by its most telling setting — provider type, then
-// repository — or a plain "enabled" when it carries no detail.
-func (s *ReviewStep) renderFeatures(st *wizard.SectionStyles) string {
-	if !s.anyAddonEnabled() {
-		return ""
-	}
-
-	names := make([]string, 0, len(s.cfg.Addons))
-	for name, ac := range s.cfg.Addons {
-		if ac.Enabled {
-			names = append(names, name)
-		}
-	}
-	slices.Sort(names)
-	fitted := st.ForLabels(names...)
-
-	var b strings.Builder
-
-	b.WriteString(fitted.Header.Render(s.sectionTitle("addons", wizard.StepIDAddons)))
-	b.WriteString("\n")
-	b.WriteString(fitted.Separator)
-	b.WriteString("\n")
-
-	for _, name := range names {
-		ac := s.cfg.Addons[name]
-		value := valEnabled
-		if detail, ok := ac.Settings["type"]; ok && detail != "" {
-			value = detail
-		} else if repo, ok := ac.Settings[flux.SettingRepository]; ok && repo != "" {
-			value = repo
-		}
-		b.WriteString(fitted.KVPair(name, value))
-		b.WriteString("\n")
-	}
-	b.WriteString("\n")
-
-	return b.String()
-}
-
 // renderAdvanced renders every non-default advanced setting the wizard
 // applies, so nothing changing deploy behavior is invisible at the gate.
 func (s *ReviewStep) renderAdvanced(st *wizard.SectionStyles) string {
@@ -872,14 +765,7 @@ func (s *ReviewStep) Apply(_ *config.Config) error {
 
 // ShortHelp returns the review step's help bar.
 func (s *ReviewStep) ShortHelp() []wizard.KeyBinding {
-	if s.showPreview {
-		return []wizard.KeyBinding{
-			{Key: "p/esc", Help: "close preview"},
-			{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
-		}
-	}
 	bindings := []wizard.KeyBinding{
-		{Key: "p", Help: "preview install config"},
 		{Key: wizard.HelpLeftRight, Help: wizard.HelpChoose},
 		{Key: wizard.HelpEnter, Help: wizard.HelpConfirm},
 		{Key: wizard.HelpEsc, Help: wizard.HelpBack},
