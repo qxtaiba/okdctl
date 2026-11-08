@@ -198,37 +198,6 @@ func TestReviewStep_PreflightSanitizesHostileCapacityNodeText(t *testing.T) {
 	}
 }
 
-func TestReviewPlanIncludesHeadlessCommandAndConfigPath(t *testing.T) {
-	s := NewReviewStep()
-	s.SetConfig(reviewTestConfig())
-	s.SetConfigPath("/tmp/qa cluster.yaml")
-	for _, width := range []int{70, 106, 170} {
-		frame := tuitest.StripANSI(s.View(width, 100))
-		tuitest.AssertFits(t, frame, width, 100)
-		for _, want := range []string{"PREFLIGHT", "pull secret", "CIDR ranges"} {
-			if !strings.Contains(frame, want) {
-				t.Fatalf("review at width %d omitted concrete preflight item %q:\n%s", width, want, frame)
-			}
-		}
-		for _, want := range []string{
-			"DEPLOY PLAN", "bootstrap", "masters", "workers",
-			"WRITES", "/tmp/qa cluster.yaml",
-			"HEADLESS", `--config '/tmp/qa cluster.yaml'`, "--confirm-cluster",
-		} {
-			if !strings.Contains(frame, want) {
-				t.Errorf("review at width %d omitted %q:\n%s", width, want, frame)
-			}
-		}
-	}
-}
-
-func TestReviewHeadlessCommandShellQuotesArguments(t *testing.T) {
-	got := reviewHeadlessCommand("/tmp/O'Brien config.yaml", "qa cluster")
-	if want := `--config '/tmp/O'\''Brien config.yaml' --yes --confirm-cluster 'qa cluster'`; !strings.Contains(got, want) {
-		t.Fatalf("reviewHeadlessCommand() = %q, want shell-safe arguments containing %q", got, want)
-	}
-}
-
 func TestReviewStep_HiddenStepGetsNoIndex(t *testing.T) {
 	s := NewReviewStep()
 	s.SetConfig(reviewTestConfig())

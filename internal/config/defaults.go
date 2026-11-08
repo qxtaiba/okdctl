@@ -10,8 +10,7 @@ const (
 	// doesn't ARP-fight the hypervisor.
 	defaultStaticIPStart = "192.168.1.140"
 	defaultFluxAddon     = "flux"
-	// defaultTerraformEnv ships embedded; validators trust it without a disk check.
-	defaultTerraformEnv = "production"
+	defaultTerraformEnv  = "production"
 )
 
 // DefaultConfig returns a Config with defaults for a typical homelab environment.

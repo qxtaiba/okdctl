@@ -90,10 +90,9 @@ func New(opts ...Option) *Executor {
 	return e
 }
 
-// DefaultEnvAllowlist is the env filter shared by Executor subprocesses and
-// the sudo re-exec in cli/elevation.go: it passes tooling/provider
-// namespaces and drops the rest so unrelated tokens don't reach privileged
-// processes. Executor subprocesses further drop secret-keyed entries
+// DefaultEnvAllowlist is the env filter for Executor subprocesses: it passes
+// tooling/provider namespaces and drops the rest so unrelated tokens don't
+// reach child processes. Executor subprocesses further drop secret-keyed entries
 // (buildEnv); only direct FilterParentEnv callers (self re-exec) get
 // allowlisted credentials like PROXMOX_VE_PASSWORD.
 var DefaultEnvAllowlist = EnvAllowlist{
@@ -125,8 +124,7 @@ var DefaultEnvAllowlist = EnvAllowlist{
 	},
 }
 
-// EnvAllowlist is a dual exact+prefix filter for environment variables,
-// exported so callers like cli/elevation.go can reuse it.
+// EnvAllowlist is a dual exact+prefix filter for environment variables.
 type EnvAllowlist struct {
 	Exact    map[string]bool
 	Prefixes []string
@@ -136,8 +134,7 @@ func (a EnvAllowlist) allows(key string) bool {
 	return a.Exact[key] || slices.ContainsFunc(a.Prefixes, func(p string) bool { return strings.HasPrefix(key, p) })
 }
 
-// FilterParentEnv returns os.Environ() entries whose keys pass the
-// allowlist, exported for reuse by the sudo re-exec path in cli/elevation.go.
+// FilterParentEnv returns os.Environ() entries whose keys pass the allowlist.
 func FilterParentEnv(a EnvAllowlist) []string {
 	parent := os.Environ()
 	out := make([]string, 0, len(parent))

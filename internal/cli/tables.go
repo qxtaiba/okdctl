@@ -14,8 +14,6 @@ import (
 // starves the value column down to nothing.
 const minLeaderWrapWidth = 12
 
-// (addon list, addon verify, node list, node status).
-
 // printLeaders prints rows as two-space-indented dotted key/value leaders at
 // tui.DefaultKeyColWidth, wrapping each value to the terminal width.
 func printLeaders(w io.Writer, rows [][2]string) error {
