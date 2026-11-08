@@ -252,3 +252,32 @@ func deliver(m *Model, cmd tea.Cmd) {
 	}
 	m.Update(msg)
 }
+
+func TestTypingATokenArmsTheDiscardQuestion(t *testing.T) {
+	step := NewDataDrivenStep(&StepDefinition{
+		ID:    StepIDProxmox,
+		Title: "proxmox",
+		Sections: []SectionDefinition{{Fields: []FieldDefinition{{
+			Key:   "token",
+			Label: "api token",
+			Type:  FieldTypePassword,
+		}}}},
+		Secrets: func(s *DataDrivenStep) Secrets {
+			var secrets Secrets
+			secrets.ProxmoxToken.Set(s.Value("token"))
+			return secrets
+		},
+	})
+	cfg := config.DefaultConfig()
+	step.LoadFromConfig(cfg, true)
+	m := NewModel([]WizardStep{step}, cfg)
+	tuitest.RenderAt(t, m, 100, 30)
+
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'x', Text: "x"})
+	deliver(m, cmd)
+
+	m = update(t, m, ctrlC)
+	if m.quitting || !showsDiscardPrompt(m) {
+		t.Error("ctrl+c after typing a token must ask before quitting")
+	}
+}
