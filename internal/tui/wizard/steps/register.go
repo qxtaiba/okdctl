@@ -15,7 +15,6 @@ func RegisterAll(b *wizard.StepBuilder) {
 	})
 	b.Register(wizard.StepTypeNetworking, func() (wizard.WizardStep, wizard.StepState) { return NewNetworkingStep(capacity), nil })
 	b.Register(wizard.StepTypeResources, func() (wizard.WizardStep, wizard.StepState) { return NewResourcesStep(capacity) })
-	b.Register(wizard.StepTypeAddons, func() (wizard.WizardStep, wizard.StepState) { return NewAddonsStep(), nil })
 	b.Register(wizard.StepTypeFiles, func() (wizard.WizardStep, wizard.StepState) { return NewFilesStep(), nil })
 	b.Register(wizard.StepTypeAdvanced, func() (wizard.WizardStep, wizard.StepState) { return NewAdvancedStep(), nil })
 	b.Register(wizard.StepTypeReview, func() (wizard.WizardStep, wizard.StepState) { return NewReviewStep(), capacity })
@@ -27,7 +26,7 @@ func deployPhases() []wizard.Stage {
 	return []wizard.Stage{
 		{Label: "connect", Steps: []wizard.StepID{wizard.StepIDWelcome, wizard.StepIDDistribution, wizard.StepIDProxmox}},
 		{Label: labelCluster, Steps: []wizard.StepID{wizard.StepIDBasics, wizard.StepIDNodePlacement, wizard.StepIDNetworking, wizard.StepIDResources}},
-		{Label: "extras", Steps: []wizard.StepID{wizard.StepIDAddons, wizard.StepIDFiles, wizard.StepIDAdvanced}},
+		{Label: "extras", Steps: []wizard.StepID{wizard.StepIDFiles, wizard.StepIDAdvanced}},
 		{Label: "review", Steps: []wizard.StepID{wizard.StepIDReview}},
 	}
 }

@@ -69,7 +69,7 @@ func configDigest(cfg *config.Config) [sha256.Size]byte {
 func isConfigureStep(id StepID) bool {
 	switch id {
 	case StepIDDistribution, StepIDBasics, StepIDProxmox, StepIDNodePlacement,
-		StepIDNetworking, StepIDResources, StepIDAddons, StepIDFiles,
+		StepIDNetworking, StepIDResources, StepIDFiles,
 		StepIDAdvanced, StepIDReview:
 		return true
 	default:

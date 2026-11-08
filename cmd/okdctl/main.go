@@ -8,7 +8,6 @@ import (
 	"slices"
 	"strings"
 
-	_ "github.com/qxtaiba/okdctl/internal/addon/catalog" // Register all built-in addons
 	"github.com/qxtaiba/okdctl/internal/cli"
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/logutil"

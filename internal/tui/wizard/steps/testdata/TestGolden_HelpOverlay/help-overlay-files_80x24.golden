@@ -1,22 +1,22 @@
                                                                                 
   ╭──────────────────────────────────────────────────────────────────────────╮  
   │ O K D C T L                                                              │  
-  │ configure cluster addons         connect · cluster · extras ●○○ · review │  
+  │ configure files & ignition serv…  connect · cluster · extras ●○ · review │  
   │──────────────────────────────────────────────────────────────────────────│  
   │                                                                          │  
-  │    ● gitops (flux)                                                       │  
+  │    ● required files                                                      │  
   │                                                                          │  
-  │    enabled                                                               │  
-  │    ╭────────────────╮                                                    │  
-  │    │ ● no  ○ yes    │                                                    │  
-  │    ╰────────────────╯                                                    │  
-  │    enable gitops deployment                                              │  
+  │    pull secret                                                           │  
+  │    ╭────────────────────────────────────────────────────────────────╮    │  
+  │    │ ?                                                              │    │  
+  │    ╰────────────────────────────────────────────────────────────────╯    │  
+  │    path to okd pull-secret.json from red hat                             │  
   │                                                                          │  
-  │      repository settings appear when enabled.                            │  
+  │    ssh public key                                                        │  
+  │    ╭────────────────────────────────────────────────────────────────╮    │  
+  │    │ ~/.ssh/id_ed25519.pub                                          │    │  
+  │    ╰────────────────────────────────────────────────────────────────╯    │  
   │                                                                          │  
-  │    ✓ secret store (common)                                               │  
-  │      supports onepassword, vault, and bitwarden via external-secrets-    │  
-  │      operator                                                            │  
   │                                                                          │  
   │─────────── ↑ ↓  scroll down for more ──────────── ▸ okd 4.22.0-okd-scos.7│  
   │  ↑↓/tab navigate • enter continue • esc back … • ctrl+c quit • ? help    │  

@@ -43,6 +43,6 @@
   │  okdctl deploy --config 'okdctl.yaml' --yes --confirm-cluster 'mycluster'                                                                                                    │  
   │                                                                                                                                                                              │  
   │────────────────────────────────────────────────────────────── ↑ ↓  scroll up for more ────────────────────────────────────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
-  │  ○ deploy now   ● save and exit            p preview install config • ←/→ choose • enter confirm • esc back • 1-9 jump to section • pgup/pgdn scroll • ctrl+c quit • ? help  │  
+  │  ○ deploy now   ● save and exit                                       ←/→ choose • enter confirm • esc back • 1-9 jump to section • pgup/pgdn scroll • ctrl+c quit • ? help  │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                                                                                                     

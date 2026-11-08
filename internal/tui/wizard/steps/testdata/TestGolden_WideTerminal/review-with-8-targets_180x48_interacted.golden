@@ -3,6 +3,10 @@
   │ O K D C T L                                                                                                                                                                  │  
   │ review your configuration                                                                                                                connect · cluster · extras · review │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
+  │  host prefix      23                                                                                                                                                         │  
+  │  pod cidr         10.128.0.0/14                                                                                                                                              │  
+  │  service cidr     172.30.0.0/16                                                                                                                                              │  
+  │  static ip start  192.168.1.140                                                                                                                                              │  
   │  interface        ens18                                                                                                                                                      │  
   │  netmask          255.255.255.0 (from cidr)                                                                                                                                  │  
   │  vm dns           192.168.1.20 (bastion/dnsmasq)                                                                                                                             │  
@@ -20,11 +24,7 @@
   │  ignition server  https://192.168.1.20                                                                                                                                       │  
   │  web root         /var/www/html                                                                                                                                              │  
   │                                                                                                                                                                              │  
-  │  [7] addons                                                                                                                                                                  │  
-  │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄                                                                  │  
-  │  flux        enabled                                                                                                                                                         │  
-  │                                                                                                                                                                              │  
-  │  [8] advanced                                                                                                                                                                │  
+  │  [7] advanced                                                                                                                                                                │  
   │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄                                                                  │  
   │  vm id base             6000                                                                                                                                                 │  
   │  timeouts               bootstrap 60m, install 120m                                                                                                                          │  
@@ -43,6 +43,6 @@
   │  okdctl deploy --config 'okdctl.yaml' --yes --confirm-cluster 'mycluster'                                                                                                    │  
   │                                                                                                                                                                              │  
   │────────────────────────────────────────────────────────────── ↑ ↓  scroll up for more ────────────────────────────────────────────────────────────── ▸ okd 4.22.0-okd-scos.7 │  
-  │  ● deploy now   ○ save and exit            p preview install config • ←/→ choose • enter confirm • esc back • 1-9 jump to section • pgup/pgdn scroll • ctrl+c quit • ? help  │  
+  │  ● deploy now   ○ save and exit                                       ←/→ choose • enter confirm • esc back • 1-9 jump to section • pgup/pgdn scroll • ctrl+c quit • ? help  │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                                                                                                     

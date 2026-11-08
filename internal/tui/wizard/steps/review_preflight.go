@@ -3,7 +3,6 @@ package steps
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"slices"
 	"strings"
 
@@ -31,19 +30,6 @@ func reviewPreflight(cfg *config.Config, capacity ...*WizardCapacitySnapshot) []
 	checks := []reviewCheck{
 		reviewFileCheck("pull secret", cfg.Files.PullSecret, true),
 		reviewFileCheck("ssh public key", cfg.Files.SSHPublicKey, true),
-	}
-	if cfg.Addons["flux"].Enabled {
-		check := reviewFileCheck("flux deploy key", system.ExpandPath("~/.ssh/flux-deploy-key"), false)
-		check.detail = "~/.ssh/flux-deploy-key"
-		checks = append(checks, check)
-	}
-	if cfg.Addons["secretstore"].Enabled {
-		_, err := exec.LookPath("sops")
-		check := reviewCheck{label: "sops", status: "available", passed: err == nil}
-		if err != nil {
-			check.status, check.warning = "not found", true
-		}
-		checks = append(checks, check)
 	}
 
 	networks := []string{

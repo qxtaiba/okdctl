@@ -51,7 +51,6 @@ func allStepDefinitions() []*wizard.StepDefinition {
 		&ResourcesStepDefinition,
 		&FilesStepDefinition,
 		&AdvancedStepDefinition,
-		&AddonsStepDefinition,
 	}
 }
 

@@ -104,21 +104,3 @@ func TestResourcesStep_VCPUAndMemoryRegisterMatchesValidator(t *testing.T) {
 		}
 	}
 }
-
-// TestAddonsStep_HelpIsLowercase asserts every addon field's Help row
-// follows the wizard's lowercase, shape-first voice — product names
-// ("1password", "vault", "bitwarden") and acronyms ("eso", "kv", "uuid",
-// "url", "api") stay lowercase like the rest of the wizard's copy.
-func TestAddonsStep_HelpIsLowercase(t *testing.T) {
-	for _, sec := range AddonsStepDefinition.Sections {
-		for i := range sec.Fields {
-			fd := &sec.Fields[i]
-			if fd.Help == "" {
-				continue
-			}
-			if fd.Help != strings.ToLower(fd.Help) {
-				t.Errorf("addons.%s: Help %q is not lowercase", fd.Key, fd.Help)
-			}
-		}
-	}
-}

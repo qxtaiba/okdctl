@@ -10,11 +10,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
-	"github.com/qxtaiba/okdctl/internal/tui/wizard/lifecycle"
 )
 
 // assertNoScrollIndicator fails t if frame's footer shows the viewport
@@ -92,7 +90,6 @@ func configureScenarios() []configureScenario {
 		},
 		{name: "networking", id: wizard.StepIDNetworking, interact: tabKey},
 		{name: "resources", id: wizard.StepIDResources, interact: tabKey},
-		{name: "addons", id: wizard.StepIDAddons, interact: tabKey},
 		{name: "files", id: wizard.StepIDFiles, interact: tabKey},
 		{name: "advanced", id: wizard.StepIDAdvanced, interact: tabKey},
 		{
@@ -109,27 +106,9 @@ func configureScenarios() []configureScenario {
 			seed: seedReviewChanges,
 		},
 		{
-			// Populates node placement and enables an addon on top of the
-			// default config so every reviewJumpOrder section renders,
-			// pinning the full 1-8 contiguous jump legend.
+			// Populates node placement so every reviewJumpOrder section
+			// renders, pinning the full contiguous jump legend.
 			name: "review-with-8-targets",
-			id:   wizard.StepIDReview,
-			seed: func(m *wizard.Model) {
-				cfg := m.Config()
-				cfg.Provider.Proxmox.ControlPlaneNodes = []string{"pve1", "pve2", "pve3"}
-				cfg.Provider.Proxmox.WorkerNodes = []string{"pve1", "pve2", "pve3"}
-				flux := cfg.Addons["flux"]
-				flux.Enabled = true
-				cfg.Addons["flux"] = flux
-				m.CurrentStep().(*ReviewStep).SetConfig(cfg)
-			},
-			interact: endKey,
-		},
-		{
-			// Same as review-with-8-targets but leaves every addon disabled
-			// (the default), pinning that the addons-hidden gap renumbers
-			// advanced to [7] rather than leaving [8] behind it.
-			name: "review-with-addons-hidden",
 			id:   wizard.StepIDReview,
 			seed: func(m *wizard.Model) {
 				cfg := m.Config()
@@ -343,65 +322,6 @@ func resolveCmd(t *testing.T, cmd tea.Cmd) tea.Msg {
 	return nil
 }
 
-// TestGolden_HubReachesManageNodes drives the hub's manage-nodes verb with
-// real keystrokes: the dim "opening …" notice while the flow is still being
-// assembled, then the lifecycle flow's first screen with its esc-to-hub
-// ribbon, then the hub again once esc is pressed.
-func TestGolden_HubReachesManageNodes(t *testing.T) {
-	for _, sz := range []struct{ w, h int }{{80, 24}, {100, 30}} {
-		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
-			forceHeroColor(t)
-			tui.SetTerminalWidth(sz.w)
-			t.Cleanup(func() { tui.SetTerminalWidth(0) })
-
-			m := newGoldenModel(t)
-			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
-			seedHubSaveSlot(m)
-			hub := m.CurrentStep().(*WelcomeStep)
-			hub.SetFlows(HubFlows{ManageNodes: func() ([]wizard.WizardStep, wizard.FlowChrome, error) {
-				st := &lifecycle.State{Cfg: m.Config()}
-				return lifecycle.NewSteps(st, lifecycle.DemoHooks(0)), lifecycle.Chrome(), nil
-			}})
-
-			downKey := tea.KeyPressMsg{Code: 'j', Text: "j"}
-			for range 2 {
-				m.Update(downKey)
-			}
-			_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-
-			opening := tuitest.RenderAt(t, m, sz.w, sz.h)
-			tuitest.Golden(t, fmt.Sprintf("hub-opening_%dx%d", sz.w, sz.h), opening)
-			tuitest.AssertFits(t, opening, sz.w, sz.h)
-			if !strings.Contains(tuitest.StripANSI(opening), "opening manage nodes") {
-				t.Errorf("the hub must say which flow it is opening, and the notice must fit the body budget:\n%s", opening)
-			}
-			if sz.w == 80 && sz.h == 24 {
-				assertNoScrollIndicator(t, opening)
-			}
-
-			m.Update(resolveCmd(t, cmd))
-
-			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
-			tuitest.Golden(t, fmt.Sprintf("manage-nodes_%dx%d", sz.w, sz.h), frame)
-			tuitest.AssertFits(t, frame, sz.w, sz.h)
-
-			plain := tuitest.StripANSI(frame)
-			if !strings.Contains(plain, "esc hub") {
-				t.Errorf("the lifecycle entry screen must advertise the esc round-trip:\n%s", plain)
-			}
-
-			m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
-			back := tuitest.StripANSI(tuitest.RenderAt(t, m, sz.w, sz.h))
-			if !strings.Contains(back, "manage nodes") || !strings.Contains(back, "prod-cluster") {
-				t.Errorf("esc must return to the hub:\n%s", back)
-			}
-			if strings.Contains(back, "opening") {
-				t.Errorf("the hub's opening notice must clear on return:\n%s", back)
-			}
-		})
-	}
-}
-
 // TestGolden_HubWideTiers pins the blank-slate hub at wide/tall terminals:
 // the launcher earns a second column instead of sitting as a lone centered
 // menu in an otherwise empty frame.
@@ -535,7 +455,7 @@ func TestModel_PasswordNeverLeaksIntoTheFrame(t *testing.T) {
 	}
 }
 
-// TestGolden_HelpOverlay pins the "?" help overlay open on the addons step —
+// TestGolden_HelpOverlay pins the "?" help overlay open on the files step —
 // key-event-driven, matching how a real terminal session would trigger it.
 // The overlay must replace only the viewport region (header/footer chrome
 // stays) and fit exactly at both sizes.
@@ -549,12 +469,12 @@ func TestGolden_HelpOverlay(t *testing.T) {
 
 			m := newGoldenModel(t)
 			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
-			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDAddons})
+			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDFiles})
 
 			m.Update(questionMark)
 
 			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
-			tuitest.Golden(t, fmt.Sprintf("help-overlay-addons_%dx%d", sz.w, sz.h), frame)
+			tuitest.Golden(t, fmt.Sprintf("help-overlay-files_%dx%d", sz.w, sz.h), frame)
 			tuitest.AssertFits(t, frame, sz.w, sz.h)
 		})
 	}
@@ -656,130 +576,6 @@ func TestGolden_DistributionErrorState(t *testing.T) {
 			tuitest.Golden(t, fmt.Sprintf("distribution-error_%dx%d", sz.w, sz.h), frame)
 			if sz.fits {
 				tuitest.AssertFits(t, frame, sz.w, sz.h)
-			}
-		})
-	}
-}
-
-// TestGolden_AddonsVaultsEditMode pins the vaults key-value field's
-// edit-mode composition: two fieldBox cells joined with
-// lipgloss.JoinHorizontal side by side, rather than the old string-concat
-// that interleaved their rows. Tabs past the 8 fields preceding vaults
-// (flux's 4, secretstore common's 3, connect host) so it's focused and
-// scrolled into view, then ctrl+e enters edit mode.
-func TestGolden_AddonsVaultsEditMode(t *testing.T) {
-	pinSopsOnPath(t, false)
-	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
-	rightKey := tea.KeyPressMsg{Code: tea.KeyRight}
-	ctrlE := tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl}
-
-	for _, sz := range goldenSizes {
-		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
-			tui.SetTerminalWidth(sz.w)
-			t.Cleanup(func() { tui.SetTerminalWidth(0) })
-
-			m := newGoldenModel(t)
-			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
-			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDAddons})
-
-			// The settings fold behind the enable toggles: tab to the secret
-			// store toggle, enable it, then tab to the unfolded vaults field.
-			m.Update(tabKey)
-			m.Update(wizard.FocusChangedMsg{})
-			m.Update(rightKey)
-			for range 4 {
-				m.Update(tabKey)
-				m.Update(wizard.FocusChangedMsg{})
-			}
-			m.Update(ctrlE)
-
-			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
-			tuitest.Golden(t, fmt.Sprintf("addons-vaults-edit_%dx%d", sz.w, sz.h), frame)
-			if sz.fits {
-				tuitest.AssertFits(t, frame, sz.w, sz.h)
-			}
-		})
-	}
-}
-
-// TestGolden_AddonsFluxWarning pins the flux section's warning block: once
-// flux is enabled with no ssh deploy key present, an amber ⚠ line renders
-// after the flux_path field and before the secret store (common) section
-// head, wrapped to the section's width, with the frame unsliced. Toggles
-// the enabled field to yes, then tabs past flux's remaining 3 fields so
-// the warning and the next section head scroll into view.
-func TestGolden_AddonsFluxWarning(t *testing.T) {
-	if system.FileExists(system.ExpandPath("~/.ssh/flux-deploy-key")) {
-		t.Skip("~/.ssh/flux-deploy-key exists on this machine, so the warning this test checks for would not fire")
-	}
-
-	rightKey := tea.KeyPressMsg{Code: tea.KeyRight}
-	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
-
-	for _, sz := range goldenSizes {
-		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
-			tui.SetTerminalWidth(sz.w)
-			t.Cleanup(func() { tui.SetTerminalWidth(0) })
-
-			m := newGoldenModel(t)
-			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
-			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDAddons})
-
-			m.Update(rightKey)
-			for range 4 {
-				m.Update(tabKey)
-				m.Update(wizard.FocusChangedMsg{})
-			}
-
-			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
-			tuitest.Golden(t, fmt.Sprintf("addons-flux-warning_%dx%d", sz.w, sz.h), frame)
-			if sz.fits {
-				tuitest.AssertFits(t, frame, sz.w, sz.h)
-			}
-		})
-	}
-}
-
-// TestGolden_AddonsProviderAbsenceNotes pins mechanism 4's other half: once
-// secret store is enabled with onepassword selected, the inactive vault and
-// bitwarden provider sections each show their own "<provider> settings
-// appear when selected." line rather than vanishing silently — distinct
-// from the "secret store settings appear when enabled." line those same
-// sections show while secret store itself is off (TestGolden_ConfigureSteps
-// already pins that case). Scrolls to the bottom (G) since the two notes
-// sit below onepassword's own unfolded fields, with nothing focusable to
-// tab the viewport toward.
-func TestGolden_AddonsProviderAbsenceNotes(t *testing.T) {
-	pinSopsOnPath(t, false)
-	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
-	rightKey := tea.KeyPressMsg{Code: tea.KeyRight}
-	bottomKey := tea.KeyPressMsg{Code: 'G', Text: "G"}
-
-	for _, sz := range []struct{ w, h int }{{80, 24}, {120, 40}} {
-		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
-			tui.SetTerminalWidth(sz.w)
-			t.Cleanup(func() { tui.SetTerminalWidth(0) })
-
-			m := newGoldenModel(t)
-			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
-			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDAddons})
-
-			// flux_enabled -> secretstore_enabled (toggle on with right).
-			m.Update(tabKey)
-			m.Update(wizard.FocusChangedMsg{})
-			m.Update(rightKey)
-			m.Update(bottomKey)
-
-			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
-			tuitest.Golden(t, fmt.Sprintf("addons-provider-absence-notes_%dx%d", sz.w, sz.h), frame)
-			tuitest.AssertFits(t, frame, sz.w, sz.h)
-
-			plain := tuitest.StripANSI(frame)
-			if !strings.Contains(plain, "vault settings appear when selected.") {
-				t.Errorf("frame is missing the vault absence note:\n%s", plain)
-			}
-			if !strings.Contains(plain, "bitwarden settings appear when selected.") {
-				t.Errorf("frame is missing the bitwarden absence note:\n%s", plain)
 			}
 		})
 	}
@@ -1060,11 +856,14 @@ func TestGolden_ProxmoxEnterHighlightsInvalidFields(t *testing.T) {
 	tuitest.AssertFits(t, frame, 100, 30)
 }
 
-// pinSopsOnPath fixes the sops lookup so golden frames do not depend on
-// whether the machine running the test happens to have sops installed.
-func pinSopsOnPath(t *testing.T, found bool) {
-	t.Helper()
-	prev := sopsOnPath
-	sopsOnPath = func() bool { return found }
-	t.Cleanup(func() { sopsOnPath = prev })
+// hasExactLine reports whether any line of view, trimmed, equals want
+// exactly — used to tell a field's own bare label row apart from prose
+// (e.g. an AbsenceNote) that merely contains the same word.
+func hasExactLine(view, want string) bool {
+	for _, line := range strings.Split(view, "\n") {
+		if strings.TrimSpace(line) == want {
+			return true
+		}
+	}
+	return false
 }

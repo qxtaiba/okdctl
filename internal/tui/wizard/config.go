@@ -31,7 +31,6 @@ const (
 	StepTypeNodePlacement StepType = "node-placement"
 	StepTypeNetworking    StepType = "networking"
 	StepTypeResources     StepType = "resources"
-	StepTypeAddons        StepType = "addons"
 	StepTypeFiles         StepType = "files"
 	StepTypeAdvanced      StepType = "advanced"
 	StepTypeReview        StepType = "review"
@@ -48,7 +47,6 @@ func DefaultConfig() Config {
 			{Type: StepTypeNodePlacement},
 			{Type: StepTypeNetworking},
 			{Type: StepTypeResources},
-			{Type: StepTypeAddons},
 			{Type: StepTypeFiles},
 			{Type: StepTypeAdvanced},
 			{Type: StepTypeReview},
