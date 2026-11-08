@@ -1,44 +1,51 @@
 ---
-schemaVersion: "v2"
+schemaVersion: v3
 cluster:
   name: minimal
   domain: k8s.local
 distribution:
   type: okd
-  version: "4.22.0-okd-scos.7"
+  version: 4.22.0-okd-scos.10
 provider:
   type: proxmox
   proxmox:
-    host: 192.168.1.100
-    node: pve
+    endpoint: https://192.168.1.100:8006 # token and insecure flag live in okdctl.env
+    nodes: [pve]
     storage: local-lvm
     iso_storage: local
     bridge: vmbr0
-topology:
-  control_plane:
-    count: 1
-    cpu: 4
-    memory_mb: 8192 # 8 GB
-    disk_gb: 50
-  workers:
-    count: 0 # No workers - control plane runs workloads
-    cpu: 0
-    memory_mb: 0
-    disk_gb: 0
+    vlan: 0
+    cpu_type: host
+    pool: ""
+    ha: false
+    vmid_base: 6000
 networking:
   machine_cidr: 192.168.1.0/24
+  gateway: 192.168.1.1
+  dns: [192.168.1.1]
+  api_vip: 192.168.1.158
+  ingress_vip: 192.168.1.159
+  node_ip_start: 192.168.1.150
+  ntp: []
   pod_cidr: 10.128.0.0/14
   service_cidr: 172.30.0.0/16
-  gateway: 192.168.1.1
-  dns:
-    - 192.168.1.1
-  static_ip:
-    # start IS the bootstrap node's IP; remaining nodes get start+1,
-    # start+2, ... and the API VIP derives from it (x.y.z.10) unless
-    # bastion.vip is set. Keep it clear of live hosts (Proxmox host,
-    # ignition server). Netmask is derived from machine_cidr.
-    start: 192.168.1.140
-    interface: ens18
-addons:
-  flux:
-    enabled: false
+  host_prefix: 23
+control_plane: # always three; with no workers they also run the workloads
+  cpu: 4
+  memory_mib: 16384
+  disks: [{size_gib: 120}]
+workers:
+  count: 0
+  cpu: 2
+  memory_mib: 8192
+  disks: [{size_gib: 100}]
+files:
+  pull_secret: ./pull-secret.json
+  ssh_public_key: ~/.ssh/id_ed25519.pub
+lifecycle:
+  before_next_node: {command: "", timeout: 15m}
+  drain_timeout: 10m
+handoff:
+  enabled: true
+defaults:
+  disable_redhat_catalogs: true
