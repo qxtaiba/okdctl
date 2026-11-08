@@ -2,6 +2,7 @@ package proxmox
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -53,6 +54,9 @@ func (d *driver) UpdateVM(ctx context.Context, ref VMRef, patch VMPatch, digest 
 	if patch.OnBoot != nil {
 		form.Set("onboot", boolFlag(*patch.OnBoot))
 	}
+	if len(patch.Delete) > 0 {
+		form.Set("delete", strings.Join(patch.Delete, ","))
+	}
 	return d.task(ctx, http.MethodPost, ref.Node, vmPath(ref, "/config"), form)
 }
 
@@ -69,12 +73,32 @@ func (d *driver) DeleteVM(ctx context.Context, ref VMRef) (Task, error) {
 	return d.task(ctx, http.MethodDelete, ref.Node, vmPath(ref, "?purge=1&destroy-unreferenced-disks=1"), nil)
 }
 
+// SetHA upserts the HA resource: a registered VM is updated in place, with
+// an empty Group deleting any group it had.
 func (d *driver) SetHA(ctx context.Context, ref VMRef, spec HASpec) error {
-	form := url.Values{"sid": {haSID(ref)}, "state": {spec.State}}
+	sid := haSID(ref)
+	path := "/cluster/ha/resources/" + url.PathEscape(sid)
+	var current struct {
+		SID string `json:"sid"`
+	}
+	err := d.get(ctx, path, &current)
+	switch {
+	case errors.Is(err, ErrNotFound) || (err == nil && current.SID == ""):
+		form := url.Values{"sid": {sid}, "state": {spec.State}}
+		if spec.Group != "" {
+			form.Set("group", spec.Group)
+		}
+		return d.write(ctx, http.MethodPost, "/cluster/ha/resources", form, nil)
+	case err != nil:
+		return err
+	}
+	form := url.Values{"state": {spec.State}}
 	if spec.Group != "" {
 		form.Set("group", spec.Group)
+	} else {
+		form.Set("delete", "group")
 	}
-	return d.write(ctx, http.MethodPost, "/cluster/ha/resources", form, nil)
+	return d.write(ctx, http.MethodPut, path, form, nil)
 }
 
 func (d *driver) ClearHA(ctx context.Context, ref VMRef) error {
