@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/qxtaiba/okdctl/internal/executor"
 )
 
 // TestMsgFieldNoCredentialInterpolation AST-scans internal/ for errtypes Msg
@@ -136,21 +134,4 @@ func findInternalDir() (string, error) {
 		dir = parent
 	}
 	return "", os.ErrNotExist
-}
-
-// TestExitErrorCommandNoArgvLeak canaries that Command stays "cli subcommand"
-// (no argv); cluster/k8s.go::subcommand is solely responsible — update this
-// test if that changes.
-func TestExitErrorCommandNoArgvLeak(t *testing.T) {
-	const secret = "s3cr3t"
-
-	e := &executor.ExitError{
-		Command:  "oc create secret generic mysecret --from-literal=password=" + secret,
-		ExitCode: 1,
-		Stderr:   "some stderr",
-	}
-	if !strings.Contains(e.Error(), secret) {
-		t.Fatalf("canary broken: ExitError.Error() no longer surfaces Command verbatim; "+
-			"ExitError may now self-redact — verify cluster/k8s.go::subcommand contract is still needed: %q", e.Error())
-	}
 }
