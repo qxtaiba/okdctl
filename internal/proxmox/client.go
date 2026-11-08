@@ -12,7 +12,6 @@ import (
 	"net/url"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/luthermonson/go-proxmox"
 
@@ -29,14 +28,15 @@ var notFoundPhrases = []string{"does not exist", "no such resource", "not HA man
 
 // pveErrorTransport appends a failed reply's JSON message to its status
 // line, because go-proxmox reports a 5xx as errors.New(res.Status) and
-// discards the body; the body itself is replayed for callers that read it.
+// discards the body; a 400 is left alone since go-proxmox renders that
+// body itself, and the body is replayed for callers that read it.
 type pveErrorTransport struct {
 	next http.RoundTripper
 }
 
 func (t pveErrorTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	res, err := t.next.RoundTrip(req)
-	if err != nil || res.StatusCode < http.StatusBadRequest {
+	if err != nil || res.StatusCode <= http.StatusBadRequest {
 		return res, err
 	}
 	body, err := io.ReadAll(io.LimitReader(res.Body, errorBodyLimit))
@@ -75,8 +75,9 @@ func (d *driver) get(ctx context.Context, path string, v any) error {
 	return nil
 }
 
-// write sends form as a flat JSON object (PVE accepts JSON bodies for every
-// form parameter) and decodes the data envelope into v; a nil v discards it.
+// write sends the first value of every form key as a flat JSON object (PVE
+// accepts JSON bodies for every form parameter) and decodes the data
+// envelope into v; a nil v discards it.
 func (d *driver) write(ctx context.Context, method, path string, form url.Values, v any) error {
 	var body []byte
 	if form != nil {
@@ -119,39 +120,27 @@ func mapAPIError(err error) error {
 }
 
 // newProxmoxClient builds the go-proxmox client and returns the *http.Client
-// under it for raw requests; the credential becomes an immutable Go string
-// Zeroize can't reach, bounded to this call.
-func newProxmoxClient(endpoint, username string, password, apiToken []byte, insecure bool, timeout time.Duration) (client *proxmox.Client, httpClient *http.Client, err error) {
+// under it for raw requests; the token becomes an immutable Go string Zeroize
+// can't reach, bounded to this call. No transport timeout: ISO uploads outlive
+// any fixed budget, so every method is bounded by its ctx instead.
+func newProxmoxClient(endpoint string, apiToken []byte, insecure bool) (client *proxmox.Client, httpClient *http.Client, err error) {
 	if endpoint == "" {
-		return nil, nil, fmt.Errorf("proxmox client: endpoint is required")
+		return nil, nil, errors.New("proxmox client: endpoint is required")
+	}
+	if len(apiToken) == 0 {
+		return nil, nil, errors.New("proxmox client: no credentials (need an api token)")
+	}
+	id, secret, ok := strings.Cut(string(apiToken), "=")
+	if !ok {
+		return nil, nil, errors.New("proxmox client: api token must be in id=secret form")
 	}
 	if insecure {
 		warnInsecureTLS(endpoint)
 	}
-	httpClient = httputil.NewOptionalInsecure(insecure, timeout)
+	httpClient = httputil.NewOptionalInsecure(insecure, 0)
 	httpClient.Transport = pveErrorTransport{next: httpClient.Transport}
-	base := APIBaseURL(endpoint)
-
-	switch {
-	case len(password) > 0:
-		return proxmox.NewClient(
-			base,
-			proxmox.WithHTTPClient(httpClient),
-			proxmox.WithCredentials(&proxmox.Credentials{Username: username, Password: string(password)}),
-		), httpClient, nil
-	case len(apiToken) > 0:
-		id, secret, ok := strings.Cut(string(apiToken), "=")
-		if !ok {
-			return nil, nil, fmt.Errorf("proxmox client: PROXMOX_VE_API_TOKEN must be in id=secret form")
-		}
-		return proxmox.NewClient(
-			base,
-			proxmox.WithHTTPClient(httpClient),
-			proxmox.WithAPIToken(id, secret),
-		), httpClient, nil
-	default:
-		return nil, nil, fmt.Errorf("proxmox client: no credentials (need password or api token)")
-	}
+	client = proxmox.NewClient(APIBaseURL(endpoint), proxmox.WithHTTPClient(httpClient), proxmox.WithAPIToken(id, secret))
+	return client, httpClient, nil
 }
 
 var insecureTLSWarnOnce sync.Once
