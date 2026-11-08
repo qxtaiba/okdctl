@@ -122,36 +122,6 @@ func (c *ProxmoxCredentials) GoString() string {
 	return c.String()
 }
 
-// Env returns credential env vars for subprocess execution without
-// touching the global process environment. The returned strings are
-// immutable copies that Zeroize cannot wipe, so callers MUST pass the
-// result directly into a WithEnv option in the same frame as defer
-// Zeroize() and MUST NOT let it outlive the call stack (goroutine, cache,
-// persistent config). TestEnvCallSiteRegistry enforces this statically.
-func (c *ProxmoxCredentials) Env() []string {
-	if !c.IsValid() {
-		return nil
-	}
-
-	env := []string{envProxmoxEndpoint + "=" + c.Endpoint}
-
-	if c.UseAPIToken() {
-		env = append(env, envProxmoxAPIToken+"="+string(c.APIToken))
-	} else {
-		env = append(
-			env,
-			envProxmoxUsername+"="+c.Username,
-			envProxmoxPassword+"="+string(c.Password),
-		)
-	}
-
-	if c.Insecure {
-		env = append(env, envProxmoxInsecure+"=true")
-	}
-
-	return env
-}
-
 // configHasCredentials reports whether the config file carries a full
 // credential set (API token or username+password).
 func configHasCredentials(px *config.ProxmoxConfig) bool {

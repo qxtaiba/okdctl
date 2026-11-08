@@ -155,10 +155,6 @@ func ValidateWithOptions(cfg *Config, opts ValidationOptions) *ValidationResult 
 		}
 	}
 
-	if opts.Scope.HasScope(ScopeEnums) {
-		validateTerraformEnvDir(cfg, opts.ProjectRoot, result)
-	}
-
 	if opts.Scope.HasScope(ScopeProvider) {
 		validatePlacementInventory(cfg, opts.ProxmoxInventory, result)
 	}

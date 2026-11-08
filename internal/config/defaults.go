@@ -2,7 +2,6 @@ package config
 
 import (
 	"github.com/qxtaiba/okdctl/internal/netutil"
-	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 const (
@@ -12,7 +11,7 @@ const (
 	defaultStaticIPStart = "192.168.1.140"
 	defaultFluxAddon     = "flux"
 	// defaultTerraformEnv ships embedded; validators trust it without a disk check.
-	defaultTerraformEnv = workspace.DefaultTerraformEnv
+	defaultTerraformEnv = "production"
 )
 
 // DefaultConfig returns a Config with defaults for a typical homelab environment.

@@ -13,7 +13,6 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/netutil"
 	"github.com/qxtaiba/okdctl/internal/system"
-	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 var (
@@ -82,21 +81,6 @@ func validateEnums(cfg *Config, result *ValidationResult) {
 		if err := ValidateTerraformEnv(env); err != nil {
 			result.AddError(FieldDeploymentTerraformEnv, err.Error())
 		}
-	}
-}
-
-// validateTerraformEnvDir requires a matching directory under projectRoot for
-// custom environments; "production" is trusted without a disk check.
-func validateTerraformEnvDir(cfg *Config, projectRoot string, result *ValidationResult) {
-	env := cfg.Deployment.TerraformEnv
-	// A pattern-invalid env already failed validateEnums; avoid a duplicate error here.
-	if env == "" || env == defaultTerraformEnv || ValidateTerraformEnv(env) != nil {
-		return
-	}
-	dir := workspace.TerraformEnvDir(projectRoot, env)
-	if !system.DirExists(dir) {
-		result.AddError(FieldDeploymentTerraformEnv,
-			fmt.Sprintf("no environment directory at %s — create it or fix deployment.terraform_env", dir))
 	}
 }
 
