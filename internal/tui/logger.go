@@ -86,8 +86,7 @@ func buildSinkLogger(w io.Writer) *charmlog.Logger {
 }
 
 // stderrHandler fans each record to stderr and, when configured, the
-// persistent-log sink, clearing any active spinner/progress line via lineReg
-// first so both writes land on a clean line.
+// persistent-log sink.
 type stderrHandler struct {
 	stderr slog.Handler
 	sink   slog.Handler // nil when no persistent-log sink is active
@@ -98,16 +97,13 @@ func (h *stderrHandler) Enabled(ctx context.Context, lvl slog.Level) bool {
 }
 
 func (h *stderrHandler) Handle(ctx context.Context, r slog.Record) error { //nolint:gocritic // hugeParam: slog.Handler interface requires value receiver
-	var err error
-	lineReg.withLine(func() {
-		err = h.stderr.Handle(ctx, r)
-		if h.sink == nil {
-			return
-		}
-		if sinkErr := h.sink.Handle(ctx, r); err == nil {
-			err = sinkErr
-		}
-	})
+	err := h.stderr.Handle(ctx, r)
+	if h.sink == nil {
+		return err
+	}
+	if sinkErr := h.sink.Handle(ctx, r); err == nil {
+		err = sinkErr
+	}
 	return err
 }
 

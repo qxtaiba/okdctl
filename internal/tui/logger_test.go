@@ -9,6 +9,14 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 )
 
+func configureBuf(t *testing.T, buf *bytes.Buffer) {
+	t.Helper()
+	if err := ConfigureLoggers(LoggerConfig{Level: "debug", Format: "text", Stderr: buf}); err != nil {
+		t.Fatal(err)
+	}
+	logutil.InstallHandler(newStderrHandler())
+}
+
 func TestStderrSlog_RedactsSecrets(t *testing.T) {
 	var buf bytes.Buffer
 	configureBuf(t, &buf)

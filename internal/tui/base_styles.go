@@ -15,12 +15,10 @@ var (
 	CodeInlineStyle lipgloss.Style
 	SuccessStyle    lipgloss.Style
 	ErrorStyle      lipgloss.Style
-	WarningStyle    lipgloss.Style
 	HighlightStyle  lipgloss.Style
-	SpinnerStyle    lipgloss.Style
 )
 
-// rebuildStyles assigns TitleStyle through SpinnerStyle from the active
+// rebuildStyles assigns TitleStyle through HighlightStyle from the active
 // resolved Theme; UseTheme calls it after every theme swap.
 func rebuildStyles() {
 	TitleStyle = lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary())
@@ -30,7 +28,5 @@ func rebuildStyles() {
 	CodeInlineStyle = lipgloss.NewStyle().Foreground(ColorCode())
 	SuccessStyle = lipgloss.NewStyle().Foreground(ColorSuccess()).Bold(true)
 	ErrorStyle = lipgloss.NewStyle().Foreground(ColorError()).Bold(true)
-	WarningStyle = lipgloss.NewStyle().Foreground(ColorWarning()).Bold(true)
 	HighlightStyle = lipgloss.NewStyle().Foreground(ColorPrimary()).Bold(true)
-	SpinnerStyle = lipgloss.NewStyle().Foreground(ColorAccent()).Bold(true)
 }
