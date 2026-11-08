@@ -49,6 +49,8 @@ func SetMotion(m MotionMode) {
 // of the frame clock — still alive, far calmer.
 const reducedMotionDivisor = 4
 
+var spinnerFrames = []string{"⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"}
+
 // SpinnerGlyph returns the spinner glyph for one frame of the shared clock
 // — a pure function of (mode, frame): full advances one glyph per frame,
 // reduced every fourth, off always renders frame zero.

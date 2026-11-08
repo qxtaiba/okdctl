@@ -5,7 +5,6 @@ const (
 	IconSuccess    = "✓"
 	IconError      = "✗"
 	IconWarning    = "⚠"
-	IconSkip       = "↷"
 	IconPending    = "○"
 	IconActive     = "●"
 	IconPointer    = "→"
