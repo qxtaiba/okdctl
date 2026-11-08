@@ -1,1 +1,1 @@
-{"data":{"vmid":101,"name":"grappleberry-master-0","status":"running","qmpstatus":"running","ha":{"managed":1,"state":"started","group":"okd"},"uptime":86400,"pid":4242,"cpus":4,"maxmem":17179869184,"agent":1}}
+{"data":{"agent":1,"cpu":0,"cpus":4,"disk":0,"diskread":0,"diskwrite":0,"ha":{"group":"okd","managed":1,"state":"started"},"maxdisk":128849018880,"maxmem":17179869184,"mem":0,"memhost":0,"name":"grappleberry-master-0","netin":0,"netout":0,"pid":4242,"qmpstatus":"running","status":"running","tags":"grappleberry","uptime":86400,"vmid":101}}
