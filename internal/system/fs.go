@@ -52,13 +52,10 @@ func openTempFile(dir, pattern string, mode os.FileMode) (*os.File, error) {
 	return nil, fmt.Errorf("could not allocate temp file in %s after 10000 tries", dir)
 }
 
-// ExpandPath expands a leading `~/` to the invoking user's home directory.
-// Uses InvokingUserHomeDir so hand-edited paths resolve to the shell user's
-// home even after the deploy re-execs under sudo (os.UserHomeDir would
-// return /root there).
+// ExpandPath expands a leading `~/` to the user's home directory.
 func ExpandPath(path string) string {
 	if strings.HasPrefix(path, "~/") {
-		if home, err := InvokingUserHomeDir(); err == nil {
+		if home, err := os.UserHomeDir(); err == nil {
 			return filepath.Join(home, path[2:])
 		}
 	}
