@@ -11,7 +11,6 @@ import (
 func cacheFetcher(t *testing.T) *OKDVersionFetcher {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
-	t.Setenv("SUDO_USER", "")
 	return NewOKDVersionFetcher()
 }
 

@@ -3,7 +3,6 @@ package system
 import (
 	"errors"
 	"os"
-	"os/user"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -119,21 +118,15 @@ func TestFileExists(t *testing.T) {
 }
 
 func TestExpandPath(t *testing.T) {
-	t.Run("tilde_slash expands to invoking user home", func(t *testing.T) {
-		cur, err := user.Current()
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Setenv("SUDO_USER", cur.Username)
-		got := ExpandPath("~/x")
-		want := filepath.Join(cur.HomeDir, "x")
-		if got != want {
+	t.Run("tilde_slash expands to the user home", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		if got, want := ExpandPath("~/x"), filepath.Join(home, "x"); got != want {
 			t.Errorf("ExpandPath(~/x) = %q, want %q", got, want)
 		}
 	})
 
 	t.Run("bare tilde passes through unchanged", func(t *testing.T) {
-		t.Setenv("SUDO_USER", "")
 		if got := ExpandPath("~"); got != "~" {
 			t.Errorf("ExpandPath(~) = %q, want ~", got)
 		}
