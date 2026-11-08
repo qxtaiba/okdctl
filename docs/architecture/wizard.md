@@ -63,8 +63,7 @@ distribution through review — whose live config no longer matches the
 one the session opened with raises a one-line question in the status
 row; a second ctrl+c or `y` discards the edits and quits, and any other
 key returns to the form without reaching it. That comparison is a digest
-of the config as `config.Effective` resolves it, plus the credential
-fields that never serialize (`configDigest`), so an edit typed and then
+of the config's JSON form (`configDigest`), so an edit typed and then
 typed back is no edit at all, and ctrl+c with nothing changed quits
 immediately. This applies to the configure flow only: the hub and the
 day-two flows quit as before, and the screens that run an operation keep

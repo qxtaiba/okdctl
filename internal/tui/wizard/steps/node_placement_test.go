@@ -3,6 +3,7 @@ package steps
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -229,7 +230,7 @@ func TestNodePlacementStep_TabAdvancesAcrossSections(t *testing.T) {
 	s.SetFocused(true)
 
 	tab := tea.KeyPressMsg{Code: tea.KeyTab}
-	for i, want := range []int{1, 1, 1, 2, 2} {
+	for i, want := range []int{0, 1, 1, 1, 2, 2} {
 		_, _ = s.Update(tab)
 		if got := s.inner.CurrentSection(); got != want {
 			t.Fatalf("CurrentSection() after tab %d = %d, want %d", i+1, got, want)
@@ -321,8 +322,10 @@ func TestGolden_NodePlacementUnknownCapacity(t *testing.T) {
 			m.Config().Provider.Proxmox.Nodes = []string{"pve1"}
 			gen := m.CurrentStep().(*NodePlacementStep).generation
 			m.Update(discoveryCompleteMsg{generation: gen, discovery: &proxmoxDiscovery{Nodes: []proxmoxNode{{Name: "pve1", Status: "online"}}}})
-			m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
-			m.Update(wizard.FocusChangedMsg{})
+			for range 2 {
+				m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+				m.Update(wizard.FocusChangedMsg{})
+			}
 
 			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
 			tuitest.Golden(t, fmt.Sprintf("node-placement-unknown-capacity_%dx%d", sz.w, sz.h), frame)
@@ -491,4 +494,49 @@ func TestNodePlacementStep_SanitizesHostileProxmoxText(t *testing.T) {
 			t.Fatalf("rendered view carries the raw payload or no sanitization marker:\n%q", view)
 		}
 	})
+}
+
+func TestReviewJumpToProxmoxKeepsThePoolNodePlacementChose(t *testing.T) {
+	tui.SetTerminalWidth(120)
+	t.Cleanup(func() { tui.SetTerminalWidth(0) })
+	m := newGoldenModel(t)
+	_ = tuitest.RenderAt(t, m, 120, 40)
+	enter := tea.KeyPressMsg{Code: tea.KeyEnter}
+
+	m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDNodePlacement})
+	placement := m.CurrentStep().(*NodePlacementStep)
+	m.Update(discoveryCompleteMsg{generation: placement.generation, discovery: demoDiscovery()})
+	placement.poolField.SetValue("pve1,pve2")
+	_, cmd := m.Update(enter)
+	pumpCmd(m, cmd)
+	if got := m.Config().Provider.Proxmox.Nodes; !slices.Equal(got, []string{"pve1", "pve2"}) {
+		t.Fatalf("node placement did not write the pool: %v", got)
+	}
+
+	m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDProxmox})
+	_, cmd = m.Update(enter)
+	pumpCmd(m, cmd)
+
+	if got := m.Config().Provider.Proxmox.Nodes; !slices.Equal(got, []string{"pve1", "pve2"}) {
+		t.Fatalf("confirming the proxmox step overwrote the pool node placement chose: %v", got)
+	}
+}
+
+func TestNodePlacementTypedNodesJoinThePoolWithoutDiscovery(t *testing.T) {
+	cfg := config.DefaultConfig()
+	s := NewNodePlacementStep()
+	s.cfg = cfg
+	step, _ := s.Update(discoveryCompleteMsg{err: errors.New("connection refused")})
+	s = step.(*NodePlacementStep)
+
+	if got := s.poolField.Value(); got != "pve" {
+		t.Fatalf("pool without discovery = %q, want the config's own list", got)
+	}
+	s.addField.SetValue("pve9, pve")
+	if err := s.Apply(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.Provider.Proxmox.Nodes; !slices.Equal(got, []string{"pve", "pve9"}) {
+		t.Fatalf("pool after typing a node = %v, want [pve pve9]", got)
+	}
 }

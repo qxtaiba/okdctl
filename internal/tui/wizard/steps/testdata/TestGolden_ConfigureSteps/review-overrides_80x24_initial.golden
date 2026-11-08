@@ -18,7 +18,7 @@
   │  endpoint     https://192.168.1.100:8006                                 │  
   │  nodes        pve1, pve2                                                 │  
   │                                                                          │  
-  │─────────── ↑ ↓  scroll down for more ──────────── ▸ okd 4.22.0-okd-scos.1│  
+  │────────── ↑ ↓  scroll down for more ─────────── ▸ okd 4.22.0-okd-scos.10 │  
   │  ● deploy now   ○ save and exit     ←/→ choose … • ctrl+c quit • ? help  │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

@@ -17,12 +17,12 @@
   │    ╰────────────────────────────────────────────────────────────────────────────────────╯    │  
   │    proxmox nodes the vms spread across (provider.proxmox.nodes)                              │  
   │                                                                                              │  
-  │    ✓ control plane                                                                           │  
+  │    add nodes                                                                                 │  
+  │    ╭──────────────────────────────────────╮                                                  │  
+  │    │ none                                 │                                                  │  
+  │    ╰──────────────────────────────────────╯                                                  │  
   │                                                                                              │  
-  │    lab-master0                                                                               │  
-  │    ╭─────────────────────╮                                                                   │  
-  │    │ ◂ pve1 — 32c/128g ▸ │ default                                                           │  
-  │    ╰─────────────────────╯                                                                   │  
+  │    ✓ control plane                                                                           │  
   │                                                                                              │  
   │──────────────────── ↑ ↓  scroll down for more ───────────────────── ▸ okd 4.22.0-okd-scos.10 │  
   │  ↑↓ navigate • ← → change value • enter continue • esc back … • ctrl+c quit • ? help         │  

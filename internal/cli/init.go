@@ -161,15 +161,22 @@ func saveConfig(cfg *config.Config, path string, w io.Writer) error {
 	return nil
 }
 
-// writeCredentialsEnv writes the sidecar only when a token was typed, so a
-// re-run that leaves the field blank keeps the saved one.
+// writeCredentialsEnv rewrites the sidecar when a token was typed or the TLS
+// toggle moved from the loaded value, carrying the loaded token forward when
+// none was typed; an untouched session leaves the file alone.
 func writeCredentialsEnv(secrets *wizard.Secrets, configPath string) error {
-	if secrets.ProxmoxToken.IsEmpty() {
+	loaded := credentials.GetProxmoxCredentials(nil)
+	defer loaded.Zeroize()
+	typed := !secrets.ProxmoxToken.IsEmpty()
+	if !typed && secrets.ProxmoxInsecure == loaded.Insecure {
 		return nil
 	}
 	creds := &credentials.ProxmoxCredentials{
-		APIToken: bytes.Clone(secrets.ProxmoxToken.Bytes()),
+		APIToken: bytes.Clone(loaded.APIToken),
 		Insecure: secrets.ProxmoxInsecure,
+	}
+	if typed {
+		creds.APIToken = bytes.Clone(secrets.ProxmoxToken.Bytes())
 	}
 	defer creds.Zeroize()
 	envPath := credentials.EnvFilePath(configPath)

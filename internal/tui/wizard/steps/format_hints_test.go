@@ -19,7 +19,6 @@ func TestFormatShapedFields_HelpStatesShape(t *testing.T) {
 		{&ProxmoxStepDefinition, fieldAPIToken, "user@realm!tokenname=secret"},
 		{&ProxmoxStepDefinition, fieldAPIToken, "PROXMOX_VE_API_TOKEN"},
 		{&ProxmoxStepDefinition, fieldInsecure, "PROXMOX_VE_INSECURE"},
-		{&ProxmoxStepDefinition, config.FieldProxmoxNodes, "pve1, pve2"},
 		{&ProxmoxStepDefinition, config.FieldProxmoxVLAN, "0 is untagged"},
 		{&ProxmoxStepDefinition, config.FieldProxmoxVMIDBase, "6000"},
 		{&NetworkingStepDefinition, config.FieldNetworkingMachineCIDR, "192.168.1.0/24"},

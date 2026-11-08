@@ -22,7 +22,6 @@ func writeData(w http.ResponseWriter, v any) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"data": v})
 }
 
-// newFakeProxmoxServer answers /nodes only for the test token.
 func newFakeProxmoxServer(t *testing.T, nodes http.HandlerFunc) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()

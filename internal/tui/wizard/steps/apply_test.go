@@ -34,7 +34,6 @@ func TestStepDefinitionsRoundTripTheirFields(t *testing.T) {
 		{&BasicsStepDefinition, config.FieldClusterName, "homelab"},
 		{&BasicsStepDefinition, config.FieldClusterDomain, "prod.example"},
 		{&ProxmoxStepDefinition, config.FieldProxmoxEndpoint, "https://10.0.0.5:8006"},
-		{&ProxmoxStepDefinition, config.FieldProxmoxNodes, "pve1, pve2"},
 		{&ProxmoxStepDefinition, config.FieldProxmoxStorage, "tank"},
 		{&ProxmoxStepDefinition, config.FieldProxmoxISOStorage, "isos"},
 		{&ProxmoxStepDefinition, config.FieldProxmoxBridge, "vmbr1"},
@@ -194,5 +193,19 @@ func TestAdvancedStep_CIDROverlapFocusesAndMarksImplicatedFields(t *testing.T) {
 	}
 	if n := strings.Count(view, "must not overlap"); n != 2 {
 		t.Fatalf("View() shows the overlap error %d times, want 2 (once at each implicated field):\n%s", n, view)
+	}
+}
+
+func TestProxmoxStepSeedsTheTLSToggleFromTheLoadedEnv(t *testing.T) {
+	for _, tc := range []struct{ env, want string }{{"true", valYes}, {"", valNo}} {
+		t.Setenv("PROXMOX_VE_INSECURE", tc.env)
+		step := NewProxmoxStep()
+		step.LoadFromConfig(config.DefaultConfig(), true)
+		if got := step.Value(fieldInsecure); got != tc.want {
+			t.Errorf("PROXMOX_VE_INSECURE=%q seeds the toggle as %q, want %q", tc.env, got, tc.want)
+		}
+		if got := step.Secrets().ProxmoxInsecure; got != (tc.want == valYes) {
+			t.Errorf("PROXMOX_VE_INSECURE=%q: Secrets().ProxmoxInsecure = %v", tc.env, got)
+		}
 	}
 }
