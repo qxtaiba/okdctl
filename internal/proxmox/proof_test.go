@@ -84,10 +84,18 @@ func TestProof(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New(): %v", err)
 	}
+	if left := leftovers(t, d, env); len(left) > 0 {
+		t.Fatalf("host carries %s before the proof; refusing to run", strings.Join(left, ", "))
+	}
 	t.Run("Upload", func(t *testing.T) { proofUpload(t, d, env) })
 	t.Run("CreateUnderToken", func(t *testing.T) { proofCreateUnderToken(t, d, env, env.vmid+1) })
 	t.Run("ShutdownSemantics", func(t *testing.T) { proofShutdownSemantics(t, d, env, env.vmid+2) })
-	requireNothingLeft(t, d, env)
+	t.Run("HA", func(t *testing.T) { proofHA(t, d, env, env.vmid+2) })
+	if left := leftovers(t, d, env); len(left) > 0 {
+		t.Errorf("left on host after the proof: %s", strings.Join(left, ", "))
+	} else {
+		t.Logf("vms %d-%d, their ha resources and the proof iso absent", env.vmid, env.vmid+2)
+	}
 }
 
 func proofUpload(t *testing.T, d Driver, env *proofEnv) {
@@ -191,6 +199,50 @@ func proofShutdownSemantics(t *testing.T, d Driver, env *proofEnv, vmid int) {
 	}
 }
 
+func proofHA(t *testing.T, d Driver, env *proofEnv, vmid int) {
+	ctx := t.Context()
+	ref := VMRef{Node: env.node, VMID: vmid}
+	spec := proofSpec(env, vmid, 1, 1024, DiskSpec{Slot: "scsi0", Storage: env.storage, SizeGiB: 1, Serial: "proof-ha"})
+	createVM(t, d, ref, &spec)
+	t.Cleanup(func() { cleanupHA(t, d, ref) })
+
+	// "stopped" keeps the CRM from ever starting a disposable VM.
+	if err := d.SetHA(ctx, ref, HASpec{State: "stopped"}); err != nil {
+		t.Fatalf("SetHA(stopped) on an unregistered vm: %v", err)
+	}
+	if registered, err := d.(*driver).hasHA(ctx, ref); err != nil || !registered {
+		t.Fatalf("hasHA() after SetHA = %v, %v; want registered", registered, err)
+	}
+	if st := status(t, d, ref); !st.HA {
+		t.Errorf("Status() after SetHA = %+v, want HA managed", st)
+	}
+	if err := d.SetHA(ctx, ref, HASpec{State: "stopped"}); err != nil {
+		t.Fatalf("SetHA(stopped) on a registered vm: %v", err)
+	}
+	t.Log("SetHA registered then updated vm:" + strconv.Itoa(vmid) + " as stopped")
+
+	if err := d.ClearHA(ctx, ref); err != nil {
+		t.Fatalf("ClearHA(): %v", err)
+	}
+	switch err := d.ClearHA(ctx, ref); {
+	case errors.Is(err, ErrNotFound):
+		t.Logf("second ClearHA is ErrNotFound: %v", err)
+	case err == nil:
+		t.Log("second ClearHA is nil: the host deletes idempotently")
+	default:
+		t.Fatalf("second ClearHA() = %v, want ErrNotFound or nil", err)
+	}
+	if registered, err := d.(*driver).hasHA(ctx, ref); err != nil || registered {
+		t.Fatalf("hasHA() after ClearHA = %v, %v; want unregistered", registered, err)
+	}
+	if st := status(t, d, ref); st.HA {
+		t.Errorf("Status() after ClearHA = %+v, want HA unmanaged", st)
+	}
+	if err := finish(ctx, d)(d.DeleteVM(ctx, ref)); err != nil {
+		t.Fatalf("DeleteVM(): %v", err)
+	}
+}
+
 func proofSpec(env *proofEnv, vmid, cores, memoryMiB int, disks ...DiskSpec) VMSpec {
 	return VMSpec{
 		VMID:       vmid,
@@ -251,20 +303,26 @@ func requireVMAbsent(t *testing.T, d Driver, ref VMRef) {
 	}
 }
 
-// requireNothingLeft reads the per-VM status endpoint rather than the lagging listing.
-func requireNothingLeft(t *testing.T, d Driver, env *proofEnv) {
+// leftovers reads the per-VM status and HA endpoints rather than the lagging
+// listing, and names every proof VM, HA resource and ISO still on the host.
+func leftovers(t *testing.T, d Driver, env *proofEnv) []string {
 	t.Helper()
 	ctx := t.Context()
+	var left []string
 	for vmid := env.vmid; vmid <= env.vmid+2; vmid++ {
-		if _, err := d.Status(ctx, VMRef{Node: env.node, VMID: vmid}); !errors.Is(err, ErrNotFound) {
-			t.Errorf("vm %d still present after the proof: %v", vmid, err)
+		ref := VMRef{Node: env.node, VMID: vmid}
+		if _, err := d.Status(ctx, ref); !errors.Is(err, ErrNotFound) {
+			left = append(left, fmt.Sprintf("vm %d (%v)", vmid, err))
+		}
+		if registered, err := d.(*driver).hasHA(ctx, ref); err != nil || registered {
+			left = append(left, fmt.Sprintf("ha resource %s (%v)", haSID(ref), err))
 		}
 	}
 	volid := fmt.Sprintf("%s:iso/okdctl-proof-%d.iso", env.isoStorage, env.vmid)
 	if v := lookupVolume(ctx, t, d, env, volid); v != nil {
-		t.Errorf("volume %s still present after the proof", volid)
+		left = append(left, "volume "+volid)
 	}
-	t.Logf("vms %d-%d and %s absent", env.vmid, env.vmid+2, volid)
+	return left
 }
 
 func status(t *testing.T, d Driver, ref VMRef) VMStatus {
@@ -327,6 +385,16 @@ func cleanupVM(t *testing.T, d Driver, ref VMRef, created Task) {
 		return
 	}
 	t.Logf("cleanup removed vm %d", ref.VMID)
+}
+
+// cleanupHA runs before cleanupVM (cleanups are LIFO) so the VM is never
+// destroyed while registered.
+func cleanupHA(t *testing.T, d Driver, ref VMRef) {
+	ctx, cancel := context.WithTimeout(context.Background(), proofTimeout)
+	defer cancel()
+	if err := d.ClearHA(ctx, ref); err != nil && !errors.Is(err, ErrNotFound) {
+		t.Errorf("cleanup ha %s: %v (resource may be left on host)", haSID(ref), err)
+	}
 }
 
 // cleanupVolume runs after t.Context is cancelled, so it carries its own deadline.

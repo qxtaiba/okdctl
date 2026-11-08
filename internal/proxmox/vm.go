@@ -142,24 +142,38 @@ func (d *driver) DeleteVM(ctx context.Context, ref VMRef) (Task, error) {
 	return d.task(ctx, http.MethodDelete, ref.Node, vmPath(ref, "?purge=1&destroy-unreferenced-disks=1"), nil)
 }
 
-// SetHA upserts the HA resource: a registered VM is updated in place, with
-// an empty Group deleting any group it had.
-func (d *driver) SetHA(ctx context.Context, ref VMRef, spec HASpec) error {
-	sid := haSID(ref)
-	path := "/cluster/ha/resources/" + url.PathEscape(sid)
+func haPath(ref VMRef) string {
+	return "/cluster/ha/resources/" + url.PathEscape(haSID(ref))
+}
+
+// hasHA reports whether ref is registered as an HA resource.
+func (d *driver) hasHA(ctx context.Context, ref VMRef) (bool, error) {
 	var current struct {
 		SID string `json:"sid"`
 	}
-	err := d.get(ctx, path, &current)
+	err := d.get(ctx, haPath(ref), &current)
 	switch {
-	case errors.Is(err, ErrNotFound) || (err == nil && current.SID == ""):
-		form := url.Values{"sid": {sid}, "state": {spec.State}}
+	case errors.Is(err, ErrNotFound):
+		return false, nil
+	case err != nil:
+		return false, err
+	}
+	return current.SID != "", nil
+}
+
+// SetHA upserts the HA resource: a registered VM is updated in place, with
+// an empty Group deleting any group it had.
+func (d *driver) SetHA(ctx context.Context, ref VMRef, spec HASpec) error {
+	registered, err := d.hasHA(ctx, ref)
+	if err != nil {
+		return err
+	}
+	if !registered {
+		form := url.Values{"sid": {haSID(ref)}, "state": {spec.State}}
 		if spec.Group != "" {
 			form.Set("group", spec.Group)
 		}
 		return d.write(ctx, http.MethodPost, "/cluster/ha/resources", form, nil)
-	case err != nil:
-		return err
 	}
 	form := url.Values{"state": {spec.State}}
 	if spec.Group != "" {
@@ -167,11 +181,11 @@ func (d *driver) SetHA(ctx context.Context, ref VMRef, spec HASpec) error {
 	} else {
 		form.Set("delete", "group")
 	}
-	return d.write(ctx, http.MethodPut, path, form, nil)
+	return d.write(ctx, http.MethodPut, haPath(ref), form, nil)
 }
 
 func (d *driver) ClearHA(ctx context.Context, ref VMRef) error {
-	return d.write(ctx, http.MethodDelete, "/cluster/ha/resources/"+url.PathEscape(haSID(ref)), nil, nil)
+	return d.write(ctx, http.MethodDelete, haPath(ref), nil, nil)
 }
 
 func boolFlag(b bool) string {
