@@ -2,6 +2,7 @@ package proxmox
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -13,6 +14,7 @@ import (
 const (
 	taskPollInterval = time.Second
 	taskRunning      = "running"
+	waitTaskRetries  = 5
 )
 
 func (d *driver) Start(ctx context.Context, ref VMRef) (Task, error) {
@@ -24,7 +26,7 @@ func (d *driver) Start(ctx context.Context, ref VMRef) (Task, error) {
 func (d *driver) Shutdown(ctx context.Context, ref VMRef, timeout time.Duration, force bool) (Task, error) {
 	form := url.Values{}
 	if timeout > 0 {
-		form.Set("timeout", strconv.Itoa(int(timeout/time.Second)))
+		form.Set("timeout", strconv.Itoa(int((timeout+time.Second-1)/time.Second)))
 	}
 	if force {
 		form.Set("forceStop", "1")
@@ -60,7 +62,9 @@ func (d *driver) Status(ctx context.Context, ref VMRef) (VMStatus, error) {
 }
 
 // WaitTask polls the task until it stops; a zero Task is already done, and a
-// task ending with anything but OK or WARNINGS: n fails with *TaskFailed.
+// task ending with anything but OK or WARNINGS: n fails with *TaskFailed. A
+// poll error other than permission or not-found is retried on the next tick
+// up to waitTaskRetries times in a row.
 func (d *driver) WaitTask(ctx context.Context, task Task) error {
 	if task.UPID == "" {
 		return nil
@@ -68,15 +72,25 @@ func (d *driver) WaitTask(ctx context.Context, task Task) error {
 	path := nodePath(task.Node, "tasks/"+url.PathEscape(task.UPID)+"/status")
 	ticker := time.NewTicker(d.pollInterval)
 	defer ticker.Stop()
+	failures := 0
 	for {
 		var st struct {
 			Status     string `json:"status"`
 			ExitStatus string `json:"exitstatus"`
 		}
-		if err := d.get(ctx, path, &st); err != nil {
+		err := d.get(ctx, path, &st)
+		switch {
+		case err == nil:
+			failures = 0
+		case ctx.Err() != nil, errors.Is(err, ErrPermission), errors.Is(err, ErrNotFound):
 			return err
+		default:
+			failures++
+			if failures > waitTaskRetries {
+				return err
+			}
 		}
-		if st.Status != taskRunning {
+		if err == nil && st.Status != taskRunning {
 			// PVE's own upid_status_is_error also counts "WARNINGS: n" as success.
 			if st.ExitStatus == "OK" || strings.HasPrefix(st.ExitStatus, "WARNINGS: ") {
 				return nil

@@ -286,6 +286,15 @@ func TestShutdown(t *testing.T) {
 			t.Fatalf("posted form = %v, want %v", got, want)
 		}
 	})
+	t.Run("sub-second timeout rounds up", func(t *testing.T) {
+		f := newFakeAPI(t, nil)
+		if _, err := f.driver(t).Shutdown(t.Context(), ref101, 1500*time.Millisecond, false); err != nil {
+			t.Fatalf("Shutdown(): %v", err)
+		}
+		if got, want := f.form(key), (url.Values{"timeout": {"2"}}); !reflect.DeepEqual(got, want) {
+			t.Fatalf("posted form = %v, want %v", got, want)
+		}
+	})
 	t.Run("forced", func(t *testing.T) {
 		f := newFakeAPI(t, nil)
 		if _, err := f.driver(t).Shutdown(t.Context(), ref101, 30*time.Second, true); err != nil {
@@ -402,6 +411,49 @@ func TestWaitTask(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), exit) {
 			t.Fatalf("error %q does not carry the exit status", err)
+		}
+	})
+
+	t.Run("transient errors are retried", func(t *testing.T) {
+		h, polls := taskStatusHandler("running", "OK")
+		var calls atomic.Int32
+		f := newFakeAPI(t, map[string]http.HandlerFunc{key: func(w http.ResponseWriter, r *http.Request) {
+			if calls.Add(1) <= 2 {
+				pveErrorHandler("got timeout")(w, r)
+				return
+			}
+			h(w, r)
+		}})
+		if err := fastDriver(t, f).WaitTask(t.Context(), shutdown); err != nil {
+			t.Fatalf("WaitTask(): %v", err)
+		}
+		if got := polls.Load(); got != 2 {
+			t.Fatalf("polled %d times after the retries, want 2", got)
+		}
+	})
+
+	t.Run("persistent errors surface after bounded retries", func(t *testing.T) {
+		var calls atomic.Int32
+		f := newFakeAPI(t, map[string]http.HandlerFunc{key: func(w http.ResponseWriter, r *http.Request) {
+			calls.Add(1)
+			pveErrorHandler("got timeout")(w, r)
+		}})
+		err := fastDriver(t, f).WaitTask(t.Context(), shutdown)
+		if err == nil || !strings.Contains(err.Error(), "got timeout") {
+			t.Fatalf("WaitTask() error = %v, want the pve message", err)
+		}
+		if got := calls.Load(); got != 1+waitTaskRetries {
+			t.Fatalf("polled %d times, want %d", got, 1+waitTaskRetries)
+		}
+	})
+
+	t.Run("permission errors are not retried", func(t *testing.T) {
+		f := newFakeAPI(t, map[string]http.HandlerFunc{key: jsonHandler(http.StatusForbidden, `{"data":null}`)})
+		if err := fastDriver(t, f).WaitTask(t.Context(), shutdown); !errors.Is(err, ErrPermission) {
+			t.Fatalf("WaitTask() error = %v, want ErrPermission", err)
+		}
+		if got := f.count(key); got != 1 {
+			t.Fatalf("polled %d times, want 1", got)
 		}
 	})
 
