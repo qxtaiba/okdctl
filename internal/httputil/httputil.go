@@ -28,21 +28,6 @@ func New(timeout time.Duration) *http.Client {
 	return &http.Client{Timeout: timeout, CheckRedirect: capRedirects}
 }
 
-// NewInsecure returns a TLS-skipping client for the bootstrap-window
-// kube-vip healthcheck, where the VIP isn't yet in the apiserver SANs.
-// Callers MUST attempt the secure path first and fall back here only on
-// x509.HostnameError; new callers must register in
-// httputil_newinsecure_policy_test.go's allowedPrefixes.
-func NewInsecure(timeout time.Duration) *http.Client {
-	return &http.Client{
-		Timeout:       timeout,
-		CheckRedirect: capRedirects,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // bootstrap self-signed cert; see doc
-		},
-	}
-}
-
 // NewOptionalInsecure skips TLS verification only when insecure is true —
 // the operator-opt-in path for go-proxmox API clients; new callers must
 // register in TestNewInsecureCallerPolicy's allowlist.

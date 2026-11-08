@@ -13,13 +13,11 @@ import (
 )
 
 // TestNewInsecureCallerPolicy fails if a file outside a factory's
-// allowlisted paths calls a TLS-skip factory (NewInsecure,
-// NewOptionalInsecure); new callers must be added to allowedPrefixes after
-// a security review.
+// allowlisted paths calls the TLS-skip factory NewOptionalInsecure; new
+// callers must be added to allowedPrefixes after a security review.
 func TestNewInsecureCallerPolicy(t *testing.T) {
 	const importPath = "github.com/qxtaiba/okdctl/internal/httputil"
 	allowedPrefixes := map[string][]string{
-		"NewInsecure": {},
 		"NewOptionalInsecure": {
 			"internal/infrastructure/proxmox/",
 			"internal/tui/wizard/steps/",
