@@ -2,7 +2,7 @@ package proxmox
 
 import (
 	"context"
-	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/luthermonson/go-proxmox"
@@ -225,30 +225,26 @@ type Driver interface {
 func New(endpoint string, token []byte, insecure bool) (Driver, error) {
 	// No transport timeout: ISO uploads outlive any fixed budget, so every
 	// method is bounded by its ctx instead.
-	client, err := newProxmoxClient(endpoint, "", nil, token, insecure, 0)
+	client, httpClient, err := newProxmoxClient(endpoint, "", nil, token, insecure, 0)
 	if err != nil {
 		return nil, err
 	}
-	return &driver{client: client, pollInterval: taskPollInterval}, nil
+	return &driver{
+		client:       client,
+		httpClient:   httpClient,
+		baseURL:      APIBaseURL(endpoint),
+		auth:         "PVEAPIToken=" + string(token),
+		pollInterval: taskPollInterval,
+	}, nil
 }
 
+// driver holds the go-proxmox client plus the raw-request fields UploadISO
+// needs; auth is a private copy of the token header, so zeroizing the
+// caller's token never touches it.
 type driver struct {
 	client       *proxmox.Client
+	httpClient   *http.Client
+	baseURL      string
+	auth         string
 	pollInterval time.Duration
-}
-
-func notImplemented(method string) error {
-	return fmt.Errorf("proxmox driver: %s not implemented", method)
-}
-
-func (d *driver) UploadISO(context.Context, string, string, string, string) (Task, error) {
-	return Task{}, notImplemented("UploadISO")
-}
-
-func (d *driver) ListISOs(context.Context, string, string) ([]Volume, error) {
-	return nil, notImplemented("ListISOs")
-}
-
-func (d *driver) DeleteVolume(context.Context, string, string, string) (Task, error) {
-	return Task{}, notImplemented("DeleteVolume")
 }

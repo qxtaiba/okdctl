@@ -1,7 +1,11 @@
 package proxmox
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -23,42 +27,50 @@ const (
 	upidShutdown = "UPID:pve:00001234:00005678:66aabbcc:qmshutdown:101:root@pam!tok:"
 	upidStop     = "UPID:pve:00001234:00005678:66aabbcc:qmstop:101:root@pam!tok:"
 	upidReset    = "UPID:pve:00001234:00005678:66aabbcc:qmreset:101:root@pam!tok:"
+	upidUpload   = "UPID:pve:00001234:00005678:66aabbcc:imgcopy::root@pam!tok:"
+	upidImgDel   = "UPID:pve:00001234:00005678:66aabbcc:imgdel:grappleberry-worker.iso@local:root@pam!tok:"
 )
 
 var fakeFixtures = map[string]string{
-	"GET /version":                                  "version.json",
-	"GET /nodes":                                    "nodes.json",
-	"GET /nodes/pve/status":                         "nodes_pve_status.json",
-	"GET /nodes/pve/storage":                        "nodes_pve_storage.json",
-	"GET /nodes/pve/network?type=any_bridge":        "nodes_pve_network_any_bridge.json",
-	"GET /cluster/resources?type=vm":                "cluster_resources_vm.json",
-	"GET /access/permissions":                       "access_permissions.json",
-	"GET /nodes/pve/qemu/101/status/current":        "nodes_pve_qemu_101_status_current.json",
-	"GET /nodes/pve/qemu/101/config":                "nodes_pve_qemu_101_config.json",
-	"GET /nodes/pve/qemu/101/pending":               "nodes_pve_qemu_101_pending.json",
-	"GET /nodes/pve/tasks/" + upidStart + "/status": "nodes_pve_tasks_qmstart_status.json",
-	"GET /cluster/ha/resources/vm:101":              "cluster_ha_resources_vm_101.json",
+	"GET /version":                                     "version.json",
+	"GET /nodes":                                       "nodes.json",
+	"GET /nodes/pve/status":                            "nodes_pve_status.json",
+	"GET /nodes/pve/storage":                           "nodes_pve_storage.json",
+	"GET /nodes/pve/network?type=any_bridge":           "nodes_pve_network_any_bridge.json",
+	"GET /cluster/resources?type=vm":                   "cluster_resources_vm.json",
+	"GET /access/permissions":                          "access_permissions.json",
+	"GET /nodes/pve/qemu/101/status/current":           "nodes_pve_qemu_101_status_current.json",
+	"GET /nodes/pve/qemu/101/config":                   "nodes_pve_qemu_101_config.json",
+	"GET /nodes/pve/qemu/101/pending":                  "nodes_pve_qemu_101_pending.json",
+	"GET /nodes/pve/tasks/" + upidStart + "/status":    "nodes_pve_tasks_qmstart_status.json",
+	"GET /cluster/ha/resources/vm:101":                 "cluster_ha_resources_vm_101.json",
+	"GET /nodes/pve/storage/local/content?content=iso": "nodes_pve_storage_local_content_iso.json",
 }
 
 // fakeWrites maps a write call to the UPID it returns; "" answers {"data":null}.
 var fakeWrites = map[string]string{
-	"POST /nodes/pve/qemu":                                            upidCreate,
-	"POST /nodes/pve/qemu/101/config":                                 upidConfig,
-	"PUT /nodes/pve/qemu/101/resize":                                  upidResize,
-	"DELETE /nodes/pve/qemu/101?purge=1&destroy-unreferenced-disks=1": upidDestroy,
-	"POST /nodes/pve/qemu/101/status/start":                           upidStart,
-	"POST /nodes/pve/qemu/101/status/shutdown":                        upidShutdown,
-	"POST /nodes/pve/qemu/101/status/stop":                            upidStop,
-	"POST /nodes/pve/qemu/101/status/reset":                           upidReset,
-	"POST /cluster/ha/resources":                                      "",
-	"PUT /cluster/ha/resources/vm:101":                                "",
-	"DELETE /cluster/ha/resources/vm:101?purge=1":                     "",
+	"POST /nodes/pve/qemu":                                                      upidCreate,
+	"POST /nodes/pve/qemu/101/config":                                           upidConfig,
+	"PUT /nodes/pve/qemu/101/resize":                                            upidResize,
+	"DELETE /nodes/pve/qemu/101?purge=1&destroy-unreferenced-disks=1":           upidDestroy,
+	"POST /nodes/pve/qemu/101/status/start":                                     upidStart,
+	"POST /nodes/pve/qemu/101/status/shutdown":                                  upidShutdown,
+	"POST /nodes/pve/qemu/101/status/stop":                                      upidStop,
+	"POST /nodes/pve/qemu/101/status/reset":                                     upidReset,
+	"POST /cluster/ha/resources":                                                "",
+	"PUT /cluster/ha/resources/vm:101":                                          "",
+	"DELETE /cluster/ha/resources/vm:101?purge=1":                               "",
+	"POST /nodes/pve/storage/local/upload":                                      upidUpload,
+	"DELETE /nodes/pve/storage/local/content/local:iso/grappleberry-worker.iso": upidImgDel,
 }
 
 type fakeCall struct {
-	Method string
-	Key    string
-	Form   url.Values
+	Method        string
+	Key           string
+	Form          url.Values
+	ContentType   string
+	ContentLength int64
+	Body          []byte
 }
 
 type fakeAPI struct {
@@ -124,8 +136,15 @@ func (f *fakeAPI) serve(w http.ResponseWriter, r *http.Request) {
 }
 
 func (f *fakeAPI) record(r *http.Request, key string) {
-	call := fakeCall{Method: r.Method, Key: key}
-	if r.Body != nil && r.ContentLength != 0 {
+	call := fakeCall{Method: r.Method, Key: key, ContentType: r.Header.Get("Content-Type"), ContentLength: r.ContentLength}
+	switch {
+	case strings.HasPrefix(call.ContentType, "multipart/form-data"):
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			f.t.Errorf("%s %s: read multipart body: %v", r.Method, key, err)
+		}
+		call.Body = body
+	case r.Body != nil && r.ContentLength != 0:
 		var fields map[string]string
 		if err := json.NewDecoder(r.Body).Decode(&fields); err != nil {
 			f.t.Errorf("%s %s: body is not a flat JSON object: %v", r.Method, key, err)
@@ -159,15 +178,31 @@ func (f *fakeAPI) count(key string) int {
 // form returns the body of the last call matching "METHOD key".
 func (f *fakeAPI) form(key string) url.Values {
 	f.t.Helper()
+	return f.last(key).Form
+}
+
+// multipartBody parses the last multipart call matching "METHOD key".
+func (f *fakeAPI) multipartBody(key string) (fakeCall, *multipart.Reader) {
+	f.t.Helper()
+	call := f.last(key)
+	_, params, err := mime.ParseMediaType(call.ContentType)
+	if err != nil || params["boundary"] == "" {
+		f.t.Fatalf("%s content type %q is not multipart: %v", key, call.ContentType, err)
+	}
+	return call, multipart.NewReader(bytes.NewReader(call.Body), params["boundary"])
+}
+
+func (f *fakeAPI) last(key string) fakeCall {
+	f.t.Helper()
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for i := len(f.calls) - 1; i >= 0; i-- {
 		if c := f.calls[i]; c.Method+" "+c.Key == key {
-			return c.Form
+			return c
 		}
 	}
 	f.t.Fatalf("no call %s recorded; calls: %+v", key, f.calls)
-	return nil
+	return fakeCall{}
 }
 
 func (f *fakeAPI) driver(t *testing.T) Driver {
