@@ -2,6 +2,7 @@ package tui
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 
@@ -62,7 +63,21 @@ func TestStderrSlog_NonSecretsPassThrough(t *testing.T) {
 	}
 }
 
+// resetLoggersAfter rebuilds the package-level loggers once t ends, so a
+// repeated in-process run does not inherit the previous run_id binding.
+func resetLoggersAfter(t *testing.T) {
+	t.Helper()
+	t.Cleanup(func() {
+		stderrLogger.Store(buildLogger(os.Stderr))
+		sinkLogger.Store(nil)
+		stderrIsJSON.Store(false)
+		logutil.SetRunID("")
+		logutil.InstallHandler(newStderrHandler())
+	})
+}
+
 func TestSetRunID_RefreshesRedactionWrapper(t *testing.T) {
+	resetLoggersAfter(t)
 	var stderrBuf, sinkBuf bytes.Buffer
 	if err := ConfigureLoggers(LoggerConfig{Level: "debug", Format: "text", Stderr: &stderrBuf, Sink: &sinkBuf}); err != nil {
 		t.Fatal(err)
@@ -93,6 +108,7 @@ func TestSetRunID_RefreshesRedactionWrapper(t *testing.T) {
 }
 
 func TestRunIDOnStderrWhenJSON(t *testing.T) {
+	resetLoggersAfter(t)
 	var stderrBuf bytes.Buffer
 	if err := ConfigureLoggers(LoggerConfig{Level: "debug", Format: "json", Stderr: &stderrBuf}); err != nil {
 		t.Fatal(err)
