@@ -117,6 +117,18 @@ func TestCreateVM(t *testing.T) {
 		}
 	})
 
+	t.Run("vmid listed with a create lock is reported as such", func(t *testing.T) {
+		row := `{"id":"qemu/105","lock":"create","name":"grappleberry-worker-0","node":"pve","tags":"grappleberry","type":"qemu","vmid":105}`
+		f := newFakeAPI(t, map[string]http.HandlerFunc{"GET /cluster/resources?type=vm": jsonHandler(http.StatusOK, `{"data":[`+row+`]}`)})
+		_, err := f.driver(t).CreateVM(t.Context(), "pve", newSpec(105, "grappleberry"))
+		if err == nil || !strings.Contains(err.Error(), "being created") {
+			t.Fatalf("CreateVM() error = %v, want it to say vm 105 is being created", err)
+		}
+		if f.called("POST /nodes/pve/qemu") {
+			t.Fatal("CreateVM() posted over a VM being created")
+		}
+	})
+
 	t.Run("vmid unlisted but tagged on the node is a no-op", func(t *testing.T) {
 		f := newFakeAPI(t, map[string]http.HandlerFunc{config105: taggedConfig("grappleberry;okd")})
 		task, err := f.driver(t).CreateVM(t.Context(), "pve", newSpec(105, "grappleberry"))

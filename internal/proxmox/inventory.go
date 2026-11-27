@@ -162,6 +162,7 @@ type resourceRow struct {
 	Node   string `json:"node"`
 	Name   string `json:"name"`
 	Status string `json:"status"`
+	Lock   string `json:"lock"`
 	Tags   string `json:"tags"`
 	Pool   string `json:"pool"`
 	MaxMem num    `json:"maxmem"`
@@ -176,12 +177,14 @@ func (d *driver) ListVMs(ctx context.Context) ([]VMSummary, error) {
 		return nil, err
 	}
 	vms := make([]VMSummary, 0, len(rows))
-	for _, r := range rows {
+	for i := range rows {
+		r := &rows[i]
 		vms = append(vms, VMSummary{
 			VMRef:     VMRef{Node: r.Node, VMID: int(r.VMID)}, //nolint:gosec // G115: vmids are small positive integers
 			Type:      r.Type,
 			Name:      r.Name,
 			Status:    r.Status,
+			Lock:      r.Lock,
 			Tags:      splitList(r.Tags, ';'),
 			Pool:      r.Pool,
 			MaxMemMiB: bytesToMiB(uint64(r.MaxMem)),

@@ -40,6 +40,7 @@ type VMSummary struct {
 	Type      string
 	Name      string
 	Status    string
+	Lock      string
 	Tags      []string
 	Pool      string
 	MaxMemMiB int

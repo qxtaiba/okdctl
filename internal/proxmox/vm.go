@@ -15,6 +15,8 @@ func vmPath(ref VMRef, rest string) string {
 	return nodePath(ref.Node, "qemu/"+strconv.Itoa(ref.VMID)+rest)
 }
 
+const lockCreate = "create"
+
 func haSID(ref VMRef) string {
 	return "vm:" + strconv.Itoa(ref.VMID)
 }
@@ -22,18 +24,23 @@ func haSID(ref VMRef) string {
 // CreateVM is idempotent by VMID: a VM already carrying spec.Tag on node
 // yields a zero Task, so a create whose WaitTask timed out can be retried,
 // while one on another node, one still locked by its own create, or any
-// other VM is an error. The cluster listing catches a VMID on another node;
-// the target node's config catches one pvestatd has not published yet.
+// other VM is an error. The cluster listing catches a VMID on another node
+// and carries the lock; the target node's config catches one pvestatd has
+// not published yet.
 func (d *driver) CreateVM(ctx context.Context, node string, spec VMSpec) (Task, error) { //nolint:gocritic // hugeParam: Driver passes specs by value
 	vms, err := d.ListVMs(ctx)
 	if err != nil {
 		return Task{}, fmt.Errorf("create vm %d: %w", spec.VMID, err)
 	}
 	if i := slices.IndexFunc(vms, func(vm VMSummary) bool { return vm.VMID == spec.VMID }); i >= 0 {
-		if err := existingVM(&spec, vms[i].Node, vms[i].Name, vms[i].Tags); err != nil || vms[i].Node == node {
+		vm := vms[i]
+		if vm.Lock == lockCreate {
+			return Task{}, creatingErr(&spec, vm.Node)
+		}
+		if err := existingVM(&spec, vm.Node, vm.Name, vm.Tags); err != nil || vm.Node == node {
 			return Task{}, err
 		}
-		return Task{}, fmt.Errorf("create vm %d: vm %q is on node %s, not %s", spec.VMID, vms[i].Name, vms[i].Node, node)
+		return Task{}, fmt.Errorf("create vm %d: vm %q is on node %s, not %s", spec.VMID, vm.Name, vm.Node, node)
 	}
 	ref := VMRef{Node: node, VMID: spec.VMID}
 	if exists, err := d.vmExists(ctx, ref, &spec); exists || err != nil {
@@ -56,10 +63,14 @@ func (d *driver) vmExists(ctx context.Context, ref VMRef, spec *VMSpec) (bool, e
 		return false, nil
 	case err != nil:
 		return false, fmt.Errorf("create vm %d: %w", spec.VMID, err)
-	case cfg.Lock == "create":
-		return true, fmt.Errorf("create vm %d: vm is being created on %s", spec.VMID, ref.Node)
+	case cfg.Lock == lockCreate:
+		return true, creatingErr(spec, ref.Node)
 	}
 	return true, existingVM(spec, ref.Node, cfg.Name, cfg.Tags)
+}
+
+func creatingErr(spec *VMSpec, node string) error {
+	return fmt.Errorf("create vm %d: vm is being created on %s", spec.VMID, node)
 }
 
 func existingVM(spec *VMSpec, node, name string, tags []string) error {
