@@ -230,8 +230,17 @@ func (p Permissions) granted(path, priv string) bool {
 		} else {
 			path = "/"
 		}
-		if privs := p[path]; slices.Contains(slices.Collect(maps.Values(privs)), true) {
+		if privs := p[path]; anyGranted(privs) {
 			return privs[priv]
+		}
+	}
+	return false
+}
+
+func anyGranted(privs map[string]bool) bool {
+	for _, ok := range privs {
+		if ok {
+			return true
 		}
 	}
 	return false
