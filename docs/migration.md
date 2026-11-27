@@ -80,19 +80,30 @@ Keys new in v3 with no v2 source: `networking.ingress_vip`,
 
 ## Credentials
 
-The token no longer appears in the YAML in any form, and the loader
-refuses a file that assigns `PROXMOX_VE_*` variables. The v2 keys
-`provider.proxmox.token_id`, `provider.proxmox.insecure` and
-`provider.proxmox.insecure_http` move to `okdctl.env` beside the config,
-written at mode 0600:
+The token no longer appears in the YAML in any form. The loader refuses a
+file that assigns `PROXMOX_VE_*` variables as a credentials file handed
+to it by mistake. Two v2 keys move to the sidecar `okdctl.env`, which
+always sits beside `okdctl.yaml` in the same directory and is written at
+mode 0600:
+
+| v2 key | okdctl.env variable |
+| --- | --- |
+| `provider.proxmox.token_id` (and the token itself) | `PROXMOX_VE_API_TOKEN` |
+| `provider.proxmox.insecure` | `PROXMOX_VE_INSECURE` |
 
 ```sh
 PROXMOX_VE_API_TOKEN='user@pve!okdctl=00000000-0000-0000-0000-000000000000'
 PROXMOX_VE_INSECURE=true   # only for a self-signed endpoint certificate
 ```
 
-The same two variables set in the environment take precedence over the
-file.
+Those two are the only variables the sidecar may hold; any other key is
+refused. The same two variables set in the environment are laid over the
+file: a non-empty value in the environment wins, and a token that differs
+from the saved one is reported by name without printing either value.
+
+The v2 key `provider.proxmox.insecure_http` has no variable. Plain HTTP
+is the `http://` scheme on `provider.proxmox.endpoint`; the wizard and
+the driver warn that the token then travels in cleartext.
 
 ## Starting fresh
 
