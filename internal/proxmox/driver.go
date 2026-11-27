@@ -218,7 +218,7 @@ type Driver interface {
 	Reset(ctx context.Context, ref VMRef) (Task, error)
 	Status(ctx context.Context, ref VMRef) (VMStatus, error)
 	WaitTask(ctx context.Context, task Task) error
-	UploadISO(ctx context.Context, node, storage, path, sha256 string) (Task, error)
+	UploadISO(ctx context.Context, node, storage, path, name, sha256 string) (Task, error)
 	ListISOs(ctx context.Context, node, storage string) ([]Volume, error)
 	DeleteVolume(ctx context.Context, node, storage, volid string) (Task, error)
 	SetHA(ctx context.Context, ref VMRef, spec HASpec) error

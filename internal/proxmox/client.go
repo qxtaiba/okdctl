@@ -61,6 +61,7 @@ func statusWithMessage(status string, body []byte) string {
 	return status
 }
 
+// pveMessage joins the envelope's message with its per-parameter errors, which a 400 carries.
 func pveMessage(body []byte) string {
 	var envelope struct {
 		Message string          `json:"message"`
@@ -69,10 +70,14 @@ func pveMessage(body []byte) string {
 	if json.Unmarshal(body, &envelope) != nil {
 		return ""
 	}
-	if msg := strings.TrimSpace(envelope.Message); msg != "" {
+	msg, errs := strings.TrimSpace(envelope.Message), strings.TrimSpace(string(envelope.Errors))
+	switch {
+	case msg == "":
+		return errs
+	case errs == "":
 		return msg
 	}
-	return strings.TrimSpace(string(envelope.Errors))
+	return msg + " " + errs
 }
 
 // get decodes the data envelope of an authenticated GET on an

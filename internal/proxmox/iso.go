@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"time"
 )
 
@@ -45,10 +44,11 @@ func storagePath(node, storage, rest string) string {
 	return nodePath(node, "storage/"+url.PathEscape(storage)+"/"+rest)
 }
 
-// UploadISO streams path to the node's storage without buffering the file;
-// the request bypasses go-proxmox because its uploader ranges a map and so
-// emits the multipart fields in random order (luthermonson/go-proxmox#352).
-func (d *driver) UploadISO(ctx context.Context, node, storage, path, sha256 string) (Task, error) {
+// UploadISO streams path to the node's storage as the volume name without
+// buffering the file; the request bypasses go-proxmox because its uploader
+// ranges a map and so emits the multipart fields in random order
+// (luthermonson/go-proxmox#352).
+func (d *driver) UploadISO(ctx context.Context, node, storage, path, name, sha256 string) (Task, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return Task{}, fmt.Errorf("upload iso: %w", err)
@@ -59,7 +59,7 @@ func (d *driver) UploadISO(ctx context.Context, node, storage, path, sha256 stri
 		return Task{}, fmt.Errorf("upload iso: %w", err)
 	}
 
-	head, tail, contentType, err := isoMultipart(filepath.Base(path), sha256)
+	head, tail, contentType, err := isoMultipart(name, sha256)
 	if err != nil {
 		return Task{}, fmt.Errorf("upload iso: %w", err)
 	}
@@ -84,7 +84,9 @@ func (d *driver) UploadISO(ctx context.Context, node, storage, path, sha256 stri
 	case res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden:
 		return Task{}, fmt.Errorf("upload iso: %w", ErrPermission)
 	case res.StatusCode >= http.StatusMultipleChoices:
-		return Task{}, fmt.Errorf("upload iso: %w", mapAPIError(errors.New(res.Status)))
+		// The transport leaves a 400's body alone, so its parameter detail is read here.
+		body, _ := io.ReadAll(io.LimitReader(res.Body, errorBodyLimit))
+		return Task{}, fmt.Errorf("upload iso: %w", mapAPIError(errors.New(statusWithMessage(res.Status, body))))
 	}
 	var envelope struct {
 		Data string `json:"data"`

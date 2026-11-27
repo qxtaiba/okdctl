@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -105,11 +104,6 @@ func proofUpload(t *testing.T, d Driver, env *proofEnv) {
 	ctx := t.Context()
 	name := fmt.Sprintf("okdctl-proof-%d.iso", env.vmid)
 	volid := env.isoStorage + ":iso/" + name
-	// PVE names the volume after the uploaded file, so the ISO is linked under the proof name.
-	path := filepath.Join(t.TempDir(), name)
-	if err := os.Symlink(env.iso, path); err != nil {
-		t.Fatalf("link iso: %v", err)
-	}
 	sum, size := sha256File(t, env.iso)
 	if v := lookupVolume(ctx, t, d, env, volid); v != nil {
 		t.Fatalf("volume %s already exists (%d bytes); refusing to touch it", volid, v.Size)
@@ -117,7 +111,7 @@ func proofUpload(t *testing.T, d Driver, env *proofEnv) {
 	t.Cleanup(func() { cleanupVolume(t, d, env, volid) })
 
 	began := time.Now()
-	if err := finish(ctx, d)(d.UploadISO(ctx, env.node, env.isoStorage, path, sum)); err != nil {
+	if err := finish(ctx, d)(d.UploadISO(ctx, env.node, env.isoStorage, env.iso, name, sum)); err != nil {
 		t.Fatalf("UploadISO(): %v", err)
 	}
 	t.Logf("uploaded %d bytes as %s in %s", size, volid, time.Since(began).Round(time.Second))
