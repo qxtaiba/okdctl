@@ -20,9 +20,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
-// responseHeaderTimeout bounds dial, TLS handshake and the wait for headers
-// per attempt; the body read is bounded by ctx alone so a slow mirror is
-// never cut off mid-stream and retried from zero.
+// responseHeaderTimeout bounds dial, TLS and headers per attempt; the body answers to ctx alone.
 var responseHeaderTimeout = 30 * time.Second
 
 type dlConfig struct {
@@ -100,7 +98,10 @@ func Fetch(ctx context.Context, url, dst string, opts ...FetchOption) error {
 	filename := filepath.Base(dst)
 	cfg.logger.Info("download: fetching", "file", filename)
 
-	client := newClient()
+	transport := newTransport()
+	defer transport.CloseIdleConnections()
+	client := httputil.New(0)
+	client.Transport = transport
 
 	attempts, err := retryDownload(ctx, func() error {
 		return fetchToFile(ctx, client, cfg)
@@ -117,15 +118,12 @@ func Fetch(ctx context.Context, url, dst string, opts ...FetchOption) error {
 	return nil
 }
 
-func newClient() *http.Client {
-	client := httputil.New(0)
-	client.Transport = &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
-		DialContext:           (&net.Dialer{Timeout: responseHeaderTimeout}).DialContext,
-		TLSHandshakeTimeout:   responseHeaderTimeout,
-		ResponseHeaderTimeout: responseHeaderTimeout,
-	}
-	return client
+func newTransport() *http.Transport {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.DialContext = (&net.Dialer{Timeout: responseHeaderTimeout}).DialContext
+	transport.TLSHandshakeTimeout = responseHeaderTimeout
+	transport.ResponseHeaderTimeout = responseHeaderTimeout
+	return transport
 }
 
 // fetchToFile runs one attempt; a mid-attempt failure removes the partial file
