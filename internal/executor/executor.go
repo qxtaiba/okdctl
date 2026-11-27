@@ -164,19 +164,9 @@ func (e *ExitError) Redacted() any {
 	}{e.Command, e.ExitCode}
 }
 
-// NewExitError returns ctx.Err() when ctx is already cancelled, so
-// errors.Is(_, context.Canceled) propagates for cli/root.go's SIGINT/SIGTERM
-// exit-code mapping.
-func NewExitError(ctx context.Context, cmd string, code int, stderr string) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	return &ExitError{Command: cmd, ExitCode: code, Stderr: stderr}
-}
-
 // Run executes a command and returns its result; *Result is always
 // non-nil, even on error, so callers can read ExitCode/Stderr without a
-// nil guard.
+// nil guard. A child cut short by ctx returns ctx's error, not its exit.
 func (e *Executor) Run(ctx context.Context, name string, args ...string) (*Result, error) {
 	return e.run(ctx, nil, name, args...)
 }
@@ -235,6 +225,11 @@ func (e *Executor) run(ctx context.Context, stdin io.Reader, name string, args .
 		Truncated: rout.dropped,
 	}
 	retErr := splitExitError(err, result)
+	// os/exec reports the SIGTERM exit over the watcher's context error, so a
+	// cancelled child would otherwise read as a plain non-zero exit.
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		retErr = fmt.Errorf("%s: %w", name, ctxErr)
+	}
 
 	e.logger.Debug("exec: completed", "cmd", name, "exit", result.ExitCode, "duration", result.Duration)
 	return result, retErr

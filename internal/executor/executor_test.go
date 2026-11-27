@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
@@ -166,6 +167,19 @@ func TestRun(t *testing.T) {
 		}
 	})
 
+	t.Run("ctx cancelled mid-run returns the context error", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+		result, err := New().Run(ctx, "sh", "-c", "sleep 10")
+		if result == nil {
+			t.Fatal("result must be non-nil on error")
+		}
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Errorf("err = %v (exit %d); want context.DeadlineExceeded", err, result.ExitCode)
+		}
+	})
+
 	t.Run("cancelled ctx returns the context error", func(t *testing.T) {
 		t.Parallel()
 		ctx, cancel := context.WithCancel(context.Background())
@@ -173,32 +187,6 @@ func TestRun(t *testing.T) {
 		result, err := New().Run(ctx, "sh", "-c", "sleep 10")
 		if result == nil {
 			t.Fatal("result must be non-nil on error")
-		}
-		if !errors.Is(err, context.Canceled) {
-			t.Errorf("err = %v; want context.Canceled", err)
-		}
-	})
-}
-
-func TestNewExitError(t *testing.T) {
-	t.Run("live ctx yields ExitError", func(t *testing.T) {
-		err := NewExitError(context.Background(), "sh", 3, "oops")
-		var exitErr *ExitError
-		if !errors.As(err, &exitErr) {
-			t.Fatalf("err type = %T; want *ExitError", err)
-		}
-		if exitErr.ExitCode != 3 || exitErr.Command != "sh" || exitErr.Stderr != "oops" {
-			t.Errorf("ExitError = %+v", *exitErr)
-		}
-	})
-
-	t.Run("cancelled ctx wins over the exit code", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
-		err := NewExitError(ctx, "sh", 3, "oops")
-		var exitErr *ExitError
-		if errors.As(err, &exitErr) {
-			t.Errorf("got *ExitError on ctx cancel; want context error, got: %v", err)
 		}
 		if !errors.Is(err, context.Canceled) {
 			t.Errorf("err = %v; want context.Canceled", err)
