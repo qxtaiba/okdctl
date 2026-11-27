@@ -11,6 +11,7 @@ func testInputs(t *testing.T, cfg *config.Config) Inputs {
 	t.Helper()
 	return Inputs{
 		Inventory:  mustBuild(t, cfg),
+		Day1:       []string{"lab-master0", "lab-master1", "lab-master2", "lab-worker0", "lab-worker1"},
 		Release:    "4.20.0",
 		PullSecret: []byte(`{"auths":{}}`),
 		SSHKey:     []byte("ssh-ed25519 AAAA"),
@@ -51,9 +52,14 @@ func TestInputsHash_Sensitivity(t *testing.T) {
 		{name: "manifest byte", change: true, in: func(in *Inputs) { in.ExtraManifests["98-a.yaml"] = []byte("a: 2\n") }},
 		{name: "pull secret", change: true, in: func(in *Inputs) { in.PullSecret = []byte(`{"auths":{"x":{}}}`) }},
 		{name: "ssh key", change: true, in: func(in *Inputs) { in.SSHKey = []byte("ssh-ed25519 BBBB") }},
-		{name: "worker count", cfg: func(c *config.Config) { c.Workers.Count = 3 }},
-		{name: "worker address", cfg: func(c *config.Config) {
+		{name: "worker address", change: true, cfg: func(c *config.Config) {
 			c.Nodes = map[string]config.NodeOverride{"lab-worker0": {IP: "192.168.1.200"}}
+		}},
+		{name: "worker added after day 1", cfg: func(c *config.Config) { c.Workers.Count = 3 }},
+		{name: "day-1 worker removed", change: true, cfg: func(c *config.Config) { c.Workers.Count = 1 }},
+		{name: "later worker address", cfg: func(c *config.Config) {
+			c.Workers.Count = 3
+			c.Nodes = map[string]config.NodeOverride{"lab-worker2": {IP: "192.168.1.200"}}
 		}},
 		{name: "memory", cfg: func(c *config.Config) { c.Workers.MemoryMiB = 65536 }},
 		{name: "cpu", cfg: func(c *config.Config) { c.ControlPlane.CPU = 2 }},
