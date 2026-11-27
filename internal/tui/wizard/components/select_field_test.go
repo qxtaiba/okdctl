@@ -248,3 +248,15 @@ func TestSelectField_SetValueEmptyInjectsNothing(t *testing.T) {
 		t.Fatalf("len(Options) = %d, want 2 (an empty value must not inject)", got)
 	}
 }
+
+func TestSelectFieldSetDefaultOutsideOptionsCarriesNoDefaultTag(t *testing.T) {
+	f := NewSelectField("host", []string{"pve1", "pve2"})
+	f.SetDefault("pve")
+	if f.IsDefault() || strings.Contains(f.View(), "default") {
+		t.Fatalf("a default the options do not offer is tagged default: %q", f.View())
+	}
+	f.SetDefault("pve2")
+	if !f.IsDefault() || f.Value() != "pve2" {
+		t.Fatalf("default on an offered value: IsDefault=%v Value=%q", f.IsDefault(), f.Value())
+	}
+}

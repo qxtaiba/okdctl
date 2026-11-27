@@ -184,18 +184,27 @@ func (s *NodePlacementStep) hostNames() []string {
 
 // buildInnerStep builds the pool multi-select, a typed-names field for nodes
 // discovery did not list, and one host select per node the model derives,
-// defaulting each to the model's placement.
+// defaulting each to the model's placement over the pool the fields offer.
 func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, hosts []string) {
+	pool := offeredPool(s.cfg.Provider.Proxmox.Nodes, hosts)
+	options := slices.Clone(hosts)
+	for _, name := range pool {
+		if !slices.Contains(options, name) {
+			options = append(options, name)
+		}
+	}
 	s.poolField = components.NewMultiSelectField("placement pool", hosts)
 	s.poolField.Help = "proxmox nodes the vms spread across (provider.proxmox.nodes)"
-	s.poolField.SetValue(strings.Join(s.cfg.Provider.Proxmox.Nodes, ","))
+	s.poolField.SetValue(strings.Join(pool, ","))
 	s.addField = components.NewInputField("add nodes", "none")
 	s.addField.Help = "comma-separated node names to add to the pool when discovery did not list them"
 	sections := []wizard.FormSection{{Title: "proxmox nodes", Group: components.NewInputGroup(s.poolField, s.addField)}}
 
 	s.hostFields = make(map[string]*components.SelectField)
 	s.inventory = nil
-	inv, defaults, err := placementInventory(s.cfg)
+	base := *s.cfg
+	base.Provider.Proxmox.Nodes = pool
+	inv, defaults, err := placementInventory(&base)
 	s.buildErr = err
 	if err == nil {
 		s.inventory = inv.Nodes
@@ -209,7 +218,7 @@ func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, hosts []strin
 			fields := make([]components.FormField, 0, len(role.nodes))
 			for i := range role.nodes {
 				node := &role.nodes[i]
-				field := components.NewSelectField(node.Name, hosts)
+				field := components.NewSelectField(node.Name, options)
 				field.Help = "proxmox node (nodes." + node.Name + ".host)"
 				field.SetDefault(defaults[node.Name])
 				if override := s.cfg.Nodes[node.Name].Host; override != "" {
@@ -225,6 +234,18 @@ func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, hosts []strin
 		}
 	}
 	s.inner = wizard.NewMultiSectionForm(sections)
+}
+
+// offeredPool keeps the configured pool while discovery still lists any of
+// it; a pool with no discovered member is DefaultConfig's placeholder, so
+// the whole discovered set stands in.
+func offeredPool(configured, hosts []string) []string {
+	for _, name := range configured {
+		if slices.Contains(hosts, name) {
+			return configured
+		}
+	}
+	return hosts
 }
 
 // placementInventory derives cfg's nodes plus the host each would get with

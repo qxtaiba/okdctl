@@ -599,3 +599,44 @@ func TestNodePlacementTypingIntoAddNodesNeverRefetchesOrScrolls(t *testing.T) {
 		t.Fatal("ConsumesTextInput() = false while add nodes holds focus")
 	}
 }
+
+func TestNodePlacementFreshInitSpreadsAcrossTheDiscoveredPool(t *testing.T) {
+	cfg := config.DefaultConfig()
+	s := NewNodePlacementStep()
+	s.cfg = cfg
+	step, _ := s.Update(discoveryCompleteMsg{discovery: demoDiscovery()})
+	s = step.(*NodePlacementStep)
+
+	if got := s.poolField.Value(); got != "pve1,pve2" {
+		t.Fatalf("pool offered on a fresh run = %q, want every discovered host and no placeholder", got)
+	}
+	want := map[string]string{"lab-master0": "pve1", "lab-master1": "pve2", "lab-master2": "pve1", "lab-worker0": "pve2", "lab-worker1": "pve1"}
+	for name, host := range want {
+		field := s.hostFields[name]
+		if got := field.Value(); got != host || !field.IsDefault() {
+			t.Errorf("%s = %q (default %v), want the model's %q tagged default", name, got, field.IsDefault(), host)
+		}
+	}
+	if err := s.Apply(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Nodes) != 0 || !slices.Equal(cfg.Provider.Proxmox.Nodes, []string{"pve1", "pve2"}) {
+		t.Fatalf("an untouched fresh placement wrote overrides %+v on pool %v", cfg.Nodes, cfg.Provider.Proxmox.Nodes)
+	}
+}
+
+func TestNodePlacementKeepsAConfiguredPoolThatDiscoveryStillOffers(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Provider.Proxmox.Nodes = []string{"pve2", "pve9"}
+	s := NewNodePlacementStep()
+	s.cfg = cfg
+	step, _ := s.Update(discoveryCompleteMsg{discovery: demoDiscovery()})
+	s = step.(*NodePlacementStep)
+
+	if got := s.poolField.Value(); got != "pve2,pve9" {
+		t.Fatalf("pool = %q, want the configured pool kept", got)
+	}
+	if got := s.hostFields["lab-master1"].Value(); got != "pve9" {
+		t.Fatalf("lab-master1 = %q, want the configured pool's pve9 selectable as its default", got)
+	}
+}

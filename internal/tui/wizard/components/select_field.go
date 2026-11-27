@@ -84,14 +84,19 @@ func (f *SelectField) SetValue(value string) {
 // the box keeps reserving the "default" tag's room for the field's whole
 // life; see boxOuterWidth.
 func (f *SelectField) SetDefault(value string) {
-	f.isDefault = true
 	f.hasDefault = true
 	for i, opt := range f.Options {
 		if opt == value {
 			f.selected = i
+			f.isDefault = true
 			return
 		}
 	}
+}
+
+// IsDefault reports whether the selection is still the untouched default.
+func (f *SelectField) IsDefault() bool {
+	return f.isDefault
 }
 
 // HasDefaultTag reports whether the field has ever carried a default value
