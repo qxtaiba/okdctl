@@ -3,9 +3,10 @@ package proxmox
 import "errors"
 
 var (
-	// ErrNotFound reports a node, VM, storage or volume the cluster does not have.
-	// It names the request's subject, so only Status, VMConfig and VMPending
-	// may read it as "VM gone".
+	// ErrNotFound reports a node, VM, storage, volume or HA resource the
+	// cluster does not have. It names the request's subject, so only Status,
+	// VMConfig, VMPending, DeleteVM and SetHA's registration read may take it
+	// as "VM gone"; every other reader treats it as a plain failure.
 	ErrNotFound = errors.New("not found")
 	// ErrPermission reports an API call the token lacks a privilege for.
 	ErrPermission = errors.New("permission denied")
