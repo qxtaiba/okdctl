@@ -1,4 +1,4 @@
-package config
+package credentials
 
 // SecretBytes holds a credential as []byte so Zeroize can overwrite it
 // before GC.

@@ -6,6 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/credentials"
 )
 
 // StepID identifies a WizardStep instance at runtime; StepType names a
@@ -86,7 +87,7 @@ type TextInputConsumer interface {
 // Secrets is wizard input that never enters the Config: the Proxmox API
 // token and TLS toggle written to okdctl.env.
 type Secrets struct {
-	ProxmoxToken    config.SecretBytes
+	ProxmoxToken    credentials.SecretBytes
 	ProxmoxInsecure bool
 }
 
