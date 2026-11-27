@@ -73,6 +73,11 @@ func NewNodePlacementStep() *NodePlacementStep {
 	}
 }
 
+func (s *NodePlacementStep) withConfig(cfg *config.Config) *NodePlacementStep {
+	s.cfg = cfg
+	return s
+}
+
 func (s *NodePlacementStep) withCapacity(snapshot *WizardCapacitySnapshot) *NodePlacementStep {
 	s.capacity = snapshot
 	return s
@@ -88,16 +93,9 @@ func (s *NodePlacementStep) Animating() bool {
 	return s.phase == phaseDiscovering
 }
 
-// ShouldShow shows this step only for the Proxmox provider and records cfg.
+// ShouldShow shows this step only for the Proxmox provider.
 func (s *NodePlacementStep) ShouldShow(cfg *config.Config) bool {
-	if cfg.Provider.Type != config.ProviderProxmox {
-		return false
-	}
-	s.cfg = cfg
-	if s.capacity != nil {
-		s.capacity.cfg = cfg
-	}
-	return true
+	return cfg.Provider.Type == config.ProviderProxmox
 }
 
 // Init starts discovery, or on re-entry after a success rebuilds the form

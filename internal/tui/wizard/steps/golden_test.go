@@ -131,22 +131,20 @@ func newGoldenModel(t *testing.T) *wizard.Model {
 
 func newGoldenModelWithCapacity(t *testing.T) (*wizard.Model, *WizardCapacitySnapshot) {
 	t.Helper()
+	cfg := config.DefaultConfig()
+	cfg.Files.SSHPublicKey = "./id_ed25519.pub"
 	builder := wizard.NewStepBuilder()
-	RegisterAll(builder)
+	RegisterAll(builder, cfg)
 	built, err := wizard.BuildSteps(wizard.DefaultConfig(), builder)
 	if err != nil {
 		t.Fatal(err)
 	}
 	capacity, _ := built.States[wizard.StepTypeReview].(*WizardCapacitySnapshot)
-	cfg := config.DefaultConfig()
-	cfg.Files.SSHPublicKey = "./id_ed25519.pub"
 	for _, step := range built.Steps {
 		if ds, ok := step.(*wizard.DataDrivenStep); ok {
 			ds.LoadFromConfig(cfg, false)
 		}
 	}
-	capacity.cfg = cfg
-	built.States[wizard.StepTypeResources].(*ResourcesStepState).Cfg = cfg
 	return wizard.NewFlowModel(built.Steps, cfg, Chrome()), capacity
 }
 
@@ -401,13 +399,14 @@ func TestGolden_DistributionErrorState(t *testing.T) {
 
 func newGoldenModelFreshDefaults(t *testing.T) *wizard.Model {
 	t.Helper()
+	cfg := config.DefaultConfig()
 	builder := wizard.NewStepBuilder()
-	RegisterAll(builder)
+	RegisterAll(builder, cfg)
 	built, err := wizard.BuildSteps(wizard.DefaultConfig(), builder)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return wizard.NewFlowModel(built.Steps, config.DefaultConfig(), Chrome())
+	return wizard.NewFlowModel(built.Steps, cfg, Chrome())
 }
 
 func pumpCmd(m *wizard.Model, cmd tea.Cmd) {

@@ -640,3 +640,35 @@ func TestNodePlacementKeepsAConfiguredPoolThatDiscoveryStillOffers(t *testing.T)
 		t.Fatalf("lab-master1 = %q, want the configured pool's pve9 selectable as its default", got)
 	}
 }
+
+func TestNodePlacementShouldShowIsPure(t *testing.T) {
+	s := NewNodePlacementStep()
+	other := newPlacementConfig()
+	if !s.ShouldShow(other) || s.cfg != nil {
+		t.Fatalf("ShouldShow(proxmox) = false or recorded cfg %p, want true and no mutation", s.cfg)
+	}
+	if s.ShouldShow(&config.Config{Provider: config.ProviderConfig{Type: "aws"}}) {
+		t.Fatal("ShouldShow(non-proxmox provider) = true, want false")
+	}
+}
+
+func TestRegisterAllSeedsTheSessionConfigIntoEveryConsumer(t *testing.T) {
+	cfg := newPlacementConfig()
+	builder := wizard.NewStepBuilder()
+	RegisterAll(builder, cfg)
+	built, err := wizard.BuildSteps(wizard.DefaultConfig(), builder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	capacity := built.States[wizard.StepTypeReview].(*WizardCapacitySnapshot)
+	resources := built.States[wizard.StepTypeResources].(*ResourcesStepState)
+	var placement *NodePlacementStep
+	for _, step := range built.Steps {
+		if p, ok := step.(*NodePlacementStep); ok {
+			placement = p
+		}
+	}
+	if capacity.cfg != cfg || resources.Cfg != cfg || placement.cfg != cfg {
+		t.Fatalf("session config not shared: capacity=%p resources=%p placement=%p want %p", capacity.cfg, resources.Cfg, placement.cfg, cfg)
+	}
+}

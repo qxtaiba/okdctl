@@ -1,14 +1,15 @@
 package steps
 
 import (
+	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/credentials"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
-// RegisterAll registers every configure-wizard step factory on b in the
-// order wizard.DefaultConfig lists them.
-func RegisterAll(b *wizard.StepBuilder) {
-	capacity := &WizardCapacitySnapshot{}
+// RegisterAll registers every configure-wizard step factory on b; cfg is the
+// session config the steps edit and the capacity snapshot reads.
+func RegisterAll(b *wizard.StepBuilder, cfg *config.Config) {
+	capacity := &WizardCapacitySnapshot{cfg: cfg}
 	var proxmox *wizard.DataDrivenStep
 	secrets := func() wizard.Secrets {
 		if proxmox == nil {
@@ -24,10 +25,14 @@ func RegisterAll(b *wizard.StepBuilder) {
 		return proxmox, nil
 	})
 	b.Register(wizard.StepTypeNodePlacement, func() (wizard.WizardStep, wizard.StepState) {
-		return NewNodePlacementStep().withCapacity(capacity).withSecrets(secrets), nil
+		return NewNodePlacementStep().withConfig(cfg).withCapacity(capacity).withSecrets(secrets), nil
 	})
 	b.Register(wizard.StepTypeNetworking, func() (wizard.WizardStep, wizard.StepState) { return NewNetworkingStep(capacity), nil })
-	b.Register(wizard.StepTypeResources, func() (wizard.WizardStep, wizard.StepState) { return NewResourcesStep(capacity) })
+	b.Register(wizard.StepTypeResources, func() (wizard.WizardStep, wizard.StepState) {
+		step, state := NewResourcesStep(capacity)
+		state.Cfg = cfg
+		return step, state
+	})
 	b.Register(wizard.StepTypeFiles, func() (wizard.WizardStep, wizard.StepState) { return NewFilesStep(), nil })
 	b.Register(wizard.StepTypeAdvanced, func() (wizard.WizardStep, wizard.StepState) { return NewAdvancedStep(), nil })
 	b.Register(wizard.StepTypeReview, func() (wizard.WizardStep, wizard.StepState) { return NewReviewStep(), capacity })

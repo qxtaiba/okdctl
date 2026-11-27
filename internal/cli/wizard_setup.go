@@ -71,7 +71,7 @@ func runHubSession(cmd *cobra.Command, flowSteps []wizard.WizardStep, cfg *confi
 // credential fields and is skipped like the config in demo mode.
 func buildWizardStepsWithState(wizardCfg wizard.Config, saved *credentials.ProxmoxCredentials) (wizard.BuiltSteps, error) {
 	builder := wizard.NewStepBuilder()
-	steps.RegisterAll(builder)
+	steps.RegisterAll(builder, wizardCfg.InitialConfig)
 	built, err := wizard.BuildSteps(wizardCfg, builder)
 	if err != nil {
 		return wizard.BuiltSteps{}, err

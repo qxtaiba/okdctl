@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
@@ -11,7 +12,7 @@ import (
 
 func TestConfigurePhases_CoverEveryRegisteredStepExactlyOnce(t *testing.T) {
 	builder := wizard.NewStepBuilder()
-	RegisterAll(builder)
+	RegisterAll(builder, config.DefaultConfig())
 	built, err := wizard.BuildSteps(wizard.DefaultConfig(), builder)
 	if err != nil {
 		t.Fatal(err)
@@ -36,7 +37,7 @@ func TestConfigurePhases_CoverEveryRegisteredStepExactlyOnce(t *testing.T) {
 
 func TestRegisterAllSharesCapacitySnapshotWithReviewState(t *testing.T) {
 	builder := wizard.NewStepBuilder()
-	RegisterAll(builder)
+	RegisterAll(builder, config.DefaultConfig())
 	built, err := wizard.BuildSteps(wizard.DefaultConfig(), builder)
 	if err != nil {
 		t.Fatal(err)
