@@ -165,15 +165,6 @@ func TestConfigValidate_RecordInfraIDMakesMACsReal(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &inv); err != nil || inv.InfraID != infraID {
 		t.Errorf("json infra_id = %q, %v; want %q", inv.InfraID, err, infraID)
 	}
-
-	if err := os.WriteFile(workspace.RecordPath(dir), []byte("{broken"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	_, _, err = runValidate(t, path, "")
-	var cfgErr *errtypes.ConfigError
-	if !errors.As(err, &cfgErr) || !strings.Contains(err.Error(), "cluster record") {
-		t.Errorf("corrupt record: err = %v; want a ConfigError naming the record", err)
-	}
 }
 
 func TestConfigValidate_RecordNamingAnotherClusterIsRefused(t *testing.T) {

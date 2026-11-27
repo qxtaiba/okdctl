@@ -53,8 +53,6 @@ func TestOpenLogFileAcceptsRegularFile(t *testing.T) {
 	_ = f.Close()
 }
 
-// resetLoggingState snapshots and restores logging globals so file-sink tests
-// don't bleed into each other.
 func resetLoggingState(t *testing.T) {
 	t.Helper()
 	prevLogFile, prevFormat, prevLevel := logFile, logFormat, logLevel
@@ -122,7 +120,6 @@ func TestConfigureLogging_DefaultSinkRedacts(t *testing.T) {
 	}
 }
 
-// stderr is piped under go test, so configureLogging auto-selects json here.
 func TestConfigureLogging_InitMilestonesSurviveNonTTY(t *testing.T) {
 	resetLoggingState(t)
 	dir := t.TempDir()
@@ -200,18 +197,6 @@ func TestConfigureLogging_NoDefaultSinkForReadOnlyCmds(t *testing.T) {
 	}
 }
 
-// TestLogFailureToSinkCarriesRunIDAndRespectsQuiet exercises
-// logFailureToSink — the path announceFailure takes when it prints the
-// pretty box straight to stderr instead of going through the logutil
-// facade, so a boxed failure on a TTY still reaches the persistent sink.
-// Secret redaction itself is covered at the logutil.RedactHandler layer
-// (internal/logutil/redact_test.go); this only pins logFailureToSink's own
-// contract — the failure lands with run_id attached, and --quiet (which
-// only raises the effective level to error, per effectiveLogLevel) does
-// NOT swallow it, since it's an Error-level write itself — quiet must
-// never hide the one thing it's reporting. The sink is always text (see
-// ringSlog's and buildSinkLogger's own "never mix text and json in one
-// physical okdctl.log" invariant), not whatever --log-format chose.
 func TestLogFailureToSinkCarriesRunIDAndSurvivesQuiet(t *testing.T) {
 	oldSink, oldLevel := runLogSink, logLevel
 	oldQuiet, oldVerbose := logQuiet, logVerbose

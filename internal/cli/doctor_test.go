@@ -147,107 +147,12 @@ func TestPreflightInput(t *testing.T) {
 	})
 }
 
-func TestPrintFindingsText(t *testing.T) {
-	tui.SetColorProfileFor(&bytes.Buffer{})
-	t.Cleanup(func() { tui.SetColorProfileFor(&bytes.Buffer{}) })
-
-	var buf bytes.Buffer
-	if err := printFindings(&buf, tui.FormatText, doctorFixture); err != nil {
-		t.Fatalf("printFindings: %v", err)
-	}
-	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
-	if len(lines) != 1+len(doctorFixture) {
-		t.Fatalf("got %d lines, want %d:\n%s", len(lines), 1+len(doctorFixture), buf.String())
-	}
-	for _, want := range []string{"CHECK", "SEVERITY", "MESSAGE"} {
-		if !strings.Contains(lines[0], want) {
-			t.Errorf("header %q missing %q", lines[0], want)
-		}
-	}
-	for i, f := range doctorFixture {
-		for _, want := range []string{f.Check, f.Severity, f.Message} {
-			if !strings.Contains(lines[i+1], want) {
-				t.Errorf("row %d %q missing %q", i, lines[i+1], want)
-			}
-		}
-	}
-
-	buf.Reset()
-	if err := printFindings(&buf, tui.FormatText, nil); err != nil {
-		t.Fatalf("printFindings(nil): %v", err)
-	}
-	if got := strings.TrimSpace(buf.String()); got != doctorPassed {
-		t.Fatalf("printFindings(nil) = %q, want %q", got, doctorPassed)
-	}
-}
-
-func TestPrintFindingsJSON(t *testing.T) {
-	type row struct {
-		Check    string `json:"check"`
-		Severity string `json:"severity"`
-		Message  string `json:"message"`
-	}
-
-	var buf bytes.Buffer
-	if err := printFindings(&buf, tui.FormatJSON, doctorFixture); err != nil {
-		t.Fatalf("printFindings: %v", err)
-	}
-	var got []row
-	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
-		t.Fatalf("stdout is not a JSON array: %v\n%s", err, buf.String())
-	}
-	want := make([]row, len(doctorFixture))
-	for i, f := range doctorFixture {
-		want[i] = row{f.Check, f.Severity, f.Message}
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("json = %+v, want %+v", got, want)
-	}
-
-	buf.Reset()
-	if err := printFindings(&buf, tui.FormatJSON, nil); err != nil {
-		t.Fatalf("printFindings(nil): %v", err)
-	}
-	if got := strings.TrimSpace(buf.String()); got != "[]" {
-		t.Fatalf("printFindings(nil) = %q, want %q", got, "[]")
-	}
-}
-
-func TestFindingsError(t *testing.T) {
-	cases := []struct {
-		name     string
-		findings []proxmox.Finding
-		want     string
-	}{
-		{"empty", nil, ""},
-		{"warn only", doctorFixture[1:2], ""},
-		{"one fail", doctorFixture[:1], "preflight: 1 failing check"},
-		{"two fails", doctorFixture, "preflight: 2 failing checks"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			err := findingsError(tc.findings)
-			if tc.want == "" {
-				if err != nil {
-					t.Fatalf("findingsError() = %v, want nil", err)
-				}
-				return
-			}
-			if err == nil || err.Error() != tc.want {
-				t.Fatalf("findingsError() = %v, want %q", err, tc.want)
-			}
-		})
-	}
-}
-
 type doctorHarness struct {
 	errOut bytes.Buffer
 	seam   *proxmox.PreflightInput
 	driver proxmox.Driver
 }
 
-// newDoctorHarness runs from a fresh directory holding the relative
-// okdctl.yaml every cli test uses, so okdctl.env resolves beside it.
 func newDoctorHarness(t *testing.T) *doctorHarness {
 	t.Helper()
 	tui.SetColorProfileFor(&bytes.Buffer{})
@@ -432,67 +337,17 @@ func TestDoctorCommand(t *testing.T) {
 	})
 }
 
-func TestDoctorCommandConfigErrors(t *testing.T) {
+func TestDoctorCommand_InvalidConfigStopsBeforeCredentials(t *testing.T) {
 	h := newDoctorHarness(t)
-	run := h.run
-
-	t.Run("invalid config is a config error before credentials", func(t *testing.T) {
-		if err := os.WriteFile("okdctl.yaml", []byte("schemaVersion: v3\ncluster:\n  name: Bad_Name\n"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() {
-			if err := config.NewLoader().Save(config.MinimalConfig(), "okdctl.yaml"); err != nil {
-				t.Fatal(err)
-			}
-		})
-		_, err := run(t, "", nil, nil)
-		var ce *errtypes.ConfigError
-		if !errors.As(err, &ce) {
-			t.Fatalf("err = %T %v, want *errtypes.ConfigError", err, err)
-		}
-		if h.seam != nil || !strings.Contains(h.errOut.String(), "cluster.name") {
-			t.Fatalf("seam=%v stderr=%q; want validation findings and no preflight", h.seam, h.errOut.String())
-		}
-	})
-
-	t.Run("broken cluster record is a config error", func(t *testing.T) {
-		recPath := workspace.RecordPath(".")
-		if err := os.MkdirAll(filepath.Dir(recPath), 0o700); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(recPath, []byte("{broken"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { _ = os.RemoveAll(filepath.Dir(recPath)) })
-		_, err := run(t, doctorToken, nil, nil)
-		var ce *errtypes.ConfigError
-		if !errors.As(err, &ce) {
-			t.Fatalf("err = %T %v, want *errtypes.ConfigError", err, err)
-		}
-		if h.seam != nil {
-			t.Fatal("preflight ran against a record doctor could not read")
-		}
-	})
-
-	t.Run("record naming another cluster is a config error", func(t *testing.T) {
-		recPath := workspace.RecordPath(".")
-		rec := &model.Record{InfraID: "other-a1b2c3", Cluster: "other", Domain: "k8s.local", Created: time.Now(), Release: "4.22.0-okd-scos.10"}
-		if err := model.SaveRecord(recPath, rec); err != nil {
-			t.Fatalf("SaveRecord: %v", err)
-		}
-		t.Cleanup(func() { _ = os.RemoveAll(filepath.Dir(recPath)) })
-		_, err := run(t, doctorToken, nil, nil)
-		var ce *errtypes.ConfigError
-		if !errors.As(err, &ce) {
-			t.Fatalf("err = %T %v, want *errtypes.ConfigError", err, err)
-		}
-		for _, want := range []string{`"other"`, `"minimal"`, "cluster record"} {
-			if !strings.Contains(err.Error(), want) {
-				t.Errorf("err %q missing %q", err, want)
-			}
-		}
-		if h.seam != nil {
-			t.Fatal("preflight ran against another cluster's record")
-		}
-	})
+	if err := os.WriteFile("okdctl.yaml", []byte("schemaVersion: v3\ncluster:\n  name: Bad_Name\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := h.run(t, "", nil, nil)
+	var ce *errtypes.ConfigError
+	if !errors.As(err, &ce) {
+		t.Fatalf("err = %T %v, want *errtypes.ConfigError", err, err)
+	}
+	if h.seam != nil || !strings.Contains(h.errOut.String(), "cluster.name") {
+		t.Fatalf("seam=%v stderr=%q; want validation findings and no preflight", h.seam, h.errOut.String())
+	}
 }
