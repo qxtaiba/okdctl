@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/proxmox"
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 var doctorOutput string
@@ -123,7 +125,7 @@ func validateOutputFormat(format string) error {
 }
 
 func doctorCredentials(cfg *config.Config, configPath string) (*credentials.ProxmoxCredentials, error) {
-	envPath := credentials.EnvFilePath(configPath)
+	envPath := workspace.EnvPath(filepath.Dir(configPath))
 	creds, err := credentials.Load(envPath, cfg.Provider.Proxmox.Endpoint)
 	if err != nil {
 		return nil, err

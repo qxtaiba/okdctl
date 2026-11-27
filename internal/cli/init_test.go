@@ -17,6 +17,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/steps"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 const fixtureAPIToken = "root@pam!ci=s3cret-token-bytes"
@@ -162,15 +163,15 @@ func TestWriteCredentialsEnv(t *testing.T) {
 			var secrets wizard.Secrets
 			secrets.ProxmoxToken.Set(tc.typedToken)
 			secrets.ProxmoxInsecure = tc.toggle
-			configPath := filepath.Join(t.TempDir(), "okdctl.yaml")
+			root := t.TempDir()
+			configPath, envPath := workspace.ConfigPath(root), workspace.EnvPath(root)
 			if tc.fileToken != "" {
 				saved := &credentials.ProxmoxCredentials{APIToken: []byte(tc.fileToken), Insecure: tc.envInsecure == "true"}
-				if err := credentials.WriteEnvFile(credentials.EnvFilePath(configPath), saved); err != nil {
+				if err := credentials.WriteEnvFile(envPath, saved); err != nil {
 					t.Fatal(err)
 				}
 			}
 
-			envPath := credentials.EnvFilePath(configPath)
 			before, _ := os.ReadFile(envPath)
 			seeded, err := credentials.Load(envPath, "")
 			if err != nil {

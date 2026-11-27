@@ -24,12 +24,13 @@ import (
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/version"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // cfgFile is cobra-managed state from --config; passing it as a param would fight cobra's pattern.
 var cfgFile string
 
-const defaultConfigFile = "okdctl.yaml"
+const defaultConfigFile = workspace.ConfigFile
 
 var (
 	logLevel   string

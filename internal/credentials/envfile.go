@@ -25,18 +25,6 @@ var envFileAllowedKeys = map[string]bool{
 	envProxmoxInsecure: true,
 }
 
-// EnvFilePath derives the sidecar path from a config path, okdctl.yaml
-// becoming okdctl.env.
-func EnvFilePath(configPath string) string {
-	if strings.HasSuffix(configPath, ".yaml") {
-		return strings.TrimSuffix(configPath, ".yaml") + ".env"
-	}
-	if strings.HasSuffix(configPath, ".yml") {
-		return strings.TrimSuffix(configPath, ".yml") + ".env"
-	}
-	return configPath + ".env"
-}
-
 // WriteEnvFile persists the token and TLS flag as KEY=VALUE lines at mode
 // 0600, refusing a symlinked path and zeroing its buffer after the write.
 func WriteEnvFile(path string, creds *ProxmoxCredentials) error {

@@ -17,6 +17,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // reviewJumpOrder lists the jumpable steps in on-screen order.
@@ -157,7 +158,7 @@ func (s *ReviewStep) View(width, height int) string {
 func (s *ReviewStep) renderWrites(width int) string {
 	path := s.configPath
 	if path == "" {
-		path = "okdctl.yaml"
+		path = workspace.ConfigFile
 	}
 	header := lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText())
 	return header.Render("WRITES") + "\n" + tui.Truncate(path, width) + "\n"

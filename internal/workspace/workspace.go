@@ -1,4 +1,5 @@
 // Package workspace owns okdctl's v3 on-disk layout under a workspace root:
+// the configuration and its credentials sidecar, the run log and lock,
 // cluster/ (record, rendered installer inputs, auth, state, ISO), handoff/,
 // backups/ and bin/.
 package workspace
@@ -12,11 +13,23 @@ const (
 	HandoffDirName = "handoff"
 	BackupsDirName = "backups"
 	BinDirName     = "bin"
+	ConfigFile     = "okdctl.yaml"
+	EnvFile        = "okdctl.env"
 	RecordFile     = "record.json"
 	ISOFile        = "agent.x86_64.iso"
 	LogFile        = "okdctl.log"
 	LockFile       = ".okdctl.lock"
 )
+
+// ConfigPath returns the cluster configuration every command loads.
+func ConfigPath(root string) string {
+	return filepath.Join(root, ConfigFile)
+}
+
+// EnvPath returns the 0600 credentials sidecar beside the configuration.
+func EnvPath(root string) string {
+	return filepath.Join(root, EnvFile)
+}
 
 // LogPath returns the persistent run log every command appends to.
 func LogPath(root string) string {

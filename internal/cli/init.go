@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/steps"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 var (
@@ -62,7 +64,7 @@ func runInit(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	saved, err := credentials.Load(credentials.EnvFilePath(initOutputFile), cfg.Provider.Proxmox.Endpoint)
+	saved, err := credentials.Load(workspace.EnvPath(root), cfg.Provider.Proxmox.Endpoint)
 	if err != nil {
 		return err
 	}
@@ -187,7 +189,7 @@ func writeCredentialsEnv(secrets *wizard.Secrets, configPath string, seeded *cre
 	if !typed && secrets.ProxmoxInsecure == seeded.Insecure {
 		return nil
 	}
-	envPath := credentials.EnvFilePath(configPath)
+	envPath := workspace.EnvPath(filepath.Dir(configPath))
 	creds, err := credentials.ReadEnvFile(envPath)
 	if err != nil {
 		return fmt.Errorf("read credentials: %w", err)
