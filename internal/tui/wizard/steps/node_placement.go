@@ -307,7 +307,23 @@ func (s *NodePlacementStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	if errs := s.inner.Validate(); len(errs) > 0 {
 		return s, tea.Batch(s.inner.FocusFirstInvalid(), func() tea.Msg { return wizard.ErrorSetMsg{Error: wizard.ErrFixHighlighted} })
 	}
+	if len(s.pool()) == 0 {
+		return s, tea.Batch(s.inner.Focus(), func() tea.Msg { return wizard.ErrorSetMsg{Error: errPoolEmpty} })
+	}
 	return s, func() tea.Msg { return wizard.StepCompleteMsg{StepID: s.ID()} }
+}
+
+var errPoolEmpty = errors.New("check or type at least one proxmox node for the placement pool")
+
+// pool is the checked nodes plus any typed ones.
+func (s *NodePlacementStep) pool() []string {
+	pool := splitList(s.poolField.Value())
+	for _, name := range splitList(s.addField.Value()) {
+		if !slices.Contains(pool, name) {
+			pool = append(pool, name)
+		}
+	}
+	return pool
 }
 
 // ConsumesTextInput reports whether the add-nodes field holds focus.
@@ -475,32 +491,34 @@ func (s *NodePlacementStep) FocusedSpan() (wizard.LineSpan, bool) {
 	return wizard.LineSpan{Start: span.Start + offset, End: span.End + offset}, true
 }
 
-// Apply writes the pool (the checked nodes plus any typed ones) and, per
-// node the current config produces, a host override only where the choice
-// differs from the model's placement.
+// Apply writes the pool and, per node the config produces, a host override
+// only where a touched choice differs from the model's placement; an
+// untouched host follows the pool, and a host override keyed to a node the
+// config no longer produces is dropped.
 func (s *NodePlacementStep) Apply(cfg *config.Config) error {
 	if s.inner == nil {
 		return nil
 	}
-	pool := splitList(s.poolField.Value())
-	for _, name := range splitList(s.addField.Value()) {
-		if !slices.Contains(pool, name) {
-			pool = append(pool, name)
-		}
-	}
-	if len(pool) > 0 {
-		cfg.Provider.Proxmox.Nodes = pool
-	}
+	cfg.Provider.Proxmox.Nodes = s.pool()
 	_, defaults, err := placementInventory(cfg)
 	if err != nil {
 		return nil //nolint:nilerr // without a buildable model there is no placement to write; cfg.Validate() reports the cause at review
+	}
+	for name, override := range cfg.Nodes {
+		if _, produced := defaults[name]; !produced && override.Host != "" {
+			delete(cfg.Nodes, name)
+		}
 	}
 	for name, field := range s.hostFields {
 		def, produced := defaults[name]
 		if !produced {
 			continue
 		}
-		setHostOverride(cfg, name, field.Value(), def)
+		host := field.Value()
+		if field.IsDefault() {
+			host = def
+		}
+		setHostOverride(cfg, name, host, def)
 	}
 	return nil
 }

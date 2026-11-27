@@ -99,8 +99,8 @@ func TestNodePlacementApplyWritesThePoolAndReplacesItsDefaults(t *testing.T) {
 	if _, overridden := cfg.Nodes["lab-master0"]; overridden {
 		t.Errorf("pve2 is lab-master0's default on the new pool; no override expected: %+v", cfg.Nodes)
 	}
-	if got := cfg.Nodes["lab-master1"].Host; got != "pve2" {
-		t.Errorf("lab-master1 kept pve2 from the old pool, so it needs an override on the new one; got %q", got)
+	if _, overridden := cfg.Nodes["lab-master1"]; overridden {
+		t.Errorf("an untouched host must follow the new pool's placement, not pin the old one: %+v", cfg.Nodes)
 	}
 }
 
@@ -670,5 +670,56 @@ func TestRegisterAllSeedsTheSessionConfigIntoEveryConsumer(t *testing.T) {
 	}
 	if capacity.cfg != cfg || resources.Cfg != cfg || placement.cfg != cfg {
 		t.Fatalf("session config not shared: capacity=%p resources=%p placement=%p want %p", capacity.cfg, resources.Cfg, placement.cfg, cfg)
+	}
+}
+
+func TestNodePlacementApplyPrunesHostOverridesTheConfigNoLongerProduces(t *testing.T) {
+	for name, mutate := range map[string]func(*config.Config){
+		"renamed cluster": func(cfg *config.Config) { cfg.Cluster.Name = "prod" },
+		"no workers":      func(cfg *config.Config) { cfg.Workers.Count = 0 },
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg := newPlacementConfig()
+			cfg.Nodes = map[string]config.NodeOverride{"lab-worker1": {Host: "pve3"}, "lab-master0": {CPU: new(8)}}
+			s := NewNodePlacementStep()
+			s.cfg = cfg
+			s.buildInnerStep(nil, placementHosts)
+			mutate(cfg)
+
+			if err := s.Apply(cfg); err != nil {
+				t.Fatal(err)
+			}
+			if _, stale := cfg.Nodes["lab-worker1"]; stale {
+				t.Errorf("stale host override survived: %+v", cfg.Nodes)
+			}
+			if o, kept := cfg.Nodes["lab-master0"]; name == "no workers" && (!kept || o.CPU == nil) {
+				t.Errorf("a non-host override on a produced node was dropped: %+v", cfg.Nodes)
+			}
+		})
+	}
+}
+
+func TestNodePlacementApplyRefusesAnEmptyPool(t *testing.T) {
+	cfg := newPlacementConfig()
+	s := NewNodePlacementStep()
+	s.cfg = cfg
+	s.phase = phasePlacing
+	s.buildInnerStep(nil, placementHosts)
+	s.SetFocused(true)
+	s.poolField.SetValue("")
+
+	_, cmd := s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	errMsg, ok := firstErrorSetMsg(cmd)
+	if !ok || !strings.Contains(errMsg.Error.Error(), "pool") {
+		t.Fatalf("enter with no pool chip checked = %#v, want an ErrorSetMsg about the pool", cmd)
+	}
+	if got := s.inner.FocusedField(); got != s.poolField {
+		t.Fatalf("focus after refusal = %v, want the pool field", got)
+	}
+	if err := s.Apply(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Provider.Proxmox.Nodes) != 0 {
+		t.Fatalf("Apply kept the previous pool %v while the screen showed none", cfg.Provider.Proxmox.Nodes)
 	}
 }
