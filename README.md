@@ -23,10 +23,10 @@ The workflow today, from an empty directory:
    `okdctl init --minimal` writes the three-node starter file without the
    wizard. The wizard's review screen ends on "save and exit".
 2. `okdctl config validate` checks the file against the schema and prints
-   the node table it produces: name, role, VMID, MAC, address and host for
-   every control-plane and worker node. The MACs are a preview until the
-   install mints the infra-ID. `okdctl config show` prints the file as the
-   loader read it.
+   the node table it produces: name, role, VMID, MAC, address, host, CPU,
+   memory and disk sizes for every control-plane and worker node. The
+   MACs are a preview until the install mints the infra-ID. `okdctl config
+   show` prints the file as the loader read it.
 3. `okdctl doctor` runs the Proxmox preflight the installer relies on: API
    token privileges, PVE version, CPU flags, free memory per host, VMID and
    address collisions, storage content types and the bridge on every target
