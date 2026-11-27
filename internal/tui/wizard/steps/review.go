@@ -103,8 +103,8 @@ func (s *ReviewStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	return s, nil
 }
 
-// firstFailure names the first failed preflight check; a config Validate
-// rejects must never reach disk.
+// firstFailure names the first failed preflight check; any failing check
+// blocks the save.
 func (s *ReviewStep) firstFailure() error {
 	for _, check := range s.preflight {
 		if check.failed {
