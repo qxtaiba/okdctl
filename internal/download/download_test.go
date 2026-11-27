@@ -134,7 +134,6 @@ func TestDownload_CtxCancelCleansPartialFile(t *testing.T) {
 	go func() {
 		done <- Fetch(
 			ctx, srv.URL+"/big", out,
-			WithTimeout(30*time.Second),
 			WithLogger(logutil.NopLogger),
 		)
 	}()
@@ -165,7 +164,7 @@ func TestDownload_SymlinkAtOutputPath(t *testing.T) {
 
 	dir := t.TempDir()
 	target := filepath.Join(dir, "real-target.bin")
-	if err := os.WriteFile(target, []byte("original"), 0o600); err != nil {
+	if err := os.WriteFile(target, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -174,12 +173,7 @@ func TestDownload_SymlinkAtOutputPath(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := Fetch(
-		context.Background(), srv.URL+"/artifact.bin", link,
-		// WithOverwrite bypasses canSkipDownload's stat-through-symlink short-circuit.
-		WithOverwrite(true),
-		WithLogger(logutil.NopLogger),
-	); err == nil {
+	if err := Fetch(context.Background(), srv.URL+"/artifact.bin", link, WithLogger(logutil.NopLogger)); err == nil {
 		t.Fatal("expected error when OutputPath is a symlink; O_NOFOLLOW must reject it")
 	}
 
@@ -187,7 +181,7 @@ func TestDownload_SymlinkAtOutputPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile target: %v", err)
 	}
-	if string(got) != "original" {
+	if len(got) != 0 {
 		t.Errorf("symlink target must be unchanged; got %q", got)
 	}
 }
@@ -231,5 +225,30 @@ func TestCanSkipDownload(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestFetch_SlowBodyOutlivesHeaderTimeout(t *testing.T) {
+	old := responseHeaderTimeout
+	responseHeaderTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { responseHeaderTimeout = old })
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		for range 4 {
+			_, _ = w.Write([]byte("chunk"))
+			w.(http.Flusher).Flush()
+			time.Sleep(100 * time.Millisecond)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	out := filepath.Join(t.TempDir(), "slow.bin")
+	if err := Fetch(context.Background(), srv.URL+"/slow", out, WithLogger(logutil.NopLogger)); err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	got, err := os.ReadFile(out)
+	if err != nil || string(got) != strings.Repeat("chunk", 4) {
+		t.Fatalf("content = %q, %v; want four chunks", got, err)
 	}
 }

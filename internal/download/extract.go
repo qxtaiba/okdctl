@@ -7,18 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
 type extractConfig struct {
 	stripComponents int
-	cleanupArchive  bool
-	logger          *slog.Logger
 }
 
 // ExtractOption configures an ExtractTarGz call.
@@ -30,16 +25,6 @@ var ErrSymlinkEscape = errors.New("symlink resolves outside destination")
 // WithExtractStripComponents removes n leading path components from archive entries, like tar --strip-components.
 func WithExtractStripComponents(n int) ExtractOption {
 	return func(c *extractConfig) { c.stripComponents = n }
-}
-
-// WithExtractCleanupArchive removes the archive file after successful extraction.
-func WithExtractCleanupArchive(v bool) ExtractOption {
-	return func(c *extractConfig) { c.cleanupArchive = v }
-}
-
-// WithExtractLogger injects a structured logger; nil falls back to logutil.NopLogger.
-func WithExtractLogger(l *slog.Logger) ExtractOption {
-	return func(c *extractConfig) { c.logger = logutil.OrNop(l) }
 }
 
 // verifyResolvedLink rejects rel if its real-filesystem resolution escapes
@@ -151,14 +136,10 @@ func processTarEntry(root *os.Root, tarReader *tar.Reader, header *tar.Header, s
 // get a resolution post-check (see processTarEntry) that removes any escaping
 // target.
 func ExtractTarGz(ctx context.Context, archivePath, destDir string, opts ...ExtractOption) error {
-	cfg := &extractConfig{
-		logger: logutil.NopLogger,
-	}
+	cfg := &extractConfig{}
 	for _, o := range opts {
 		o(cfg)
 	}
-
-	filename := filepath.Base(archivePath)
 
 	file, err := os.Open(archivePath)
 	if err != nil {
@@ -203,14 +184,6 @@ func ExtractTarGz(ctx context.Context, archivePath, destDir string, opts ...Extr
 			return err
 		}
 	}
-
-	if cfg.cleanupArchive {
-		if err := os.Remove(archivePath); err != nil {
-			cfg.logger.Warn("download: could not remove archive", "file", filename, "err", err)
-		}
-	}
-
-	cfg.logger.Info("download: extracted", "file", filename)
 
 	return nil
 }

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -19,16 +20,15 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
-// DefaultTimeout bounds a Fetch call when WithTimeout is unset; aliases httputil.TimeoutDownload.
-const DefaultTimeout = httputil.TimeoutDownload
+// responseHeaderTimeout bounds dial, TLS handshake and the wait for headers
+// per attempt; the body read is bounded by ctx alone so a slow mirror is
+// never cut off mid-stream and retried from zero.
+var responseHeaderTimeout = 30 * time.Second
 
 type dlConfig struct {
 	url              string
 	outputPath       string
 	expectedChecksum string
-	description      string
-	timeout          time.Duration
-	overwrite        bool
 	logger           *slog.Logger
 }
 
@@ -39,15 +39,6 @@ type FetchOption func(*dlConfig)
 func WithFetchChecksum(sum string) FetchOption {
 	return func(c *dlConfig) { c.expectedChecksum = sum }
 }
-
-// WithDescription sets the human-readable name used in log and error messages.
-func WithDescription(d string) FetchOption { return func(c *dlConfig) { c.description = d } }
-
-// WithTimeout overrides the per-fetch HTTP timeout (default: DefaultTimeout).
-func WithTimeout(d time.Duration) FetchOption { return func(c *dlConfig) { c.timeout = d } }
-
-// WithOverwrite forces a re-download even when a file with a matching checksum exists.
-func WithOverwrite(v bool) FetchOption { return func(c *dlConfig) { c.overwrite = v } }
 
 // WithLogger injects a structured logger; nil falls back to logutil.NopLogger.
 func WithLogger(l *slog.Logger) FetchOption {
@@ -98,14 +89,7 @@ func Fetch(ctx context.Context, url, dst string, opts ...FetchOption) error {
 	for _, o := range opts {
 		o(cfg)
 	}
-	if cfg.timeout == 0 {
-		cfg.timeout = DefaultTimeout
-	}
-	if cfg.description == "" {
-		cfg.description = filepath.Base(dst)
-	}
-
-	if !cfg.overwrite && canSkipDownload(ctx, cfg) {
+	if canSkipDownload(ctx, cfg) {
 		return nil
 	}
 
@@ -116,14 +100,14 @@ func Fetch(ctx context.Context, url, dst string, opts ...FetchOption) error {
 	filename := filepath.Base(dst)
 	cfg.logger.Info("download: fetching", "file", filename)
 
-	client := httputil.New(cfg.timeout)
+	client := newClient()
 
 	attempts, err := retryDownload(ctx, func() error {
 		return fetchToFile(ctx, client, cfg)
 	})
 	if err != nil {
 		cfg.logger.Warn("download: giving up after retries", "file", filename, "attempts", attempts, "err", err)
-		return &errtypes.NetworkError{Msg: fmt.Sprintf("download failed for %s", cfg.description), Err: err}
+		return &errtypes.NetworkError{Msg: "download " + filename, Err: err}
 	}
 
 	if err := verifyDownloadedFile(ctx, dst, cfg.expectedChecksum, cfg.logger); err != nil {
@@ -131,6 +115,17 @@ func Fetch(ctx context.Context, url, dst string, opts ...FetchOption) error {
 		return err
 	}
 	return nil
+}
+
+func newClient() *http.Client {
+	client := httputil.New(0)
+	client.Transport = &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           (&net.Dialer{Timeout: responseHeaderTimeout}).DialContext,
+		TLSHandshakeTimeout:   responseHeaderTimeout,
+		ResponseHeaderTimeout: responseHeaderTimeout,
+	}
+	return client
 }
 
 // fetchToFile runs one attempt; a mid-attempt failure removes the partial file

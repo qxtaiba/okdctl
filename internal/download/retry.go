@@ -74,11 +74,9 @@ func bodySnippet(raw []byte, truncated bool) string {
 	return clean
 }
 
-// isRetryable classifies err for another attempt: 5xx, transport errors, 408/429, and per-attempt
-// timeouts retry — Client.Timeout satisfies
-// errors.Is(context.DeadlineExceeded), so treating that as non-retryable would
-// break the slow-mirror case it exists for. Only context.Canceled aborts
-// outright; other 4xx stay fail-fast.
+// isRetryable classifies err for another attempt: 5xx, 408/429 and every
+// transport error, header timeouts included, retry; only context.Canceled
+// aborts outright and other 4xx stay fail-fast.
 func isRetryable(err error) bool {
 	if err == nil {
 		return false
