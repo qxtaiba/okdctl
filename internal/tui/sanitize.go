@@ -15,7 +15,7 @@ import (
 const controlMarker = "\uFFFD"
 
 // This is a terminal-escape check, distinct from and in addition to secret
-// redaction (internal/logutil.RedactHandler, ScrubSecrets): it has no notion
+// redaction (internal/logutil.RedactHandler): it has no notion
 // of what text means, only of what it could do to the terminal that renders
 // it. Apply it to text that originates outside okdctl's control — Proxmox
 // node/storage/bridge/VM names, backend error strings, surfaced log lines —
