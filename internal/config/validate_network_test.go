@@ -49,6 +49,7 @@ func TestValidateNetwork(t *testing.T) {
 		{"service overlaps pod", func(c *Config) { c.Networking.ServiceCIDR = "10.128.0.0/16" }, finding{FieldNetworkingServiceCIDR, "overlaps pod_cidr"}},
 		{"host prefix low", func(c *Config) { c.Networking.HostPrefix = 19 }, finding{FieldNetworkingHostPrefix, "between 20 and 28"}},
 		{"host prefix high", func(c *Config) { c.Networking.HostPrefix = 29 }, finding{FieldNetworkingHostPrefix, "between 20 and 28"}},
+		{"host prefix shorter than pod cidr", func(c *Config) { c.Networking.PodCIDR = "10.128.0.0/24" }, finding{FieldNetworkingHostPrefix, "23 must be at least the pod_cidr prefix length 24"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -63,6 +64,7 @@ func TestValidateNetwork(t *testing.T) {
 		"range ends on last host":      func(c *Config) { c.Networking.NodeIPStart = "192.168.1.243" },
 		"host prefix 20":               func(c *Config) { c.Networking.HostPrefix = 20 },
 		"host prefix 28":               func(c *Config) { c.Networking.HostPrefix = 28 },
+		"host prefix equal to pod cidr": func(c *Config) { c.Networking.PodCIDR = "10.128.0.0/23" },
 		"masters only range":           func(c *Config) { c.Workers.Count = 0; c.Networking.NodeIPStart = "192.168.1.252" },
 		"ntp listed":                   func(c *Config) { c.Networking.NTP = []string{"pool.ntp.org"} },
 		"overridden worker past the range end": func(c *Config) {

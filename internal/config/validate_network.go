@@ -37,8 +37,11 @@ func (c *Config) validateNetwork(r *ValidationResult, nodes []nodeRef) {
 	if service.IsValid() && pod.IsValid() && service.Overlaps(pod) {
 		r.addf(FieldNetworkingServiceCIDR, "%s overlaps pod_cidr %s", service, pod)
 	}
-	if n.HostPrefix < minHostPrefix || n.HostPrefix > maxHostPrefix {
+	switch {
+	case n.HostPrefix < minHostPrefix || n.HostPrefix > maxHostPrefix:
 		r.addf(FieldNetworkingHostPrefix, "%d must be between %d and %d", n.HostPrefix, minHostPrefix, maxHostPrefix)
+	case pod.IsValid() && n.HostPrefix < pod.Bits():
+		r.addf(FieldNetworkingHostPrefix, "%d must be at least the pod_cidr prefix length %d", n.HostPrefix, pod.Bits())
 	}
 }
 
