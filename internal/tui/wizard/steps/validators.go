@@ -4,9 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
-	"net/url"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -15,8 +13,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
-
-var dnsLabel = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
 // ValidateFilePath requires a path to an existing regular file.
 func ValidateFilePath(value string) error {
@@ -33,25 +29,6 @@ func ValidateFilePath(value string) error {
 		return fmt.Errorf("cannot access file: %w — check permissions", err)
 	case info.IsDir():
 		return fmt.Errorf("%s is a directory — point at the file itself", expanded)
-	}
-	return nil
-}
-
-func validateClusterName(value string) error {
-	if len(value) > 54 || !dnsLabel.MatchString(value) {
-		return errors.New("use 1-54 lowercase letters, digits and hyphens, no dots")
-	}
-	return nil
-}
-
-func validateDomain(value string) error {
-	if len(value) > 253 {
-		return errors.New("domain is longer than 253 characters")
-	}
-	for _, label := range strings.Split(value, ".") {
-		if !dnsLabel.MatchString(label) {
-			return fmt.Errorf("invalid domain %q — use lowercase labels such as example.com", value)
-		}
 	}
 	return nil
 }
@@ -75,17 +52,6 @@ func validateIPList(value string) error {
 		if err := validateIP(entry); err != nil {
 			return err
 		}
-	}
-	return nil
-}
-
-func validateEndpoint(value string) error {
-	u, err := url.Parse(value)
-	if err != nil || u.Scheme == "" || u.Host == "" {
-		return errors.New("use a url with scheme and host, such as https://pve:8006")
-	}
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return errors.New("use http or https, such as https://pve:8006")
 	}
 	return nil
 }

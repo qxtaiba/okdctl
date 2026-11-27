@@ -18,6 +18,11 @@ const (
 	pairKeyWorkerResources       = "worker_resources"
 )
 
+var (
+	masterFloor = config.FloorFor(config.RoleMaster)
+	workerFloor = config.FloorFor(config.RoleWorker)
+)
+
 // ResourcesStepState pairs the resources step with the Config its footer
 // totals read.
 type ResourcesStepState struct {
@@ -44,11 +49,11 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					Key:       fieldCPCPU,
 					Label:     labelCPU,
 					Default:   "4",
-					Help:      "okd minimum: 4 vcpus",
+					Help:      fmt.Sprintf("okd minimum: %d vcpus", masterFloor.CPU),
 					Width:     wizard.FieldWidthNumber,
 					Required:  true,
 					PairKey:   pairKeyControlPlaneResources,
-					Validate:  minInt(4, "vcpu"),
+					Validate:  minInt(masterFloor.CPU, "vcpu"),
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.ControlPlane.CPU = v }),
 					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.ControlPlane.CPU }),
 				},
@@ -56,11 +61,11 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					Key:       fieldCPMemory,
 					Label:     labelMemory,
 					Default:   "16384",
-					Help:      "okd minimum: 16384 mib (16 gib)",
+					Help:      floorMemoryHelp(masterFloor),
 					Width:     wizard.FieldWidthNumber,
 					Required:  true,
 					PairKey:   pairKeyControlPlaneResources,
-					Validate:  minInt(16384, "mib"),
+					Validate:  minInt(masterFloor.MemoryMiB, "mib"),
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.ControlPlane.MemoryMiB = v }),
 					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.ControlPlane.MemoryMiB }),
 				},
@@ -68,11 +73,11 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					Key:       fieldCPRootDisk,
 					Label:     labelRootDisk,
 					Default:   "120",
-					Help:      "okd minimum: 100 gib",
+					Help:      fmt.Sprintf("okd minimum: %d gib", masterFloor.RootGiB),
 					Width:     wizard.FieldWidthNumber,
 					Required:  true,
 					PairKey:   pairKeyControlPlaneResources,
-					Validate:  minInt(100, "gib"),
+					Validate:  minInt(masterFloor.RootGiB, "gib"),
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.ControlPlane.Disks = setDiskSize(c.ControlPlane.Disks, 0, v) }),
 					ConfigGet: wizard.GetInt(func(c *config.Config) int { return diskSize(c.ControlPlane.Disks, 0) }),
 				},
@@ -96,11 +101,11 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					Key:       fieldWorkerCPU,
 					Label:     labelCPU,
 					Default:   "8",
-					Help:      "okd minimum: 2 vcpus",
+					Help:      fmt.Sprintf("okd minimum: %d vcpus", workerFloor.CPU),
 					Width:     wizard.FieldWidthNumber,
 					Required:  true,
 					PairKey:   pairKeyWorkerResources,
-					Validate:  minInt(2, "vcpu"),
+					Validate:  minInt(workerFloor.CPU, "vcpu"),
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Workers.CPU = v }),
 					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Workers.CPU }),
 				},
@@ -108,11 +113,11 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					Key:       fieldWorkerMemory,
 					Label:     labelMemory,
 					Default:   "16384",
-					Help:      "okd minimum: 8192 mib (8 gib)",
+					Help:      floorMemoryHelp(workerFloor),
 					Width:     wizard.FieldWidthNumber,
 					Required:  true,
 					PairKey:   pairKeyWorkerResources,
-					Validate:  minInt(8192, "mib"),
+					Validate:  minInt(workerFloor.MemoryMiB, "mib"),
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Workers.MemoryMiB = v }),
 					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Workers.MemoryMiB }),
 				},
@@ -120,11 +125,11 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					Key:       fieldWorkerRootDisk,
 					Label:     labelRootDisk,
 					Default:   "120",
-					Help:      "okd minimum: 100 gib",
+					Help:      fmt.Sprintf("okd minimum: %d gib", workerFloor.RootGiB),
 					Width:     wizard.FieldWidthNumber,
 					Required:  true,
 					PairKey:   pairKeyWorkerResources,
-					Validate:  minInt(100, "gib"),
+					Validate:  minInt(workerFloor.RootGiB, "gib"),
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Workers.Disks = setDiskSize(c.Workers.Disks, 0, v) }),
 					ConfigGet: wizard.GetInt(func(c *config.Config) int { return diskSize(c.Workers.Disks, 0) }),
 				},
@@ -142,6 +147,10 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 			},
 		},
 	},
+}
+
+func floorMemoryHelp(f config.Floor) string {
+	return fmt.Sprintf("okd minimum: %d mib (%d gib)", f.MemoryMiB, f.MemoryMiB/1024)
 }
 
 // setDiskSize sizes disks[i], growing the list; a zero size on a non-root
