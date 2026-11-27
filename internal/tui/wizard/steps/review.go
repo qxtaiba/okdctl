@@ -385,9 +385,9 @@ func (s *ReviewStep) renderCompute(st *wizard.SectionStyles, width int) string {
 	}
 	warnings := ""
 	if inv, err := model.Build(s.cfg, ""); err == nil {
-		cpu, memoryMiB, diskGiB := inventoryTotals(&inv)
-		entries = append(entries, wizard.KVEntry{Label: "total", Value: fmt.Sprintf("%d vcpu, %d gb ram, %d gb disk", cpu, memoryMiB/1024, diskGiB)})
-		warnings = s.renderComputeWarnings(cpu, memoryMiB/1024, width)
+		total := inventoryDemand(inv.Nodes)
+		entries = append(entries, wizard.KVEntry{Label: "total", Value: fmt.Sprintf("%d vcpu, %d gb ram, %d gb disk", total.cpu, total.memoryMiB/1024, total.diskGiB)})
+		warnings = s.renderComputeWarnings(&total, width)
 	}
 	section := wizard.RenderSection(st, s.sectionTitle("compute", wizard.StepIDResources), entries)
 	if warnings == "" {
@@ -396,7 +396,7 @@ func (s *ReviewStep) renderCompute(st *wizard.SectionStyles, width int) string {
 	return strings.TrimRight(section, "\n") + "\n" + warnings + "\n"
 }
 
-func (s *ReviewStep) renderComputeWarnings(totalCPU, totalMemGB, width int) string {
+func (s *ReviewStep) renderComputeWarnings(total *demand, width int) string {
 	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning())
 	perHost := ""
 	if n := len(s.cfg.Provider.Proxmox.Nodes); n > 1 {
@@ -404,12 +404,12 @@ func (s *ReviewStep) renderComputeWarnings(totalCPU, totalMemGB, width int) stri
 	}
 	capacity := s.capacity.OnlineTotals()
 	var b strings.Builder
-	if capacity.MemoryKnown && totalMemGB > capacity.MemoryGB {
+	if capacity.overMemory(total) {
 		text := fmt.Sprintf("%s total ram exceeds online capacity (%d gb)%s — verify your proxmox host(s) have sufficient memory", tui.IconWarning, capacity.MemoryGB, perHost)
 		b.WriteString(warnStyle.Render(lipgloss.Wrap(text, width, "")))
 		b.WriteString("\n")
 	}
-	if capacity.CPUsKnown && totalCPU > capacity.CPUs {
+	if capacity.overCPU(total) {
 		text := fmt.Sprintf("%s total vcpu exceeds online capacity (%d)%s — verify your proxmox host(s) have sufficient cores", tui.IconWarning, capacity.CPUs, perHost)
 		b.WriteString(warnStyle.Render(lipgloss.Wrap(text, width, "")))
 		b.WriteString("\n")

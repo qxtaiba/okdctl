@@ -74,18 +74,7 @@ func reviewCapacityCheck(cfg *config.Config, snapshot *WizardCapacitySnapshot) r
 	if err != nil {
 		return reviewCheck{label: labelSelectedCapacity, status: statusNotChecked, detail: err.Error()}
 	}
-	type demand struct{ cpu, memoryMiB int }
-	use := make(map[string]*demand)
-	for i := range inv.Nodes {
-		n := &inv.Nodes[i]
-		d := use[n.Host]
-		if d == nil {
-			d = &demand{}
-			use[n.Host] = d
-		}
-		d.cpu += n.CPU
-		d.memoryMiB += n.MemoryMiB
-	}
+	use := demandByHost(inv.Nodes, nil)
 	rows := make([]string, 0, len(use))
 	warning, unknown := false, false
 	for i := range nodes {
@@ -102,12 +91,11 @@ func reviewCapacityCheck(cfg *config.Config, snapshot *WizardCapacitySnapshot) r
 		if node.MemKnown {
 			memory = fmt.Sprintf("%d GB", node.MemGB)
 		}
-		over := (node.CPUsKnown && d.cpu > node.CPUs) || (node.MemKnown && d.memoryMiB > node.MemGB*1024)
 		state := "fits"
 		switch {
 		case node.Status != proxmoxStatusOnline:
 			state, warning = "offline", true
-		case over:
+		case node.exceeds(d):
 			state, warning = "over capacity", true
 		case !node.CPUsKnown || !node.MemKnown:
 			state, unknown = "capacity unknown", true

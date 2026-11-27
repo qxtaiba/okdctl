@@ -177,19 +177,6 @@ func NewResourcesStep(capacity *WizardCapacitySnapshot) (*wizard.DataDrivenStep,
 	return step, state
 }
 
-// inventoryTotals sums vcpu, memory and disk over every node of inv.
-func inventoryTotals(inv *model.Inventory) (cpu, memoryMiB, diskGiB int) {
-	for i := range inv.Nodes {
-		n := &inv.Nodes[i]
-		cpu += n.CPU
-		memoryMiB += n.MemoryMiB
-		for _, d := range n.Disks {
-			diskGiB += d.SizeGiB
-		}
-	}
-	return cpu, memoryMiB, diskGiB
-}
-
 // renderResourceFooter totals the as-typed sizing through model.Build on a
 // copy of the session config, so the footer and the review share one sum.
 func renderResourceFooter(step *wizard.DataDrivenStep, state *ResourcesStepState, width int) string {
@@ -206,12 +193,10 @@ func renderResourceFooter(step *wizard.DataDrivenStep, state *ResourcesStepState
 	if err != nil {
 		return tui.Truncate("resource totals pending · enter valid values", width)
 	}
-	cpu, memoryMiB, diskGiB := inventoryTotals(&inv)
-	label := fmt.Sprintf("%d vcpu · %d gb ram · %d gb disk", cpu, memoryMiB/1024, diskGiB)
+	total := inventoryDemand(inv.Nodes)
+	label := fmt.Sprintf("%d vcpu · %d gb ram · %d gb disk", total.cpu, total.memoryMiB/1024, total.diskGiB)
 	capacity := state.Capacity.OnlineTotals()
-	over := (capacity.CPUsKnown && cpu > capacity.CPUs) ||
-		(capacity.MemoryKnown && memoryMiB > capacity.MemoryGB*1024)
-	if over {
+	if capacity.overCPU(&total) || capacity.overMemory(&total) {
 		label = tui.Truncate(label+fmt.Sprintf(" · exceeds online capacity (%dc/%dg)", capacity.CPUs, capacity.MemoryGB), width)
 		return lipgloss.NewStyle().Foreground(tui.ColorWarning()).Bold(true).Render(label)
 	}

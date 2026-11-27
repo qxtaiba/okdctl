@@ -391,31 +391,18 @@ func nodeDisplayOptions(nodes []proxmoxNode, values []string) []string {
 	return display
 }
 
-// assignmentDemand sums the vcpu, memory and disk the chosen hosts would
-// carry and flags the ones over their discovered capacity.
+// assignmentDemand sums what the chosen hosts would carry and flags the ones
+// over their discovered capacity.
 func (s *NodePlacementStep) assignmentDemand(width int) string {
 	if s.discovery == nil || len(s.inventory) == 0 {
 		return ""
 	}
-	type demand struct{ cpu, memGB, diskGB int }
-	use := make(map[string]*demand)
-	for i := range s.inventory {
-		node := &s.inventory[i]
-		host := node.Host
-		if field := s.hostFields[node.Name]; field != nil {
-			host = field.Value()
+	use := demandByHost(s.inventory, func(n *model.NodeSpec) string {
+		if field := s.hostFields[n.Name]; field != nil {
+			return field.Value()
 		}
-		d := use[host]
-		if d == nil {
-			d = &demand{}
-			use[host] = d
-		}
-		d.cpu += node.CPU
-		d.memGB += node.MemoryMiB / 1024
-		for _, disk := range node.Disks {
-			d.diskGB += disk.SizeGiB
-		}
-	}
+		return n.Host
+	})
 	rows := make([]string, 0, len(use))
 	for i := range s.discovery.Nodes {
 		node := &s.discovery.Nodes[i]
@@ -423,8 +410,8 @@ func (s *NodePlacementStep) assignmentDemand(width int) string {
 		if !assigned {
 			continue
 		}
-		row := fmt.Sprintf("%s: %dc/%dg/%dgb", tui.SanitizeTerminalEscapes(node.Name), d.cpu, d.memGB, d.diskGB)
-		if (node.CPUsKnown && d.cpu > node.CPUs) || (node.MemKnown && d.memGB > node.MemGB) {
+		row := fmt.Sprintf("%s: %dc/%dg/%dgb", tui.SanitizeTerminalEscapes(node.Name), d.cpu, d.memoryMiB/1024, d.diskGiB)
+		if node.exceeds(d) {
 			row = lipgloss.NewStyle().Foreground(tui.ColorWarning()).Render(row + " · oversubscribed")
 		}
 		rows = append(rows, row)
