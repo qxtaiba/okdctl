@@ -29,6 +29,8 @@ type fakeDriver struct {
 	vms      []VMSummary
 	configs  map[int]VMConfig
 	errs     map[string]error
+
+	configReads int
 }
 
 func (f *fakeDriver) Permissions(context.Context) (Permissions, error) {
@@ -64,6 +66,7 @@ func (f *fakeDriver) Bridges(_ context.Context, node string) ([]Bridge, error) {
 }
 
 func (f *fakeDriver) VMConfig(_ context.Context, ref VMRef) (VMConfig, error) {
+	f.configReads++
 	if err := f.errs["config"]; err != nil && ref.VMID == 200 {
 		return VMConfig{}, err
 	}
@@ -553,22 +556,49 @@ func TestFixtureNodeHasRequiredCPUFlags(t *testing.T) {
 
 type cancellingDriver struct {
 	*fakeDriver
+	at     string
 	cancel context.CancelFunc
 }
 
 func (d cancellingDriver) ListVMs(ctx context.Context) ([]VMSummary, error) {
-	d.cancel()
+	if d.at == "listvms" {
+		d.cancel()
+	}
 	return d.fakeDriver.ListVMs(ctx)
 }
 
+func (d cancellingDriver) VMConfig(ctx context.Context, ref VMRef) (VMConfig, error) {
+	if d.at == "config" {
+		d.cancel()
+	}
+	return d.fakeDriver.VMConfig(ctx, ref)
+}
+
+type cancellingPinger struct{ cancel context.CancelFunc }
+
+func (p cancellingPinger) Alive(ctx context.Context, _ netip.Addr) (bool, error) {
+	p.cancel()
+	return false, ctx.Err()
+}
+
 func TestPreflightReturnsCancellation(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	d := cancellingDriver{fakeDriver: goodDriver(), cancel: cancel}
-	d.errs["config"] = errors.New("context canceled")
-	got, err := Preflight(ctx, d, fakePinger{}, goodInput())
-	if !errors.Is(err, context.Canceled) || got != nil {
-		t.Fatalf("Preflight = %+v, %v; want nil, context.Canceled", got, err)
+	for _, at := range []string{"listvms", "config", "ping"} {
+		t.Run(at, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			d := cancellingDriver{fakeDriver: goodDriver(), at: at, cancel: cancel}
+			var ping Pinger = fakePinger{}
+			if at == "ping" {
+				ping = cancellingPinger{cancel}
+			}
+			got, err := Preflight(ctx, d, ping, goodInput())
+			if !errors.Is(err, context.Canceled) || got != nil {
+				t.Fatalf("Preflight = %+v, %v; want nil, context.Canceled", got, err)
+			}
+			if at == "config" && d.configReads != 1 {
+				t.Fatalf("read %d vm configs after cancel, want the loop to stop at 1", d.configReads)
+			}
+		})
 	}
 }
 
