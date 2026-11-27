@@ -8,7 +8,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
-var nodeKeySuffix = regexp.MustCompile(`-(master|worker)(0|[1-9][0-9]*)$`)
+var nodeKeySuffix = regexp.MustCompile(`-(master|worker)(0|[1-9]\d*)$`)
 
 // BasicsStepDefinition declares the cluster identity fields.
 var BasicsStepDefinition = wizard.StepDefinition{
