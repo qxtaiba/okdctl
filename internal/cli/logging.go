@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"slices"
 	"syscall"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // logFileCloser holds the open log-file handle for Execute to close; nil when
@@ -62,7 +62,7 @@ func openDefaultLogSink() (string, *os.File, error) {
 	if err != nil {
 		return "", nil, err
 	}
-	path := filepath.Join(root, logutil.DefaultLogFileName)
+	path := workspace.LogPath(root)
 	f, err := openLogFile(path)
 	if err != nil {
 		return "", nil, err

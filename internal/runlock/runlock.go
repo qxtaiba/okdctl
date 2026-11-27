@@ -9,16 +9,14 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
-
-const lockFile = ".okdctl.lock"
 
 // Lock holds the open file descriptor whose flock protects the project root.
 // Call Release when the protected operation completes.
@@ -32,7 +30,7 @@ type Lock struct {
 // slog.Default(); callers bypassing cli.Execute must install
 // logutil.RedactHandler first.
 func Acquire(projectRoot, verb string) (*Lock, error) {
-	path := filepath.Join(projectRoot, lockFile)
+	path := workspace.LockPath(projectRoot)
 
 	// Refuse a symlink at the lock path (O_NOFOLLOW closes the lstat->open
 	// TOCTOU race) — Acquire runs as root under sudo re-exec, so a pre-sudo

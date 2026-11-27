@@ -12,6 +12,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 func TestOpenLogFileRefusesSymlink(t *testing.T) {
@@ -96,8 +97,8 @@ func TestConfigureLogging_DefaultSinkRedacts(t *testing.T) {
 	if err := configureLogging(initCmd); err != nil {
 		t.Fatalf("configureLogging: %v", err)
 	}
-	if runLogPath == "" || filepath.Base(runLogPath) != logutil.DefaultLogFileName {
-		t.Fatalf("runLogPath = %q, want <workspace>/%s", runLogPath, logutil.DefaultLogFileName)
+	if runLogPath == "" || filepath.Base(runLogPath) != workspace.LogFile {
+		t.Fatalf("runLogPath = %q, want <workspace>/%s", runLogPath, workspace.LogFile)
 	}
 	if logFileCloser == nil {
 		t.Fatal("logFileCloser not set for default sink")
@@ -162,7 +163,7 @@ func TestConfigureLogging_LogFilePrecedence(t *testing.T) {
 	if _, err := os.Stat(logFile); err != nil {
 		t.Fatalf("--log-file target not created: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, logutil.DefaultLogFileName)); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, workspace.LogFile)); !os.IsNotExist(err) {
 		t.Fatalf("default sink created despite --log-file: stat err = %v", err)
 	}
 }
@@ -178,7 +179,7 @@ func TestConfigureLogging_NoDefaultSinkForReadOnlyCmds(t *testing.T) {
 	if runLogPath != "" || logFileCloser != nil {
 		t.Fatalf("file sink active for version: runLogPath=%q closer=%v", runLogPath, logFileCloser)
 	}
-	if _, err := os.Stat(filepath.Join(dir, logutil.DefaultLogFileName)); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, workspace.LogFile)); !os.IsNotExist(err) {
 		t.Fatalf("okdctl.log created for a read-only command: stat err = %v", err)
 	}
 }

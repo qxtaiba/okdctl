@@ -14,7 +14,19 @@ const (
 	BinDirName     = "bin"
 	RecordFile     = "record.json"
 	ISOFile        = "agent.x86_64.iso"
+	LogFile        = "okdctl.log"
+	LockFile       = ".okdctl.lock"
 )
+
+// LogPath returns the persistent run log every command appends to.
+func LogPath(root string) string {
+	return filepath.Join(root, LogFile)
+}
+
+// LockPath returns the flock file runlock holds while a command runs.
+func LockPath(root string) string {
+	return filepath.Join(root, LockFile)
+}
 
 // ClusterDir returns <root>/cluster, created by up and removed by destroy.
 func ClusterDir(root string) string {
