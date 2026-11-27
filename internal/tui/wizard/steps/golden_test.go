@@ -54,7 +54,7 @@ func configureScenarios() []configureScenario {
 			id:   wizard.StepIDDistribution,
 			seed: func(m *wizard.Model) {
 				gen := m.CurrentStep().(*DistributionStep).generation
-				m.Update(versionsLoadedMsg{generation: gen, series: demoReleaseSeries()})
+				m.Update(versionsLoadedMsg{generation: gen, series: fixtureReleaseSeries()})
 			},
 		},
 		{name: "proxmox", id: wizard.StepIDProxmox},
@@ -64,7 +64,7 @@ func configureScenarios() []configureScenario {
 			id:   wizard.StepIDNodePlacement,
 			seed: func(m *wizard.Model) {
 				gen := m.CurrentStep().(*NodePlacementStep).generation
-				m.Update(discoveryCompleteMsg{generation: gen, discovery: demoDiscovery()})
+				m.Update(discoveryCompleteMsg{generation: gen, discovery: fixtureDiscovery()})
 			},
 			wide: true,
 		},
@@ -75,7 +75,7 @@ func configureScenarios() []configureScenario {
 				m.Config().Provider.Proxmox.Nodes = []string{"pve1", "pve2"}
 				m.Config().Nodes = map[string]config.NodeOverride{"lab-master1": {Host: "pve1"}}
 				gen := m.CurrentStep().(*NodePlacementStep).generation
-				m.Update(discoveryCompleteMsg{generation: gen, discovery: demoDiscovery()})
+				m.Update(discoveryCompleteMsg{generation: gen, discovery: fixtureDiscovery()})
 			},
 		},
 		{name: "networking", id: wizard.StepIDNetworking},
@@ -127,7 +127,7 @@ func newGoldenModelWithCapacity(t *testing.T) (*wizard.Model, *WizardCapacitySna
 	return wizard.NewFlowModel(built.Steps, cfg, Chrome()), capacity
 }
 
-func demoDiscovery() *proxmoxDiscovery {
+func fixtureDiscovery() *proxmoxDiscovery {
 	return &proxmoxDiscovery{Nodes: []proxmoxNode{
 		{Name: "pve1", Status: "online", CPUs: 32, MemGB: 128},
 		{Name: "pve2", Status: "online", CPUs: 24, MemGB: 96},
@@ -171,11 +171,11 @@ func TestCapacityWizardFramesFitAllTiers(t *testing.T) {
 			tui.SetTerminalWidth(size.width)
 			t.Cleanup(func() { tui.SetTerminalWidth(0) })
 			m, capacity := newGoldenModelWithCapacity(t)
-			capacity.discovery = demoDiscovery()
+			capacity.discovery = fixtureDiscovery()
 			_ = tuitest.RenderAt(t, m, size.width, size.height)
 			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDNodePlacement})
 			gen := m.CurrentStep().(*NodePlacementStep).generation
-			m.Update(discoveryCompleteMsg{generation: gen, discovery: demoDiscovery()})
+			m.Update(discoveryCompleteMsg{generation: gen, discovery: fixtureDiscovery()})
 			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDNetworking})
 			networkFrame := tuitest.RenderAt(t, m, size.width, size.height)
 			tuitest.AssertFits(t, networkFrame, size.width, size.height)
@@ -301,7 +301,7 @@ func TestGolden_DistributionHelpOverlay(t *testing.T) {
 			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
 			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDDistribution})
 			gen := m.CurrentStep().(*DistributionStep).generation
-			m.Update(versionsLoadedMsg{generation: gen, series: demoReleaseSeries()})
+			m.Update(versionsLoadedMsg{generation: gen, series: fixtureReleaseSeries()})
 			m.Update(questionMark)
 
 			frame := tuitest.RenderAt(t, m, sz.w, sz.h)

@@ -305,7 +305,7 @@ func TestNodePlacementCredentialsPreferTheTypedToken(t *testing.T) {
 	})
 	creds := s.credentials()
 	if string(creds.APIToken) != "typed@pam!okdctl=typed" || !creds.Insecure || creds.Endpoint != s.cfg.Provider.Proxmox.Endpoint {
-		t.Fatalf("creds = %+v / %q, want the typed token, insecure and the config endpoint", creds.Redacted(), creds.APIToken)
+		t.Fatalf("creds = %+v, want the typed token, insecure and the config endpoint", creds.Redacted())
 	}
 }
 
@@ -335,7 +335,7 @@ func TestSeedCredentialsReachesBothSteps(t *testing.T) {
 	}
 	creds := placement.credentials()
 	if string(creds.APIToken) != "file@pam!okdctl=file" || !creds.Insecure {
-		t.Fatalf("creds with a blank typed token = %+v / %q, want the sidecar's token and flag", creds.Redacted(), creds.APIToken)
+		t.Fatalf("creds with a blank typed token = %+v, want the sidecar's token and flag", creds.Redacted())
 	}
 	creds.Zeroize()
 	if !saved.IsValid() {
@@ -358,7 +358,7 @@ func TestNodePlacementStep_StaleDiscoveryRepliesCannotOverwriteNewer(t *testing.
 			t.Fatal("re-entry must issue a new generation")
 		}
 
-		discB := demoDiscovery()
+		discB := fixtureDiscovery()
 		step, _ := s.Update(discoveryCompleteMsg{generation: genB, discovery: discB})
 		s = step.(*NodePlacementStep)
 		stale.generation = genA
@@ -377,7 +377,7 @@ func TestNodePlacementStep_ReentryAfterSuccessRebuildsWithoutRefetching(t *testi
 	if cmd := s.Init(); cmd == nil {
 		t.Fatal("first Init() must fetch")
 	}
-	step, _ := s.Update(discoveryCompleteMsg{generation: s.generation, discovery: demoDiscovery()})
+	step, _ := s.Update(discoveryCompleteMsg{generation: s.generation, discovery: fixtureDiscovery()})
 	s = step.(*NodePlacementStep)
 	gen := s.generation
 
@@ -403,7 +403,7 @@ func TestNodePlacementStep_ReentryAfterErrorRefetches(t *testing.T) {
 	if cmd := s.Init(); cmd == nil || s.generation == genA {
 		t.Fatal("re-entry after an error must retry with a new generation")
 	}
-	step, _ = s.Update(discoveryCompleteMsg{generation: s.generation, discovery: demoDiscovery()})
+	step, _ = s.Update(discoveryCompleteMsg{generation: s.generation, discovery: fixtureDiscovery()})
 	s = step.(*NodePlacementStep)
 	if s.discoveryErr != nil {
 		t.Fatalf("discoveryErr = %v after the retry succeeded, want nil", s.discoveryErr)
@@ -414,7 +414,7 @@ func TestNodePlacementStep_RefreshKeyRefetchesDiscovery(t *testing.T) {
 	s := NewNodePlacementStep()
 	s.cfg = newPlacementConfig()
 	s.Init()
-	step, _ := s.Update(discoveryCompleteMsg{generation: s.generation, discovery: demoDiscovery()})
+	step, _ := s.Update(discoveryCompleteMsg{generation: s.generation, discovery: fixtureDiscovery()})
 	s = step.(*NodePlacementStep)
 	genBefore := s.generation
 
@@ -437,7 +437,7 @@ func TestNodePlacementStep_OverlayHelp(t *testing.T) {
 	}
 
 	want := wizard.KeyBinding{Key: "r", Help: "refresh"}
-	for name, msg := range map[string]discoveryCompleteMsg{"success": {discovery: demoDiscovery()}, "network error": {err: errors.New("connection refused")}} {
+	for name, msg := range map[string]discoveryCompleteMsg{"success": {discovery: fixtureDiscovery()}, "network error": {err: errors.New("connection refused")}} {
 		s := NewNodePlacementStep()
 		s.cfg = newPlacementConfig()
 		step, _ := s.Update(msg)
@@ -457,7 +457,7 @@ func TestNodePlacementStep_HelpOverlayListsRefreshOnlyOncePlacing(t *testing.T) 
 			s := NewNodePlacementStep()
 			s.cfg = newPlacementConfig()
 			if tc.discovered {
-				step, _ := s.Update(discoveryCompleteMsg{discovery: demoDiscovery()})
+				step, _ := s.Update(discoveryCompleteMsg{discovery: fixtureDiscovery()})
 				s = step.(*NodePlacementStep)
 			}
 			m := wizard.NewModel([]wizard.WizardStep{s}, s.cfg)
@@ -509,7 +509,7 @@ func TestReviewJumpToProxmoxKeepsThePoolNodePlacementChose(t *testing.T) {
 
 	m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDNodePlacement})
 	placement := m.CurrentStep().(*NodePlacementStep)
-	m.Update(discoveryCompleteMsg{generation: placement.generation, discovery: demoDiscovery()})
+	m.Update(discoveryCompleteMsg{generation: placement.generation, discovery: fixtureDiscovery()})
 	placement.poolField.SetValue("pve1,pve2")
 	_, cmd := m.Update(enter)
 	pumpCmd(m, cmd)
@@ -549,7 +549,7 @@ func TestNodePlacementTypingIntoAddNodesNeverRefetchesOrScrolls(t *testing.T) {
 	s := NewNodePlacementStep()
 	s.cfg = newPlacementConfig()
 	s.Init()
-	step, _ := s.Update(discoveryCompleteMsg{generation: s.generation, discovery: demoDiscovery()})
+	step, _ := s.Update(discoveryCompleteMsg{generation: s.generation, discovery: fixtureDiscovery()})
 	s = step.(*NodePlacementStep)
 	m := wizard.NewModel([]wizard.WizardStep{s}, s.cfg)
 	tuitest.RenderAt(t, m, 100, 30)
@@ -574,7 +574,7 @@ func TestNodePlacementFreshInitSpreadsAcrossTheDiscoveredPool(t *testing.T) {
 	cfg := config.DefaultConfig()
 	s := NewNodePlacementStep()
 	s.cfg = cfg
-	step, _ := s.Update(discoveryCompleteMsg{discovery: demoDiscovery()})
+	step, _ := s.Update(discoveryCompleteMsg{discovery: fixtureDiscovery()})
 	s = step.(*NodePlacementStep)
 
 	if got := s.poolField.Value(); got != "pve1,pve2" {
@@ -600,7 +600,7 @@ func TestNodePlacementKeepsAConfiguredPoolThatDiscoveryStillOffers(t *testing.T)
 	cfg.Provider.Proxmox.Nodes = []string{"pve2", "pve9"}
 	s := NewNodePlacementStep()
 	s.cfg = cfg
-	step, _ := s.Update(discoveryCompleteMsg{discovery: demoDiscovery()})
+	step, _ := s.Update(discoveryCompleteMsg{discovery: fixtureDiscovery()})
 	s = step.(*NodePlacementStep)
 
 	if got := s.poolField.Value(); got != "pve2,pve9" {
