@@ -30,18 +30,14 @@ func init() {
 }
 
 func runKubeconfig(cmd *cobra.Command, _ []string) error {
-	projectRoot, err := resolveProjectRootOrDie()
+	root, err := workspaceRoot(cfgFile)
 	if err != nil {
 		return err
 	}
-
-	src := workspace.KubeconfigPath(projectRoot)
-
+	src := workspace.KubeconfigPath(root)
 	if !system.FileExists(src) {
-		return &errtypes.ConfigError{
-			Msg: fmt.Sprintf("kubeconfig not found at %s; run `okdctl up` first", src),
-			Err: errtypes.ErrConfigMissing,
-		}
+		return (&errtypes.ConfigError{Msg: "kubeconfig not found at " + src, Err: errtypes.ErrConfigMissing}).
+			WithHint("installing a cluster, which writes it, returns in a later release")
 	}
 
 	data, err := os.ReadFile(src)

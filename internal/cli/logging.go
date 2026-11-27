@@ -58,7 +58,7 @@ func openLogFile(path string) (*os.File, error) {
 // (TOCTOU-safe), closing the sink on chown failure instead of leaving a
 // root-owned log.
 func openDefaultLogSink() (string, *os.File, error) {
-	root, err := resolveWorkspaceRoot()
+	root, err := workspaceRoot(initTarget())
 	if err != nil {
 		return "", nil, err
 	}

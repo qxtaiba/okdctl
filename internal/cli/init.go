@@ -40,7 +40,7 @@ the cluster (okdctl up) returns in a later release.`,
 }
 
 func init() {
-	initCmd.Flags().StringVar(&initOutputFile, flagOutputFile, "okdctl.yaml", "config file to write (reused if present; overrides --config)")
+	initCmd.Flags().StringVar(&initOutputFile, flagOutputFile, defaultConfigFile, "config file to write (reused if present; overrides --config)")
 	initCmd.Flags().BoolVar(&initMinimal, "minimal", false, "write the minimal three-node configuration without the wizard")
 }
 
@@ -49,12 +49,10 @@ const upHandoff = "run: okdctl up"
 
 func runInit(cmd *cobra.Command, _ []string) error {
 	out := cmd.OutOrStdout()
-	root, err := resolveWorkspaceRoot()
+	initOutputFile = initTarget()
+	root, err := workspaceRoot(initOutputFile)
 	if err != nil {
 		return err
-	}
-	if !cmd.Flags().Changed(flagOutputFile) && cmd.Root().PersistentFlags().Changed(flagConfig) {
-		initOutputFile = cfgFile
 	}
 	if initMinimal {
 		return withProjectLock(root, cmdNameInit, func() error { return writeMinimalConfig(initOutputFile, out) })
@@ -95,6 +93,14 @@ func runInit(cmd *cobra.Command, _ []string) error {
 		logutil.Info("configuration saved", logutil.LF("path", initOutputFile))
 	}
 	return nil
+}
+
+// initTarget is the file init writes: --output-file when given, else --config.
+func initTarget() string {
+	if initOutputFile == defaultConfigFile && cfgFile != defaultConfigFile {
+		return cfgFile
+	}
+	return initOutputFile
 }
 
 // runHubVerb prints the handoff line for a hub verb that never walks the

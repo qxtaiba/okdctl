@@ -29,6 +29,8 @@ import (
 // cfgFile is cobra-managed state from --config; passing it as a param would fight cobra's pattern.
 var cfgFile string
 
+const defaultConfigFile = "okdctl.yaml"
+
 var (
 	logLevel   string
 	logFormat  string
@@ -372,7 +374,7 @@ func versionText() string {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVarP(&cfgFile, flagConfig, flagConfigShort, "okdctl.yaml", "configuration file")
+	rootCmd.PersistentFlags().StringVarP(&cfgFile, flagConfig, flagConfigShort, defaultConfigFile, "configuration file")
 	rootCmd.PersistentFlags().BoolVar(&noColor, flagNoColor, false, "disable colour output (same as NO_COLOR=1)")
 	rootCmd.PersistentFlags().BoolVar(&noMotion, flagNoMotion, false, "disable TUI animation (same as OKDCTL_NO_MOTION=1; NO_COLOR alone reduces it)")
 	rootCmd.PersistentFlags().StringVar(&logLevel, flagLogLevel, "info", "log verbosity (debug, info, warn, error)")

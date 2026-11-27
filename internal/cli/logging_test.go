@@ -148,6 +148,22 @@ func TestConfigureLogging_InitMilestonesSurviveNonTTY(t *testing.T) {
 	}
 }
 
+func TestConfigureLogging_DefaultSinkFollowsOutputFile(t *testing.T) {
+	resetLoggingState(t)
+	t.Chdir(t.TempDir())
+	target := t.TempDir()
+	orig := initOutputFile
+	initOutputFile = filepath.Join(target, "okdctl.yaml")
+	t.Cleanup(func() { initOutputFile = orig })
+
+	if err := configureLogging(initCmd); err != nil {
+		t.Fatalf("configureLogging: %v", err)
+	}
+	if want := filepath.Join(target, logutil.DefaultLogFileName); runLogPath != want {
+		t.Fatalf("runLogPath = %q, want %q beside --output-file", runLogPath, want)
+	}
+}
+
 func TestConfigureLogging_LogFilePrecedence(t *testing.T) {
 	resetLoggingState(t)
 	dir := t.TempDir()

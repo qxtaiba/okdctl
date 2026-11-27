@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -123,7 +122,11 @@ func runConfigValidate(cmd *cobra.Command, _ []string) error {
 // no record exists yet. A record naming a cluster other than clusterName is
 // refused, so a renamed config never adopts another cluster's identity.
 func recordedInfraID(configFile, clusterName string) (infraID string, recorded bool, err error) {
-	path := workspace.RecordPath(filepath.Dir(configFile))
+	root, err := workspaceRoot(configFile)
+	if err != nil {
+		return "", false, err
+	}
+	path := workspace.RecordPath(root)
 	rec, err := model.LoadRecord(path)
 	switch {
 	case errors.Is(err, os.ErrNotExist):

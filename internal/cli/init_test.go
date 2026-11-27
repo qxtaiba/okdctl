@@ -91,6 +91,23 @@ func TestRunInit_MinimalWritesWithoutTheWizard(t *testing.T) {
 	}
 }
 
+func TestRunInit_MinimalLocksBesideOutputFile(t *testing.T) {
+	resetInitState(t)
+	initMinimal = true
+	target := t.TempDir()
+	initOutputFile = filepath.Join(target, "okdctl.yaml")
+
+	if err := runInit(initCmd, nil); err != nil {
+		t.Fatalf("runInit --minimal: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(target, ".okdctl.lock")); err != nil {
+		t.Errorf("lock must land in the --output-file directory: %v", err)
+	}
+	if _, err := os.Stat(".okdctl.lock"); !os.IsNotExist(err) {
+		t.Errorf("lock landed in cwd, stat err %v", err)
+	}
+}
+
 func TestWriteCredentialsEnv(t *testing.T) {
 	const loadedToken = "root@pam!ci=loaded-token"
 	const shellToken = "root@pam!shell=exported-token"
