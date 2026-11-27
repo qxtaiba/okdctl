@@ -1,9 +1,14 @@
 package steps
 
 import (
+	"regexp"
+	"strconv"
+
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
+
+var nodeKeySuffix = regexp.MustCompile(`-(master|worker)(0|[1-9][0-9]*)$`)
 
 // BasicsStepDefinition declares the cluster identity fields.
 var BasicsStepDefinition = wizard.StepDefinition{
@@ -38,6 +43,34 @@ var BasicsStepDefinition = wizard.StepDefinition{
 			},
 		},
 	},
+	Apply: func(_ *wizard.DataDrivenStep, cfg *config.Config) error {
+		rekeyNodeOverrides(cfg)
+		return nil
+	},
+}
+
+// rekeyNodeOverrides moves a nodes.<old>-<role><i> override under the
+// current cluster name so a rename keeps the operator's placement; a key
+// with no role suffix stays for Validate to report.
+func rekeyNodeOverrides(cfg *config.Config) {
+	for key, override := range cfg.Nodes {
+		if _, _, ok := cfg.ParseNodeKey(key); ok {
+			continue
+		}
+		m := nodeKeySuffix.FindStringSubmatch(key)
+		if m == nil {
+			continue
+		}
+		index, err := strconv.Atoi(m[2])
+		if err != nil {
+			continue
+		}
+		name := cfg.NodeName(config.Role(m[1]), index)
+		if _, taken := cfg.Nodes[name]; !taken {
+			cfg.Nodes[name] = override
+		}
+		delete(cfg.Nodes, key)
+	}
 }
 
 // NewBasicsStep returns the basics wizard step.

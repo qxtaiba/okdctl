@@ -482,11 +482,7 @@ func (s *NodePlacementStep) Apply(cfg *config.Config) error {
 	if err != nil {
 		return nil //nolint:nilerr // without a buildable model there is no placement to write; cfg.Validate() reports the cause at review
 	}
-	for name, override := range cfg.Nodes {
-		if _, produced := defaults[name]; !produced && override.Host != "" {
-			delete(cfg.Nodes, name)
-		}
-	}
+	pruneStaleHostOverrides(cfg, defaults)
 	for name, field := range s.hostFields {
 		def, produced := defaults[name]
 		if !produced {
@@ -499,6 +495,16 @@ func (s *NodePlacementStep) Apply(cfg *config.Config) error {
 		setHostOverride(cfg, name, host, def)
 	}
 	return nil
+}
+
+// pruneStaleHostOverrides drops the host override of every node outside
+// produced; other overrides stay for Validate to report.
+func pruneStaleHostOverrides(cfg *config.Config, produced map[string]string) {
+	for name, override := range cfg.Nodes {
+		if _, ok := produced[name]; !ok && override.Host != "" {
+			delete(cfg.Nodes, name)
+		}
+	}
 }
 
 func setHostOverride(cfg *config.Config, name, host, def string) {

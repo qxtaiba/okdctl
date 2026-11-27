@@ -147,6 +147,12 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 			},
 		},
 	},
+	Apply: func(_ *wizard.DataDrivenStep, cfg *config.Config) error {
+		if _, defaults, err := placementInventory(cfg); err == nil {
+			pruneStaleHostOverrides(cfg, defaults)
+		}
+		return nil
+	},
 }
 
 func floorMemoryHelp(f config.Floor) string {
