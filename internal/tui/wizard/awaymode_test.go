@@ -9,7 +9,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 )
 
-// recordingStep captures every message the frame delivers to it.
 type recordingStep struct {
 	*nopStep
 	msgs []tea.Msg
@@ -28,9 +27,6 @@ func TestViewRequestsFocusReporting(t *testing.T) {
 	}
 }
 
-// TestBlurDropsTheClockAndFocusRestoresIt pins away mode's clock contract:
-// a blurred terminal runs the shared clock at 1Hz, and focus retires the
-// pending slow tick so the catch-up sweep starts immediately.
 func TestBlurDropsTheClockAndFocusRestoresIt(t *testing.T) {
 	m := NewFlowModel([]WizardStep{newNopStep()}, config.DefaultConfig(), DefaultChrome())
 	_ = tuitest.RenderAt(t, m, 100, 30)
@@ -57,8 +53,6 @@ func TestBlurDropsTheClockAndFocusRestoresIt(t *testing.T) {
 	}
 }
 
-// TestFocusMsgsReachTheActiveStep keeps the step's own catch-up bookkeeping
-// wired: blur and focus are delivered like any other message.
 func TestFocusMsgsReachTheActiveStep(t *testing.T) {
 	step := &recordingStep{nopStep: newNopStep()}
 	m := NewFlowModel([]WizardStep{step}, config.DefaultConfig(), DefaultChrome())

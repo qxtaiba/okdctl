@@ -12,8 +12,6 @@ import (
 // DefaultTerminalWidth is the terminal width used when it cannot be detected.
 const DefaultTerminalWidth = 100
 
-// terminalWidthFloor is the minimum width TerminalWidth ever reports, even
-// when COLUMNS or term.GetSize returns something smaller.
 const terminalWidthFloor = 40
 
 var (
@@ -22,10 +20,8 @@ var (
 	terminalWidthOverride atomic.Int64 // 0 means "use detection"
 )
 
-// TerminalWidth reports the terminal width — COLUMNS when it parses as a
-// positive integer, else term.GetSize on stdout, else on stderr, else
-// DefaultTerminalWidth, floored at 40 — detecting once per process unless
-// SetTerminalWidth rearms it.
+// TerminalWidth reports COLUMNS, else the stdout or stderr size, else
+// DefaultTerminalWidth, floored at 40 and detected once per process.
 func TerminalWidth() int {
 	if w := terminalWidthOverride.Load(); w != 0 {
 		return int(w)
@@ -36,9 +32,8 @@ func TerminalWidth() int {
 	return terminalWidthDetected
 }
 
-// SetTerminalWidth overrides TerminalWidth for tests and callers that already
-// know the width; SetTerminalWidth(0) restores detection, re-arming it so the
-// next call re-detects.
+// SetTerminalWidth overrides TerminalWidth; SetTerminalWidth(0) re-arms
+// detection.
 func SetTerminalWidth(w int) {
 	if w == 0 {
 		terminalWidthOnce = sync.Once{}

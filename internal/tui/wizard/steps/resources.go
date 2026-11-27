@@ -18,15 +18,15 @@ const (
 	pairKeyWorkerResources       = "worker_resources"
 )
 
-// ResourcesStepState pairs the resources step with the Config it edits so the
-// footer totals read the same config the review does.
+// ResourcesStepState pairs the resources step with the Config its footer
+// totals read.
 type ResourcesStepState struct {
 	Step     *wizard.DataDrivenStep
 	Cfg      *config.Config
 	Capacity *WizardCapacitySnapshot
 }
 
-// IsWizardStepState marks ResourcesStepState as a valid wizard.StepState.
+// IsWizardStepState marks ResourcesStepState as a wizard.StepState.
 func (s *ResourcesStepState) IsWizardStepState() {}
 
 // ResourcesStepDefinition declares the control-plane and worker sizing fields.
@@ -144,8 +144,8 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 	},
 }
 
-// setDiskSize sizes disks[i], growing the list as needed; a zero size on a
-// non-root index drops that disk and the ones after it.
+// setDiskSize sizes disks[i], growing the list; a zero size on a non-root
+// index drops that disk and the ones after it.
 func setDiskSize(disks []config.DiskSpec, i, size int) []config.DiskSpec {
 	if size == 0 && i > 0 {
 		if len(disks) > i {
@@ -167,7 +167,7 @@ func diskSize(disks []config.DiskSpec, i int) int {
 	return 0
 }
 
-// NewResourcesStep returns the resources wizard step and its state.
+// NewResourcesStep returns the resources step and its state.
 func NewResourcesStep(capacity *WizardCapacitySnapshot) (*wizard.DataDrivenStep, *ResourcesStepState) {
 	step := wizard.NewDataDrivenStep(&ResourcesStepDefinition)
 	state := &ResourcesStepState{Step: step, Capacity: capacity}

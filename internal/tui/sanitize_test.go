@@ -27,11 +27,6 @@ func TestSanitizeTerminalEscapes_Families(t *testing.T) {
 		{"other c0", "a\x01b", "a" + controlMarker + "b"},
 		{"del", "a\x7fb", "a" + controlMarker + "b"},
 		{"c1 control literal", "a\u0085b", "a" + controlMarker + "b"},
-		// ESC immediately followed by an ordinary letter is not one of the
-		// recognized families (CSI/OSC/DCS/APC/PM/SOS/nF): only the ESC byte
-		// -- the one byte that could have introduced a sequence -- is
-		// neutralized, and the unrelated letter after it survives as plain
-		// text instead of being swallowed as collateral damage.
 		{"esc then ordinary letter", "a\x1bbc", "a" + controlMarker + "bc"},
 		{"csi sgr", "a\x1b[31mred\x1b[0mb", "a" + controlMarker + "red" + controlMarker + "b"},
 		{"csi cursor move", "a\x1b[2;5Hb", "a" + controlMarker + "b"},
@@ -43,10 +38,6 @@ func TestSanitizeTerminalEscapes_Families(t *testing.T) {
 		{"pm", "a\x1b^payload\x1b\\b", "a" + controlMarker + "b"},
 		{"sos", "a\x1bXpayload\x1b\\b", "a" + controlMarker + "b"},
 		{"nf charset designation", "a\x1b(Bb", "a" + controlMarker + "b"},
-		// RIS ('c', an Fs-range byte) is a real, dangerous xterm reset
-		// sequence, but it is destroyed all the same: the terminal can only
-		// act on it by reading a literal ESC immediately followed by 'c', and
-		// the ESC itself is gone from the output no matter what follows it.
 		{"esc then reserved fs byte (RIS)", "a\x1bcb", "a" + controlMarker + "cb"},
 	}
 	for _, tc := range cases {
@@ -62,12 +53,6 @@ func TestSanitizeTerminalEscapes_Families(t *testing.T) {
 	}
 }
 
-// TestSanitizeTerminalEscapes_NestedStraddlingSequences proves an OSC
-// smuggled inside what looks like a CSI parameter list — the kind of input a
-// single greedy regex scanner could misparse by matching from the first ESC
-// all the way to a later unrelated final byte — is still recognized as two
-// separate sequences: the unterminated CSI stops at the embedded ESC instead
-// of swallowing it, and the OSC is then scanned fresh from there.
 func TestSanitizeTerminalEscapes_NestedStraddlingSequences(t *testing.T) {
 	in := "x\x1b[1;\x1b]0;title\x07m-tail"
 	got := SanitizeTerminalEscapes(in)
@@ -81,11 +66,6 @@ func TestSanitizeTerminalEscapes_NestedStraddlingSequences(t *testing.T) {
 	}
 }
 
-// TestSanitizeTerminalEscapes_EscapeEmbeddedMidUTF8 splices a CSI sequence
-// into the middle of a valid 3-byte UTF-8 rune (orphaning its lead and
-// trailing continuation bytes), and checks the corruption stays local: the
-// escape is neutralized, no byte panics or round-trips into garbage, and an
-// untouched multi-byte rune elsewhere in the same string survives intact.
 func TestSanitizeTerminalEscapes_EscapeEmbeddedMidUTF8(t *testing.T) {
 	ri := "日" // E6 97 A5
 	lead, mid, tail := ri[0:1], ri[1:2], ri[2:3]
@@ -104,10 +84,6 @@ func TestSanitizeTerminalEscapes_EscapeEmbeddedMidUTF8(t *testing.T) {
 	}
 }
 
-// TestSanitizeTerminalEscapes_InvalidUTF8 checks a grab-bag of malformed
-// byte sequences — a lone continuation byte, an overlong lead byte with
-// nothing following, a truncated multi-byte rune at end of string — never
-// panics and always yields valid UTF-8 output.
 func TestSanitizeTerminalEscapes_InvalidUTF8(t *testing.T) {
 	cases := []string{
 		"\x80",
@@ -124,9 +100,6 @@ func TestSanitizeTerminalEscapes_InvalidUTF8(t *testing.T) {
 	}
 }
 
-// TestSanitizeTerminalEscapes_LoneEscAtEndOfString checks a trailing,
-// unintroduced ESC with nothing after it is still neutralized rather than
-// left dangling.
 func TestSanitizeTerminalEscapes_LoneEscAtEndOfString(t *testing.T) {
 	got := SanitizeTerminalEscapes("tail\x1b")
 	want := "tail" + controlMarker
@@ -135,11 +108,6 @@ func TestSanitizeTerminalEscapes_LoneEscAtEndOfString(t *testing.T) {
 	}
 }
 
-// TestSanitizeTerminalEscapes_NeutralizesUntrustedOSC8Hyperlink proves that
-// an OSC 8 hyperlink — the exact escape family okdctl's own Hyperlink helper
-// legitimately emits for trusted output — is fully neutralized when it
-// arrives as untrusted text instead, e.g. a Proxmox node name engineered to
-// render a spoofed link.
 func TestSanitizeTerminalEscapes_NeutralizesUntrustedOSC8Hyperlink(t *testing.T) {
 	malicious := "\x1b]8;;http://attacker.example/evil\x1b\\clickme\x1b]8;;\x1b\\"
 
@@ -156,11 +124,6 @@ func TestSanitizeTerminalEscapes_NeutralizesUntrustedOSC8Hyperlink(t *testing.T)
 	}
 }
 
-// TestSanitizeTerminalEscapes_WouldAlsoStripOwnHyperlink documents why
-// SanitizeTerminalEscapes must gate on trust at the call site, not on
-// content: it cannot distinguish okdctl's own legitimate Hyperlink() OSC 8
-// escapes from a forged copy, so running trusted, already-rendered output
-// back through it breaks the very link it tried to produce.
 func TestSanitizeTerminalEscapes_WouldAlsoStripOwnHyperlink(t *testing.T) {
 	forced := colorprofile.TrueColor
 	outputProfile.Store(&forced)

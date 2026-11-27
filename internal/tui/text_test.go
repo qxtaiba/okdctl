@@ -31,9 +31,6 @@ func TestTruncateMiddleIsRuneSafe(t *testing.T) {
 		}
 	})
 
-	// The backward scan must not cut between a combining mark's base rune
-	// and the mark itself: a mark stranded at the front of the tail would
-	// visually attach to the preceding ellipsis instead of its own base.
 	t.Run("backward scan through a decomposed sequence stays mark-safe", func(t *testing.T) {
 		cjk := strings.Repeat("中", 15)
 		input := cjk + "éí"
@@ -70,10 +67,6 @@ func TestTruncateMiddleFoldsInvalidUTF8(t *testing.T) {
 	}
 }
 
-// TestWrapLinesNeverBreaksAtHyphens pins that copy-paste recovery commands
-// (`okdctl init --minimal`, kubeadmin-password paths) wrap on spaces only:
-// a hyphen split silently corrupts the exact strings users copy during
-// failure recovery.
 func TestWrapLinesNeverBreaksAtHyphens(t *testing.T) {
 	cases := []struct {
 		text  string

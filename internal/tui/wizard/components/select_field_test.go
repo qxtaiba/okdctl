@@ -98,11 +98,6 @@ func TestSelectField_DefaultTagBesideBox(t *testing.T) {
 	}
 }
 
-// TestSelectField_DefaultTagFitsAtExplicitWidthNarrowAvail mirrors
-// InputField's secretstore_op_connect_host regression for SelectField: an
-// explicitly wide box (e.g. FieldWidthPath, 64) with a default must reserve
-// room for the " default" tag out of its available width, so box+tag join
-// into exactly avail columns instead of overflowing it by the tag's width.
 func TestSelectField_DefaultTagFitsAtExplicitWidthNarrowAvail(t *testing.T) {
 	f := NewSelectField("git repository", []string{"https://example.com/repo.git"})
 	f.SetBoxWidth(64) // wizard.FieldWidthPath
@@ -119,11 +114,6 @@ func TestSelectField_DefaultTagFitsAtExplicitWidthNarrowAvail(t *testing.T) {
 	}
 }
 
-// TestSelectField_BoxWidthStableAcrossDefaultTagDrop pins geometry
-// stability: a field that has ever carried a default reserves the tag's
-// room for its whole life (hasDefault, permanent), so the box itself never
-// widens once the user picks a different option and the (now-cleared)
-// default tag drops.
 func TestSelectField_BoxWidthStableAcrossDefaultTagDrop(t *testing.T) {
 	f := NewSelectField("git repository", []string{"https://example.com/repo.git", "https://example.com/other.git"})
 	f.SetBoxWidth(64)
@@ -193,9 +183,6 @@ func TestSelectField_TwoOptionArrowDropsDefaultTag(t *testing.T) {
 	}
 }
 
-// TestSelectField_BlankOptionRendersHonestLabel pins that a blank option
-// renders as a dim "none" between the cycle arrows rather than a bare
-// double space that reads as a rendering glitch.
 func TestSelectField_BlankOptionRendersHonestLabel(t *testing.T) {
 	f := NewSelectField("storage class", []string{"", "ceph-rbd"})
 	f.SetWidth(90)
@@ -206,10 +193,6 @@ func TestSelectField_BlankOptionRendersHonestLabel(t *testing.T) {
 	}
 }
 
-// TestSelectField_SetValueUnknownInjectsCurrentOption pins the edit-config
-// contract: a configured value outside Options must be injected and
-// selected (rendered with a "current" tag), never silently coerced to
-// whatever the cursor sat on.
 func TestSelectField_SetValueUnknownInjectsCurrentOption(t *testing.T) {
 	f := NewSelectField("control plane nodes", []string{"1", "3", "5"})
 	f.SetWidth(90)

@@ -6,10 +6,8 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// FactRow is one key/value fact for RenderFacts; Sub marks a nested key
-// (one tier fainter), Highlight an amber-emphasized value, and a non-empty
-// Link wraps every rendered value segment in an OSC 8 hyperlink to it
-// (degrading to plain text off-TTY and under NO_COLOR).
+// FactRow is one key/value fact for RenderFacts; Link wraps the value in an
+// OSC 8 hyperlink that degrades to plain text off-TTY.
 type FactRow struct {
 	Key, Value string
 	Link       string
@@ -20,8 +18,8 @@ type FactRow struct {
 // FactLeader selects what joins a fact's key to its value.
 type FactLeader int
 
-// Fact leader dialects: dotted leaders (done cards, CLI summaries), a padded
-// key column (review sections), and flowing "key: value" (fold summaries).
+// Fact leader dialects: dotted leaders, a padded key column, and flowing
+// "key: value".
 const (
 	FactLeaderDots FactLeader = iota
 	FactLeaderPad
@@ -33,8 +31,7 @@ type FactStyles struct {
 	Key, SubKey, Value, Highlight, Leader lipgloss.Style
 }
 
-// DefaultFactStyles returns the dotted dialect's house styles, resolved from
-// the active theme.
+// DefaultFactStyles returns the dotted dialect's styles from the active theme.
 func DefaultFactStyles() FactStyles {
 	return FactStyles{
 		Key:       lipgloss.NewStyle().Foreground(ColorTextDim()),
@@ -45,9 +42,8 @@ func DefaultFactStyles() FactStyles {
 	}
 }
 
-// FactLayout shapes one RenderFacts call: the leader dialect, the key/dot
-// column width (0 means DefaultKeyColWidth for the column dialects), and the
-// wrap budget (0 disables wrapping).
+// FactLayout shapes one RenderFacts call; a zero KeyWidth means
+// DefaultKeyColWidth and a zero TotalWidth disables wrapping.
 type FactLayout struct {
 	Leader     FactLeader
 	KeyWidth   int
@@ -55,10 +51,8 @@ type FactLayout struct {
 	Styles     FactStyles
 }
 
-// RenderFacts renders rows as styled fact lines in one of the three house
-// dialects — the single engine behind the done cards' dotted leaders, the
-// review sections' key columns, and the fold summaries' flowing facts. Lines
-// come back un-downsampled.
+// RenderFacts renders rows as styled fact lines in one dialect. Lines come
+// back un-downsampled.
 func RenderFacts(rows []FactRow, l *FactLayout) []string {
 	var lines []string
 	for i := range rows {
@@ -89,9 +83,7 @@ func renderFactRow(row *FactRow, l *FactLayout) []string {
 	var valueStart int
 	switch l.Leader {
 	case FactLeaderPad:
-		// A key at or past the column keeps one space of separation; a key
-		// style carrying its own Width has already padded to the column, so
-		// the floor never fires for it.
+		// A key style carrying its own Width has already padded to the column.
 		styled := keyStyle.Render(row.Key)
 		pad := keyColWidth - lipgloss.Width(styled)
 		if pad < 1 && lipgloss.Width(styled) >= keyColWidth && keyStyle.GetWidth() == 0 {
@@ -102,10 +94,7 @@ func renderFactRow(row *FactRow, l *FactLayout) []string {
 		prefix = styled + strings.Repeat(" ", pad)
 	default: // FactLeaderDots
 		keyLen := lipgloss.Width(row.Key)
-		// Dots fill to the shared value column; a key close enough that fewer
-		// than three dots remain keeps the column with what's left (floor 1),
-		// and only a key overrunning the column itself shifts its own row —
-		// sibling rows stay aligned.
+		// A key overrunning the column shifts only its own row.
 		dotsNeeded := keyColWidth - keyLen - 2
 		if dotsNeeded < 1 {
 			dotsNeeded = 3
@@ -117,10 +106,8 @@ func renderFactRow(row *FactRow, l *FactLayout) []string {
 	return strings.Split(prefix+wrapValueColumn(row.Value, valueStart, &valueStyle, l.TotalWidth, row.Link), "\n")
 }
 
-// renderColonFact renders one "key: value" fact flow-wrapped to TotalWidth.
-// The raw line is wrapped first and styled after (styling before wrapping
-// would split ANSI sequences), so the key/value seam is re-found by rune
-// count on each wrapped row.
+// renderColonFact wraps the raw line first and styles after, since styling
+// before wrapping would split ANSI sequences.
 func renderColonFact(row *FactRow, l *FactLayout, keyStyle, valueStyle *lipgloss.Style) []string {
 	raw := row.Key + ": " + row.Value
 	wrapped := raw

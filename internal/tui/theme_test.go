@@ -95,11 +95,6 @@ func TestResolveThemeHighContrastIsBackgroundIndependent(t *testing.T) {
 	}
 }
 
-// TestUseThemeSwapsAtomically exercises the documented concurrency
-// contract under -race: one goroutine swapping themes (UseTheme has a
-// single writer by contract — the style caches are not write-safe) while
-// several readers pull colors through the getters, every read landing on
-// one whole theme, never a torn mix.
 func TestUseThemeSwapsAtomically(t *testing.T) {
 	t.Cleanup(func() { SetDarkBackground(true) })
 

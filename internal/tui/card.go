@@ -7,14 +7,11 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// Card renders body inside a rounded box exactly width columns wide, with
-// title spliced into the top border ("╭─ title ─…╮") and required to fit
-// within width-6 columns or the exact-width guarantee breaks; body is
-// never rewrapped — each line is padded to width-2 columns, or rune-safely
-// truncated with "…" when the caller handed it a longer line, so the box
-// geometry always holds; and unlike BoxedSectionCompact, Card doesn't
-// upper-case the title or run its output through Downsample, since it's
-// meant for the wizard's live viewport rather than the CLI's static boxes.
+// Card renders body in a rounded box exactly width columns wide with title
+// spliced into the top border; title must fit in width-6 columns, and body
+// lines are padded or truncated, never rewrapped. Unlike BoxedSectionCompact
+// it neither upper-cases the title nor Downsamples, since it targets the
+// wizard's live viewport.
 func Card(title, body string, width int, accent color.Color) string {
 	border := lipgloss.NewStyle().Foreground(accent)
 	titleStyle := lipgloss.NewStyle().Foreground(accent).Bold(true)

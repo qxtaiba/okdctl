@@ -23,8 +23,6 @@ func assertNoScrollIndicator(t *testing.T, frame string) {
 	}
 }
 
-// forceHeroColor forces tui.ColorEnabled() true for the duration of t, so
-// the hub's block-letter hero renders instead of its no-color fallback.
 func forceHeroColor(t *testing.T) {
 	t.Helper()
 	t.Cleanup(func() { tui.SetColorProfileFor(&bytes.Buffer{}) })
@@ -44,8 +42,6 @@ type configureScenario struct {
 	name string
 	id   wizard.StepID
 	seed func(*wizard.Model)
-	// wide also pins the frame at 120x40: the hub, the densest step and the
-	// fresh placement whose host rows sit below the 80x24 fold.
 	wide bool
 }
 
@@ -315,8 +311,6 @@ func TestGolden_DistributionHelpOverlay(t *testing.T) {
 	}
 }
 
-// TestGolden_NodePlacementSingleNode pins the single-host case: every host
-// select has exactly one option and renders the bare value with no arrows.
 func TestGolden_NodePlacementSingleNode(t *testing.T) {
 	tui.SetTerminalWidth(100)
 	t.Cleanup(func() { tui.SetTerminalWidth(0) })
@@ -482,9 +476,6 @@ func lineOf(s string, byteIdx int) int {
 	return strings.Count(s[:byteIdx], "\n")
 }
 
-// TestGolden_ProxmoxAdvancedFoldExpandedStaysOpenAfterFocusLeaves pins the
-// fold's sticky expand latch: tab to the toggle, enter to expand, then tab
-// away so the section is no longer focus-forced open.
 func TestGolden_ProxmoxAdvancedFoldExpandedStaysOpenAfterFocusLeaves(t *testing.T) {
 	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
 	shiftTabKey := tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift}
@@ -524,9 +515,6 @@ func TestGolden_ProxmoxAdvancedFoldExpandedStaysOpenAfterFocusLeaves(t *testing.
 	}
 }
 
-// TestGolden_ProxmoxAdvancedFoldCollapsedAt80x24 pins the collapsed summary
-// row at the compact tier, scrolled into view with pgdn while the endpoint
-// keeps focus.
 func TestGolden_ProxmoxAdvancedFoldCollapsedAt80x24(t *testing.T) {
 	tui.SetTerminalWidth(80)
 	t.Cleanup(func() { tui.SetTerminalWidth(0) })
@@ -551,9 +539,6 @@ func TestGolden_ProxmoxAdvancedFoldCollapsedAt80x24(t *testing.T) {
 	}
 }
 
-// TestGolden_ProxmoxEnterHighlightsInvalidFields pins honest validation:
-// clearing the required endpoint paints no error until enter forces the
-// form's validation, which paints the red box and the status-row message.
 func TestGolden_ProxmoxEnterHighlightsInvalidFields(t *testing.T) {
 	enterKey := tea.KeyPressMsg{Code: tea.KeyEnter}
 

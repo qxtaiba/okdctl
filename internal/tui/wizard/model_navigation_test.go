@@ -12,7 +12,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 )
 
-// fakeStep is a minimal WizardStep double, avoiding an import cycle with the steps package.
 type fakeStep struct {
 	id         StepID
 	focused    bool
@@ -42,8 +41,6 @@ func (f *fakeStep) ShouldShow(cfg *config.Config) bool {
 	return f.shouldShow(cfg)
 }
 
-// growingStep is a SpanProvider whose View grows on demand, exercising the
-// resync-then-scroll order on FocusChangedMsg.
 type growingStep struct {
 	BaseStep
 	rows     int
@@ -67,7 +64,6 @@ func (g *growingStep) FocusedSpan() (LineSpan, bool) {
 	return LineSpan{Start: g.rows - 1, End: g.rows - 1}, true
 }
 
-// fakeReviewStep additionally implements ReviewJumper, standing in for steps.ReviewStep.
 type fakeReviewStep struct {
 	fakeStep
 	order   []StepID
@@ -83,8 +79,6 @@ func update(t *testing.T, m *Model, msg tea.Msg) *Model {
 	return mm.(*Model)
 }
 
-// newNavTestSteps builds [basics, proxmox, networking, review]; review is
-// returned to inspect computed jump targets.
 func newNavTestSteps(order []StepID) ([]WizardStep, *fakeReviewStep) {
 	review := &fakeReviewStep{fakeStep: fakeStep{id: StepIDReview}, order: order}
 	steps := []WizardStep{
@@ -96,7 +90,6 @@ func newNavTestSteps(order []StepID) ([]WizardStep, *fakeReviewStep) {
 	return steps, review
 }
 
-// advanceToReview drives forward with confirms until review, tolerant of hidden intermediate steps.
 func advanceToReview(t *testing.T, m *Model) *Model {
 	t.Helper()
 	for range len(m.steps) {
@@ -214,7 +207,6 @@ func TestModel_JumpFromReview_EscDoesNotApplyEditedStep(t *testing.T) {
 
 	m = update(t, m, JumpToStepMsg{StepID: StepIDProxmox})
 
-	// advanceToReview already applies every step once; compare against a snapshot, not zero.
 	proxmoxStep := steps[1].(*fakeStep)
 	before := proxmoxStep.applyCalls
 
@@ -269,8 +261,6 @@ func TestModel_DigitKeyOutsideReviewUnaffected(t *testing.T) {
 	}
 }
 
-// scrollTestDefinition mirrors a long data-driven step's shape: several sections of
-// text and select fields, with help text long enough to wrap at 80 columns.
 func scrollTestDefinition() *StepDefinition {
 	sections := make([]SectionDefinition, 0, 4)
 	for s := range 4 {
@@ -301,8 +291,6 @@ func scrollTestDefinition() *StepDefinition {
 	}
 }
 
-// TestModel_BackNeverLandsOnHiddenStep pins bug 17: when every earlier step
-// is ShouldShow-hidden, back stays put instead of focusing a hidden screen.
 func TestModel_BackNeverLandsOnHiddenStep(t *testing.T) {
 	steps, _ := newNavTestSteps([]StepID{StepIDBasics, StepIDProxmox, StepIDNetworking})
 	steps[0].(*fakeStep).shouldShow = func(*config.Config) bool { return false }
@@ -319,10 +307,6 @@ func TestModel_BackNeverLandsOnHiddenStep(t *testing.T) {
 	}
 }
 
-// TestModel_StaleStepCompleteIgnored pins bug 16: a StepCompleteMsg carrying
-// a step ID other than the current one is a late async completion from a
-// step the user already left, and must not advance (and Apply) the current
-// step.
 func TestModel_StaleStepCompleteIgnored(t *testing.T) {
 	steps, _ := newNavTestSteps([]StepID{StepIDBasics, StepIDProxmox, StepIDNetworking})
 	m := NewModel(steps, &config.Config{})
@@ -338,9 +322,6 @@ func TestModel_StaleStepCompleteIgnored(t *testing.T) {
 	}
 }
 
-// TestModel_HomeEndReachFocusedTextInput pins bug 6: home/end while a text
-// input holds focus are line-start/line-end cursor moves inside the field,
-// not viewport scrolls — the same consumes-text-input guard "?" already has.
 func TestModel_HomeEndReachFocusedTextInput(t *testing.T) {
 	def := &StepDefinition{
 		ID:    StepIDBasics,
@@ -431,8 +412,6 @@ func TestModel_FocusChangedResyncsBeforeScroll(t *testing.T) {
 	}
 }
 
-// recordingArrowStep records every message reaching its Update, standing in
-// for a form step whose fields own the keys.
 type recordingArrowStep struct {
 	growingStep
 	received []tea.Msg
@@ -443,9 +422,6 @@ func (s *recordingArrowStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 	return s, nil
 }
 
-// TestModel_VimKeysScrollTheViewport pins the additive vim vocabulary:
-// ctrl+d/u mirror the half-page keys and gg/G jump to the ends — all
-// footer-silent, none stolen from a step that needs the keys.
 func TestModel_VimKeysScrollTheViewport(t *testing.T) {
 	in := &growingStep{BaseStep: NewBaseStep(StepIDWelcome, "reader", ""), rows: 120}
 	m := NewModel([]WizardStep{in}, config.DefaultConfig())
@@ -471,8 +447,6 @@ func TestModel_VimKeysScrollTheViewport(t *testing.T) {
 	}
 }
 
-// TestModel_VimGPendingClearsOnOtherKeys pins the gg chord: a lone g followed
-// by any other key never jumps, and the interloper key still does its job.
 func TestModel_VimGPendingClearsOnOtherKeys(t *testing.T) {
 	in := &growingStep{BaseStep: NewBaseStep(StepIDWelcome, "reader", ""), rows: 120}
 	m := NewModel([]WizardStep{in}, config.DefaultConfig())
@@ -493,8 +467,6 @@ func TestModel_VimGPendingClearsOnOtherKeys(t *testing.T) {
 	}
 }
 
-// TestModel_VimKeysFallThroughToTextInputs pins the additive rule: a step
-// whose focused field consumes text keeps j/k/g as typed characters.
 func TestModel_VimKeysFallThroughToTextInputs(t *testing.T) {
 	out := &recordingTextStep{recordingArrowStep{growingStep: growingStep{BaseStep: NewBaseStep(StepIDBasics, "form", ""), rows: 120}}}
 	m := NewModel([]WizardStep{out}, config.DefaultConfig())
@@ -515,10 +487,6 @@ func TestModel_VimKeysFallThroughToTextInputs(t *testing.T) {
 	}
 }
 
-// recordingTextStep is a recordingArrowStep whose focused field consumes
-// typed text, standing in for a form with a live input. Update returns the
-// outer type — the embedded Update would hand the model the inner step and
-// silently drop the TextInputConsumer assertion.
 type recordingTextStep struct{ recordingArrowStep }
 
 func (s *recordingTextStep) ConsumesTextInput() bool { return true }

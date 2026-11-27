@@ -119,15 +119,15 @@ var networkingAddressKeys = []string{
 	config.FieldNetworkingIngressVIP, config.FieldNetworkingNodeIPStart,
 }
 
-// networkingCrossFields validates the typed layout against the compiled-in
-// defaults; NewNetworkingStep swaps in the session config.
+// networkingCrossFields validates against the compiled-in defaults;
+// NewNetworkingStep swaps in the session config.
 func networkingCrossFields(values map[string]string) error {
 	return networkingValidate(values, config.DefaultConfig())
 }
 
 // networkingValidate applies values onto a copy of cfg and reports the first
-// finding config.Validate raises against one of this step's fields, so the
-// wizard and the loader share one rule set.
+// config.Validate finding on one of this step's fields, so the wizard and the
+// loader share one rule set.
 func networkingValidate(values map[string]string, cfg *config.Config) error {
 	scratch := *cfg
 	scratch.Networking.DNS = slices.Clone(scratch.Networking.DNS)
@@ -135,7 +135,8 @@ func networkingValidate(values map[string]string, cfg *config.Config) error {
 	// A value its own field validator rejects is that field's to report.
 	wellFormed := make(map[string]bool)
 	for i := range networkingSections {
-		for _, field := range networkingSections[i].Fields {
+		for j := range networkingSections[i].Fields {
+			field := &networkingSections[i].Fields[j]
 			v, ok := values[field.Key]
 			if !ok || field.ConfigSet == nil {
 				continue
@@ -153,8 +154,8 @@ func networkingValidate(values map[string]string, cfg *config.Config) error {
 	return nil
 }
 
-// NewNetworkingStep returns the networking wizard step, with an allocation
-// preview once capacity carries the session config.
+// NewNetworkingStep returns the networking step with an allocation preview
+// once capacity carries the session config.
 func NewNetworkingStep(capacity *WizardCapacitySnapshot) *wizard.DataDrivenStep {
 	if capacity == nil {
 		return wizard.NewDataDrivenStep(&NetworkingStepDefinition)
@@ -181,7 +182,7 @@ func NewNetworkingStep(capacity *WizardCapacitySnapshot) *wizard.DataDrivenStep 
 }
 
 // renderNetworkAllocationPreview lays out the master block and the worker
-// indices the config produces; a pool with nodes: holes lists each address.
+// indices; a pool with holes lists each address.
 func renderNetworkAllocationPreview(values map[string]string, workers []int) string {
 	warning := lipgloss.NewStyle().Foreground(tui.ColorWarning())
 	start, err := netip.ParseAddr(values[config.FieldNetworkingNodeIPStart])

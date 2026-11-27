@@ -7,9 +7,8 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// Layout constants for BoxedSection rendering; DefaultBoxWidth (90) is the
-// full box width rendered on a wide-enough terminal, clamped down by
-// BoxInnerWidth once the terminal is narrower.
+// Box layout constants; DefaultBoxWidth is clamped down by BoxInnerWidth on
+// a narrower terminal.
 const (
 	DefaultBoxWidth         = 90
 	MinBoxWidth             = 20
@@ -19,7 +18,6 @@ const (
 	ContentPadding          = 2
 )
 
-// borderCols is the width consumed by a box's two vertical border characters.
 const borderCols = 2
 
 type boxConfig struct {
@@ -28,8 +26,8 @@ type boxConfig struct {
 	compact     bool
 }
 
-// BoxInnerWidth reports the content width available inside a box requested
-// at width columns, clamped to the terminal and floored at MinBoxWidth.
+// BoxInnerWidth reports the content width inside a box requested at width
+// columns, clamped to the terminal and floored at MinBoxWidth.
 func BoxInnerWidth(width int) int {
 	if width < MinBoxWidth {
 		width = DefaultBoxWidthFallback
@@ -37,9 +35,8 @@ func BoxInnerWidth(width int) int {
 	return max(min(width, TerminalWidth())-borderCols, MinBoxWidth-borderCols)
 }
 
-// normalizeVerticalPadding trims blank lines from both ends of content and
-// re-adds exactly one, giving every box symmetric padding regardless of
-// trailing Newline() calls.
+// normalizeVerticalPadding gives every box exactly one blank line at each
+// end regardless of trailing Newline() calls.
 func normalizeVerticalPadding(content string) string {
 	lines := strings.Split(content, "\n")
 	for len(lines) > 0 && strings.TrimSpace(lines[0]) == "" {
@@ -126,8 +123,7 @@ func boxedSectionCore(content, title string, width int, cfg boxConfig) string {
 	return Downsample(strings.Join(result, "\n"))
 }
 
-// BoxedSectionCompact renders content in a single-line-titled box
-// (brand-purple title, dimmed-brand border) so every box reads as okdctl;
+// BoxedSectionCompact renders content in a single-line-titled brand box;
 // color is stripped under a non-truecolor profile.
 func BoxedSectionCompact(content, title string, width int) string {
 	return boxedSectionCore(content, title, width, boxConfig{
@@ -137,8 +133,7 @@ func BoxedSectionCompact(content, title string, width int) string {
 	})
 }
 
-// BoxedSectionAccent renders a compact box with a caller-chosen accent color,
-// used by the error box to skin the same chrome in red.
+// BoxedSectionAccent renders a compact box with a caller-chosen accent color.
 func BoxedSectionAccent(content, title string, width int, accent color.Color) string {
 	return boxedSectionCore(content, title, width, boxConfig{
 		borderColor: accent,

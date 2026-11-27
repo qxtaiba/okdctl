@@ -8,12 +8,11 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 )
 
-// StepID identifies a specific WizardStep instance at runtime (for
-// StepCompleteMsg routing and similar), distinct from StepType (config.go)
-// which names factory-registry entries.
+// StepID identifies a WizardStep instance at runtime; StepType names a
+// factory-registry entry.
 type StepID string
 
-// Built-in StepID values for each wizard step in DefaultConfig.
+// Built-in StepID values.
 const (
 	StepIDWelcome       StepID = "welcome"
 	StepIDDistribution  StepID = "distribution"
@@ -38,8 +37,7 @@ type WizardStep interface {
 	View(width, height int) string
 }
 
-// ConfigApplier is implemented by steps that write their values into cfg on
-// step advance.
+// ConfigApplier is implemented by steps that write their values into cfg.
 type ConfigApplier interface {
 	Apply(cfg *config.Config) error
 }
@@ -60,10 +58,9 @@ type ResizableStep interface {
 	SetSize(width, height int)
 }
 
-// TerminalSizer is implemented by steps that lay themselves out against the
-// terminal's own dimensions rather than the content box they render into — a
-// gate stated in terminal columns and rows cannot be re-derived from the
-// content width, which the frame's own caps flatten.
+// TerminalSizer is implemented by steps whose layout gate is stated in
+// terminal columns and rows, which the frame's caps flatten out of the
+// content box.
 type TerminalSizer interface {
 	SetTerminalSize(width, height int)
 }
@@ -73,24 +70,21 @@ type HelpProvider interface {
 	ShortHelp() []KeyBinding
 }
 
-// OverlayHelpProvider is implemented by steps with a binding that works but
-// is deliberately left out of the footer ribbon, listed instead under the
-// "?" overlay's own screen section alongside ShortHelp's bindings.
+// OverlayHelpProvider is implemented by steps with bindings that work but
+// are listed only under the "?" overlay, not the footer.
 type OverlayHelpProvider interface {
 	OverlayHelp() []KeyBinding
 }
 
-// TextInputConsumer is implemented by steps whose currently focused field
-// would consume a "?" keypress as literal typed text rather than the
-// wizard's help-overlay toggle; a step with no text fields need not
-// implement it — an unasserted step never consumes text input, so "?"
-// always opens the overlay there.
+// TextInputConsumer is implemented by steps whose focused field would take
+// "?" as typed text rather than the help-overlay toggle; a step that does
+// not implement it never consumes text input.
 type TextInputConsumer interface {
 	ConsumesTextInput() bool
 }
 
 // Secrets is wizard input that never enters the Config: the Proxmox API
-// token and TLS toggle the caller writes to okdctl.env.
+// token and TLS toggle written to okdctl.env.
 type Secrets struct {
 	ProxmoxToken    config.SecretBytes
 	ProxmoxInsecure bool
@@ -107,8 +101,7 @@ type KeyBinding struct {
 	Help string
 }
 
-// BaseStep implements common WizardStep fields and defaults; embed it in
-// concrete steps to avoid boilerplate.
+// BaseStep implements the common WizardStep fields and defaults.
 type BaseStep struct {
 	visitContext context.Context
 	id           StepID
@@ -120,14 +113,13 @@ type BaseStep struct {
 	height       int
 }
 
-// NewBaseStep returns a BaseStep with the given id, title, and description.
+// NewBaseStep returns a BaseStep with the given id, title and description.
 func NewBaseStep(id StepID, title, description string) BaseStep {
 	return NewBaseStepWithDisplayTitle(id, title, "", description)
 }
 
-// NewBaseStepWithDisplayTitle returns a BaseStep with a separate
-// displayTitle (shown in the header) plus title (the progress-indicator
-// fallback used when displayTitle is empty).
+// NewBaseStepWithDisplayTitle returns a BaseStep whose header shows
+// displayTitle while the progress indicator shows title.
 func NewBaseStepWithDisplayTitle(id StepID, title, displayTitle, description string) BaseStep {
 	return BaseStep{
 		id:           id,
@@ -145,14 +137,13 @@ func (b *BaseStep) ID() StepID { return b.id }
 // Title returns the progress-indicator title.
 func (b *BaseStep) Title() string { return b.title }
 
-// DisplayTitle returns the title shown in the header; an empty string
-// falls back to Title().
+// DisplayTitle returns the header title; empty falls back to Title().
 func (b *BaseStep) DisplayTitle() string { return b.displayTitle }
 
-// IsFocused reports whether the step currently owns input focus.
+// IsFocused reports whether the step owns input focus.
 func (b *BaseStep) IsFocused() bool { return b.focused }
 
-// ShouldShow always returns true; override in concrete steps to skip.
+// ShouldShow always returns true.
 func (b *BaseStep) ShouldShow(_ *config.Config) bool {
 	return true
 }
@@ -168,8 +159,7 @@ func (b *BaseStep) SetSize(width, height int) {
 	b.height = height
 }
 
-// ShortHelp returns the default key bindings shown in the wizard footer;
-// concrete steps override to contribute step-specific keys.
+// ShortHelp returns the default footer bindings.
 func (b *BaseStep) ShortHelp() []KeyBinding {
 	return []KeyBinding{
 		{Key: "↑↓", Help: HelpNavigate},
@@ -179,8 +169,7 @@ func (b *BaseStep) ShortHelp() []KeyBinding {
 	}
 }
 
-// StepCompleteMsg signals that the named step is finished and the wizard
-// should advance.
+// StepCompleteMsg signals that the named step is finished.
 type StepCompleteMsg struct {
 	StepID StepID
 }
@@ -188,34 +177,27 @@ type StepCompleteMsg struct {
 // StepBackMsg signals that the wizard should step back one position.
 type StepBackMsg struct{}
 
-// LayoutChangedMsg asks the wizard to re-measure the active step: a step that
-// flips its own layout gate — a full-screen toggle turning OwnsFrameWidth on —
-// changes the body width without the terminal changing at all, and nothing else
-// resizes the viewport before the next real resize.
+// LayoutChangedMsg asks the wizard to re-measure the active step after a
+// layout gate flipped without a terminal resize.
 type LayoutChangedMsg struct{}
 
-// ErrorSetMsg signals an error to display in the wizard's status row, emitted
-// on a failed step-level validation or when a ConfigApplier returns an error
-// during a step transition.
+// ErrorSetMsg signals an error to display in the wizard's status row.
 type ErrorSetMsg struct {
 	Error error
 }
 
-// FocusChangedMsg signals that focus has moved within the active step; the
-// wizard resyncs the viewport and scrolls the focused field into view.
+// FocusChangedMsg signals that focus moved within the active step.
 type FocusChangedMsg struct{}
 
-// LineSpan is an inclusive range of 0-based line indices into a step's
-// View() output.
+// LineSpan is an inclusive range of 0-based lines into a step's View().
 type LineSpan struct {
 	Start int
 	End   int
 }
 
-// SpanProvider is implemented by steps that can report which lines of their
-// View() the focused field occupies; the wizard scrolls that span into view
-// on FocusChangedMsg. Spans are recorded during View, so a step that has
-// not rendered yet reports false.
+// SpanProvider is implemented by steps that report which View() lines the
+// focused field occupies. Spans are recorded during View, so an unrendered
+// step reports false.
 type SpanProvider interface {
 	FocusedSpan() (LineSpan, bool)
 }
@@ -226,32 +208,31 @@ type ConfigSyncMsg struct {
 }
 
 // JumpTarget pairs a StepID with the 1-based digit that jumps to it from
-// review. Digits are compacted: a ShouldShow-hidden step consumes none.
+// review; a hidden step consumes no digit.
 type JumpTarget struct {
 	StepID StepID
 	Digit  int
 }
 
-// ReviewJumper is implemented by the review step. JumpOrder declares which
-// steps section headers may route a digit to; the wizard delivers the
-// ShouldShow-compacted result via SetJumpTargets on every focus.
+// ReviewJumper is implemented by the review step: JumpOrder declares the
+// jumpable steps and SetJumpTargets delivers the compacted digits on focus.
 type ReviewJumper interface {
 	JumpOrder() []StepID
 	SetJumpTargets(targets []JumpTarget)
 }
 
-// JumpToStepMsg jumps directly to the named step; confirming or escaping
-// it there returns straight to review instead of replaying steps between.
+// JumpToStepMsg jumps to the named step; confirming or escaping there
+// returns straight to review.
 type JumpToStepMsg struct {
 	StepID StepID
 }
 
-// FocusedBounds identifies the active control in the step's rendered line coordinates.
+// FocusedBounds reports the active control's rendered line bounds.
 type FocusedBounds interface {
 	FocusBounds(width, height int) (top, bottom int, ok bool)
 }
 
-// SetVisitContext attaches the lifetime of the current visit to step requests.
+// SetVisitContext attaches the current visit's lifetime to step requests.
 func (b *BaseStep) SetVisitContext(ctx context.Context) { b.visitContext = ctx }
 
 // Context returns the current visit context.
@@ -259,6 +240,6 @@ func (b *BaseStep) Context() context.Context {
 	if b.visitContext != nil {
 		return b.visitContext
 	}
-	// Direct widget tests and render probes run outside the flow owner.
+	// Direct widget tests run outside the flow owner.
 	return context.Background()
 }

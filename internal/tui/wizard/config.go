@@ -4,25 +4,24 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 )
 
-// Config is the declarative description of a wizard: which steps run, the
-// seed Config, and whether an existing okdctl.yaml is present.
+// Config is the declarative description of a wizard.
 type Config struct {
 	Steps         []StepConfig
 	InitialConfig *config.Config
 	ConfigExists  bool
 }
 
-// StepConfig declares sequence order; visible steps must validate before advancing.
+// StepConfig declares sequence order; visible steps must validate before
+// advancing.
 type StepConfig struct {
 	Type StepType
 }
 
-// StepType names an entry in the StepBuilder factory registry, distinct
-// from StepID (step.go) which identifies an already-constructed WizardStep
-// at runtime.
+// StepType names a StepBuilder registry entry; StepID identifies a built
+// step at runtime.
 type StepType string
 
-// Built-in StepType values in the default StepBuilder factory registry.
+// Built-in StepType values.
 const (
 	StepTypeWelcome       StepType = "welcome"
 	StepTypeDistribution  StepType = "distribution"
@@ -36,7 +35,7 @@ const (
 	StepTypeReview        StepType = "review"
 )
 
-// DefaultConfig returns the step sequence used by "okdctl configure".
+// DefaultConfig returns the configure wizard's step sequence.
 func DefaultConfig() Config {
 	return Config{
 		Steps: []StepConfig{

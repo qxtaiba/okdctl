@@ -10,7 +10,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
-// heroCols is the OKDCTL wordmark's own width at scale 1.
 var heroCols = tui.WordmarkWidth("OKDCTL", 1)
 
 func TestHeroFallsBackBelow60Cols(t *testing.T) {
@@ -27,7 +26,6 @@ func TestHeroFallsBackWithoutColor(t *testing.T) {
 	}
 }
 
-// heroSize measures a rendered hero's row count and widest row.
 func heroSize(t *testing.T, hero string) (rows, cols int) {
 	t.Helper()
 	lines := strings.Split(hero, "\n")

@@ -32,10 +32,9 @@ type discoveryCompleteMsg struct {
 	err        error
 }
 
-// NodePlacementStep discovers the Proxmox nodes, then lets the operator pick
-// the placement pool and a host per node; a host is written as a
-// nodes.<name>.host override only where it differs from the model's own
-// placement.
+// NodePlacementStep discovers the Proxmox nodes and lets the operator pick
+// the pool and a host per node, written as a nodes.<name>.host override only
+// where it differs from the model's placement.
 type NodePlacementStep struct {
 	wizard.BaseStep
 
@@ -48,7 +47,7 @@ type NodePlacementStep struct {
 
 	discovery    *proxmoxDiscovery
 	discoveryErr error
-	// generation tags every fetch so a superseded reply is discarded unapplied.
+	// generation tags every fetch so a superseded reply is discarded unapplied
 	generation uint64
 
 	header     string
@@ -60,7 +59,7 @@ type NodePlacementStep struct {
 	buildErr   error
 }
 
-// NewNodePlacementStep constructs the node placement wizard step.
+// NewNodePlacementStep constructs the node placement step.
 func NewNodePlacementStep() *NodePlacementStep {
 	return &NodePlacementStep{
 		BaseStep: wizard.NewBaseStepWithDisplayTitle(
@@ -93,14 +92,13 @@ func (s *NodePlacementStep) Animating() bool {
 	return s.phase == phaseDiscovering
 }
 
-// ShouldShow shows this step only for the Proxmox provider.
+// ShouldShow shows the step only for the Proxmox provider.
 func (s *NodePlacementStep) ShouldShow(cfg *config.Config) bool {
 	return cfg.Provider.Type == config.ProviderProxmox
 }
 
-// Init starts discovery, or on re-entry after a success rebuilds the form
-// from the cached inventory so a changed worker count or cluster name is
-// reflected without another fetch; a failed attempt always retries.
+// Init starts discovery, or after a success rebuilds the form from the
+// cached inventory; a failed attempt always retries.
 func (s *NodePlacementStep) Init() tea.Cmd {
 	if s.phase == phasePlacing && s.discoveryErr == nil && s.discovery != nil {
 		s.buildInnerStep(s.discovery, s.hostNames())
@@ -114,8 +112,7 @@ func (s *NodePlacementStep) Init() tea.Cmd {
 	return s.startDiscovery()
 }
 
-// startDiscovery issues a generation-tagged fetch over credentials resolved
-// now, so the returned tea.Cmd never touches s once handed to bubbletea.
+// startDiscovery resolves credentials now so the tea.Cmd never touches s.
 func (s *NodePlacementStep) startDiscovery() tea.Cmd {
 	s.phase = phaseDiscovering
 	s.discoveryErr = nil
@@ -152,8 +149,7 @@ func (s *NodePlacementStep) credentials() *credentials.ProxmoxCredentials {
 	return creds
 }
 
-// sanitizeDiscovery strips terminal escapes from the node names once, at the
-// boundary, since the pool multi-select shows its options verbatim.
+// sanitizeDiscovery strips terminal escapes once, at the boundary.
 func sanitizeDiscovery(disc *proxmoxDiscovery) *proxmoxDiscovery {
 	if disc == nil {
 		return nil
@@ -164,8 +160,8 @@ func sanitizeDiscovery(disc *proxmoxDiscovery) *proxmoxDiscovery {
 	return disc
 }
 
-// hostNames returns the discovered node names, or the config's pool when
-// discovery failed, so placement stays editable offline.
+// hostNames returns the discovered names, or the config's pool when discovery
+// failed so placement stays editable offline.
 func (s *NodePlacementStep) hostNames() []string {
 	if s.discovery != nil && len(s.discovery.Nodes) > 0 {
 		names := make([]string, len(s.discovery.Nodes))
@@ -180,9 +176,9 @@ func (s *NodePlacementStep) hostNames() []string {
 	return []string{"pve"}
 }
 
-// buildInnerStep builds the pool multi-select, a typed-names field for nodes
-// discovery did not list, and one host select per node the model derives,
-// defaulting each to the model's placement over the pool the fields offer.
+// buildInnerStep builds the pool multi-select, the add-nodes field and one
+// host select per derived node, defaulting each to the model's placement
+// over the offered pool.
 func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, hosts []string) {
 	pool := offeredPool(s.cfg.Provider.Proxmox.Nodes, hosts)
 	options := slices.Clone(hosts)
@@ -234,9 +230,8 @@ func (s *NodePlacementStep) buildInnerStep(disc *proxmoxDiscovery, hosts []strin
 	s.inner = wizard.NewMultiSectionForm(sections)
 }
 
-// offeredPool keeps the configured pool while discovery still lists any of
-// it; a pool with no discovered member is DefaultConfig's placeholder, so
-// the whole discovered set stands in.
+// offeredPool keeps the configured pool while discovery lists any of it; a
+// pool with no discovered member is DefaultConfig's placeholder.
 func offeredPool(configured, hosts []string) []string {
 	for _, name := range configured {
 		if slices.Contains(hosts, name) {
@@ -246,8 +241,8 @@ func offeredPool(configured, hosts []string) []string {
 	return hosts
 }
 
-// placementInventory derives cfg's nodes plus the host each would get with
-// no override, the baseline a chosen host is compared against.
+// placementInventory derives cfg's nodes and the host each would get with no
+// override.
 func placementInventory(cfg *config.Config) (model.Inventory, map[string]string, error) {
 	inv, err := model.Build(cfg, previewInfraID)
 	if err != nil {
@@ -270,7 +265,7 @@ func placementInventory(cfg *config.Config) (model.Inventory, map[string]string,
 	return inv, defaults, nil
 }
 
-// Update handles discovery results, frame ticks and the placement form.
+// Update handles discovery results, frames and the placement form.
 func (s *NodePlacementStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	switch msg := msg.(type) {
 	case discoveryCompleteMsg:
@@ -293,8 +288,7 @@ func (s *NodePlacementStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	if s.phase != phasePlacing || s.inner == nil {
 		return s, nil
 	}
-	// 'r' re-issues discovery, footer-silent like the vim scroll keys, unless
-	// the add-nodes field would take it as text.
+	// 'r' re-issues discovery unless the add-nodes field would take it as text.
 	if keyMsg, ok := msg.(tea.KeyPressMsg); ok && !s.ConsumesTextInput() && key.Matches(keyMsg, key.NewBinding(key.WithKeys("r"))) {
 		cmd := s.startDiscovery()
 		return s, cmd
@@ -315,7 +309,6 @@ func (s *NodePlacementStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 
 var errPoolEmpty = errors.New("check or type at least one proxmox node for the placement pool")
 
-// pool is the checked nodes plus any typed ones.
 func (s *NodePlacementStep) pool() []string {
 	pool := splitList(s.poolField.Value())
 	for _, name := range splitList(s.addField.Value()) {
@@ -331,7 +324,6 @@ func (s *NodePlacementStep) ConsumesTextInput() bool {
 	return s.inner != nil && s.inner.ConsumesTextInput()
 }
 
-// discoveryHeader renders the discovery summary or its failure above the form.
 func (s *NodePlacementStep) discoveryHeader(width int) string {
 	noteStyle := lipgloss.NewStyle().Foreground(tui.ColorTextFaint()).Italic(true).PaddingLeft(2)
 	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning()).PaddingLeft(2)
@@ -392,7 +384,7 @@ func nodeDisplayOptions(nodes []proxmoxNode, values []string) []string {
 }
 
 // assignmentDemand sums what the chosen hosts would carry and flags the ones
-// over their discovered capacity.
+// over capacity.
 func (s *NodePlacementStep) assignmentDemand(width int) string {
 	if s.discovery == nil || len(s.inventory) == 0 {
 		return ""
@@ -430,7 +422,7 @@ func (s *NodePlacementStep) headerOffset() int {
 	return lipgloss.Height(s.header) + 1
 }
 
-// View renders the discovery spinner or the header plus the placement form.
+// View renders the discovery spinner or the header and placement form.
 func (s *NodePlacementStep) View(width, height int) string {
 	s.SetSize(width, height)
 	if s.phase == phaseDiscovering {
@@ -447,7 +439,7 @@ func (s *NodePlacementStep) View(width, height int) string {
 	return header
 }
 
-// SetSize propagates the viewport width to the placement form.
+// SetSize propagates the width to the placement form.
 func (s *NodePlacementStep) SetSize(width, height int) {
 	s.BaseStep.SetSize(width, height)
 	if s.inner != nil {
@@ -455,7 +447,7 @@ func (s *NodePlacementStep) SetSize(width, height int) {
 	}
 }
 
-// FocusBounds includes the discovery summary above the current field.
+// FocusBounds includes the discovery header above the current field.
 func (s *NodePlacementStep) FocusBounds(_, _ int) (top, bottom int, ok bool) {
 	if s.inner == nil || s.phase == phaseDiscovering {
 		return 0, 0, false
@@ -478,10 +470,9 @@ func (s *NodePlacementStep) FocusedSpan() (wizard.LineSpan, bool) {
 	return wizard.LineSpan{Start: span.Start + offset, End: span.End + offset}, true
 }
 
-// Apply writes the pool and, per node the config produces, a host override
-// only where a touched choice differs from the model's placement; an
-// untouched host follows the pool, and a host override keyed to a node the
-// config no longer produces is dropped.
+// Apply writes the pool and a host override wherever a touched choice differs
+// from the model's placement; an untouched host follows the pool and a host
+// override for a node the config no longer produces is dropped.
 func (s *NodePlacementStep) Apply(cfg *config.Config) error {
 	if s.inner == nil {
 		return nil
@@ -539,7 +530,7 @@ func (s *NodePlacementStep) SetFocused(focused bool) {
 	s.inner.Blur()
 }
 
-// ShortHelp returns the step's help bar for the current phase.
+// ShortHelp returns the help bar for the current phase.
 func (s *NodePlacementStep) ShortHelp() []wizard.KeyBinding {
 	if s.phase == phaseDiscovering {
 		return []wizard.KeyBinding{

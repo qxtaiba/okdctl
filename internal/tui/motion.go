@@ -2,9 +2,8 @@ package tui
 
 import "sync/atomic"
 
-// MotionMode is the three-position animation dial: full motion, reduced
-// (calmer cadence, honored when the environment asks for less movement),
-// and off (no frame clock at all — animations freeze at their first frame).
+// MotionMode is the animation dial: full, reduced, or off (animations
+// freeze at their first frame).
 type MotionMode int32
 
 // Motion dial positions, most animated first.
@@ -14,11 +13,9 @@ const (
 	MotionOff
 )
 
-// ResolveMotion resolves the motion dial from its inputs, most explicit
-// first: the --no-motion flag, then OKDCTL_NO_MOTION ("1"/"true"), then
-// no-color-by-either-spelling — the --no-color flag or the NO_COLOR env var
-// (any value, no-color.org) — which implies reduced motion only; off has
-// its own switch and is deliberately NO_COLOR-independent.
+// ResolveMotion resolves the dial, most explicit first: --no-motion, then
+// OKDCTL_NO_MOTION, then no-color by flag or NO_COLOR, which implies
+// reduced only.
 func ResolveMotion(flagOff, flagNoColor bool, getenv func(string) string) MotionMode {
 	if flagOff {
 		return MotionOff
@@ -39,21 +36,17 @@ func Motion() MotionMode {
 	return MotionMode(motionMode.Load())
 }
 
-// SetMotion installs the motion dial position; call once at startup with
-// ResolveMotion's result.
+// SetMotion installs the dial position; call once at startup.
 func SetMotion(m MotionMode) {
 	motionMode.Store(int32(m))
 }
 
-// reducedMotionDivisor slows the reduced dial's glyph cadence to a quarter
-// of the frame clock — still alive, far calmer.
 const reducedMotionDivisor = 4
 
 var spinnerFrames = []string{"⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"}
 
-// SpinnerGlyph returns the spinner glyph for one frame of the shared clock
-// — a pure function of (mode, frame): full advances one glyph per frame,
-// reduced every fourth, off always renders frame zero.
+// SpinnerGlyph returns the spinner glyph for one frame: full advances every
+// frame, reduced every fourth, off always frame zero.
 func SpinnerGlyph(mode MotionMode, frame uint64) string {
 	switch mode {
 	case MotionOff:

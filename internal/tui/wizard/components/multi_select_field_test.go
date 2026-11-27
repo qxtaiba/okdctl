@@ -116,10 +116,6 @@ func TestMultiSelectField_OversizedChipIsEllipsizedNotSplit(t *testing.T) {
 	}
 }
 
-// TestMultiSelectField_UnknownEntriesKeptAsCurrentChips pins the bug-1
-// ruling on the checklist: a loaded value the option list does not offer
-// stays as an extra checked chip labeled (current), and an untouched field
-// round-trips its loaded value byte-identical through Value.
 func TestMultiSelectField_UnknownEntriesKeptAsCurrentChips(t *testing.T) {
 	f := NewMultiSelectField("additional networks", []string{"vmbr0", "vmbr1"})
 	f.SetWidth(60)
@@ -136,7 +132,6 @@ func TestMultiSelectField_UnknownEntriesKeptAsCurrentChips(t *testing.T) {
 		t.Fatalf("the unknown entry's chip must be checked:\n%s", view)
 	}
 
-	// A toggle regenerates the value in option order, the kept chip last.
 	_ = f.Focus()
 	f.Update(tea.KeyPressMsg{Code: tea.KeyRight}) // cursor: vmbr0 -> vmbr1
 	f.Update(tea.KeyPressMsg{Code: tea.KeySpace})
@@ -144,14 +139,12 @@ func TestMultiSelectField_UnknownEntriesKeptAsCurrentChips(t *testing.T) {
 		t.Fatalf("Value() after toggling vmbr1 = %q, want vmbr0,vmbr1,vmbr9", got)
 	}
 
-	// Unchecking the kept chip drops it from the value like any other chip.
 	f.Update(tea.KeyPressMsg{Code: tea.KeyRight}) // cursor: vmbr1 -> vmbr9
 	f.Update(tea.KeyPressMsg{Code: tea.KeySpace})
 	if got := f.Value(); got != "vmbr0,vmbr1" {
 		t.Fatalf("Value() after unchecking the kept chip = %q, want vmbr0,vmbr1", got)
 	}
 
-	// A later SetValue replaces the injected chips instead of stacking them.
 	f.SetValue("vmbr1")
 	if view := tuitest.StripANSI(f.View()); strings.Contains(view, "vmbr9") {
 		t.Fatalf("a fresh SetValue must drop the previous injection:\n%s", view)

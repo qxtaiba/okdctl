@@ -19,8 +19,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
 )
 
-// reviewJumpOrder lists jumpable steps in on-screen order; welcome and
-// distribution have no section here and aren't reachable by digit.
+// reviewJumpOrder lists the jumpable steps in on-screen order.
 var reviewJumpOrder = []wizard.StepID{
 	wizard.StepIDBasics,
 	wizard.StepIDProxmox,
@@ -43,7 +42,7 @@ type ReviewStep struct {
 	jumpTargets []wizard.JumpTarget
 }
 
-// NewReviewStep constructs the review wizard step.
+// NewReviewStep constructs the review step.
 func NewReviewStep() *ReviewStep {
 	return &ReviewStep{
 		BaseStep: wizard.NewBaseStepWithDisplayTitle(
@@ -56,18 +55,18 @@ func NewReviewStep() *ReviewStep {
 	}
 }
 
-// Init returns nil; the step has no async startup work.
+// Init returns nil.
 func (s *ReviewStep) Init() tea.Cmd {
 	return nil
 }
 
-// SetConfig stores the Config summarized on the review screen.
+// SetConfig stores the Config the review summarizes.
 func (s *ReviewStep) SetConfig(cfg *config.Config) {
 	s.cfg = cfg
 	s.preflight = reviewPreflight(cfg, s.capacity)
 }
 
-// SetSavedConfig snapshots the saved config for the config-changes diff.
+// SetSavedConfig snapshots the saved config for the changes diff.
 func (s *ReviewStep) SetSavedConfig(cfg *config.Config) {
 	s.saved = reviewConfigSnapshot(cfg)
 }
@@ -77,13 +76,13 @@ func (s *ReviewStep) SetConfigPath(path string) {
 	s.configPath = path
 }
 
-// SetCapacity supplies the shared Proxmox inventory for the review preflight.
+// SetCapacity supplies the discovery snapshot for the preflight.
 func (s *ReviewStep) SetCapacity(capacity *WizardCapacitySnapshot) {
 	s.capacity = capacity
 	s.preflight = reviewPreflight(s.cfg, capacity)
 }
 
-// Update handles jump digits and enter to confirm.
+// Update handles jump digits and enter.
 func (s *ReviewStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	keyMsg, ok := msg.(tea.KeyPressMsg)
 	if !ok {
@@ -104,8 +103,8 @@ func (s *ReviewStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	return s, nil
 }
 
-// firstFailure names the first failed preflight check, which blocks both
-// actions: a config Validate rejects must never reach disk.
+// firstFailure names the first failed preflight check; a config Validate
+// rejects must never reach disk.
 func (s *ReviewStep) firstFailure() error {
 	for _, check := range s.preflight {
 		if check.failed {
@@ -115,17 +114,16 @@ func (s *ReviewStep) firstFailure() error {
 	return nil
 }
 
-// JumpOrder returns the steps a digit keypress may route to.
+// JumpOrder returns the steps a digit may route to.
 func (s *ReviewStep) JumpOrder() []wizard.StepID {
 	return reviewJumpOrder
 }
 
-// SetJumpTargets records the digit assignments; called on every focus.
+// SetJumpTargets records the digit assignments.
 func (s *ReviewStep) SetJumpTargets(targets []wizard.JumpTarget) {
 	s.jumpTargets = targets
 }
 
-// sectionTitle prefixes title with "[N] " when stepID has a jump digit.
 func (s *ReviewStep) sectionTitle(title string, stepID wizard.StepID) string {
 	for _, t := range s.jumpTargets {
 		if t.StepID == stepID {
@@ -135,8 +133,7 @@ func (s *ReviewStep) sectionTitle(title string, stepID wizard.StepID) string {
 	return title
 }
 
-// View renders the full configuration summary; the action selector renders
-// separately through PinnedFooter.
+// View renders the summary; the action renders through PinnedFooter.
 func (s *ReviewStep) View(width, height int) string {
 	s.SetSize(width, height)
 	if s.cfg == nil {
@@ -219,8 +216,8 @@ func (s *ReviewStep) changedConfigKeys() []string {
 	return keys
 }
 
-// reviewConfigSnapshot flattens cfg's json form into dotted paths, the same
-// paths the wizard's field keys use, so the diff needs no hand-kept table.
+// reviewConfigSnapshot flattens cfg's json into the dotted paths the field
+// keys use, so the diff needs no hand-kept table.
 func reviewConfigSnapshot(cfg *config.Config) map[string]string {
 	if cfg == nil {
 		return nil
@@ -272,8 +269,7 @@ func scalarText(v any) string {
 	return fmt.Sprint(v)
 }
 
-// PinnedFooter renders the action selector inline on the help row, empty
-// while there is no configuration to act on.
+// PinnedFooter renders the action inline on the help row.
 func (s *ReviewStep) PinnedFooter(width int) string {
 	if s.cfg == nil {
 		return ""
@@ -305,7 +301,6 @@ func (s *ReviewStep) renderProxmox(st *wizard.SectionStyles) string {
 	})
 }
 
-// renderNodes tabulates every node the model derives from the config.
 func (s *ReviewStep) renderNodes(st *wizard.SectionStyles, width int) string {
 	var b strings.Builder
 	b.WriteString(st.Header.Render(s.sectionTitle("nodes", wizard.StepIDNodePlacement)))
@@ -373,8 +368,8 @@ func roleSpec(count int, d *config.NodeDefaults) string {
 	return fmt.Sprintf("%d × (%d vcpu, %d gb ram, disks %s gb)", count, d.CPU, d.MemoryMiB/1024, strings.Join(sizes, "+"))
 }
 
-// renderCompute renders the per-role sizing and the inventory total, with
-// warnings when the total exceeds the discovered online capacity.
+// renderCompute renders the per-role sizing, the total and any capacity
+// warnings.
 func (s *ReviewStep) renderCompute(st *wizard.SectionStyles, width int) string {
 	entries := []wizard.KVEntry{
 		{Label: roleLabelControlPlane, Value: roleSpec(config.MasterCount, &s.cfg.ControlPlane)},
@@ -453,17 +448,17 @@ func truncatePath(path string, maxLen int) string {
 	return ".../" + base
 }
 
-// Validate always returns nil; the review step has no editable fields.
+// Validate always returns nil.
 func (s *ReviewStep) Validate() error {
 	return nil
 }
 
-// Apply is a no-op; the review step does not mutate the Config.
+// Apply is a no-op.
 func (s *ReviewStep) Apply(_ *config.Config) error {
 	return nil
 }
 
-// ShortHelp returns the review step's help bar.
+// ShortHelp returns the review help bar.
 func (s *ReviewStep) ShortHelp() []wizard.KeyBinding {
 	bindings := []wizard.KeyBinding{
 		{Key: wizard.HelpEnter, Help: wizard.HelpConfirm},
@@ -475,7 +470,7 @@ func (s *ReviewStep) ShortHelp() []wizard.KeyBinding {
 	return append(bindings, wizard.KeyBinding{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit})
 }
 
-// SetFocused refreshes the preflight checks when the review screen opens.
+// SetFocused refreshes the preflight when the review opens.
 func (s *ReviewStep) SetFocused(focused bool) {
 	s.BaseStep.SetFocused(focused)
 	s.actions.SetFocused(focused)
@@ -484,7 +479,7 @@ func (s *ReviewStep) SetFocused(focused bool) {
 	}
 }
 
-// FocusBounds keeps the actions visible beneath the configuration summary.
+// FocusBounds keeps the action visible beneath the summary.
 func (s *ReviewStep) FocusBounds(width, height int) (top, bottom int, ok bool) {
 	if s.cfg == nil {
 		return 0, 0, false

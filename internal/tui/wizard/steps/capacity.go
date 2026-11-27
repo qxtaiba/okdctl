@@ -5,12 +5,12 @@ import (
 	"github.com/qxtaiba/okdctl/internal/model"
 )
 
-// previewInfraID seeds model.Build on screens that never show a MAC; the
-// real infra-ID exists only once the cluster record does.
+// previewInfraID seeds model.Build on screens that never show a MAC; the real
+// infra-ID exists only once the cluster record does.
 const previewInfraID = "preview"
 
-// CapacityTotals sums the online nodes' cpu and memory; a Known flag is
-// false unless every online node reported that resource.
+// CapacityTotals sums the online nodes' cpu and memory; a Known flag is false
+// unless every online node reported that resource.
 type CapacityTotals struct {
 	CPUs        int
 	MemoryGB    int
@@ -25,7 +25,7 @@ type WizardCapacitySnapshot struct {
 	discovery *proxmoxDiscovery
 }
 
-// IsWizardStepState marks the snapshot as available through BuiltSteps.States.
+// IsWizardStepState marks the snapshot as a wizard.StepState.
 func (s *WizardCapacitySnapshot) IsWizardStepState() {}
 
 // OnlineTotals aggregates the online nodes' cpu and memory.
@@ -59,7 +59,6 @@ func (s *WizardCapacitySnapshot) nodes() []proxmoxNode {
 	return s.discovery.Nodes
 }
 
-// demand is what a set of nodes asks of the hosts carrying them.
 type demand struct{ cpu, memoryMiB, diskGiB int }
 
 func (d *demand) add(n *model.NodeSpec) {

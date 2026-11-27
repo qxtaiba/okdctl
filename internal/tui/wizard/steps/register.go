@@ -6,8 +6,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
-// RegisterAll registers every configure-wizard step factory on b; cfg is the
-// session config the steps edit and the capacity snapshot reads.
+// RegisterAll registers every configure step factory on b over the session
+// config cfg.
 func RegisterAll(b *wizard.StepBuilder, cfg *config.Config) {
 	capacity := &WizardCapacitySnapshot{cfg: cfg}
 	var proxmox *wizard.DataDrivenStep
@@ -56,8 +56,6 @@ func SeedCredentials(built wizard.BuiltSteps, saved *credentials.ProxmoxCredenti
 	}
 }
 
-// configurePhases groups every configure-wizard step into the header trail's
-// four phases.
 func configurePhases() []wizard.Stage {
 	return []wizard.Stage{
 		{Label: "connect", Steps: []wizard.StepID{wizard.StepIDWelcome, wizard.StepIDDistribution, wizard.StepIDProxmox}},
@@ -67,7 +65,7 @@ func configurePhases() []wizard.Stage {
 	}
 }
 
-// Chrome returns the configure wizard's header chrome with the phase trail.
+// Chrome returns the configure wizard's chrome with the phase trail.
 func Chrome() wizard.FlowChrome {
 	chrome := wizard.DefaultChrome()
 	chrome.Trail = wizard.StagesTrail(configurePhases())

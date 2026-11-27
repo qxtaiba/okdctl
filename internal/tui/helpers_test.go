@@ -54,10 +54,6 @@ func TestDottedKVWrapsUnderValueColumn(t *testing.T) {
 	}
 }
 
-// TestDottedKVKeyNearColumnKeepsValueColumn pins bug 23: a key close enough
-// to the column that fewer than three dots remain keeps the shared value
-// column with shorter leaders instead of drifting its value one column
-// right (post_deploy_60's DNS rows).
 func TestDottedKVKeyNearColumnKeepsValueColumn(t *testing.T) {
 	const keyColWidth = 30
 	short := tuitest.StripANSI(DottedKeyValueFull("api.mycluster.k8s.local", "192.168.1.50", keyColWidth, 0))
@@ -68,9 +64,6 @@ func TestDottedKVKeyNearColumnKeepsValueColumn(t *testing.T) {
 	}
 }
 
-// TestDottedKVReservesGutterColumn pins bug 22: a value wide enough to fill
-// the row wraps one column early, so it never renders flush against the
-// enclosing box border — the same gutter errorbox reserves.
 func TestDottedKVReservesGutterColumn(t *testing.T) {
 	const totalWidth = 60
 	value := strings.Repeat("x", 120)

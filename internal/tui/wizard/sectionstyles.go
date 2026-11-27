@@ -8,13 +8,9 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-// minLabelWidth is the narrowest a section's label column ever shrinks to.
 const minLabelWidth = 12
 
-// SectionStyles is the shared style set for review-style summary screens:
-// cyan section headers over full-width separators, a label column fitted to
-// its section's content, and a thick separator ahead of a screen's action
-// selector.
+// SectionStyles is the shared style set for review-style summary screens.
 type SectionStyles struct {
 	Header         lipgloss.Style
 	Separator      string
@@ -24,7 +20,7 @@ type SectionStyles struct {
 	Check          lipgloss.Style
 }
 
-// NewSectionStyles builds the section styles sized to the step's width.
+// NewSectionStyles builds the section styles sized to width.
 func NewSectionStyles(width int) SectionStyles {
 	return SectionStyles{
 		Header: lipgloss.NewStyle().
@@ -46,8 +42,8 @@ func NewSectionStyles(width int) SectionStyles {
 	}
 }
 
-// LabelWidthFor returns the label column width that fits the longest of
-// labels plus two columns of padding, never narrower than minLabelWidth.
+// LabelWidthFor returns the label column width fitting the longest label
+// plus padding, never narrower than minLabelWidth.
 func LabelWidthFor(labels ...string) int {
 	w := minLabelWidth
 	for _, label := range labels {
@@ -70,8 +66,7 @@ func (st SectionStyles) ForLabels(labels ...string) SectionStyles { //nolint:goc
 	return st
 }
 
-// KVPair renders one label/value line using the section label column, via
-// the shared facts renderer's padded-column dialect.
+// KVPair renders one label/value line in the padded-column dialect.
 func (st *SectionStyles) KVPair(label, value string) string {
 	lines := tui.RenderFacts(
 		[]tui.FactRow{{Key: label, Value: value}},
@@ -80,14 +75,15 @@ func (st *SectionStyles) KVPair(label, value string) string {
 	return strings.Join(lines, "\n")
 }
 
-// KVEntry describes one label/value line; Skip omits it entirely rather than rendering blank.
+// KVEntry describes one label/value line; Skip omits it entirely.
 type KVEntry struct {
 	Label string
 	Value string
 	Skip  bool
 }
 
-// RenderSection emits a titled block of KVEntry lines, or "" if every entry is skipped.
+// RenderSection emits a titled block of KVEntry lines, or "" when every
+// entry is skipped.
 func RenderSection(st *SectionStyles, title string, entries []KVEntry) string {
 	visible := entries[:0:0]
 	for _, e := range entries {

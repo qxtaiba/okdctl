@@ -83,7 +83,6 @@ func TestDataDrivenStep_ValueSetValue(t *testing.T) {
 		t.Fatalf("Value(name) after setValue = %q, want cluster-a", got)
 	}
 
-	// Unknown keys are a no-op, not a panic.
 	step.setValue("does-not-exist", "x")
 	if got := step.Value("does-not-exist"); got != "" {
 		t.Fatalf("Value(unknown key) = %q, want empty", got)
@@ -128,10 +127,6 @@ func TestDataDrivenStep_LoadFromConfig(t *testing.T) {
 	}
 }
 
-// blankableDefaultStepDefinition returns a single non-required text field
-// with a Default, mirroring secretstore_op_connect_host's shape: a value
-// the wizard offers as a starting point but that a real config may
-// legitimately have cleared.
 func blankableDefaultStepDefinition() *StepDefinition {
 	return &StepDefinition{
 		ID: StepIDBasics,
@@ -223,7 +218,6 @@ func TestDataDrivenStep_Apply(t *testing.T) {
 	if !cfg.Handoff.Enabled {
 		t.Error("cfg.Handoff.Enabled = false, want true")
 	}
-	// Step-level Apply runs after field auto-binding, so step.Value already reflects it.
 	if cfg.Cluster.Domain != "applied.cluster-a" {
 		t.Errorf("cfg.Cluster.Domain = %q, want applied.cluster-a", cfg.Cluster.Domain)
 	}
@@ -373,7 +367,6 @@ func TestDataDrivenStep_UpdateEnterValidatesThenCompletes(t *testing.T) {
 
 	enter := tea.KeyPressMsg{Code: tea.KeyEnter}
 
-	// Required "name" is empty: enter must fail validation and emit an error, not advance.
 	if _, cmd := step.Update(enter); cmd == nil {
 		t.Fatal("Update(enter) with empty required field: want error cmd, got nil")
 	} else if _, ok := firstErrorSetMsg(cmd); !ok {
@@ -394,7 +387,6 @@ func TestDataDrivenStep_UpdateEnterValidatesThenCompletes(t *testing.T) {
 		t.Errorf("StepCompleteMsg.StepID = %q, want %q", complete.StepID, StepIDBasics)
 	}
 
-	// Definition-level Validate rejects "forbidden": enter must emit an error, not advance.
 	step.setValue("name", "forbidden")
 	_, cmd = step.Update(enter)
 	if cmd == nil {
@@ -405,8 +397,6 @@ func TestDataDrivenStep_UpdateEnterValidatesThenCompletes(t *testing.T) {
 	}
 }
 
-// firstErrorSetMsg runs cmd, flattening batches, and returns the first
-// ErrorSetMsg produced along with whether one was found.
 func firstErrorSetMsg(cmd tea.Cmd) (ErrorSetMsg, bool) {
 	if cmd == nil {
 		return ErrorSetMsg{}, false
@@ -530,9 +520,6 @@ func TestDataDrivenStep_EnterDefinitionErrorEmitsErrorSetMsg(t *testing.T) {
 	}
 }
 
-// crossFieldTestDefinition models a networking-shaped overlap check: two
-// fields whose cross-field Validate failure implicates the second one, the
-// way machine_cidr/service_cidr overlap implicates service_cidr.
 func crossFieldTestDefinition() *StepDefinition {
 	return &StepDefinition{
 		ID:    StepIDBasics,
@@ -558,20 +545,12 @@ func crossFieldTestDefinition() *StepDefinition {
 	}
 }
 
-// TestDataDrivenStep_CrossFieldErrorFocusesAndMarksImplicatedField pins the
-// reconciliation-audit defect where a cross-field failure (the CIDR-overlap
-// shape) only ever reached the status-row banner: the implicated field
-// never got focused, revealed, or marked invalid inline, so an operator
-// with the field scrolled out of view saw a complaint with no indication
-// of where.
 func TestDataDrivenStep_CrossFieldErrorFocusesAndMarksImplicatedField(t *testing.T) {
 	step := NewDataDrivenStep(crossFieldTestDefinition())
 	step.SetFocused(true)
 	step.setValue("machine_cidr", "10.0.0.0/16")
 	step.setValue("service_cidr", "10.0.0.0/16")
 
-	// Park focus on the first field — standing in for the implicated field
-	// being scrolled out of view when enter is pressed.
 	if cmd := step.form.focusAt(0, 0); cmd != nil {
 		cmd()
 	}
@@ -593,7 +572,6 @@ func TestDataDrivenStep_CrossFieldErrorFocusesAndMarksImplicatedField(t *testing
 		t.Fatalf("View() after a cross-field error = %q, want the inline error visible", view)
 	}
 
-	// Correcting the value clears the stale inline error.
 	if cmd := step.form.focusAt(0, 1); cmd != nil {
 		cmd()
 	}
@@ -703,8 +681,6 @@ func TestFieldWidth_Cols(t *testing.T) {
 		avail int
 		want  int
 	}{
-		// Below either class's derived ceiling, the avail clamp wins —
-		// unchanged from before the ceilings started tracking formMaxWidth.
 		{FieldWidthAuto, 90, 90},
 		{FieldWidthNumber, 90, 16},
 		{FieldWidthPath, 90, 90},
@@ -712,8 +688,6 @@ func TestFieldWidth_Cols(t *testing.T) {
 		{FieldWidthPath, 50, 50},
 		{FieldWidthAuto, 32, 32},
 		{FieldWidthPath, 74, 74},
-		// A generous avail lets each class's own derived ceiling — tied to
-		// formMaxWidth, not a bare literal — win instead.
 		{FieldWidthAuto, 1000, formMaxWidth - formFieldChrome},
 		{FieldWidthPath, 1000, formMaxWidth - 4},
 		{FieldWidthFull, 1000, 1000},
@@ -812,8 +786,6 @@ func TestMultiSectionForm_TabEmitsFocusChanged(t *testing.T) {
 	}
 }
 
-// containsFocusChanged runs cmd, flattening batches, and reports whether any
-// resulting message is a FocusChangedMsg.
 func containsFocusChanged(cmd tea.Cmd) bool {
 	if cmd == nil {
 		return false
@@ -938,10 +910,6 @@ func TestMultiSectionForm_HiddenSectionSkippedByViewAndNavigation(t *testing.T) 
 	}
 }
 
-// TestMultiSectionForm_EnterReachesAConsumingField pins bug 4: enter on a
-// field that consumes it must reach the field, not submit the whole step —
-// the form routes enter to such a field before matching its own submit
-// binding; a field that does not consume enter still submits.
 func TestMultiSectionForm_EnterReachesAConsumingField(t *testing.T) {
 	fold := components.NewFoldToggleField("advanced", nil)
 	form := NewMultiSectionForm([]FormSection{{
@@ -965,9 +933,6 @@ func TestMultiSectionForm_EnterReachesAConsumingField(t *testing.T) {
 	}
 }
 
-// TestFormSection_OptionalBlankFieldStillCompletes pins bug 36: a section
-// whose only unfilled fields are optional (token id, vip, ntp server) shows
-// the completed indicator instead of staying pending forever.
 func TestFormSection_OptionalBlankFieldStillCompletes(t *testing.T) {
 	optional := components.NewInputField("token id", "")
 	required := components.NewInputField("host", "")
@@ -983,11 +948,6 @@ func TestFormSection_OptionalBlankFieldStillCompletes(t *testing.T) {
 	}
 }
 
-// TestDataDrivenStep_LoadFromConfig_SelectOutsideOptionsRoundTrips pins the
-// edit-config safety contract: a valid config value the select's Options
-// don't offer (validators accept 1..100 masters) must survive
-// LoadFromConfig -> Apply byte-identical instead of being coerced to the
-// cursor's default.
 func TestDataDrivenStep_LoadFromConfig_SelectOutsideOptionsRoundTrips(t *testing.T) {
 	def := &StepDefinition{
 		ID: StepIDBasics,
@@ -1030,9 +990,6 @@ func TestRenderInfoCard_FitsWidth(t *testing.T) {
 	}
 }
 
-// pairedTestDefinition declares two short text fields sharing a PairKey, in
-// a section of their own so the surrounding section head never interferes
-// with the row-join assertions below.
 func pairedTestDefinition() *StepDefinition {
 	return &StepDefinition{
 		ID:    StepIDBasics,
@@ -1049,9 +1006,6 @@ func pairedTestDefinition() *StepDefinition {
 	}
 }
 
-// TestDataDrivenStep_PairedFieldsRenderOnOneRow pins mechanism 2: two
-// fields sharing a PairKey join into a single visual row once the form
-// column is wide enough, with one combined LineSpan covering both.
 func TestDataDrivenStep_PairedFieldsRenderOnOneRow(t *testing.T) {
 	step := NewDataDrivenStep(pairedTestDefinition())
 	step.SetFocused(true)
@@ -1080,9 +1034,6 @@ func TestDataDrivenStep_PairedFieldsRenderOnOneRow(t *testing.T) {
 	}
 }
 
-// TestDataDrivenStep_PairedFieldsFallBackBelowCompactFloor pins the
-// pairMinInnerWidth floor: below the 80-column "ordinary" tier, a declared
-// pair renders single column instead of joining a row.
 func TestDataDrivenStep_PairedFieldsFallBackBelowCompactFloor(t *testing.T) {
 	step := NewDataDrivenStep(pairedTestDefinition())
 	step.SetFocused(true)
@@ -1095,11 +1046,6 @@ func TestDataDrivenStep_PairedFieldsFallBackBelowCompactFloor(t *testing.T) {
 	}
 }
 
-// TestDataDrivenStep_PairedFieldsReserveDefaultTagSymmetrically pins the
-// controller ruling that a pair mixing a default-tagged field with an
-// untagged one reserves the tag's room in both halves, so the two boxes
-// stay the same width rather than the tagged one rendering visibly
-// narrower than its sibling.
 func TestDataDrivenStep_PairedFieldsReserveDefaultTagSymmetrically(t *testing.T) {
 	def := &StepDefinition{
 		ID:    StepIDBasics,
@@ -1143,8 +1089,6 @@ func TestDataDrivenStep_PairedFieldsReserveDefaultTagSymmetrically(t *testing.T)
 	}
 }
 
-// absenceNoteTestDefinition declares a toggle field and a section hidden
-// until the toggle flips to "yes", carrying an AbsenceNote.
 func absenceNoteTestDefinition() *StepDefinition {
 	return &StepDefinition{
 		ID:    StepIDBasics,
@@ -1175,9 +1119,6 @@ func absenceNoteTestDefinition() *StepDefinition {
 	}
 }
 
-// TestDataDrivenStep_AbsenceNoteRendersWhenSectionHidden pins mechanism 4:
-// a hidden conditional section renders its AbsenceNote line instead of
-// vanishing with zero output.
 func TestDataDrivenStep_AbsenceNoteRendersWhenSectionHidden(t *testing.T) {
 	step := NewDataDrivenStep(absenceNoteTestDefinition())
 	step.SetFocused(true)
@@ -1191,9 +1132,6 @@ func TestDataDrivenStep_AbsenceNoteRendersWhenSectionHidden(t *testing.T) {
 	}
 }
 
-// TestDataDrivenStep_AbsenceNoteClearsWhenSectionBecomesVisible pins the
-// other half: once the section is visible, its real content renders and
-// the absence note disappears.
 func TestDataDrivenStep_AbsenceNoteClearsWhenSectionBecomesVisible(t *testing.T) {
 	step := NewDataDrivenStep(absenceNoteTestDefinition())
 	step.setValue("enabled", testValYes)
@@ -1208,9 +1146,6 @@ func TestDataDrivenStep_AbsenceNoteClearsWhenSectionBecomesVisible(t *testing.T)
 	}
 }
 
-// collapsibleTestDefinition declares a primary section plus a Collapsible
-// "advanced" section with one Required field — the shape the HARD
-// CONSTRAINT exists to protect (a fold must never hide required work).
 func collapsibleTestDefinition() *StepDefinition {
 	return &StepDefinition{
 		ID:    StepIDBasics,
@@ -1236,9 +1171,6 @@ func collapsibleTestDefinition() *StepDefinition {
 	}
 }
 
-// TestDataDrivenStep_CollapsibleSectionCollapsesWhenCompleteAndUnfocused
-// pins the fold's quiet state: complete, unfocused, it renders one summary
-// line instead of its field.
 func TestDataDrivenStep_CollapsibleSectionCollapsesWhenCompleteAndUnfocused(t *testing.T) {
 	step := NewDataDrivenStep(collapsibleTestDefinition())
 	step.setValue("hidden_required", "x")
@@ -1253,9 +1185,6 @@ func TestDataDrivenStep_CollapsibleSectionCollapsesWhenCompleteAndUnfocused(t *t
 	}
 }
 
-// TestDataDrivenStep_CollapsibleSectionExpandsWhenFocusIsInside pins the
-// focus-forced expansion: tabbing into the section renders it in full even
-// though the user never pressed enter on the toggle.
 func TestDataDrivenStep_CollapsibleSectionExpandsWhenFocusIsInside(t *testing.T) {
 	step := NewDataDrivenStep(collapsibleTestDefinition())
 	step.setValue("hidden_required", "x")
@@ -1270,10 +1199,6 @@ func TestDataDrivenStep_CollapsibleSectionExpandsWhenFocusIsInside(t *testing.T)
 	}
 }
 
-// TestDataDrivenStep_CollapsibleSectionAutoExpandsWhenRequiredFieldInvalid
-// pins the HARD CONSTRAINT itself: a collapsed fold containing a
-// required-and-empty field must auto-expand even while focus sits
-// elsewhere, so the error is never silently hidden.
 func TestDataDrivenStep_CollapsibleSectionAutoExpandsWhenRequiredFieldInvalid(t *testing.T) {
 	step := NewDataDrivenStep(collapsibleTestDefinition())
 	step.SetFocused(true) // focuses "name"; hidden_required stays empty
@@ -1286,10 +1211,6 @@ func TestDataDrivenStep_CollapsibleSectionAutoExpandsWhenRequiredFieldInvalid(t 
 	}
 }
 
-// TestDataDrivenStep_CollapsibleSectionValidateReachesHiddenField pins that
-// Validate/TouchAll/FocusFirstInvalid treat a Collapsible section exactly
-// like a visible one: enter's forced submission attempt focuses the hidden
-// required field rather than silently failing.
 func TestDataDrivenStep_CollapsibleSectionValidateReachesHiddenField(t *testing.T) {
 	step := NewDataDrivenStep(collapsibleTestDefinition())
 	step.SetFocused(true)
@@ -1306,10 +1227,6 @@ func TestDataDrivenStep_CollapsibleSectionValidateReachesHiddenField(t *testing.
 	}
 }
 
-// TestDataDrivenStep_CollapsibleSectionEnterStickyExpand pins mechanism 3's
-// enter binding: toggling the fold open via enter keeps it open even after
-// focus moves elsewhere, since the latch is sticky rather than
-// focus-derived.
 func TestDataDrivenStep_CollapsibleSectionEnterStickyExpand(t *testing.T) {
 	step := NewDataDrivenStep(collapsibleTestDefinition())
 	step.setValue("hidden_required", "x")

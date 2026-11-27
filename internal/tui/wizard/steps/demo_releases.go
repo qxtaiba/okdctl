@@ -11,7 +11,7 @@ func demoDate(year int, month time.Month) time.Time {
 }
 
 // DemoReleaseSeries returns a fixed three-minor OKD release catalog for
-// deterministic wizard demos and golden-frame tests.
+// golden-frame tests and demos.
 func DemoReleaseSeries() []releases.OKDReleaseSeries {
 	series420 := []releases.OKDVersion{
 		{Version: "4.20.1-okd-scos.7", Tag: "4.20.1-okd-scos.7", ReleaseDate: demoDate(2026, time.August), Stable: true, Latest: true, Type: releases.ReleaseTypeLatestStable},

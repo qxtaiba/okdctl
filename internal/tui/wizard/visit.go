@@ -78,7 +78,7 @@ func (m *Model) shutdown() {
 			stoppable.Stop()
 		}
 	}
-	// Commands inherit cancellation; cleanup waits are bounded by their backend deadlines.
+	// Commands inherit cancellation, so this wait is bounded by their deadlines.
 	m.workers.Wait()
 	for _, step := range m.steps {
 		if releaser, ok := step.(interface{ Release() }); ok {

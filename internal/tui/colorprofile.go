@@ -9,9 +9,8 @@ import (
 	"github.com/charmbracelet/colorprofile"
 )
 
-// outputProfile is the color profile for rendered CLI surfaces (boxes,
-// dotted lines, glyphs); box helpers used to leak 24-bit escapes under
-// NO_COLOR/pipes, so this shares charm/log's TTY/NO_COLOR rulebook.
+// outputProfile shares charm/log's TTY/NO_COLOR rulebook so boxes never
+// leak 24-bit escapes into pipes.
 var outputProfile atomic.Pointer[colorprofile.Profile]
 
 func init() {
@@ -19,12 +18,8 @@ func init() {
 	outputProfile.Store(&p)
 }
 
-// detect returns NoTTY when NO_COLOR is set to any value — colorprofile.Detect
-// parses NO_COLOR as a bool, so a non-boolean value like "yes" would otherwise
-// leak color — and delegates to colorprofile.Detect(w, os.Environ()) otherwise.
-// NoTTY, not Ascii: colorprofile.Writer leaves bare "\x1b[m" reset markers
-// around color-only spans at the Ascii profile (it only strips the color
-// params, not the reset), while NoTTY takes the full ansi.Strip path.
+// detect returns NoTTY under any NO_COLOR value: colorprofile.Detect parses
+// it as a bool, and Ascii would keep bare reset markers around color spans.
 func detect(w io.Writer) colorprofile.Profile {
 	if os.Getenv("NO_COLOR") != "" {
 		return colorprofile.NoTTY
@@ -33,17 +28,15 @@ func detect(w io.Writer) colorprofile.Profile {
 }
 
 // SetColorProfileFor re-detects the render color profile from w and the
-// environment (TTY, NO_COLOR, CLICOLOR*). Call once at startup before any
-// boxed print so redirected output/tests don't see the init-time os.Stdout
-// snapshot.
+// environment. Call once at startup before any boxed print.
 func SetColorProfileFor(w io.Writer) {
 	p := detect(w)
 	outputProfile.Store(&p)
 	resolveActiveTheme(IsDarkBackground())
 }
 
-// DisableColor forces the render color profile to strip all ANSI for the
-// rest of the process; see detect's doc for why NoTTY rather than Ascii.
+// DisableColor strips all ANSI from rendered output for the rest of the
+// process.
 func DisableColor() {
 	p := colorprofile.NoTTY
 	outputProfile.Store(&p)
@@ -54,7 +47,6 @@ func colorProfile() colorprofile.Profile {
 	return *outputProfile.Load()
 }
 
-// colorEnabled reports whether the active profile emits any color.
 func colorEnabled() bool {
 	return colorProfile() > colorprofile.Ascii
 }
@@ -64,9 +56,8 @@ func ColorEnabled() bool {
 	return colorEnabled()
 }
 
-// Hyperlink wraps text in an OSC 8 terminal hyperlink to url when the
-// active color profile renders escapes at all; off-TTY and under NO_COLOR
-// the text comes back plain.
+// Hyperlink wraps text in an OSC 8 link to url, or returns it plain when the
+// profile renders no escapes.
 func Hyperlink(url, text string) string {
 	if url == "" || !colorEnabled() {
 		return text
@@ -74,10 +65,8 @@ func Hyperlink(url, text string) string {
 	return "\x1b]8;;" + url + "\x1b\\" + text + "\x1b]8;;\x1b\\"
 }
 
-// Downsample rewrites s so ANSI escapes match the active profile —
-// unchanged under TrueColor, downgraded for ANSI/ANSI256, stripped
-// otherwise. Boxed* helpers apply it internally; callers printing styled
-// lines outside a box must call it themselves.
+// Downsample rewrites s's ANSI escapes to the active profile. Boxed* helpers
+// apply it; callers printing styled lines outside a box must.
 func Downsample(s string) string {
 	p := colorProfile()
 	if p == colorprofile.TrueColor {

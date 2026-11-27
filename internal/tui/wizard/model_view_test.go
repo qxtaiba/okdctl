@@ -15,11 +15,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
 )
 
-// TestModel_FrameWidthIsTerminalMinusFour pins the full-width frame at every
-// width: the bordered box always spans terminal width minus the outer padding — a
-// capped form measure lives inside it, never as a shrunken frame — and every
-// rendered row still spans the terminal exactly, the surplus becoming blank
-// right-hand margin rather than a partial row AltScreen would leave dirty.
 func TestModel_FrameWidthIsTerminalMinusFour(t *testing.T) {
 	for _, h := range []int{30, 48} {
 		for _, w := range []int{80, 100, 116, 120, 149, 150, 151, 180, 200} {
@@ -145,18 +140,11 @@ func TestModel_WindowTitleFollowsStep(t *testing.T) {
 	}
 }
 
-// lightSlate700ANSI and darkSlate700ANSI are the truecolor SGR sequences for
-// ColorRule()'s light (#CBD5E1) and dark (#334155) tier values.
 const (
 	lightSlate700ANSI = "38;2;203;213;225"
 	darkSlate700ANSI  = "38;2;51;65;85"
 )
 
-// resetPackageColorState restores the dark-tier default and rebuilds every
-// package-level style cache that tracks it, mirroring the full call chain
-// wizard.Model's BackgroundColorMsg case runs in production — SetDarkBackground
-// alone leaves rebuildWizardStyles/components.RebuildStyles's own package
-// vars on the light tier, leaking into whichever test runs next.
 func resetPackageColorState() {
 	tui.SetDarkBackground(true)
 	rebuildWizardStyles()
@@ -171,9 +159,6 @@ func TestModel_BackgroundColorMsgRebuildsStyles(t *testing.T) {
 
 	m.Update(tea.BackgroundColorMsg{Color: color.White})
 
-	// The rule glyph is where ColorRule() renders; a whole-frame absence
-	// check would false-positive on light TextSoft, whose hex mirrors the
-	// dark rule tier across the slate ladder.
 	frame := m.View().Content
 	if !strings.Contains(frame, lightSlate700ANSI) {
 		t.Errorf("light-tier ColorRule() (%s) not found in rendered frame:\n%s", lightSlate700ANSI, frame)
@@ -183,9 +168,6 @@ func TestModel_BackgroundColorMsgRebuildsStyles(t *testing.T) {
 	}
 }
 
-// selectorStep is a WizardStep wrapping a components.Selector directly, so
-// its View exercises Selector.getOptionStyles's cache without any of the
-// other step machinery.
 type selectorStep struct {
 	nopStep
 	sel *components.Selector
@@ -214,9 +196,6 @@ func TestModel_BackgroundColorMsgInvalidatesSelectorCache(t *testing.T) {
 
 	m.Update(tea.BackgroundColorMsg{Color: color.White})
 
-	// The connector cell is the one place the rule tier renders here; the
-	// whole-frame check would false-positive on light TextSoft, whose hex
-	// mirrors the dark rule tier across the slate ladder.
 	after := step.View(0, 0)
 	if !strings.Contains(after, lightSlate700ANSI+"m  │") {
 		t.Errorf("light-tier ColorRule() (%s) not on the connector after BackgroundColorMsg — Selector's cache was not invalidated:\n%q", lightSlate700ANSI, after)
@@ -290,8 +269,6 @@ func TestHeader_TitleTruncatesAt60Cols(t *testing.T) {
 	}
 }
 
-// tallStep renders far more lines than any test terminal height, forcing
-// the viewport (and its footer scroll indicator) into the scrollable state.
 type tallStep struct{ nopStep }
 
 func (s *tallStep) View(_, _ int) string {
@@ -327,9 +304,6 @@ func TestFooterRule_IndicatorCentredWithinAvail(t *testing.T) {
 	}
 }
 
-// TestFooterRule_ClampsAtNarrowWidths pins bug 7: at 60–63 columns the
-// rule + indicator + badge row must never exceed the content width — an
-// overflow wraps inside WizardBorderStyle and shatters the frame.
 func TestFooterRule_ClampsAtNarrowWidths(t *testing.T) {
 	cfg := config.DefaultConfig()
 	chrome := FlowChrome{Badge: func(*config.Config) string { return "okd 4.22.0-okd-scos.7" }}
@@ -386,8 +360,6 @@ func TestFooter_PinnedFooterLeftOfRibbon(t *testing.T) {
 		t.Fatalf("pinned footer text at col %d, want 2: %q", leftIdx, helpRow)
 	}
 
-	// The ribbon's trailing "? help" hint (always reserved, per
-	// helpEssentialKeys) is now the rightmost item, not "quit".
 	helpIdx := strings.LastIndex(helpRow, "help")
 	if helpIdx < leftIdx+len(pinnedFooterText) {
 		t.Fatalf("ribbon not right of pinned text: %q", helpRow)

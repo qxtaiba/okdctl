@@ -18,7 +18,7 @@ import (
 
 var dnsLabel = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
-// ValidateFilePath requires a non-empty path to an existing regular file.
+// ValidateFilePath requires a path to an existing regular file.
 func ValidateFilePath(value string) error {
 	if value == "" {
 		return errors.New("path is required — enter a file path")
@@ -97,7 +97,6 @@ func validateDuration(value string) error {
 	return nil
 }
 
-// minInt accepts whole numbers of at least lo; unit suffixes the message.
 func minInt(lo int, unit string) func(string) error {
 	return func(value string) error {
 		n, err := strconv.Atoi(strings.TrimSpace(value))
@@ -166,7 +165,7 @@ func getDuration(get func(cfg *config.Config) time.Duration) wizard.ConfigGetter
 	return func(cfg *config.Config) string { return durationText(get(cfg)) }
 }
 
-// durationText renders 15m0s as 15m and 1h0m0s as 1h, matching the yaml.
+// durationText renders 15m0s as 15m, matching the yaml.
 func durationText(d time.Duration) string {
 	s := d.String()
 	if strings.HasSuffix(s, "m0s") {
@@ -178,7 +177,6 @@ func durationText(d time.Duration) string {
 	return s
 }
 
-// fieldLabel turns a json path into its last segment with spaces.
 func fieldLabel(key string) string {
 	if i := strings.LastIndexByte(key, '.'); i >= 0 {
 		key = key[i+1:]

@@ -24,8 +24,8 @@ type reviewCheck struct {
 	notApplicable bool
 }
 
-// reviewPreflight checks the two input files, runs cfg.Validate() and, with
-// a discovery snapshot, the chosen hosts' capacity.
+// reviewPreflight checks the input files, runs cfg.Validate() and, with a
+// snapshot, the chosen hosts' capacity.
 func reviewPreflight(cfg *config.Config, capacity ...*WizardCapacitySnapshot) []reviewCheck {
 	if cfg == nil {
 		return nil
@@ -60,8 +60,6 @@ func reviewConfigCheck(cfg *config.Config) reviewCheck {
 	}
 }
 
-// reviewCapacityCheck sums each chosen host's demand from the model's
-// inventory against the discovered capacity.
 func reviewCapacityCheck(cfg *config.Config, snapshot *WizardCapacitySnapshot) reviewCheck {
 	if cfg.Provider.Type != config.ProviderProxmox {
 		return reviewCheck{label: labelSelectedCapacity, status: "not applicable", notApplicable: true}

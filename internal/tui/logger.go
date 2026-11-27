@@ -18,11 +18,7 @@ import (
 
 var (
 	stderrLogger atomic.Pointer[charmlog.Logger]
-	// sinkLogger is the persistent-run-log logger; nil when no sink is
-	// configured.
-	sinkLogger atomic.Pointer[charmlog.Logger]
-	// stderrIsJSON gates whether SetRunID attaches run_id to stderr;
-	// ConfigureLoggers sets it from LoggerConfig.Format.
+	sinkLogger   atomic.Pointer[charmlog.Logger]
 	stderrIsJSON atomic.Bool
 )
 
@@ -31,8 +27,6 @@ func init() {
 	logutil.InstallHandler(newStderrHandler())
 }
 
-// newStderrHandler wraps stderrLogger (and sinkLogger, when configured) for
-// logutil, which adds the RedactHandler layer on install.
 func newStderrHandler() slog.Handler {
 	h := &stderrHandler{stderr: stderrLogger.Load()}
 	if sl := sinkLogger.Load(); sl != nil {
@@ -41,8 +35,7 @@ func newStderrHandler() slog.Handler {
 	return h
 }
 
-// badgeWidth pads every level badge to the same column so log messages
-// share a starting column regardless of level.
+// badgeWidth keeps every level badge the same width so messages share a column.
 const badgeWidth = 7
 
 func levelBadge(c color.Color, text string, bold bool) lipgloss.Style {
@@ -51,13 +44,8 @@ func levelBadge(c color.Color, text string, bold bool) lipgloss.Style {
 
 func buildStyles() *charmlog.Styles {
 	styles := charmlog.DefaultStyles()
-	// The DEBUG badge captures ColorTextFaint() here, at logger-configuration
-	// time — before the wizard's BackgroundColorMsg can flip the theme — but
-	// that's never visibly stale: TextFaint resolves to the same hex on both
-	// polarities (theme.go's token table), so a badge built pre-wizard is
-	// byte-identical to one rebuilt post-wizard. The other badges write to
-	// stderr outside the wizard, where the dark default is the contract. No
-	// rebuild hook needed.
+	// TextFaint resolves to the same hex on both polarities, so a badge built
+	// before the wizard flips the theme never reads stale.
 	styles.Levels[charmlog.DebugLevel] = levelBadge(ColorTextFaint(), "[DEBUG]", false)
 	styles.Levels[charmlog.InfoLevel] = levelBadge(ColorInfo(), "[INFO]", true)
 	styles.Levels[charmlog.WarnLevel] = levelBadge(ColorWarning(), "[WARN]", true)
@@ -73,9 +61,6 @@ func buildLogger(w io.Writer) *charmlog.Logger {
 	return l
 }
 
-// buildSinkLogger builds the persistent run-log logger: always text with
-// timestamps on and a colour-stripped profile, independent of the stderr
-// logger's format and colour settings.
 func buildSinkLogger(w io.Writer) *charmlog.Logger {
 	l := charmlog.New(w)
 	l.SetReportTimestamp(true)
@@ -85,8 +70,6 @@ func buildSinkLogger(w io.Writer) *charmlog.Logger {
 	return l
 }
 
-// stderrHandler fans each record to stderr and, when configured, the
-// persistent-log sink.
 type stderrHandler struct {
 	stderr slog.Handler
 	sink   slog.Handler // nil when no persistent-log sink is active
@@ -123,7 +106,7 @@ func (h *stderrHandler) WithGroup(name string) slog.Handler {
 	return nh
 }
 
-// FormatText and FormatJSON are ConfigureLoggers' two output encodings.
+// FormatText and FormatJSON are ConfigureLoggers' output encodings.
 const (
 	FormatText = "text"
 	FormatJSON = "json"
@@ -134,14 +117,11 @@ type LoggerConfig struct {
 	Level  string
 	Format string
 	Stderr io.Writer
-	// Sink is the persistent run log: always text with timestamps on and a
-	// colour-stripped profile, and always carries run_id; nil disables it.
+	// Sink is the persistent run log, always text with timestamps and run_id;
+	// nil disables it.
 	Sink io.Writer
 }
 
-// parseLevelAndFormat resolves the charm/log level and formatter a caller
-// named by level/format string, shared by ConfigureLoggers and NewLogHandler
-// so the two accepted-value sets (and their error messages) can never drift.
 func parseLevelAndFormat(level, format string) (charmlog.Level, charmlog.Formatter, error) {
 	lvl, err := charmlog.ParseLevel(level)
 	if err != nil {
@@ -159,9 +139,8 @@ func parseLevelAndFormat(level, format string) (charmlog.Level, charmlog.Formatt
 	return lvl, formatter, nil
 }
 
-// ConfigureLoggers applies level, formatter, and writer settings to the
-// package-level loggers. Not safe for concurrent calls — call once in cobra
-// PersistentPreRunE before any subcommand runs.
+// ConfigureLoggers applies cfg to the package-level loggers. Not safe for
+// concurrent calls; call once in PersistentPreRunE.
 func ConfigureLoggers(cfg LoggerConfig) error {
 	lvl, formatter, err := parseLevelAndFormat(cfg.Level, cfg.Format)
 	if err != nil {
@@ -173,16 +152,12 @@ func ConfigureLoggers(cfg LoggerConfig) error {
 	el.SetFormatter(formatter)
 	el.SetOutput(cfg.Stderr)
 	if !colorEnabled() {
-		// NoTTY, not Ascii: colorprofile.Writer only downsamples color SGR
-		// params at Ascii, leaving bold/reset codes in place (see detect's
-		// doc in colorprofile.go); NoTTY takes the full ansi.Strip path so
-		// --no-color/NO_COLOR text output carries zero escape bytes.
+		// NoTTY, not Ascii: colorprofile.Writer leaves bold/reset codes at Ascii.
 		el.SetColorProfile(colorprofile.NoTTY)
 	}
 	stderrIsJSON.Store(cfg.Format == FormatJSON)
-	// SetRunID may already have fired (execute() pins run_id before
-	// PersistentPreRunE parses --log-format); attach it here too so a json
-	// run configured after SetRunID still carries it.
+	// execute() pins run_id before --log-format is parsed, so a json run
+	// re-attaches it here.
 	if cfg.Format == FormatJSON {
 		if id := logutil.RunID(); id != "" {
 			stderrLogger.Store(el.With("run_id", id))
@@ -204,10 +179,8 @@ func ConfigureLoggers(cfg LoggerConfig) error {
 	return nil
 }
 
-// NewLogHandler builds a redacting handler for an ad-hoc log destination
-// outside the package-level stderr/sink loggers — e.g. the lifecycle
-// wizard's exec-screen log tee — with the same level/format policy
-// ConfigureLoggers applies to the console.
+// NewLogHandler builds a redacting handler for w with ConfigureLoggers'
+// level and format policy.
 func NewLogHandler(level, format string, w io.Writer) (slog.Handler, error) {
 	lvl, formatter, err := parseLevelAndFormat(level, format)
 	if err != nil {
@@ -222,17 +195,15 @@ func NewLogHandler(level, format string, w io.Writer) (slog.Handler, error) {
 	return logutil.NewRedactHandler(l), nil
 }
 
-// SuppressInfo raises the stderr logger to ErrorLevel (silencing Info/Warn)
-// so --format=json | jq pipelines don't see chatter mixed into the JSON.
+// SuppressInfo raises the stderr logger to ErrorLevel so json pipelines see
+// no chatter.
 func SuppressInfo() {
 	stderrLogger.Load().SetLevel(charmlog.ErrorLevel)
 }
 
-// SetRunID pins run_id on the package-level loggers so subsequent
-// logutil.X calls carry it; call once, before any log line, since
-// logutil.SimpleLogger snapshots loggers at creation time. run_id always
-// attaches to the sink and attaches to stderr only under json format. Not
-// safe for concurrent callers.
+// SetRunID pins run_id on the package-level loggers, on stderr only under
+// json format. Call once before any log line; not safe for concurrent
+// callers.
 func SetRunID(id string) {
 	logutil.SetRunID(id)
 	if sl := sinkLogger.Load(); sl != nil {
@@ -241,9 +212,7 @@ func SetRunID(id string) {
 	if stderrIsJSON.Load() {
 		stderrLogger.Store(stderrLogger.Load().With("run_id", id))
 	}
-	// Reinstall so the facade captures the rebound loggers.
 	logutil.InstallHandler(newStderrHandler())
-	// Rebind slog.SetDefault so libs/goroutines that captured slog.Default()
-	// earlier also see run_id.
+	// Goroutines that captured slog.Default() earlier must see run_id too.
 	slog.SetDefault(logutil.SimpleLogger())
 }

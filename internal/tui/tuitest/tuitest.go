@@ -1,6 +1,5 @@
 // Package tuitest renders bubbletea models headlessly and compares frames
-// against ANSI-stripped golden files (run OKDCTL_UPDATE_GOLDEN=1 go test
-// ./internal/tui/... to accept new frames).
+// against ANSI-stripped golden files; OKDCTL_UPDATE_GOLDEN=1 rewrites them.
 package tuitest
 
 import (
@@ -17,15 +16,13 @@ import (
 
 var ansiRE = regexp.MustCompile(`\x1b\[[0-9;?]*[\x20-\x2f]*[\x40-\x7e]|\x1b\][^\x07\x1b]*(\x07|\x1b\\)`)
 
-// StripANSI removes SGR (color/style) and OSC (e.g. hyperlink) escape
-// sequences from s, leaving the plain visible text.
+// StripANSI removes SGR and OSC escape sequences from s.
 func StripANSI(s string) string {
 	return ansiRE.ReplaceAllString(s, "")
 }
 
-// Golden compares the ANSI-stripped got against the golden file for name,
-// failing the test on a mismatch; set OKDCTL_UPDATE_GOLDEN to rewrite it
-// instead.
+// Golden compares the ANSI-stripped got against the golden file for name;
+// OKDCTL_UPDATE_GOLDEN rewrites it instead.
 func Golden(t *testing.T, name, got string) {
 	t.Helper()
 	got = StripANSI(got)
@@ -65,9 +62,8 @@ func fits(frame string, w, h int) error {
 	return nil
 }
 
-// AssertFits fails the test if frame has more than h rows or any row wider
-// than w columns (after ANSI stripping); h <= 0 skips the row-count check,
-// for CLI output with no fixed viewport height.
+// AssertFits fails when frame exceeds h rows or w columns; h <= 0 skips the
+// row check.
 func AssertFits(t *testing.T, frame string, w, h int) {
 	t.Helper()
 	if err := fits(frame, w, h); err != nil {
@@ -75,7 +71,7 @@ func AssertFits(t *testing.T, frame string, w, h int) {
 	}
 }
 
-// RenderAt resizes m to w×h and returns the resulting frame's content.
+// RenderAt resizes m to w×h and returns the frame's content.
 func RenderAt(t *testing.T, m tea.Model, w, h int) string {
 	t.Helper()
 	next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})

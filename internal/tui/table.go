@@ -10,29 +10,26 @@ import (
 // Align selects a column's horizontal cell alignment.
 type Align int
 
-// Column alignments; numeric columns read best right-aligned.
+// Column alignments.
 const (
 	AlignLeft Align = iota
 	AlignRight
 )
 
-// Column describes one table column: its header, alignment, width bounds,
-// and its share of surplus width under TableOptions.Width.
+// Column describes one table column.
 type Column struct {
 	Header string
 	Align  Align
-	// MinWidth floors the column; MaxWidth caps it, middle-truncating wider
-	// cells (0 = natural/uncapped).
+	// MinWidth floors the column; MaxWidth caps it (0 = uncapped)
 	MinWidth int
 	MaxWidth int
-	// Weight is the column's proportional share of the surplus once
-	// TableOptions.Width exceeds the table's natural width; 0 keeps the
-	// column at its natural width.
+	// Weight is the column's share of TableOptions.Width surplus; 0 keeps the
+	// natural width
 	Weight int
 }
 
-// RowGroup is a run of rows rendered under a dim group-title line; an empty
-// Title renders the rows with no title line.
+// RowGroup is a run of rows under a dim title line; an empty Title renders
+// the rows alone.
 type RowGroup struct {
 	Title string
 	Rows  [][]string
@@ -41,26 +38,20 @@ type RowGroup struct {
 // TableOptions configures Table and ColumnTable; the zero value renders a
 // plain table with a two-space gap.
 type TableOptions struct {
-	// RowStyle is consulted per data row (0-indexed, excluding header and
-	// group-title lines, continuous across groups); a true return styles the
-	// whole row. Padding is computed on plain text so escapes never shift
-	// columns.
+	// RowStyle styles a whole data row (0-indexed, continuous across groups)
+	// when it returns true
 	RowStyle func(row int) (lipgloss.Style, bool)
-	// MaxColWidth middle-truncates any cell wider than the cap with an
-	// ellipsis; zero disables truncation.
+	// MaxColWidth middle-truncates wider cells; zero disables
 	MaxColWidth int
-	// Gap is the number of spaces between columns; zero defaults to 2.
-	Gap int
-	// PlainHeader leaves the header unstyled; by default it renders dim.
+	Gap         int
 	PlainHeader bool
-	// Width is the total budget Column.Weight distributes surplus against;
-	// zero renders at natural width and ignores weights.
+	// Width is the budget Column.Weight distributes surplus against; zero
+	// ignores weights
 	Width int
 }
 
-// Table renders an aligned column table as lines (header then one per row),
-// widths sized to the widest plain cell. Lines come back un-downsampled —
-// callers outside a Boxed* helper must Downsample each line themselves.
+// Table renders rows as aligned lines, header first. Lines come back
+// un-downsampled; callers outside a Boxed* helper Downsample them.
 func Table(headers []string, rows [][]string, opts TableOptions) []string {
 	cols := make([]Column, len(headers))
 	for i, h := range headers {
@@ -69,9 +60,8 @@ func Table(headers []string, rows [][]string, opts TableOptions) []string {
 	return ColumnTable(cols, []RowGroup{{Rows: rows}}, opts)
 }
 
-// ColumnTable renders a column-spec table as lines: the header, then each
-// group's dim title line followed by its rows. Lines come back
-// un-downsampled, like Table's.
+// ColumnTable renders a column-spec table as lines, each group's dim title
+// before its rows. Lines come back un-downsampled, like Table's.
 func ColumnTable(cols []Column, groups []RowGroup, opts TableOptions) []string {
 	gap := opts.Gap
 	if gap == 0 {
@@ -114,9 +104,8 @@ func ColumnTable(cols []Column, groups []RowGroup, opts TableOptions) []string {
 	return lines
 }
 
-// columnWidths sizes each column to its widest capped cell, clamps to the
-// column's own Min/MaxWidth, then hands any Width surplus to the weighted
-// columns proportionally (remainder left to right).
+// columnWidths sizes each column to its widest capped cell within its
+// bounds, then shares any Width surplus by weight.
 func columnWidths(cols []Column, groups []RowGroup, opts TableOptions) []int {
 	widths := make([]int, len(cols))
 	measure := func(row []string) {
@@ -169,8 +158,6 @@ func columnWidths(cols []Column, groups []RowGroup, opts TableOptions) []int {
 	return widths
 }
 
-// cellCap is the effective per-cell truncation cap for a column: the tighter
-// of the table-wide MaxColWidth and the column's own MaxWidth.
 func cellCap(col *Column, opts TableOptions) int {
 	switch {
 	case col.MaxWidth > 0 && opts.MaxColWidth > 0:
@@ -220,8 +207,8 @@ func padLeftCells(s string, w int) string {
 	return s
 }
 
-// Truncate grapheme-safely clips s to fit within maxW visible columns,
-// appending "…" when it clips.
+// Truncate clips s grapheme-safely to maxW columns, appending "…" when it
+// clips.
 func Truncate(s string, maxW int) string {
 	if maxW <= 0 {
 		return ""

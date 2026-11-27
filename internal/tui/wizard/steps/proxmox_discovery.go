@@ -33,8 +33,7 @@ type proxmoxDiscovery struct {
 	Nodes []proxmoxNode
 }
 
-// discoverProxmox lists the cluster's nodes with creds; parent bounds the
-// fetch to the current wizard visit.
+// discoverProxmox lists the cluster's nodes with creds under parent.
 func discoverProxmox(parent context.Context, creds *credentials.ProxmoxCredentials) (*proxmoxDiscovery, error) {
 	if creds.Endpoint == "" {
 		return nil, errors.New("missing endpoint — enter it in the proxmox step")
@@ -76,9 +75,8 @@ func discoverProxmox(parent context.Context, creds *credentials.ProxmoxCredentia
 	return &proxmoxDiscovery{Nodes: nodes}, nil
 }
 
-// classifyError turns a raw discovery failure into an actionable message;
-// each TLS cause gets its own safe remedy rather than a nudge to disable
-// verification.
+// classifyError gives each TLS cause its own safe remedy rather than a nudge
+// to disable verification.
 func classifyError(err error) error {
 	var unknownAuthority x509.UnknownAuthorityError
 	if errors.As(err, &unknownAuthority) {

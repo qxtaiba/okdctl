@@ -9,9 +9,6 @@ import (
 	"github.com/charmbracelet/colorprofile"
 )
 
-// TestHighContrastRequested pins the env contract after the legacy
-// HOMELAB_HIGH_CONTRAST alias was removed: only OKDCTL_HIGH_CONTRAST set to
-// "1" or "true" requests the high-contrast theme.
 func TestHighContrastRequested(t *testing.T) {
 	for _, tc := range []struct {
 		value string
@@ -30,8 +27,6 @@ func TestHighContrastRequested(t *testing.T) {
 	}
 }
 
-// TestSetDarkBackgroundResolvesPolarity pins the light-background muted tier
-// hex values and confirms SetDarkBackground(true) restores the dark defaults.
 func TestSetDarkBackgroundResolvesPolarity(t *testing.T) {
 	t.Cleanup(func() { SetDarkBackground(true) })
 
@@ -70,10 +65,6 @@ func TestSetDarkBackgroundResolvesPolarity(t *testing.T) {
 	}
 }
 
-// TestThemeRemapReachesRenderedRows pins bug 14: the light-background and
-// high-contrast themes must reach a rendered dottedKV row and CodeInline —
-// not stop at the semantic aliases — or credentials and recovery commands
-// render at ~2.4:1 on light terminals with the a11y switch on.
 func TestThemeRemapReachesRenderedRows(t *testing.T) {
 	forced := colorprofile.TrueColor
 	outputProfile.Store(&forced)
@@ -112,9 +103,6 @@ func TestThemeRemapReachesRenderedRows(t *testing.T) {
 	}
 }
 
-// TestHighContrastPropagatesToBaseStyles proves UseTheme rebuilds the derived
-// style caches, fixing the init-ordering bug where TitleStyle used to capture
-// the brand hue before the theme swap could rebind it.
 func TestHighContrastPropagatesToBaseStyles(t *testing.T) {
 	t.Cleanup(func() { SetDarkBackground(true) })
 

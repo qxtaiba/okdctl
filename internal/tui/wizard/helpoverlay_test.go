@@ -10,10 +10,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 )
 
-// textConsumingStep is a TextInputConsumer double: consuming toggles whether
-// "?" should be treated as typed text (true) or the help-overlay toggle
-// (false), and every Update call is recorded so tests can assert whether a
-// keypress reached the step or was swallowed by the wizard.
 type textConsumingStep struct {
 	nopStep
 	consuming bool
@@ -101,9 +97,6 @@ func TestHelpOverlay_NonConsumingStepOpensOverlay(t *testing.T) {
 	}
 }
 
-// TestHelpOverlay_UnassertedStepAlwaysOpens pins the documented default:
-// nopStep doesn't implement TextInputConsumer at all, so "?" always opens
-// the overlay there.
 func TestHelpOverlay_UnassertedStepAlwaysOpens(t *testing.T) {
 	m := NewModel([]WizardStep{newNopStep()}, config.DefaultConfig())
 	tuitest.RenderAt(t, m, 100, 30)
@@ -182,8 +175,6 @@ func TestHelpOverlay_ReplacesOnlyTheViewportRegion(t *testing.T) {
 	tuitest.AssertFits(t, m.View().Content, 100, 30)
 }
 
-// wideHelpStep advertises far more bindings than an 80-column ribbon can
-// show, so the footer truncates — the overlay must still list every one.
 type wideHelpStep struct{ nopStep }
 
 func (s *wideHelpStep) ShortHelp() []KeyBinding {
@@ -249,8 +240,6 @@ func TestFooterBindings_AlwaysAdvertisesHelp(t *testing.T) {
 	}
 }
 
-// TestHelpOverlay_ListsVimGroupFooterSilently pins the vim vocabulary's home:
-// absent from the footer ribbon, present in the overlay under its own group.
 func TestHelpOverlay_ListsVimGroup(t *testing.T) {
 	m := NewModel([]WizardStep{newNopStep()}, config.DefaultConfig())
 	tuitest.RenderAt(t, m, 100, 30)
@@ -268,19 +257,12 @@ func TestHelpOverlay_ListsVimGroup(t *testing.T) {
 	}
 }
 
-// overlayOnlyStep is an OverlayHelpProvider double: it advertises "x extra"
-// only to the "?" overlay, never via ShortHelp, mirroring how a step reuses
-// a keystroke across phases without repeating it in the footer ribbon.
 type overlayOnlyStep struct{ nopStep }
 
 func (s *overlayOnlyStep) OverlayHelp() []KeyBinding {
 	return []KeyBinding{{Key: "x", Help: "extra"}}
 }
 
-// TestHelpOverlay_ListsStepOverlayHelpFooterSilently pins the overlay's
-// aggregation of a step's own OverlayHelpProvider bindings: absent from the
-// footer ribbon (ShortHelp never saw them), present in the overlay's screen
-// section alongside the step's regular bindings.
 func TestHelpOverlay_ListsStepOverlayHelpFooterSilently(t *testing.T) {
 	s := &overlayOnlyStep{nopStep: *newNopStep()}
 	m := NewModel([]WizardStep{s}, config.DefaultConfig())
@@ -297,10 +279,6 @@ func TestHelpOverlay_ListsStepOverlayHelpFooterSilently(t *testing.T) {
 	}
 }
 
-// TestHelpOverlay_StepWithoutOverlayHelpListsNothingExtra is the negative
-// case: a step that implements neither ShortHelp's "x" entry nor
-// OverlayHelpProvider must not have "x" appear in the overlay at all — the
-// aggregation must not invent bindings a step never declared.
 func TestHelpOverlay_StepWithoutOverlayHelpListsNothingExtra(t *testing.T) {
 	m := NewModel([]WizardStep{newNopStep()}, config.DefaultConfig())
 	tuitest.RenderAt(t, m, 100, 30)

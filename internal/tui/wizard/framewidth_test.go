@@ -14,9 +14,6 @@ type widthOwnerStep struct {
 
 func (s *widthOwnerStep) OwnsFrameWidth() bool { return s.owns }
 
-// TestLayoutChangedMsg_ReMeasuresTheBody pins why the message exists: a step
-// flipping its own OwnsFrameWidth changes the body width with no terminal
-// resize to trigger one.
 func TestLayoutChangedMsg_ReMeasuresTheBody(t *testing.T) {
 	s := &widthOwnerStep{nopStep: *newNopStep()}
 	m := NewFlowModel([]WizardStep{s}, config.DefaultConfig(), DefaultChrome())

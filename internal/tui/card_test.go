@@ -23,9 +23,6 @@ func TestCard_TitleInBorder(t *testing.T) {
 	}
 }
 
-// TestCard_OverLongLineNeverWidensBorder pins the box-geometry invariant: a
-// body line longer than the card's inner width must be truncated, never
-// allowed to push the right border outward.
 func TestCard_OverLongLineNeverWidensBorder(t *testing.T) {
 	overLong := "this body line is far longer than the twenty column card width"
 	card := Card("title", overLong, 20, ColorPrimary())
@@ -41,9 +38,6 @@ func TestCard_OverLongLineNeverWidensBorder(t *testing.T) {
 	}
 }
 
-// TestCard_OverLongStyledLineNeverWidensBorder pins the same invariant for a
-// body line that already carries its own ANSI styling, mirroring how
-// callers pre-style card content before handing it to Card.
 func TestCard_OverLongStyledLineNeverWidensBorder(t *testing.T) {
 	styled := lipgloss.NewStyle().Bold(true).Foreground(ColorWarning()).
 		Render("this styled body line is far longer than the card width")

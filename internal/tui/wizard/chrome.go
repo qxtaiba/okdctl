@@ -9,25 +9,19 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-// ProgressInfo is the header's view of wizard progress, passed to a
-// FlowChrome.Trail hook in place of the default dot ribbon.
+// ProgressInfo is the header's view of wizard progress for a Trail hook.
 type ProgressInfo struct {
 	Current, Total int
 	CurrentID      StepID
-	// VisibleIDs lists every currently visible step's ID in flow order, so a
-	// Trail hook can work out a step's position within a subset (e.g. a
-	// Stage) without knowing which steps a given config hides.
+	// VisibleIDs lists the visible steps in flow order
 	VisibleIDs []StepID
 }
 
-// FlowChrome parameterizes per-flow header chrome — tagline, an optional
-// context badge on the footer divider, and a pluggable progress trail;
-// Badge and Trail may be nil.
+// FlowChrome parameterizes per-flow header chrome; Badge and Trail may be nil.
 type FlowChrome struct {
 	Tagline string
 	Badge   func(cfg *config.Config) string
-	// Trail renders the header's right-hand progress indicator; nil falls
-	// back to the dot ribbon + "step N of M".
+	// Trail renders the progress indicator; nil uses the dot ribbon
 	Trail func(p ProgressInfo) string
 }
 
@@ -42,18 +36,15 @@ type Stage struct {
 	Steps []StepID
 }
 
-// The stage-trail styles are assigned by rebuildWizardStyles so the
-// background flip reaches them.
 var (
 	stageLabelStyle        lipgloss.Style
 	stageLabelCurrentStyle lipgloss.Style
 	stageSeparatorStyle    lipgloss.Style
 )
 
-// StagesTrail returns a FlowChrome.Trail hook that renders stages as
-// dot-separated crumbs, bolding whichever stage contains p.CurrentID and
-// appending that stage's inline dot ribbon once it has 2 or more visible
-// steps; a CurrentID absent from every stage renders all stages dim.
+// StagesTrail returns a Trail hook rendering stages as dot-separated crumbs,
+// bolding the one holding p.CurrentID with an inline dot ribbon once it has
+// two or more visible steps.
 func StagesTrail(stages []Stage) func(p ProgressInfo) string {
 	return func(p ProgressInfo) string {
 		current := -1
@@ -77,9 +68,6 @@ func StagesTrail(stages []Stage) func(p ProgressInfo) string {
 	}
 }
 
-// renderActiveStage renders stage's bolded label, appending an inline dot
-// ribbon tracking p.CurrentID's position among stage's visible steps once
-// there are 2 or more of them.
 func renderActiveStage(stage Stage, p *ProgressInfo) string {
 	label := stageLabelCurrentStyle.Render(stage.Label)
 
@@ -105,9 +93,6 @@ func renderActiveStage(stage Stage, p *ProgressInfo) string {
 	return label + " " + stageDots(position, total)
 }
 
-// stageDots renders total dots in RenderStepProgress's ✓/●/○ vocabulary,
-// joined with no connector since the ribbon sits inline with its stage's
-// label.
 func stageDots(position, total int) string {
 	dots := make([]string, total)
 	for i := range total {
@@ -123,15 +108,13 @@ func stageDots(position, total int) string {
 	return strings.Join(dots, "")
 }
 
-// PinnedFooter is implemented by steps that render their own full-width
-// footer instead of the wizard's default help bar.
+// PinnedFooter is implemented by steps that render their own footer row.
 type PinnedFooter interface {
 	PinnedFooter(width int) string
 }
 
-// BadgeSuppressor is implemented by steps that can declare the chrome's
-// context badge misleading right now — the blank-slate hub, where a
-// defaults-seed version would advertise a cluster that doesn't exist.
+// BadgeSuppressor is implemented by steps for which the context badge would
+// mislead, such as the blank-slate hub.
 type BadgeSuppressor interface {
 	SuppressesBadge() bool
 }

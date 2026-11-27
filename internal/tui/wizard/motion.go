@@ -9,37 +9,31 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-// framePeriod is the shared clock's tick interval: 12.5Hz, one glyph per
-// frame at the full motion dial.
+// framePeriod is the full dial's cadence, one glyph per frame.
 const framePeriod = 80 * time.Millisecond
 
-// blurredFramePeriod is the shared clock's cadence while the terminal is
-// unfocused: 1Hz keeps elapsed and stall readings honest at near-zero CPU
-// while the cosmetic animators stand suspended.
+// blurredFramePeriod keeps elapsed readings honest at near-zero CPU.
 const blurredFramePeriod = time.Second
 
-// FrameMsg advances every live animation on the active step by one frame of
-// the wizard's shared clock; Frame is monotonic for the life of the model.
-// Tests drive animations deterministically by sending FrameMsg with pinned
-// counters — never by waiting on wall time.
+// FrameMsg advances every live animation on the active step by one frame;
+// Frame is monotonic for the life of the model. Tests send FrameMsg with
+// pinned counters, never wait on wall time.
 type FrameMsg struct {
 	Frame uint64
 }
 
-// Animator is implemented by steps that need frame ticks while something on
-// them is moving; the wizard's clock runs only while the active step reports
-// true and stops on the first tick it doesn't.
+// Animator is implemented by steps that need frame ticks; the clock runs
+// only while the active step reports true.
 type Animator interface {
 	Animating() bool
 }
 
-// clockTickMsg is the clock chain's wall-time wire message; gen identifies
-// the chain so a tick from a stopped chain is dropped instead of double-arming.
+// clockTickMsg is the clock chain's wire message; gen drops ticks from a
+// stopped chain.
 type clockTickMsg struct {
 	gen uint64
 }
 
-// currentStepAnimating reports whether the active step wants frame ticks.
 func (m *Model) currentStepAnimating() bool {
 	if len(m.steps) == 0 || m.currentStep < 0 || m.currentStep >= len(m.steps) {
 		return false
@@ -48,9 +42,8 @@ func (m *Model) currentStepAnimating() bool {
 	return ok && a.Animating()
 }
 
-// armClock starts the frame clock when the active step is animating and no
-// chain is live; it returns nil under MotionOff (the dial's hard stop) and
-// while a chain is already running.
+// armClock starts the frame clock when the active step animates and no
+// chain is live; nil under MotionOff.
 func (m *Model) armClock() tea.Cmd {
 	if m.motion == tui.MotionOff || m.clockRunning || !m.currentStepAnimating() {
 		return nil
@@ -65,8 +58,6 @@ func (m *Model) clockTickCmd() tea.Cmd {
 	return tea.Tick(m.clockPeriod(), func(time.Time) tea.Msg { return clockTickMsg{gen: gen} })
 }
 
-// clockPeriod is the shared clock's active tick interval: away mode's 1Hz
-// while the terminal is blurred, the full 12.5Hz otherwise.
 func (m *Model) clockPeriod() time.Duration {
 	if m.blurred {
 		return blurredFramePeriod
@@ -74,9 +65,8 @@ func (m *Model) clockPeriod() time.Duration {
 	return framePeriod
 }
 
-// handleClockTick advances the monotonic frame counter, delivers the frame
-// to the active step through the normal update path (so the viewport
-// resyncs), and re-arms the chain only while the step keeps animating.
+// handleClockTick advances the frame counter, delivers the frame through
+// the normal update path and re-arms while the step keeps animating.
 func (m *Model) handleClockTick(msg clockTickMsg) (tea.Model, tea.Cmd) {
 	if msg.gen != m.clockGen {
 		return m, nil
@@ -90,8 +80,7 @@ func (m *Model) handleClockTick(msg clockTickMsg) (tea.Model, tea.Cmd) {
 	return model, cmd
 }
 
-// Spinner renders the shared clock's spinner glyph for frame — brand
-// colored, trailing-space padded the way checklist rows compose it.
+// Spinner renders the shared clock's spinner glyph for frame.
 func Spinner(frame uint64) string {
 	return lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Render(tui.SpinnerGlyph(tui.Motion(), frame) + " ")
 }

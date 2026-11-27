@@ -14,9 +14,6 @@ import (
 
 var nodeIDPattern = regexp.MustCompile(`node\d+`)
 
-// shownNodeIDs returns the set of distinct "nodeN" IDs present in a
-// rendered view, whole-token matched so "node1" never false-positives
-// against a rendered "node10"..."node19".
 func shownNodeIDs(view string) map[string]bool {
 	shown := make(map[string]bool)
 	for _, id := range nodeIDPattern.FindAllString(view, -1) {
@@ -46,15 +43,6 @@ func newSpanSelector() *Selector {
 	})
 }
 
-// TestSelector_DropdownBorderClosesOnTheRight guards E-L8(e): the
-// dropdown's top and bottom border must be a closed bracket — "┌...┐" and
-// "└...┘" — sized to the body's own widest row, not a fixed 20-column stub
-// with no closing corner at all (which read as a rendering bug: a box that
-// starts but never ends).
-// TestSelector_DropdownBoxClosedAndRounded pins bug 15: the dropdown draws
-// a fully closed, rounded box — every body row carries a right wall at the
-// column the corners close on — matching every other box in the app, with
-// the border tracking real content width rather than the 20-column stub.
 func TestSelector_DropdownBoxClosedAndRounded(t *testing.T) {
 	s := nItemDropdownSelector(3)
 	for i := range s.options {
@@ -202,8 +190,6 @@ func TestSelector_DropdownOffsetReclampsWhenBudgetGrows(t *testing.T) {
 		t.Fatal("scrolling to the last item under a 5-item budget should have moved the offset")
 	}
 
-	// Simulate a resize growing the budget without moving the cursor: the
-	// stale offset must re-clamp on render, not strand the window mid-list.
 	s.SetDropdownBudget(12)
 	view := tuitest.StripANSI(s.View())
 	for i := 0; i < 6; i++ {
@@ -228,10 +214,6 @@ func TestSelector_DropdownOffsetReclampsWhenBudgetShrinks(t *testing.T) {
 		t.Fatalf("Selected().ID after 19 moveDown() calls = %q, want node19", s.Selected().ID)
 	}
 
-	// Simulate a resize shrinking the budget toward the floor without
-	// moving the cursor: the window must still contain the selected item
-	// and render a full floor-sized set of rows, not strand the cursor
-	// outside a window sized for the old, larger budget.
 	s.SetDropdownBudget(5)
 	view := tuitest.StripANSI(s.View())
 	shown := shownNodeIDs(view)

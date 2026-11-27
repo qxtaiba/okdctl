@@ -14,13 +14,12 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/components"
 )
 
-// HubVerb names one entry of the hub's menu — the single action the operator
-// picked on the welcome screen.
+// HubVerb names the hub menu entry the operator picked.
 type HubVerb int
 
 // The hub's verbs: edit config and quit over an existing configuration, get
-// started and quit on a blank slate. Deploy, manage nodes, cluster status
-// and destroy return with the commands that back them.
+// started and quit on a blank slate. The others return with the commands
+// that back them.
 const (
 	HubVerbDeploy HubVerb = iota
 	HubVerbEditConfig
@@ -31,8 +30,8 @@ const (
 	HubVerbQuit
 )
 
-// hubEntry pairs a menu label with its verb; accel is the verb's single-key
-// accelerator in review's [N] grammar, empty for rows reached by pointer.
+// hubEntry pairs a menu label with its verb; accel is the single-key
+// accelerator in review's [N] grammar, empty for pointer-only rows.
 type hubEntry struct {
 	verb  HubVerb
 	label string
@@ -49,7 +48,7 @@ var hubFreshVerbs = []hubEntry{
 	{HubVerbQuit, "quit", ""},
 }
 
-// WelcomeStep is okdctl's hub for cluster operations and configuration flows.
+// WelcomeStep is okdctl's hub.
 type WelcomeStep struct {
 	wizard.BaseStep
 	configExists bool
@@ -57,14 +56,12 @@ type WelcomeStep struct {
 	entries      []hubEntry
 	nav          *components.CompactSelector
 
-	// termWidth and termHeight are the terminal's own dimensions, not the
-	// content box View renders into — the hero's double-scale gate is stated
-	// in terminal columns and rows.
+	// termWidth and termHeight gate the hero's double scale in terminal columns
 	termWidth  int
 	termHeight int
 }
 
-// NewWelcomeStep constructs the hub step on its blank-slate menu.
+// NewWelcomeStep constructs the hub on its blank-slate menu.
 func NewWelcomeStep() *WelcomeStep {
 	s := &WelcomeStep{
 		BaseStep: wizard.NewBaseStep(wizard.StepIDWelcome, "welcome", ""),
@@ -73,9 +70,8 @@ func NewWelcomeStep() *WelcomeStep {
 	return s
 }
 
-// setEntries rebuilds the menu over entries, clamped so up/down never wraps
-// past either end; on a menu with accelerators, rows without one indent to
-// keep the verbs on one column.
+// setEntries rebuilds the menu, indenting rows without an accelerator so the
+// verbs share one column.
 func (s *WelcomeStep) setEntries(entries []hubEntry) {
 	s.entries = entries
 	hasAccels := false
@@ -100,24 +96,22 @@ func (s *WelcomeStep) setEntries(entries []hubEntry) {
 	s.nav.SetWrap(false)
 }
 
-// SetConfigExists tells the hub whether okdctl.yaml exists, switching between
-// the edit and blank-slate menus.
+// SetConfigExists switches between the edit and blank-slate menus.
 func (s *WelcomeStep) SetConfigExists(exists bool) {
 	s.configExists = exists
 	entries := hubFreshVerbs
 	if exists {
 		entries = hubVerbs
 	} else {
-		// The blank slate has no slot to describe; a line left over from an
-		// earlier SetExistingConfig would name a configuration that is gone.
+		// A slot line left from an earlier SetExistingConfig would name a
+		// configuration that is gone.
 		s.saveSlot = ""
 	}
 	s.setEntries(entries)
 }
 
-// SetExistingConfig switches the hub to its edit menu and derives the dim
-// save-slot line from cfg; until the cluster record exists, a saved file is a
-// configuration and nothing more.
+// SetExistingConfig switches to the edit menu and derives the save-slot line
+// from cfg.
 func (s *WelcomeStep) SetExistingConfig(cfg *config.Config) {
 	s.SetConfigExists(true)
 	if cfg == nil {
@@ -128,14 +122,12 @@ func (s *WelcomeStep) SetExistingConfig(cfg *config.Config) {
 		cfg.Cluster.Name, cfg.Distribution.Version, pluralNodes(nodes))
 }
 
-// SuppressesBadge hides the chrome's version badge on the blank-slate hub,
-// where the defaults-seed version would advertise a cluster that doesn't
-// exist; the badge returns once a real configuration is loaded.
+// SuppressesBadge hides the version badge on the blank-slate hub, where the
+// defaults-seed version would advertise a cluster that does not exist.
 func (s *WelcomeStep) SuppressesBadge() bool {
 	return !s.configExists
 }
 
-// pluralNodes renders a node count with its noun agreeing.
 func pluralNodes(n int) string {
 	if n == 1 {
 		return "1 node"
@@ -143,7 +135,7 @@ func pluralNodes(n int) string {
 	return fmt.Sprintf("%d nodes", n)
 }
 
-// SelectedVerb returns the verb the operator has highlighted.
+// SelectedVerb returns the highlighted verb.
 func (s *WelcomeStep) SelectedVerb() HubVerb {
 	i := s.nav.SelectedIndex()
 	if i < 0 || i >= len(s.entries) {
@@ -152,13 +144,12 @@ func (s *WelcomeStep) SelectedVerb() HubVerb {
 	return s.entries[i].verb
 }
 
-// Init returns nil; the hub has no async startup work.
+// Init returns nil.
 func (s *WelcomeStep) Init() tea.Cmd {
 	return nil
 }
 
-// Update moves the pointer down the verb menu (arrows remapped onto the
-// selector's vertical bindings) and confirms on enter or space.
+// Update moves the pointer and confirms on enter, space or an accelerator.
 func (s *WelcomeStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	if msg, ok := msg.(tea.KeyPressMsg); ok {
 		if msg.Code == tea.KeyEnter || msg.Code == tea.KeySpace {
@@ -175,14 +166,12 @@ func (s *WelcomeStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	return s, nil
 }
 
-// confirm completes the step with the highlighted verb, which the configure
-// flow or the CLI handles once the hub is left.
 func (s *WelcomeStep) confirm() tea.Cmd {
 	return func() tea.Msg { return wizard.StepCompleteMsg{StepID: wizard.StepIDWelcome} }
 }
 
-// acceleratedEntry maps a pressed key to its menu entry: a verb's letter
-// accelerator, or the 1-based digit of an accelerator-carrying row.
+// acceleratedEntry maps a key to its row by letter accelerator or the
+// 1-based digit of an accelerator-carrying row.
 func (s *WelcomeStep) acceleratedEntry(text string) (int, bool) {
 	if text == "" {
 		return 0, false
@@ -203,24 +192,22 @@ func (s *WelcomeStep) IsCentered() bool {
 	return true
 }
 
-// RendersHero returns true so the hub owns its screen identity and the frame
-// gives the launcher the reclaimed header rows.
+// RendersHero returns true so the frame drops its header for the launcher.
 func (s *WelcomeStep) RendersHero() bool {
 	return true
 }
 
-// OwnsFrameWidth gives the hub's launcher the frame's full width.
+// OwnsFrameWidth gives the launcher the frame's full width.
 func (s *WelcomeStep) OwnsFrameWidth() bool {
 	return true
 }
 
-// SetTerminalSize records the terminal's own dimensions, which gate the hero's
-// double-scale rendering.
+// SetTerminalSize records the terminal dimensions that gate the hero scale.
 func (s *WelcomeStep) SetTerminalSize(width, height int) {
 	s.termWidth, s.termHeight = width, height
 }
 
-// View renders the blank-slate launcher or the existing-configuration hub.
+// View renders the launcher with the save-slot line when a config exists.
 func (s *WelcomeStep) View(width, height int) string {
 	s.SetSize(width, height)
 	parts := []string{renderHero(s.termWidth, s.termHeight, tui.ColorEnabled()), ""}
@@ -230,20 +217,15 @@ func (s *WelcomeStep) View(width, height int) string {
 	parts = append(parts, s.nav.ViewPointer())
 	launcher := lipgloss.JoinVertical(lipgloss.Center, parts...)
 
-	// The "get started" panel only describes what's ahead for a truly
-	// blank slate (s.saveSlot == ""); a config already on disk reaches
-	// this same centered layout too, where that copy would be wrong.
+	// The "get started" panel describes a blank slate only.
 	if width < hubGetStartedPanelMinWidth || s.saveSlot != "" {
 		return launcher
 	}
 	return lipgloss.JoinHorizontal(lipgloss.Center, launcher, strings.Repeat(" ", hubGetStartedPanelGap), renderGetStartedPanel())
 }
 
-// hubGetStartedPanelMinWidth is the content width at and above which the
-// blank-slate hub earns a second column instead of sitting as a lone
-// centered menu in an otherwise empty frame — chosen so a 150-column
-// terminal clears it once the outer frame's own padding and border are
-// subtracted.
+// hubGetStartedPanelMinWidth lets a 150-column terminal clear it after the
+// frame's own padding and border.
 const hubGetStartedPanelMinWidth = 140
 
 const (
@@ -251,10 +233,7 @@ const (
 	hubGetStartedPanelWidth = 42
 )
 
-// renderGetStartedPanel renders the blank-slate hub's second column: an
-// honest preview of the four phases "get started" walks through, drawn
-// from the same connect/cluster/extras/review grouping the header trail
-// uses, not invented marketing copy.
+// renderGetStartedPanel previews the four phases the header trail groups.
 func renderGetStartedPanel() string {
 	phases := []struct{ label, detail string }{
 		{"connect", "provider, distribution, credentials"},
@@ -273,15 +252,13 @@ func renderGetStartedPanel() string {
 	return tui.Card("GET STARTED", strings.Join(rows, "\n"), hubGetStartedPanelWidth, tui.ColorAccent())
 }
 
-// Validate always returns nil; the hub has no inputs to validate.
+// Validate always returns nil.
 func (s *WelcomeStep) Validate() error {
 	return nil
 }
 
-// ShortHelp returns the hub's help bar — the one screen whose enter label
-// reads "start" rather than "continue"/"confirm" (see keymap_help.go): the
-// hub begins the wizard, it doesn't advance or confirm anything already in
-// progress.
+// ShortHelp labels enter "start": the hub begins the wizard rather than
+// advancing a form.
 func (s *WelcomeStep) ShortHelp() []wizard.KeyBinding {
 	return []wizard.KeyBinding{
 		{Key: "↑↓", Help: "choose"},
@@ -290,8 +267,8 @@ func (s *WelcomeStep) ShortHelp() []wizard.KeyBinding {
 	}
 }
 
-// ShouldExitEarly reports whether the highlighted verb is handled outside the
-// configure flow, so confirming it leaves the wizard rather than advancing.
+// ShouldExitEarly reports whether the highlighted verb leaves the wizard
+// instead of walking the configure flow.
 func (s *WelcomeStep) ShouldExitEarly() bool {
 	switch s.SelectedVerb() {
 	case HubVerbEditConfig, HubVerbGetStarted:

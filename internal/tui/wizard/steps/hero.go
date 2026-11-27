@@ -5,9 +5,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
-// Hero sizing gates: heroMinWidth is the narrowest terminal renderHero draws
-// the block-letter wordmark at, and heroDoubleWidth by heroDoubleHeight is the
-// terminal it draws that wordmark at heroScale times glyph size on both axes.
+// Hero sizing gates: the block letters need heroMinWidth and double at
+// heroDoubleWidth by heroDoubleHeight.
 const (
 	heroMinWidth     = 60
 	heroDoubleWidth  = 120
@@ -15,10 +14,8 @@ const (
 	heroScale        = 2
 )
 
-// renderHero renders the OKDCTL block-letter hero gradient-colored across its
-// six letters — 5 rows by 50 cols normally, heroScale times that on both axes
-// once the terminal reaches heroDoubleWidth by heroDoubleHeight — or the
-// spaced LogoStyle wordmark below heroMinWidth or without color.
+// renderHero renders the gradient block-letter hero, doubled on a large
+// terminal, or the spaced wordmark below heroMinWidth or without color.
 func renderHero(width, height int, colorOK bool) string {
 	if width < heroMinWidth || !colorOK {
 		return wizard.LogoStyle.Render("O K D C T L")

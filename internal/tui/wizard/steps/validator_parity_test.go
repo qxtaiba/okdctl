@@ -7,9 +7,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
 
-// wizardFieldParity maps a validated wizard field to a bad value and the
-// cfg.Validate() field that must also reject it; loaderOnly marks shapes the
-// yaml loader enforces at parse time, which Validate() never sees.
 var wizardFieldParity = map[string]struct {
 	bad        string
 	wantField  string
