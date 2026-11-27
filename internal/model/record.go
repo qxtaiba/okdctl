@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/marker"
@@ -13,6 +14,9 @@ import (
 // ErrRecordMismatch reports a record whose envelope names a different
 // cluster than its body.
 var ErrRecordMismatch = errors.New("cluster record names a different cluster")
+
+// ErrInfraID reports an infra-ID that is not <cluster>-<6 lowercase hex>.
+var ErrInfraID = errors.New("infra-id is not <cluster>-<6 hex>")
 
 var recordFile = marker.File{Label: "cluster record", Version: "1"}
 
@@ -56,12 +60,26 @@ func LoadRecord(path string) (*Record, error) {
 		return nil, fmt.Errorf("load cluster record %s: %w (envelope %q, record %q)",
 			path, ErrRecordMismatch, body.ClusterName, body.Cluster)
 	}
+	if err := body.checkInfraID(); err != nil {
+		return nil, fmt.Errorf("load cluster record %s: %w", path, err)
+	}
 	return &body.Record, nil
 }
 
+func (r *Record) checkInfraID() error {
+	rest, ok := strings.CutPrefix(r.InfraID, r.Cluster+"-")
+	if !ok || len(rest) != 6 || strings.Trim(rest, "0123456789abcdef") != "" {
+		return fmt.Errorf("infra_id %q: %w", r.InfraID, ErrInfraID)
+	}
+	return nil
+}
+
 // SaveRecord writes r atomically at mode 0600 with r.Cluster as the
-// envelope's cluster name.
+// envelope's cluster name; an infra-ID NewInfraID would not produce is refused.
 func SaveRecord(path string, r *Record) error {
+	if err := r.checkInfraID(); err != nil {
+		return fmt.Errorf("save cluster record: %w", err)
+	}
 	body := recordBody{Record: *r}
 	if err := recordFile.Write(path, &body, r.Cluster); err != nil {
 		return fmt.Errorf("save cluster record: %w", err)

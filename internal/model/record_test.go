@@ -64,6 +64,22 @@ func TestLoadRecord_Errors(t *testing.T) {
 	}{
 		{name: "missing file", wantIs: os.ErrNotExist},
 		{
+			name:    "empty infra id",
+			seed:    `{"schema_version":"1","cluster_name":"lab","infra_id":"","cluster":"lab"}`,
+			wantIs:  ErrInfraID,
+			wantMsg: `infra_id ""`,
+		},
+		{
+			name:   "infra id of another cluster",
+			seed:   `{"schema_version":"1","cluster_name":"lab","infra_id":"other-a1b2c3","cluster":"lab"}`,
+			wantIs: ErrInfraID,
+		},
+		{
+			name:   "infra id with uppercase hex",
+			seed:   `{"schema_version":"1","cluster_name":"lab","infra_id":"lab-A1B2C3","cluster":"lab"}`,
+			wantIs: ErrInfraID,
+		},
+		{
 			name:    "cluster name mismatch",
 			seed:    `{"schema_version":"1","cluster_name":"other","infra_id":"lab-a1b2c3","cluster":"lab"}`,
 			wantIs:  ErrRecordMismatch,
@@ -116,5 +132,18 @@ func TestLoadRecord_Errors(t *testing.T) {
 				t.Errorf("err = %q; must not contain %q", err, tc.notMsg)
 			}
 		})
+	}
+}
+
+func TestSaveRecord_RefusesBadInfraID(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "record.json")
+	for _, id := range []string{"", "lab", "lab-abc", "other-a1b2c3"} {
+		err := SaveRecord(path, &Record{InfraID: id, Cluster: "lab"})
+		if !errors.Is(err, ErrInfraID) {
+			t.Errorf("SaveRecord(%q) = %v; want ErrInfraID", id, err)
+		}
+		if _, statErr := os.Stat(path); !errors.Is(statErr, os.ErrNotExist) {
+			t.Fatalf("SaveRecord(%q) wrote the file", id)
+		}
 	}
 }
