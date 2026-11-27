@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -310,6 +311,72 @@ func TestResult_TruncatedOnRingPath(t *testing.T) {
 		}
 		if !result.Truncated {
 			t.Errorf("Truncated = false for 201 lines; want true")
+		}
+	})
+}
+
+func TestStart(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("needs POSIX sh")
+	}
+
+	t.Run("delivers lines while the child runs and keeps the cancel identity", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		var got []Line
+		p, err := New().Start(ctx, func(l Line) {
+			got = append(got, l)
+			if l.Text == "ready" {
+				cancel()
+			}
+		}, "sh", "-c", "echo ready; exec sleep 10")
+		if err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+		result, err := p.Wait()
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Wait err = %v; want context.Canceled", err)
+		}
+		if len(got) != 1 || got[0] != (Line{Text: "ready"}) {
+			t.Errorf("lines = %+v; want only the ready line, delivered before the child was cancelled", got)
+		}
+		if result.Stdout != "ready" {
+			t.Errorf("Stdout = %q; want the tail kept alongside the stream", result.Stdout)
+		}
+	})
+
+	t.Run("flags stderr and flushes a trailing partial line", func(t *testing.T) {
+		t.Parallel()
+		var got []Line
+		p, err := New().Start(context.Background(), func(l Line) { got = append(got, l) },
+			"sh", "-c", "echo err >&2; printf 'a\\nb'")
+		if err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+		result, err := p.Wait()
+		if err != nil || result.ExitCode != 0 {
+			t.Fatalf("Wait = %+v, %v; want clean exit", result, err)
+		}
+		want := []Line{{Text: "err", Stderr: true}, {Text: "a"}, {Text: "b"}}
+		if len(got) != len(want) {
+			t.Fatalf("lines = %+v; want %+v", got, want)
+		}
+		for _, w := range want {
+			if !slices.Contains(got, w) {
+				t.Errorf("lines = %+v; missing %+v", got, w)
+			}
+		}
+		if result.Stderr != "err" || result.Stdout != "a\nb" {
+			t.Errorf("tails = %q / %q; want err / a\\nb", result.Stderr, result.Stdout)
+		}
+	})
+
+	t.Run("missing binary fails at Start", func(t *testing.T) {
+		t.Parallel()
+		p, err := New().Start(context.Background(), nil, "okdctl-no-such-binary")
+		if err == nil || p != nil {
+			t.Fatalf("Start = %v, %v; want nil proc and an error", p, err)
 		}
 	})
 }

@@ -1,96 +1,61 @@
 package executor
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 )
 
-func TestRingWriter_Empty(t *testing.T) {
-	r := newRingWriter(5)
-	if got := r.tail(); got != "" {
-		t.Errorf("empty tail want \"\", got %q", got)
+func TestRing_Tail(t *testing.T) {
+	cases := []struct {
+		name string
+		push []string
+		want string
+	}{
+		{"empty", nil, ""},
+		{"exactly cap", []string{"x", "y", "z"}, "x\ny\nz"},
+		{"over cap keeps the newest", []string{"1", "2", "3", "4", "5"}, "3\n4\n5"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newRing(3)
+			for _, line := range tc.push {
+				r.push(line)
+			}
+			if got := r.tail(); got != tc.want {
+				t.Errorf("tail = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 
-func TestRingWriter_ExactlyCap(t *testing.T) {
-	r := newRingWriter(3)
-	for _, line := range []string{"x", "y", "z"} {
-		if _, err := fmt.Fprintln(r, line); err != nil {
+func TestLineWriter_SplitsAcrossWrites(t *testing.T) {
+	var got []string
+	w := &lineWriter{emit: func(s string) { got = append(got, s) }}
+	for _, chunk := range []string{"line1\nli", "ne2\npar", "tial"} {
+		if _, err := w.Write([]byte(chunk)); err != nil {
 			t.Fatal(err)
 		}
 	}
-	got := r.tail()
-	if got != "x\ny\nz" {
-		t.Errorf("want \"x\\ny\\nz\", got %q", got)
+	if want := []string{"line1", "line2"}; strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("emitted before flush = %v, want %v", got, want)
+	}
+	w.flush()
+	if want := "line1,line2,partial"; strings.Join(got, ",") != want {
+		t.Errorf("emitted after flush = %v, want %s", got, want)
 	}
 }
 
-func TestRingWriter_OverCap(t *testing.T) {
-	r := newRingWriter(3)
-	for _, line := range []string{"1", "2", "3", "4", "5"} {
-		if _, err := fmt.Fprintln(r, line); err != nil {
-			t.Fatal(err)
-		}
-	}
-	got := r.tail()
-	if got != "3\n4\n5" {
-		t.Errorf("want \"3\\n4\\n5\", got %q", got)
-	}
-}
-
-func TestRingWriter_MultiLineWrite(t *testing.T) {
-	r := newRingWriter(10)
-	if _, err := r.Write([]byte("line1\nline2\nline3\n")); err != nil {
-		t.Fatal(err)
-	}
-	got := r.tail()
-	if got != "line1\nline2\nline3" {
-		t.Errorf("want \"line1\\nline2\\nline3\", got %q", got)
-	}
-}
-
-func TestRingWriter_PartialLineWrite(t *testing.T) {
-	r := newRingWriter(10)
-	if _, err := r.Write([]byte("no newline")); err != nil {
-		t.Fatal(err)
-	}
-	got := r.tail()
-	if got != "no newline" {
-		t.Errorf("want \"no newline\", got %q", got)
-	}
-}
-
-func TestRingWriter_PartialThenComplete(t *testing.T) {
-	r := newRingWriter(10)
-	if _, err := r.Write([]byte("par")); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := r.Write([]byte("tial\nfull\n")); err != nil {
-		t.Fatal(err)
-	}
-	got := r.tail()
-	if got != "partial\nfull" {
-		t.Errorf("want \"partial\\nfull\", got %q", got)
-	}
-}
-
-func TestRingWriter_PartialBoundedAt64K(t *testing.T) {
-	r := newRingWriter(maxCapturedLines)
+func TestLineWriter_PartialBoundedAt64K(t *testing.T) {
+	var emitted int
+	w := &lineWriter{emit: func(s string) { emitted += len(s) }}
 	blob := strings.Repeat("x", 1024*1024) // 1 MiB, no newline
-	if _, err := r.Write([]byte(blob)); err != nil {
+	if _, err := w.Write([]byte(blob)); err != nil {
 		t.Fatal(err)
 	}
-	if len(r.partial) > maxPartial {
-		t.Errorf("partial len %d exceeds maxPartial %d", len(r.partial), maxPartial)
+	if len(w.partial) > maxPartial {
+		t.Errorf("partial len %d exceeds maxPartial %d", len(w.partial), maxPartial)
 	}
-	var total int
-	for _, line := range r.lines {
-		total += len(line)
-	}
-	total += len(r.partial)
-	limit := maxPartial * (maxCapturedLines + 1)
-	if total > limit {
-		t.Errorf("total retained bytes %d exceeds limit %d", total, limit)
+	if emitted+len(w.partial) != len(blob) {
+		t.Errorf("retained %d bytes of %d", emitted+len(w.partial), len(blob))
 	}
 }

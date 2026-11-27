@@ -1,5 +1,5 @@
-// Package executor wraps os/exec with context-aware execution, tail capture
-// of stdout/stderr and structured command tracing.
+// Package executor wraps os/exec with an env allowlist, graceful SIGTERM
+// cancellation and streamed or tail-captured child output.
 package executor
 
 import (
@@ -189,32 +189,9 @@ func splitExitError(err error, result *Result) error {
 }
 
 func (e *Executor) run(ctx context.Context, stdin io.Reader, name string, args ...string) (*Result, error) {
-	start := time.Now()
-	cmd := e.newCmd(ctx, name, args...)
-
-	rout := newRingWriter(maxCapturedLines)
-	rerr := newRingWriter(maxCapturedLines)
-	cmd.Stdin = stdin
-	cmd.Stdout = rout
-	cmd.Stderr = rerr
-
-	e.logger.Debug("exec: started", "cmd", name, "argc", len(args))
-
-	err := cmd.Run()
-
-	result := &Result{
-		Stdout:    rout.tail(),
-		Stderr:    rerr.tail(),
-		Duration:  time.Since(start),
-		Truncated: rout.dropped,
+	p, err := e.start(ctx, stdin, nil, name, args...)
+	if err != nil {
+		return &Result{}, err
 	}
-	retErr := splitExitError(err, result)
-	// os/exec reports the SIGTERM exit over the watcher's context error, so a
-	// cancelled child would otherwise read as a plain non-zero exit.
-	if ctxErr := ctx.Err(); ctxErr != nil {
-		retErr = fmt.Errorf("%s: %w", name, ctxErr)
-	}
-
-	e.logger.Debug("exec: completed", "cmd", name, "exit", result.ExitCode, "duration", result.Duration)
-	return result, retErr
+	return p.Wait()
 }
