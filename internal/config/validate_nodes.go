@@ -8,19 +8,6 @@ import (
 	"strings"
 )
 
-type roleFloor struct {
-	cpu       int
-	memoryMiB int
-	rootGiB   int
-}
-
-func floorFor(role Role) roleFloor {
-	if role == RoleMaster {
-		return roleFloor{cpu: 4, memoryMiB: 16384, rootGiB: 100}
-	}
-	return roleFloor{cpu: 2, memoryMiB: 8192, rootGiB: 100}
-}
-
 type nodeRef struct {
 	name       string
 	role       Role
@@ -47,9 +34,9 @@ func (c *Config) validateNodeCount(r *ValidationResult) []nodeRef {
 }
 
 func (c *Config) validateNodes(r *ValidationResult, nodes []nodeRef) {
-	validateDefaults(r, FieldControlPlane, &c.ControlPlane, floorFor(RoleMaster))
+	validateDefaults(r, FieldControlPlane, &c.ControlPlane, FloorFor(RoleMaster))
 	if c.Workers.Count > 0 {
-		validateDefaults(r, FieldWorkers, &c.Workers.NodeDefaults, floorFor(RoleWorker))
+		validateDefaults(r, FieldWorkers, &c.Workers.NodeDefaults, FloorFor(RoleWorker))
 	}
 	c.validateOverrideKeys(r)
 	c.validateNodeNames(r, nodes)
@@ -72,17 +59,17 @@ func (c *Config) validateNodeNames(r *ValidationResult, nodes []nodeRef) {
 	}
 }
 
-func validateDefaults(r *ValidationResult, field string, d *NodeDefaults, f roleFloor) {
-	if d.CPU < f.cpu {
-		r.addf(field+".cpu", "%d must be at least %d vCPU", d.CPU, f.cpu)
+func validateDefaults(r *ValidationResult, field string, d *NodeDefaults, f Floor) {
+	if d.CPU < f.CPU {
+		r.addf(field+".cpu", "%d must be at least %d vCPU", d.CPU, f.CPU)
 	}
-	if d.MemoryMiB < f.memoryMiB {
-		r.addf(field+".memory_mib", "%d must be at least %d MiB", d.MemoryMiB, f.memoryMiB)
+	if d.MemoryMiB < f.MemoryMiB {
+		r.addf(field+".memory_mib", "%d must be at least %d MiB", d.MemoryMiB, f.MemoryMiB)
 	}
 	if len(d.Disks) == 0 {
 		r.AddError(field+".disks", "list at least one disk; disks[0] is the root disk")
 	}
-	validateDisks(r, field, d.Disks, f.rootGiB)
+	validateDisks(r, field, d.Disks, f.RootGiB)
 }
 
 func validateDisks(r *ValidationResult, field string, disks []DiskSpec, rootGiB int) {
@@ -121,15 +108,15 @@ func (c *Config) validateOverride(r *ValidationResult, nodes []nodeRef, i int) {
 		return
 	}
 	field := FieldNodes + "." + node.name
-	f := floorFor(node.role)
+	f := FloorFor(node.role)
 	o := &node.override
-	if o.CPU != nil && *o.CPU < f.cpu {
-		r.addf(field+".cpu", "%d must be at least %d vCPU", *o.CPU, f.cpu)
+	if o.CPU != nil && *o.CPU < f.CPU {
+		r.addf(field+".cpu", "%d must be at least %d vCPU", *o.CPU, f.CPU)
 	}
-	if o.MemoryMiB != nil && *o.MemoryMiB < f.memoryMiB {
-		r.addf(field+".memory_mib", "%d must be at least %d MiB", *o.MemoryMiB, f.memoryMiB)
+	if o.MemoryMiB != nil && *o.MemoryMiB < f.MemoryMiB {
+		r.addf(field+".memory_mib", "%d must be at least %d MiB", *o.MemoryMiB, f.MemoryMiB)
 	}
-	validateDisks(r, field, o.Disks, f.rootGiB)
+	validateDisks(r, field, o.Disks, f.RootGiB)
 	if pool := c.Provider.Proxmox.Nodes; len(pool) > 0 && o.Host != "" && !slices.Contains(pool, o.Host) {
 		r.addf(field+".host", "%s host %q is not one of provider.proxmox.nodes (%s)", node.name, o.Host, strings.Join(pool, ", "))
 	}

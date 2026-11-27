@@ -34,9 +34,9 @@ func TestValidateCluster(t *testing.T) {
 	}
 
 	passing := map[string]func(*Config){
-		"floor version":   func(c *Config) { c.Distribution.Version = MinOKDVersion },
-		"newer minor":     func(c *Config) { c.Distribution.Version = "4.23.0-okd-scos.1" },
-		"54 char name":    func(c *Config) { c.Cluster.Name = "a123456789b123456789c123456789d123456789e123456789f123" },
+		"floor version": func(c *Config) { c.Distribution.Version = MinOKDVersion },
+		"newer minor":   func(c *Config) { c.Distribution.Version = "4.23.0-okd-scos.1" },
+		"54 char name":  func(c *Config) { c.Cluster.Name = "a123456789b123456789c123456789d123456789e123456789f123" },
 		"63 char node name": func(c *Config) {
 			c.Cluster.Name = "a123456789b123456789c123456789d123456789e123456789f123"
 			c.Nodes = map[string]NodeOverride{c.Cluster.Name + "-worker10": {Host: "pve"}}

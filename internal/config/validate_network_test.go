@@ -60,13 +60,13 @@ func TestValidateNetwork(t *testing.T) {
 	}
 
 	passing := map[string]func(*Config){
-		"public resolvers":             func(c *Config) { c.Networking.DNS = []string{"1.1.1.1", "9.9.9.9"} },
-		"range ends on last host":      func(c *Config) { c.Networking.NodeIPStart = "192.168.1.243" },
-		"host prefix 20":               func(c *Config) { c.Networking.HostPrefix = 20 },
-		"host prefix 28":               func(c *Config) { c.Networking.HostPrefix = 28 },
+		"public resolvers":              func(c *Config) { c.Networking.DNS = []string{"1.1.1.1", "9.9.9.9"} },
+		"range ends on last host":       func(c *Config) { c.Networking.NodeIPStart = "192.168.1.243" },
+		"host prefix 20":                func(c *Config) { c.Networking.HostPrefix = 20 },
+		"host prefix 28":                func(c *Config) { c.Networking.HostPrefix = 28 },
 		"host prefix equal to pod cidr": func(c *Config) { c.Networking.PodCIDR = "10.128.0.0/23" },
-		"masters only range":           func(c *Config) { c.Workers.Count = 0; c.Networking.NodeIPStart = "192.168.1.252" },
-		"ntp listed":                   func(c *Config) { c.Networking.NTP = []string{"pool.ntp.org"} },
+		"masters only range":            func(c *Config) { c.Workers.Count = 0; c.Networking.NodeIPStart = "192.168.1.252" },
+		"ntp listed":                    func(c *Config) { c.Networking.NTP = []string{"pool.ntp.org"} },
 		"overridden worker past the range end": func(c *Config) {
 			c.Networking.MachineCIDR, c.Networking.Gateway, c.Networking.DNS = "192.168.1.144/28", "192.168.1.145", []string{"192.168.1.145"}
 			c.Networking.NodeIPStart, c.Networking.APIVIP, c.Networking.IngressVIP = "192.168.1.146", "192.168.1.157", "192.168.1.158"

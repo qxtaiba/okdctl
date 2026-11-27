@@ -34,6 +34,12 @@ func (r *ValidationResult) addf(field, format string, args ...any) {
 	r.AddError(field, fmt.Sprintf(format, args...))
 }
 
+func (r *ValidationResult) check(field string, err error) {
+	if err != nil {
+		r.AddError(field, err.Error())
+	}
+}
+
 func (r *ValidationResult) Error() string {
 	msgs := make([]string, 0, len(r.Errors))
 	for _, e := range r.Errors {
