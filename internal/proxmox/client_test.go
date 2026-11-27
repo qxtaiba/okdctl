@@ -51,8 +51,8 @@ func TestNewProxmoxClientWarnsOnInsecureOnce(t *testing.T) {
 func TestBadRequestRendersBodyOnce(t *testing.T) {
 	const detail = `{"vmid":"invalid format - value does not look like a valid VM ID"}`
 	f := newFakeAPI(t, map[string]http.HandlerFunc{
-		"POST /nodes/pve/qemu":           jsonHandler(http.StatusBadRequest, `{"data":null,"errors":`+detail+`}`),
-		"GET /nodes/pve/qemu/105/config": missingConfig(105),
+		"POST /nodes/pve/qemu":                     jsonHandler(http.StatusBadRequest, `{"data":null,"errors":`+detail+`}`),
+		"GET /nodes/pve/qemu/105/config?current=1": missingConfig(105),
 	})
 	_, err := f.driver(t).CreateVM(t.Context(), "pve", newSpec(105, "grappleberry"))
 	if err == nil || strings.Count(err.Error(), "invalid format") != 1 {

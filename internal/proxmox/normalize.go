@@ -27,6 +27,7 @@ func ParseVMConfig(raw map[string]any) (VMConfig, error) {
 	r := cfgReader{raw: raw}
 	c := VMConfig{
 		Name:      r.str("name"),
+		Lock:      r.str("lock"),
 		Cores:     cmp.Or(r.int("cores"), 1),
 		Sockets:   cmp.Or(r.int("sockets"), 1),
 		CPUType:   parseCPU(r.str("cpu")),

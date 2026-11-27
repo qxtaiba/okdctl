@@ -19,18 +19,21 @@ func haSID(ref VMRef) string {
 	return "vm:" + strconv.Itoa(ref.VMID)
 }
 
-// CreateVM is idempotent by VMID: a VM already carrying spec.Tag yields a
-// zero Task and any other existing VM is an error, so a create whose
-// WaitTask timed out can be retried. The cluster listing catches a VMID on
-// another node; the target node's config catches one pvestatd has not
-// published yet.
+// CreateVM is idempotent by VMID: a VM already carrying spec.Tag on node
+// yields a zero Task, so a create whose WaitTask timed out can be retried,
+// while one on another node, one still locked by its own create, or any
+// other VM is an error. The cluster listing catches a VMID on another node;
+// the target node's config catches one pvestatd has not published yet.
 func (d *driver) CreateVM(ctx context.Context, node string, spec VMSpec) (Task, error) { //nolint:gocritic // hugeParam: Driver passes specs by value
 	vms, err := d.ListVMs(ctx)
 	if err != nil {
 		return Task{}, fmt.Errorf("create vm %d: %w", spec.VMID, err)
 	}
 	if i := slices.IndexFunc(vms, func(vm VMSummary) bool { return vm.VMID == spec.VMID }); i >= 0 {
-		return Task{}, existingVM(&spec, vms[i].Node, vms[i].Name, vms[i].Tags)
+		if err := existingVM(&spec, vms[i].Node, vms[i].Name, vms[i].Tags); err != nil || vms[i].Node == node {
+			return Task{}, err
+		}
+		return Task{}, fmt.Errorf("create vm %d: vm %q is on node %s, not %s", spec.VMID, vms[i].Name, vms[i].Node, node)
 	}
 	ref := VMRef{Node: node, VMID: spec.VMID}
 	if exists, err := d.vmExists(ctx, ref, &spec); exists || err != nil {
@@ -53,6 +56,8 @@ func (d *driver) vmExists(ctx context.Context, ref VMRef, spec *VMSpec) (bool, e
 		return false, nil
 	case err != nil:
 		return false, fmt.Errorf("create vm %d: %w", spec.VMID, err)
+	case cfg.Lock == "create":
+		return true, fmt.Errorf("create vm %d: vm is being created on %s", spec.VMID, ref.Node)
 	}
 	return true, existingVM(spec, ref.Node, cfg.Name, cfg.Tags)
 }
@@ -65,9 +70,11 @@ func existingVM(spec *VMSpec, node, name string, tags []string) error {
 		spec.VMID, name, node, strings.Join(tags, ";"))
 }
 
+// VMConfig reads the running configuration (current=1); the values PVE has
+// queued for the next power cycle are VMPending's.
 func (d *driver) VMConfig(ctx context.Context, ref VMRef) (VMConfig, error) {
 	var raw map[string]any
-	path := vmPath(ref, "/config")
+	path := vmPath(ref, "/config?current=1")
 	if err := d.get(ctx, path, &raw); err != nil {
 		return VMConfig{}, err
 	}

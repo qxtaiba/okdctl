@@ -46,7 +46,7 @@ func taggedConfig(tags string) http.HandlerFunc {
 }
 
 func TestCreateVM(t *testing.T) {
-	const config105 = "GET /nodes/pve/qemu/105/config"
+	const config105 = "GET /nodes/pve/qemu/105/config?current=1"
 
 	t.Run("new vmid posts the spec", func(t *testing.T) {
 		f := newFakeAPI(t, map[string]http.HandlerFunc{config105: missingConfig(105)})
@@ -92,6 +92,28 @@ func TestCreateVM(t *testing.T) {
 		f := newFakeAPI(t, nil)
 		if _, err := f.driver(t).CreateVM(t.Context(), "pve", newSpec(201, "lab-9f3a1c")); err == nil {
 			t.Fatal("CreateVM() treated tag lab-9f3a1cx as lab-9f3a1c")
+		}
+	})
+
+	t.Run("existing vmid with our tag on another node names it", func(t *testing.T) {
+		f := newFakeAPI(t, nil)
+		_, err := f.driver(t).CreateVM(t.Context(), "pve2", newSpec(101, "grappleberry"))
+		if err == nil || !strings.Contains(err.Error(), "on node pve") {
+			t.Fatalf("CreateVM() error = %v, want it to name node pve", err)
+		}
+		if f.called("POST /nodes/pve2/qemu") {
+			t.Fatal("CreateVM() posted a second VM for a vmid living on another node")
+		}
+	})
+
+	t.Run("vmid locked by an in-flight create is reported as such", func(t *testing.T) {
+		f := newFakeAPI(t, map[string]http.HandlerFunc{config105: jsonHandler(http.StatusOK, `{"data":{"lock":"create","digest":"d"}}`)})
+		_, err := f.driver(t).CreateVM(t.Context(), "pve", newSpec(105, "grappleberry"))
+		if err == nil || !strings.Contains(err.Error(), "being created") {
+			t.Fatalf("CreateVM() error = %v, want it to say vm 105 is being created", err)
+		}
+		if f.called("POST /nodes/pve/qemu") {
+			t.Fatal("CreateVM() posted over a VM being created")
 		}
 	})
 

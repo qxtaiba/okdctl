@@ -409,6 +409,9 @@ func TestDriverVMConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("VMConfig(): %v", err)
 	}
+	if !f.called("GET /nodes/pve/qemu/101/config?current=1") {
+		t.Fatalf("VMConfig() calls = %+v, want the running config (current=1), not the pending-merged one", f.calls)
+	}
 	want := VMConfig{
 		Name: "grappleberry-master-0", Cores: 4, Sockets: 1, CPUType: "host", MemoryMiB: 16384,
 		BIOS: "ovmf", Machine: "q35", SCSIHW: "virtio-scsi-single", OSType: "l26", OnBoot: true, AgentEnabled: true,
@@ -434,7 +437,7 @@ func TestDriverVMConfig(t *testing.T) {
 
 	t.Run("missing vm on real pve is not found", func(t *testing.T) {
 		f := newFakeAPI(t, map[string]http.HandlerFunc{
-			"GET /nodes/pve/qemu/999/config": pveErrorHandler("Configuration file 'nodes/pve/qemu-server/999.conf' does not exist"),
+			"GET /nodes/pve/qemu/999/config?current=1": pveErrorHandler("Configuration file 'nodes/pve/qemu-server/999.conf' does not exist"),
 		})
 		if _, err := f.driver(t).VMConfig(t.Context(), VMRef{Node: "pve", VMID: 999}); !errors.Is(err, ErrNotFound) {
 			t.Fatalf("VMConfig() error = %v, want ErrNotFound", err)
@@ -443,7 +446,7 @@ func TestDriverVMConfig(t *testing.T) {
 
 	t.Run("null data is not found", func(t *testing.T) {
 		f := newFakeAPI(t, map[string]http.HandlerFunc{
-			"GET /nodes/pve/qemu/999/config": jsonHandler(http.StatusOK, `{"data":null}`),
+			"GET /nodes/pve/qemu/999/config?current=1": jsonHandler(http.StatusOK, `{"data":null}`),
 		})
 		if _, err := f.driver(t).VMConfig(t.Context(), VMRef{Node: "pve", VMID: 999}); !errors.Is(err, ErrNotFound) {
 			t.Fatalf("VMConfig() error = %v, want ErrNotFound", err)
@@ -452,7 +455,7 @@ func TestDriverVMConfig(t *testing.T) {
 
 	t.Run("malformed config is an error", func(t *testing.T) {
 		f := newFakeAPI(t, map[string]http.HandlerFunc{
-			"GET /nodes/pve/qemu/101/config": jsonHandler(http.StatusOK, `{"data":{"digest":"d","memory":"lots"}}`),
+			"GET /nodes/pve/qemu/101/config?current=1": jsonHandler(http.StatusOK, `{"data":{"digest":"d","memory":"lots"}}`),
 		})
 		if _, err := f.driver(t).VMConfig(t.Context(), ref101); err == nil || !strings.Contains(err.Error(), "memory") {
 			t.Fatalf("VMConfig() error = %v, want a memory parse error", err)
