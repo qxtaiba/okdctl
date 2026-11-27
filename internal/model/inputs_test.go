@@ -97,3 +97,11 @@ func TestInputsHash_Sensitivity(t *testing.T) {
 		})
 	}
 }
+
+func TestInputsHash_Golden(t *testing.T) {
+	in := testInputs(t, testConfig(2))
+	const want = "8d39b6c0f32b560492d7c1337e206ccce09199752f14fff3310ec4bb6989cb1f"
+	if got := in.Hash(); got != want {
+		t.Errorf("Hash = %s; want %s (a change here stales every record: bump the record schema version)", got, want)
+	}
+}

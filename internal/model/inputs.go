@@ -1,10 +1,10 @@
 package model
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"hash"
 	"maps"
 	"slices"
 	"strconv"
@@ -34,12 +34,13 @@ type Inputs struct {
 // secret, the SSH key and the extra manifests by sorted name. A worker added after day 1 stays
 // out; a removed day-1 worker drops out and changes the digest, so the step
 // that removes one rewrites the record; sizing and placement are excluded
-// because the driver reconciles them.
+// because the driver reconciles them. The encoding is pinned by a golden
+// test; changing it stales every record, so bump recordFile.Version with it.
 func (in *Inputs) Hash() string {
-	var buf bytes.Buffer
+	h := sha256.New()
 	field := func(parts ...string) {
 		for _, p := range parts {
-			fmt.Fprintf(&buf, "%d:%s\n", len(p), p)
+			fmt.Fprintf(h, "%d:%s\n", len(p), p)
 		}
 	}
 	field("infra", in.Inventory.InfraID)
@@ -61,11 +62,21 @@ func (in *Inputs) Hash() string {
 	list("ntp", net.NTP)
 	field("cluster-net", net.PodCIDR, net.ServiceCIDR, strconv.Itoa(net.HostPrefix))
 	field("release", in.Release)
-	field("pull-secret", string(in.PullSecret))
-	field("ssh-key", string(in.SSHKey))
+	field("pull-secret")
+	writeBytes(h, in.PullSecret)
+	field("ssh-key")
+	writeBytes(h, in.SSHKey)
 	for _, name := range slices.Sorted(maps.Keys(in.ExtraManifests)) {
-		field("manifest", name, string(in.ExtraManifests[name]))
+		field("manifest", name)
+		writeBytes(h, in.ExtraManifests[name])
 	}
-	sum := sha256.Sum256(buf.Bytes())
-	return hex.EncodeToString(sum[:])
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// writeBytes streams b in the field encoding so the pull secret is never
+// copied into a buffer nobody zeroizes.
+func writeBytes(h hash.Hash, b []byte) {
+	fmt.Fprintf(h, "%d:", len(b))
+	h.Write(b)
+	h.Write([]byte{'\n'})
 }
