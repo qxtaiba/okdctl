@@ -21,7 +21,24 @@ jobs:
         with:
           go-version-file: go.mod
       - uses: sigstore/cosign-installer@881c63bd87e38389154debd8331404ce7ca8a3ab # v4.1.4
-      - uses: anchore/sbom-action/download-syft@dfcb83b97731532d72be422cbc51ee64adb6fd56 # v0.24.4
+      - name: install syft
+        env:
+          # renovate: datasource=github-releases depName=anchore/syft
+          SYFT_VERSION: v1.57.2
+        # anchore/sbom-action resolves the version through the GitHub releases
+        # web page, which times out for anchore/syft (anchore/sbom-action#667);
+        # the release download path is served by the CDN and does not.
+        run: |
+          set -euo pipefail
+          cd "$(mktemp -d)"
+          base="https://github.com/anchore/syft/releases/download/${SYFT_VERSION}"
+          file="syft_${SYFT_VERSION#v}_linux_amd64.tar.gz"
+          curl -fsSL --retry 5 --retry-all-errors -o "$file" "${base}/${file}"
+          curl -fsSL --retry 5 --retry-all-errors -o checksums.txt "${base}/syft_${SYFT_VERSION#v}_checksums.txt"
+          grep " ${file}$" checksums.txt | sha256sum -c -
+          tar -xzf "$file" syft
+          sudo install -m 0755 syft /usr/local/bin/syft
+          syft version
       - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         id: goreleaser
         with:
