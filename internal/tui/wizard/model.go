@@ -397,18 +397,14 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// handleConfigSync applies a step's ConfigSyncMsg to the shared config.
+// handleConfigSync applies a step's ConfigSyncMsg to the shared config; a
+// mid-edit failure is the field's to show inline, never the status row's.
 func (m *Model) handleConfigSync(msg ConfigSyncMsg) (tea.Model, tea.Cmd) {
 	if !m.currentStepMatches(msg.StepID) {
 		return m, nil
 	}
-	if len(m.steps) > 0 && m.currentStep >= 0 && m.currentStep < len(m.steps) {
-		if a, ok := m.steps[m.currentStep].(ConfigApplier); ok {
-			if err := a.Apply(m.config); err != nil {
-				m.err = err
-				return m, nil
-			}
-		}
+	if a, ok := m.CurrentStep().(ConfigApplier); ok {
+		_ = a.Apply(m.config)
 	}
 	return m, nil
 }

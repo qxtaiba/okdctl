@@ -97,5 +97,7 @@ func (n *proxmoxNode) exceeds(d *demand) bool {
 	return (n.CPUsKnown && d.cpu > n.CPUs) || (n.MemKnown && d.memoryMiB > n.MemGB*1024)
 }
 
-func (t CapacityTotals) overCPU(d *demand) bool    { return t.CPUsKnown && d.cpu > t.CPUs }
-func (t CapacityTotals) overMemory(d *demand) bool { return t.MemoryKnown && d.memoryMiB > t.MemoryGB*1024 }
+func (t CapacityTotals) overCPU(d *demand) bool { return t.CPUsKnown && d.cpu > t.CPUs }
+func (t CapacityTotals) overMemory(d *demand) bool {
+	return t.MemoryKnown && d.memoryMiB > t.MemoryGB*1024
+}

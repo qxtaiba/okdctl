@@ -1126,6 +1126,17 @@ func (s *DataDrivenStep) focusCrossFieldError(cfe *crossFieldError) tea.Cmd {
 	return cmd
 }
 
+// IsComplete reports whether every visible field passes Check, without
+// painting error state.
+func (s *DataDrivenStep) IsComplete() bool {
+	for i := range s.form.sections {
+		if s.form.sections[i].isVisible() && !s.form.sections[i].isComplete() {
+			return false
+		}
+	}
+	return true
+}
+
 // Validate runs the form's field validation, then the step-level Validate
 // function if the definition provides one.
 func (s *DataDrivenStep) Validate() error {
@@ -1173,8 +1184,9 @@ func (s *DataDrivenStep) redactedDefinitionValidate() error {
 	return errors.New(message)
 }
 
-// Apply writes each field's value into cfg using its ConfigSet, then runs
-// the step-level Apply function if provided.
+// Apply writes each valid field's value into cfg using its ConfigSet, then
+// runs the step-level Apply function if provided. A field failing Check is
+// skipped, so a per-keystroke sync never writes a half-typed value.
 func (s *DataDrivenStep) Apply(cfg *config.Config) error {
 	for sIdx := range s.definition.Sections {
 		if !s.form.sections[sIdx].isVisible() {
@@ -1182,10 +1194,11 @@ func (s *DataDrivenStep) Apply(cfg *config.Config) error {
 		}
 		for fIdx := range s.definition.Sections[sIdx].Fields {
 			fieldDef := &s.definition.Sections[sIdx].Fields[fIdx]
-			if fieldDef.ConfigSet == nil {
+			field := s.getField(fieldDef.Key)
+			if fieldDef.ConfigSet == nil || field == nil || field.Check() != nil {
 				continue
 			}
-			if err := fieldDef.ConfigSet(cfg, s.Value(fieldDef.Key)); err != nil {
+			if err := fieldDef.ConfigSet(cfg, field.Value()); err != nil {
 				return fmt.Errorf("field %s: %w", fieldDef.Key, err)
 			}
 		}
