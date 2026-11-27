@@ -18,6 +18,10 @@ var ErrRecordMismatch = errors.New("cluster record names a different cluster")
 // ErrInfraID reports an infra-ID that is not <cluster>-<6 lowercase hex>.
 var ErrInfraID = errors.New("infra-id is not <cluster>-<6 hex>")
 
+// PreviewInfraID stands in for the record's infra-ID before up writes one;
+// the MACs it yields are a preview and SaveRecord refuses it.
+const PreviewInfraID = "preview"
+
 var recordFile = marker.File{Label: "cluster record", Version: "1"}
 
 // Record is the on-disk identity of a cluster, written once at define time;
