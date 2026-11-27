@@ -12,7 +12,6 @@ import (
 	"golang.org/x/term"
 
 	"github.com/qxtaiba/okdctl/internal/logutil"
-	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/workspace"
 )
@@ -41,8 +40,8 @@ func wantsDefaultLogSink(cmd *cobra.Command) bool {
 	return false
 }
 
-// openLogFile lstats to refuse a symlink then opens O_NOFOLLOW, closing a
-// pre-sudo TOCTOU race on root-authored log lines.
+// openLogFile lstats to refuse a symlink then opens O_NOFOLLOW, so log lines
+// never land in a redirected file.
 func openLogFile(path string) (*os.File, error) {
 	if info, err := os.Lstat(path); err == nil {
 		if info.Mode()&os.ModeSymlink != 0 {
@@ -54,9 +53,6 @@ func openLogFile(path string) (*os.File, error) {
 	return os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND|syscall.O_NOFOLLOW, 0o600)
 }
 
-// openDefaultLogSink opens <workspace>/okdctl.log and chowns it via the open fd
-// (TOCTOU-safe), closing the sink on chown failure instead of leaving a
-// root-owned log.
 func openDefaultLogSink() (string, *os.File, error) {
 	root, err := workspaceRoot(initTarget())
 	if err != nil {
@@ -66,10 +62,6 @@ func openDefaultLogSink() (string, *os.File, error) {
 	f, err := openLogFile(path)
 	if err != nil {
 		return "", nil, err
-	}
-	if err := system.ChownFileToInvokingUser(f); err != nil {
-		_ = f.Close()
-		return "", nil, fmt.Errorf("chown log file to invoking user: %w", err)
 	}
 	return path, f, nil
 }
