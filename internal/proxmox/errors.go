@@ -17,4 +17,9 @@ type TaskFailed struct {
 	ExitStatus string
 }
 
-func (e *TaskFailed) Error() string { return e.ExitStatus }
+func (e *TaskFailed) Error() string {
+	if e.ExitStatus == "" {
+		return "task " + e.UPID + " failed"
+	}
+	return e.ExitStatus
+}

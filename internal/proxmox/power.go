@@ -79,6 +79,9 @@ func (d *driver) WaitTask(ctx context.Context, task Task) error {
 			ExitStatus string `json:"exitstatus"`
 		}
 		err := d.get(ctx, path, &st)
+		if err == nil && st.Status == "" {
+			err = fmt.Errorf("get %s: empty task status", path)
+		}
 		switch {
 		case err == nil:
 			failures = 0

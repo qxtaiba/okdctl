@@ -477,6 +477,33 @@ func TestWaitTask(t *testing.T) {
 		}
 	})
 
+	t.Run("null status is retried", func(t *testing.T) {
+		h, polls := taskStatusHandler("running", "OK")
+		var calls atomic.Int32
+		f := newFakeAPI(t, map[string]http.HandlerFunc{key: func(w http.ResponseWriter, r *http.Request) {
+			if calls.Add(1) == 1 {
+				jsonHandler(http.StatusOK, `{"data":null}`)(w, r)
+				return
+			}
+			h(w, r)
+		}})
+		if err := fastDriver(t, f).WaitTask(t.Context(), shutdown); err != nil {
+			t.Fatalf("WaitTask(): %v", err)
+		}
+		if got := polls.Load(); got != 2 {
+			t.Fatalf("polled %d times after the null reply, want 2", got)
+		}
+	})
+
+	t.Run("persistent null status is not a task failure", func(t *testing.T) {
+		f := newFakeAPI(t, map[string]http.HandlerFunc{key: jsonHandler(http.StatusOK, `{"data":null}`)})
+		err := fastDriver(t, f).WaitTask(t.Context(), shutdown)
+		var failed *TaskFailed
+		if err == nil || errors.As(err, &failed) || err.Error() == "" {
+			t.Fatalf("WaitTask() error = %v (%T), want a non-empty error that is not *TaskFailed", err, err)
+		}
+	})
+
 	t.Run("permission errors are not retried", func(t *testing.T) {
 		f := newFakeAPI(t, map[string]http.HandlerFunc{key: jsonHandler(http.StatusForbidden, `{"data":null}`)})
 		if err := fastDriver(t, f).WaitTask(t.Context(), shutdown); !errors.Is(err, ErrPermission) {

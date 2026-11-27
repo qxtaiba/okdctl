@@ -114,3 +114,10 @@ func TestGatewayFailuresAreErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestTaskFailedErrorNamesTheTask(t *testing.T) {
+	err := &TaskFailed{UPID: upidStart}
+	if !strings.Contains(err.Error(), upidStart) {
+		t.Fatalf("Error() = %q, want it to name the task when the exit status is empty", err.Error())
+	}
+}
