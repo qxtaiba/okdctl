@@ -169,7 +169,8 @@ func persistWizardConfig(result *wizard.Result, path string, seeded *credentials
 
 func saveConfig(cfg *config.Config, path string, w io.Writer) error {
 	if result := validateConfig(cfg, w); !result.IsValid() {
-		logutil.Warn("configuration has validation warnings but will still be saved")
+		return (&errtypes.ConfigError{Msg: "config validation failed, nothing written", Err: result}).
+			WithHint("review the errors listed above and run okdctl init again")
 	}
 	if err := config.NewLoader().Save(cfg, path); err != nil {
 		return fmt.Errorf("save configuration: %w", err)

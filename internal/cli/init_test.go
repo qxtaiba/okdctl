@@ -333,6 +333,22 @@ func TestRunInit_SaveAndExitPersistsConfigAndSidecar(t *testing.T) {
 	}
 }
 
+func TestRunInit_InvalidWizardConfigIsNotSaved(t *testing.T) {
+	resetInitState(t)
+	bad := config.DefaultConfig()
+	bad.Cluster.Name = "Bad_Name"
+	stubWizard(t, &wizard.Result{Outcome: wizard.OutcomeCompleted, Config: bad, Action: wizard.ActionDeploy}, steps.HubVerbGetStarted, nil)
+
+	err := runInit(initCmd, nil)
+	var ce *errtypes.ConfigError
+	if !errors.As(err, &ce) || !strings.Contains(err.Error(), "validation failed") {
+		t.Fatalf("err = %T %v, want a ConfigError naming validation", err, err)
+	}
+	if _, statErr := os.Stat("okdctl.yaml"); !os.IsNotExist(statErr) {
+		t.Errorf("an invalid config was written, stat err %v", statErr)
+	}
+}
+
 func TestRunInit_HubQuitVerbChangesNothing(t *testing.T) {
 	resetInitState(t)
 	stubWizard(t, &wizard.Result{Outcome: wizard.OutcomeCompleted}, steps.HubVerbQuit, nil)
