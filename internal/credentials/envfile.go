@@ -17,7 +17,7 @@ import (
 
 // ErrEnvFileUnknownKey reports a key outside the PROXMOX_VE_API_TOKEN and
 // PROXMOX_VE_INSECURE allowlist, so a typo or a smuggled variable fails
-// loudly instead of silently reaching the process environment.
+// loudly instead of being silently ignored.
 var ErrEnvFileUnknownKey = errors.New("env file contains an unrecognized key")
 
 var envFileAllowedKeys = map[string]bool{
