@@ -10,7 +10,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
-// refuseSymlinkDst asserts AtomicWrite refuses a symlink at the destination.
 func refuseSymlinkDst(t *testing.T, dir string, op func(link string) error) {
 	t.Helper()
 	target := filepath.Join(dir, "symlink-target.txt")

@@ -37,7 +37,6 @@ func TestFacade_LevelsAndFields(t *testing.T) {
 	}
 }
 
-// Locks the redaction guarantee for both the facade and SimpleLogger paths.
 func TestInstallHandler_WrapsRedactHandler(t *testing.T) {
 	buf := installBuffer(t)
 
