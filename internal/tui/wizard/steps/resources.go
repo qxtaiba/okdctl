@@ -80,7 +80,7 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 }
 
 // sizingFields declares a role's cpu, memory and root-disk fields, floored
-// at config.FloorFor(role) and bound to the defaults block of returns.
+// at config.FloorFor(role) and bound to the NodeDefaults that of returns.
 func sizingFields(role config.Role, keys [3]string, pairKey, cpuDefault string, of func(*config.Config) *config.NodeDefaults) []wizard.FieldDefinition {
 	floor := config.FloorFor(role)
 	return []wizard.FieldDefinition{
