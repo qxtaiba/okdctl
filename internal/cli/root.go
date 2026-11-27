@@ -278,10 +278,9 @@ func logFailureToSink(err error) {
 // shouldRenderErrorBox reports whether announceFailure draws the boxed
 // ErrorSummary instead of the flat "command failed" log line: both stderr
 // and stdout TTY-shaped, not json, and err isn't already self-presented.
-// NO_COLOR/--no-color is deliberately NOT part of this gate (contrast the
-// progressBars derivation in logging.go, which does fold colorOff in) — box
-// drawing is structure, not color, so the box still renders under NO_COLOR,
-// just Downsampled to ANSI-free by the color profile configureLogging set.
+// NO_COLOR/--no-color is deliberately NOT part of this gate — box drawing is
+// structure, not color, so the box still renders under NO_COLOR, just
+// Downsampled to ANSI-free by the color profile configureLogging set.
 func shouldRenderErrorBox(stderrTTY, stdoutTTY bool, format string, err error) bool {
 	return stderrTTY && stdoutTTY && format != tui.FormatJSON && !render.IsPresented(err)
 }
@@ -374,7 +373,7 @@ func versionText() string {
 
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, flagConfig, flagConfigShort, "okdctl.yaml", "configuration file")
-	rootCmd.PersistentFlags().BoolVar(&noColor, flagNoColor, false, "disable colour and progress output (same as NO_COLOR=1)")
+	rootCmd.PersistentFlags().BoolVar(&noColor, flagNoColor, false, "disable colour output (same as NO_COLOR=1)")
 	rootCmd.PersistentFlags().BoolVar(&noMotion, flagNoMotion, false, "disable TUI animation (same as OKDCTL_NO_MOTION=1; NO_COLOR alone reduces it)")
 	rootCmd.PersistentFlags().StringVar(&logLevel, flagLogLevel, "info", "log verbosity (debug, info, warn, error)")
 	_ = rootCmd.RegisterFlagCompletionFunc(flagLogLevel,

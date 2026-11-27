@@ -102,19 +102,15 @@ func configureLogging(cmd *cobra.Command) error {
 	effectiveLevel := effectiveLogLevel()
 
 	stderrIsTTY := term.IsTerminal(int(os.Stderr.Fd()))
-	stdoutIsTTY := term.IsTerminal(int(os.Stdout.Fd()))
-	// --no-color or NO_COLOR (no-color.org, any value) disables progress bars
-	// regardless of TTY; FORCE_COLOR only affects colorprofile styling, not
-	// this gate.
+	// --no-color or NO_COLOR (no-color.org, any value) forces colour off;
+	// FORCE_COLOR only affects colorprofile styling.
 	colorOff := noColor || os.Getenv("NO_COLOR") != ""
 
 	// auto-switch to json when stderr is piped and --log-format wasn't set
-	// explicitly, mirroring the progress-bar TTY gate
+	// explicitly
 	if !cmd.Root().PersistentFlags().Changed(flagLogFormat) && !stderrIsTTY {
 		logFormat = tui.FormatJSON
 	}
-
-	progressBars := stderrIsTTY && stdoutIsTTY && logFormat != tui.FormatJSON && !colorOff
 
 	tui.SetMotion(tui.ResolveMotion(noMotion, noColor, os.Getenv))
 
@@ -128,11 +124,10 @@ func configureLogging(cmd *cobra.Command) error {
 	}
 
 	if err := tui.ConfigureLoggers(tui.LoggerConfig{
-		Level:        effectiveLevel,
-		Format:       logFormat,
-		Stderr:       os.Stderr,
-		Sink:         sinkW,
-		ProgressBars: progressBars,
+		Level:  effectiveLevel,
+		Format: logFormat,
+		Stderr: os.Stderr,
+		Sink:   sinkW,
 	}); err != nil {
 		return err
 	}

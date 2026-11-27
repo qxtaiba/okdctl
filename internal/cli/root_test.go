@@ -192,13 +192,6 @@ func TestExitCodeForTaxonomy(t *testing.T) {
 	}
 }
 
-// TestShouldRenderErrorBox guards item 7 of the second-cut safety findings:
-// colorOff (NO_COLOR/--no-color) used to flip progressBars, which
-// announceFailure gated on, so NO_COLOR degraded the boxed error to the
-// flat "[ERROR]" line — box drawing is structure, not color. The gate keeps
-// its TTY/json/presented checks but takes no color signal at all, so this
-// table exhaustively covers stderr/stdout TTY-ness and format without ever
-// mentioning NO_COLOR — its absence from the signature is the fix.
 func TestShouldRenderErrorBox(t *testing.T) {
 	plain := errors.New("boom")
 	cases := []struct {

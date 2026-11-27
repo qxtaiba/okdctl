@@ -136,8 +136,7 @@ type LoggerConfig struct {
 	Stderr io.Writer
 	// Sink is the persistent run log: always text with timestamps on and a
 	// colour-stripped profile, and always carries run_id; nil disables it.
-	Sink         io.Writer
-	ProgressBars bool
+	Sink io.Writer
 }
 
 // parseLevelAndFormat resolves the charm/log level and formatter a caller
@@ -201,7 +200,6 @@ func ConfigureLoggers(cfg LoggerConfig) error {
 		sinkLogger.Store(nil)
 	}
 
-	logutil.SetProgressBarsEnabled(cfg.ProgressBars)
 	logutil.InstallHandler(newStderrHandler())
 	return nil
 }

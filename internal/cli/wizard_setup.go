@@ -64,9 +64,6 @@ func sessionVerb(result *wizard.Result, hub *steps.WelcomeStep) steps.HubVerb {
 func runHubSession(cmd *cobra.Command, flowSteps []wizard.WizardStep, cfg *config.Config) (wizard.Result, error) {
 	restoreLogs := logutil.Redirect(subprocSink())
 	defer restoreLogs()
-	progressBars := logutil.ProgressBarsEnabled()
-	logutil.SetProgressBarsEnabled(false)
-	defer logutil.SetProgressBarsEnabled(progressBars)
 	return wizard.RunFlow(cmd.Context(), flowSteps, cfg, steps.Chrome())
 }
 
