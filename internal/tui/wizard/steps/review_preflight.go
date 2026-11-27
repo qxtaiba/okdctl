@@ -70,7 +70,7 @@ func reviewCapacityCheck(cfg *config.Config, snapshot *WizardCapacitySnapshot) r
 	if len(nodes) == 0 {
 		return reviewCheck{label: labelSelectedCapacity, status: statusNotChecked}
 	}
-	inv, err := model.Build(cfg, "")
+	inv, err := model.Build(cfg, previewInfraID)
 	if err != nil {
 		return reviewCheck{label: labelSelectedCapacity, status: statusNotChecked, detail: err.Error()}
 	}
