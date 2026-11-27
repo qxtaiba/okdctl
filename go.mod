@@ -21,7 +21,7 @@ require (
 	github.com/charmbracelet/x/ansi v0.12.0
 	github.com/spf13/pflag v1.1.0
 	go.yaml.in/yaml/v2 v2.4.5
-	golang.org/x/sync v0.23.0
+	golang.org/x/sync v0.25.0
 )
 
 require (
