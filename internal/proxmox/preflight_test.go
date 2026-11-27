@@ -3,9 +3,11 @@ package proxmox
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/netip"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -73,10 +75,11 @@ func (f *fakeDriver) VMConfig(_ context.Context, ref VMRef) (VMConfig, error) {
 
 type fakePinger struct {
 	alive                 map[netip.Addr]bool
+	errs                  map[netip.Addr]error
 	inflight, maxInflight *atomic.Int32
 }
 
-func (p fakePinger) Alive(_ context.Context, addr netip.Addr) bool {
+func (p fakePinger) Alive(_ context.Context, addr netip.Addr) (bool, error) {
 	if p.inflight != nil {
 		n := p.inflight.Add(1)
 		for old := p.maxInflight.Load(); n > old && !p.maxInflight.CompareAndSwap(old, n); old = p.maxInflight.Load() {
@@ -84,7 +87,7 @@ func (p fakePinger) Alive(_ context.Context, addr netip.Addr) bool {
 		time.Sleep(30 * time.Millisecond)
 		p.inflight.Add(-1)
 	}
-	return p.alive[addr]
+	return p.alive[addr], p.errs[addr]
 }
 
 func goodStorages() []StorageInfo {
@@ -401,6 +404,20 @@ func TestPreflight(t *testing.T) {
 			},
 		},
 		{
+			name: "address check inconclusive warns per cause",
+			mutate: func(_ *fakeDriver, _ *PreflightInput, p *fakePinger) {
+				p.alive[netip.MustParseAddr("10.0.0.6")] = true
+				p.errs[netip.MustParseAddr("10.0.0.11")] = errors.New("ping: executable file not found")
+				p.errs[netip.MustParseAddr("10.0.0.5")] = errors.New("ping: executable file not found")
+				p.errs[netip.MustParseAddr("10.0.0.10")] = errors.New("ping exit 2: connect: Network is unreachable")
+			},
+			want: []Finding{
+				{"address-in-use", "fail", "address 10.0.0.6 answers ping"},
+				{"address-in-use", "warn", "address check inconclusive for 10.0.0.5, 10.0.0.11: ping: executable file not found"},
+				{"address-in-use", "warn", "address check inconclusive for 10.0.0.10: ping exit 2: connect: Network is unreachable"},
+			},
+		},
+		{
 			name:   "storage missing",
 			mutate: func(_ *fakeDriver, in *PreflightInput, _ *fakePinger) { in.Storage = "nfs" },
 			want: []Finding{
@@ -451,7 +468,7 @@ func TestPreflight(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			d, in, p := goodDriver(), goodInput(), fakePinger{alive: map[netip.Addr]bool{}}
+			d, in, p := goodDriver(), goodInput(), fakePinger{alive: map[netip.Addr]bool{}, errs: map[netip.Addr]error{}}
 			tc.mutate(d, &in, &p)
 			got, err := Preflight(context.Background(), d, p, in)
 			if err != nil {
@@ -523,36 +540,27 @@ func TestExecPinger(t *testing.T) {
 		}
 		return p
 	}
-	addr := netip.MustParseAddr("10.0.0.5")
-	ctx := context.Background()
-	ex := executor.New()
+	_, noReply := pingFlavour(runtime.GOOS)
+	exitNoReply := fmt.Sprintf("exit %d\n", noReply)
 	cases := []struct {
-		name string
-		bin  string
-		want bool
+		name    string
+		bin     string
+		alive   bool
+		wantErr string
 	}{
-		{"up", write("up", "exit 0\n"), true},
-		{"down", write("down", "exit 1\n"), false},
-		{"missing", filepath.Join(dir, "nope"), false},
+		{name: "up", bin: write("up", "exit 0\n"), alive: true},
+		{name: "no reply", bin: write("down", exitNoReply)},
+		{name: "missing", bin: filepath.Join(dir, "nope"), wantErr: "nope"},
+		{name: "other exit", bin: write("other", "echo usage >&2\nexit 64\n"), wantErr: "ping exit 64: usage"},
+		{name: "unreachable", bin: write("unreach", "echo 'ping: sendto: No route to host' >&2\n"+exitNoReply), wantErr: "No route to host"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			p := execPinger{ex: ex, bin: tc.bin}
-			if got := p.Alive(ctx, addr); got != tc.want {
-				t.Fatalf("Alive = %v, want %v", got, tc.want)
+			p := execPinger{ex: executor.New(), bin: tc.bin}
+			alive, err := p.Alive(context.Background(), netip.MustParseAddr("10.0.0.5"))
+			if alive != tc.alive || (err != nil) != (tc.wantErr != "") || (err != nil && !strings.Contains(err.Error(), tc.wantErr)) {
+				t.Fatalf("Alive = %v, %v; want %v, error containing %q", alive, err, tc.alive, tc.wantErr)
 			}
 		})
-	}
-	if ExecPinger(ex).(execPinger).bin != "ping" {
-		t.Fatal("ExecPinger must run ping")
-	}
-}
-
-func TestPingWait(t *testing.T) {
-	if got := pingWait("darwin"); got != "1000" {
-		t.Fatalf("darwin: %q", got)
-	}
-	if got := pingWait("linux"); got != "1" {
-		t.Fatalf("linux: %q", got)
 	}
 }

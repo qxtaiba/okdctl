@@ -41,9 +41,10 @@ type Finding struct {
 	Message  string
 }
 
-// Pinger reports whether an address answers on the network.
+// Pinger reports whether an address answers on the network; an error means
+// the probe was inconclusive (no ping binary, no route), not unanswered.
 type Pinger interface {
-	Alive(ctx context.Context, addr netip.Addr) bool
+	Alive(ctx context.Context, addr netip.Addr) (bool, error)
 }
 
 const (
@@ -360,16 +361,29 @@ func (st *preflightState) checkAddresses(ctx context.Context, ping Pinger, out *
 	addrs := slices.Clone(st.in.Addresses)
 	slices.SortFunc(addrs, netip.Addr.Compare)
 	alive := make([]bool, len(addrs))
+	errs := make([]error, len(addrs))
 	var g errgroup.Group
 	g.SetLimit(pingConcurrency)
 	for i, a := range addrs {
-		g.Go(func() error { alive[i] = ping.Alive(ctx, a); return nil })
+		g.Go(func() error { alive[i], errs[i] = ping.Alive(ctx, a); return nil })
 	}
-	_ = g.Wait() // Alive reports no error, so nothing to collect
+	_ = g.Wait() // Alive's error is a finding, not a failure, so nothing to collect
+	inconclusive := map[string][]string{}
+	var causes []string
 	for i, a := range addrs {
-		if alive[i] {
+		switch {
+		case errs[i] != nil:
+			cause := errs[i].Error()
+			if _, seen := inconclusive[cause]; !seen {
+				causes = append(causes, cause)
+			}
+			inconclusive[cause] = append(inconclusive[cause], a.String())
+		case alive[i]:
 			out.add("address-in-use", "address %s answers ping", a)
 		}
+	}
+	for _, cause := range causes {
+		out.warn("address-in-use", "address check inconclusive for %s: %s", strings.Join(inconclusive[cause], ", "), cause)
 	}
 }
 
@@ -423,19 +437,37 @@ type execPinger struct {
 }
 
 // ExecPinger returns a Pinger that runs `ping -c 1 -W <wait> <addr>` through
-// ex; a non-zero exit or a missing ping binary both read as not alive.
+// ex; only the platform's no-reply exit reads as not alive, anything else
+// (missing binary, no route, another exit) is inconclusive.
 func ExecPinger(ex *executor.Executor) Pinger {
 	return execPinger{ex: ex, bin: "ping"}
 }
 
-func (p execPinger) Alive(ctx context.Context, addr netip.Addr) bool {
-	res, err := p.ex.Run(ctx, p.bin, "-c", "1", "-W", pingWait(runtime.GOOS), addr.String())
-	return err == nil && res.ExitCode == 0
+func (p execPinger) Alive(ctx context.Context, addr netip.Addr) (bool, error) {
+	wait, noReply := pingFlavour(runtime.GOOS)
+	res, err := p.ex.Run(ctx, p.bin, "-c", "1", "-W", wait, addr.String())
+	stderr := strings.TrimSpace(res.Stderr)
+	switch {
+	case err != nil:
+		return false, fmt.Errorf("ping: %w", err)
+	case res.ExitCode == 0:
+		return true, nil
+	case res.ExitCode == noReply && !routeError(stderr):
+		return false, nil
+	}
+	return false, fmt.Errorf("ping exit %d: %s", res.ExitCode, stderr)
 }
 
-func pingWait(goos string) string {
+// routeError spots the sendto failures ping reports under the no-reply exit.
+func routeError(stderr string) bool {
+	return strings.Contains(stderr, "No route to host") || strings.Contains(stderr, "unreachable")
+}
+
+// pingFlavour returns the -W value and the no-reply exit code: macOS ping
+// takes milliseconds and exits 2, iputils takes seconds and exits 1.
+func pingFlavour(goos string) (wait string, noReply int) {
 	if goos == "darwin" {
-		return "1000" // macOS ping takes -W in milliseconds, iputils in seconds
+		return "1000", 2
 	}
-	return "1"
+	return "1", 1
 }
