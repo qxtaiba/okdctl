@@ -446,9 +446,6 @@ func (m *Model) handleWizardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) 
 	}
 
 	if key.Matches(msg, m.keyMap.Back) {
-		if owner, ok := m.CurrentStep().(interface{ OwnsKey(tea.KeyPressMsg) bool }); ok && owner.OwnsKey(msg) {
-			return m, nil, false
-		}
 		if m.currentStep > 0 {
 			model, cmd := m.goToPreviousStep()
 			return model, cmd, true

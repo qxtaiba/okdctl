@@ -356,10 +356,6 @@ func (f *MultiSectionForm) Update(msg tea.Msg) (cmd tea.Cmd, enterPressed bool) 
 	}
 
 	if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
-		if owner, ok := group.Field(group.FocusIndex()).(interface{ OwnsKey(tea.KeyPressMsg) bool }); ok && owner.OwnsKey(keyMsg) {
-			_, cmd := group.Update(msg)
-			return cmd, false
-		}
 		switch {
 		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("enter"))):
 			if ec, isConsumer := f.FocusedField().(components.EnterConsumer); isConsumer && ec.ConsumesEnter() {
@@ -1048,16 +1044,6 @@ func (s *DataDrivenStep) ShortHelp() []KeyBinding {
 		}
 	}
 	return bindings
-}
-
-// OwnsKey delegates cell-edit keys before flow navigation handles them.
-func (s *DataDrivenStep) OwnsKey(msg tea.KeyPressMsg) bool {
-	field := s.form.FocusedField()
-	if field == nil {
-		return false
-	}
-	owner, ok := field.(interface{ OwnsKey(tea.KeyPressMsg) bool })
-	return ok && owner.OwnsKey(msg)
 }
 
 // ConsumesTextInput reports whether the focused field is mid-text-entry,
