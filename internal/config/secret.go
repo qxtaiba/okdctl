@@ -1,15 +1,12 @@
 package config
 
-// SecretBytes wraps a credential as []byte, not string, so Zeroize can
-// overwrite it before GC. The wizard fills it on capture; deploy/destroy
-// wipes it via defer.
+// SecretBytes holds a credential as []byte so Zeroize can overwrite it
+// before GC.
 type SecretBytes struct {
 	b []byte
 }
 
-// Set copies v into an owned []byte, zeroizing any prior backing array first
-// so a re-Set can't leak the old secret. Only the wizard's password-field
-// callback calls this in production; internal/credentials assigns []byte directly.
+// Set replaces the secret with v, zeroizing the prior backing array first.
 func (s *SecretBytes) Set(v string) {
 	clear(s.b)
 	s.b = []byte(v)
@@ -21,8 +18,7 @@ func (s *SecretBytes) Zeroize() {
 	s.b = nil
 }
 
-// Bytes returns the underlying slice. Callers must not retain the result
-// past a Zeroize call on the same SecretBytes value.
+// Bytes returns the backing slice; it is wiped by the next Set or Zeroize.
 func (s SecretBytes) Bytes() []byte {
 	return s.b
 }
@@ -37,7 +33,7 @@ func (s SecretBytes) String() string {
 	return "[redacted]"
 }
 
-// Redacted satisfies the interface logutil.RedactHandler detects for opaque-typed values.
+// Redacted is what logutil.RedactHandler logs in place of the value.
 func (s SecretBytes) Redacted() any {
 	return "[redacted]"
 }
