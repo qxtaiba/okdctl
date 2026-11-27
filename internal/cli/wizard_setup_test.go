@@ -126,11 +126,11 @@ func TestWizardAssemblyRejectsUnknownAndDuplicateSteps(t *testing.T) {
 }
 
 func TestSessionVerb(t *testing.T) {
-	deployHighlighted := func() *steps.WelcomeStep {
+	editHighlighted := func() *steps.WelcomeStep {
 		hub := steps.NewWelcomeStep()
 		hub.SetExistingConfig(config.DefaultConfig())
-		if hub.SelectedVerb() != steps.HubVerbDeploy {
-			t.Fatalf("hub highlights %v; want the deploy row", hub.SelectedVerb())
+		if hub.SelectedVerb() != steps.HubVerbEditConfig {
+			t.Fatalf("hub highlights %v; want the edit row", hub.SelectedVerb())
 		}
 		return hub
 	}
@@ -141,8 +141,8 @@ func TestSessionVerb(t *testing.T) {
 		exit wizard.StepID
 		want steps.HubVerb
 	}{
-		{"hub ended the session on its highlighted verb", deployHighlighted(), wizard.StepIDWelcome, steps.HubVerbDeploy},
-		{"review ended the session under a stale deploy highlight", deployHighlighted(), wizard.StepIDReview, steps.HubVerbGetStarted},
+		{"hub ended the session on its highlighted verb", editHighlighted(), wizard.StepIDWelcome, steps.HubVerbEditConfig},
+		{"review ended the session under a stale edit highlight", editHighlighted(), wizard.StepIDReview, steps.HubVerbGetStarted},
 		{"no hub in the flow", nil, wizard.StepIDReview, steps.HubVerbGetStarted},
 	}
 	for _, c := range cases {

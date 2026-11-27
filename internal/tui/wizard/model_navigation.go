@@ -209,20 +209,20 @@ func (m *Model) goToNextStep() (tea.Model, tea.Cmd) {
 			}
 		}
 
-		if ee, ok := m.steps[m.currentStep].(earlyExiter); ok {
-			if ee.ShouldExitEarly() {
-				action := ActionExit
-				if ag, ok := m.steps[m.currentStep].(actionGetter); ok {
-					action = ag.GetSelectedAction()
-				}
-				m.result = Result{
-					Outcome:  OutcomeCompleted,
-					Config:   m.config,
-					Action:   action,
-					ExitStep: m.steps[m.currentStep].ID(),
-				}
-				return m, tea.Quit
+		if ee, ok := m.steps[m.currentStep].(earlyExiter); ok && ee.ShouldExitEarly() {
+			// Leaving through the hub would otherwise drop an edit session
+			// silently; the discard question is the same one ctrl+c asks.
+			if !m.saved.matches(m.config, m.steps) {
+				m.discardPending = true
+				return m, nil
 			}
+			m.result = Result{
+				Outcome:  OutcomeCompleted,
+				Config:   m.config,
+				Action:   ActionExit,
+				ExitStep: m.steps[m.currentStep].ID(),
+			}
+			return m, tea.Quit
 		}
 
 		if f, ok := m.steps[m.currentStep].(FocusableStep); ok {
@@ -243,19 +243,14 @@ func (m *Model) goToNextStep() (tea.Model, tea.Cmd) {
 	}
 
 	if nextStep >= len(m.steps) {
-		action := ActionExit
 		var exitStep StepID
 		if len(m.steps) > 0 {
-			currentStep := m.steps[m.currentStep]
-			exitStep = currentStep.ID()
-			if ag, ok := currentStep.(actionGetter); ok {
-				action = ag.GetSelectedAction()
-			}
+			exitStep = m.steps[m.currentStep].ID()
 		}
 		m.result = Result{
 			Outcome:  OutcomeCompleted,
 			Config:   m.config,
-			Action:   action,
+			Action:   ActionExit,
 			ExitStep: exitStep,
 		}
 		return m, tea.Quit

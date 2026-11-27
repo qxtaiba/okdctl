@@ -46,10 +46,6 @@ type earlyExiter interface {
 	ShouldExitEarly() bool
 }
 
-type actionGetter interface {
-	GetSelectedAction() Action
-}
-
 type centerable interface {
 	IsCentered() bool
 }
@@ -157,10 +153,11 @@ const (
 	OutcomeCancelled
 )
 
-// Action names the user's choice at the wizard's terminal step.
+// Action names how a completed flow wants to continue; every screen ends on
+// ActionExit until an install command exists to hand off to.
 type Action string
 
-// Actions the user can pick at the wizard's terminal step.
+// Terminal actions.
 const (
 	ActionDeploy Action = "deploy"
 	ActionExit   Action = "exit"

@@ -18,8 +18,9 @@ import (
 // picked on the welcome screen.
 type HubVerb int
 
-// The hub's verbs: the first five are the menu shown over an existing
-// configuration, the last two the blank-slate menu.
+// The hub's verbs: edit config and quit over an existing configuration, get
+// started and quit on a blank slate. Deploy, manage nodes, cluster status
+// and destroy return with the commands that back them.
 const (
 	HubVerbDeploy HubVerb = iota
 	HubVerbEditConfig
@@ -30,29 +31,19 @@ const (
 	HubVerbQuit
 )
 
-// hubEntry pairs a menu label with the verb it selects; accel is the verb's
-// single-key accelerator in review's [N] grammar, empty for verbs the
-// friction ladder keeps behind pointer + enter.
+// hubEntry pairs a menu label with its verb; accel is the verb's single-key
+// accelerator in review's [N] grammar, empty for rows reached by pointer.
 type hubEntry struct {
 	verb  HubVerb
 	label string
 	accel string
 }
 
-// hubVerbs is the menu shown when an okdctl.yaml exists: five verbs, in the
-// order the operator is most likely to want them. Destroy deliberately has
-// no accelerator — and no digit either, since digits address only entries
-// that carry an accelerator.
 var hubVerbs = []hubEntry{
-	{HubVerbDeploy, labelDeploy, "d"},
 	{HubVerbEditConfig, "edit config", "e"},
-	{HubVerbManageNodes, "manage nodes", "n"},
-	{HubVerbClusterStatus, "cluster status", "s"},
-	{HubVerbDestroy, "destroy", ""},
+	{HubVerbQuit, "quit", ""},
 }
 
-// hubFreshVerbs is the blank-slate menu: there is nothing to deploy, manage,
-// inspect or destroy yet.
 var hubFreshVerbs = []hubEntry{
 	{HubVerbGetStarted, "get started", ""},
 	{HubVerbQuit, "quit", ""},
@@ -83,9 +74,8 @@ func NewWelcomeStep() *WelcomeStep {
 }
 
 // setEntries rebuilds the menu over entries, clamped so up/down never wraps
-// past either end of a launcher's short list. On a menu with accelerators,
-// each row leads with its "[d]" hint and accelerator-less rows indent to
-// keep the verbs on one column — the missing bracket is the signal.
+// past either end; on a menu with accelerators, rows without one indent to
+// keep the verbs on one column.
 func (s *WelcomeStep) setEntries(entries []hubEntry) {
 	s.entries = entries
 	hasAccels := false
@@ -111,7 +101,7 @@ func (s *WelcomeStep) setEntries(entries []hubEntry) {
 }
 
 // SetConfigExists tells the hub whether okdctl.yaml exists, switching between
-// the five-verb and blank-slate menus.
+// the edit and blank-slate menus.
 func (s *WelcomeStep) SetConfigExists(exists bool) {
 	s.configExists = exists
 	entries := hubFreshVerbs
@@ -125,7 +115,7 @@ func (s *WelcomeStep) SetConfigExists(exists bool) {
 	s.setEntries(entries)
 }
 
-// SetExistingConfig switches the hub to its five-verb menu and derives the dim
+// SetExistingConfig switches the hub to its edit menu and derives the dim
 // save-slot line from cfg; until the cluster record exists, a saved file is a
 // configuration and nothing more.
 func (s *WelcomeStep) SetExistingConfig(cfg *config.Config) {
@@ -192,8 +182,7 @@ func (s *WelcomeStep) confirm() tea.Cmd {
 }
 
 // acceleratedEntry maps a pressed key to its menu entry: a verb's letter
-// accelerator, or the 1-based digit of an accelerator-carrying row — destroy
-// answers to neither, per the friction ladder.
+// accelerator, or the 1-based digit of an accelerator-carrying row.
 func (s *WelcomeStep) acceleratedEntry(text string) (int, bool) {
 	if text == "" {
 		return 0, false
@@ -271,7 +260,7 @@ func renderGetStartedPanel() string {
 		{"connect", "provider, distribution, credentials"},
 		{labelCluster, "name, nodes, networking, resources"},
 		{"extras", "add-ons, files, advanced settings"},
-		{"review", "confirm changes, deploy"},
+		{"review", "confirm changes, save"},
 	}
 	labelStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true)
 	detailStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim())
@@ -280,7 +269,7 @@ func renderGetStartedPanel() string {
 	for _, phase := range phases {
 		rows = append(rows, labelStyle.Render(phase.label), detailStyle.Render("  "+phase.detail))
 	}
-	rows = append(rows, "", tui.DimStyle.Render("writes okdctl.yaml, ready to deploy"))
+	rows = append(rows, "", tui.DimStyle.Render("writes okdctl.yaml"))
 	return tui.Card("GET STARTED", strings.Join(rows, "\n"), hubGetStartedPanelWidth, tui.ColorAccent())
 }
 
@@ -299,14 +288,6 @@ func (s *WelcomeStep) ShortHelp() []wizard.KeyBinding {
 		{Key: wizard.HelpEnter, Help: wizard.HelpStart},
 		{Key: wizard.HelpCtrlC, Help: wizard.HelpQuit},
 	}
-}
-
-// GetSelectedAction maps the highlighted verb to the wizard's terminal action.
-func (s *WelcomeStep) GetSelectedAction() wizard.Action {
-	if s.SelectedVerb() == HubVerbDeploy {
-		return wizard.ActionDeploy
-	}
-	return wizard.ActionExit
 }
 
 // ShouldExitEarly reports whether the highlighted verb is handled outside the

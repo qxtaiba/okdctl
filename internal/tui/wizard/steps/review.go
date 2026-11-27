@@ -31,7 +31,7 @@ var reviewJumpOrder = []wizard.StepID{
 	wizard.StepIDAdvanced,
 }
 
-// ReviewStep renders the configuration summary and the deploy-or-save selector.
+// ReviewStep renders the configuration summary and the save action.
 type ReviewStep struct {
 	wizard.BaseStep
 	cfg         *config.Config
@@ -48,11 +48,11 @@ func NewReviewStep() *ReviewStep {
 	return &ReviewStep{
 		BaseStep: wizard.NewBaseStepWithDisplayTitle(
 			wizard.StepIDReview,
-			"review & deploy",
+			"review & save",
 			"review your configuration",
 			"review configuration and choose action",
 		),
-		actions: components.NewCompactSelector([]string{"deploy now", "save and exit"}),
+		actions: components.NewCompactSelector([]string{"save and exit"}),
 	}
 }
 
@@ -83,7 +83,7 @@ func (s *ReviewStep) SetCapacity(capacity *WizardCapacitySnapshot) {
 	s.preflight = reviewPreflight(s.cfg, capacity)
 }
 
-// Update handles jump digits, action-selector navigation and enter to confirm.
+// Update handles jump digits and enter to confirm.
 func (s *ReviewStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	keyMsg, ok := msg.(tea.KeyPressMsg)
 	if !ok {
@@ -101,9 +101,7 @@ func (s *ReviewStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		}
 		return s, func() tea.Msg { return wizard.StepCompleteMsg{StepID: wizard.StepIDReview} }
 	}
-	var cmd tea.Cmd
-	s.actions, cmd = s.actions.Update(components.ArrowsAsVertical(keyMsg))
-	return s, cmd
+	return s, nil
 }
 
 // firstFailure names the first failed preflight check, which blocks both
@@ -468,7 +466,6 @@ func (s *ReviewStep) Apply(_ *config.Config) error {
 // ShortHelp returns the review step's help bar.
 func (s *ReviewStep) ShortHelp() []wizard.KeyBinding {
 	bindings := []wizard.KeyBinding{
-		{Key: wizard.HelpLeftRight, Help: wizard.HelpChoose},
 		{Key: wizard.HelpEnter, Help: wizard.HelpConfirm},
 		{Key: wizard.HelpEsc, Help: wizard.HelpBack},
 	}
@@ -485,14 +482,6 @@ func (s *ReviewStep) SetFocused(focused bool) {
 	if focused {
 		s.preflight = reviewPreflight(s.cfg, s.capacity)
 	}
-}
-
-// GetSelectedAction returns the action the user chose on the review screen.
-func (s *ReviewStep) GetSelectedAction() wizard.Action {
-	if s.actions.SelectedIndex() == 0 {
-		return wizard.ActionDeploy
-	}
-	return wizard.ActionExit
 }
 
 // FocusBounds keeps the actions visible beneath the configuration summary.

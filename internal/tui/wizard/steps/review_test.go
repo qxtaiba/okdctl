@@ -213,15 +213,11 @@ func TestReviewStep_ActionsLiveInTheFooterOnly(t *testing.T) {
 		t.Errorf("PinnedFooter() before SetConfig = %q, want empty", got)
 	}
 	s.SetConfig(reviewTestConfig())
-	footer := s.PinnedFooter(80)
-	if !strings.Contains(footer, "deploy now") || !strings.Contains(footer, "save and exit") {
-		t.Errorf("PinnedFooter() = %q, want both actions", footer)
+	if footer := s.PinnedFooter(80); !strings.Contains(footer, "save and exit") || strings.Contains(footer, "deploy") {
+		t.Errorf("PinnedFooter() = %q, want the save action alone", footer)
 	}
-	if out := s.View(100, 100); strings.Contains(out, "deploy now") || strings.Contains(out, "save and exit") {
-		t.Error("View() body still renders the action radio, want it pinned to the footer only")
-	}
-	if got := s.GetSelectedAction(); got != wizard.ActionDeploy {
-		t.Errorf("GetSelectedAction() = %q, want deploy by default", got)
+	if out := s.View(100, 100); strings.Contains(out, "save and exit") {
+		t.Error("View() body still renders the action, want it pinned to the footer only")
 	}
 }
 
@@ -235,8 +231,8 @@ func TestReviewActionsVisibleAfterSummaryWraps(t *testing.T) {
 	for _, size := range [][2]int{{120, 40}, {80, 24}} {
 		m.Update(tea.WindowSizeMsg{Width: size[0], Height: size[1]})
 		out := m.View().Content
-		if !strings.Contains(out, "deploy now") || !strings.Contains(out, "save and exit") {
-			t.Fatalf("review actions hidden at %v: %s", size, out)
+		if !strings.Contains(out, "save and exit") {
+			t.Fatalf("review action hidden at %v: %s", size, out)
 		}
 	}
 }

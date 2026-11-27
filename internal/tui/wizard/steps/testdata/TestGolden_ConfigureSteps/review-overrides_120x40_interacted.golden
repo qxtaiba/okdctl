@@ -35,6 +35,6 @@
   │  okdctl.yaml                                                                                                     │  
   │                                                                                                                  │  
   │─────────────────────────────── ↑ ↓  scroll up for more ──────────────────────────────── ▸ okd 4.22.0-okd-scos.10 │  
-  │  ● deploy now   ○ save and exit                  ←/→ choose • enter confirm • esc back … • ctrl+c quit • ? help  │  
+  │  ● save and exit       enter confirm • esc back • 1-9 jump to section • pgup/pgdn scroll • ctrl+c quit • ? help  │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                                         
