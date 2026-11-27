@@ -8,13 +8,13 @@ import (
 	"time"
 )
 
-const (
-	TimeoutShort = 10 * time.Second // API calls, connectivity checks
-	// TimeoutResponseHeader bounds dial, TLS handshake and response headers
-	// on NewOptionalInsecure's transport, matching internal/download; the
-	// body answers to ctx alone so uploads and long polls stay unbounded.
-	TimeoutResponseHeader = 30 * time.Second
-)
+// TimeoutShort bounds whole API calls and connectivity checks.
+const TimeoutShort = 10 * time.Second
+
+// TimeoutResponseHeader bounds dial, TLS handshake and response headers
+// on NewOptionalInsecure's transport, matching internal/download; the
+// body answers to ctx alone so uploads and long polls stay unbounded.
+const TimeoutResponseHeader = 30 * time.Second
 
 // New returns an *http.Client configured with the given request timeout.
 func New(timeout time.Duration) *http.Client {
