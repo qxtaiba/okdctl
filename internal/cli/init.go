@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/credentials"
@@ -22,6 +23,7 @@ import (
 
 var (
 	initOutputFile string
+	initOutputFlag *pflag.Flag
 	initMinimal    bool
 )
 
@@ -43,6 +45,7 @@ the cluster (okdctl up) returns in a later release.`,
 
 func init() {
 	initCmd.Flags().StringVar(&initOutputFile, flagOutputFile, defaultConfigFile, "config file to write (reused if present; overrides --config)")
+	initOutputFlag = initCmd.Flags().Lookup(flagOutputFile)
 	initCmd.Flags().BoolVar(&initMinimal, "minimal", false, "write the minimal three-node configuration without the wizard")
 }
 
@@ -52,7 +55,7 @@ const upHandoff = "configuration saved; installing it returns in a later release
 func runInit(cmd *cobra.Command, _ []string) error {
 	out := cmd.OutOrStdout()
 	initOutputFile = initTarget()
-	root, err := workspaceRoot(initOutputFile)
+	root, err := initRoot()
 	if err != nil {
 		return err
 	}
@@ -99,10 +102,23 @@ func runInit(cmd *cobra.Command, _ []string) error {
 
 // initTarget is the file init writes: --output-file when given, else --config.
 func initTarget() string {
-	if initOutputFile == defaultConfigFile && cfgFile != defaultConfigFile {
+	if !initOutputFlag.Changed && cfgFile != defaultConfigFile {
 		return cfgFile
 	}
 	return initOutputFile
+}
+
+// initRoot resolves the workspace init writes into and creates it, so the
+// log sink and the lock open before the config lands in a new directory.
+func initRoot() (string, error) {
+	root, err := workspaceRoot(initTarget())
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		return "", &errtypes.ConfigError{Msg: "create workspace " + root, Err: err}
+	}
+	return root, nil
 }
 
 // runHubVerb prints the handoff line for a hub verb that never walks the

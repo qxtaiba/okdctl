@@ -31,6 +31,7 @@ func resetInitState(t *testing.T) {
 		initCmd.SetOut(nil)
 	})
 	initOutputFile, initMinimal = "okdctl.yaml", false
+	initOutputFlag.Changed = false
 	initCmd.SetContext(context.Background())
 	initCmd.SetOut(io.Discard)
 	t.Chdir(t.TempDir())
@@ -106,6 +107,36 @@ func TestRunInit_MinimalLocksBesideOutputFile(t *testing.T) {
 	}
 	if _, err := os.Stat(".okdctl.lock"); !os.IsNotExist(err) {
 		t.Errorf("lock landed in cwd, stat err %v", err)
+	}
+}
+
+func TestInitTarget_ExplicitOutputFileWinsOverConfig(t *testing.T) {
+	resetInitState(t)
+	savedCfg := cfgFile
+	t.Cleanup(func() { cfgFile = savedCfg })
+	cfgFile = "other.yaml"
+
+	if got := initTarget(); got != "other.yaml" {
+		t.Fatalf("initTarget() with only --config = %q, want other.yaml", got)
+	}
+	if err := initCmd.Flags().Set(flagOutputFile, defaultConfigFile); err != nil {
+		t.Fatal(err)
+	}
+	if got := initTarget(); got != defaultConfigFile {
+		t.Fatalf("initTarget() with an explicit --output-file = %q, want %s", got, defaultConfigFile)
+	}
+}
+
+func TestRunInit_MinimalCreatesTheWorkspaceDirectory(t *testing.T) {
+	resetInitState(t)
+	initMinimal = true
+	initOutputFile = filepath.Join(t.TempDir(), "new", "okdctl.yaml")
+
+	if err := runInit(initCmd, nil); err != nil {
+		t.Fatalf("runInit --minimal into a missing directory: %v", err)
+	}
+	if _, err := os.Stat(initOutputFile); err != nil {
+		t.Fatalf("config not written: %v", err)
 	}
 }
 

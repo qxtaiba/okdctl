@@ -54,7 +54,7 @@ func openLogFile(path string) (*os.File, error) {
 }
 
 func openDefaultLogSink() (string, *os.File, error) {
-	root, err := workspaceRoot(initTarget())
+	root, err := initRoot()
 	if err != nil {
 		return "", nil, err
 	}
