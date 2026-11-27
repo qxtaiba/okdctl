@@ -89,8 +89,14 @@ func TestNodeLayout(t *testing.T) {
 			t.Errorf("DerivedNodeAddress(%s, %d) = %s, %v; want %s", tc.role, tc.index, got, err, tc.addr)
 		}
 	}
-	cfg.Networking.NodeIPStart = "nope"
-	if _, err := cfg.DerivedNodeAddress(RoleMaster, 0); err == nil {
-		t.Error("DerivedNodeAddress accepted an unparsable node_ip_start")
+	cfg.Networking.NodeIPStart = "192.168.1.255"
+	if got, err := cfg.DerivedNodeAddress(RoleMaster, 1); err != nil || got != netip.MustParseAddr("192.168.2.0") {
+		t.Errorf("DerivedNodeAddress across the octet boundary = %s, %v", got, err)
+	}
+	for name, start := range map[string]string{"unparsable": "nope", "ipv6": "2001:db8::1", "overflow": "255.255.255.250"} {
+		cfg.Networking.NodeIPStart = start
+		if _, err := cfg.DerivedNodeAddress(RoleWorker, 0); err == nil {
+			t.Errorf("DerivedNodeAddress accepted %s node_ip_start %q", name, start)
+		}
 	}
 }

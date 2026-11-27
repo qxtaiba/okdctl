@@ -1,13 +1,13 @@
 package config
 
 import (
+	"encoding/binary"
 	"fmt"
+	"math"
 	"net/netip"
 	"slices"
 	"strconv"
 	"strings"
-
-	"github.com/qxtaiba/okdctl/internal/netutil"
 )
 
 // Role is a node's cluster role, in openshift-install vocabulary.
@@ -58,11 +58,24 @@ func NodeIPOffset(role Role, index int) int {
 // DerivedNodeAddress returns the address node_ip_start gives node index of
 // role, before any nodes.<name>.ip override.
 func (c *Config) DerivedNodeAddress(role Role, index int) (netip.Addr, error) {
-	raw, err := netutil.CalculateVMIP(c.Networking.NodeIPStart, NodeIPOffset(role, index))
+	start, err := netip.ParseAddr(c.Networking.NodeIPStart)
 	if err != nil {
-		return netip.Addr{}, err
+		return netip.Addr{}, fmt.Errorf("node_ip_start %q: %w", c.Networking.NodeIPStart, err)
 	}
-	return netip.ParseAddr(raw)
+	if !start.Is4() {
+		return netip.Addr{}, fmt.Errorf("node_ip_start %q: only IPv4 is supported", c.Networking.NodeIPStart)
+	}
+	offset := NodeIPOffset(role, index)
+	if offset < 0 {
+		return netip.Addr{}, fmt.Errorf("node index %d is negative", index)
+	}
+	raw := start.As4()
+	sum := uint64(binary.BigEndian.Uint32(raw[:])) + uint64(offset)
+	if sum > math.MaxUint32 {
+		return netip.Addr{}, fmt.Errorf("node_ip_start %s + %d leaves the IPv4 space", start, offset)
+	}
+	binary.BigEndian.PutUint32(raw[:], uint32(sum))
+	return netip.AddrFrom4(raw), nil
 }
 
 // ParseNodeKey accepts exactly the names NodeName produces: masters 0..2
