@@ -14,7 +14,7 @@
     "github>qxtaiba/okdctl//.github/renovate/customManagers.json5"
   ],
   "dependencyDashboardTitle": "Renovate Dashboard 🤖",
-  "commitMessageLowerCase": "always",
+  "commitMessageLowerCase": "auto",
   "timezone": "UTC",
   "suppressNotifications": [
     "prEditedNotification",
