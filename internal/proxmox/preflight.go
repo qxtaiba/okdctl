@@ -282,7 +282,8 @@ func (st *preflightState) checkMemory(out *findings) {
 			continue
 		}
 		running, owned := 0, 0
-		for _, vm := range st.vms {
+		for i := range st.vms {
+			vm := &st.vms[i]
 			switch {
 			case vm.Node != name || vm.Status != "running":
 			case st.owned(vm.Tags):
@@ -328,7 +329,8 @@ func (st *preflightState) checkISOSpace(out *findings) {
 }
 
 func (st *preflightState) checkVMIDCollision(out *findings) {
-	for _, vm := range st.vms {
+	for i := range st.vms {
+		vm := &st.vms[i]
 		if !st.owned(vm.Tags) && slices.Contains(st.in.VMIDs, vm.VMID) {
 			out.add("vmid-collision", "vmid %d already used by %q on node %s", vm.VMID, vm.Name, vm.Node)
 		}
@@ -343,7 +345,8 @@ func (st *preflightState) checkMACCollision(ctx context.Context, d Driver, out *
 	for _, mac := range st.in.MACs {
 		planned[strings.ToLower(mac)] = mac
 	}
-	for _, vm := range st.vms {
+	for i := range st.vms {
+		vm := &st.vms[i]
 		if ctx.Err() != nil {
 			return
 		}
@@ -399,7 +402,8 @@ func (st *preflightState) checkAddresses(ctx context.Context, ping Pinger, out *
 // a node address while its VM runs, the VIPs while any of them does.
 func (st *preflightState) unownedAddresses() []netip.Addr {
 	running := map[int]bool{}
-	for _, vm := range st.vms {
+	for i := range st.vms {
+		vm := &st.vms[i]
 		if vm.Status == "running" && st.owned(vm.Tags) {
 			running[vm.VMID] = true
 		}
