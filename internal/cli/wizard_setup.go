@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/credentials"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/steps"
@@ -29,12 +30,12 @@ type hubOutcome struct {
 	Verb steps.HubVerb
 }
 
-func runWizardWithMode(cmd *cobra.Command, cfg *config.Config, configExists bool) (hubOutcome, error) {
+func runWizardWithMode(cmd *cobra.Command, cfg *config.Config, configExists bool, saved *credentials.ProxmoxCredentials) (hubOutcome, error) {
 	wizardCfg := wizard.DefaultConfig()
 	wizardCfg.InitialConfig = cfg
 	wizardCfg.ConfigExists = configExists
 
-	built, err := buildWizardStepsWithState(wizardCfg)
+	built, err := buildWizardStepsWithState(wizardCfg, saved)
 	if err != nil {
 		return hubOutcome{}, err
 	}
@@ -69,7 +70,9 @@ func runHubSession(cmd *cobra.Command, flowSteps []wizard.WizardStep, cfg *confi
 	return wizard.RunFlow(cmd.Context(), flowSteps, cfg, steps.Chrome())
 }
 
-func buildWizardStepsWithState(wizardCfg wizard.Config) (wizard.BuiltSteps, error) {
+// buildWizardStepsWithState builds the configure flow; saved seeds the
+// credential fields and is skipped like the config in demo mode.
+func buildWizardStepsWithState(wizardCfg wizard.Config, saved *credentials.ProxmoxCredentials) (wizard.BuiltSteps, error) {
 	builder := wizard.NewStepBuilder()
 	steps.RegisterAll(builder)
 	built, err := wizard.BuildSteps(wizardCfg, builder)
@@ -83,6 +86,7 @@ func buildWizardStepsWithState(wizardCfg wizard.Config) (wizard.BuiltSteps, erro
 	if wizardCfg.InitialConfig != nil {
 		if os.Getenv(wizardDemoEnv) == "" {
 			initializeStepsFromConfig(built, wizardCfg.InitialConfig, wizardCfg.ConfigExists)
+			steps.SeedCredentials(built, saved)
 		}
 		// Demo mode skips seeding the fields but still edits this config, so
 		// the resources totals read it in every mode, as the review does.

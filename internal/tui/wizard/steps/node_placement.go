@@ -44,6 +44,7 @@ type NodePlacementStep struct {
 	frame    uint64
 	capacity *WizardCapacitySnapshot
 	secrets  func() wizard.Secrets
+	saved    *credentials.ProxmoxCredentials
 
 	discovery    *proxmoxDiscovery
 	discoveryErr error
@@ -131,11 +132,15 @@ func (s *NodePlacementStep) startDiscovery() tea.Cmd {
 	}
 }
 
-// credentials prefers a token typed this session over the environment's
-// and takes the TLS toggle as typed, since the proxmox step seeds it from
-// the environment.
+// credentials copies the saved sidecar, then prefers a token typed this
+// session and takes the TLS toggle as typed, since the proxmox step seeds it
+// from the same sidecar.
 func (s *NodePlacementStep) credentials() *credentials.ProxmoxCredentials {
-	creds := credentials.FromEnv(s.cfg.Provider.Proxmox.Endpoint)
+	creds := &credentials.ProxmoxCredentials{Endpoint: s.cfg.Provider.Proxmox.Endpoint}
+	if s.saved != nil {
+		creds.APIToken = bytes.Clone(s.saved.APIToken)
+		creds.Insecure = s.saved.Insecure
+	}
 	if s.secrets == nil {
 		return creds
 	}

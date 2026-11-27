@@ -8,6 +8,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/credentials"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
@@ -196,16 +197,19 @@ func TestAdvancedStep_CIDROverlapFocusesAndMarksImplicatedFields(t *testing.T) {
 	}
 }
 
-func TestProxmoxStepSeedsTheTLSToggleFromTheLoadedEnv(t *testing.T) {
-	for _, tc := range []struct{ env, want string }{{"true", valYes}, {"", valNo}} {
-		t.Setenv("PROXMOX_VE_INSECURE", tc.env)
+func TestProxmoxStepTLSToggleFollowsTheSavedFlag(t *testing.T) {
+	for _, tc := range []struct {
+		insecure bool
+		want     string
+	}{{true, valYes}, {false, valNo}} {
 		step := NewProxmoxStep()
 		step.LoadFromConfig(config.DefaultConfig(), true)
+		SeedCredentials(wizard.BuiltSteps{Steps: []wizard.WizardStep{step}}, &credentials.ProxmoxCredentials{Insecure: tc.insecure})
 		if got := step.Value(fieldInsecure); got != tc.want {
-			t.Errorf("PROXMOX_VE_INSECURE=%q seeds the toggle as %q, want %q", tc.env, got, tc.want)
+			t.Errorf("saved insecure=%v seeds the toggle as %q, want %q", tc.insecure, got, tc.want)
 		}
-		if got := step.Secrets().ProxmoxInsecure; got != (tc.want == valYes) {
-			t.Errorf("PROXMOX_VE_INSECURE=%q: Secrets().ProxmoxInsecure = %v", tc.env, got)
+		if got := step.Secrets().ProxmoxInsecure; got != tc.insecure {
+			t.Errorf("saved insecure=%v: Secrets().ProxmoxInsecure = %v", tc.insecure, got)
 		}
 	}
 }

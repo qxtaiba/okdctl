@@ -64,7 +64,12 @@ func runInit(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	outcome, err := runWizardFn(cmd, cfg, configExists)
+	saved, err := credentials.Load(credentials.EnvFilePath(initOutputFile), cfg.Provider.Proxmox.Endpoint)
+	if err != nil {
+		return err
+	}
+	defer saved.Zeroize()
+	outcome, err := runWizardFn(cmd, cfg, configExists, saved)
 	if err != nil {
 		return (&errtypes.ConfigError{Msg: "wizard failed", Err: err}).
 			WithHint("try again, or use --minimal to write a configuration without the wizard")
@@ -79,7 +84,7 @@ func runInit(cmd *cobra.Command, _ []string) error {
 
 	result := &outcome.Result
 	defer result.Secrets.ProxmoxToken.Zeroize()
-	if err := withProjectLock(root, cmdNameInit, func() error { return persistWizardConfig(result, initOutputFile, out) }); err != nil {
+	if err := withProjectLock(root, cmdNameInit, func() error { return persistWizardConfig(result, initOutputFile, saved, out) }); err != nil {
 		return err
 	}
 	switch result.Action {
@@ -149,11 +154,11 @@ func withProjectLock(projectRoot, verb string, fn func() error) error {
 	return fn()
 }
 
-func persistWizardConfig(result *wizard.Result, path string, w io.Writer) error {
+func persistWizardConfig(result *wizard.Result, path string, seeded *credentials.ProxmoxCredentials, w io.Writer) error {
 	if err := saveConfig(result.Config, path, w); err != nil {
 		return err
 	}
-	return writeCredentialsEnv(&result.Secrets, path)
+	return writeCredentialsEnv(&result.Secrets, path, seeded)
 }
 
 func saveConfig(cfg *config.Config, path string, w io.Writer) error {
@@ -167,12 +172,10 @@ func saveConfig(cfg *config.Config, path string, w io.Writer) error {
 }
 
 // writeCredentialsEnv rewrites the sidecar when a token was typed or the TLS
-// toggle moved from the value the wizard was seeded with; an untouched
+// toggle moved from seeded, the value the wizard opened with; an untouched
 // session leaves the file alone. Only the sidecar's own token is carried
 // forward: a shell export that differs from it never reaches the file.
-func writeCredentialsEnv(secrets *wizard.Secrets, configPath string) error {
-	seeded := credentials.FromEnv("")
-	defer seeded.Zeroize()
+func writeCredentialsEnv(secrets *wizard.Secrets, configPath string, seeded *credentials.ProxmoxCredentials) error {
 	typed := !secrets.ProxmoxToken.IsEmpty()
 	if !typed && secrets.ProxmoxInsecure == seeded.Insecure {
 		return nil

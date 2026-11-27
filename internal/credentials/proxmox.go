@@ -59,9 +59,7 @@ func (c ProxmoxCredentials) GoString() string {
 	return c.String()
 }
 
-// FromEnv reads the token and TLS flag from PROXMOX_VE_API_TOKEN and
-// PROXMOX_VE_INSECURE, ignoring any sidecar.
-func FromEnv(endpoint string) *ProxmoxCredentials {
+func fromEnv(endpoint string) *ProxmoxCredentials {
 	creds := &ProxmoxCredentials{Endpoint: endpoint, Insecure: os.Getenv(envProxmoxInsecure) == "true"}
 	if token := os.Getenv(envProxmoxAPIToken); token != "" {
 		creds.APIToken = []byte(token)
@@ -78,7 +76,7 @@ func Load(envPath, endpoint string) (*ProxmoxCredentials, error) {
 		return nil, err
 	}
 	creds.Endpoint = endpoint
-	env := FromEnv(endpoint)
+	env := fromEnv(endpoint)
 	if os.Getenv(envProxmoxInsecure) != "" {
 		creds.Insecure = env.Insecure
 	}

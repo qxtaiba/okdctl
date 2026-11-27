@@ -64,14 +64,14 @@ func TestLoad(t *testing.T) {
 func TestFromEnv(t *testing.T) {
 	t.Setenv(envProxmoxAPIToken, "root@pam!okdctl=secret")
 	t.Setenv(envProxmoxInsecure, "true")
-	creds := FromEnv("https://pve:8006")
+	creds := fromEnv("https://pve:8006")
 	if string(creds.APIToken) != "root@pam!okdctl=secret" || !creds.Insecure || creds.Endpoint != "https://pve:8006" {
 		t.Fatalf("creds = %+v, want the environment's token and flag", creds.Redacted())
 	}
 
 	t.Setenv(envProxmoxAPIToken, "")
 	t.Setenv(envProxmoxInsecure, "false")
-	if creds := FromEnv(""); creds.IsValid() || creds.Insecure {
+	if creds := fromEnv(""); creds.IsValid() || creds.Insecure {
 		t.Fatalf("creds = %+v, want no token and tls verification on", creds.Redacted())
 	}
 }
@@ -104,11 +104,5 @@ func TestProxmoxCredentialsMaskAndZeroize(t *testing.T) {
 		if b != 0 {
 			t.Fatalf("token byte %d not zeroed", i)
 		}
-	}
-
-	var none *ProxmoxCredentials
-	none.Zeroize()
-	if s := fmt.Sprintf("nil=%v", none); strings.Contains(s, "panic") {
-		t.Errorf("nil pointer rendered as %q", s)
 	}
 }

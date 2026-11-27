@@ -11,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/credentials"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
@@ -289,13 +290,12 @@ func TestNodePlacementStep_ShouldShow(t *testing.T) {
 }
 
 func TestNodePlacementCredentialsPreferTheTypedToken(t *testing.T) {
-	t.Setenv("PROXMOX_VE_API_TOKEN", "env@pam!okdctl=env")
-	t.Setenv("PROXMOX_VE_INSECURE", "")
 	s := NewNodePlacementStep()
 	s.cfg = newPlacementConfig()
+	s.saved = &credentials.ProxmoxCredentials{APIToken: []byte("env@pam!okdctl=env")}
 
 	if creds := s.credentials(); string(creds.APIToken) != "env@pam!okdctl=env" || creds.Insecure {
-		t.Fatalf("without typed secrets creds = %+v, want the environment's token", creds.Redacted())
+		t.Fatalf("without typed secrets creds = %+v, want the saved token", creds.Redacted())
 	}
 
 	s.withSecrets(func() wizard.Secrets {
@@ -311,14 +311,36 @@ func TestNodePlacementCredentialsPreferTheTypedToken(t *testing.T) {
 }
 
 func TestNodePlacementCredentialsTypedToggleWins(t *testing.T) {
-	t.Setenv("PROXMOX_VE_API_TOKEN", "env@pam!okdctl=env")
-	t.Setenv("PROXMOX_VE_INSECURE", "true")
 	s := NewNodePlacementStep()
 	s.cfg = newPlacementConfig()
+	s.saved = &credentials.ProxmoxCredentials{APIToken: []byte("env@pam!okdctl=env"), Insecure: true}
 	s.withSecrets(func() wizard.Secrets { return wizard.Secrets{ProxmoxInsecure: false} })
 
 	if creds := s.credentials(); creds.Insecure || string(creds.APIToken) != "env@pam!okdctl=env" {
-		t.Fatalf("creds = %+v; want the toggle typed off to win over PROXMOX_VE_INSECURE", creds.Redacted())
+		t.Fatalf("creds = %+v; want the toggle typed off to win over the saved flag", creds.Redacted())
+	}
+}
+
+func TestSeedCredentialsReachesBothSteps(t *testing.T) {
+	t.Setenv("PROXMOX_VE_API_TOKEN", "")
+	proxmox := NewProxmoxStep()
+	placement := NewNodePlacementStep()
+	placement.cfg = newPlacementConfig()
+	placement.withSecrets(func() wizard.Secrets { return proxmox.Secrets() })
+	saved := &credentials.ProxmoxCredentials{APIToken: []byte("file@pam!okdctl=file"), Insecure: true}
+
+	SeedCredentials(wizard.BuiltSteps{Steps: []wizard.WizardStep{proxmox, placement}}, saved)
+
+	if got := proxmox.Value(fieldInsecure); got != valYes {
+		t.Fatalf("insecure field = %q, want %q from the sidecar", got, valYes)
+	}
+	creds := placement.credentials()
+	if string(creds.APIToken) != "file@pam!okdctl=file" || !creds.Insecure {
+		t.Fatalf("creds with a blank typed token = %+v / %q, want the sidecar's token and flag", creds.Redacted(), creds.APIToken)
+	}
+	creds.Zeroize()
+	if !saved.IsValid() {
+		t.Fatal("zeroizing the discovery copy wiped the saved sidecar")
 	}
 }
 

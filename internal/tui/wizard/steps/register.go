@@ -1,6 +1,9 @@
 package steps
 
-import "github.com/qxtaiba/okdctl/internal/tui/wizard"
+import (
+	"github.com/qxtaiba/okdctl/internal/credentials"
+	"github.com/qxtaiba/okdctl/internal/tui/wizard"
+)
 
 // RegisterAll registers every configure-wizard step factory on b in the
 // order wizard.DefaultConfig lists them.
@@ -28,6 +31,24 @@ func RegisterAll(b *wizard.StepBuilder) {
 	b.Register(wizard.StepTypeFiles, func() (wizard.WizardStep, wizard.StepState) { return NewFilesStep(), nil })
 	b.Register(wizard.StepTypeAdvanced, func() (wizard.WizardStep, wizard.StepState) { return NewAdvancedStep(), nil })
 	b.Register(wizard.StepTypeReview, func() (wizard.WizardStep, wizard.StepState) { return NewReviewStep(), capacity })
+}
+
+// SeedCredentials seeds the proxmox step's TLS toggle and node placement's
+// discovery from the sidecar init loaded; saved must outlive the flow.
+func SeedCredentials(built wizard.BuiltSteps, saved *credentials.ProxmoxCredentials) {
+	if saved == nil {
+		return
+	}
+	for _, step := range built.Steps {
+		switch s := step.(type) {
+		case *wizard.DataDrivenStep:
+			if s.ID() == wizard.StepIDProxmox && saved.Insecure {
+				s.SetValue(fieldInsecure, valYes)
+			}
+		case *NodePlacementStep:
+			s.saved = saved
+		}
+	}
 }
 
 // configurePhases groups every configure-wizard step into the header trail's

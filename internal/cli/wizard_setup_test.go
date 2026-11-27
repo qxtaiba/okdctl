@@ -26,7 +26,7 @@ func TestReviewDiffBaselineRequiresAnExistingConfig(t *testing.T) {
 			wizardCfg := wizard.DefaultConfig()
 			wizardCfg.InitialConfig = cfg
 			wizardCfg.ConfigExists = tc.configExists
-			built, err := buildWizardStepsWithState(wizardCfg)
+			built, err := buildWizardStepsWithState(wizardCfg, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -56,7 +56,7 @@ func TestWizardAssemblySeedsConfiguredOrder(t *testing.T) {
 	spec := wizard.DefaultConfig()
 	spec.InitialConfig = cfg
 	spec.ConfigExists = true
-	built, err := buildWizardStepsWithState(spec)
+	built, err := buildWizardStepsWithState(spec, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestWizardAssemblyResourcesAndReviewTotalsAgree(t *testing.T) {
 			spec := wizard.DefaultConfig()
 			spec.InitialConfig = cfg
 			spec.ConfigExists = true
-			built, err := buildWizardStepsWithState(spec)
+			built, err := buildWizardStepsWithState(spec, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -119,7 +119,7 @@ func TestWizardAssemblyResourcesAndReviewTotalsAgree(t *testing.T) {
 
 func TestWizardAssemblyRejectsUnknownAndDuplicateSteps(t *testing.T) {
 	for _, kinds := range [][]wizard.StepConfig{{{Type: "unknown"}}, {{Type: wizard.StepTypeBasics}, {Type: wizard.StepTypeBasics}}} {
-		if _, err := buildWizardStepsWithState(wizard.Config{Steps: kinds}); err == nil {
+		if _, err := buildWizardStepsWithState(wizard.Config{Steps: kinds}, nil); err == nil {
 			t.Fatalf("accepted invalid assembly: %v", kinds)
 		}
 	}

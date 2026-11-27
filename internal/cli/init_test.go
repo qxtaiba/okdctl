@@ -36,18 +36,21 @@ func resetInitState(t *testing.T) {
 }
 
 type wizardCapture struct {
-	called       bool
-	cfg          *config.Config
-	configExists bool
+	called        bool
+	cfg           *config.Config
+	configExists  bool
+	savedToken    string
+	savedInsecure bool
 }
 
 func stubWizard(t *testing.T, res *wizard.Result, verb steps.HubVerb, err error) *wizardCapture {
 	t.Helper()
 	rec := &wizardCapture{}
-	runWizardFn = func(_ *cobra.Command, cfg *config.Config, exists bool) (hubOutcome, error) {
+	runWizardFn = func(_ *cobra.Command, cfg *config.Config, exists bool, saved *credentials.ProxmoxCredentials) (hubOutcome, error) {
 		rec.called = true
 		rec.cfg = cfg
 		rec.configExists = exists
+		rec.savedToken, rec.savedInsecure = string(saved.APIToken), saved.Insecure
 		return hubOutcome{Result: *res, Verb: verb}, err
 	}
 	return rec
@@ -152,8 +155,12 @@ func TestWriteCredentialsEnv(t *testing.T) {
 
 			envPath := credentials.EnvFilePath(configPath)
 			before, _ := os.ReadFile(envPath)
+			seeded, err := credentials.Load(envPath, "")
+			if err != nil {
+				t.Fatal(err)
+			}
 
-			if err := writeCredentialsEnv(&secrets, configPath); err != nil {
+			if err := writeCredentialsEnv(&secrets, configPath, seeded); err != nil {
 				t.Fatalf("writeCredentialsEnv: %v", err)
 			}
 			fi, err := os.Stat(envPath)
@@ -207,6 +214,25 @@ func TestRunInit_ExistingConfigSeedsWizard(t *testing.T) {
 	}
 	if !rec.called || !rec.configExists || rec.cfg.Cluster.Name != "prod" {
 		t.Fatalf("wizard seeded with called=%v exists=%v name=%q; want the on-disk config", rec.called, rec.configExists, rec.cfg.Cluster.Name)
+	}
+}
+
+func TestRunInit_SavedSidecarSeedsTheWizard(t *testing.T) {
+	resetInitState(t)
+	seedInitConfig(t)
+	t.Setenv("PROXMOX_VE_API_TOKEN", "")
+	t.Setenv("PROXMOX_VE_INSECURE", "")
+	saved := &credentials.ProxmoxCredentials{APIToken: []byte(fixtureAPIToken), Insecure: true}
+	if err := credentials.WriteEnvFile("okdctl.env", saved); err != nil {
+		t.Fatalf("seed sidecar: %v", err)
+	}
+	rec := stubWizard(t, &wizard.Result{Outcome: wizard.OutcomeCancelled}, steps.HubVerbEditConfig, nil)
+
+	if err := runInit(initCmd, nil); err != nil {
+		t.Fatalf("runInit: %v", err)
+	}
+	if rec.savedToken != fixtureAPIToken || !rec.savedInsecure {
+		t.Fatalf("wizard seeded with token %q insecure=%v; want the sidecar's values", rec.savedToken, rec.savedInsecure)
 	}
 }
 
