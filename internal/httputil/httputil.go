@@ -8,12 +8,8 @@ import (
 	"time"
 )
 
-// Standard request timeouts tiered by expected response size;
-// download.DefaultTimeout aliases TimeoutDownload, so this package owns
-// the download-tier value.
 const (
-	TimeoutShort    = 10 * time.Second // API calls, connectivity checks
-	TimeoutDownload = 5 * time.Minute  // File downloads
+	TimeoutShort = 10 * time.Second // API calls, connectivity checks
 	// TimeoutResponseHeader bounds dial, TLS handshake and response headers
 	// on NewOptionalInsecure's transport, matching internal/download; the
 	// body answers to ctx alone so uploads and long polls stay unbounded.
