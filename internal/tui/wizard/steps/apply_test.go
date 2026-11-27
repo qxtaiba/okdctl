@@ -1,6 +1,7 @@
 package steps
 
 import (
+	"maps"
 	"strings"
 	"testing"
 
@@ -138,33 +139,21 @@ func TestProxmoxStepDefinition_SecretsStayOutOfTheConfig(t *testing.T) {
 }
 
 func TestNetworkingCrossFields(t *testing.T) {
-	valid := map[string]string{
-		config.FieldNetworkingMachineCIDR: "192.168.1.0/24",
-		config.FieldNetworkingGateway:     "192.168.1.1",
-		config.FieldNetworkingAPIVIP:      "192.168.1.158",
-		config.FieldNetworkingIngressVIP:  "192.168.1.159",
-		config.FieldNetworkingNodeIPStart: "192.168.1.150",
-	}
+	valid := networkingValues("192.168.1.150")
 	if err := networkingCrossFields(valid); err != nil {
 		t.Fatalf("valid layout rejected: %v", err)
 	}
-
-	outside := map[string]string{}
-	for k, v := range valid {
-		outside[k] = v
-	}
-	outside[config.FieldNetworkingAPIVIP] = "10.0.0.5"
-	if err := networkingCrossFields(outside); err == nil || !strings.Contains(err.Error(), "api vip 10.0.0.5 is outside machine cidr") {
-		t.Errorf("outside-cidr vip: err = %v", err)
-	}
-
-	dup := map[string]string{}
-	for k, v := range valid {
-		dup[k] = v
-	}
-	dup[config.FieldNetworkingIngressVIP] = valid[config.FieldNetworkingAPIVIP]
-	if err := networkingCrossFields(dup); err == nil || !strings.Contains(err.Error(), "api vip and ingress vip both use") {
-		t.Errorf("duplicate vip: err = %v", err)
+	for name, tc := range map[string]struct{ key, value, wantLabel string }{
+		"vip outside cidr": {config.FieldNetworkingAPIVIP, "10.0.0.5", "api vip"},
+		"duplicate vip":    {config.FieldNetworkingIngressVIP, valid[config.FieldNetworkingAPIVIP], "ingress vip"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			values := maps.Clone(valid)
+			values[tc.key] = tc.value
+			if err := networkingCrossFields(values); err == nil || !strings.HasPrefix(err.Error(), tc.wantLabel) {
+				t.Errorf("err = %v, want a finding on %s", err, tc.wantLabel)
+			}
+		})
 	}
 
 	malformed := map[string]string{config.FieldNetworkingMachineCIDR: "999.999.1.0/99", config.FieldNetworkingAPIVIP: "10.0.0.5"}

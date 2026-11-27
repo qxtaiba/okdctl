@@ -3,6 +3,7 @@ package steps
 import (
 	"fmt"
 	"net/netip"
+	"slices"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -21,94 +22,96 @@ var NetworkingStepDefinition = wizard.StepDefinition{
 	Title:        "network configuration",
 	DisplayTitle: "configure cluster networking",
 	Description:  "lay out the machine network, the vips and the node addresses",
-	Sections: []wizard.SectionDefinition{
-		{
-			Title: "machine network",
-			Fields: []wizard.FieldDefinition{
-				{
-					Key:       config.FieldNetworkingMachineCIDR,
-					Label:     "machine cidr",
-					Default:   "192.168.1.0/24",
-					Help:      "network the vms live on, e.g. 192.168.1.0/24",
-					Required:  true,
-					Validate:  validateCIDR,
-					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.MachineCIDR = v }),
-					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.MachineCIDR }),
-				},
-				{
-					Key:       config.FieldNetworkingGateway,
-					Label:     "gateway",
-					Default:   "192.168.1.1",
-					Help:      "default gateway ip address inside the machine cidr",
-					Required:  true,
-					Validate:  validateIP,
-					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.Gateway = v }),
-					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.Gateway }),
-				},
-				{
-					Key:       config.FieldNetworkingDNS,
-					Label:     "dns servers",
-					Default:   "192.168.1.1",
-					Help:      "comma-separated resolver ip addresses the nodes use, e.g. 192.168.1.1, 1.1.1.1",
-					Required:  true,
-					Validate:  validateIPList,
-					ConfigSet: setList(func(c *config.Config, v []string) { c.Networking.DNS = v }),
-					ConfigGet: getList(func(c *config.Config) []string { return c.Networking.DNS }),
-				},
+	Sections:     networkingSections,
+	Validate:     networkingCrossFields,
+}
+
+var networkingSections = []wizard.SectionDefinition{
+	{
+		Title: "machine network",
+		Fields: []wizard.FieldDefinition{
+			{
+				Key:       config.FieldNetworkingMachineCIDR,
+				Label:     "machine cidr",
+				Default:   "192.168.1.0/24",
+				Help:      "network the vms live on, e.g. 192.168.1.0/24",
+				Required:  true,
+				Validate:  validateCIDR,
+				ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.MachineCIDR = v }),
+				ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.MachineCIDR }),
 			},
-		},
-		{
-			Title: "virtual ips",
-			Fields: []wizard.FieldDefinition{
-				{
-					Key:       config.FieldNetworkingAPIVIP,
-					Label:     "api vip",
-					Default:   "192.168.1.158",
-					Help:      "unused ip address in the machine cidr for the kubernetes api, e.g. 192.168.1.158",
-					Required:  true,
-					PairKey:   pairKeyVIPs,
-					Validate:  validateIP,
-					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.APIVIP = v }),
-					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.APIVIP }),
-				},
-				{
-					Key:       config.FieldNetworkingIngressVIP,
-					Label:     "ingress vip",
-					Default:   "192.168.1.159",
-					Help:      "unused ip address in the machine cidr for the ingress router, e.g. 192.168.1.159",
-					Required:  true,
-					PairKey:   pairKeyVIPs,
-					Validate:  validateIP,
-					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.IngressVIP = v }),
-					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.IngressVIP }),
-				},
+			{
+				Key:       config.FieldNetworkingGateway,
+				Label:     "gateway",
+				Default:   "192.168.1.1",
+				Help:      "default gateway ip address inside the machine cidr",
+				Required:  true,
+				Validate:  validateIP,
+				ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.Gateway = v }),
+				ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.Gateway }),
 			},
-		},
-		{
-			Title: "node addresses",
-			Fields: []wizard.FieldDefinition{
-				{
-					Key:       config.FieldNetworkingNodeIPStart,
-					Label:     "node ip start",
-					Default:   "192.168.1.150",
-					Help:      "first node address — masters take +0..2 and workers +10 onward, e.g. 192.168.1.150",
-					Required:  true,
-					Validate:  validateIP,
-					ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.NodeIPStart = v }),
-					ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.NodeIPStart }),
-				},
-				{
-					Key:         fieldNTP,
-					Label:       "ntp servers",
-					Placeholder: "pool.ntp.org",
-					Help:        "comma-separated hostnames or ips for chrony — blank keeps the default pool",
-					ConfigSet:   setList(func(c *config.Config, v []string) { c.Networking.NTP = v }),
-					ConfigGet:   getList(func(c *config.Config) []string { return c.Networking.NTP }),
-				},
+			{
+				Key:       config.FieldNetworkingDNS,
+				Label:     "dns servers",
+				Default:   "192.168.1.1",
+				Help:      "comma-separated resolver ip addresses the nodes use, e.g. 192.168.1.1, 1.1.1.1",
+				Required:  true,
+				Validate:  validateIPList,
+				ConfigSet: setList(func(c *config.Config, v []string) { c.Networking.DNS = v }),
+				ConfigGet: getList(func(c *config.Config) []string { return c.Networking.DNS }),
 			},
 		},
 	},
-	Validate: networkingCrossFields,
+	{
+		Title: "virtual ips",
+		Fields: []wizard.FieldDefinition{
+			{
+				Key:       config.FieldNetworkingAPIVIP,
+				Label:     "api vip",
+				Default:   "192.168.1.158",
+				Help:      "unused ip address in the machine cidr for the kubernetes api, e.g. 192.168.1.158",
+				Required:  true,
+				PairKey:   pairKeyVIPs,
+				Validate:  validateIP,
+				ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.APIVIP = v }),
+				ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.APIVIP }),
+			},
+			{
+				Key:       config.FieldNetworkingIngressVIP,
+				Label:     "ingress vip",
+				Default:   "192.168.1.159",
+				Help:      "unused ip address in the machine cidr for the ingress router, e.g. 192.168.1.159",
+				Required:  true,
+				PairKey:   pairKeyVIPs,
+				Validate:  validateIP,
+				ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.IngressVIP = v }),
+				ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.IngressVIP }),
+			},
+		},
+	},
+	{
+		Title: "node addresses",
+		Fields: []wizard.FieldDefinition{
+			{
+				Key:       config.FieldNetworkingNodeIPStart,
+				Label:     "node ip start",
+				Default:   "192.168.1.150",
+				Help:      "first node address — masters take +0..2 and workers +10 onward, e.g. 192.168.1.150",
+				Required:  true,
+				Validate:  validateIP,
+				ConfigSet: wizard.SetString(func(c *config.Config, v string) { c.Networking.NodeIPStart = v }),
+				ConfigGet: wizard.GetString(func(c *config.Config) string { return c.Networking.NodeIPStart }),
+			},
+			{
+				Key:         fieldNTP,
+				Label:       "ntp servers",
+				Placeholder: "pool.ntp.org",
+				Help:        "comma-separated hostnames or ips for chrony — blank keeps the default pool",
+				ConfigSet:   setList(func(c *config.Config, v []string) { c.Networking.NTP = v }),
+				ConfigGet:   getList(func(c *config.Config) []string { return c.Networking.NTP }),
+			},
+		},
+	},
 }
 
 var networkingAddressKeys = []string{
@@ -116,31 +119,36 @@ var networkingAddressKeys = []string{
 	config.FieldNetworkingIngressVIP, config.FieldNetworkingNodeIPStart,
 }
 
-// networkingCrossFields checks what no single field can: every address
-// inside the machine cidr and no two of them equal. Unparseable values are
-// left to their own field validator.
+// networkingCrossFields validates the typed layout against the compiled-in
+// defaults; NewNetworkingStep swaps in the session config.
 func networkingCrossFields(values map[string]string) error {
-	cidr, err := netip.ParsePrefix(values[config.FieldNetworkingMachineCIDR])
-	if err != nil {
-		return nil //nolint:nilerr // the machine cidr's own field validator reports the malformed value
+	return networkingValidate(values, config.DefaultConfig())
+}
+
+// networkingValidate applies values onto a copy of cfg and reports the first
+// finding config.Validate raises against one of this step's fields, so the
+// wizard and the loader share one rule set.
+func networkingValidate(values map[string]string, cfg *config.Config) error {
+	scratch := *cfg
+	scratch.Networking.DNS = slices.Clone(scratch.Networking.DNS)
+	scratch.Networking.NTP = slices.Clone(scratch.Networking.NTP)
+	// A value its own field validator rejects is that field's to report.
+	wellFormed := make(map[string]bool)
+	for i := range networkingSections {
+		for _, field := range networkingSections[i].Fields {
+			v, ok := values[field.Key]
+			if !ok || field.ConfigSet == nil {
+				continue
+			}
+			_ = field.ConfigSet(&scratch, v)
+			wellFormed[field.Key] = field.Validate == nil || field.Validate(v) == nil
+		}
 	}
-	seen := make(map[string]string, len(networkingAddressKeys))
-	for _, key := range networkingAddressKeys {
-		addr, err := netip.ParseAddr(values[key])
-		if err != nil {
-			continue
+	for _, e := range scratch.Validate().Errors {
+		key, _, _ := strings.Cut(e.Field, "[")
+		if wellFormed[key] {
+			return wizard.NewCrossFieldError(fmt.Errorf("%s: %s", fieldLabel(key), e.Message), key)
 		}
-		if !cidr.Contains(addr) {
-			return wizard.NewCrossFieldError(
-				fmt.Errorf("%s %s is outside machine cidr %s — pick an address inside it or widen the cidr", fieldLabel(key), addr, cidr.Masked()),
-				key, config.FieldNetworkingMachineCIDR)
-		}
-		if other, dup := seen[addr.String()]; dup {
-			return wizard.NewCrossFieldError(
-				fmt.Errorf("%s and %s both use %s — every address must be distinct", fieldLabel(other), fieldLabel(key), addr),
-				other, key)
-		}
-		seen[addr.String()] = key
 	}
 	return nil
 }
@@ -148,10 +156,17 @@ func networkingCrossFields(values map[string]string) error {
 // NewNetworkingStep returns the networking wizard step, with an allocation
 // preview once capacity carries the session config.
 func NewNetworkingStep(capacity *WizardCapacitySnapshot) *wizard.DataDrivenStep {
-	step := wizard.NewDataDrivenStep(&NetworkingStepDefinition)
 	if capacity == nil {
-		return step
+		return wizard.NewDataDrivenStep(&NetworkingStepDefinition)
 	}
+	def := NetworkingStepDefinition
+	def.Validate = func(values map[string]string) error {
+		if capacity.cfg == nil {
+			return networkingCrossFields(values)
+		}
+		return networkingValidate(values, capacity.cfg)
+	}
+	step := wizard.NewDataDrivenStep(&def)
 	step.WithExtraContentFunc("allocation preview", func(s *wizard.DataDrivenStep, _ int) string {
 		if capacity.cfg == nil {
 			return ""
