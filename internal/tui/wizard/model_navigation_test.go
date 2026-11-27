@@ -1,6 +1,7 @@
 package wizard
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -17,6 +18,7 @@ type fakeStep struct {
 	focused    bool
 	applyCalls int
 	shouldShow func(cfg *config.Config) bool
+	validate   func() error
 }
 
 func (f *fakeStep) ID() StepID                           { return f.id }
@@ -524,4 +526,34 @@ func (s *recordingTextStep) ConsumesTextInput() bool { return true }
 func (s *recordingTextStep) Update(msg tea.Msg) (WizardStep, tea.Cmd) {
 	s.received = append(s.received, msg)
 	return s, nil
+}
+
+func TestModel_JumpFromReview_EscRefusesAnInvalidStep(t *testing.T) {
+	steps, _ := newNavTestSteps([]StepID{StepIDBasics, StepIDProxmox, StepIDNetworking})
+	invalid := errors.New("cluster name: use lowercase letters")
+	steps[1].(*fakeStep).validate = func() error { return invalid }
+	m := NewModel(steps, &config.Config{})
+	m = advanceToReview(t, m)
+	m = update(t, m, JumpToStepMsg{StepID: StepIDProxmox})
+
+	m = update(t, m, tea.KeyPressMsg{Code: tea.KeyEscape})
+	if got := m.CurrentStep().ID(); got != StepIDProxmox {
+		t.Fatalf("esc left an invalid step for %v, want to stay on proxmox", got)
+	}
+	if !errors.Is(m.err, invalid) {
+		t.Fatalf("status row = %v, want the step's validation error", m.err)
+	}
+
+	steps[1].(*fakeStep).validate = nil
+	m = update(t, m, tea.KeyPressMsg{Code: tea.KeyEscape})
+	if got := m.CurrentStep().ID(); got != StepIDReview {
+		t.Fatalf("esc from a valid step landed on %v, want review", got)
+	}
+}
+
+func (f *fakeStep) Validate() error {
+	if f.validate == nil {
+		return nil
+	}
+	return f.validate()
 }

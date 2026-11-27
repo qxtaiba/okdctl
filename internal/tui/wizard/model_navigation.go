@@ -269,10 +269,17 @@ func (m *Model) goToPreviousStep() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if len(m.steps) > 0 && m.currentStep < len(m.steps) {
-		if f, ok := m.steps[m.currentStep].(FocusableStep); ok {
-			f.SetFocused(false)
+	// A jumped-to step has already written every keystroke into the config,
+	// so leaving it invalid would hand review a config it cannot save.
+	if v, ok := m.steps[m.currentStep].(interface{ Validate() error }); ok && m.returnToReview {
+		if err := v.Validate(); err != nil {
+			m.setError(err)
+			return m, nil
 		}
+	}
+
+	if f, ok := m.steps[m.currentStep].(FocusableStep); ok {
+		f.SetFocused(false)
 	}
 
 	if m.returnToReview {

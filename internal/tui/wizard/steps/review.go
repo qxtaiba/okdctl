@@ -96,11 +96,25 @@ func (s *ReviewStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		}
 	}
 	if keyMsg.Code == tea.KeyEnter {
+		if err := s.firstFailure(); err != nil {
+			return s, func() tea.Msg { return wizard.ErrorSetMsg{Error: err} }
+		}
 		return s, func() tea.Msg { return wizard.StepCompleteMsg{StepID: wizard.StepIDReview} }
 	}
 	var cmd tea.Cmd
 	s.actions, cmd = s.actions.Update(components.ArrowsAsVertical(keyMsg))
 	return s, cmd
+}
+
+// firstFailure names the first failed preflight check, which blocks both
+// actions: a config Validate rejects must never reach disk.
+func (s *ReviewStep) firstFailure() error {
+	for _, check := range s.preflight {
+		if check.failed {
+			return fmt.Errorf("fix %s · %s before continuing", check.label, check.status)
+		}
+	}
+	return nil
 }
 
 // JumpOrder returns the steps a digit keypress may route to.

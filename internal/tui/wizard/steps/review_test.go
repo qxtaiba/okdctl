@@ -1,6 +1,8 @@
 package steps
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -236,5 +238,41 @@ func TestReviewActionsVisibleAfterSummaryWraps(t *testing.T) {
 		if !strings.Contains(out, "deploy now") || !strings.Contains(out, "save and exit") {
 			t.Fatalf("review actions hidden at %v: %s", size, out)
 		}
+	}
+}
+
+func readableReviewConfig(t *testing.T) *config.Config {
+	t.Helper()
+	dir := t.TempDir()
+	cfg := reviewTestConfig()
+	for _, f := range []struct {
+		name string
+		dst  *string
+	}{{"pull-secret.json", &cfg.Files.PullSecret}, {"id.pub", &cfg.Files.SSHPublicKey}} {
+		path := filepath.Join(dir, f.name)
+		if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		*f.dst = path
+	}
+	return cfg
+}
+
+func TestReviewStep_EnterRefusesWhileAPreflightCheckFails(t *testing.T) {
+	enter := tea.KeyPressMsg{Code: tea.KeyEnter}
+	cfg := readableReviewConfig(t)
+	s := NewReviewStep()
+	s.SetConfig(cfg)
+	_, cmd := s.Update(enter)
+	if _, ok := cmd().(wizard.StepCompleteMsg); !ok {
+		t.Fatalf("enter on a passing preflight produced %#v, want StepCompleteMsg", cmd())
+	}
+
+	cfg.Cluster.Name = ".lab"
+	s.SetFocused(true)
+	_, cmd = s.Update(enter)
+	errMsg, ok := cmd().(wizard.ErrorSetMsg)
+	if !ok || !strings.Contains(errMsg.Error.Error(), "configuration") {
+		t.Fatalf("enter on a failing preflight produced %#v, want ErrorSetMsg naming the configuration check", cmd())
 	}
 }
