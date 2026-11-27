@@ -136,8 +136,9 @@ func mapAPIError(err error) error {
 
 // newProxmoxClient builds the go-proxmox client and returns the *http.Client
 // under it for raw requests; the token becomes an immutable Go string Zeroize
-// can't reach, bounded to this call. No transport timeout: ISO uploads outlive
-// any fixed budget, so every method is bounded by its ctx instead.
+// can't reach, bounded to this call. The whole-request timeout stays zero
+// because ISO uploads and WaitTask polls outlive any fixed budget; the
+// transport bounds dial, TLS and response headers, bodies answer to ctx.
 func newProxmoxClient(endpoint string, apiToken []byte, insecure bool) (client *proxmox.Client, httpClient *http.Client, err error) {
 	if endpoint == "" {
 		return nil, nil, errors.New("proxmox client: endpoint is required")
