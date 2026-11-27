@@ -16,7 +16,10 @@ func (c *Config) validateNetwork(r *ValidationResult, nodes []nodeRef) {
 	machine := parsePrefix(r, FieldNetworkingMachineCIDR, n.MachineCIDR)
 	pod := parsePrefix(r, FieldNetworkingPodCIDR, n.PodCIDR)
 	service := parsePrefix(r, FieldNetworkingServiceCIDR, n.ServiceCIDR)
-	parseAddr(r, FieldNetworkingGateway, n.Gateway)
+	// nmstate routes the default gateway on-link; one outside the prefix never comes up.
+	if gateway := parseAddr(r, FieldNetworkingGateway, n.Gateway); gateway.IsValid() && machine.IsValid() && !machine.Contains(gateway) {
+		r.addf(FieldNetworkingGateway, "%s is outside machine_cidr %s", gateway, machine)
+	}
 	if len(n.DNS) == 0 {
 		r.AddError(FieldNetworkingDNS, "list at least one resolver")
 	}

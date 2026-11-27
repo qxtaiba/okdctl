@@ -15,6 +15,7 @@ func TestValidateNetwork(t *testing.T) {
 		{"pod cidr", func(c *Config) { c.Networking.PodCIDR = "10.128.0.0" }, finding{FieldNetworkingPodCIDR, "not a CIDR"}},
 		{"service cidr", func(c *Config) { c.Networking.ServiceCIDR = "" }, finding{FieldNetworkingServiceCIDR, "not a CIDR"}},
 		{"gateway", func(c *Config) { c.Networking.Gateway = "999.1.1.1" }, finding{FieldNetworkingGateway, "not an IP address"}},
+		{"gateway outside", func(c *Config) { c.Networking.Gateway = "10.0.0.1" }, finding{FieldNetworkingGateway, "10.0.0.1 is outside machine_cidr 192.168.1.0/24"}},
 		{"no dns", func(c *Config) { c.Networking.DNS = nil }, finding{FieldNetworkingDNS, "at least one"}},
 		{"dns entry", func(c *Config) { c.Networking.DNS = []string{"1.1.1.1", "dns.lan"} }, finding{FieldNetworkingDNS + "[1]", "not an IP address"}},
 		{"api vip parse", func(c *Config) { c.Networking.APIVIP = "x" }, finding{FieldNetworkingAPIVIP, "not an IP address"}},
@@ -56,7 +57,6 @@ func TestValidateNetwork(t *testing.T) {
 	}
 
 	passing := map[string]func(*Config){
-		"gateway outside machine_cidr": func(c *Config) { c.Networking.Gateway = "10.0.0.1" },
 		"public resolvers":             func(c *Config) { c.Networking.DNS = []string{"1.1.1.1", "9.9.9.9"} },
 		"range ends on last host":      func(c *Config) { c.Networking.NodeIPStart = "192.168.1.243" },
 		"host prefix 20":               func(c *Config) { c.Networking.HostPrefix = 20 },
