@@ -20,5 +20,14 @@
     "prEditedNotification",
     "prIgnoreNotification"
   ],
-  "postUpdateOptions": ["gomodTidy"]
+  "postUpdateOptions": ["gomodTidy"],
+  "packageRules": [
+    {
+      // sigs.k8s.io/yaml wraps go.yaml.in/yaml/v2; a v4 loader would be a third
+      // YAML engine against the two-engine baseline (CLAUDE.md, dependencies).
+      "matchPackageNames": ["go.yaml.in/yaml/v2"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    }
+  ]
 }
