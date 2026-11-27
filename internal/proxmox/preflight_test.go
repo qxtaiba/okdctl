@@ -177,11 +177,21 @@ func TestPreflight(t *testing.T) {
 			},
 		},
 		{
-			name: "permissions ancestor lacks datastore allocate",
+			name: "permissions nearest propagating ancestor replaces the root grant",
 			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) {
 				delete(d.perms["/storage"], "Datastore.Allocate")
+				d.perms["/"]["Datastore.Allocate"] = true
 			},
 			want: []Finding{{"permissions", "fail", "missing privilege Datastore.Allocate on /storage/local"}},
+		},
+		{
+			name: "permissions non-propagating ancestor is skipped for the one above",
+			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) {
+				for priv := range d.perms["/storage"] {
+					d.perms["/storage"][priv] = false
+					d.perms["/"][priv] = true
+				}
+			},
 		},
 		{
 			name: "permissions ancestor grant without propagate stops there",

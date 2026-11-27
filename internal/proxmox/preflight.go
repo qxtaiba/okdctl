@@ -215,8 +215,9 @@ func (st *preflightState) checkPermissions(out *findings) {
 }
 
 // granted follows PVE's roles(): a privilege listed on the path itself is
-// held whatever its propagate flag, one listed on an ancestor only when the
-// flag is set, since /access/permissions lists only paths carrying an entry.
+// held whatever its propagate flag; below a listed path the nearest ancestor
+// carrying any propagating entry decides alone, since its roles replace what
+// it would inherit, and an ancestor with none is skipped.
 func (p Permissions) granted(path, priv string) bool {
 	if privs, ok := p[path]; ok {
 		_, held := privs[priv]
@@ -228,8 +229,8 @@ func (p Permissions) granted(path, priv string) bool {
 		} else {
 			path = "/"
 		}
-		if p[path][priv] {
-			return true
+		if privs := p[path]; slices.Contains(slices.Collect(maps.Values(privs)), true) {
+			return privs[priv]
 		}
 	}
 	return false
