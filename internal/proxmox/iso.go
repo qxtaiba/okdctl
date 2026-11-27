@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -84,7 +85,7 @@ func (d *driver) UploadISO(ctx context.Context, node, storage, path, name, sha25
 	case res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden:
 		return Task{}, fmt.Errorf("upload iso: %w", ErrPermission)
 	case res.StatusCode >= http.StatusMultipleChoices:
-		// The transport leaves a 400's body alone, so its parameter detail is read here.
+		// A 400's body carries the per-parameter detail the status line lacks.
 		body, _ := io.ReadAll(io.LimitReader(res.Body, errorBodyLimit))
 		return Task{}, fmt.Errorf("upload iso: %w", mapAPIError(errors.New(statusWithMessage(res.Status, body))))
 	}
@@ -117,4 +118,34 @@ func isoMultipart(filename, sha256 string) (head, tail []byte, contentType strin
 	}
 	all := buf.Bytes()
 	return all[:split], all[split:], w.FormDataContentType(), nil
+}
+
+// errorBodyLimit bounds how much of a failed reply's body is read for its message.
+const errorBodyLimit = 64 << 10
+
+// statusWithMessage appends PVE's JSON message to a status line that does not already carry it.
+func statusWithMessage(status string, body []byte) string {
+	if msg := pveMessage(body); msg != "" && !strings.Contains(status, msg) {
+		return status + ": " + msg
+	}
+	return status
+}
+
+// pveMessage joins the envelope's message with its per-parameter errors, which a 400 carries.
+func pveMessage(body []byte) string {
+	var envelope struct {
+		Message string          `json:"message"`
+		Errors  json.RawMessage `json:"errors"`
+	}
+	if json.Unmarshal(body, &envelope) != nil {
+		return ""
+	}
+	msg, errs := strings.TrimSpace(envelope.Message), strings.TrimSpace(string(envelope.Errors))
+	switch {
+	case msg == "":
+		return errs
+	case errs == "":
+		return msg
+	}
+	return msg + " " + errs
 }

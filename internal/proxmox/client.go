@@ -1,12 +1,10 @@
 package proxmox
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -18,67 +16,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
-// errorBodyLimit bounds how much of a failed reply's body is read for its message.
-const errorBodyLimit = 64 << 10
-
 // notFoundPhrases are how PVE's die() paths report a missing VM, config or
 // HA resource (deleting one says "not HA managed"); pveproxy sends them as
 // the reason phrase and in the body.
 var notFoundPhrases = []string{"does not exist", "no such resource", "not HA managed"}
-
-// pveErrorTransport makes every failed reply one go-proxmox refuses: it
-// errors only on 400 (rendering that body itself), 401/403 and 500/501, and
-// with a nil decode target reads any other status as success, so a 404 or a
-// proxy's 502-504 is given the 500 code while its own status line, with
-// PVE's JSON message appended since go-proxmox discards the body, is kept.
-type pveErrorTransport struct {
-	next http.RoundTripper
-}
-
-func (t pveErrorTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	res, err := t.next.RoundTrip(req)
-	if err != nil || res.StatusCode <= http.StatusBadRequest {
-		return res, err
-	}
-	body, err := io.ReadAll(io.LimitReader(res.Body, errorBodyLimit))
-	_ = res.Body.Close()
-	if err != nil {
-		return nil, fmt.Errorf("read %s %s error body: %w", req.Method, req.URL.Path, err)
-	}
-	res.Body = io.NopCloser(bytes.NewReader(body))
-	res.Status = statusWithMessage(res.Status, body)
-	if res.StatusCode != http.StatusUnauthorized && res.StatusCode != http.StatusForbidden {
-		res.StatusCode = http.StatusInternalServerError
-	}
-	return res, nil
-}
-
-// statusWithMessage appends PVE's JSON message to a status line that does not already carry it.
-func statusWithMessage(status string, body []byte) string {
-	if msg := pveMessage(body); msg != "" && !strings.Contains(status, msg) {
-		return status + ": " + msg
-	}
-	return status
-}
-
-// pveMessage joins the envelope's message with its per-parameter errors, which a 400 carries.
-func pveMessage(body []byte) string {
-	var envelope struct {
-		Message string          `json:"message"`
-		Errors  json.RawMessage `json:"errors"`
-	}
-	if json.Unmarshal(body, &envelope) != nil {
-		return ""
-	}
-	msg, errs := strings.TrimSpace(envelope.Message), strings.TrimSpace(string(envelope.Errors))
-	switch {
-	case msg == "":
-		return errs
-	case errs == "":
-		return msg
-	}
-	return msg + " " + errs
-}
 
 // get decodes the data envelope of an authenticated GET on an
 // /api2/json-relative path into v, translating go-proxmox's auth failure
@@ -120,8 +61,8 @@ func (d *driver) task(ctx context.Context, method, node, path string, form url.V
 	return Task{Node: node, UPID: upid}, nil
 }
 
-// mapAPIError is the one place transport failures become this package's
-// sentinels; the PVE message is kept behind ErrNotFound for diagnostics.
+// mapAPIError is the one place API failures become this package's sentinels;
+// the PVE message is kept behind ErrNotFound for diagnostics.
 func mapAPIError(err error) error {
 	if errors.Is(err, proxmox.ErrNotAuthorized) {
 		return ErrPermission
@@ -154,7 +95,6 @@ func newProxmoxClient(endpoint string, apiToken []byte, insecure bool) (client *
 		warnInsecureTLS(endpoint)
 	}
 	httpClient = httputil.NewOptionalInsecure(insecure, 0)
-	httpClient.Transport = pveErrorTransport{next: httpClient.Transport}
 	client = proxmox.NewClient(APIBaseURL(endpoint), proxmox.WithHTTPClient(httpClient), proxmox.WithAPIToken(id, secret))
 	return client, httpClient, nil
 }
