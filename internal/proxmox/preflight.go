@@ -49,9 +49,10 @@ type Pinger interface {
 	Alive(ctx context.Context, addr netip.Addr) (bool, error)
 }
 
+// SeverityFail and SeverityWarn are the two Finding.Severity values.
 const (
-	severityFail = "fail"
-	severityWarn = "warn"
+	SeverityFail = "fail"
+	SeverityWarn = "warn"
 
 	memoryReserveMiB = 8192
 	pingConcurrency  = 8
@@ -65,10 +66,10 @@ var (
 		"VM.Config.Memory", "VM.Config.Network", "VM.Config.Options", "VM.PowerMgmt", "VM.Audit",
 	}
 	checkSeverity = map[string]string{
-		"permissions": severityFail, "version": severityFail, "cpu-flags": severityFail,
-		"memory": severityWarn, "iso-space": severityFail, "vmid-collision": severityFail,
-		"mac-collision": severityFail, "address-in-use": severityFail,
-		"storage-content": severityFail, "bridge": severityFail,
+		"permissions": SeverityFail, "version": SeverityFail, "cpu-flags": SeverityFail,
+		"memory": SeverityWarn, "iso-space": SeverityFail, "vmid-collision": SeverityFail,
+		"mac-collision": SeverityFail, "address-in-use": SeverityFail,
+		"storage-content": SeverityFail, "bridge": SeverityFail,
 	}
 )
 
@@ -79,7 +80,7 @@ func (f *findings) add(check, format string, args ...any) {
 }
 
 func (f *findings) warn(check, format string, args ...any) {
-	f.emit(check, severityWarn, format, args...)
+	f.emit(check, SeverityWarn, format, args...)
 }
 
 func (f *findings) emit(check, sev, format string, args ...any) {

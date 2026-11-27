@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/credentials"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/model"
 	"github.com/qxtaiba/okdctl/internal/proxmox"
@@ -244,6 +243,7 @@ func TestFindingsError(t *testing.T) {
 type doctorHarness struct {
 	errOut bytes.Buffer
 	seam   *proxmox.PreflightInput
+	driver proxmox.Driver
 }
 
 // newDoctorHarness runs from a fresh directory holding the relative
@@ -273,10 +273,8 @@ func (h *doctorHarness) run(t *testing.T, token string, findings []proxmox.Findi
 	h.errOut.Reset()
 	h.seam = nil
 	t.Setenv("PROXMOX_VE_API_TOKEN", token)
-	var gotCreds *credentials.ProxmoxCredentials
-	var gotToken string
-	runPreflight = func(_ context.Context, creds *credentials.ProxmoxCredentials, in *proxmox.PreflightInput) ([]proxmox.Finding, error) {
-		h.seam, gotCreds, gotToken = in, creds, string(creds.APIToken)
+	runPreflight = func(_ context.Context, d proxmox.Driver, in *proxmox.PreflightInput) ([]proxmox.Finding, error) {
+		h.seam, h.driver = in, d
 		return findings, runErr
 	}
 	var out bytes.Buffer
@@ -285,21 +283,18 @@ func (h *doctorHarness) run(t *testing.T, token string, findings []proxmox.Findi
 	rootCmd.SetArgs(append([]string{"doctor", "--config", "okdctl.yaml", "--output", "text"}, extra...))
 	err := rootCmd.Execute()
 	if h.seam != nil {
-		h.assertSeam(t, gotCreds, gotToken, token)
+		h.assertSeam(t)
 	}
 	return out.String(), err
 }
 
-func (h *doctorHarness) assertSeam(t *testing.T, creds *credentials.ProxmoxCredentials, gotToken, token string) {
+func (h *doctorHarness) assertSeam(t *testing.T) {
 	t.Helper()
 	if !reflect.DeepEqual(h.seam.Nodes, []string{"pve"}) || len(h.seam.VMIDs) != 3 || h.seam.Tag != "" {
 		t.Fatalf("seam received input %+v, want the minimal config's preview footprint", h.seam)
 	}
-	if creds == nil || creds.Endpoint == "" || gotToken != token {
-		t.Fatalf("seam received creds %+v with token %q", creds, gotToken)
-	}
-	if creds.APIToken != nil {
-		t.Fatal("token not zeroized after doctor returned")
+	if h.driver == nil {
+		t.Fatal("seam received no driver")
 	}
 }
 
@@ -384,10 +379,28 @@ func TestDoctorCommand(t *testing.T) {
 		}
 	})
 
-	t.Run("preflight error propagates", func(t *testing.T) {
-		_, err := run(t, token, nil, errors.New("read permissions: 401"))
-		if err == nil || !strings.Contains(err.Error(), "read permissions: 401") {
-			t.Fatalf("err = %v, want wrapped preflight error", err)
+	t.Run("transport failure is a network error", func(t *testing.T) {
+		_, err := run(t, token, nil, errors.New("read permissions: dial tcp 127.0.0.1:1: connect: connection refused"))
+		var ne *errtypes.NetworkError
+		if !errors.As(err, &ne) || exitCodeFor(err) != 3 {
+			t.Fatalf("err = %T %v (exit %d), want *errtypes.NetworkError exiting 3", err, err, exitCodeFor(err))
+		}
+		if !strings.Contains(err.Error(), "connection refused") {
+			t.Fatalf("err = %v, want the transport cause kept", err)
+		}
+	})
+
+	t.Run("json transport failure leaves an empty array on stdout", func(t *testing.T) {
+		out, err := run(t, token, nil, errors.New("dial tcp: connection refused"), "-o", "json")
+		if err == nil || strings.TrimSpace(out) != "[]" {
+			t.Fatalf("stdout = %q err = %v, want [] and the network error", out, err)
+		}
+	})
+
+	t.Run("cancellation keeps its identity through the network error", func(t *testing.T) {
+		_, err := run(t, token, nil, context.Canceled)
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("err = %v, want context.Canceled reachable", err)
 		}
 	})
 
