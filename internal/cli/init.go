@@ -45,7 +45,7 @@ func init() {
 }
 
 // upHandoff is printed where the install would start.
-const upHandoff = "run: okdctl up"
+const upHandoff = "configuration saved; installing it returns in a later release"
 
 func runInit(cmd *cobra.Command, _ []string) error {
 	out := cmd.OutOrStdout()

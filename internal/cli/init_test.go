@@ -361,7 +361,7 @@ func TestRunInit_HubQuitVerbChangesNothing(t *testing.T) {
 	}
 }
 
-func TestRunInit_DeployNowSavesThenHandsOffToUp(t *testing.T) {
+func TestRunInit_DeployNowSavesThenPrintsHandoff(t *testing.T) {
 	resetInitState(t)
 	var out bytes.Buffer
 	initCmd.SetOut(&out)
@@ -370,8 +370,8 @@ func TestRunInit_DeployNowSavesThenHandsOffToUp(t *testing.T) {
 	if err := runInit(initCmd, nil); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
-	if got := out.String(); got != "run: okdctl up\n" {
-		t.Errorf("stdout = %q, want the up handoff line alone", got)
+	if got := out.String(); got != upHandoff+"\n" {
+		t.Errorf("stdout = %q, want the handoff line alone", got)
 	}
 	if _, err := os.Stat("okdctl.yaml"); err != nil {
 		t.Errorf("the config must be saved before the handoff line: %v", err)
@@ -383,7 +383,7 @@ func TestRunInit_DeployNowSavesThenHandsOffToUp(t *testing.T) {
 
 func TestRunInit_HubVerbsPrintHandoffsAndChangeNothing(t *testing.T) {
 	for verb, want := range map[steps.HubVerb]string{
-		steps.HubVerbDeploy:        "run: okdctl up",
+		steps.HubVerbDeploy:        upHandoff,
 		steps.HubVerbDestroy:       "destroy returns in a later release",
 		steps.HubVerbClusterStatus: "cluster status returns in a later release",
 		steps.HubVerbManageNodes:   "node management returns in a later release",
