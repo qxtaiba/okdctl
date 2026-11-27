@@ -19,13 +19,13 @@ func TestBuildEnv_AllowlistFilters(t *testing.T) {
 	t.Setenv("PATH", "/usr/bin:/bin")
 	t.Setenv("HOME", "/tmp/home")
 	t.Setenv("KUBECONFIG", "/tmp/kube")
-	t.Setenv("KUBE_PS1", "on")                  // prefix match
-	t.Setenv("TF_VAR_region", "us-east-1")      // prefix match
-	t.Setenv("PROXMOX_VE_ENDPOINT", "pve:8006") // prefix match, non-secret
-	t.Setenv("PROXMOX_VE_PASSWORD", "hunter")   // prefix match, secret-keyed
-	t.Setenv("AWS_SECRET_ACCESS_KEY", "nope")   // not in allowlist
-	t.Setenv("SECRET_API_KEY", "nope")          // not in allowlist
-	t.Setenv("OKDCTL_INTERNAL_TOKEN", "nope")   // not in allowlist
+	t.Setenv("KUBE_PS1", "on")
+	t.Setenv("TF_VAR_region", "us-east-1")
+	t.Setenv("PROXMOX_VE_ENDPOINT", "pve:8006")
+	t.Setenv("PROXMOX_VE_PASSWORD", "hunter")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "nope")
+	t.Setenv("SECRET_API_KEY", "nope")
+	t.Setenv("OKDCTL_INTERNAL_TOKEN", "nope")
 
 	e := New()
 	env := e.buildEnv()
@@ -36,8 +36,6 @@ func TestBuildEnv_AllowlistFilters(t *testing.T) {
 		"HOME=/tmp/home",
 		"KUBECONFIG=/tmp/kube",
 		"KUBE_PS1=on",
-		"TF_VAR_region=us-east-1",
-		"PROXMOX_VE_ENDPOINT=pve:8006",
 	}
 	for _, want := range mustContain {
 		if !strings.Contains(joined, "\x00"+want+"\x00") {
@@ -50,6 +48,8 @@ func TestBuildEnv_AllowlistFilters(t *testing.T) {
 		"SECRET_API_KEY=",
 		"OKDCTL_INTERNAL_TOKEN=",
 		"PROXMOX_VE_PASSWORD=",
+		"PROXMOX_VE_ENDPOINT=",
+		"TF_VAR_region=",
 	}
 	for _, forbid := range mustNotContain {
 		if strings.Contains(joined, "\x00"+forbid) {
@@ -59,23 +59,18 @@ func TestBuildEnv_AllowlistFilters(t *testing.T) {
 }
 
 func TestBuildEnv_SecretKeyedDroppedFromParentButNotWithEnv(t *testing.T) {
-	t.Setenv("PROXMOX_VE_PASSWORD", "from-parent")
-	t.Setenv("PROXMOX_VE_API_TOKEN", "from-parent")
-	t.Setenv("TF_VAR_db_password", "from-parent")
+	t.Setenv("KUBE_API_TOKEN", "from-parent")
+	t.Setenv("KUBE_PASSWORD", "from-parent")
 
-	e := New(WithEnv([]string{"PROXMOX_VE_PASSWORD=from-caller"}))
+	e := New(WithEnv([]string{"KUBE_API_TOKEN=from-caller"}))
 	joined := "\n" + strings.Join(e.buildEnv(), "\n") + "\n"
 
-	for _, forbid := range []string{
-		"\nPROXMOX_VE_PASSWORD=from-parent\n",
-		"\nPROXMOX_VE_API_TOKEN=from-parent\n",
-		"\nTF_VAR_db_password=from-parent\n",
-	} {
+	for _, forbid := range []string{"\nKUBE_API_TOKEN=from-parent\n", "\nKUBE_PASSWORD=from-parent\n"} {
 		if strings.Contains(joined, forbid) {
 			t.Errorf("parent secret %q leaked into subprocess env:\n%s", strings.TrimSpace(forbid), joined)
 		}
 	}
-	if !strings.Contains(joined, "\nPROXMOX_VE_PASSWORD=from-caller\n") {
+	if !strings.Contains(joined, "\nKUBE_API_TOKEN=from-caller\n") {
 		t.Errorf("WithEnv-supplied credential missing from env:\n%s", joined)
 	}
 }
@@ -110,11 +105,14 @@ func TestAllowlist_ExactAndPrefix(t *testing.T) {
 		{"PATH", true},
 		{"KUBECONFIG", true},
 		{"KUBE_PS1", true},
-		{"TF_VAR_thing", true},
-		{"PROXMOX_VE_API_TOKEN", true},
-		{"OC_EDITOR", true},
-		{"HELM_CACHE_HOME", true},
-		{"GIT_SSH_COMMAND", true},
+		{"HTTPS_PROXY", true},
+		{"XDG_CONFIG_HOME", true},
+		{"TF_VAR_thing", false},
+		{"PROXMOX_VE_API_TOKEN", false},
+		{"OC_EDITOR", false},
+		{"HELM_CACHE_HOME", false},
+		{"GIT_SSH_COMMAND", false},
+		{"SUDO_USER", false},
 		{"GITHUB_TOKEN", false},
 		{"GH_TOKEN", false},
 		{"AWS_SECRET_ACCESS_KEY", false},
