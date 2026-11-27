@@ -103,7 +103,8 @@ type preflightState struct {
 }
 
 // Preflight runs every check against the cluster and returns the findings
-// in check order; it errors only when an inventory call every check needs fails.
+// in check order; it errors only when an inventory call every check needs
+// fails or ctx ends, so cancellation never reads as a finding.
 //
 //nolint:gocritic // hugeParam: the brief fixes the by-value signature
 func Preflight(ctx context.Context, d Driver, ping Pinger, in PreflightInput) ([]Finding, error) {
@@ -122,6 +123,9 @@ func Preflight(ctx context.Context, d Driver, ping Pinger, in PreflightInput) ([
 	st.checkAddresses(ctx, ping, &out)
 	st.checkStorageContent(&out)
 	st.checkBridge(&out)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -150,7 +154,7 @@ func (st *preflightState) gather(ctx context.Context, d Driver) error {
 		inv.bridges, inv.bridgesErr = d.Bridges(ctx, node)
 		st.perNode[node] = inv
 	}
-	return nil
+	return ctx.Err()
 }
 
 type privReq struct{ path, alt, priv string }
@@ -340,6 +344,9 @@ func (st *preflightState) checkMACCollision(ctx context.Context, d Driver, out *
 		planned[strings.ToLower(mac)] = mac
 	}
 	for _, vm := range st.vms {
+		if ctx.Err() != nil {
+			return
+		}
 		if vm.Type != resourceTypeQEMU || st.owned(vm.Tags) {
 			continue
 		}

@@ -541,6 +541,27 @@ func TestFixtureNodeHasRequiredCPUFlags(t *testing.T) {
 	}
 }
 
+type cancellingDriver struct {
+	*fakeDriver
+	cancel context.CancelFunc
+}
+
+func (d cancellingDriver) ListVMs(ctx context.Context) ([]VMSummary, error) {
+	d.cancel()
+	return d.fakeDriver.ListVMs(ctx)
+}
+
+func TestPreflightReturnsCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	d := cancellingDriver{fakeDriver: goodDriver(), cancel: cancel}
+	d.errs["config"] = errors.New("context canceled")
+	got, err := Preflight(ctx, d, fakePinger{}, goodInput())
+	if !errors.Is(err, context.Canceled) || got != nil {
+		t.Fatalf("Preflight = %+v, %v; want nil, context.Canceled", got, err)
+	}
+}
+
 func TestPreflightDependencyErrors(t *testing.T) {
 	for _, key := range []string{"permissions", "version", "nodes", "listvms"} {
 		t.Run(key, func(t *testing.T) {
