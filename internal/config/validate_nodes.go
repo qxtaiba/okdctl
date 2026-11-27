@@ -52,8 +52,23 @@ func (c *Config) validateNodes(r *ValidationResult, nodes []nodeRef) {
 		validateDefaults(r, FieldWorkers, &c.Workers.NodeDefaults, floorFor(RoleWorker))
 	}
 	c.validateOverrideKeys(r)
+	c.validateNodeNames(r, nodes)
 	for i := range nodes {
 		c.validateOverride(r, nodes, i)
+	}
+}
+
+// validateNodeNames reports the longest produced name over the DNS label
+// limit once; the name is the hostname and the Kubernetes node name.
+func (c *Config) validateNodeNames(r *ValidationResult, nodes []nodeRef) {
+	longest := ""
+	for i := range nodes {
+		if name := nodes[i].name; len(name) > max(maxDNSLabelLen, len(longest)) {
+			longest = name
+		}
+	}
+	if longest != "" {
+		r.addf(FieldClusterName, "node name %s is %d characters; a DNS label is at most %d", longest, len(longest), maxDNSLabelLen)
 	}
 }
 

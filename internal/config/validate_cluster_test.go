@@ -20,6 +20,10 @@ func TestValidateCluster(t *testing.T) {
 		{"version older minor", func(c *Config) { c.Distribution.Version = "4.19.0-okd-scos.15" }, finding{FieldDistributionVersion, "below the floor " + MinOKDVersion}},
 		{"pull secret required", func(c *Config) { c.Files.PullSecret = "" }, finding{FieldFilesPullSecret, "required"}},
 		{"ssh key required", func(c *Config) { c.Files.SSHPublicKey = "" }, finding{FieldFilesSSHPublicKey, "required"}},
+		{"node name over the dns label", func(c *Config) {
+			c.Cluster.Name = "a123456789b123456789c123456789d123456789e123456789f123"
+			c.Nodes = map[string]NodeOverride{c.Cluster.Name + "-worker100": {Host: "pve"}}
+		}, finding{FieldClusterName, "node name a123456789b123456789c123456789d123456789e123456789f123-worker100 is 64 characters; a DNS label is at most 63"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -33,6 +37,10 @@ func TestValidateCluster(t *testing.T) {
 		"floor version":   func(c *Config) { c.Distribution.Version = MinOKDVersion },
 		"newer minor":     func(c *Config) { c.Distribution.Version = "4.23.0-okd-scos.1" },
 		"54 char name":    func(c *Config) { c.Cluster.Name = "a123456789b123456789c123456789d123456789e123456789f123" },
+		"63 char node name": func(c *Config) {
+			c.Cluster.Name = "a123456789b123456789c123456789d123456789e123456789f123"
+			c.Nodes = map[string]NodeOverride{c.Cluster.Name + "-worker10": {Host: "pve"}}
+		},
 		"hyphenated name": func(c *Config) { c.Cluster.Name = "my-lab-1" },
 		"deep domain":     func(c *Config) { c.Cluster.Domain = "okd.lab.example.com" },
 	}

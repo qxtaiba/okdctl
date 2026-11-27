@@ -8,6 +8,7 @@ import (
 
 const (
 	maxClusterNameLen = 54
+	maxDNSLabelLen    = 63
 	maxDNSNameLen     = 253
 )
 
