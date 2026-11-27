@@ -266,8 +266,6 @@ func TestSignalExitCode(t *testing.T) {
 }
 
 func TestExecutePanicExitsSoftware(t *testing.T) {
-	t.Setenv(wizardDemoEnv, "1")
-
 	panicCmd := &cobra.Command{
 		Use:    "panic-test",
 		Hidden: true,

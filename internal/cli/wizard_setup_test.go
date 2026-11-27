@@ -50,7 +50,6 @@ func TestReviewDiffBaselineRequiresAnExistingConfig(t *testing.T) {
 }
 
 func TestWizardAssemblySeedsConfiguredOrder(t *testing.T) {
-	t.Setenv(wizardDemoEnv, "")
 	cfg := config.DefaultConfig()
 	cfg.Cluster.Name = "seeded-cluster"
 	spec := wizard.DefaultConfig()
@@ -82,38 +81,33 @@ func TestWizardAssemblySeedsConfiguredOrder(t *testing.T) {
 
 func TestWizardAssemblyResourcesAndReviewTotalsAgree(t *testing.T) {
 	totals := regexp.MustCompile(`(\d+) vcpu\D+(\d+) gb ram\D+(\d+) gb disk`)
-	for _, tc := range []struct{ name, demo string }{{"interactive", ""}, {"demo mode", "1"}} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv(wizardDemoEnv, tc.demo)
-			cfg := config.DefaultConfig()
-			spec := wizard.DefaultConfig()
-			spec.InitialConfig = cfg
-			spec.ConfigExists = true
-			built, err := buildWizardStepsWithState(spec, nil)
-			if err != nil {
-				t.Fatal(err)
-			}
+	cfg := config.DefaultConfig()
+	spec := wizard.DefaultConfig()
+	spec.InitialConfig = cfg
+	spec.ConfigExists = true
+	built, err := buildWizardStepsWithState(spec, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-			var footer, review string
-			for _, step := range built.Steps {
-				switch s := step.(type) {
-				case *wizard.DataDrivenStep:
-					if s.ID() == wizard.StepIDResources {
-						footer = tuitest.StripANSI(s.PinnedFooter(120))
-					}
-				case *steps.ReviewStep:
-					review = tuitest.StripANSI(s.View(120, 100))
-				}
+	var footer, review string
+	for _, step := range built.Steps {
+		switch s := step.(type) {
+		case *wizard.DataDrivenStep:
+			if s.ID() == wizard.StepIDResources {
+				footer = tuitest.StripANSI(s.PinnedFooter(120))
 			}
+		case *steps.ReviewStep:
+			review = tuitest.StripANSI(s.View(120, 100))
+		}
+	}
 
-			got, want := totals.FindStringSubmatch(footer), totals.FindStringSubmatch(review)
-			if got == nil || want == nil {
-				t.Fatalf("totals missing: resources footer %q, review:\n%s", footer, review)
-			}
-			if !slices.Equal(got[1:], want[1:]) {
-				t.Errorf("resources footer totals %v, review totals %v (vcpu, gb ram, gb disk)", got[1:], want[1:])
-			}
-		})
+	got, want := totals.FindStringSubmatch(footer), totals.FindStringSubmatch(review)
+	if got == nil || want == nil {
+		t.Fatalf("totals missing: resources footer %q, review:\n%s", footer, review)
+	}
+	if !slices.Equal(got[1:], want[1:]) {
+		t.Errorf("resources footer totals %v, review totals %v (vcpu, gb ram, gb disk)", got[1:], want[1:])
 	}
 }
 

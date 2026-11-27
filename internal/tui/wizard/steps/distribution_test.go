@@ -49,10 +49,10 @@ func TestDistributionStep_GetMinorFromOptionID(t *testing.T) {
 
 func TestDistributionStep_SetVersionFetcher_UsesFixture(t *testing.T) {
 	s := NewDistributionStep()
-	s.SetVersionFetcher(StaticVersionFetcher{Series: DemoReleaseSeries()})
+	s.SetVersionFetcher(StaticVersionFetcher{Series: demoReleaseSeries()})
 	msg := s.fetchVersions()
 	loaded, ok := msg.(versionsLoadedMsg)
-	if !ok || loaded.err != nil || len(loaded.series) != len(DemoReleaseSeries()) {
+	if !ok || loaded.err != nil || len(loaded.series) != len(demoReleaseSeries()) {
 		t.Fatalf("fetchVersions = %#v", msg)
 	}
 }
@@ -72,7 +72,7 @@ func TestDistributionStep_ConfiguredPatchAnchorsCursor(t *testing.T) {
 	s := NewDistributionStep()
 	s.SetSelectedVersion("4.19.4-okd-scos.3")
 
-	step, _ := s.Update(versionsLoadedMsg{series: DemoReleaseSeries()})
+	step, _ := s.Update(versionsLoadedMsg{series: demoReleaseSeries()})
 	s = step.(*DistributionStep)
 
 	if got := s.versionSelector.Selected().ID; got != "4.19.4-okd-scos.3" {
@@ -89,7 +89,7 @@ func TestDistributionStep_ConfiguredPatchAnchorsCursor(t *testing.T) {
 func TestDistributionStep_EnterEnterKeepsConfiguredVersion(t *testing.T) {
 	s := NewDistributionStep()
 	s.SetSelectedVersion("4.19.4-okd-scos.3")
-	step, _ := s.Update(versionsLoadedMsg{series: DemoReleaseSeries()})
+	step, _ := s.Update(versionsLoadedMsg{series: demoReleaseSeries()})
 	s = step.(*DistributionStep)
 
 	step, _ = s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -108,7 +108,7 @@ func TestDistributionStep_EnterEnterKeepsConfiguredVersion(t *testing.T) {
 
 func TestDistributionStep_EnterOnCollapsedSeriesConfirms(t *testing.T) {
 	s := NewDistributionStep()
-	step, _ := s.Update(versionsLoadedMsg{series: DemoReleaseSeries()})
+	step, _ := s.Update(versionsLoadedMsg{series: demoReleaseSeries()})
 	s = step.(*DistributionStep)
 
 	step, cmd := s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -127,7 +127,7 @@ func TestDistributionStep_EnterOnCollapsedSeriesConfirms(t *testing.T) {
 
 func TestDistributionStep_FreshRunCarriesNoCurrentChip(t *testing.T) {
 	s := NewDistributionStep()
-	step, _ := s.Update(versionsLoadedMsg{series: DemoReleaseSeries()})
+	step, _ := s.Update(versionsLoadedMsg{series: demoReleaseSeries()})
 	s = step.(*DistributionStep)
 
 	if view := s.View(80, 30); strings.Contains(view, "current") {
@@ -138,7 +138,7 @@ func TestDistributionStep_FreshRunCarriesNoCurrentChip(t *testing.T) {
 func loadedDistributionStep(t *testing.T) *DistributionStep {
 	t.Helper()
 	s := NewDistributionStep()
-	step, _ := s.Update(versionsLoadedMsg{series: DemoReleaseSeries()})
+	step, _ := s.Update(versionsLoadedMsg{series: demoReleaseSeries()})
 	s = step.(*DistributionStep)
 	step, _ = s.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	return step.(*DistributionStep)
@@ -272,7 +272,7 @@ func TestDistributionStep_ShortHelpNeverEmpty(t *testing.T) {
 		t.Error("ShortHelp() after retry (back to loading) is empty")
 	}
 
-	s.SetVersionFetcher(StaticVersionFetcher{Series: DemoReleaseSeries()})
+	s.SetVersionFetcher(StaticVersionFetcher{Series: demoReleaseSeries()})
 	step, _ = s.Update(s.fetchVersions())
 	s = step.(*DistributionStep)
 	if len(s.ShortHelp()) == 0 {
@@ -349,7 +349,7 @@ func TestDistributionStep_CatalogAbsentVersionInjectsCurrentRow(t *testing.T) {
 	s := NewDistributionStep()
 	s.SetSelectedVersion("4.19.1-okd-scos.9")
 
-	step, _ := s.Update(versionsLoadedMsg{series: DemoReleaseSeries()})
+	step, _ := s.Update(versionsLoadedMsg{series: demoReleaseSeries()})
 	s = step.(*DistributionStep)
 
 	if got := s.versionSelector.Selected().ID; got != "4.19.1-okd-scos.9" {
@@ -383,7 +383,7 @@ func TestDistributionStep_CatalogAbsentVersionInjectsCurrentRow(t *testing.T) {
 func TestDistributionStep_CatalogPresentVersionInjectsNothing(t *testing.T) {
 	s := NewDistributionStep()
 	s.SetSelectedVersion("4.19.4-okd-scos.3")
-	step, _ := s.Update(versionsLoadedMsg{series: DemoReleaseSeries()})
+	step, _ := s.Update(versionsLoadedMsg{series: demoReleaseSeries()})
 	s = step.(*DistributionStep)
 
 	if view := tuitest.StripANSI(s.View(90, 30)); strings.Contains(view, "not in the fetched catalog") {
@@ -404,7 +404,7 @@ func TestDistributionStep_StaleSuccessCannotOverwriteNewer(t *testing.T) {
 	}
 
 	seriesA := []releases.OKDReleaseSeries{{Major: 4, Minor: 10, Latest: releases.OKDVersion{Version: "4.10.0"}}}
-	seriesB := DemoReleaseSeries()
+	seriesB := demoReleaseSeries()
 
 	step, _ := s.Update(versionsLoadedMsg{generation: genB, series: seriesB})
 	s = step.(*DistributionStep)
@@ -428,7 +428,7 @@ func TestDistributionStep_StaleErrorCannotOverwriteNewer(t *testing.T) {
 	s.Init() // re-entry while A is still in flight
 	genB := s.generation
 
-	seriesB := DemoReleaseSeries()
+	seriesB := demoReleaseSeries()
 	step, _ := s.Update(versionsLoadedMsg{generation: genB, series: seriesB})
 	s = step.(*DistributionStep)
 	step, _ = s.Update(versionsLoadedMsg{generation: genA, err: errors.New("dial tcp: connection refused")})
@@ -447,7 +447,7 @@ func TestDistributionStep_StaleErrorCannotOverwriteNewer(t *testing.T) {
 
 func TestDistributionStep_ReentryAfterSuccessReusesCachedCatalog(t *testing.T) {
 	s := NewDistributionStep()
-	s.SetVersionFetcher(StaticVersionFetcher{Series: DemoReleaseSeries()})
+	s.SetVersionFetcher(StaticVersionFetcher{Series: demoReleaseSeries()})
 
 	cmd := s.Init()
 	if cmd == nil {
@@ -478,7 +478,7 @@ func TestDistributionStep_ReentryAfterErrorRefetches(t *testing.T) {
 		t.Fatalf("phase after failed load = %v, want phaseVersionError", s.phase)
 	}
 
-	s.SetVersionFetcher(StaticVersionFetcher{Series: DemoReleaseSeries()})
+	s.SetVersionFetcher(StaticVersionFetcher{Series: demoReleaseSeries()})
 	cmd = s.Init() // re-entry
 	if cmd == nil {
 		t.Fatal("re-entry after an error must retry, not get stuck")
@@ -496,7 +496,7 @@ func TestDistributionStep_OverlayHelp(t *testing.T) {
 		t.Fatalf("OverlayHelp() while loading = %+v, want nil", got)
 	}
 
-	s.SetVersionFetcher(StaticVersionFetcher{Series: DemoReleaseSeries()})
+	s.SetVersionFetcher(StaticVersionFetcher{Series: demoReleaseSeries()})
 	cmd := s.Init()
 	step, _ := s.Update(cmd())
 	s = step.(*DistributionStep)
@@ -517,7 +517,7 @@ func TestDistributionStep_OverlayHelp(t *testing.T) {
 
 func TestDistributionStep_HelpOverlay_RefreshDiscoverable(t *testing.T) {
 	s := NewDistributionStep()
-	s.SetVersionFetcher(StaticVersionFetcher{Series: DemoReleaseSeries()})
+	s.SetVersionFetcher(StaticVersionFetcher{Series: demoReleaseSeries()})
 	cmd := s.Init()
 	step, _ := s.Update(cmd())
 	s = step.(*DistributionStep)

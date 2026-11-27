@@ -19,7 +19,7 @@ LDFLAGS := -ldflags "-s -w \
 
 .DEFAULT_GOAL := help
 
-.PHONY: all build build-all clean test test-short test-cover coverage-floors lint fmt vet check deps deps-update run dev install demo screenshots help
+.PHONY: all build build-all clean test test-short test-cover coverage-floors lint fmt vet check deps deps-update run dev install help
 
 all: deps lint test build ## Run all checks and build
 
@@ -95,16 +95,10 @@ clean: ## Clean build artifacts
 	@echo "Cleaning..."
 	@rm -rf $(BUILD_DIR)
 	@rm -f coverage.out coverage.html
-	@rm -f okdctl.yaml test.yaml demo.yaml
+	@rm -f okdctl.yaml test.yaml
 
 clean-all: clean ## Clean everything including dependencies
 	@rm -rf vendor
-
-demo: ## Re-record docs/assets/demo.gif from the committed tape (needs vhs)
-	scripts/demo/record.sh
-
-screenshots: ## Render wizard PNGs at 80x24/100x30/120x40/180x48 (needs vhs)
-	scripts/screenshot/run.sh
 
 help: ## Show this help
 	@echo "okdctl build targets"

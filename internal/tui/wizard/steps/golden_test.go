@@ -54,7 +54,7 @@ func configureScenarios() []configureScenario {
 			id:   wizard.StepIDDistribution,
 			seed: func(m *wizard.Model) {
 				gen := m.CurrentStep().(*DistributionStep).generation
-				m.Update(versionsLoadedMsg{generation: gen, series: DemoReleaseSeries()})
+				m.Update(versionsLoadedMsg{generation: gen, series: demoReleaseSeries()})
 			},
 		},
 		{name: "proxmox", id: wizard.StepIDProxmox},
@@ -301,7 +301,7 @@ func TestGolden_DistributionHelpOverlay(t *testing.T) {
 			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
 			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDDistribution})
 			gen := m.CurrentStep().(*DistributionStep).generation
-			m.Update(versionsLoadedMsg{generation: gen, series: DemoReleaseSeries()})
+			m.Update(versionsLoadedMsg{generation: gen, series: demoReleaseSeries()})
 			m.Update(questionMark)
 
 			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
