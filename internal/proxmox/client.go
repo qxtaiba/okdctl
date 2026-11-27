@@ -92,21 +92,22 @@ func newProxmoxClient(endpoint string, apiToken []byte, insecure bool) (client *
 		return nil, nil, errors.New("proxmox client: api token must be in id=secret form")
 	}
 	if insecure {
-		warnInsecureTLS(endpoint)
+		warnEndpoint(&insecureTLSWarnOnce, "proxmox tls verification disabled (insecure: true)", endpoint)
+	}
+	if strings.HasPrefix(strings.ToLower(normalizeEndpoint(endpoint)), "http://") {
+		warnEndpoint(&plaintextHTTPWarnOnce, "proxmox endpoint uses plaintext http, the api token is sent in the clear", endpoint)
 	}
 	httpClient = httputil.NewOptionalInsecure(insecure, 0)
 	client = proxmox.NewClient(APIBaseURL(endpoint), proxmox.WithHTTPClient(httpClient), proxmox.WithAPIToken(id, secret))
 	return client, httpClient, nil
 }
 
-var insecureTLSWarnOnce sync.Once
+var insecureTLSWarnOnce, plaintextHTTPWarnOnce sync.Once
 
-// warnInsecureTLS logs once per process through the logutil facade rather
-// than threading a logger through every constructor.
-func warnInsecureTLS(endpoint string) {
-	insecureTLSWarnOnce.Do(func() {
-		logutil.Warn("proxmox tls verification disabled (insecure: true)", logutil.LF("endpoint", endpoint))
-	})
+// warnEndpoint logs once per process through the logutil facade rather than
+// threading a logger through every constructor.
+func warnEndpoint(once *sync.Once, msg, endpoint string) {
+	once.Do(func() { logutil.Warn(msg, logutil.LF("endpoint", endpoint)) })
 }
 
 // APIBaseURL normalizes endpoint (https default, trailing slash trimmed) and

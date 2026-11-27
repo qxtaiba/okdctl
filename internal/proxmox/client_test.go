@@ -48,6 +48,28 @@ func TestNewProxmoxClientWarnsOnInsecureOnce(t *testing.T) {
 	}
 }
 
+func TestNewProxmoxClientWarnsOnPlaintextHTTPOnce(t *testing.T) {
+	plaintextHTTPWarnOnce = sync.Once{}
+	var buf bytes.Buffer
+	t.Cleanup(logutil.Redirect(&buf))
+
+	for _, endpoint := range []string{"http://pve:8006", "http://pve:8006"} {
+		if _, _, err := newProxmoxClient(endpoint, []byte("user@pam!t=secret"), false); err != nil {
+			t.Fatalf("newProxmoxClient(%q): %v", endpoint, err)
+		}
+	}
+	if log := buf.String(); strings.Count(log, "plaintext http") != 1 || !strings.Contains(log, "endpoint=http://pve:8006") {
+		t.Fatalf("want one plaintext warning naming the endpoint, log = %q", log)
+	}
+	buf.Reset()
+	if _, _, err := newProxmoxClient("https://pve:8006", []byte("user@pam!t=secret"), false); err != nil {
+		t.Fatalf("newProxmoxClient: %v", err)
+	}
+	if strings.Contains(buf.String(), "plaintext http") {
+		t.Errorf("https endpoint must not warn, log = %q", buf.String())
+	}
+}
+
 func TestBadRequestRendersBodyOnce(t *testing.T) {
 	const detail = `{"vmid":"invalid format - value does not look like a valid VM ID"}`
 	f := newFakeAPI(t, map[string]http.HandlerFunc{
