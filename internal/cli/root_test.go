@@ -412,7 +412,7 @@ func TestUnknownCommandIsUsageErrorWithHelpHint(t *testing.T) {
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("bare okdctl: %v", err)
 	}
-	if !strings.Contains(out.String(), "okdctl [command]") {
-		t.Fatalf("bare okdctl must print help, got:\n%s", out.String())
+	if !strings.Contains(out.String(), "okdctl [command]") || strings.Contains(out.String(), "okdctl [flags]") {
+		t.Fatalf("bare okdctl must print help with the single [command] usage line, got:\n%s", out.String())
 	}
 }
