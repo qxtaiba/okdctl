@@ -1,5 +1,5 @@
-// Package steps hosts the phase-step orchestration primitives
-// (StepDef, BuildSteps, Orchestrator) shared by every distribution.
+// Package steps is the step engine slice 3's up, apply and destroy phases
+// are built from: StepDef, BuildSteps, Orchestrator and the Reporter stream.
 package steps
 
 import (
@@ -34,9 +34,7 @@ type StepDef struct {
 	// SkipReasonFunc overrides SkipReason after SkipWhen fires — use when
 	// SkipWhen folds several causes into one.
 	SkipReasonFunc func() string
-	OnStart        func()
 	Exec           func(ctx context.Context) error
-	OnError        func(error)
 }
 
 // BuildSteps validates defs for NewOrchestrator. Panics on an empty ID or Name.

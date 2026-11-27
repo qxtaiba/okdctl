@@ -15,7 +15,7 @@ import (
 )
 
 func buildOrchestrator(defs []steps.StepDef) *steps.Orchestrator {
-	return steps.NewOrchestrator(steps.BuildSteps(defs)...)
+	return steps.NewOrchestrator(nil, steps.BuildSteps(defs)...)
 }
 
 func TestOrchestratorRun_FatalStepStopsRun(t *testing.T) {
@@ -177,11 +177,9 @@ func TestOrchestratorRun_ClassifiesByErrorChain(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			var gotErr error
 			o := buildOrchestrator([]steps.StepDef{{
 				ID: "create-vms", Name: "create VMs",
-				Exec:    func(_ context.Context) error { return tc.err },
-				OnError: func(err error) { gotErr = err },
+				Exec: func(_ context.Context) error { return tc.err },
 			}})
 			err := o.Run(context.Background())
 			d, ok := errtypes.Describe(err)
@@ -191,8 +189,8 @@ func TestOrchestratorRun_ClassifiesByErrorChain(t *testing.T) {
 			if !strings.HasPrefix(d.Message, "step create-vms failed: ") {
 				t.Errorf("Message = %q, want the step id named", d.Message)
 			}
-			if !errors.Is(err, tc.err) || gotErr == nil || !errors.Is(gotErr, tc.err) {
-				t.Errorf("chain broken: Run err %v, OnError err %v", err, gotErr)
+			if res := o.Results(); !errors.Is(err, tc.err) || len(res) != 1 || !errors.Is(res[0].Error, tc.err) {
+				t.Errorf("chain broken: Run err %v, results %+v", err, res)
 			}
 		})
 	}
