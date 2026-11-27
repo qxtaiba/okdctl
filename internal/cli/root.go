@@ -308,9 +308,8 @@ func signalExitCode(caughtSig *atomic.Value, err error) (int, bool) {
 	return 130, true
 }
 
-// exitCodeFor maps err to the documented BSD-sysexits code. Precedence is
-// sentinel > Config(2) > Network(3) > Cluster(4) > Auth(5) > Usage(64)
-// regardless of wrap order.
+// exitCodeFor maps err to its BSD-sysexits code: 66 for a missing config
+// file, else the Kind errtypes.Describe resolves, else 1.
 func exitCodeFor(err error) int {
 	if err == nil {
 		return 0
@@ -318,27 +317,8 @@ func exitCodeFor(err error) int {
 	if errors.Is(err, errtypes.ErrConfigMissing) {
 		return 66
 	}
-	var cfgErr *errtypes.ConfigError
-	if errors.As(err, &cfgErr) {
-		return 2
-	}
-	var netErr *errtypes.NetworkError
-	if errors.As(err, &netErr) {
-		return 3
-	}
-	var clusterErr *errtypes.ClusterError
-	if errors.As(err, &clusterErr) {
-		return 4
-	}
-	var authErr *errtypes.AuthError
-	if errors.As(err, &authErr) {
-		return 5
-	}
-	var usageErr *errtypes.UsageError
-	// 64 = EX_USAGE (BSD sysexits.h); returned via UsageError so deferred
-	// closes run before process exit
-	if errors.As(err, &usageErr) {
-		return 64
+	if d, ok := errtypes.Describe(err); ok {
+		return d.Kind.ExitCode()
 	}
 	return 1
 }

@@ -3,11 +3,14 @@ package steps_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net/url"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
+	"github.com/qxtaiba/okdctl/internal/proxmox"
 	"github.com/qxtaiba/okdctl/internal/steps"
 )
 
@@ -160,21 +163,38 @@ func TestOrchestratorRun_AlreadyDoneErrorProceedsToExecute(t *testing.T) {
 	}
 }
 
-func TestOrchestratorRun_OnErrorFiresWithClassifiedError(t *testing.T) {
+func TestOrchestratorRun_ClassifiesByErrorChain(t *testing.T) {
 	t.Parallel()
-	var gotErr error
-	defs := []steps.StepDef{
-		{
-			ID: "a", Name: "a",
-			Exec:    func(_ context.Context) error { return errors.New("boom") },
-			OnError: func(err error) { gotErr = err },
-		},
+	cases := []struct {
+		name string
+		err  error
+		want errtypes.Kind
+	}{
+		{"driver permission is auth", fmt.Errorf("create vm: %w", proxmox.ErrPermission), errtypes.KindAuth},
+		{"transport failure is network", &url.Error{Op: "Get", URL: "https://pve:8006", Err: errors.New("connection refused")}, errtypes.KindNetwork},
+		{"anything else is cluster", &proxmox.TaskFailed{UPID: "UPID:pve:1", ExitStatus: "unable to start"}, errtypes.KindCluster},
 	}
-	o := buildOrchestrator(defs)
-	_ = o.Run(context.Background())
-	var ce *errtypes.ClusterError
-	if !errors.As(gotErr, &ce) {
-		t.Fatalf("OnError err = %T, want *errtypes.ClusterError (classifyStepErr backstop)", gotErr)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var gotErr error
+			o := buildOrchestrator([]steps.StepDef{{
+				ID: "create-vms", Name: "create VMs",
+				Exec:    func(_ context.Context) error { return tc.err },
+				OnError: func(err error) { gotErr = err },
+			}})
+			err := o.Run(context.Background())
+			d, ok := errtypes.Describe(err)
+			if !ok || d.Kind != tc.want {
+				t.Fatalf("Describe(%v) = %+v ok=%v, want kind %v", err, d, ok, tc.want)
+			}
+			if !strings.HasPrefix(d.Message, "step create-vms failed: ") {
+				t.Errorf("Message = %q, want the step id named", d.Message)
+			}
+			if !errors.Is(err, tc.err) || gotErr == nil || !errors.Is(gotErr, tc.err) {
+				t.Errorf("chain broken: Run err %v, OnError err %v", err, gotErr)
+			}
+		})
 	}
 }
 
@@ -197,7 +217,7 @@ func TestOrchestratorRun_ScrubsCredentialInClassifiedMsg(t *testing.T) {
 	if strings.Contains(ce.Msg, "hunter2") {
 		t.Errorf("Msg leaked credential past RedactHandler: %q", ce.Msg)
 	}
-	if !strings.Contains(ce.Msg, "step failed") {
+	if !strings.Contains(ce.Msg, "step a failed") {
 		t.Errorf("Msg = %q; want it to keep the laundered root cause", ce.Msg)
 	}
 	if !errors.Is(err, root) {

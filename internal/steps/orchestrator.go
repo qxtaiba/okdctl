@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"slices"
 	"sync"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
+	"github.com/qxtaiba/okdctl/internal/proxmox"
 )
 
 // MetricsRecorder receives per-step/run observations from Orchestrator;
@@ -129,26 +131,28 @@ func (o *Orchestrator) Results() []StepResult {
 	return slices.Clone(o.results)
 }
 
-// classifyStepErr wraps a bare error in ClusterError (exit 4, not exit 1);
-// typed errtypes and ctx cancel/deadline errors pass through unchanged.
-func classifyStepErr(err error) error {
+// classifyStepErr types a bare step error by its chain: a driver permission
+// refusal is an AuthError, a transport failure a NetworkError, anything else
+// a ClusterError; typed errtypes and ctx errors pass through unchanged.
+func classifyStepErr(id StepID, err error) error {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return err
 	}
-	var (
-		ce   *errtypes.ClusterError
-		ne   *errtypes.NetworkError
-		cfge *errtypes.ConfigError
-		ae   *errtypes.AuthError
-		ue   *errtypes.UsageError
-	)
-	if errors.As(err, &ce) || errors.As(err, &ne) || errors.As(err, &cfge) || errors.As(err, &ae) || errors.As(err, &ue) {
+	if _, ok := errtypes.Describe(err); ok {
 		return err
 	}
 	// Msg bypasses RedactHandler, so err.Error() is laundered through
 	// RedactableStderr before landing in Msg; Err stays untouched for errors.Is/As.
-	scrubbed := fmt.Sprint(logutil.RedactableStderr(err.Error()).Redacted())
-	return &errtypes.ClusterError{Msg: "step failed: " + scrubbed, Err: err}
+	msg := fmt.Sprintf("step %s failed: %v", id, logutil.RedactableStderr(err.Error()).Redacted())
+	var netErr net.Error
+	switch {
+	case errors.Is(err, proxmox.ErrPermission):
+		return &errtypes.AuthError{Msg: msg, Err: err}
+	case errors.As(err, &netErr):
+		return &errtypes.NetworkError{Msg: msg, Err: err}
+	default:
+		return &errtypes.ClusterError{Msg: msg, Err: err}
+	}
 }
 
 func (o *Orchestrator) executeStep(ctx context.Context, step *StepDef) StepResult {
@@ -197,7 +201,7 @@ func (o *Orchestrator) executeStep(ctx context.Context, step *StepDef) StepResul
 		err = step.Exec(ctx)
 	}
 	if err != nil {
-		err = classifyStepErr(err)
+		err = classifyStepErr(step.ID, err)
 		if step.OnError != nil {
 			step.OnError(err)
 		}
