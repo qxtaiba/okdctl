@@ -99,4 +99,8 @@ func TestNodeLayout(t *testing.T) {
 			t.Errorf("DerivedNodeAddress accepted %s node_ip_start %q", name, start)
 		}
 	}
+	cfg.Networking.NodeIPStart = "192.168.1.10"
+	if _, err := cfg.DerivedNodeAddress(RoleMaster, -1); err == nil {
+		t.Error("DerivedNodeAddress accepted a negative index")
+	}
 }
