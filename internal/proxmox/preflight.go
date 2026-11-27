@@ -279,8 +279,8 @@ func (st *preflightState) owned(tags []string) bool {
 func (st *preflightState) checkMemory(out *findings) {
 	for _, name := range slices.Sorted(maps.Keys(st.in.MemoryMiBByNode)) {
 		node, ok := st.nodes[name]
-		if !ok {
-			continue
+		if !ok || node.MemTotalMiB == 0 {
+			continue // an unreadable or offline status is the cpu-flags check's finding
 		}
 		running, owned := 0, 0
 		for i := range st.vms {

@@ -313,6 +313,13 @@ func TestPreflight(t *testing.T) {
 			want: []Finding{{"memory", "warn", "node pve1: planned 4096 MiB + running 53249 MiB + 8192 MiB reserve exceeds 65536 MiB"}},
 		},
 		{
+			name: "memory skips a node whose total is unknown",
+			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) {
+				d.nodes[1].MemTotalMiB, d.nodes[1].CPUFlags = 0, nil
+			},
+			want: []Finding{{"cpu-flags", "fail", "node pve2: status not readable"}},
+		},
+		{
 			name:   "memory exactly fits",
 			mutate: func(_ *fakeDriver, in *PreflightInput, _ *fakePinger) { in.MemoryMiBByNode["pve1"] = 49152 },
 		},
