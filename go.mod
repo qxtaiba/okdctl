@@ -20,7 +20,8 @@ require (
 	github.com/charmbracelet/colorprofile v0.4.3
 	github.com/charmbracelet/x/ansi v0.11.9
 	github.com/spf13/pflag v1.0.10
-	go.yaml.in/yaml/v2 v2.4.5
+	go.yaml.in/yaml/v2 v2.4.2
+	go.yaml.in/yaml/v4 v4.0.0
 	golang.org/x/sync v0.23.0
 )
 
