@@ -27,7 +27,6 @@ func (c *Config) validateNetwork(r *ValidationResult, nodes []nodeRef) {
 		parseAddr(r, fmt.Sprintf("%s[%d]", FieldNetworkingDNS, i), d)
 	}
 	c.validateVIPs(r, machine, nodes)
-	c.validateNodeRange(r, machine, nodes)
 	c.validateDerivedAddresses(r, machine, nodes)
 	if pod.IsValid() && machine.IsValid() && pod.Overlaps(machine) {
 		r.addf(FieldNetworkingPodCIDR, "%s overlaps machine_cidr %s", pod, machine)
@@ -80,37 +79,29 @@ func (c *Config) validateVIPs(r *ValidationResult, machine netip.Prefix, nodes [
 	}
 }
 
-// validateNodeRange checks node_ip_start and the last derived node address;
-// a CIDR is contiguous, so both inside means every node address is inside.
-func (c *Config) validateNodeRange(r *ValidationResult, machine netip.Prefix, nodes []nodeRef) {
-	start := parseAddr(r, FieldNetworkingNodeIPStart, c.Networking.NodeIPStart)
-	if !start.IsValid() || !machine.IsValid() || len(nodes) == 0 {
-		return
-	}
-	if !machine.Contains(start) {
+// validateDerivedAddresses checks node_ip_start and every derived address:
+// inside machine_cidr (the first one outside is reported, the rest follow
+// it) and clear of the gateway, the resolvers and the prefix edges;
+// overrides have their own rules.
+func (c *Config) validateDerivedAddresses(r *ValidationResult, machine netip.Prefix, nodes []nodeRef) {
+	n := &c.Networking
+	start := parseAddr(r, FieldNetworkingNodeIPStart, n.NodeIPStart)
+	if start.IsValid() && machine.IsValid() && !machine.Contains(start) {
 		r.addf(FieldNetworkingNodeIPStart, "%s is outside machine_cidr %s", start, machine)
 		return
 	}
-	last := &nodes[len(nodes)-1]
-	end, err := c.DerivedNodeAddress(last.role, last.index)
-	if err != nil {
-		r.addf(FieldNetworkingNodeIPStart, "derive the last node address: %v", err)
-		return
-	}
-	if !machine.Contains(end) {
-		r.addf(FieldNetworkingNodeIPStart, "node range %s-%s leaves machine_cidr %s", start, end, machine)
-	}
-}
-
-// validateDerivedAddresses reports a derived address inside machine_cidr
-// that collides with the gateway, a resolver or an edge of the prefix;
-// overrides and addresses outside the prefix have their own rules.
-func (c *Config) validateDerivedAddresses(r *ValidationResult, machine netip.Prefix, nodes []nodeRef) {
-	n := &c.Networking
 	gateway, _ := netip.ParseAddr(n.Gateway)
+	outside := false
 	for i := range nodes {
 		node := &nodes[i]
-		if !node.derived || (machine.IsValid() && !machine.Contains(node.ip)) {
+		if !node.derived {
+			continue
+		}
+		if machine.IsValid() && !machine.Contains(node.ip) {
+			if !outside {
+				r.addf(FieldNetworkingNodeIPStart, "%s derives %s, outside machine_cidr %s", node.name, node.ip, machine)
+			}
+			outside = true
 			continue
 		}
 		if node.ip == gateway {

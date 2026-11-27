@@ -30,7 +30,7 @@ func TestValidateNetwork(t *testing.T) {
 		{"ingress vip is worker address", func(c *Config) { c.Networking.IngressVIP = "192.168.1.161" }, finding{FieldNetworkingIngressVIP, "equals the address of lab-worker1"}},
 		{"node ip start parse", func(c *Config) { c.Networking.NodeIPStart = "" }, finding{FieldNetworkingNodeIPStart, "not an IP address"}},
 		{"node range starts outside", func(c *Config) { c.Networking.NodeIPStart = "192.168.2.10" }, finding{FieldNetworkingNodeIPStart, "outside machine_cidr 192.168.1.0/24"}},
-		{"node range ends outside", func(c *Config) { c.Networking.NodeIPStart = "192.168.1.245" }, finding{FieldNetworkingNodeIPStart, "192.168.1.245-192.168.2.0 leaves machine_cidr 192.168.1.0/24"}},
+		{"node range ends outside", func(c *Config) { c.Networking.NodeIPStart = "192.168.1.245" }, finding{FieldNetworkingNodeIPStart, "lab-worker1 derives 192.168.2.0, outside machine_cidr 192.168.1.0/24"}},
 		{"node start is gateway", func(c *Config) { c.Networking.NodeIPStart = "192.168.1.1" }, finding{FieldNetworkingNodeIPStart, "lab-master0 and gateway share 192.168.1.1"}},
 		{"master is resolver", func(c *Config) { c.Networking.DNS = []string{"192.168.1.1", "192.168.1.151"} }, finding{FieldNetworkingNodeIPStart, "lab-master1 and dns[1] share 192.168.1.151"}},
 		{"worker is resolver", func(c *Config) { c.Networking.DNS = []string{"192.168.1.161"} }, finding{FieldNetworkingNodeIPStart, "lab-worker1 and dns[0] share 192.168.1.161"}},
@@ -42,7 +42,7 @@ func TestValidateNetwork(t *testing.T) {
 				c.Networking.NodeIPStart = "192.168.1.200"
 				c.Nodes = map[string]NodeOverride{"lab-worker100": {Host: "pve"}}
 			},
-			finding{FieldNetworkingNodeIPStart, "192.168.1.200-192.168.2.54 leaves machine_cidr 192.168.1.0/24"},
+			finding{FieldNetworkingNodeIPStart, "lab-worker100 derives 192.168.2.54, outside machine_cidr 192.168.1.0/24"},
 		},
 		{"pod overlaps machine", func(c *Config) { c.Networking.PodCIDR = "192.168.0.0/16" }, finding{FieldNetworkingPodCIDR, "overlaps machine_cidr"}},
 		{"service overlaps machine", func(c *Config) { c.Networking.ServiceCIDR = "192.168.1.0/25" }, finding{FieldNetworkingServiceCIDR, "overlaps machine_cidr"}},
@@ -65,6 +65,12 @@ func TestValidateNetwork(t *testing.T) {
 		"host prefix 28":               func(c *Config) { c.Networking.HostPrefix = 28 },
 		"masters only range":           func(c *Config) { c.Workers.Count = 0; c.Networking.NodeIPStart = "192.168.1.252" },
 		"ntp listed":                   func(c *Config) { c.Networking.NTP = []string{"pool.ntp.org"} },
+		"overridden worker past the range end": func(c *Config) {
+			c.Networking.MachineCIDR, c.Networking.Gateway, c.Networking.DNS = "192.168.1.144/28", "192.168.1.145", []string{"192.168.1.145"}
+			c.Networking.NodeIPStart, c.Networking.APIVIP, c.Networking.IngressVIP = "192.168.1.146", "192.168.1.157", "192.168.1.158"
+			c.Workers.Count = 1
+			c.Nodes = map[string]NodeOverride{"lab-worker5": {IP: "192.168.1.152"}}
+		},
 	}
 	for name, mutate := range passing {
 		t.Run("accepts "+name, func(t *testing.T) {
