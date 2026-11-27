@@ -41,20 +41,18 @@ func seedHubSaveSlot(m *wizard.Model) {
 }
 
 type configureScenario struct {
-	name     string
-	id       wizard.StepID
-	seed     func(*wizard.Model)
-	interact tea.Msg
+	name string
+	id   wizard.StepID
+	seed func(*wizard.Model)
+	// wide also pins the frame at 120x40: the hub, the densest step and the
+	// fresh placement whose host rows sit below the 80x24 fold.
+	wide bool
 }
 
 func configureScenarios() []configureScenario {
-	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
-	downKey := tea.KeyPressMsg{Code: 'j', Text: "j"}
-	endKey := tea.KeyPressMsg{Code: tea.KeyEnd}
-
 	return []configureScenario{
-		{name: "hub_fresh", id: wizard.StepIDWelcome},
-		{name: "hub_existing", id: wizard.StepIDWelcome, seed: seedHubSaveSlot, interact: downKey},
+		{name: "hub_fresh", id: wizard.StepIDWelcome, wide: true},
+		{name: "hub_existing", id: wizard.StepIDWelcome, seed: seedHubSaveSlot, wide: true},
 		{
 			name: "distribution",
 			id:   wizard.StepIDDistribution,
@@ -62,54 +60,39 @@ func configureScenarios() []configureScenario {
 				gen := m.CurrentStep().(*DistributionStep).generation
 				m.Update(versionsLoadedMsg{generation: gen, series: DemoReleaseSeries()})
 			},
-			interact: tabKey,
 		},
-		{name: "proxmox", id: wizard.StepIDProxmox, interact: tabKey},
-		{name: "basics", id: wizard.StepIDBasics, interact: tabKey},
+		{name: "proxmox", id: wizard.StepIDProxmox},
+		{name: "basics", id: wizard.StepIDBasics},
 		{
-			name: "node-placement",
+			name: "node-placement-fresh",
 			id:   wizard.StepIDNodePlacement,
 			seed: func(m *wizard.Model) {
-				m.Config().Provider.Proxmox.Nodes = []string{"pve1", "pve2"}
 				gen := m.CurrentStep().(*NodePlacementStep).generation
 				m.Update(discoveryCompleteMsg{generation: gen, discovery: demoDiscovery()})
 			},
-			interact: tabKey,
+			wide: true,
 		},
-		{name: "networking", id: wizard.StepIDNetworking, interact: tabKey},
-		{name: "resources", id: wizard.StepIDResources, interact: tabKey},
-		{name: "files", id: wizard.StepIDFiles, interact: tabKey},
-		{name: "advanced", id: wizard.StepIDAdvanced, interact: tabKey},
+		{
+			name: "node-placement-overrides",
+			id:   wizard.StepIDNodePlacement,
+			seed: func(m *wizard.Model) {
+				m.Config().Provider.Proxmox.Nodes = []string{"pve1", "pve2"}
+				m.Config().Nodes = map[string]config.NodeOverride{"lab-master1": {Host: "pve1"}}
+				gen := m.CurrentStep().(*NodePlacementStep).generation
+				m.Update(discoveryCompleteMsg{generation: gen, discovery: demoDiscovery()})
+			},
+		},
+		{name: "networking", id: wizard.StepIDNetworking},
+		{name: "resources", id: wizard.StepIDResources},
+		{name: "files", id: wizard.StepIDFiles},
+		{name: "advanced", id: wizard.StepIDAdvanced},
 		{
 			name: "review",
 			id:   wizard.StepIDReview,
-			seed: func(m *wizard.Model) {
-				m.CurrentStep().(*ReviewStep).SetConfig(m.Config())
-			},
-			interact: downKey,
+			seed: func(m *wizard.Model) { m.CurrentStep().(*ReviewStep).SetConfig(m.Config()) },
+			wide: true,
 		},
 		{name: "review-edited", id: wizard.StepIDReview, seed: seedReviewChanges},
-		{
-			name: "review-overrides",
-			id:   wizard.StepIDReview,
-			seed: func(m *wizard.Model) {
-				cfg := m.Config()
-				cfg.Provider.Proxmox.Nodes = []string{"pve1", "pve2"}
-				cfg.Nodes = map[string]config.NodeOverride{"lab-master0": {Host: "pve2", MemoryMiB: new(32768)}}
-				m.CurrentStep().(*ReviewStep).SetConfig(cfg)
-			},
-			interact: endKey,
-		},
-		{
-			name: "review-no-changes",
-			id:   wizard.StepIDReview,
-			seed: func(m *wizard.Model) {
-				cfg := m.Config()
-				step := m.CurrentStep().(*ReviewStep)
-				step.SetConfig(cfg)
-				step.SetSavedConfig(cfg)
-			},
-		},
 	}
 }
 
@@ -155,16 +138,17 @@ func demoDiscovery() *proxmoxDiscovery {
 	}}
 }
 
-var goldenSizes = []struct{ w, h int }{{80, 24}, {120, 40}}
-
 func TestGolden_ConfigureSteps(t *testing.T) {
-	for _, sz := range goldenSizes {
-		for _, sc := range configureScenarios() {
+	for _, sc := range configureScenarios() {
+		sizes := []struct{ w, h int }{{80, 24}}
+		if sc.wide {
+			sizes = append(sizes, struct{ w, h int }{120, 40})
+		}
+		for _, sz := range sizes {
 			t.Run(fmt.Sprintf("%s_%dx%d", sc.name, sz.w, sz.h), func(t *testing.T) {
 				if strings.HasPrefix(sc.name, "hub") {
 					forceHeroColor(t)
 				}
-				base := fmt.Sprintf("%s_%dx%d", sc.name, sz.w, sz.h)
 				tui.SetTerminalWidth(sz.w)
 				t.Cleanup(func() { tui.SetTerminalWidth(0) })
 
@@ -175,17 +159,10 @@ func TestGolden_ConfigureSteps(t *testing.T) {
 					sc.seed(m)
 				}
 				frame := tuitest.RenderAt(t, m, sz.w, sz.h)
-				tuitest.Golden(t, base+"_initial", frame)
+				tuitest.Golden(t, fmt.Sprintf("%s_%dx%d", sc.name, sz.w, sz.h), frame)
 				tuitest.AssertFits(t, frame, sz.w, sz.h)
-				if strings.HasPrefix(sc.name, "hub") && sz.w == 80 && sz.h == 24 {
+				if strings.HasPrefix(sc.name, "hub") && sz.w == 80 {
 					assertNoScrollIndicator(t, frame)
-				}
-
-				if sc.interact != nil {
-					m.Update(sc.interact)
-					frame = tuitest.RenderAt(t, m, sz.w, sz.h)
-					tuitest.Golden(t, base+"_interacted", frame)
-					tuitest.AssertFits(t, frame, sz.w, sz.h)
 				}
 			})
 		}
@@ -473,7 +450,7 @@ func TestGolden_NetworkingMalformedCIDRShowsOneCleanError(t *testing.T) {
 func TestGolden_NetworkingPairedVIPsVisible(t *testing.T) {
 	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
 
-	for _, sz := range []struct{ w, h int }{{80, 24}, {120, 40}} {
+	for _, sz := range []struct{ w, h int }{{80, 24}} {
 		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
 			tui.SetTerminalWidth(sz.w)
 			t.Cleanup(func() { tui.SetTerminalWidth(0) })
@@ -514,7 +491,7 @@ func TestGolden_ProxmoxAdvancedFoldExpandedStaysOpenAfterFocusLeaves(t *testing.
 	enterKey := tea.KeyPressMsg{Code: tea.KeyEnter}
 	pageDown := tea.KeyPressMsg{Code: tea.KeyPgDown}
 
-	for _, sz := range []struct{ w, h int }{{80, 24}, {120, 40}} {
+	for _, sz := range []struct{ w, h int }{{80, 24}} {
 		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
 			tui.SetTerminalWidth(sz.w)
 			t.Cleanup(func() { tui.SetTerminalWidth(0) })

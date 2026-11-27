@@ -1,24 +1,24 @@
                                                                                 
   ╭──────────────────────────────────────────────────────────────────────────╮  
   │ O K D C T L                                                              │  
-  │ configure required files          connect · cluster · extras ●○ · review │  
+  │ configure node placement        connect · cluster ✓●○○ · extras · review │  
   │──────────────────────────────────────────────────────────────────────────│  
-  │    ● required files                                                      │  
+  │    discovered 2 node(s)                                                  │  
+  │    pve1 ✓ online · 32c · 128g                                            │  
+  │    pve2 ✓ online · 24c · 96g                                             │  
+  │    assigned demand · pve1: 20c/64g/980gb · pve2: 8c/16g/620gb            │  
   │                                                                          │  
-  │    pull secret                                                           │  
+  │                                                                          │  
+  │    ● proxmox nodes                                                       │  
+  │                                                                          │  
+  │    placement pool                                                        │  
   │    ╭────────────────────────────────────────────────────────────────╮    │  
-  │    │ ./pull-secret.json                                             │    │  
+  │    │ > [✓] pve1    [✓] pve2                                         │    │  
   │    ╰────────────────────────────────────────────────────────────────╯    │  
-  │    ✗ file does not exist: ./pull-secret.json — check the path            │  
-  │                                                                          │  
-  │    ssh public key                                                        │  
-  │    ╭────────────────────────────────────────────────────────────────╮    │  
-  │    │ ./id_ed25519.pub                                               │    │  
-  │    ╰────────────────────────────────────────────────────────────────╯    │  
-  │    path to the ssh public key for node access                            │  
+  │    proxmox nodes the vms spread across (provider.proxmox.nodes)          │  
   │                                                                          │  
   │                                                                          │  
-  │────────── ↑ ↓  17% • scroll for more ────────── ▸ okd 4.22.0-okd-scos.10 │  
-  │  ↑↓/tab navigate • enter continue • esc back … • ctrl+c quit • ? help    │  
+  │────────── ↑ ↓  scroll down for more ─────────── ▸ okd 4.22.0-okd-scos.10 │  
+  │  ↑↓ navigate • ← → change value … • ctrl+c quit • ? help                 │  
   ╰──────────────────────────────────────────────────────────────────────────╯  
                                                                                 

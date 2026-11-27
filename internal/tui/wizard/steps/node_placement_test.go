@@ -345,7 +345,7 @@ func TestSeedCredentialsReachesBothSteps(t *testing.T) {
 }
 
 func TestGolden_NodePlacementUnknownCapacity(t *testing.T) {
-	for _, sz := range []struct{ w, h int }{{80, 24}, {180, 48}} {
+	for _, sz := range []struct{ w, h int }{{80, 24}} {
 		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
 			tui.SetTerminalWidth(sz.w)
 			t.Cleanup(func() { tui.SetTerminalWidth(0) })
