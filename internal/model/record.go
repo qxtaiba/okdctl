@@ -5,10 +5,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
-	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/marker"
 )
 
@@ -43,19 +41,13 @@ func NewInfraID(cluster string) string {
 	return cluster + "-" + hex.EncodeToString(b[:])
 }
 
-// LoadRecord reads the record at path; a missing file wraps os.ErrNotExist
-// and an envelope naming another cluster wraps ErrRecordMismatch.
+// LoadRecord reads the record at path; a missing file wraps os.ErrNotExist,
+// another schema version wraps marker.ErrSchemaVersion and an envelope
+// naming another cluster wraps ErrRecordMismatch.
 func LoadRecord(path string) (*Record, error) {
 	var body recordBody
-	found, err := recordFile.Read(path, &body)
-	if err != nil {
+	if err := recordFile.Read(path, &body); err != nil {
 		return nil, err
-	}
-	if !found {
-		if _, err := os.Stat(path); err != nil {
-			return nil, fmt.Errorf("load cluster record: %w", err)
-		}
-		return nil, fmt.Errorf("load cluster record %s: unsupported schema_version %q", path, body.SchemaVersion)
 	}
 	switch {
 	case body.ClusterName == "":
@@ -71,7 +63,7 @@ func LoadRecord(path string) (*Record, error) {
 // envelope's cluster name.
 func SaveRecord(path string, r *Record) error {
 	body := recordBody{Record: *r}
-	if err := recordFile.Write(path, &body, logutil.RunID(), r.Cluster); err != nil {
+	if err := recordFile.Write(path, &body, r.Cluster); err != nil {
 		return fmt.Errorf("save cluster record: %w", err)
 	}
 	return nil

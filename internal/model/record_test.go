@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/qxtaiba/okdctl/internal/marker"
 )
 
 func TestNewInfraID(t *testing.T) {
@@ -75,16 +77,17 @@ func TestLoadRecord_Errors(t *testing.T) {
 			notMsg:  "different cluster",
 		},
 		{
-			name:  "unknown schema version",
-			seed:  `{"schema_version":"99","cluster_name":"lab","infra_id":"lab-a1b2c3","cluster":"lab"}`,
-			notIs: []error{os.ErrNotExist, ErrRecordMismatch},
+			name:   "unknown schema version",
+			seed:   `{"schema_version":"99","cluster_name":"lab","infra_id":"lab-a1b2c3","cluster":"lab"}`,
+			wantIs: marker.ErrSchemaVersion,
+			notIs:  []error{os.ErrNotExist, ErrRecordMismatch},
 		},
 		{
 			name:    "corrupt json",
 			seed:    `{broken`,
 			notIs:   []error{os.ErrNotExist, ErrRecordMismatch},
-			wantMsg: "parse cluster record marker:",
-			notMsg:  "load cluster record: parse cluster record",
+			wantMsg: "parse cluster record marker",
+			notMsg:  "load cluster record",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

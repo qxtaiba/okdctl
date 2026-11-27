@@ -1,8 +1,10 @@
 package marker
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -16,7 +18,7 @@ var testFile = File{Label: "test", Version: "v2"}
 
 func TestFileWriteReadRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "marker.json")
-	if err := testFile.Write(path, &testPayload{Kind: "alpha"}, "run-1", "prod"); err != nil {
+	if err := testFile.Write(path, &testPayload{Kind: "alpha"}, "prod"); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
 	info, err := os.Stat(path)
@@ -28,27 +30,24 @@ func TestFileWriteReadRoundTrip(t *testing.T) {
 	}
 
 	var got testPayload
-	found, err := testFile.Read(path, &got)
-	if err != nil || !found {
-		t.Fatalf("Read = (%v, %v); want (true, nil)", found, err)
+	if err := testFile.Read(path, &got); err != nil {
+		t.Fatalf("Read: %v", err)
 	}
-	if got.Kind != "alpha" || got.SchemaVersion != "v2" || got.RunID != "run-1" || got.ClusterName != "prod" {
+	if got.Kind != "alpha" || got.SchemaVersion != "v2" || got.ClusterName != "prod" {
 		t.Fatalf("round-trip mismatch: %+v", got)
-	}
-	if got.Timestamp.IsZero() {
-		t.Error("Timestamp must be stamped on write")
 	}
 }
 
-func TestFileReadAbsentAndError(t *testing.T) {
+func TestFileReadErrors(t *testing.T) {
 	tests := []struct {
 		name    string
-		seed    string // "" = no file on disk
-		wantErr bool
+		seed    string
+		wantIs  error
+		wantMsg string
 	}{
-		{name: "missing file treated absent"},
-		{name: "corrupt JSON errors", seed: "{broken", wantErr: true},
-		{name: "unknown version treated absent", seed: `{"schema_version":"v99","kind":"alpha","cluster_name":"prod"}`},
+		{name: "missing file", wantIs: os.ErrNotExist, wantMsg: "read test marker"},
+		{name: "corrupt json", seed: "{broken", wantMsg: "parse test marker"},
+		{name: "unknown version", seed: `{"schema_version":"v99","kind":"alpha","cluster_name":"prod"}`, wantIs: ErrSchemaVersion, wantMsg: `"v99", want "v2"`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -59,32 +58,16 @@ func TestFileReadAbsentAndError(t *testing.T) {
 				}
 			}
 			var got testPayload
-			found, err := testFile.Read(path, &got)
-			if tc.wantErr {
-				if err == nil {
-					t.Fatal("want error, got nil")
-				}
-				return
+			err := testFile.Read(path, &got)
+			if err == nil {
+				t.Fatal("Read accepted the marker")
 			}
-			if err != nil || found {
-				t.Fatalf("Read = (%v, %v); want (false, nil)", found, err)
+			if tc.wantIs != nil && !errors.Is(err, tc.wantIs) {
+				t.Errorf("err = %v; want errors.Is %v", err, tc.wantIs)
+			}
+			if !strings.Contains(err.Error(), tc.wantMsg) || !strings.Contains(err.Error(), path) {
+				t.Errorf("err = %q; want it to contain %q and the path", err, tc.wantMsg)
 			}
 		})
-	}
-}
-
-func TestFileClear(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "marker.json")
-	if err := testFile.Write(path, &testPayload{}, "r", "c"); err != nil {
-		t.Fatalf("Write: %v", err)
-	}
-	if err := testFile.Clear(path); err != nil {
-		t.Fatalf("Clear: %v", err)
-	}
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Fatalf("marker still present after Clear: %v", err)
-	}
-	if err := testFile.Clear(path); err != nil {
-		t.Fatalf("Clear on absent file: %v", err)
 	}
 }
