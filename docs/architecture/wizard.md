@@ -74,9 +74,10 @@ The wizard package lives under `internal/tui/wizard/`:
 - `datadriven.go` is the runtime that renders any `StepDefinition`.
 - `steps/` holds the step files: `welcome`, `distribution`, `proxmox`,
   `basics`, `node_placement`, `networking`, `resources`, `files`,
-  `advanced` and `review`. Three of them are hand-written `WizardStep`
-  types (the hub, the distribution picker and node placement); the rest
-  are `StepDefinition` literals plus their helper validators.
+  `advanced` and `review`. Four of them are hand-written `WizardStep`
+  types (the hub, the distribution picker, node placement and review);
+  the other six are `StepDefinition` literals plus their helper
+  validators.
 
 Adding a new step takes three additive edits: create the file under
 `steps/`, add a `StepType` constant and a `DefaultConfig()` entry in
@@ -86,12 +87,15 @@ in `steps/register.go`, which `internal/cli/wizard_setup.go` calls.
 ## FieldDefinition: the smallest unit
 
 A `FieldDefinition` names a config key (the `config.Field*` constants),
-its label, default, placeholder, help, type (`FieldTypeText` or
+its label, default, placeholder, help, type (`FieldTypeText`,
+`FieldTypePassword`, masked and scrubbed from error text, or
 `FieldTypeSelect` with `Options`), whether it is required, a `Validate`
 function and the two-way bridge `ConfigSet` / `ConfigGet` between the
-form's `map[string]string` and the typed `*config.Config`. The
-`SetString`, `SetInt`, `SetBool`, `GetString` and `GetInt` helpers in
-`datadriven.go` wrap the conversions so definitions stay terse.
+form's `map[string]string` and the typed `*config.Config`; the api token
+field has no `ConfigSet` and reaches `okdctl.env` through `Secrets`
+instead. The `SetString`, `SetInt`, `SetBool`, `GetString` and
+`GetInt` helpers in `datadriven.go` wrap the conversions so definitions
+stay terse.
 
 The field validators are the exported `config.Check*` functions, the same
 checks `config.Config.Validate` runs, so the wizard and `okdctl config
