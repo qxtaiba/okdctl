@@ -308,7 +308,7 @@ func (s *ReviewStep) renderNodes(st *wizard.SectionStyles, width int) string {
 	b.WriteString("\n")
 	b.WriteString(st.Separator)
 	b.WriteString("\n")
-	inv, err := model.Build(s.cfg, previewInfraID)
+	inv, err := model.Build(s.cfg, model.PreviewInfraID)
 	if err != nil {
 		warn := lipgloss.NewStyle().Foreground(tui.ColorWarning())
 		b.WriteString(warn.Render(tui.Truncate("node identities unavailable: "+err.Error(), width)))
@@ -378,7 +378,7 @@ func (s *ReviewStep) renderCompute(st *wizard.SectionStyles, width int) string {
 		{Label: roleLabelWorkers, Value: "none — the control plane runs the workloads", Skip: s.cfg.Workers.Count != 0},
 	}
 	warnings := ""
-	if inv, err := model.Build(s.cfg, previewInfraID); err == nil {
+	if inv, err := model.Build(s.cfg, model.PreviewInfraID); err == nil {
 		total := inventoryDemand(inv.Nodes)
 		entries = append(entries, wizard.KVEntry{Label: "total", Value: fmt.Sprintf("%d vcpu, %d gb ram, %d gb disk", total.cpu, total.memoryMiB/1024, total.diskGiB)})
 		warnings = s.renderComputeWarnings(&total, width)

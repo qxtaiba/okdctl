@@ -5,10 +5,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/model"
 )
 
-// previewInfraID seeds model.Build on screens that never show a MAC; the real
-// infra-ID exists only once the cluster record does.
-const previewInfraID = "preview"
-
 // CapacityTotals sums the online nodes' cpu and memory; a Known flag is false
 // unless every online node reported that resource.
 type CapacityTotals struct {

@@ -21,12 +21,7 @@ import (
 
 var configValidateOutput string
 
-// previewInfraID stands in for the record's infra-ID before okdctl up
-// writes one; the MACs it yields are a preview.
-const (
-	previewInfraID = "preview"
-	previewMACNote = "MACs are assigned at okdctl up; the ones above are a preview."
-)
+const previewMACNote = "MACs are assigned at okdctl up; the ones above are a preview."
 
 var configCmd = &cobra.Command{
 	Use:   "config",
@@ -118,7 +113,7 @@ func runConfigValidate(cmd *cobra.Command, _ []string) error {
 }
 
 // recordedInfraID returns the infra-ID of the cluster record in the
-// workspace holding configFile, or previewInfraID with recorded=false when
+// workspace holding configFile, or model.PreviewInfraID with recorded=false when
 // no record exists yet. A record naming a cluster other than clusterName is
 // refused, so a renamed config never adopts another cluster's identity.
 func recordedInfraID(configFile, clusterName string) (infraID string, recorded bool, err error) {
@@ -130,7 +125,7 @@ func recordedInfraID(configFile, clusterName string) (infraID string, recorded b
 	rec, err := model.LoadRecord(path)
 	switch {
 	case errors.Is(err, os.ErrNotExist):
-		return previewInfraID, false, nil
+		return model.PreviewInfraID, false, nil
 	case err != nil:
 		return "", false, &errtypes.ConfigError{Msg: err.Error(), Err: err}
 	case rec.Cluster != clusterName:

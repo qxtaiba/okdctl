@@ -198,7 +198,7 @@ func renderResourceFooter(step *wizard.DataDrivenStep, state *ResourcesStepState
 	if !step.IsComplete() || step.Apply(&overlay) != nil {
 		return tui.Truncate("resource totals pending · enter valid values", width)
 	}
-	inv, err := model.Build(&overlay, previewInfraID)
+	inv, err := model.Build(&overlay, model.PreviewInfraID)
 	if err != nil {
 		return tui.Truncate("resource totals pending · enter valid values", width)
 	}

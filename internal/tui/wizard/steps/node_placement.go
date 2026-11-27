@@ -244,7 +244,7 @@ func offeredPool(configured, hosts []string) []string {
 // placementInventory derives cfg's nodes and the host each would get with no
 // override.
 func placementInventory(cfg *config.Config) (model.Inventory, map[string]string, error) {
-	inv, err := model.Build(cfg, previewInfraID)
+	inv, err := model.Build(cfg, model.PreviewInfraID)
 	if err != nil {
 		return model.Inventory{}, nil, err
 	}
@@ -254,7 +254,7 @@ func placementInventory(cfg *config.Config) (model.Inventory, map[string]string,
 		o.Host = ""
 		bare.Nodes[name] = o
 	}
-	base, err := model.Build(&bare, previewInfraID)
+	base, err := model.Build(&bare, model.PreviewInfraID)
 	if err != nil {
 		return model.Inventory{}, nil, err
 	}
