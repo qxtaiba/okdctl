@@ -55,8 +55,8 @@ var runPreflight = func(ctx context.Context, d proxmox.Driver, in *proxmox.Prefl
 }
 
 // openDriver builds the Proxmox driver from creds and zeroizes the token;
-// doctor and up share it so the driver outlives one call.
-func openDriver(creds *credentials.ProxmoxCredentials) (proxmox.Driver, error) {
+// it is a variable so tests can observe the credentials doctor resolved.
+var openDriver = func(creds *credentials.ProxmoxCredentials) (proxmox.Driver, error) {
 	defer creds.Zeroize()
 	d, err := proxmox.New(creds.Endpoint, creds.APIToken, creds.Insecure)
 	if err != nil {

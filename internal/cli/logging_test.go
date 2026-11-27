@@ -156,7 +156,7 @@ func TestConfigureLogging_DefaultSinkFollowsOutputFile(t *testing.T) {
 	if err := configureLogging(initCmd); err != nil {
 		t.Fatalf("configureLogging: %v", err)
 	}
-	if want := filepath.Join(target, logutil.DefaultLogFileName); runLogPath != want {
+	if want := workspace.LogPath(target); runLogPath != want {
 		t.Fatalf("runLogPath = %q, want %q beside --output-file", runLogPath, want)
 	}
 }

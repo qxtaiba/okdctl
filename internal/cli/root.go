@@ -254,7 +254,7 @@ func signalLoop(sigCh <-chan os.Signal, cancel context.CancelFunc, caughtSig *at
 func announceFailure(err error) {
 	stderrTTY := term.IsTerminal(int(os.Stderr.Fd()))
 	stdoutTTY := term.IsTerminal(int(os.Stdout.Fd()))
-	if shouldRenderErrorBox(stderrTTY, stdoutTTY, logFormat, err) {
+	if shouldRenderErrorBox(stderrTTY, stdoutTTY, logFormat) {
 		logFailureToSink(err)
 		fmt.Fprintln(os.Stderr, render.ErrorSummary(err, exitCodeFor(err), logutil.RunID()))
 		return
@@ -282,13 +282,10 @@ func logFailureToSink(err error) {
 }
 
 // shouldRenderErrorBox reports whether announceFailure draws the boxed
-// ErrorSummary instead of the flat "command failed" log line: both stderr
-// and stdout TTY-shaped, not json, and err isn't already self-presented.
-// NO_COLOR/--no-color is deliberately NOT part of this gate — box drawing is
-// structure, not color, so the box still renders under NO_COLOR, just
-// Downsampled to ANSI-free by the color profile configureLogging set.
-func shouldRenderErrorBox(stderrTTY, stdoutTTY bool, format string, err error) bool {
-	return stderrTTY && stdoutTTY && format != tui.FormatJSON && !render.IsPresented(err)
+// ErrorSummary instead of the flat "command failed" log line. NO_COLOR is
+// deliberately not part of the gate: box drawing is structure, not color.
+func shouldRenderErrorBox(stderrTTY, stdoutTTY bool, format string) bool {
+	return stderrTTY && stdoutTTY && format != tui.FormatJSON
 }
 
 // signalExitCode reports the exit code for a caught signal (130 SIGINT, 143

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/credentials"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/model"
 	"github.com/qxtaiba/okdctl/internal/proxmox"
@@ -160,9 +161,9 @@ func newDoctorHarness(t *testing.T) *doctorHarness {
 	if err := config.NewLoader().Save(config.MinimalConfig(), "okdctl.yaml"); err != nil {
 		t.Fatal(err)
 	}
-	origRun := runPreflight
+	origRun, origOpen := runPreflight, openDriver
 	t.Cleanup(func() {
-		runPreflight = origRun
+		runPreflight, openDriver = origRun, origOpen
 		rootCmd.SetOut(nil)
 		rootCmd.SetErr(nil)
 		rootCmd.SetArgs(nil)
@@ -211,8 +212,11 @@ func TestDoctorReadsTheSidecarToken(t *testing.T) {
 		t.Fatal(err)
 	}
 	var gotToken string
-	runPreflight = func(_ context.Context, creds *credentials.ProxmoxCredentials, _ *proxmox.PreflightInput) ([]proxmox.Finding, error) {
+	openDriver = func(creds *credentials.ProxmoxCredentials) (proxmox.Driver, error) {
 		gotToken = string(creds.APIToken)
+		return nil, nil
+	}
+	runPreflight = func(context.Context, proxmox.Driver, *proxmox.PreflightInput) ([]proxmox.Finding, error) {
 		return nil, nil
 	}
 	rootCmd.SetOut(io.Discard)
