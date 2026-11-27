@@ -574,3 +574,28 @@ func TestNodePlacementTypedNodesJoinThePoolWithoutDiscovery(t *testing.T) {
 		t.Fatalf("pool after typing a node = %v, want [pve pve9]", got)
 	}
 }
+
+func TestNodePlacementTypingIntoAddNodesNeverRefetchesOrScrolls(t *testing.T) {
+	s := NewNodePlacementStep()
+	s.cfg = newPlacementConfig()
+	s.Init()
+	step, _ := s.Update(discoveryCompleteMsg{generation: s.generation, discovery: demoDiscovery()})
+	s = step.(*NodePlacementStep)
+	m := wizard.NewModel([]wizard.WizardStep{s}, s.cfg)
+	tuitest.RenderAt(t, m, 100, 30)
+	m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	gen := s.generation
+
+	for _, r := range "rack1?gG" {
+		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	if got := s.addField.Value(); got != "rack1?gG" {
+		t.Fatalf("add nodes = %q, want every typed rune kept", got)
+	}
+	if s.generation != gen {
+		t.Fatal("typing r into add nodes re-issued discovery")
+	}
+	if !s.ConsumesTextInput() {
+		t.Fatal("ConsumesTextInput() = false while add nodes holds focus")
+	}
+}

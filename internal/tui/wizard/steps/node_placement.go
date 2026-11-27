@@ -274,8 +274,9 @@ func (s *NodePlacementStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	if s.phase != phasePlacing || s.inner == nil {
 		return s, nil
 	}
-	// 'r' re-issues discovery, footer-silent like the vim scroll keys.
-	if keyMsg, ok := msg.(tea.KeyPressMsg); ok && key.Matches(keyMsg, key.NewBinding(key.WithKeys("r"))) {
+	// 'r' re-issues discovery, footer-silent like the vim scroll keys, unless
+	// the add-nodes field would take it as text.
+	if keyMsg, ok := msg.(tea.KeyPressMsg); ok && !s.ConsumesTextInput() && key.Matches(keyMsg, key.NewBinding(key.WithKeys("r"))) {
 		cmd := s.startDiscovery()
 		return s, cmd
 	}
@@ -288,6 +289,11 @@ func (s *NodePlacementStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 		return s, tea.Batch(s.inner.FocusFirstInvalid(), func() tea.Msg { return wizard.ErrorSetMsg{Error: wizard.ErrFixHighlighted} })
 	}
 	return s, func() tea.Msg { return wizard.StepCompleteMsg{StepID: s.ID()} }
+}
+
+// ConsumesTextInput reports whether the add-nodes field holds focus.
+func (s *NodePlacementStep) ConsumesTextInput() bool {
+	return s.inner != nil && s.inner.ConsumesTextInput()
 }
 
 // discoveryHeader renders the discovery summary or its failure above the form.
