@@ -2,6 +2,8 @@ package steps
 
 import (
 	"fmt"
+	"maps"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -140,6 +142,24 @@ func TestSetDiskSize(t *testing.T) {
 	}
 	if got := setDiskSize(nil, 0, 100); len(got) != 1 || got[0].SizeGiB != 100 {
 		t.Errorf("root on nil = %+v", got)
+	}
+}
+
+func TestResourceFooterRenderLeavesHostOverridesAlone(t *testing.T) {
+	cfg := newPlacementConfig()
+	cfg.Nodes = map[string]config.NodeOverride{
+		"lab-worker0": {Host: "pve2"},
+		"lab-worker1": {Host: "pve3"},
+	}
+	want := maps.Clone(cfg.Nodes)
+	step, state := NewResourcesStep(nil)
+	state.Cfg = cfg
+	step.LoadFromConfig(cfg, true)
+	step.SetValue(fieldWorkerCount, "0")
+
+	renderResourceFooter(step, state, 120)
+	if !reflect.DeepEqual(cfg.Nodes, want) {
+		t.Fatalf("a footer render changed the session config's Nodes to %+v, want %+v", cfg.Nodes, want)
 	}
 }
 

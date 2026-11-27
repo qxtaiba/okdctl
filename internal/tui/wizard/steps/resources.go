@@ -2,6 +2,7 @@ package steps
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -164,6 +165,7 @@ func renderResourceFooter(step *wizard.DataDrivenStep, state *ResourcesStepState
 	overlay := *state.Cfg
 	overlay.ControlPlane.Disks = slices.Clone(overlay.ControlPlane.Disks)
 	overlay.Workers.Disks = slices.Clone(overlay.Workers.Disks)
+	overlay.Nodes = maps.Clone(overlay.Nodes)
 	if !step.IsComplete() || step.Apply(&overlay) != nil {
 		return tui.Truncate("resource totals pending · enter valid values", width)
 	}
