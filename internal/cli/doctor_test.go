@@ -231,9 +231,23 @@ func TestDoctorReadsTheSidecarToken(t *testing.T) {
 	}
 }
 
+func TestOpenDriverZeroizesToken(t *testing.T) {
+	for name, endpoint := range map[string]string{"valid": "https://pve:8006", "empty": ""} {
+		creds := &credentials.ProxmoxCredentials{Endpoint: endpoint, APIToken: []byte(doctorToken)}
+		_, err := openDriver(creds)
+		if (err != nil) != (name == "empty") {
+			t.Fatalf("openDriver(%s) err = %v", name, err)
+		}
+		if creds.APIToken != nil {
+			t.Fatalf("openDriver(%s) left the token in place", name)
+		}
+	}
+}
+
 func TestDoctorCommand(t *testing.T) {
 	h := newDoctorHarness(t)
 	run := h.run
+	origOpen := openDriver
 	const token = doctorToken
 
 	t.Run("fail exits non-zero after the table", func(t *testing.T) {
@@ -303,6 +317,18 @@ func TestDoctorCommand(t *testing.T) {
 		out, err := run(t, token, nil, errors.New("dial tcp: connection refused"), "-o", "json")
 		if err == nil || strings.TrimSpace(out) != "[]" {
 			t.Fatalf("stdout = %q err = %v, want [] and the network error", out, err)
+		}
+	})
+
+	t.Run("json driver failure leaves an empty array on stdout", func(t *testing.T) {
+		openDriver = func(*credentials.ProxmoxCredentials) (proxmox.Driver, error) {
+			return nil, &errtypes.ConfigError{Msg: "connect proxmox"}
+		}
+		t.Cleanup(func() { openDriver = origOpen })
+		out, err := run(t, token, nil, nil, "-o", "json")
+		var ce *errtypes.ConfigError
+		if !errors.As(err, &ce) || strings.TrimSpace(out) != "[]" {
+			t.Fatalf("stdout = %q err = %v, want [] and the config error", out, err)
 		}
 	})
 

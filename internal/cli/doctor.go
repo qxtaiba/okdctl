@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -88,19 +87,25 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 	}
 	d, err := openDriver(creds)
 	if err != nil {
-		return err
+		return noFindings(cmd, err)
 	}
 	findings, err := runPreflight(cmd.Context(), d, &in)
 	if err != nil {
-		if doctorOutput == tui.FormatJSON {
-			fmt.Fprintln(cmd.OutOrStdout(), "[]")
-		}
-		return preflightError(err)
+		return noFindings(cmd, preflightError(err))
 	}
 	if err := printFindings(cmd.OutOrStdout(), doctorOutput, findings); err != nil {
 		return err
 	}
 	return findingsError(findings)
+}
+
+// noFindings returns err after printing the empty array a json consumer
+// expects when the checks could not run.
+func noFindings(cmd *cobra.Command, err error) error {
+	if doctorOutput == tui.FormatJSON {
+		fmt.Fprintln(cmd.OutOrStdout(), "[]")
+	}
+	return err
 }
 
 // preflightError types a preflight that could not run: a rejected token is
@@ -125,7 +130,11 @@ func validateOutputFormat(format string) error {
 }
 
 func doctorCredentials(cfg *config.Config, configPath string) (*credentials.ProxmoxCredentials, error) {
-	envPath := workspace.EnvPath(filepath.Dir(configPath))
+	root, err := workspaceRoot(configPath)
+	if err != nil {
+		return nil, err
+	}
+	envPath := workspace.EnvPath(root)
 	creds, err := credentials.Load(envPath, cfg.Provider.Proxmox.Endpoint)
 	if err != nil {
 		return nil, err
