@@ -151,8 +151,8 @@ func fetchToFile(ctx context.Context, client *http.Client, cfg *dlConfig) error 
 	}
 
 	// 0o600 is tightened only for transit; consumers set their own final mode.
-	// O_NOFOLLOW rejects a symlink here — the open runs as root under sudo
-	// re-exec, so following one would write attacker content elsewhere.
+	// O_NOFOLLOW refuses a symlink planted at dst, so a fetch can never be
+	// steered into overwriting another file.
 	outFile, err := os.OpenFile(cfg.outputPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC|syscall.O_NOFOLLOW, 0o600)
 	if err != nil {
 		return fmt.Errorf("create output file: %w", err)
