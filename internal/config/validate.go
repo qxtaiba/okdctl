@@ -55,5 +55,19 @@ func (c *Config) Validate() *ValidationResult {
 	c.validateProvider(r, nodes)
 	c.validateNetwork(r, nodes)
 	c.validateNodes(r, nodes)
+	c.validateLifecycle(r)
 	return r
+}
+
+func (c *Config) validateLifecycle(r *ValidationResult) {
+	hook := &c.Lifecycle.BeforeNextNode
+	switch {
+	case hook.Timeout < 0:
+		r.addf(FieldLifecycleHookTimeout, "%s must be 0 or more", hook.Timeout)
+	case hook.Command != "" && hook.Timeout == 0:
+		r.addf(FieldLifecycleHookTimeout, "%s must be greater than 0 when a command is set", hook.Timeout)
+	}
+	if c.Lifecycle.DrainTimeout < 0 {
+		r.addf(FieldLifecycleDrainTimeout, "%s must be 0 or more", c.Lifecycle.DrainTimeout)
+	}
 }

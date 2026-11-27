@@ -3,6 +3,7 @@ package config
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 type finding struct {
@@ -86,4 +87,28 @@ func TestValidationResult_Error(t *testing.T) {
 	if got := r.Error(); got != "a.b: first; c: second" {
 		t.Errorf("Error() = %q", got)
 	}
+}
+
+func TestValidateLifecycle(t *testing.T) {
+	cases := []struct {
+		name   string
+		mutate func(*Config)
+		want   finding
+	}{
+		{"negative drain timeout", func(c *Config) { c.Lifecycle.DrainTimeout = -10 * time.Minute }, finding{FieldLifecycleDrainTimeout, "-10m0s must be 0 or more"}},
+		{"negative hook timeout", func(c *Config) { c.Lifecycle.BeforeNextNode.Timeout = -time.Second }, finding{FieldLifecycleHookTimeout, "-1s must be 0 or more"}},
+		{"hook without timeout", func(c *Config) { c.Lifecycle.BeforeNextNode = Hook{Command: "./gate.sh"} }, finding{FieldLifecycleHookTimeout, "0s must be greater than 0 when a command is set"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			tc.mutate(cfg)
+			assertFinding(t, cfg, tc.want)
+		})
+	}
+	t.Run("accepts zero timeouts without a hook", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.Lifecycle = LifecycleConfig{}
+		assertValid(t, cfg)
+	})
 }

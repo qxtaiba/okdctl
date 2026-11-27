@@ -43,4 +43,7 @@ const (
 
 	FieldFilesPullSecret   = "files.pull_secret" //nolint:gosec // G101: a config path, not a credential
 	FieldFilesSSHPublicKey = "files.ssh_public_key"
+
+	FieldLifecycleHookTimeout  = "lifecycle.before_next_node.timeout"
+	FieldLifecycleDrainTimeout = "lifecycle.drain_timeout"
 )
