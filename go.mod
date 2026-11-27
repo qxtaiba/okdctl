@@ -6,7 +6,7 @@ toolchain go1.27.4
 
 require (
 	charm.land/bubbles/v2 v2.2.2
-	charm.land/bubbletea/v2 v2.1.1
+	charm.land/bubbletea/v2 v2.2.0
 	charm.land/lipgloss/v2 v2.0.6
 	charm.land/log/v2 v2.0.1
 	github.com/luthermonson/go-proxmox v0.8.2
@@ -18,7 +18,7 @@ require (
 
 require (
 	github.com/charmbracelet/colorprofile v0.4.3
-	github.com/charmbracelet/x/ansi v0.11.9
+	github.com/charmbracelet/x/ansi v0.12.0
 	github.com/spf13/pflag v1.1.0
 	go.yaml.in/yaml/v2 v2.4.5
 	golang.org/x/sync v0.23.0
