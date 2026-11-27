@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -245,8 +246,8 @@ type doctorHarness struct {
 	seam   *proxmox.PreflightInput
 }
 
-// newDoctorHarness runs from a fresh directory with the relative okdctl.yaml
-// every cli test uses, so LoadEnvFile sees one path for the whole process.
+// newDoctorHarness runs from a fresh directory holding the relative
+// okdctl.yaml every cli test uses, so okdctl.env resolves beside it.
 func newDoctorHarness(t *testing.T) *doctorHarness {
 	t.Helper()
 	tui.SetColorProfileFor(&bytes.Buffer{})
@@ -299,6 +300,30 @@ func (h *doctorHarness) assertSeam(t *testing.T, creds *credentials.ProxmoxCrede
 	}
 	if creds.APIToken != nil {
 		t.Fatal("token not zeroized after doctor returned")
+	}
+}
+
+func TestDoctorReadsTheSidecarToken(t *testing.T) {
+	h := newDoctorHarness(t)
+	t.Setenv("PROXMOX_VE_API_TOKEN", "")
+	saved := &credentials.ProxmoxCredentials{APIToken: []byte(doctorToken)}
+	if err := credentials.WriteEnvFile("okdctl.env", saved); err != nil {
+		t.Fatal(err)
+	}
+	var gotToken string
+	runPreflight = func(_ context.Context, creds *credentials.ProxmoxCredentials, _ *proxmox.PreflightInput) ([]proxmox.Finding, error) {
+		gotToken = string(creds.APIToken)
+		return nil, nil
+	}
+	rootCmd.SetOut(io.Discard)
+	rootCmd.SetErr(&h.errOut)
+	rootCmd.SetArgs([]string{"doctor", "--config", "okdctl.yaml"})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("doctor: %v", err)
+	}
+	if gotToken != doctorToken {
+		t.Fatalf("preflight received token %q, want the sidecar's", gotToken)
 	}
 }
 
