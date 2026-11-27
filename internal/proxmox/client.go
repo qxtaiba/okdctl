@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -16,6 +15,7 @@ import (
 	"github.com/luthermonson/go-proxmox"
 
 	"github.com/qxtaiba/okdctl/internal/httputil"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
 // errorBodyLimit bounds how much of a failed reply's body is read for its message.
@@ -155,11 +155,11 @@ func newProxmoxClient(endpoint string, apiToken []byte, insecure bool) (client *
 
 var insecureTLSWarnOnce sync.Once
 
-// warnInsecureTLS logs once per process via slog.Default rather than
-// threading a logger through every constructor.
+// warnInsecureTLS logs once per process through the logutil facade rather
+// than threading a logger through every constructor.
 func warnInsecureTLS(endpoint string) {
 	insecureTLSWarnOnce.Do(func() {
-		slog.Warn("proxmox tls verification disabled (insecure: true)", "endpoint", endpoint)
+		logutil.Warn("proxmox tls verification disabled (insecure: true)", logutil.LF("endpoint", endpoint))
 	})
 }
 

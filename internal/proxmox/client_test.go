@@ -3,11 +3,12 @@ package proxmox
 import (
 	"bytes"
 	"errors"
-	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
 func TestNormalizeEndpoint(t *testing.T) {
@@ -27,9 +28,7 @@ func TestNormalizeEndpoint(t *testing.T) {
 func TestNewProxmoxClientWarnsOnInsecureOnce(t *testing.T) {
 	insecureTLSWarnOnce = sync.Once{}
 	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	t.Cleanup(logutil.Redirect(&buf))
 
 	build := func() {
 		t.Helper()

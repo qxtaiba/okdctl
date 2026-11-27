@@ -1,6 +1,7 @@
 package proxmox
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -11,6 +12,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
 var ref101 = VMRef{Node: "pve", VMID: 101}
@@ -444,7 +447,9 @@ func TestWaitTask(t *testing.T) {
 		}
 	})
 
-	t.Run("transient errors are retried", func(t *testing.T) {
+	t.Run("transient errors are retried and warned once", func(t *testing.T) {
+		var logs bytes.Buffer
+		t.Cleanup(logutil.Redirect(&logs))
 		h, polls := taskStatusHandler("running", "OK")
 		var calls atomic.Int32
 		f := newFakeAPI(t, map[string]http.HandlerFunc{key: func(w http.ResponseWriter, r *http.Request) {
@@ -459,6 +464,9 @@ func TestWaitTask(t *testing.T) {
 		}
 		if got := polls.Load(); got != 2 {
 			t.Fatalf("polled %d times after the retries, want 2", got)
+		}
+		if got := strings.Count(logs.String(), "level=WARN"); got != 1 {
+			t.Fatalf("logged %d warnings for two identical poll failures, want 1:\n%s", got, logs.String())
 		}
 	})
 
