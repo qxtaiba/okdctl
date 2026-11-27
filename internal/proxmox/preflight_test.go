@@ -252,6 +252,18 @@ func TestPreflight(t *testing.T) {
 			want:   []Finding{{"cpu-flags", "fail", "node pve2 lacks cpu flags bmi2, movbe"}},
 		},
 		{
+			name:   "cpu flags unknown when the node status was not readable",
+			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) { d.nodes[1].CPUFlags = nil },
+			want:   []Finding{{"cpu-flags", "fail", "node pve2: status not readable"}},
+		},
+		{
+			name: "placement node offline",
+			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) {
+				d.nodes[1].Status, d.nodes[1].CPUFlags = "offline", nil
+			},
+			want: []Finding{{"cpu-flags", "fail", "node pve2 is offline"}},
+		},
+		{
 			name:   "placement node not in cluster",
 			mutate: func(_ *fakeDriver, in *PreflightInput, _ *fakePinger) { in.Nodes = append(in.Nodes, "pve3") },
 			want: []Finding{

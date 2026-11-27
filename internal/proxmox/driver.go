@@ -155,7 +155,6 @@ type NodeInfo struct {
 	CPUs        int
 	CPUModel    string
 	CPUFlags    []string
-	PVEVersion  string
 }
 
 // StorageInfo is a node's view of one storage pool.

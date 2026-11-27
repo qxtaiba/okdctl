@@ -239,8 +239,15 @@ func (st *preflightState) checkVersion(out *findings) {
 func (st *preflightState) checkCPUFlags(out *findings) {
 	for _, name := range st.in.Nodes {
 		node, ok := st.nodes[name]
-		if !ok {
+		switch {
+		case !ok:
 			out.add("cpu-flags", "node %s not in cluster", name)
+			continue
+		case node.Status != nodeStatusOnline:
+			out.add("cpu-flags", "node %s is %s", name, node.Status)
+			continue
+		case len(node.CPUFlags) == 0:
+			out.add("cpu-flags", "node %s: status not readable", name)
 			continue
 		}
 		var missing []string
