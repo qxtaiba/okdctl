@@ -13,5 +13,4 @@ package logutil
 //	exit_code      okdctl's own exit code on a failed command
 //	duration       elapsed time of a completed span (time.Duration)
 //	attempts       retries consumed before giving up
-//	expected       the value this build supports, next to the offending value
 //	run_id         run correlation ID
