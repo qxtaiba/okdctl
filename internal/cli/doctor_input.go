@@ -34,7 +34,8 @@ func preflightInput(cfg *config.Config, configPath string) (proxmox.PreflightInp
 		HA:              px.HA,
 		CPUModel:        px.CPUType,
 		VMIDs:           make([]int, 0, len(inv.Nodes)),
-		Addresses:       make([]netip.Addr, 0, len(inv.Nodes)+2),
+		NodeAddresses:   make(map[netip.Addr]int, len(inv.Nodes)),
+		VIPs:            []netip.Addr{inv.APIVIP, inv.IngressVIP},
 		MemoryMiBByNode: make(map[string]int, len(px.Nodes)),
 	}
 	if recorded {
@@ -44,12 +45,11 @@ func preflightInput(cfg *config.Config, configPath string) (proxmox.PreflightInp
 	for i := range inv.Nodes {
 		n := &inv.Nodes[i]
 		in.VMIDs = append(in.VMIDs, n.VMID)
-		in.Addresses = append(in.Addresses, n.IP)
+		in.NodeAddresses[n.IP] = n.VMID
 		in.MemoryMiBByNode[n.Host] += n.MemoryMiB
 		if recorded {
 			in.MACs = append(in.MACs, n.MAC)
 		}
 	}
-	in.Addresses = append(in.Addresses, inv.APIVIP, inv.IngressVIP)
 	return in, nil
 }

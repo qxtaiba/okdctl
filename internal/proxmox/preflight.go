@@ -16,7 +16,8 @@ import (
 )
 
 // PreflightInput is the planned cluster footprint Preflight checks the
-// Proxmox cluster against; Addresses carries every node address and both VIPs.
+// Proxmox cluster against; NodeAddresses maps each node address to the VMID
+// that will hold it, so a running VM of the Tag'd cluster may answer on its own.
 type PreflightInput struct {
 	Nodes           []string
 	Storage         string
@@ -28,7 +29,8 @@ type PreflightInput struct {
 	Tag             string
 	VMIDs           []int
 	MACs            []string
-	Addresses       []netip.Addr
+	NodeAddresses   map[netip.Addr]int
+	VIPs            []netip.Addr
 	MemoryMiBByNode map[string]int
 	ISOBytes        int64
 	CPUModel        string
@@ -358,8 +360,7 @@ func (st *preflightState) checkAddresses(ctx context.Context, ping Pinger, out *
 	if ping == nil {
 		return
 	}
-	addrs := slices.Clone(st.in.Addresses)
-	slices.SortFunc(addrs, netip.Addr.Compare)
+	addrs := st.unownedAddresses()
 	alive := make([]bool, len(addrs))
 	errs := make([]error, len(addrs))
 	var g errgroup.Group
@@ -385,6 +386,28 @@ func (st *preflightState) checkAddresses(ctx context.Context, ping Pinger, out *
 	for _, cause := range causes {
 		out.warn("address-in-use", "address check inconclusive for %s: %s", strings.Join(inconclusive[cause], ", "), cause)
 	}
+}
+
+// unownedAddresses drops the addresses the cluster's own running VMs hold:
+// a node address while its VM runs, the VIPs while any of them does.
+func (st *preflightState) unownedAddresses() []netip.Addr {
+	running := map[int]bool{}
+	for _, vm := range st.vms {
+		if vm.Status == "running" && st.owned(vm.Tags) {
+			running[vm.VMID] = true
+		}
+	}
+	addrs := make([]netip.Addr, 0, len(st.in.NodeAddresses)+len(st.in.VIPs))
+	for a, vmid := range st.in.NodeAddresses {
+		if !running[vmid] {
+			addrs = append(addrs, a)
+		}
+	}
+	if len(running) == 0 {
+		addrs = append(addrs, st.in.VIPs...)
+	}
+	slices.SortFunc(addrs, netip.Addr.Compare)
+	return addrs
 }
 
 func (st *preflightState) checkStorageContent(out *findings) {

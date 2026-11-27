@@ -39,13 +39,7 @@ func minimalConfigDir(t *testing.T) (cfg *config.Config, path string) {
 	return config.MinimalConfig(), filepath.Join(t.TempDir(), "okdctl.yaml")
 }
 
-func addrs(s ...string) []netip.Addr {
-	out := make([]netip.Addr, 0, len(s))
-	for _, a := range s {
-		out = append(out, netip.MustParseAddr(a))
-	}
-	return out
-}
+var addr = netip.MustParseAddr
 
 func TestPreflightInput(t *testing.T) {
 	t.Run("record absent: preview identities carry no tag or macs", func(t *testing.T) {
@@ -61,7 +55,8 @@ func TestPreflightInput(t *testing.T) {
 			Bridge:          "vmbr0",
 			CPUModel:        "host",
 			VMIDs:           []int{6010, 6011, 6012},
-			Addresses:       addrs("192.168.1.150", "192.168.1.151", "192.168.1.152", "192.168.1.158", "192.168.1.159"),
+			NodeAddresses:   map[netip.Addr]int{addr("192.168.1.150"): 6010, addr("192.168.1.151"): 6011, addr("192.168.1.152"): 6012},
+			VIPs:            []netip.Addr{addr("192.168.1.158"), addr("192.168.1.159")},
 			MemoryMiBByNode: map[string]int{"pve": 3 * 16384},
 		}
 		if !reflect.DeepEqual(got, want) {
@@ -120,8 +115,8 @@ func TestPreflightInput(t *testing.T) {
 		if !reflect.DeepEqual(got.MemoryMiBByNode, wantMem) {
 			t.Errorf("MemoryMiBByNode = %v, want %v", got.MemoryMiBByNode, wantMem)
 		}
-		if len(got.VMIDs) != 5 || len(got.Addresses) != 7 {
-			t.Errorf("got %d vmids and %d addresses, want 5 and 7", len(got.VMIDs), len(got.Addresses))
+		if len(got.VMIDs) != 5 || len(got.NodeAddresses) != 5 || len(got.VIPs) != 2 {
+			t.Errorf("got %d vmids, %d node addresses and %d vips, want 5, 5 and 2", len(got.VMIDs), len(got.NodeAddresses), len(got.VIPs))
 		}
 	})
 

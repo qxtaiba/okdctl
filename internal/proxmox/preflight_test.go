@@ -139,10 +139,10 @@ func goodInput() PreflightInput {
 		Pool: "okd", HA: true, Tag: "okd-grappleberry",
 		VMIDs: []int{101, 102, 103},
 		MACs:  []string{"BC:24:11:00:00:01", "BC:24:11:00:00:02", "BC:24:11:00:00:03"},
-		Addresses: []netip.Addr{
-			netip.MustParseAddr("10.0.0.10"), netip.MustParseAddr("10.0.0.11"),
-			netip.MustParseAddr("10.0.0.5"), netip.MustParseAddr("10.0.0.6"),
+		NodeAddresses: map[netip.Addr]int{
+			netip.MustParseAddr("10.0.0.10"): 101, netip.MustParseAddr("10.0.0.11"): 102, netip.MustParseAddr("10.0.0.12"): 103,
 		},
+		VIPs:            []netip.Addr{netip.MustParseAddr("10.0.0.5"), netip.MustParseAddr("10.0.0.6")},
 		MemoryMiBByNode: map[string]int{"pve1": 32768, "pve2": 32768},
 		ISOBytes:        2 * gibBytes,
 		CPUModel:        "host",
@@ -401,6 +401,28 @@ func TestPreflight(t *testing.T) {
 				{"address-in-use", "fail", "address 10.0.0.5 answers ping"},
 				{"address-in-use", "fail", "address 10.0.0.10 answers ping"},
 				{"address-in-use", "fail", "address 10.0.0.11 answers ping"},
+			},
+		},
+		{
+			name: "addresses of the cluster's own running vms are skipped",
+			mutate: func(d *fakeDriver, _ *PreflightInput, p *fakePinger) {
+				d.vms[0].VMID, d.vms[0].Tags = 101, []string{"okd-grappleberry"}
+				p.alive[netip.MustParseAddr("10.0.0.10")] = true
+				p.alive[netip.MustParseAddr("10.0.0.5")] = true
+				p.alive[netip.MustParseAddr("10.0.0.11")] = true
+			},
+			want: []Finding{{"address-in-use", "fail", "address 10.0.0.11 answers ping"}},
+		},
+		{
+			name: "addresses of the cluster's own stopped vms still count",
+			mutate: func(d *fakeDriver, _ *PreflightInput, p *fakePinger) {
+				d.vms[0].VMID, d.vms[0].Tags, d.vms[0].Status = 101, []string{"okd-grappleberry"}, "stopped"
+				p.alive[netip.MustParseAddr("10.0.0.10")] = true
+				p.alive[netip.MustParseAddr("10.0.0.5")] = true
+			},
+			want: []Finding{
+				{"address-in-use", "fail", "address 10.0.0.5 answers ping"},
+				{"address-in-use", "fail", "address 10.0.0.10 answers ping"},
 			},
 		},
 		{
