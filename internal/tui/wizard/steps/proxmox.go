@@ -51,8 +51,8 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 					Help:    "skip tls certificate verification — yes only for self-signed certs; saved to okdctl.env as PROXMOX_VE_INSECURE",
 					Type:    wizard.FieldTypeSelect,
 					Options: []string{valNo, valYes},
-					// seeded from PROXMOX_VE_INSECURE, which init loads before the wizard
-					ConfigGet: getBool(func(*config.Config) bool { return credentials.GetProxmoxCredentials(nil).Insecure }),
+					// seeded from PROXMOX_VE_INSECURE
+					ConfigGet: getBool(func(*config.Config) bool { return credentials.FromEnv("").Insecure }),
 				},
 			},
 		},

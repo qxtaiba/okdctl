@@ -99,10 +99,10 @@ func validateOutputFormat(format string) error {
 
 func doctorCredentials(cfg *config.Config, configPath string) (*credentials.ProxmoxCredentials, error) {
 	envPath := credentials.EnvFilePath(configPath)
-	if err := credentials.LoadEnvFile(envPath); err != nil {
+	creds, err := credentials.Load(envPath, cfg.Provider.Proxmox.Endpoint)
+	if err != nil {
 		return nil, err
 	}
-	creds := credentials.GetProxmoxCredentials(cfg)
 	if !creds.IsValid() {
 		creds.Zeroize()
 		return nil, &errtypes.AuthError{Msg: "no proxmox api token: set PROXMOX_VE_API_TOKEN in " + envPath}

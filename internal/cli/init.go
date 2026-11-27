@@ -64,10 +64,6 @@ func runInit(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	// A saved token lets node placement discover the cluster without retyping it.
-	if err := credentials.LoadEnvFile(credentials.EnvFilePath(initOutputFile)); err != nil {
-		return err
-	}
 	outcome, err := runWizardFn(cmd, cfg, configExists)
 	if err != nil {
 		return (&errtypes.ConfigError{Msg: "wizard failed", Err: err}).
@@ -175,7 +171,7 @@ func saveConfig(cfg *config.Config, path string, w io.Writer) error {
 // session leaves the file alone. Only the sidecar's own token is carried
 // forward: a shell export that differs from it never reaches the file.
 func writeCredentialsEnv(secrets *wizard.Secrets, configPath string) error {
-	seeded := credentials.GetProxmoxCredentials(nil)
+	seeded := credentials.FromEnv("")
 	defer seeded.Zeroize()
 	typed := !secrets.ProxmoxToken.IsEmpty()
 	if !typed && secrets.ProxmoxInsecure == seeded.Insecure {

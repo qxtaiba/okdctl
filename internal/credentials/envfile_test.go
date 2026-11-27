@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
@@ -140,7 +139,7 @@ func TestWriteEnvFile_SymlinkRefused(t *testing.T) {
 	}
 }
 
-func TestLoadEnvFile_PermRefusal(t *testing.T) {
+func TestReadEnvFile_PermRefusal(t *testing.T) {
 	tests := []struct {
 		name        string
 		perm        os.FileMode
@@ -160,7 +159,7 @@ func TestLoadEnvFile_PermRefusal(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			err := loadEnvFileOnce(path)
+			_, err := ReadEnvFile(path)
 			var authErr *errtypes.AuthError
 			if gotAuth := errors.As(err, &authErr); gotAuth != tc.wantAuthErr {
 				t.Errorf("err = %v, wantAuthErr = %v", err, tc.wantAuthErr)
@@ -170,7 +169,7 @@ func TestLoadEnvFile_PermRefusal(t *testing.T) {
 
 	t.Run("missing file is not an error", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "does-not-exist.env")
-		if err := loadEnvFileOnce(path); err != nil {
+		if _, err := ReadEnvFile(path); err != nil {
 			t.Errorf("missing file should be nil error; got %v", err)
 		}
 	})
@@ -185,7 +184,7 @@ func TestLoadEnvFile_PermRefusal(t *testing.T) {
 		}
 		defer os.Chmod(inner, 0o700) //nolint:errcheck // best-effort cleanup
 
-		err := loadEnvFileOnce(filepath.Join(inner, "x.env"))
+		_, err := ReadEnvFile(filepath.Join(inner, "x.env"))
 		if err == nil {
 			t.Skip("filesystem allowed read despite 0o000")
 		}
@@ -196,56 +195,24 @@ func TestLoadEnvFile_PermRefusal(t *testing.T) {
 	})
 }
 
-// resetLoadOnceAfter clears the package-level LoadEnvFile guard once t ends,
-// so a repeated in-process run starts from an unloaded state.
-func resetLoadOnceAfter(t *testing.T) {
-	t.Helper()
-	t.Cleanup(func() {
-		loadOnce = sync.Once{}
-		loadErr = nil
-		loadedPath = ""
-	})
-}
-
-func TestLoadEnvFile_SecondCallDifferentPath(t *testing.T) {
-	resetLoadOnceAfter(t)
-	dir := t.TempDir()
-	first := filepath.Join(dir, "first.env")
-	mustWriteEnv(t, first, "PROXMOX_VE_INSECURE=true\n", 0o600)
-	if err := LoadEnvFile(first); err != nil {
-		t.Fatalf("first LoadEnvFile: %v", err)
-	}
-
-	err := LoadEnvFile(filepath.Join(dir, "second.env"))
-	if !errors.Is(err, errEnvFileAlreadyLoaded) {
-		t.Errorf("err = %v; want errors.Is(errEnvFileAlreadyLoaded)", err)
-	}
-}
-
-func TestLoadEnvFile_RejectsUnknownKeys(t *testing.T) {
+func TestReadEnvFile_RejectsUnknownKeys(t *testing.T) {
 	for _, stray := range []string{"TF_LOG", "PROXMOX_VE_USERNAME", "PROXMOX_VE_PASSWORD", "PROXMOX_VE_ENDPOINT"} {
 		t.Run(stray, func(t *testing.T) {
-			if _, present := os.LookupEnv(stray); present {
-				t.Skipf("%s already set in the environment; cannot assert non-promotion", stray)
-			}
 			path := filepath.Join(t.TempDir(), "stray.env")
 			mustWriteEnv(t, path, "PROXMOX_VE_API_TOKEN=tok\n"+stray+"=x\n", 0o600)
 
-			err := loadEnvFileOnce(path)
+			_, err := ReadEnvFile(path)
 			if !errors.Is(err, ErrEnvFileUnknownKey) {
 				t.Fatalf("err = %v; want errors.Is(ErrEnvFileUnknownKey)", err)
 			}
 			if !strings.Contains(err.Error(), stray) {
 				t.Errorf("error should name the rejected key; got %v", err)
 			}
-			if _, present := os.LookupEnv(stray); present {
-				t.Errorf("rejected key %s was promoted into the environment despite the error", stray)
-			}
 		})
 	}
 }
 
-func TestLoadEnvFile_SymlinkRefused(t *testing.T) {
+func TestReadEnvFile_SymlinkRefused(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root bypasses O_NOFOLLOW semantics differently")
 	}
@@ -257,9 +224,9 @@ func TestLoadEnvFile_SymlinkRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := loadEnvFileOnce(link)
+	_, err := ReadEnvFile(link)
 	if err == nil {
-		t.Fatal("loadEnvFileOnce should refuse a symlinked .env path")
+		t.Fatal("ReadEnvFile should refuse a symlinked .env path")
 	}
 	var cfgErr *errtypes.ConfigError
 	if !errors.As(err, &cfgErr) {

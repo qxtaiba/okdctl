@@ -9,14 +9,11 @@ import (
 	"os"
 	"slices"
 	"strings"
-	"sync"
 	"syscall"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
-
-var errEnvFileAlreadyLoaded = errors.New("env file already loaded with different path")
 
 // ErrEnvFileUnknownKey reports a key outside the PROXMOX_VE_API_TOKEN and
 // PROXMOX_VE_INSECURE allowlist, so a typo or a smuggled variable fails
@@ -27,14 +24,6 @@ var envFileAllowedKeys = map[string]bool{
 	envProxmoxAPIToken: true,
 	envProxmoxInsecure: true,
 }
-
-// loadOnce guards LoadEnvFile: env mutation is not goroutine-safe, and a
-// second call with a different path must fail rather than reuse the first.
-var (
-	loadOnce   sync.Once
-	loadErr    error
-	loadedPath string
-)
 
 // EnvFilePath derives the sidecar path from a config path, okdctl.yaml
 // becoming okdctl.env.
@@ -109,36 +98,6 @@ func buildEnvFileBody(creds *ProxmoxCredentials) []byte {
 		buf.WriteString(insecureLine)
 	}
 	return buf.Bytes()
-}
-
-// LoadEnvFile loads path into the process environment once per process;
-// already-set variables win and a missing file is not an error. A non-nil
-// return means nothing was loaded.
-func LoadEnvFile(path string) error {
-	loadOnce.Do(func() {
-		loadedPath = path
-		loadErr = loadEnvFileOnce(path)
-	})
-	if loadedPath != path {
-		return &errtypes.ConfigError{
-			Msg: fmt.Sprintf("LoadEnvFile already called with %q; cannot reload from %q", loadedPath, path),
-			Err: errEnvFileAlreadyLoaded,
-		}
-	}
-	return loadErr
-}
-
-func loadEnvFileOnce(path string) error {
-	pairs, err := readEnvFile(path)
-	if err != nil {
-		return err
-	}
-	for k, v := range pairs {
-		if _, exists := os.LookupEnv(k); !exists {
-			_ = os.Setenv(k, v)
-		}
-	}
-	return nil
 }
 
 // ReadEnvFile returns the token and TLS flag the sidecar at path holds,

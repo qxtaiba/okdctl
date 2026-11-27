@@ -135,7 +135,7 @@ func (s *NodePlacementStep) startDiscovery() tea.Cmd {
 // and takes the TLS toggle as typed, since the proxmox step seeds it from
 // the environment.
 func (s *NodePlacementStep) credentials() *credentials.ProxmoxCredentials {
-	creds := credentials.GetProxmoxCredentials(s.cfg)
+	creds := credentials.FromEnv(s.cfg.Provider.Proxmox.Endpoint)
 	if s.secrets == nil {
 		return creds
 	}
