@@ -43,6 +43,7 @@ func TestWorkerIndices(t *testing.T) {
 		{"fills from zero", 2, nil, []int{0, 1}},
 		{"no workers", 0, nil, nil},
 		{"negative count is empty", -3, []string{"lab-worker0"}, nil},
+		{"lowest named indices win over count", 1, []string{"lab-worker5", "lab-worker0"}, []int{0}},
 		{"keeps the named hole", 2, []string{"lab-worker0", "lab-worker2"}, []int{0, 2}},
 		{"fills the hole when count grows", 3, []string{"lab-worker0", "lab-worker2"}, []int{0, 1, 2}},
 		{"ignores masters and foreign keys", 1, []string{"lab-master1", "other-worker5"}, []int{0}},

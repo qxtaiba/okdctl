@@ -88,7 +88,9 @@ func (c *Config) ParseNodeKey(key string) (role Role, index int, ok bool) {
 
 // WorkerIndices lists the worker indices this config produces, in order: the
 // ones named under nodes first, so a removed worker's slot is the one a later
-// add reuses, then the lowest free ones up to workers.count.
+// add reuses, then the lowest free ones up to workers.count. When more are
+// named than workers.count the lowest indices win; Validate reports the
+// surplus and the wizard's placement step prunes its stale host overrides.
 func (c *Config) WorkerIndices() []int {
 	count := max(c.Workers.Count, 0)
 	var explicit []int
