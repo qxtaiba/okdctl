@@ -1,6 +1,7 @@
 package steps
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -629,5 +630,30 @@ func TestDistributionStep_HelpOverlay_ErrorPhaseListsRetryOnce(t *testing.T) {
 	}
 	if strings.Contains(screen, "refresh") {
 		t.Fatalf("error-phase overlay must not also advertise \"refresh\":\n%s", frame)
+	}
+}
+
+type ctxRecordingFetcher struct{ ctx context.Context }
+
+func (f *ctxRecordingFetcher) FetchVersions(ctx context.Context) ([]releases.OKDReleaseSeries, error) {
+	f.ctx = ctx
+	return nil, ctx.Err()
+}
+
+func TestDistributionStep_FetchRunsUnderTheVisitContext(t *testing.T) {
+	s := NewDistributionStep()
+	fetcher := &ctxRecordingFetcher{}
+	s.SetVersionFetcher(fetcher)
+	ctx, cancel := context.WithCancel(context.Background())
+	s.SetVisitContext(ctx)
+
+	cmd := s.startFetch()
+	cancel()
+	msg, ok := cmd().(versionsLoadedMsg)
+	if !ok || !errors.Is(msg.err, context.Canceled) {
+		t.Fatalf("fetch after the visit was cancelled = %#v, want a cancelled fetch", msg)
+	}
+	if fetcher.ctx == nil || fetcher.ctx.Err() == nil {
+		t.Fatal("the fetcher ran under a context the visit does not own")
 	}
 }

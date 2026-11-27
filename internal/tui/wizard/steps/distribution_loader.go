@@ -18,30 +18,28 @@ type versionsLoadedMsg struct {
 	err        error
 }
 
-// fetchVersions runs the release fetch synchronously, tagged with the
-// step's current generation; startFetch is the production path that bumps
-// the generation and wraps this fetch in a tea.Cmd closed over immutable
-// snapshots, so it is safe to run on bubbletea's own command goroutine.
+// fetchVersions runs the release fetch synchronously under the current
+// visit; startFetch is the production path.
 func (s *DistributionStep) fetchVersions() tea.Msg {
-	return doFetchVersions(s.versionFetcher, s.generation)
+	return doFetchVersions(s.Context(), s.versionFetcher, s.generation)
 }
 
-// startFetch resets the step into the loading phase and issues a
-// generation-tagged release fetch over a snapshotted fetcher, so the
-// returned tea.Cmd never touches s once it is handed to bubbletea.
+// startFetch issues a generation-tagged release fetch bounded by the current
+// visit, closed over snapshots so the tea.Cmd never touches s.
 func (s *DistributionStep) startFetch() tea.Cmd {
 	s.phase = phaseVersionLoading
 	s.loadError = nil
 	s.generation++
 	generation := s.generation
 	fetcher := s.versionFetcher
+	parent := s.Context()
 	return func() tea.Msg {
-		return doFetchVersions(fetcher, generation)
+		return doFetchVersions(parent, fetcher, generation)
 	}
 }
 
-func doFetchVersions(fetcher VersionFetcher, generation uint64) tea.Msg {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func doFetchVersions(parent context.Context, fetcher VersionFetcher, generation uint64) tea.Msg {
+	ctx, cancel := context.WithTimeout(parent, 30*time.Second)
 	defer cancel()
 
 	series, err := fetcher.FetchVersions(ctx)
