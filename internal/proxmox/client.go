@@ -26,10 +26,11 @@ const errorBodyLimit = 64 << 10
 // the reason phrase and in the body.
 var notFoundPhrases = []string{"does not exist", "no such resource", "not HA managed"}
 
-// pveErrorTransport appends a failed reply's JSON message to its status
-// line, because go-proxmox reports a 5xx as errors.New(res.Status) and
-// discards the body; a 400 is left alone since go-proxmox renders that
-// body itself, and the body is replayed for callers that read it.
+// pveErrorTransport makes every failed reply one go-proxmox refuses: it
+// errors only on 400 (rendering that body itself), 401/403 and 500/501, and
+// with a nil decode target reads any other status as success, so a 404 or a
+// proxy's 502-504 is given the 500 code while its own status line, with
+// PVE's JSON message appended since go-proxmox discards the body, is kept.
 type pveErrorTransport struct {
 	next http.RoundTripper
 }
@@ -45,10 +46,19 @@ func (t pveErrorTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		return nil, fmt.Errorf("read %s %s error body: %w", req.Method, req.URL.Path, err)
 	}
 	res.Body = io.NopCloser(bytes.NewReader(body))
-	if msg := pveMessage(body); msg != "" && !strings.Contains(res.Status, msg) {
-		res.Status += ": " + msg
+	res.Status = statusWithMessage(res.Status, body)
+	if res.StatusCode != http.StatusUnauthorized && res.StatusCode != http.StatusForbidden {
+		res.StatusCode = http.StatusInternalServerError
 	}
 	return res, nil
+}
+
+// statusWithMessage appends PVE's JSON message to a status line that does not already carry it.
+func statusWithMessage(status string, body []byte) string {
+	if msg := pveMessage(body); msg != "" && !strings.Contains(status, msg) {
+		return status + ": " + msg
+	}
+	return status
 }
 
 func pveMessage(body []byte) string {
