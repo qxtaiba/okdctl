@@ -141,8 +141,12 @@ func TestCreateVM(t *testing.T) {
 			t.Fatal("CreateVM() posted over a foreign VM")
 		}
 	})
+}
 
-	t.Run("post refused as already existing is a no-op once tagged", func(t *testing.T) {
+func TestCreateVMPostRefused(t *testing.T) {
+	const config105 = "GET /nodes/pve/qemu/105/config?current=1"
+
+	t.Run("already existing is a no-op once tagged", func(t *testing.T) {
 		var reads atomic.Int32
 		f := newFakeAPI(t, map[string]http.HandlerFunc{
 			config105: func(w http.ResponseWriter, r *http.Request) {
@@ -166,7 +170,7 @@ func TestCreateVM(t *testing.T) {
 		}
 	})
 
-	t.Run("post refused as already existing stays an error when foreign", func(t *testing.T) {
+	t.Run("already existing stays an error when foreign", func(t *testing.T) {
 		var reads atomic.Int32
 		f := newFakeAPI(t, map[string]http.HandlerFunc{
 			config105: func(w http.ResponseWriter, r *http.Request) {
