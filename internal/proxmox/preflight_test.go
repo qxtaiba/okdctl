@@ -65,6 +65,9 @@ func (f *fakeDriver) VMConfig(_ context.Context, ref VMRef) (VMConfig, error) {
 	if err := f.errs["config"]; err != nil && ref.VMID == 200 {
 		return VMConfig{}, err
 	}
+	if i := slices.IndexFunc(f.vms, func(vm VMSummary) bool { return vm.VMID == ref.VMID }); i >= 0 && f.vms[i].Type != "qemu" {
+		return VMConfig{}, ErrNotFound // the qemu config path knows no containers
+	}
 	return f.configs[ref.VMID], nil
 }
 
@@ -116,8 +119,8 @@ func goodDriver() *fakeDriver {
 			"pve2": {{Name: "vmbr0", VLANAware: true, Active: true}},
 		},
 		vms: []VMSummary{
-			{VMRef: VMRef{Node: "pve1", VMID: 100}, Name: "web", Status: "running", MaxMemMiB: 8192},
-			{VMRef: VMRef{Node: "pve2", VMID: 200}, Name: "db", Status: "stopped", MaxMemMiB: 16384},
+			{VMRef: VMRef{Node: "pve1", VMID: 100}, Type: "qemu", Name: "web", Status: "running", MaxMemMiB: 8192},
+			{VMRef: VMRef{Node: "pve2", VMID: 200}, Type: "qemu", Name: "db", Status: "stopped", MaxMemMiB: 16384},
 		},
 		configs: map[int]VMConfig{
 			100: {MAC: "BC:24:11:AA:BB:01", MACs: []string{"BC:24:11:AA:BB:01"}},
@@ -322,6 +325,14 @@ func TestPreflight(t *testing.T) {
 				{"vmid-collision", "fail", `vmid 100 already used by "web" on node pve1`},
 				{"vmid-collision", "fail", `vmid 200 already used by "db" on node pve2`},
 			},
+		},
+		{
+			name: "vmid collision with a container",
+			mutate: func(d *fakeDriver, in *PreflightInput, _ *fakePinger) {
+				d.vms = append(d.vms, VMSummary{VMRef: VMRef{Node: "pve1", VMID: 300}, Type: "lxc", Name: "dns", Status: "running", MaxMemMiB: 512})
+				in.VMIDs = append(in.VMIDs, 300)
+			},
+			want: []Finding{{"vmid-collision", "fail", `vmid 300 already used by "dns" on node pve1`}},
 		},
 		{
 			name: "vmid collision skips the cluster's own vms",

@@ -34,9 +34,10 @@ type VMStatus struct {
 	HA        bool
 }
 
-// VMSummary is one row of GET /cluster/resources?type=vm.
+// VMSummary is one row of GET /cluster/resources?type=vm; Type is "qemu" or "lxc".
 type VMSummary struct {
 	VMRef
+	Type      string
 	Name      string
 	Status    string
 	Tags      []string

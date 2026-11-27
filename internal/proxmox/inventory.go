@@ -168,8 +168,8 @@ type resourceRow struct {
 	MaxCPU num    `json:"maxcpu"`
 }
 
-// ListVMs returns qemu guests only (templates included, containers
-// dropped), sorted by VMID, with Tags split on ';' into whole tokens.
+// ListVMs returns every guest, containers and templates included, sorted
+// by VMID, with Tags split on ';' into whole tokens.
 func (d *driver) ListVMs(ctx context.Context) ([]VMSummary, error) {
 	var rows []resourceRow
 	if err := d.get(ctx, "/cluster/resources?type=vm", &rows); err != nil {
@@ -177,11 +177,9 @@ func (d *driver) ListVMs(ctx context.Context) ([]VMSummary, error) {
 	}
 	vms := make([]VMSummary, 0, len(rows))
 	for _, r := range rows {
-		if r.Type != resourceTypeQEMU {
-			continue
-		}
 		vms = append(vms, VMSummary{
 			VMRef:     VMRef{Node: r.Node, VMID: int(r.VMID)}, //nolint:gosec // G115: vmids are small positive integers
+			Type:      r.Type,
 			Name:      r.Name,
 			Status:    r.Status,
 			Tags:      splitList(r.Tags, ';'),

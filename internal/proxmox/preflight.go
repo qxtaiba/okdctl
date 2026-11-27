@@ -337,7 +337,7 @@ func (st *preflightState) checkMACCollision(ctx context.Context, d Driver, out *
 		planned[strings.ToLower(mac)] = mac
 	}
 	for _, vm := range st.vms {
-		if st.owned(vm.Tags) {
+		if vm.Type != resourceTypeQEMU || st.owned(vm.Tags) {
 			continue
 		}
 		cfg, err := d.VMConfig(ctx, vm.VMRef)
