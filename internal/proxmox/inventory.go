@@ -35,11 +35,11 @@ func (d *driver) Permissions(ctx context.Context) (Permissions, error) {
 	}
 	perms := make(Permissions, len(raw))
 	for path, privs := range raw {
-		granted := make(map[string]bool, len(privs))
+		propagate := make(map[string]bool, len(privs))
 		for priv, v := range privs {
-			granted[priv] = v != 0
+			propagate[priv] = v != 0
 		}
-		perms[path] = granted
+		perms[path] = propagate
 	}
 	return perms, nil
 }

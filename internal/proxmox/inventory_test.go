@@ -152,6 +152,7 @@ func TestPermissions(t *testing.T) {
 		"/nodes/pve":     {"Sys.Audit": true, "Sys.Console": true},
 		"/storage/local": {"Datastore.AllocateSpace": true, "Datastore.AllocateTemplate": true, "Datastore.Audit": true},
 		"/vms":           {"VM.Allocate": true, "VM.Audit": true, "VM.Config.Disk": true, "VM.PowerMgmt": true},
+		"/vms/100":       {"VM.Audit": false, "VM.PowerMgmt": false},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Permissions() = %v, want %v", got, want)

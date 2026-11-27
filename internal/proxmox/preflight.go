@@ -150,34 +150,42 @@ func (st *preflightState) gather(ctx context.Context, d Driver) error {
 	return nil
 }
 
-type privReq struct{ path, priv string }
+type privReq struct{ path, alt, priv string }
 
 func (st *preflightState) requiredPrivileges() []privReq {
 	in := st.in
 	var reqs []privReq
+	var pool string
+	if in.Pool != "" {
+		pool = "/pool/" + in.Pool
+	}
 	for _, p := range vmPrivileges {
-		reqs = append(reqs, privReq{"/vms", p})
+		// check_vm_perm accepts a VM privilege on the pool the VM is created into.
+		reqs = append(reqs, privReq{"/vms", pool, p})
+	}
+	sdn := "/sdn/zones/localnetwork/" + in.Bridge
+	if in.VLAN != 0 {
+		sdn += "/" + strconv.Itoa(in.VLAN) // check_vnet_access checks the tag's own path
 	}
 	reqs = append(reqs,
-		privReq{"/storage/" + in.Storage, "Datastore.AllocateSpace"},
-		privReq{"/storage/" + in.Storage, "Datastore.Audit"},
-		privReq{"/storage/" + in.ISOStorage, "Datastore.AllocateTemplate"},
-		privReq{"/storage/" + in.ISOStorage, "Datastore.Allocate"},
-		privReq{"/storage/" + in.ISOStorage, "Datastore.Audit"},
-		privReq{"/sdn/zones/localnetwork/" + in.Bridge, "SDN.Use"},
+		privReq{"/storage/" + in.Storage, "", "Datastore.AllocateSpace"},
+		privReq{"/storage/" + in.Storage, "", "Datastore.Audit"},
+		privReq{"/storage/" + in.ISOStorage, "", "Datastore.AllocateTemplate"},
+		privReq{"/storage/" + in.ISOStorage, "", "Datastore.Allocate"},
+		privReq{"/storage/" + in.ISOStorage, "", "Datastore.Audit"},
+		privReq{sdn, "", "SDN.Use"},
 	)
 	for _, n := range in.Nodes {
-		reqs = append(reqs, privReq{"/nodes/" + n, "Sys.Audit"})
+		reqs = append(reqs, privReq{"/nodes/" + n, "", "Sys.Audit"})
 	}
 	if in.HA {
-		reqs = append(reqs, privReq{"/", "Sys.Console"})
+		reqs = append(reqs, privReq{"/", "", "Sys.Console"})
 	}
-	if in.Pool != "" {
+	if pool != "" {
 		// create_vm with pool= calls check_perm_modify, which wants
 		// Permissions.Modify or Pool.Allocate on the pool.
-		reqs = append(reqs, privReq{"/pool/" + in.Pool, "Pool.Allocate"})
+		reqs = append(reqs, privReq{pool, "", "Pool.Allocate"})
 	}
-	reqs = append(reqs, privReq{"/", "Sys.Modify"})
 	seen := make(map[privReq]bool, len(reqs))
 	return slices.DeleteFunc(reqs, func(r privReq) bool {
 		dup := seen[r]
@@ -188,28 +196,36 @@ func (st *preflightState) requiredPrivileges() []privReq {
 
 func (st *preflightState) checkPermissions(out *findings) {
 	for _, r := range st.requiredPrivileges() {
-		if !st.perms.granted(r.path, r.priv) {
-			out.add("permissions", "missing privilege %s on %s", r.priv, r.path)
+		if st.perms.granted(r.path, r.priv) || (r.alt != "" && st.perms.granted(r.alt, r.priv)) {
+			continue
 		}
+		where := r.path
+		if r.alt != "" {
+			where += " or " + r.alt
+		}
+		out.add("permissions", "missing privilege %s on %s", r.priv, where)
 	}
 }
 
-// granted walks from path to "/" because PVE ACLs propagate downwards and
-// /access/permissions lists only the paths that carry an entry.
+// granted follows PVE's roles(): a privilege listed on the path itself is
+// held whatever its propagate flag, one listed on an ancestor only when the
+// flag is set, since /access/permissions lists only paths carrying an entry.
 func (p Permissions) granted(path, priv string) bool {
-	for {
-		if p[path][priv] {
-			return true
-		}
-		if path == "/" || path == "" {
-			return false
-		}
+	if privs, ok := p[path]; ok {
+		_, held := privs[priv]
+		return held
+	}
+	for path != "/" {
 		if i := strings.LastIndex(path, "/"); i > 0 {
 			path = path[:i]
 		} else {
 			path = "/"
 		}
+		if p[path][priv] {
+			return true
+		}
 	}
+	return false
 }
 
 func (st *preflightState) checkVersion(out *findings) {

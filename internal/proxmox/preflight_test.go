@@ -95,7 +95,7 @@ func goodDriver() *fakeDriver {
 	flags := []string{"fpu", "avx2", "bmi2", "fma", "movbe", "sse4_2"}
 	return &fakeDriver{
 		perms: Permissions{
-			"/": {"Sys.Audit": true, "Sys.Console": true, "Sys.Modify": true},
+			"/": {"Sys.Audit": true, "Sys.Console": true},
 			"/vms": {
 				"VM.Allocate": true, "VM.Audit": true, "VM.PowerMgmt": true,
 				"VM.Config.CDROM": true, "VM.Config.CPU": true, "VM.Config.Disk": true, "VM.Config.HWType": true,
@@ -153,7 +153,22 @@ func TestPreflight(t *testing.T) {
 		{
 			name:   "permissions missing privilege",
 			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) { delete(d.perms["/vms"], "VM.PowerMgmt") },
-			want:   []Finding{{"permissions", "fail", "missing privilege VM.PowerMgmt on /vms"}},
+			want:   []Finding{{"permissions", "fail", "missing privilege VM.PowerMgmt on /vms or /pool/okd"}},
+		},
+		{
+			name: "permissions missing privilege without a pool",
+			mutate: func(d *fakeDriver, in *PreflightInput, _ *fakePinger) {
+				delete(d.perms["/vms"], "VM.PowerMgmt")
+				in.Pool = ""
+			},
+			want: []Finding{{"permissions", "fail", "missing privilege VM.PowerMgmt on /vms"}},
+		},
+		{
+			name: "permissions vm privilege granted on the pool",
+			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) {
+				delete(d.perms["/vms"], "VM.PowerMgmt")
+				d.perms["/pool/okd"]["VM.PowerMgmt"] = false
+			},
 		},
 		{
 			name: "permissions ancestor lacks datastore allocate",
@@ -163,12 +178,19 @@ func TestPreflight(t *testing.T) {
 			want: []Finding{{"permissions", "fail", "missing privilege Datastore.Allocate on /storage/local"}},
 		},
 		{
-			name: "permissions exact path beats ancestor",
+			name: "permissions ancestor grant without propagate stops there",
+			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) {
+				d.perms["/storage"]["Datastore.Allocate"] = false
+			},
+			want: []Finding{{"permissions", "fail", "missing privilege Datastore.Allocate on /storage/local"}},
+		},
+		{
+			name: "permissions exact path grant counts whatever its propagate flag",
 			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) {
 				delete(d.perms["/"], "Sys.Audit")
-				d.perms["/nodes/pve1"] = map[string]bool{"Sys.Audit": true}
+				d.perms["/nodes/pve1"] = map[string]bool{"Sys.Audit": false}
+				d.perms["/nodes/pve2"] = map[string]bool{"Sys.Audit": false}
 			},
-			want: []Finding{{"permissions", "fail", "missing privilege Sys.Audit on /nodes/pve2"}},
 		},
 		{
 			name: "permissions conditional privileges skipped",
@@ -186,12 +208,18 @@ func TestPreflight(t *testing.T) {
 			want: []Finding{{"permissions", "fail", "missing privilege Pool.Allocate on /pool/okd"}},
 		},
 		{
-			name: "permissions tagging needs sys.modify whatever the tag",
-			mutate: func(d *fakeDriver, in *PreflightInput, _ *fakePinger) {
-				delete(d.perms["/"], "Sys.Modify")
-				in.Tag = ""
+			name: "permissions vlan checks the tagged sdn path",
+			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) {
+				d.perms["/sdn/zones/localnetwork/vmbr0"]["SDN.Use"] = false
 			},
-			want: []Finding{{"permissions", "fail", "missing privilege Sys.Modify on /"}},
+			want: []Finding{{"permissions", "fail", "missing privilege SDN.Use on /sdn/zones/localnetwork/vmbr0/100"}},
+		},
+		{
+			name: "permissions sdn grant on the tag alone suffices",
+			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) {
+				delete(d.perms, "/sdn/zones/localnetwork/vmbr0")
+				d.perms["/sdn/zones/localnetwork/vmbr0/100"] = map[string]bool{"SDN.Use": false}
+			},
 		},
 		{
 			name: "permissions single storage reports each privilege once",
@@ -375,7 +403,7 @@ func TestPreflight(t *testing.T) {
 			name:   "bridge missing",
 			mutate: func(_ *fakeDriver, in *PreflightInput, _ *fakePinger) { in.Bridge = "vmbr1" },
 			want: []Finding{
-				{"permissions", "fail", "missing privilege SDN.Use on /sdn/zones/localnetwork/vmbr1"},
+				{"permissions", "fail", "missing privilege SDN.Use on /sdn/zones/localnetwork/vmbr1/100"},
 				{"bridge", "fail", "bridge vmbr1 not found on node pve1"},
 				{"bridge", "fail", "bridge vmbr1 not found on node pve2"},
 			},

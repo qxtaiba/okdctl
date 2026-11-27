@@ -508,8 +508,8 @@ func pinKeys(keys ...string) merge {
 	}
 }
 
-// checkPermissions verifies the {path: {privilege: 1}} encoding and keeps the
-// file, whose live body would be the production token's whole ACL.
+// checkPermissions verifies the {path: {privilege: propagate}} encoding and
+// keeps the file, whose live body would be the production token's whole ACL.
 func checkPermissions(_, live any) (any, error) {
 	perms, err := object(live)
 	if err != nil {

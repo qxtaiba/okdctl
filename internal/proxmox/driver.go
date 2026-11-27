@@ -189,7 +189,8 @@ type HASpec struct {
 	Group string
 }
 
-// Permissions maps an ACL path to the privileges granted on it.
+// Permissions maps each ACL path the token has an entry on to the privileges
+// effective there; the bool is PVE's propagate flag, so presence alone is the grant.
 type Permissions map[string]map[string]bool
 
 // Driver is the Proxmox VE API surface okdctl provisions through; every
