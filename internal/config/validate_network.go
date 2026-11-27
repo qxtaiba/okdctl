@@ -58,6 +58,9 @@ func (c *Config) validateVIPs(r *ValidationResult, machine netip.Prefix, nodes [
 		if machine.IsValid() && !machine.Contains(vip.addr) {
 			r.addf(vip.field, "%s is outside machine_cidr %s", vip.addr, machine)
 		}
+		if edge := edgeOf(machine, vip.addr); edge != "" {
+			r.addf(vip.field, "%s is the %s address of machine_cidr %s", vip.addr, edge, machine)
+		}
 		if vip.addr == gateway {
 			r.addf(vip.field, "%s equals gateway", vip.addr)
 		}
@@ -105,7 +108,6 @@ func (c *Config) validateNodeRange(r *ValidationResult, machine netip.Prefix, no
 func (c *Config) validateDerivedAddresses(r *ValidationResult, machine netip.Prefix, nodes []nodeRef) {
 	n := &c.Networking
 	gateway, _ := netip.ParseAddr(n.Gateway)
-	network, broadcast := edges(machine)
 	for i := range nodes {
 		node := &nodes[i]
 		if !node.derived || (machine.IsValid() && !machine.Contains(node.ip)) {
@@ -119,13 +121,22 @@ func (c *Config) validateDerivedAddresses(r *ValidationResult, machine netip.Pre
 				r.addf(FieldNetworkingNodeIPStart, "%s and dns[%d] share %s", node.name, k, node.ip)
 			}
 		}
-		switch node.ip {
-		case network:
-			r.addf(FieldNetworkingNodeIPStart, "%s lands on %s, the network address of machine_cidr %s", node.name, node.ip, machine)
-		case broadcast:
-			r.addf(FieldNetworkingNodeIPStart, "%s lands on %s, the broadcast address of machine_cidr %s", node.name, node.ip, machine)
+		if edge := edgeOf(machine, node.ip); edge != "" {
+			r.addf(FieldNetworkingNodeIPStart, "%s lands on %s, the %s address of machine_cidr %s", node.name, node.ip, edge, machine)
 		}
 	}
+}
+
+// edgeOf names the edge of p that addr sits on, "network" or "broadcast",
+// or "" for an ordinary host address.
+func edgeOf(p netip.Prefix, addr netip.Addr) string {
+	switch network, broadcast := edges(p); addr {
+	case network:
+		return "network"
+	case broadcast:
+		return "broadcast"
+	}
+	return ""
 }
 
 // edges returns the network and broadcast addresses of an IPv4 prefix

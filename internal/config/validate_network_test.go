@@ -22,6 +22,8 @@ func TestValidateNetwork(t *testing.T) {
 		{"api vip outside", func(c *Config) { c.Networking.APIVIP = "192.168.2.158" }, finding{FieldNetworkingAPIVIP, "outside machine_cidr 192.168.1.0/24"}},
 		{"ingress vip outside", func(c *Config) { c.Networking.IngressVIP = "10.0.0.1" }, finding{FieldNetworkingIngressVIP, "outside machine_cidr 192.168.1.0/24"}},
 		{"vips equal", func(c *Config) { c.Networking.IngressVIP = c.Networking.APIVIP }, finding{FieldNetworkingIngressVIP, "equals api_vip"}},
+		{"api vip is network address", func(c *Config) { c.Networking.APIVIP = "192.168.1.0" }, finding{FieldNetworkingAPIVIP, "192.168.1.0 is the network address of machine_cidr 192.168.1.0/24"}},
+		{"ingress vip is broadcast", func(c *Config) { c.Networking.IngressVIP = "192.168.1.255" }, finding{FieldNetworkingIngressVIP, "192.168.1.255 is the broadcast address of machine_cidr 192.168.1.0/24"}},
 		{"api vip is gateway", func(c *Config) { c.Networking.APIVIP = "192.168.1.1" }, finding{FieldNetworkingAPIVIP, "equals gateway"}},
 		{"ingress vip is resolver", func(c *Config) { c.Networking.DNS = []string{"192.168.1.1", "192.168.1.159"} }, finding{FieldNetworkingIngressVIP, "equals dns[1]"}},
 		{"api vip is master address", func(c *Config) { c.Networking.APIVIP = "192.168.1.151" }, finding{FieldNetworkingAPIVIP, "equals the address of lab-master1"}},

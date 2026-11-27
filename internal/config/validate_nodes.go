@@ -133,8 +133,12 @@ func (c *Config) validateOverrideIP(r *ValidationResult, nodes []nodeRef, i int)
 		r.addf(field, "%q is not an IP address", node.override.IP)
 		return
 	}
-	if machine, err := netip.ParsePrefix(c.Networking.MachineCIDR); err == nil && !machine.Contains(ip) {
-		r.addf(field, "%s is outside machine_cidr %s", ip, machine.Masked())
+	if machine, err := netip.ParsePrefix(c.Networking.MachineCIDR); err == nil {
+		if machine = machine.Masked(); !machine.Contains(ip) {
+			r.addf(field, "%s is outside machine_cidr %s", ip, machine)
+		} else if edge := edgeOf(machine, ip); edge != "" {
+			r.addf(field, "%s is the %s address of machine_cidr %s", ip, edge, machine)
+		}
 	}
 	for j := range nodes {
 		other := &nodes[j]
