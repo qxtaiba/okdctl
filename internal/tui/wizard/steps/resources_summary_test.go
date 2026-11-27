@@ -32,9 +32,9 @@ func TestResourceSummaryRebindsOnPolarityFlip(t *testing.T) {
 func TestResourcePinnedFooterSumsTheInventoryAgainstOnlineCapacity(t *testing.T) {
 	cfg := config.DefaultConfig()
 	capacity := &WizardCapacitySnapshot{cfg: cfg, discovery: &proxmoxDiscovery{Nodes: []proxmoxNode{
-		{Name: "pve1", Status: "online", CPUs: 4, CPUsKnown: true, MemGB: 8, MemKnown: true},
-		{Name: "pve2", Status: "online", CPUs: 8, CPUsKnown: true, MemGB: 16, MemKnown: true},
-		{Name: "pve3", Status: "offline", CPUs: 64, CPUsKnown: true, MemGB: 256, MemKnown: true},
+		{Name: "pve1", Status: "online", CPUs: 4, MemGB: 8},
+		{Name: "pve2", Status: "online", CPUs: 8, MemGB: 16},
+		{Name: "pve3", Status: "offline", CPUs: 64, MemGB: 256},
 	}}}
 	step, state := NewResourcesStep(capacity)
 	state.Cfg = cfg
@@ -57,23 +57,16 @@ func TestGolden_ResourcesFooterBranches(t *testing.T) {
 		{
 			name: "healthy",
 			discovery: &proxmoxDiscovery{Nodes: []proxmoxNode{
-				{Name: "pve1", Status: "online", CPUs: 64, CPUsKnown: true, MemGB: 256, MemKnown: true},
+				{Name: "pve1", Status: "online", CPUs: 64, MemGB: 256},
 			}},
 			want: []string{"12 vcpu", "48 gb ram", "360 gb disk"},
 		},
 		{
 			name: "exceeds",
 			discovery: &proxmoxDiscovery{Nodes: []proxmoxNode{
-				{Name: "pve1", Status: "online", CPUs: 4, CPUsKnown: true, MemGB: 8, MemKnown: true},
+				{Name: "pve1", Status: "online", CPUs: 4, MemGB: 8},
 			}},
 			want: []string{"12 vcpu", "exceeds online capacity"},
-		},
-		{
-			name: "unknown",
-			discovery: &proxmoxDiscovery{Nodes: []proxmoxNode{
-				{Name: "pve1", Status: "online", CPUsKnown: false, MemKnown: false},
-			}},
-			want: []string{"12 vcpu", "online capacity unknown"},
 		},
 	}
 

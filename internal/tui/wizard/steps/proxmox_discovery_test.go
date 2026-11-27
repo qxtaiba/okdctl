@@ -79,7 +79,7 @@ func TestDiscoverProxmox_Success(t *testing.T) {
 	if n := got.Nodes[0]; n.Name != "pve1" || n.Status != "offline" || n.CPUs != 8 || n.MemGB != 16 {
 		t.Errorf("Nodes[0] = %+v; want the /nodes figures for an offline node", n)
 	}
-	if n := got.Nodes[1]; n.Name != "pve2" || n.Status != "online" || n.CPUs != 4 || n.MemGB != 8 || !n.CPUsKnown || !n.MemKnown {
+	if n := got.Nodes[1]; n.Name != "pve2" || n.Status != "online" || n.CPUs != 4 || n.MemGB != 8 {
 		t.Errorf("Nodes[1] = %+v; want the node status figures for an online node", n)
 	}
 }

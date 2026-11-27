@@ -74,7 +74,7 @@ func reviewCapacityCheck(cfg *config.Config, snapshot *WizardCapacitySnapshot) r
 	}
 	use := demandByHost(inv.Nodes, nil)
 	rows := make([]string, 0, len(use))
-	warning, unknown := false, false
+	warning := false
 	for i := range nodes {
 		node := &nodes[i]
 		d, assigned := use[node.Name]
@@ -82,23 +82,14 @@ func reviewCapacityCheck(cfg *config.Config, snapshot *WizardCapacitySnapshot) r
 			continue
 		}
 		delete(use, node.Name)
-		cpu, memory := "?", "?"
-		if node.CPUsKnown {
-			cpu = fmt.Sprint(node.CPUs)
-		}
-		if node.MemKnown {
-			memory = fmt.Sprintf("%d GB", node.MemGB)
-		}
 		state := "fits"
 		switch {
 		case node.Status != proxmoxStatusOnline:
 			state, warning = "offline", true
 		case node.exceeds(d):
 			state, warning = "over capacity", true
-		case !node.CPUsKnown || !node.MemKnown:
-			state, unknown = "capacity unknown", true
 		}
-		rows = append(rows, fmt.Sprintf("%s %s · %dc/%d GB → %sc/%s", tui.SanitizeTerminalEscapes(node.Name), state, d.cpu, d.memoryMiB/1024, cpu, memory))
+		rows = append(rows, fmt.Sprintf("%s %s · %dc/%d GB → %dc/%d GB", tui.SanitizeTerminalEscapes(node.Name), state, d.cpu, d.memoryMiB/1024, node.CPUs, node.MemGB))
 	}
 	for host := range use {
 		rows = append(rows, tui.SanitizeTerminalEscapes(host)+" unavailable")
@@ -107,7 +98,7 @@ func reviewCapacityCheck(cfg *config.Config, snapshot *WizardCapacitySnapshot) r
 	slices.Sort(rows)
 	return reviewCheck{
 		label: labelSelectedCapacity, status: strings.Join(rows, "; "),
-		passed: !warning && !unknown, warning: warning,
+		passed: !warning, warning: warning,
 	}
 }
 

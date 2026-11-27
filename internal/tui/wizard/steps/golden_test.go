@@ -129,8 +129,8 @@ func newGoldenModelWithCapacity(t *testing.T) (*wizard.Model, *WizardCapacitySna
 
 func demoDiscovery() *proxmoxDiscovery {
 	return &proxmoxDiscovery{Nodes: []proxmoxNode{
-		{Name: "pve1", Status: "online", CPUs: 32, CPUsKnown: true, MemGB: 128, MemKnown: true},
-		{Name: "pve2", Status: "online", CPUs: 24, CPUsKnown: true, MemGB: 96, MemKnown: true},
+		{Name: "pve1", Status: "online", CPUs: 32, MemGB: 128},
+		{Name: "pve2", Status: "online", CPUs: 24, MemGB: 96},
 	}}
 }
 
@@ -320,7 +320,7 @@ func TestGolden_NodePlacementSingleNode(t *testing.T) {
 	m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDNodePlacement})
 	gen := m.CurrentStep().(*NodePlacementStep).generation
 	m.Update(discoveryCompleteMsg{generation: gen, discovery: &proxmoxDiscovery{Nodes: []proxmoxNode{
-		{Name: "pve", Status: "online", CPUs: 32, CPUsKnown: true, MemGB: 128, MemKnown: true},
+		{Name: "pve", Status: "online", CPUs: 32, MemGB: 128},
 	}}})
 	for range 2 {
 		m.Update(tea.KeyPressMsg{Code: tea.KeyTab})

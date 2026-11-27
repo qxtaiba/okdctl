@@ -353,14 +353,7 @@ func (s *NodePlacementStep) discoveryHeader(width int) string {
 }
 
 func nodeCapacity(node *proxmoxNode) string {
-	cpu, memory := "?c", "?g"
-	if node.CPUsKnown {
-		cpu = fmt.Sprintf("%dc", node.CPUs)
-	}
-	if node.MemKnown {
-		memory = fmt.Sprintf("%dg", node.MemGB)
-	}
-	return cpu + " · " + memory
+	return fmt.Sprintf("%dc · %dg", node.CPUs, node.MemGB)
 }
 
 func nodeDisplayOptions(nodes []proxmoxNode, values []string) []string {

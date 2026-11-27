@@ -20,12 +20,10 @@ const (
 )
 
 type proxmoxNode struct {
-	Name      string
-	Status    string
-	CPUs      int
-	CPUsKnown bool
-	MemGB     int
-	MemKnown  bool
+	Name   string
+	Status string
+	CPUs   int
+	MemGB  int
 }
 
 type proxmoxDiscovery struct {
@@ -59,12 +57,10 @@ func discoverProxmox(parent context.Context, creds *credentials.ProxmoxCredentia
 	for i := range infos {
 		n := &infos[i]
 		nodes = append(nodes, proxmoxNode{
-			Name:      n.Name,
-			Status:    n.Status,
-			CPUs:      n.CPUs,
-			CPUsKnown: true,
-			MemGB:     n.MemTotalMiB / 1024,
-			MemKnown:  true,
+			Name:   n.Name,
+			Status: n.Status,
+			CPUs:   n.CPUs,
+			MemGB:  n.MemTotalMiB / 1024,
 		})
 	}
 	return &proxmoxDiscovery{Nodes: nodes}, nil

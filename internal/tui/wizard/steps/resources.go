@@ -215,8 +215,5 @@ func renderResourceFooter(step *wizard.DataDrivenStep, state *ResourcesStepState
 		label = tui.Truncate(label+fmt.Sprintf(" · exceeds online capacity (%dc/%dg)", capacity.CPUs, capacity.MemoryGB), width)
 		return lipgloss.NewStyle().Foreground(tui.ColorWarning()).Bold(true).Render(label)
 	}
-	if state.Capacity != nil && state.Capacity.discovery != nil && (!capacity.CPUsKnown || !capacity.MemoryKnown) {
-		label += " · online capacity unknown"
-	}
 	return lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true).Render(strings.TrimSpace(tui.Truncate(label, width)))
 }

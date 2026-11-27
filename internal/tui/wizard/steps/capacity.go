@@ -5,13 +5,12 @@ import (
 	"github.com/qxtaiba/okdctl/internal/model"
 )
 
-// CapacityTotals sums the online nodes' cpu and memory; a Known flag is false
-// unless every online node reported that resource.
+// CapacityTotals sums the online nodes' cpu and memory; Known is false until
+// discovery has reported an online node.
 type CapacityTotals struct {
-	CPUs        int
-	MemoryGB    int
-	CPUsKnown   bool
-	MemoryKnown bool
+	CPUs     int
+	MemoryGB int
+	Known    bool
 }
 
 // WizardCapacitySnapshot shares the session config and one discovery result
@@ -27,23 +26,14 @@ func (s *WizardCapacitySnapshot) IsWizardStepState() {}
 // OnlineTotals aggregates the online nodes' cpu and memory.
 func (s *WizardCapacitySnapshot) OnlineTotals() CapacityTotals {
 	var total CapacityTotals
-	if s == nil || s.discovery == nil {
-		return total
-	}
-	first := true
-	for i := range s.discovery.Nodes {
+	for i := range s.nodes() {
 		node := &s.discovery.Nodes[i]
 		if node.Status != proxmoxStatusOnline {
 			continue
 		}
-		if first {
-			total.CPUsKnown, total.MemoryKnown = true, true
-			first = false
-		}
+		total.Known = true
 		total.CPUs += node.CPUs
 		total.MemoryGB += node.MemGB
-		total.CPUsKnown = total.CPUsKnown && node.CPUsKnown
-		total.MemoryKnown = total.MemoryKnown && node.MemKnown
 	}
 	return total
 }
@@ -93,10 +83,8 @@ func inventoryDemand(nodes []model.NodeSpec) demand {
 }
 
 func (n *proxmoxNode) exceeds(d *demand) bool {
-	return (n.CPUsKnown && d.cpu > n.CPUs) || (n.MemKnown && d.memoryMiB > n.MemGB*1024)
+	return d.cpu > n.CPUs || d.memoryMiB > n.MemGB*1024
 }
 
-func (t CapacityTotals) overCPU(d *demand) bool { return t.CPUsKnown && d.cpu > t.CPUs }
-func (t CapacityTotals) overMemory(d *demand) bool {
-	return t.MemoryKnown && d.memoryMiB > t.MemoryGB*1024
-}
+func (t CapacityTotals) overCPU(d *demand) bool    { return t.Known && d.cpu > t.CPUs }
+func (t CapacityTotals) overMemory(d *demand) bool { return t.Known && d.memoryMiB > t.MemoryGB*1024 }

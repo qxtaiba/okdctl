@@ -121,8 +121,8 @@ func TestReviewStep_PreflightChecksSelectedHostCapacity(t *testing.T) {
 		"lab-worker0": {Host: "pve2"}, "lab-worker1": {Host: "missing"},
 	}
 	snapshot := &WizardCapacitySnapshot{discovery: &proxmoxDiscovery{Nodes: []proxmoxNode{
-		{Name: "pve1", Status: "online", CPUs: 8, CPUsKnown: true, MemGB: 32, MemKnown: true},
-		{Name: "pve2", Status: "online", CPUs: 24, CPUsKnown: true, MemGB: 96, MemKnown: true},
+		{Name: "pve1", Status: "online", CPUs: 8, MemGB: 32},
+		{Name: "pve2", Status: "online", CPUs: 24, MemGB: 96},
 	}}}
 	s := NewReviewStep()
 	s.SetConfig(cfg)

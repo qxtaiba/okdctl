@@ -2,7 +2,6 @@ package steps
 
 import (
 	"errors"
-	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -153,8 +152,8 @@ func TestNodePlacementDemandFollowsSelection(t *testing.T) {
 	s := NewNodePlacementStep()
 	s.cfg = cfg
 	disc := &proxmoxDiscovery{Nodes: []proxmoxNode{
-		{Name: "pve1", Status: "online", CPUs: 4, CPUsKnown: true, MemGB: 8, MemKnown: true},
-		{Name: "pve2", Status: "offline", CPUs: 64, CPUsKnown: true, MemGB: 256, MemKnown: true},
+		{Name: "pve1", Status: "online", CPUs: 4, MemGB: 8},
+		{Name: "pve2", Status: "offline", CPUs: 64, MemGB: 256},
 	}}
 	step, _ := s.Update(discoveryCompleteMsg{discovery: disc})
 	s = step.(*NodePlacementStep)
@@ -186,7 +185,7 @@ func TestNodePlacementAssignmentDemandElidesVisiblyAtNarrowWidth(t *testing.T) {
 	s.cfg = cfg
 	nodes := make([]proxmoxNode, len(hosts))
 	for i, h := range hosts {
-		nodes[i] = proxmoxNode{Name: h, Status: "online", CPUs: 8, CPUsKnown: true, MemGB: 16, MemKnown: true}
+		nodes[i] = proxmoxNode{Name: h, Status: "online", CPUs: 8, MemGB: 16}
 	}
 	step, _ := s.Update(discoveryCompleteMsg{discovery: &proxmoxDiscovery{Nodes: nodes}})
 	s = step.(*NodePlacementStep)
@@ -344,35 +343,6 @@ func TestSeedCredentialsReachesBothSteps(t *testing.T) {
 	}
 }
 
-func TestGolden_NodePlacementUnknownCapacity(t *testing.T) {
-	for _, sz := range []struct{ w, h int }{{80, 24}} {
-		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
-			tui.SetTerminalWidth(sz.w)
-			t.Cleanup(func() { tui.SetTerminalWidth(0) })
-
-			m := newGoldenModel(t)
-			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
-			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDNodePlacement})
-			m.Config().Provider.Proxmox.Nodes = []string{"pve1"}
-			gen := m.CurrentStep().(*NodePlacementStep).generation
-			m.Update(discoveryCompleteMsg{generation: gen, discovery: &proxmoxDiscovery{Nodes: []proxmoxNode{{Name: "pve1", Status: "online"}}}})
-			for range 2 {
-				m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
-				m.Update(wizard.FocusChangedMsg{})
-			}
-
-			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
-			tuitest.Golden(t, fmt.Sprintf("node-placement-unknown-capacity_%dx%d", sz.w, sz.h), frame)
-			tuitest.AssertFits(t, frame, sz.w, sz.h)
-
-			plain := tuitest.StripANSI(frame)
-			if !strings.Contains(plain, "pve1 — ?c/?g") {
-				t.Errorf("view is missing the unknown-capacity option:\n%s", plain)
-			}
-		})
-	}
-}
-
 func TestNodePlacementStep_StaleDiscoveryRepliesCannotOverwriteNewer(t *testing.T) {
 	for _, stale := range []discoveryCompleteMsg{
 		{discovery: &proxmoxDiscovery{Nodes: []proxmoxNode{{Name: "stale-node"}}}},
@@ -507,7 +477,7 @@ func TestNodePlacementStep_SanitizesHostileProxmoxText(t *testing.T) {
 	t.Run("node names", func(t *testing.T) {
 		s := NewNodePlacementStep()
 		s.cfg = newPlacementConfig()
-		disc := &proxmoxDiscovery{Nodes: []proxmoxNode{{Name: "pve1" + payload, Status: "online", CPUsKnown: true, CPUs: 4, MemKnown: true, MemGB: 8}}}
+		disc := &proxmoxDiscovery{Nodes: []proxmoxNode{{Name: "pve1" + payload, Status: "online", CPUs: 4, MemGB: 8}}}
 		step, _ := s.Update(discoveryCompleteMsg{discovery: disc})
 		s = step.(*NodePlacementStep)
 
