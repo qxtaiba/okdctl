@@ -412,6 +412,7 @@ func TestVersionFlagRespectsNoColor(t *testing.T) {
 		rootCmd.SetOut(nil)
 		rootCmd.SetArgs(nil)
 		noColor = false
+		_ = rootCmd.Flags().Set("version", "false")
 	})
 
 	if err := rootCmd.Execute(); err != nil {
@@ -419,6 +420,37 @@ func TestVersionFlagRespectsNoColor(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "\x1b[") {
 		t.Errorf("--version leaked ANSI under --no-color: %q", out.String())
+	}
+}
+
+func TestUnknownCommandIsUsageErrorWithHelpHint(t *testing.T) {
+	wrapArgValidators(rootCmd)
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"up"})
+	t.Cleanup(func() {
+		rootCmd.SetOut(nil)
+		rootCmd.SetErr(nil)
+		rootCmd.SetArgs(nil)
+	})
+
+	err := rootCmd.Execute()
+	var usageErr *errtypes.UsageError
+	if !errors.As(err, &usageErr) || exitCodeFor(err) != 64 {
+		t.Fatalf("okdctl up: err = %T %v (exit %d), want a UsageError exiting 64", err, err, exitCodeFor(err))
+	}
+	if d, _ := errtypes.Describe(err); !strings.Contains(d.Hint, "okdctl --help") || !strings.Contains(d.Message, `"up"`) {
+		t.Fatalf("Describe = %+v, want the unknown command named and the --help hint", d)
+	}
+
+	out.Reset()
+	rootCmd.SetArgs([]string{})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("bare okdctl: %v", err)
+	}
+	if !strings.Contains(out.String(), "okdctl [command]") {
+		t.Fatalf("bare okdctl must print help, got:\n%s", out.String())
 	}
 }
 

@@ -78,6 +78,10 @@ installing it (okdctl up) returns in a later release.`,
 	Version:       version.Version,
 	SilenceUsage:  true,
 	SilenceErrors: true,
+	// Runnable so cobra validates Args: a bare root short-circuits to help
+	// before NoArgs runs and an unknown command would exit 0 with the help text.
+	Args: cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
 	PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 		if err := configureLogging(cmd); err != nil {
 			return err
