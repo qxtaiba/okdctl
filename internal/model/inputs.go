@@ -27,15 +27,12 @@ type Inputs struct {
 	ExtraManifests map[string][]byte
 }
 
-// Hash returns the sha256 hex of a canonical encoding of the infra-ID, the
-// identity (role, index, name, VMID, MAC, IP) of every master and of every
-// worker named in Day1, the VIPs, the domain, the machine network (CIDR,
-// gateway, resolvers, NTP, VLAN), the cluster CIDRs, the release, the pull
-// secret, the SSH key and the extra manifests by sorted name. A worker added after day 1 stays
-// out; a removed day-1 worker drops out and changes the digest, so the step
-// that removes one rewrites the record; sizing and placement are excluded
-// because the driver reconciles them. The encoding is pinned by a golden
-// test; changing it stales every record, so bump recordFile.Version with it.
+// Hash returns the sha256 hex of a canonical encoding of the ISO-baked
+// inputs: the infra-ID, the identity of every master and Day1 worker, the
+// VIPs, the domain, the machine and cluster networks, the release, the pull
+// secret, the SSH key and the extra manifests. The encoding is pinned by
+// TestInputsHash_Golden; changing it stales every record, so bump
+// recordFile.Version with it.
 func (in *Inputs) Hash() string {
 	h := sha256.New()
 	field := func(parts ...string) {

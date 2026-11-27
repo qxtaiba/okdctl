@@ -137,13 +137,19 @@ func TestLoadRecord_Errors(t *testing.T) {
 
 func TestSaveRecord_RefusesBadInfraID(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "record.json")
-	for _, id := range []string{"", "lab", "lab-abc", "other-a1b2c3"} {
-		err := SaveRecord(path, &Record{InfraID: id, Cluster: "lab"})
+	for _, rec := range []Record{
+		{InfraID: "", Cluster: "lab"},
+		{InfraID: "lab", Cluster: "lab"},
+		{InfraID: "lab-abc", Cluster: "lab"},
+		{InfraID: "other-a1b2c3", Cluster: "lab"},
+		{InfraID: "-a1b2c3", Cluster: ""},
+	} {
+		err := SaveRecord(path, &rec)
 		if !errors.Is(err, ErrInfraID) {
-			t.Errorf("SaveRecord(%q) = %v; want ErrInfraID", id, err)
+			t.Errorf("SaveRecord(%+v) = %v; want ErrInfraID", rec, err)
 		}
 		if _, statErr := os.Stat(path); !errors.Is(statErr, os.ErrNotExist) {
-			t.Fatalf("SaveRecord(%q) wrote the file", id)
+			t.Fatalf("SaveRecord(%+v) wrote the file", rec)
 		}
 	}
 }

@@ -72,7 +72,7 @@ func LoadRecord(path string) (*Record, error) {
 
 func (r *Record) checkInfraID() error {
 	rest, ok := strings.CutPrefix(r.InfraID, r.Cluster+"-")
-	if !ok || len(rest) != 6 || strings.Trim(rest, "0123456789abcdef") != "" {
+	if r.Cluster == "" || !ok || len(rest) != 6 || strings.Trim(rest, "0123456789abcdef") != "" {
 		return fmt.Errorf("infra_id %q: %w", r.InfraID, ErrInfraID)
 	}
 	return nil
