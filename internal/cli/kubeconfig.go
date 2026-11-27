@@ -17,7 +17,9 @@ var kubeconfigOutput string
 var kubeconfigCmd = &cobra.Command{
 	Use:   "kubeconfig",
 	Short: "Print or export the cluster kubeconfig",
-	Long:  "Print the cluster kubeconfig to stdout or write it to a file.",
+	Long: `Print the cluster kubeconfig to stdout or write it to a file. The file is
+read from cluster/auth/kubeconfig under the workspace, the directory that
+holds okdctl.yaml. The install step, which writes it, is not yet available.`,
 	Example: `  okdctl kubeconfig                       # print to stdout
   okdctl kubeconfig --output-file ~/.kube/okd.cfg    # write to file`,
 	Args: cobra.NoArgs,

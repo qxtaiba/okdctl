@@ -46,15 +46,15 @@ var configValidateCmd = &cobra.Command{
 enum values, provider settings, topology constraints) and print every
 error found. A valid file is followed by the node table it produces:
 name, role, VMID, MAC, address, host, CPU, MEM (MiB) and DISKS (sizes in
-GiB). MACs derive from the infra-ID in cluster/record.json; before okdctl
-up writes it they are a preview and the table says so. With --output json
-the inventory alone goes to stdout as an object with infra_id ("preview"
-before the record exists), api_vip, ingress_vip and nodes[] (memory_mib,
-disks[].size_gib), and the summary goes to stderr.
+GiB). MACs derive from the infra-ID in cluster/record.json; until the
+install writes it they are a preview and the table says so. With --output
+json the inventory alone goes to stdout as an object with infra_id
+("preview" before the record exists), api_vip, ingress_vip and nodes[]
+(memory_mib, disks[].size_gib), and the summary goes to stderr.
 
 Read-only: nothing is written or deployed. Exits 0 when the config is
-valid, 2 when validation reports errors, and 66 when the file does not
-exist.`,
+valid, 2 when validation reports errors, 64 on a usage error and 66 when
+the file does not exist.`,
 	Example: `  okdctl config validate
   okdctl config validate --output json`,
 	Args: cobra.NoArgs,

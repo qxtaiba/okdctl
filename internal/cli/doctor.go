@@ -29,7 +29,7 @@ privileges, PVE version, CPU flags, free memory per host, VMID and address
 collisions, storage content types and the bridge on every target node. Node
 identities come from the configuration through the node model. The MAC
 collision check runs once cluster/record.json names the infra-ID, and the
-ISO size check runs in okdctl up, once the agent ISO exists.
+ISO size check runs at install time, once the agent ISO exists.
 
 Read-only: nothing is created or changed. Exits 0 when every check passes or
 only warns, 1 when any check fails, 2 when the configuration is invalid, 3

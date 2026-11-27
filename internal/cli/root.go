@@ -70,8 +70,9 @@ var rootCmd = &cobra.Command{
 	Use:   "okdctl",
 	Short: "Run OKD clusters on Proxmox VE",
 	Long: `okdctl defines, installs and operates one OKD cluster on Proxmox VE from
-a single configuration file. This release defines a cluster with okdctl init;
-installing it (okdctl up) returns in a later release.`,
+a single configuration file. This release defines a cluster with okdctl init
+and checks the host with okdctl doctor; installing the cluster is not yet
+available.`,
 	Example: `  okdctl init
   okdctl doctor
   okdctl config validate

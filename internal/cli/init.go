@@ -35,7 +35,7 @@ var initCmd = &cobra.Command{
 	Short: "Define a cluster and write okdctl.yaml",
 	Long: `Define an OKD cluster through the interactive wizard and write it to
 okdctl.yaml; the Proxmox API token goes to okdctl.env beside it. Installing
-the cluster (okdctl up) returns in a later release.`,
+the cluster is not yet available.`,
 	Example: `  okdctl init
   okdctl init --output-file my-cluster.yaml
   okdctl init --minimal   # write the minimal three-node config without the wizard`,
