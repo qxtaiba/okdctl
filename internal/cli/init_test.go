@@ -127,8 +127,9 @@ func TestInitTarget_ExplicitOutputFileWinsOverConfig(t *testing.T) {
 	}
 }
 
-func TestRunInit_MinimalCreatesTheWorkspaceDirectory(t *testing.T) {
+func TestRunInit_MinimalCreatesTheWorkspaceDirectoryAndSaysSo(t *testing.T) {
 	resetInitState(t)
+	logged := installLogBuffer(t)
 	initMinimal = true
 	initOutputFile = filepath.Join(t.TempDir(), "new", "okdctl.yaml")
 
@@ -137,6 +138,9 @@ func TestRunInit_MinimalCreatesTheWorkspaceDirectory(t *testing.T) {
 	}
 	if _, err := os.Stat(initOutputFile); err != nil {
 		t.Fatalf("config not written: %v", err)
+	}
+	if got := logged.String(); !strings.Contains(got, "configuration saved") || !strings.Contains(got, initOutputFile) {
+		t.Fatalf("log = %q, want the saved path reported", got)
 	}
 }
 
@@ -320,8 +324,8 @@ func TestRunInit_WizardErrorIsConfigError(t *testing.T) {
 
 	err := runInit(initCmd, nil)
 	var ce *errtypes.ConfigError
-	if !errors.As(err, &ce) || !strings.Contains(err.Error(), "wizard failed") {
-		t.Fatalf("want a ConfigError naming the wizard, got %T: %v", err, err)
+	if !errors.As(err, &ce) || !strings.Contains(err.Error(), "wizard failed: tty exploded") {
+		t.Fatalf("want a ConfigError naming the wizard and its cause, got %T: %v", err, err)
 	}
 }
 

@@ -71,7 +71,8 @@ func runInit(cmd *cobra.Command, _ []string) error {
 	defer saved.Zeroize()
 	outcome, err := runWizardFn(cmd, cfg, configExists, saved)
 	if err != nil {
-		return (&errtypes.ConfigError{Msg: "wizard failed", Err: err}).
+		// bubbletea and TTY errors carry no credential, so the cause may sit in Msg.
+		return (&errtypes.ConfigError{Msg: "wizard failed: " + err.Error(), Err: err}).
 			WithHint("try again, or use --minimal to write a configuration without the wizard")
 	}
 	if outcome.Result.Outcome == wizard.OutcomeCancelled {
@@ -137,7 +138,11 @@ func writeMinimalConfig(path string, w io.Writer) error {
 		return (&errtypes.ConfigError{Msg: path + " already exists"}).
 			WithHint("remove it, or pass --output-file to write elsewhere")
 	}
-	return saveConfig(config.MinimalConfig(), path, w)
+	if err := saveConfig(config.MinimalConfig(), path, w); err != nil {
+		return err
+	}
+	logutil.Info("configuration saved", logutil.LF("path", path))
+	return nil
 }
 
 // withProjectLock serializes shared-file writes against concurrent okdctl
