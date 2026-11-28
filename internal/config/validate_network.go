@@ -40,9 +40,11 @@ func (c *Config) validateNetwork(r *ValidationResult, nodes []nodeRef) {
 	}
 	switch {
 	case n.HostPrefix < minHostPrefix || n.HostPrefix > maxHostPrefix:
-		r.addf(FieldNetworkingHostPrefix, "%d must be between %d and %d", n.HostPrefix, minHostPrefix, maxHostPrefix)
+		r.addf(FieldNetworkingHostPrefix, "%d must be between %d and %d",
+			n.HostPrefix, minHostPrefix, maxHostPrefix)
 	case pod.IsValid() && n.HostPrefix < pod.Bits():
-		r.addf(FieldNetworkingHostPrefix, "%d must be at least the pod_cidr prefix length %d", n.HostPrefix, pod.Bits())
+		r.addf(FieldNetworkingHostPrefix, "%d must be at least the pod_cidr prefix length %d",
+			n.HostPrefix, pod.Bits())
 	}
 }
 
@@ -87,7 +89,9 @@ func (c *Config) validateVIPs(r *ValidationResult, machine netip.Prefix, nodes [
 // inside machine_cidr (the first one outside is reported, the rest follow
 // it) and clear of the gateway, the resolvers and the prefix edges;
 // overrides have their own rules.
-func (c *Config) validateDerivedAddresses(r *ValidationResult, machine netip.Prefix, nodes []nodeRef) {
+func (c *Config) validateDerivedAddresses(
+	r *ValidationResult, machine netip.Prefix, nodes []nodeRef,
+) {
 	n := &c.Networking
 	start := parseAddr(r, FieldNetworkingNodeIPStart, n.NodeIPStart)
 	if start.IsValid() && machine.IsValid() && !machine.Contains(start) {
@@ -103,7 +107,8 @@ func (c *Config) validateDerivedAddresses(r *ValidationResult, machine netip.Pre
 		}
 		if machine.IsValid() && !machine.Contains(node.ip) {
 			if !outside {
-				r.addf(FieldNetworkingNodeIPStart, "%s derives %s, outside machine_cidr %s", node.name, node.ip, machine)
+				r.addf(FieldNetworkingNodeIPStart, "%s derives %s, outside machine_cidr %s",
+					node.name, node.ip, machine)
 			}
 			outside = true
 			continue
@@ -117,7 +122,8 @@ func (c *Config) validateDerivedAddresses(r *ValidationResult, machine netip.Pre
 			}
 		}
 		if edge := edgeOf(machine, node.ip); edge != "" {
-			r.addf(FieldNetworkingNodeIPStart, "%s lands on %s, the %s address of machine_cidr %s", node.name, node.ip, edge, machine)
+			r.addf(FieldNetworkingNodeIPStart, "%s lands on %s, the %s address of machine_cidr %s",
+				node.name, node.ip, edge, machine)
 		}
 	}
 }
