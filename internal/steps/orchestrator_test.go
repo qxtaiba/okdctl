@@ -3,14 +3,12 @@ package steps_test
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/url"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/proxmox"
 	"github.com/qxtaiba/okdctl/internal/steps"
 )
 
@@ -170,9 +168,8 @@ func TestOrchestratorRun_ClassifiesByErrorChain(t *testing.T) {
 		err  error
 		want errtypes.Kind
 	}{
-		{"driver permission is auth", fmt.Errorf("create vm: %w", proxmox.ErrPermission), errtypes.KindAuth},
 		{"transport failure is network", &url.Error{Op: "Get", URL: "https://pve:8006", Err: errors.New("connection refused")}, errtypes.KindNetwork},
-		{"anything else is cluster", &proxmox.TaskFailed{UPID: "UPID:pve:1", ExitStatus: "unable to start"}, errtypes.KindCluster},
+		{"anything else is cluster", errors.New("task UPID:pve:1 failed: unable to start"), errtypes.KindCluster},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -11,7 +11,6 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
-	"github.com/qxtaiba/okdctl/internal/proxmox"
 )
 
 // Orchestrator runs steps from BuildSteps, stopping at the first fatal
@@ -69,9 +68,9 @@ func (o *Orchestrator) Results() []StepResult {
 	return slices.Clone(o.results)
 }
 
-// classifyStepErr types a bare step error by its chain: a driver permission
-// refusal is an AuthError, a transport failure a NetworkError, anything else
-// a ClusterError; typed errtypes and ctx errors pass through unchanged.
+// classifyStepErr types a bare step error by its chain: a transport failure
+// is a NetworkError, anything else a ClusterError; typed errtypes errors (the
+// driver's permission refusal among them) and ctx errors pass through unchanged.
 func classifyStepErr(id StepID, err error) error {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return err
@@ -83,14 +82,10 @@ func classifyStepErr(id StepID, err error) error {
 	// RedactableStderr before landing in Msg; Err stays untouched for errors.Is/As.
 	msg := fmt.Sprintf("step %s failed: %v", id, logutil.RedactableStderr(err.Error()).Redacted())
 	var netErr net.Error
-	switch {
-	case errors.Is(err, proxmox.ErrPermission):
-		return &errtypes.AuthError{Msg: msg, Err: err}
-	case errors.As(err, &netErr):
+	if errors.As(err, &netErr) {
 		return &errtypes.NetworkError{Msg: msg, Err: err}
-	default:
-		return &errtypes.ClusterError{Msg: msg, Err: err}
 	}
+	return &errtypes.ClusterError{Msg: msg, Err: err}
 }
 
 func (o *Orchestrator) executeStep(ctx context.Context, step *StepDef) (r StepResult) {
