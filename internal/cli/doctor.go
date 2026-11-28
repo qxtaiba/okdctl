@@ -93,7 +93,7 @@ func doctorFindings(cmd *cobra.Command) ([]proxmox.Finding, error) {
 	if err != nil {
 		return nil, err
 	}
-	creds, err := doctorCredentials(cfg, cfgFile)
+	creds, err := loadCredentials(cfg, cfgFile)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +138,7 @@ func validateOutputFormat(format string) error {
 	}
 }
 
-func doctorCredentials(cfg *config.Config, configPath string) (*credentials.ProxmoxCredentials, error) {
+func loadCredentials(cfg *config.Config, configPath string) (*credentials.ProxmoxCredentials, error) {
 	root, err := workspaceRoot(configPath)
 	if err != nil {
 		return nil, err
