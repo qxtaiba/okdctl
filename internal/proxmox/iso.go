@@ -46,9 +46,9 @@ func storagePath(node, storage, rest string) string {
 }
 
 // UploadISO streams path to the node's storage as the volume name without
-// buffering the file; the request bypasses go-proxmox because its uploader
-// ranges a map and so emits the multipart fields in random order
-// (luthermonson/go-proxmox#352).
+// buffering the file; the request bypasses go-proxmox because
+// Client.UploadReader takes no ctx and Storage.upload needs a *Storage
+// handle, so cancellation would never reach the upload.
 func (d *driver) UploadISO(ctx context.Context, node, storage, path, name, sha256 string) (Task, error) {
 	file, err := os.Open(path)
 	if err != nil {
