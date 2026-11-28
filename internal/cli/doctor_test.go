@@ -371,7 +371,7 @@ func TestDoctorCommand_JSONPrintsEmptyArrayWheneverChecksCannotRun(t *testing.T)
 		token    string
 		wantExit int
 	}{
-		"missing config": {setup: func(t *testing.T) { _ = os.Remove("okdctl.yaml") }, token: doctorToken, wantExit: 66},
+		"missing config": {setup: func(*testing.T) { _ = os.Remove("okdctl.yaml") }, token: doctorToken, wantExit: 66},
 		"invalid config": {setup: func(t *testing.T) {
 			if err := os.WriteFile("okdctl.yaml", []byte("schemaVersion: v3\ncluster:\n  name: Bad_Name\n"), 0o600); err != nil {
 				t.Fatal(err)
