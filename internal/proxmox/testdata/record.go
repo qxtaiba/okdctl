@@ -177,7 +177,7 @@ func (r *recorder) fixtures(upid string) []fixture {
 		{"cluster_resources_vm.json", "/cluster/resources?type=vm", mergeResources},
 		{"nodes_pve_storage_local_content_iso.json", "/nodes/" + node + "/storage/" + r.s.isoStorage + "/content?content=iso", mergeRows("volid")},
 		{"access_permissions.json", "/access/permissions", checkPermissions},
-		{configFile, "/nodes/" + node + "/qemu/" + vmid + "/config", pinKeys("digest", "smbios1", "vmgenid", "ide2", "boot")},
+		{configFile, "/nodes/" + node + "/qemu/" + vmid + "/config?current=1", pinKeys("digest", "smbios1", "vmgenid", "ide2", "boot")},
 		{"nodes_pve_qemu_101_status_current.json", "/nodes/" + node + "/qemu/" + vmid + "/status/current", pinKeys("status", "qmpstatus", "ha", "uptime", "pid")},
 		{"nodes_pve_tasks_qmstart_status.json", "/nodes/" + node + "/tasks/" + url.PathEscape(upid) + "/status", pinKeys("upid", "user", "type", "id")},
 	}
@@ -508,8 +508,8 @@ func pinKeys(keys ...string) merge {
 	}
 }
 
-// checkPermissions verifies the {path: {privilege: 1}} encoding and keeps the
-// file, whose live body would be the production token's whole ACL.
+// checkPermissions verifies the {path: {privilege: propagate}} encoding and
+// keeps the file, whose live body would be the production token's whole ACL.
 func checkPermissions(_, live any) (any, error) {
 	perms, err := object(live)
 	if err != nil {

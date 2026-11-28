@@ -13,8 +13,10 @@ import (
 	"github.com/qxtaiba/okdctl/internal/credentials"
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/executor"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/proxmox"
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 var doctorOutput string
@@ -27,10 +29,14 @@ privileges, PVE version, CPU flags, free memory per host, VMID and address
 collisions, storage content types and the bridge on every target node. Node
 identities come from the configuration through the node model. The MAC
 collision check runs once cluster/record.json names the infra-ID, and the
-ISO size check runs in okdctl up, once the agent ISO exists.
+ISO size check runs at install time, once the agent ISO exists.
 
 Read-only: nothing is created or changed. Exits 0 when every check passes or
-only warns, 1 when any check fails.`,
+only warns, 1 when any check fails, 2 when the configuration is invalid, 3
+when Proxmox cannot be reached, 5 when the API token is missing or rejected,
+64 on a usage error and 66 when the configuration file does not exist. With
+--output json the findings array alone goes to stdout; it is empty when the
+checks could not run.`,
 	Example: `  okdctl doctor
   okdctl doctor --output json`,
 	Args: cobra.NoArgs,
@@ -45,47 +51,82 @@ func init() {
 }
 
 // runPreflight is the seam tests replace so doctor runs without a Proxmox server.
-var runPreflight = func(ctx context.Context, creds *credentials.ProxmoxCredentials, in *proxmox.PreflightInput) ([]proxmox.Finding, error) {
-	d, err := proxmox.New(creds.Endpoint, creds.APIToken, creds.Insecure)
-	creds.Zeroize()
-	if err != nil {
-		return nil, fmt.Errorf("connect proxmox: %w", err)
-	}
+var runPreflight = func(ctx context.Context, d proxmox.Driver, in *proxmox.PreflightInput) ([]proxmox.Finding, error) {
 	return proxmox.Preflight(ctx, d, proxmox.ExecPinger(executor.New()), *in)
+}
+
+// openDriver builds the Proxmox driver from creds and zeroizes the token;
+// it is a variable so tests can observe the credentials doctor resolved.
+var openDriver = func(creds *credentials.ProxmoxCredentials) (proxmox.Driver, error) {
+	defer creds.Zeroize()
+	d, err := proxmox.New(creds.Endpoint, creds.APIToken, creds.Insecure)
+	if err != nil {
+		return nil, &errtypes.ConfigError{Msg: "connect proxmox: " + err.Error(), Err: err}
+	}
+	return d, nil
 }
 
 func runDoctor(cmd *cobra.Command, _ []string) error {
 	if err := validateOutputFormat(doctorOutput); err != nil {
 		return err
 	}
-	cfg, err := loadConfig(cfgFile)
+	findings, err := doctorFindings(cmd)
 	if err != nil {
-		return err
-	}
-	if result := validateConfig(cfg, cmd.ErrOrStderr()); !result.IsValid() {
-		return (&errtypes.ConfigError{Msg: "config validation failed", Err: result}).WithHint("review the errors listed above")
-	}
-	in, err := preflightInput(cfg, cfgFile)
-	if err != nil {
-		return err
-	}
-	creds, err := doctorCredentials(cfg, cfgFile)
-	if err != nil {
-		return err
-	}
-	defer creds.Zeroize()
-	findings, err := runPreflight(cmd.Context(), creds, &in)
-	switch {
-	case errors.Is(err, proxmox.ErrPermission):
-		return (&errtypes.AuthError{Msg: "proxmox rejected the api token", Err: err}).
-			WithHint("check PROXMOX_VE_API_TOKEN and the privileges granted to it")
-	case err != nil:
-		return fmt.Errorf("preflight: %w", err)
+		return noFindings(cmd, err)
 	}
 	if err := printFindings(cmd.OutOrStdout(), doctorOutput, findings); err != nil {
 		return err
 	}
 	return findingsError(findings)
+}
+
+// doctorFindings runs the checks; any error means they could not run.
+func doctorFindings(cmd *cobra.Command) ([]proxmox.Finding, error) {
+	cfg, err := loadConfig(cfgFile)
+	if err != nil {
+		return nil, err
+	}
+	if result := validateConfig(cfg, cmd.ErrOrStderr()); !result.IsValid() {
+		return nil, (&errtypes.ConfigError{Msg: "config validation failed", Err: result}).WithHint("review the errors listed above")
+	}
+	in, err := preflightInput(cfg, cfgFile)
+	if err != nil {
+		return nil, err
+	}
+	creds, err := loadCredentials(cfg, cfgFile)
+	if err != nil {
+		return nil, err
+	}
+	d, err := openDriver(creds)
+	if err != nil {
+		return nil, err
+	}
+	findings, err := runPreflight(cmd.Context(), d, &in)
+	if err != nil {
+		return nil, preflightError(err)
+	}
+	return findings, nil
+}
+
+// noFindings returns err after printing the empty array a json consumer
+// expects when the checks could not run.
+func noFindings(cmd *cobra.Command, err error) error {
+	if doctorOutput == tui.FormatJSON {
+		fmt.Fprintln(cmd.OutOrStdout(), "[]")
+	}
+	return err
+}
+
+// preflightError types a preflight that could not run: a rejected token is
+// an AuthError, anything else a NetworkError, so failed checks alone exit 1.
+func preflightError(err error) error {
+	if errors.Is(err, proxmox.ErrPermission) {
+		return (&errtypes.AuthError{Msg: "proxmox rejected the api token", Err: err}).
+			WithHint("check PROXMOX_VE_API_TOKEN and the privileges granted to it")
+	}
+	scrubbed := fmt.Sprint(logutil.RedactableStderr(err.Error()).Redacted())
+	return (&errtypes.NetworkError{Msg: "preflight: " + scrubbed, Err: err}).
+		WithHint("check provider.proxmox.endpoint and that the Proxmox API answers")
 }
 
 func validateOutputFormat(format string) error {
@@ -97,12 +138,16 @@ func validateOutputFormat(format string) error {
 	}
 }
 
-func doctorCredentials(cfg *config.Config, configPath string) (*credentials.ProxmoxCredentials, error) {
-	envPath := credentials.EnvFilePath(configPath)
-	if err := credentials.LoadEnvFile(envPath); err != nil {
+func loadCredentials(cfg *config.Config, configPath string) (*credentials.ProxmoxCredentials, error) {
+	root, err := workspaceRoot(configPath)
+	if err != nil {
 		return nil, err
 	}
-	creds := credentials.GetProxmoxCredentials(cfg)
+	envPath := workspace.EnvPath(root)
+	creds, err := credentials.Load(envPath, cfg.Provider.Proxmox.Endpoint)
+	if err != nil {
+		return nil, err
+	}
 	if !creds.IsValid() {
 		creds.Zeroize()
 		return nil, &errtypes.AuthError{Msg: "no proxmox api token: set PROXMOX_VE_API_TOKEN in " + envPath}
@@ -143,7 +188,7 @@ func printFindings(w io.Writer, format string, findings []proxmox.Finding) error
 func findingsError(findings []proxmox.Finding) error {
 	n := 0
 	for _, f := range findings {
-		if f.Severity == "fail" {
+		if f.Severity == proxmox.SeverityFail {
 			n++
 		}
 	}

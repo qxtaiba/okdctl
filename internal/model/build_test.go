@@ -9,7 +9,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 )
 
-const testInfraID = "lab-x7k2q"
+const testInfraID = "lab-a1b2c3"
 
 func testConfig(workers int) *config.Config {
 	cfg := config.DefaultConfig()
@@ -36,9 +36,9 @@ func TestBuild_ThreePlusZero(t *testing.T) {
 		t.Errorf("VIPs = %s/%s", inv.APIVIP, inv.IngressVIP)
 	}
 	want := []NodeSpec{
-		{Role: RoleMaster, Index: 0, Name: "lab-master0", VMID: 6010, MAC: "02:12:83:00:17:7a", IP: netip.MustParseAddr("192.168.1.150"), Host: "pve", CPU: 4, MemoryMiB: 16384, Disks: []Disk{{SizeGiB: 120, Storage: "local-lvm", Serial: "okd6010d0"}}},
-		{Role: RoleMaster, Index: 1, Name: "lab-master1", VMID: 6011, MAC: "02:12:83:00:17:7b", IP: netip.MustParseAddr("192.168.1.151"), Host: "pve", CPU: 4, MemoryMiB: 16384, Disks: []Disk{{SizeGiB: 120, Storage: "local-lvm", Serial: "okd6011d0"}}},
-		{Role: RoleMaster, Index: 2, Name: "lab-master2", VMID: 6012, MAC: "02:12:83:00:17:7c", IP: netip.MustParseAddr("192.168.1.152"), Host: "pve", CPU: 4, MemoryMiB: 16384, Disks: []Disk{{SizeGiB: 120, Storage: "local-lvm", Serial: "okd6012d0"}}},
+		{Role: RoleMaster, Index: 0, Name: "lab-master0", VMID: 6010, MAC: "02:d0:fd:00:17:7a", IP: netip.MustParseAddr("192.168.1.150"), Host: "pve", CPU: 4, MemoryMiB: 16384, Disks: []Disk{{SizeGiB: 120, Storage: "local-lvm", Serial: "okd6010d0"}}},
+		{Role: RoleMaster, Index: 1, Name: "lab-master1", VMID: 6011, MAC: "02:d0:fd:00:17:7b", IP: netip.MustParseAddr("192.168.1.151"), Host: "pve", CPU: 4, MemoryMiB: 16384, Disks: []Disk{{SizeGiB: 120, Storage: "local-lvm", Serial: "okd6011d0"}}},
+		{Role: RoleMaster, Index: 2, Name: "lab-master2", VMID: 6012, MAC: "02:d0:fd:00:17:7c", IP: netip.MustParseAddr("192.168.1.152"), Host: "pve", CPU: 4, MemoryMiB: 16384, Disks: []Disk{{SizeGiB: 120, Storage: "local-lvm", Serial: "okd6012d0"}}},
 	}
 	if len(inv.Nodes) != len(want) {
 		t.Fatalf("Nodes = %+v; want %d masters", inv.Nodes, len(want))
@@ -76,11 +76,11 @@ func TestBuild_ThreePlusTwoWithOverride(t *testing.T) {
 		t.Fatalf("Workers = %+v", workers)
 	}
 	assertNode(t, &workers[0], &NodeSpec{
-		Role: RoleWorker, Index: 0, Name: "lab-worker0", VMID: 6100, MAC: "02:12:83:00:17:d4", IP: netip.MustParseAddr("192.168.1.160"), Host: "pve2", CPU: 8, MemoryMiB: 16384,
+		Role: RoleWorker, Index: 0, Name: "lab-worker0", VMID: 6100, MAC: "02:d0:fd:00:17:d4", IP: netip.MustParseAddr("192.168.1.160"), Host: "pve2", CPU: 8, MemoryMiB: 16384,
 		Disks: []Disk{{SizeGiB: 120, Storage: "local-lvm", Serial: "okd6100d0"}, {SizeGiB: 500, Storage: "local-lvm", Serial: "okd6100d1", Wipe: true}},
 	})
 	assertNode(t, &workers[1], &NodeSpec{
-		Role: RoleWorker, Index: 1, Name: "lab-worker1", VMID: 6101, MAC: "02:12:83:00:17:d5", IP: netip.MustParseAddr("192.168.1.161"), Host: "pve2", CPU: 8, MemoryMiB: 32768,
+		Role: RoleWorker, Index: 1, Name: "lab-worker1", VMID: 6101, MAC: "02:d0:fd:00:17:d5", IP: netip.MustParseAddr("192.168.1.161"), Host: "pve2", CPU: 8, MemoryMiB: 32768,
 		Disks: []Disk{{SizeGiB: 120, Storage: "local-lvm", Serial: "okd6101d0"}, {SizeGiB: 500, Storage: "local-lvm", Serial: "okd6101d1", Wipe: true}},
 	})
 }
@@ -125,7 +125,7 @@ func TestBuild_Overrides(t *testing.T) {
 	}
 	worker0, _ := inv.ByName("lab-worker0")
 	wantDisks := []Disk{{SizeGiB: 200, Storage: "fast", Serial: "okd6100d0"}}
-	assertNode(t, &worker0, &NodeSpec{Role: RoleWorker, Name: "lab-worker0", VMID: 6100, MAC: "02:12:83:00:17:d4", IP: netip.MustParseAddr("192.168.1.160"), Host: "pve", CPU: 8, MemoryMiB: 16384, Disks: wantDisks})
+	assertNode(t, &worker0, &NodeSpec{Role: RoleWorker, Name: "lab-worker0", VMID: 6100, MAC: "02:d0:fd:00:17:d4", IP: netip.MustParseAddr("192.168.1.160"), Host: "pve", CPU: 8, MemoryMiB: 16384, Disks: wantDisks})
 }
 
 func TestBuild_Errors(t *testing.T) {
@@ -166,7 +166,7 @@ func TestInventory_Lookups(t *testing.T) {
 	if n, ok := inv.ByVMID(6012); !ok || n.Name != "lab-master2" {
 		t.Errorf("ByVMID = %+v, %v", n, ok)
 	}
-	if n, ok := inv.ByMAC("02:12:83:00:17:D4"); !ok || n.Name != "lab-worker0" {
+	if n, ok := inv.ByMAC("02:d0:fd:00:17:D4"); !ok || n.Name != "lab-worker0" {
 		t.Errorf("ByMAC = %+v, %v", n, ok)
 	}
 	if _, ok := inv.ByName("lab-worker9"); ok {

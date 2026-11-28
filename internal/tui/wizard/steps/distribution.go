@@ -18,20 +18,17 @@ import (
 )
 
 // VersionFetcher resolves the OKD release catalog for the distribution step.
-// *releases.OKDVersionFetcher is the production implementation;
-// StaticVersionFetcher is a deterministic fixture for demo mode and tests.
 type VersionFetcher interface {
 	FetchVersions(ctx context.Context) ([]releases.OKDReleaseSeries, error)
 }
 
-// StaticVersionFetcher is a VersionFetcher fixture that returns a fixed
-// release catalog (or a fixed error) without touching the network.
+// StaticVersionFetcher returns a fixed catalog or error without the network.
 type StaticVersionFetcher struct {
 	Series []releases.OKDReleaseSeries
 	Err    error
 }
 
-// FetchVersions returns a copy of Series, or Err if it is set.
+// FetchVersions returns a copy of Series, or Err when set.
 func (f StaticVersionFetcher) FetchVersions(_ context.Context) ([]releases.OKDReleaseSeries, error) {
 	if f.Err != nil {
 		return nil, f.Err
@@ -41,9 +38,8 @@ func (f StaticVersionFetcher) FetchVersions(_ context.Context) ([]releases.OKDRe
 	return series, nil
 }
 
-// helpRefresh is the house-voice help text for a binding that re-issues an
-// already-loaded fetch, shared across every step that advertises one so
-// the wording never drifts between them.
+// helpRefresh is the shared help text for a binding that re-issues a loaded
+// fetch.
 const helpRefresh = "refresh"
 
 type selectionPhase int
@@ -54,8 +50,7 @@ const (
 	phaseVersionSelect
 )
 
-// DistributionStep lets the user pick an OKD version via on-demand release
-// fetching and grouped minor/patch display.
+// DistributionStep picks an OKD version from the fetched release catalog.
 type DistributionStep struct {
 	wizard.BaseStep
 	versionSelector *components.Selector
@@ -69,21 +64,16 @@ type DistributionStep struct {
 	frame          uint64
 	loadError      error
 
-	// generation increments on every release fetch this step issues; a
-	// versionsLoadedMsg carrying a stale generation is a superseded fetch's
-	// reply and Update discards it unapplied, so a slow first fetch can
-	// never clobber a newer one's result.
+	// generation tags every fetch so a superseded reply is discarded unapplied
 	generation uint64
 
-	// contentHeight: the step's real inner height from the last genuine
-	// SetSize call, kept apart from BaseStep's own field since View() is
-	// re-run with an unbounded placeholder height on every viewport sync.
+	// contentHeight is the last genuine SetSize height; View re-runs with a
+	// placeholder height on every viewport sync
 	contentHeight int
 }
 
-// SetSize updates the step's inner width and height, remembering the real
-// content height so the dropdown's render-time budget survives renders that
-// carry a placeholder height.
+// SetSize updates the step's size, remembering the real content height for
+// the dropdown budget.
 func (s *DistributionStep) SetSize(width, height int) {
 	s.BaseStep.SetSize(width, height)
 	s.contentHeight = height
@@ -107,10 +97,8 @@ func NewDistributionStep() *DistributionStep {
 	}
 }
 
-// Init starts the release fetch, reusing an already-loaded catalog on
-// re-entry instead of re-issuing the request; a failed attempt is never
-// cached and retries automatically. The shared frame clock animates the
-// loading indicator while Animating reports true.
+// Init starts the release fetch, reusing a loaded catalog on re-entry; a
+// failed attempt always retries.
 func (s *DistributionStep) Init() tea.Cmd {
 	if s.phase == phaseVersionSelect {
 		return nil
@@ -123,7 +111,7 @@ func (s *DistributionStep) Animating() bool {
 	return s.phase == phaseVersionLoading
 }
 
-// Update handles version-load messages, shared-clock frames, and navigation keys.
+// Update handles version-load messages, frames and navigation keys.
 func (s *DistributionStep) Update(msg tea.Msg) (wizard.WizardStep, tea.Cmd) {
 	switch msg := msg.(type) {
 	case versionsLoadedMsg:
@@ -163,10 +151,8 @@ func (s *DistributionStep) handleKeyMsg(msg tea.KeyPressMsg) (wizard.WizardStep,
 		return s.handleEnterKey()
 	case key.Matches(msg, key.NewBinding(key.WithKeys("tab"))):
 		return s.handleTabKey()
-	// 'r' forces a refresh of an already-loaded catalog; footer-silent like
-	// the vim scroll vocabulary (model_navigation.go's handleVimScrollKey),
-	// since the error phase's ShortHelp already owns "r retry" and this is
-	// the same key reused for the loaded phase, not a second binding.
+	// 'r' refreshes a loaded catalog, footer-silent since the error phase
+	// already advertises the same key as retry.
 	case key.Matches(msg, key.NewBinding(key.WithKeys("r"))):
 		cmd := s.startFetch()
 		return s, cmd
@@ -176,8 +162,6 @@ func (s *DistributionStep) handleKeyMsg(msg tea.KeyPressMsg) (wizard.WizardStep,
 	return s, nil
 }
 
-// handleErrorKeyMsg handles the error phase's only key: 'r' re-issues the
-// release fetch.
 func (s *DistributionStep) handleErrorKeyMsg(msg tea.KeyPressMsg) (wizard.WizardStep, tea.Cmd) {
 	if key.Matches(msg, key.NewBinding(key.WithKeys("r"))) {
 		return s.retry()
@@ -185,16 +169,13 @@ func (s *DistributionStep) handleErrorKeyMsg(msg tea.KeyPressMsg) (wizard.Wizard
 	return s, nil
 }
 
-// retry resets the step to the loading phase and re-issues the release fetch.
 func (s *DistributionStep) retry() (wizard.WizardStep, tea.Cmd) {
 	cmd := s.startFetch()
 	return s, cmd
 }
 
-// handleEnterKey confirms the highlighted release, honouring the footer's
-// "enter confirm" promise on every row: a series row (collapsed or
-// expanded) confirms its latest patch, a patch row confirms itself exactly;
-// tab remains the expand/collapse key.
+// handleEnterKey confirms the highlighted release: a series row confirms its
+// latest patch, a patch row itself; tab expands and collapses.
 func (s *DistributionStep) handleEnterKey() (wizard.WizardStep, tea.Cmd) {
 	selected := s.versionSelector.Selected()
 
@@ -254,9 +235,8 @@ func (s *DistributionStep) handleNavigationKey(msg tea.KeyPressMsg) (wizard.Wiza
 	)
 }
 
-// FocusedSpan reports the lines the highlighted version occupies, patch rows
-// inside the expanded dropdown included; the selector starts at line 0 of
-// View, and there is nothing to focus outside the select phase.
+// FocusedSpan reports the highlighted version's lines, dropdown rows
+// included; the selector starts at line 0 of View.
 func (s *DistributionStep) FocusedSpan() (wizard.LineSpan, bool) {
 	if s.phase != phaseVersionSelect {
 		return wizard.LineSpan{}, false
@@ -268,8 +248,8 @@ func (s *DistributionStep) FocusedSpan() (wizard.LineSpan, bool) {
 	return wizard.LineSpan{Start: start, End: end}, true
 }
 
-// syncSelectedVersion mirrors SelectField.Value(): latest patch for an
-// unexpanded minor row, else the cursor's exact ID.
+// syncSelectedVersion mirrors SelectField.Value(): the latest patch for a
+// collapsed minor row, else the cursor's exact ID.
 func (s *DistributionStep) syncSelectedVersion(selected *components.Option) {
 	if selected == nil || selected.ID == "" {
 		return
@@ -287,8 +267,7 @@ func (s *DistributionStep) syncSelectedVersion(selected *components.Option) {
 	s.selectedVersion = selected.ID
 }
 
-// View renders the loading indicator, the error state, or the version
-// selector, depending on phase.
+// View renders the loading, error or selection phase.
 func (s *DistributionStep) View(width, height int) string {
 	s.BaseStep.SetSize(width, height)
 
@@ -305,15 +284,9 @@ func (s *DistributionStep) View(width, height int) string {
 	return ""
 }
 
-// applyDropdownBudget sizes the selector's dropdown window to fit the step's
-// real content height around its own chrome: the collapsed minor rows above
-// and below the expanded series, the expanded series' own title+description
-// row immediately above its dropdown (plus its connector to the last
-// collapsed row, when there is one above it), the blank line and hint row
-// beneath the selector, and the dropdown box's own border rows. Patch rows
-// each carry a description, so N shown items cost 3N-1 lines (title,
-// description, and a connector between every consecutive pair); the budget
-// is solved for the largest N that still fits.
+// applyDropdownBudget sizes the dropdown to the real content height around
+// the collapsed rows, the expanded series' own row, the hint rows and the
+// box borders; N patch rows cost 3N-1 lines.
 func (s *DistributionStep) applyDropdownBudget() {
 	if s.expandedMinor < 0 {
 		s.versionSelector.SetDropdownBudget(0)
@@ -342,12 +315,8 @@ func (s *DistributionStep) applyDropdownBudget() {
 		return lines
 	}
 
-	// The expanded series renders its own title+description row right
-	// above its patch dropdown (Selector.View never inserts a connector
-	// between that row and the dropdown itself), joined to the last
-	// collapsed row above it by a connector when before > 0. A synthetic
-	// catalog-absent row leads the list with its own title, description,
-	// and connector.
+	// The expanded series' own row sits right above its dropdown, joined to the
+	// collapsed row above by a connector; a synthetic current row adds three.
 	above := rowLines(before) + 2
 	if before > 0 {
 		above++
@@ -367,8 +336,6 @@ func (s *DistributionStep) applyDropdownBudget() {
 	s.versionSelector.SetDropdownBudget((avail + 1) / 3)
 }
 
-// viewLoadingPhase renders the fetch-in-progress spinner and its dim
-// this-can-take-a-few-seconds hint.
 func (s *DistributionStep) viewLoadingPhase() string {
 	var content strings.Builder
 	content.WriteString(lipgloss.NewStyle().
@@ -382,9 +349,7 @@ func (s *DistributionStep) viewLoadingPhase() string {
 	return content.String()
 }
 
-// viewErrorPhase renders the empty state shown when the release fetch
-// failed, followed by the raw error under a "details:" label; the retry/back
-// keys live only in the footer (ShortHelp) so they aren't repeated here.
+// viewErrorPhase leaves the retry and back keys to the footer.
 func (s *DistributionStep) viewErrorPhase(width int) string {
 	var content strings.Builder
 	content.WriteString(tui.EmptyState("no releases loaded — check your connection", ""))
@@ -427,7 +392,7 @@ func (s *DistributionStep) viewVersionPhase() string {
 	return content.String()
 }
 
-// Validate always returns nil; any available version choice is valid.
+// Validate always returns nil; any offered version is valid.
 func (s *DistributionStep) Validate() error {
 	return nil
 }
@@ -439,9 +404,7 @@ func (s *DistributionStep) Apply(cfg *config.Config) error {
 	return nil
 }
 
-// ShortHelp returns the step's help bar, which differs by phase: the select
-// phase's own bindings, or loading's {esc back, ctrl+c quit} with the error
-// phase adding {r retry}.
+// ShortHelp returns the help bar for the current phase.
 func (s *DistributionStep) ShortHelp() []wizard.KeyBinding {
 	if s.phase == phaseVersionSelect {
 		return []wizard.KeyBinding{
@@ -463,9 +426,8 @@ func (s *DistributionStep) ShortHelp() []wizard.KeyBinding {
 	return help
 }
 
-// OverlayHelp lists the select phase's footer-silent "r" refresh for the
-// "?" overlay; the error phase already advertises "r retry" via ShortHelp,
-// so it contributes nothing here to avoid listing the same key twice.
+// OverlayHelp lists the select phase's footer-silent "r" refresh; the error
+// phase already advertises it in ShortHelp.
 func (s *DistributionStep) OverlayHelp() []wizard.KeyBinding {
 	if s.phase != phaseVersionSelect {
 		return nil
@@ -473,8 +435,7 @@ func (s *DistributionStep) OverlayHelp() []wizard.KeyBinding {
 	return []wizard.KeyBinding{{Key: "r", Help: helpRefresh}}
 }
 
-// SetFocused toggles focus; the version selector is only focused once the
-// release list has loaded.
+// SetFocused focuses the selector only once the catalog has loaded.
 func (s *DistributionStep) SetFocused(focused bool) {
 	s.BaseStep.SetFocused(focused)
 	if focused && s.phase == phaseVersionSelect {
@@ -489,9 +450,8 @@ func (s *DistributionStep) GetSelectedVersion() string {
 	return s.selectedVersion
 }
 
-// SetSelectedVersion pre-selects a version and records it as the loaded
-// config's current release; once the catalog is available (immediately, or
-// at versionsLoadedMsg time) the cursor anchors on its exact patch row.
+// SetSelectedVersion pre-selects version as the loaded config's release;
+// once the catalog is available the cursor anchors on its exact patch row.
 func (s *DistributionStep) SetSelectedVersion(version string) {
 	s.selectedVersion = version
 	s.currentVersion = version
@@ -503,12 +463,9 @@ func (s *DistributionStep) SetSelectedVersion(version string) {
 	s.versionSelector.SetSelectedByID(version)
 }
 
-// anchorConfiguredVersion expands the series containing the configured
-// current version and rebuilds the option list so the cursor lands on that
-// exact patch row — the truth on screen when editing a config — rather than
-// silently sitting on the newest series. A version outside the fetched
-// catalog needs no expansion: updateVersionSelector injects it as the list's
-// leading synthetic row and the cursor is already anchored there.
+// anchorConfiguredVersion expands the series holding the configured version
+// so the cursor lands on its patch row; a version outside the catalog is
+// already the injected leading row.
 func (s *DistributionStep) anchorConfiguredVersion() {
 	if s.currentVersion == "" || strings.HasPrefix(s.currentVersion, "minor:") {
 		return
@@ -524,8 +481,7 @@ func (s *DistributionStep) anchorConfiguredVersion() {
 	}
 }
 
-// SetVersionFetcher swaps the release-catalog fetcher, used by demo mode and
-// tests to bypass the network with a deterministic fixture.
+// SetVersionFetcher swaps the release-catalog fetcher.
 func (s *DistributionStep) SetVersionFetcher(f VersionFetcher) {
 	s.versionFetcher = f
 }

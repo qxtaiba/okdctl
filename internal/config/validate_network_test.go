@@ -15,19 +15,22 @@ func TestValidateNetwork(t *testing.T) {
 		{"pod cidr", func(c *Config) { c.Networking.PodCIDR = "10.128.0.0" }, finding{FieldNetworkingPodCIDR, "not a CIDR"}},
 		{"service cidr", func(c *Config) { c.Networking.ServiceCIDR = "" }, finding{FieldNetworkingServiceCIDR, "not a CIDR"}},
 		{"gateway", func(c *Config) { c.Networking.Gateway = "999.1.1.1" }, finding{FieldNetworkingGateway, "not an IP address"}},
+		{"gateway outside", func(c *Config) { c.Networking.Gateway = "10.0.0.1" }, finding{FieldNetworkingGateway, "10.0.0.1 is outside machine_cidr 192.168.1.0/24"}},
 		{"no dns", func(c *Config) { c.Networking.DNS = nil }, finding{FieldNetworkingDNS, "at least one"}},
 		{"dns entry", func(c *Config) { c.Networking.DNS = []string{"1.1.1.1", "dns.lan"} }, finding{FieldNetworkingDNS + "[1]", "not an IP address"}},
 		{"api vip parse", func(c *Config) { c.Networking.APIVIP = "x" }, finding{FieldNetworkingAPIVIP, "not an IP address"}},
 		{"api vip outside", func(c *Config) { c.Networking.APIVIP = "192.168.2.158" }, finding{FieldNetworkingAPIVIP, "outside machine_cidr 192.168.1.0/24"}},
 		{"ingress vip outside", func(c *Config) { c.Networking.IngressVIP = "10.0.0.1" }, finding{FieldNetworkingIngressVIP, "outside machine_cidr 192.168.1.0/24"}},
 		{"vips equal", func(c *Config) { c.Networking.IngressVIP = c.Networking.APIVIP }, finding{FieldNetworkingIngressVIP, "equals api_vip"}},
+		{"api vip is network address", func(c *Config) { c.Networking.APIVIP = "192.168.1.0" }, finding{FieldNetworkingAPIVIP, "192.168.1.0 is the network address of machine_cidr 192.168.1.0/24"}},
+		{"ingress vip is broadcast", func(c *Config) { c.Networking.IngressVIP = "192.168.1.255" }, finding{FieldNetworkingIngressVIP, "192.168.1.255 is the broadcast address of machine_cidr 192.168.1.0/24"}},
 		{"api vip is gateway", func(c *Config) { c.Networking.APIVIP = "192.168.1.1" }, finding{FieldNetworkingAPIVIP, "equals gateway"}},
 		{"ingress vip is resolver", func(c *Config) { c.Networking.DNS = []string{"192.168.1.1", "192.168.1.159"} }, finding{FieldNetworkingIngressVIP, "equals dns[1]"}},
 		{"api vip is master address", func(c *Config) { c.Networking.APIVIP = "192.168.1.151" }, finding{FieldNetworkingAPIVIP, "equals the address of lab-master1"}},
 		{"ingress vip is worker address", func(c *Config) { c.Networking.IngressVIP = "192.168.1.161" }, finding{FieldNetworkingIngressVIP, "equals the address of lab-worker1"}},
 		{"node ip start parse", func(c *Config) { c.Networking.NodeIPStart = "" }, finding{FieldNetworkingNodeIPStart, "not an IP address"}},
 		{"node range starts outside", func(c *Config) { c.Networking.NodeIPStart = "192.168.2.10" }, finding{FieldNetworkingNodeIPStart, "outside machine_cidr 192.168.1.0/24"}},
-		{"node range ends outside", func(c *Config) { c.Networking.NodeIPStart = "192.168.1.245" }, finding{FieldNetworkingNodeIPStart, "192.168.1.245-192.168.2.0 leaves machine_cidr 192.168.1.0/24"}},
+		{"node range ends outside", func(c *Config) { c.Networking.NodeIPStart = "192.168.1.245" }, finding{FieldNetworkingNodeIPStart, "lab-worker1 derives 192.168.2.0, outside machine_cidr 192.168.1.0/24"}},
 		{"node start is gateway", func(c *Config) { c.Networking.NodeIPStart = "192.168.1.1" }, finding{FieldNetworkingNodeIPStart, "lab-master0 and gateway share 192.168.1.1"}},
 		{"master is resolver", func(c *Config) { c.Networking.DNS = []string{"192.168.1.1", "192.168.1.151"} }, finding{FieldNetworkingNodeIPStart, "lab-master1 and dns[1] share 192.168.1.151"}},
 		{"worker is resolver", func(c *Config) { c.Networking.DNS = []string{"192.168.1.161"} }, finding{FieldNetworkingNodeIPStart, "lab-worker1 and dns[0] share 192.168.1.161"}},
@@ -39,13 +42,14 @@ func TestValidateNetwork(t *testing.T) {
 				c.Networking.NodeIPStart = "192.168.1.200"
 				c.Nodes = map[string]NodeOverride{"lab-worker100": {Host: "pve"}}
 			},
-			finding{FieldNetworkingNodeIPStart, "192.168.1.200-192.168.2.54 leaves machine_cidr 192.168.1.0/24"},
+			finding{FieldNetworkingNodeIPStart, "lab-worker100 derives 192.168.2.54, outside machine_cidr 192.168.1.0/24"},
 		},
 		{"pod overlaps machine", func(c *Config) { c.Networking.PodCIDR = "192.168.0.0/16" }, finding{FieldNetworkingPodCIDR, "overlaps machine_cidr"}},
 		{"service overlaps machine", func(c *Config) { c.Networking.ServiceCIDR = "192.168.1.0/25" }, finding{FieldNetworkingServiceCIDR, "overlaps machine_cidr"}},
 		{"service overlaps pod", func(c *Config) { c.Networking.ServiceCIDR = "10.128.0.0/16" }, finding{FieldNetworkingServiceCIDR, "overlaps pod_cidr"}},
 		{"host prefix low", func(c *Config) { c.Networking.HostPrefix = 19 }, finding{FieldNetworkingHostPrefix, "between 20 and 28"}},
 		{"host prefix high", func(c *Config) { c.Networking.HostPrefix = 29 }, finding{FieldNetworkingHostPrefix, "between 20 and 28"}},
+		{"host prefix shorter than pod cidr", func(c *Config) { c.Networking.PodCIDR = "10.128.0.0/24" }, finding{FieldNetworkingHostPrefix, "23 must be at least the pod_cidr prefix length 24"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -56,13 +60,19 @@ func TestValidateNetwork(t *testing.T) {
 	}
 
 	passing := map[string]func(*Config){
-		"gateway outside machine_cidr": func(c *Config) { c.Networking.Gateway = "10.0.0.1" },
-		"public resolvers":             func(c *Config) { c.Networking.DNS = []string{"1.1.1.1", "9.9.9.9"} },
-		"range ends on last host":      func(c *Config) { c.Networking.NodeIPStart = "192.168.1.243" },
-		"host prefix 20":               func(c *Config) { c.Networking.HostPrefix = 20 },
-		"host prefix 28":               func(c *Config) { c.Networking.HostPrefix = 28 },
-		"masters only range":           func(c *Config) { c.Workers.Count = 0; c.Networking.NodeIPStart = "192.168.1.252" },
-		"ntp listed":                   func(c *Config) { c.Networking.NTP = []string{"pool.ntp.org"} },
+		"public resolvers":              func(c *Config) { c.Networking.DNS = []string{"1.1.1.1", "9.9.9.9"} },
+		"range ends on last host":       func(c *Config) { c.Networking.NodeIPStart = "192.168.1.243" },
+		"host prefix 20":                func(c *Config) { c.Networking.HostPrefix = 20 },
+		"host prefix 28":                func(c *Config) { c.Networking.HostPrefix = 28 },
+		"host prefix equal to pod cidr": func(c *Config) { c.Networking.PodCIDR = "10.128.0.0/23" },
+		"masters only range":            func(c *Config) { c.Workers.Count = 0; c.Networking.NodeIPStart = "192.168.1.252" },
+		"ntp listed":                    func(c *Config) { c.Networking.NTP = []string{"pool.ntp.org"} },
+		"overridden worker past the range end": func(c *Config) {
+			c.Networking.MachineCIDR, c.Networking.Gateway, c.Networking.DNS = "192.168.1.144/28", "192.168.1.145", []string{"192.168.1.145"}
+			c.Networking.NodeIPStart, c.Networking.APIVIP, c.Networking.IngressVIP = "192.168.1.146", "192.168.1.157", "192.168.1.158"
+			c.Workers.Count = 1
+			c.Nodes = map[string]NodeOverride{"lab-worker5": {IP: "192.168.1.152"}}
+		},
 	}
 	for name, mutate := range passing {
 		t.Run("accepts "+name, func(t *testing.T) {

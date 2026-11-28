@@ -28,3 +28,28 @@ func TestConfigSyncAppliesCurrentStep(t *testing.T) {
 		t.Fatalf("apply calls=%d", step.applyCalls)
 	}
 }
+
+func TestConfigSyncSkipsFieldsMidEditAndNeverPaintsTheStatusRow(t *testing.T) {
+	step := NewDataDrivenStep(&StepDefinition{
+		ID:    StepIDResources,
+		Title: "resources",
+		Sections: []SectionDefinition{{Fields: []FieldDefinition{
+			{Key: "cpu", Label: "cpu", Default: "4", Required: true, ConfigSet: SetInt(func(c *config.Config, v int) { c.ControlPlane.CPU = v })},
+			{Key: "mem", Label: "mem", Default: "16384", Required: true, ConfigSet: SetInt(func(c *config.Config, v int) { c.ControlPlane.MemoryMiB = v })},
+		}}},
+	})
+	cfg := config.DefaultConfig()
+	m := NewModel([]WizardStep{step}, cfg)
+	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	step.SetValue("mem", "32768")
+
+	m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	m.Update(ConfigSyncMsg{StepID: StepIDResources})
+
+	if m.err != nil {
+		t.Fatalf("status row = %v after a sync with a field mid-edit, want nothing painted", m.err)
+	}
+	if cfg.ControlPlane.CPU != 4 || cfg.ControlPlane.MemoryMiB != 32768 {
+		t.Fatalf("cfg cpu=%d mem=%d, want the blank cpu skipped and the later field still synced", cfg.ControlPlane.CPU, cfg.ControlPlane.MemoryMiB)
+	}
+}

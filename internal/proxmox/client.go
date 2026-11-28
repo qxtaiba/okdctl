@@ -1,13 +1,10 @@
 package proxmox
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -16,54 +13,13 @@ import (
 	"github.com/luthermonson/go-proxmox"
 
 	"github.com/qxtaiba/okdctl/internal/httputil"
+	"github.com/qxtaiba/okdctl/internal/logutil"
 )
-
-// errorBodyLimit bounds how much of a failed reply's body is read for its message.
-const errorBodyLimit = 64 << 10
 
 // notFoundPhrases are how PVE's die() paths report a missing VM, config or
 // HA resource (deleting one says "not HA managed"); pveproxy sends them as
 // the reason phrase and in the body.
 var notFoundPhrases = []string{"does not exist", "no such resource", "not HA managed"}
-
-// pveErrorTransport appends a failed reply's JSON message to its status
-// line, because go-proxmox reports a 5xx as errors.New(res.Status) and
-// discards the body; a 400 is left alone since go-proxmox renders that
-// body itself, and the body is replayed for callers that read it.
-type pveErrorTransport struct {
-	next http.RoundTripper
-}
-
-func (t pveErrorTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	res, err := t.next.RoundTrip(req)
-	if err != nil || res.StatusCode <= http.StatusBadRequest {
-		return res, err
-	}
-	body, err := io.ReadAll(io.LimitReader(res.Body, errorBodyLimit))
-	_ = res.Body.Close()
-	if err != nil {
-		return nil, fmt.Errorf("read %s %s error body: %w", req.Method, req.URL.Path, err)
-	}
-	res.Body = io.NopCloser(bytes.NewReader(body))
-	if msg := pveMessage(body); msg != "" && !strings.Contains(res.Status, msg) {
-		res.Status += ": " + msg
-	}
-	return res, nil
-}
-
-func pveMessage(body []byte) string {
-	var envelope struct {
-		Message string          `json:"message"`
-		Errors  json.RawMessage `json:"errors"`
-	}
-	if json.Unmarshal(body, &envelope) != nil {
-		return ""
-	}
-	if msg := strings.TrimSpace(envelope.Message); msg != "" {
-		return msg
-	}
-	return strings.TrimSpace(string(envelope.Errors))
-}
 
 // get decodes the data envelope of an authenticated GET on an
 // /api2/json-relative path into v, translating go-proxmox's auth failure
@@ -105,8 +61,8 @@ func (d *driver) task(ctx context.Context, method, node, path string, form url.V
 	return Task{Node: node, UPID: upid}, nil
 }
 
-// mapAPIError is the one place transport failures become this package's
-// sentinels; the PVE message is kept behind ErrNotFound for diagnostics.
+// mapAPIError is the one place API failures become this package's sentinels;
+// the PVE message is kept behind ErrNotFound for diagnostics.
 func mapAPIError(err error) error {
 	if errors.Is(err, proxmox.ErrNotAuthorized) {
 		return ErrPermission
@@ -121,8 +77,9 @@ func mapAPIError(err error) error {
 
 // newProxmoxClient builds the go-proxmox client and returns the *http.Client
 // under it for raw requests; the token becomes an immutable Go string Zeroize
-// can't reach, bounded to this call. No transport timeout: ISO uploads outlive
-// any fixed budget, so every method is bounded by its ctx instead.
+// can't reach, bounded to this call. The whole-request timeout stays zero
+// because ISO uploads and WaitTask polls outlive any fixed budget; the
+// transport bounds dial, TLS and response headers, bodies answer to ctx.
 func newProxmoxClient(endpoint string, apiToken []byte, insecure bool) (client *proxmox.Client, httpClient *http.Client, err error) {
 	if endpoint == "" {
 		return nil, nil, errors.New("proxmox client: endpoint is required")
@@ -135,22 +92,22 @@ func newProxmoxClient(endpoint string, apiToken []byte, insecure bool) (client *
 		return nil, nil, errors.New("proxmox client: api token must be in id=secret form")
 	}
 	if insecure {
-		warnInsecureTLS(endpoint)
+		warnEndpoint(&insecureTLSWarnOnce, "proxmox tls verification disabled (insecure: true)", endpoint)
+	}
+	if strings.HasPrefix(strings.ToLower(normalizeEndpoint(endpoint)), "http://") {
+		warnEndpoint(&plaintextHTTPWarnOnce, "proxmox endpoint uses plaintext http, the api token is sent in the clear", endpoint)
 	}
 	httpClient = httputil.NewOptionalInsecure(insecure, 0)
-	httpClient.Transport = pveErrorTransport{next: httpClient.Transport}
 	client = proxmox.NewClient(APIBaseURL(endpoint), proxmox.WithHTTPClient(httpClient), proxmox.WithAPIToken(id, secret))
 	return client, httpClient, nil
 }
 
-var insecureTLSWarnOnce sync.Once
+var insecureTLSWarnOnce, plaintextHTTPWarnOnce sync.Once
 
-// warnInsecureTLS logs once per process via slog.Default rather than
+// warnEndpoint logs once per process through the logutil facade rather than
 // threading a logger through every constructor.
-func warnInsecureTLS(endpoint string) {
-	insecureTLSWarnOnce.Do(func() {
-		slog.Warn("proxmox tls verification disabled (insecure: true)", "endpoint", endpoint)
-	})
+func warnEndpoint(once *sync.Once, msg, endpoint string) {
+	once.Do(func() { logutil.Warn(msg, logutil.LF("endpoint", endpoint)) })
 }
 
 // APIBaseURL normalizes endpoint (https default, trailing slash trimmed) and

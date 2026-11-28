@@ -33,9 +33,9 @@ func installHelp(root *cobra.Command) {
 {{.UsageString}}{{end}}
 `)
 
-	root.SetUsageTemplate(`{{section "usage"}}{{if .Runnable}}
-  {{.UseLine}}{{end}}{{if .HasAvailableSubCommands}}
-  {{.CommandPath}} [command]{{end}}{{if gt (len .Aliases) 0}}
+	root.SetUsageTemplate(`{{section "usage"}}{{if .HasAvailableSubCommands}}
+  {{.CommandPath}} [command]{{else}}
+  {{.UseLine}}{{end}}{{if gt (len .Aliases) 0}}
 
 {{section "aliases"}}
   {{.NameAndAliases}}{{end}}{{if .HasExample}}

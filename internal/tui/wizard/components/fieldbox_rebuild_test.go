@@ -7,10 +7,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-// TestRebuildStylesRebindsEveryThemedStyle pins the polarity flip reaching
-// the init-captured styles: under the dual-polarity Theme every role
-// rebinds, so a rendered field label and the overlay title must carry
-// light-polarity SGR after a light flip, not their init-time dark values.
 func TestRebuildStylesRebindsEveryThemedStyle(t *testing.T) {
 	t.Cleanup(func() {
 		tui.SetDarkBackground(true)

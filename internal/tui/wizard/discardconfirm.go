@@ -12,7 +12,6 @@ import (
 
 const discardPrompt = "discard unsaved changes? ctrl+c or y quits · any other key stays"
 
-// savedState is a digest of the config and secrets a flow opened with.
 type savedState struct {
 	digest [sha256.Size]byte
 }
@@ -25,9 +24,8 @@ func (s *savedState) matches(cfg *config.Config, steps []WizardStep) bool {
 	return sessionDigest(cfg, steps) == s.digest
 }
 
-// sessionDigest hashes the config's JSON form plus, per SecretsProvider,
-// whether a token is present and the TLS toggle; the token bytes never
-// enter the hash.
+// sessionDigest hashes the config's JSON plus token presence and the TLS
+// toggle per SecretsProvider; the token bytes never enter the hash.
 func sessionDigest(cfg *config.Config, steps []WizardStep) [sha256.Size]byte {
 	h := sha256.New()
 	if cfg != nil {

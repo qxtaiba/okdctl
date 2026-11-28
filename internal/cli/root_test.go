@@ -15,6 +15,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"golang.org/x/term"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
@@ -22,8 +23,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-// tripwire: pflag embeds flag values in error text (unscrubbed UsageError.Msg);
-// no credential-named flag without scrubbing first.
 func TestNoRegisteredFlagNameLooksLikeCredential(t *testing.T) {
 	var offenders []string
 	var walk func(c *cobra.Command)
@@ -47,10 +46,6 @@ func TestNoRegisteredFlagNameLooksLikeCredential(t *testing.T) {
 	}
 }
 
-// TestHighestTrafficCommandsCarryExamples guards E-C7: root plus the
-// highest-traffic leaves each carry a non-empty Example, so `--help` shows
-// an EXAMPLES section (installHelp's usage template only renders one when
-// .HasExample is true).
 func TestHighestTrafficCommandsCarryExamples(t *testing.T) {
 	want := []string{
 		"okdctl",
@@ -96,10 +91,7 @@ func TestSignalLoop(t *testing.T) {
 				sigCh <- sig
 			}
 			close(sigCh)
-			// mainDone never closes: these cases exercise a hung (or
-			// nonexistent, for the single-signal case) main goroutine, so
-			// the second signal must fall through the grace bound.
-			mainDone := make(chan struct{})
+			mainDone := make(chan struct{}) // never closes: a hung main goroutine
 
 			signalLoop(sigCh, cancel, &caughtSig, func(code int) { exitCode = code }, mainDone, time.Millisecond)
 
@@ -116,10 +108,6 @@ func TestSignalLoop(t *testing.T) {
 	}
 }
 
-// TestSignalLoop_SecondSignalAwaitsCleanup proves a second real signal no
-// longer skips execute()'s deferred credential Zeroize and
-// model.shutdown — it waits for mainDone (ExecuteContext having returned,
-// meaning that cleanup already ran) before deciding whether to force exit.
 func TestSignalLoop_SecondSignalAwaitsCleanup(t *testing.T) {
 	t.Run("cleanup finishes within grace: no force exit", func(t *testing.T) {
 		sigCh := make(chan os.Signal, 2)
@@ -157,8 +145,6 @@ func TestSignalLoop_SecondSignalAwaitsCleanup(t *testing.T) {
 	})
 }
 
-// pins the exit-code contract; external scripts depend on this mapping, so a
-// change here is a user-facing break.
 func TestExitCodeForTaxonomy(t *testing.T) {
 	cases := []struct {
 		name string
@@ -173,13 +159,9 @@ func TestExitCodeForTaxonomy(t *testing.T) {
 		{"wrappedConfig", fmt.Errorf("step: %w", &errtypes.ConfigError{Msg: "x"}), 2},
 		{"wrappedAuth", fmt.Errorf("step: %w", &errtypes.AuthError{Msg: "x"}), 5},
 		{"nilIsSuccess", nil, 0},
-		// ClusterError wrapping a context sentinel must resolve to 4;
-		// execute()'s caughtSig gate ensures errors.Is only short-circuits on a
-		// real signal
 		{"ClusterErrorWrapsDeadline", &errtypes.ClusterError{Msg: "budget", Err: context.DeadlineExceeded}, 4},
 		{"ClusterErrorWrapsCanceled", &errtypes.ClusterError{Msg: "canceled", Err: context.Canceled}, 4},
 		{"UsageError", &errtypes.UsageError{Msg: "unknown flag"}, 64},
-		// Granular BSD sysexits sentinels: specific code beats broad category.
 		{"ErrConfigMissing_direct", &errtypes.ConfigError{Msg: "not found", Err: errtypes.ErrConfigMissing}, 66},
 		{"ErrConfigMissing_wrapped", fmt.Errorf("load: %w", &errtypes.ConfigError{Msg: "not found", Err: errtypes.ErrConfigMissing}), 66},
 	}
@@ -192,41 +174,27 @@ func TestExitCodeForTaxonomy(t *testing.T) {
 	}
 }
 
-// TestShouldRenderErrorBox guards item 7 of the second-cut safety findings:
-// colorOff (NO_COLOR/--no-color) used to flip progressBars, which
-// announceFailure gated on, so NO_COLOR degraded the boxed error to the
-// flat "[ERROR]" line — box drawing is structure, not color. The gate keeps
-// its TTY/json/presented checks but takes no color signal at all, so this
-// table exhaustively covers stderr/stdout TTY-ness and format without ever
-// mentioning NO_COLOR — its absence from the signature is the fix.
-func TestShouldRenderErrorBox(t *testing.T) {
-	plain := errors.New("boom")
+func TestShouldRenderErrorBoxTakesNoColorSignal(t *testing.T) {
 	cases := []struct {
 		name                 string
 		stderrTTY, stdoutTTY bool
 		format               string
-		err                  error
 		want                 bool
 	}{
-		{"both TTY, text format renders the box", true, true, tui.FormatText, plain, true},
-		{"piped stderr gets the flat line", false, true, tui.FormatText, plain, false},
-		{"piped stdout gets the flat line", true, false, tui.FormatText, plain, false},
-		{"json format gets the flat line", true, true, tui.FormatJSON, plain, false},
-		{"already-presented error gets the flat line", true, true, tui.FormatText, render.Presented(plain), false},
+		{"both TTY, text format renders the box", true, true, tui.FormatText, true},
+		{"piped stderr gets the flat line", false, true, tui.FormatText, false},
+		{"piped stdout gets the flat line", true, false, tui.FormatText, false},
+		{"json format gets the flat line", true, true, tui.FormatJSON, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := shouldRenderErrorBox(tc.stderrTTY, tc.stdoutTTY, tc.format, tc.err); got != tc.want {
-				t.Errorf("shouldRenderErrorBox(%v, %v, %q, err) = %v, want %v", tc.stderrTTY, tc.stdoutTTY, tc.format, got, tc.want)
+			if got := shouldRenderErrorBox(tc.stderrTTY, tc.stdoutTTY, tc.format); got != tc.want {
+				t.Errorf("shouldRenderErrorBox(%v, %v, %q) = %v, want %v", tc.stderrTTY, tc.stdoutTTY, tc.format, got, tc.want)
 			}
 		})
 	}
 }
 
-// TestErrorSummaryANSIFreeUnderNoColor proves the other half of item 7's
-// claim: once shouldRenderErrorBox lets a NO_COLOR run through, the box it
-// renders is genuinely color-free (Downsampled) while still carrying its
-// box-drawing structure — NO_COLOR strips color, not the box.
 func TestErrorSummaryANSIFreeUnderNoColor(t *testing.T) {
 	tui.SetColorProfileFor(&bytes.Buffer{}) // a buffer is never a TTY
 	t.Cleanup(func() { tui.SetColorProfileFor(&bytes.Buffer{}) })
@@ -278,9 +246,6 @@ func TestSignalExitCode(t *testing.T) {
 			wantHandled: true,
 		},
 		{
-			// a poll timeout racing a caught signal keeps its own code
-			// (ClusterError→4): the root ctx is WithCancel, so a real signal
-			// only ever surfaces as Canceled
 			name:        "SIGINT ClusterError wrapping DeadlineExceeded falls through",
 			caughtSig:   storeSignal(syscall.SIGINT),
 			err:         &errtypes.ClusterError{Msg: "budget", Err: context.DeadlineExceeded},
@@ -302,8 +267,6 @@ func TestSignalExitCode(t *testing.T) {
 }
 
 func TestExecutePanicExitsSoftware(t *testing.T) {
-	t.Setenv(wizardDemoEnv, "1")
-
 	panicCmd := &cobra.Command{
 		Use:    "panic-test",
 		Hidden: true,
@@ -361,6 +324,23 @@ func installLogBuffer(t *testing.T) *bytes.Buffer {
 	return &buf
 }
 
+func TestFailureExitConfiguresLoggingForPreRunErrors(t *testing.T) {
+	if term.IsTerminal(int(os.Stderr.Fd())) {
+		t.Skip("the json switch needs a piped stderr")
+	}
+	loggingConfigured, logFormat = false, tui.FormatText
+	t.Cleanup(func() {
+		loggingConfigured, logFormat = false, tui.FormatText
+		logutil.InstallHandler(slog.NewTextHandler(os.Stderr, nil))
+	})
+
+	code := failureExit(&errtypes.UsageError{Msg: "unknown flag: --bogus"})
+
+	if code != 64 || !loggingConfigured || logFormat != tui.FormatJSON {
+		t.Fatalf("code=%d configured=%v format=%q, want 64, logging configured and json on a piped stderr", code, loggingConfigured, logFormat)
+	}
+}
+
 func TestFlagErrorFuncReturnsUsageErrorWithHelpHint(t *testing.T) {
 	buf := installLogBuffer(t)
 
@@ -395,14 +375,8 @@ func TestNoColorFlagIsLongFormOnly(t *testing.T) {
 	}
 }
 
-// Regression guard: the bare "okdctl --version" flag short-circuits inside
-// cobra's execute() before PersistentPreRunE/configureLogging ever runs, so
-// --no-color must be honored by versionText itself.
 func TestVersionFlagRespectsNoColor(t *testing.T) {
-	// registered before t.Setenv so LIFO cleanup restores CLICOLOR_FORCE
-	// first and only then re-detects the profile with a clean environment;
-	// the reverse order left the package profile forced-colourful for later
-	// tests
+	// registered before t.Setenv so LIFO cleanup unsets CLICOLOR_FORCE first
 	t.Cleanup(func() { tui.SetColorProfileFor(&bytes.Buffer{}) })
 	t.Setenv("CLICOLOR_FORCE", "1") // forces color even for a non-TTY writer
 
@@ -419,6 +393,7 @@ func TestVersionFlagRespectsNoColor(t *testing.T) {
 		rootCmd.SetOut(nil)
 		rootCmd.SetArgs(nil)
 		noColor = false
+		_ = rootCmd.Flags().Set("version", "false")
 	})
 
 	if err := rootCmd.Execute(); err != nil {
@@ -429,19 +404,51 @@ func TestVersionFlagRespectsNoColor(t *testing.T) {
 	}
 }
 
-func TestMutatesStateClassification(t *testing.T) {
-	cases := []struct {
-		cmd  *cobra.Command
-		want bool
+func TestUnknownCommandIsUsageErrorWithHelpHint(t *testing.T) {
+	wrapArgValidators(rootCmd)
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	t.Cleanup(func() {
+		rootCmd.SetOut(nil)
+		rootCmd.SetErr(nil)
+		rootCmd.SetArgs(nil)
+	})
+
+	for _, tc := range []struct {
+		args     []string
+		wantHint string
 	}{
-		{initCmd, true},
-		{doctorCmd, false},
-		{versionCmd, false},
-		{releasesListCmd, false},
+		{[]string{"up"}, "okdctl --help"},
+		{[]string{"config", "frob"}, "okdctl config --help"},
+		{[]string{"releases", "frob"}, "okdctl releases --help"},
+		{[]string{"release", "frob"}, "okdctl releases --help"},
+	} {
+		out.Reset()
+		rootCmd.SetArgs(tc.args)
+		err := rootCmd.Execute()
+		var usageErr *errtypes.UsageError
+		if !errors.As(err, &usageErr) || exitCodeFor(err) != 64 {
+			t.Fatalf("okdctl %s: err = %T %v (exit %d), want a UsageError exiting 64", strings.Join(tc.args, " "), err, err, exitCodeFor(err))
+		}
+		unknown := fmt.Sprintf("%q", tc.args[len(tc.args)-1])
+		if d, _ := errtypes.Describe(err); !strings.Contains(d.Hint, tc.wantHint) || !strings.Contains(d.Message, unknown) {
+			t.Fatalf("okdctl %s: Describe = %+v, want %s named and the %q hint", strings.Join(tc.args, " "), d, unknown, tc.wantHint)
+		}
+		if out.Len() != 0 {
+			t.Fatalf("okdctl %s printed %q, want nothing on an unknown command", strings.Join(tc.args, " "), out.String())
+		}
 	}
-	for _, tc := range cases {
-		if got := mutatesState(tc.cmd); got != tc.want {
-			t.Errorf("mutatesState(%s) = %v, want %v", tc.cmd.CommandPath(), got, tc.want)
+
+	for _, args := range [][]string{{}, {"config"}, {"releases"}} {
+		out.Reset()
+		rootCmd.SetArgs(args)
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("bare okdctl %s: %v", strings.Join(args, " "), err)
+		}
+		path := strings.TrimSpace("okdctl " + strings.Join(args, " "))
+		if !strings.Contains(out.String(), path+" [command]") || strings.Contains(out.String(), path+" [flags]") {
+			t.Fatalf("bare %s must print help with the single [command] usage line, got:\n%s", path, out.String())
 		}
 	}
 }

@@ -9,35 +9,38 @@ import (
 	"github.com/qxtaiba/okdctl/internal/config"
 )
 
-// RunFlow starts the bubbletea wizard with flow-specific chrome and blocks
-// until the user completes or cancels the flow.
+// RunFlow runs the wizard until the user completes or cancels it; ctx owns
+// cancellation, so a signal surfaces as an error wrapping context.Canceled.
 func RunFlow(ctx context.Context, steps []WizardStep, cfg *config.Config, chrome FlowChrome) (Result, error) {
 	model := NewFlowModel(steps, cfg, chrome)
 	model.flowContext = ctx
 	defer model.shutdown()
 
-	p := tea.NewProgram(model,
-		tea.WithContext(ctx),
-	)
+	// root.go's signal loop cancels ctx; bubbletea's own handler would race
+	// it for the signal and leave the terminal raw when it lost.
+	p := tea.NewProgram(model, tea.WithContext(ctx), tea.WithoutSignalHandler())
 	finalModel, err := p.Run()
 	if err != nil {
-		return Result{}, fmt.Errorf("wizard error: %w", err)
+		return Result{}, fmt.Errorf("wizard: %w", err)
 	}
-
 	m, ok := finalModel.(*Model)
 	if !ok {
 		return Result{}, fmt.Errorf("unexpected model type returned from wizard: %T", finalModel)
 	}
+	return flowResult(m, steps), nil
+}
 
+func flowResult(m *Model, steps []WizardStep) Result {
 	result := m.Result()
-	if result.Outcome == OutcomeCompleted {
-		result.Config = m.Config()
-		for _, step := range steps {
-			if p, ok := step.(SecretsProvider); ok {
-				result.Secrets = p.Secrets()
-			}
+	if result.Outcome != OutcomeCompleted {
+		result.Outcome = OutcomeCancelled
+		return result
+	}
+	result.Config = m.Config()
+	for _, step := range steps {
+		if p, ok := step.(SecretsProvider); ok {
+			result.Secrets = p.Secrets()
 		}
 	}
-
-	return result, nil
+	return result
 }

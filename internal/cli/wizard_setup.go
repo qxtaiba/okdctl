@@ -1,24 +1,13 @@
 package cli
 
 import (
-	"errors"
-	"os"
-
 	"github.com/spf13/cobra"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/credentials"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/steps"
-)
-
-// wizardDemoEnv enables README-demo recording mode: blank fields (see
-// scripts/demo/record.sh). wizardDemoReleasesEnv set to "fail" additionally
-// forces the demo distribution step's release fetch into its error state, for
-// the error-state screenshot fixture.
-const (
-	wizardDemoEnv         = "OKDCTL_WIZARD_DEMO"
-	wizardDemoReleasesEnv = "OKDCTL_DEMO_RELEASES"
 )
 
 // hubOutcome is what one hero-hub session leaves behind.
@@ -29,12 +18,12 @@ type hubOutcome struct {
 	Verb steps.HubVerb
 }
 
-func runWizardWithMode(cmd *cobra.Command, cfg *config.Config, configExists bool) (hubOutcome, error) {
+func runWizardWithMode(cmd *cobra.Command, cfg *config.Config, configExists bool, saved *credentials.ProxmoxCredentials) (hubOutcome, error) {
 	wizardCfg := wizard.DefaultConfig()
 	wizardCfg.InitialConfig = cfg
 	wizardCfg.ConfigExists = configExists
 
-	built, err := buildWizardStepsWithState(wizardCfg)
+	built, err := buildWizardStepsWithState(wizardCfg, saved)
 	if err != nil {
 		return hubOutcome{}, err
 	}
@@ -63,29 +52,24 @@ func sessionVerb(result *wizard.Result, hub *steps.WelcomeStep) steps.HubVerb {
 func runHubSession(cmd *cobra.Command, flowSteps []wizard.WizardStep, cfg *config.Config) (wizard.Result, error) {
 	restoreLogs := logutil.Redirect(subprocSink())
 	defer restoreLogs()
-	progressBars := logutil.ProgressBarsEnabled()
-	logutil.SetProgressBarsEnabled(false)
-	defer logutil.SetProgressBarsEnabled(progressBars)
 	return wizard.RunFlow(cmd.Context(), flowSteps, cfg, steps.Chrome())
 }
 
-func buildWizardStepsWithState(wizardCfg wizard.Config) (wizard.BuiltSteps, error) {
+// buildWizardStepsWithState builds the configure flow; saved seeds the
+// credential fields.
+func buildWizardStepsWithState(wizardCfg wizard.Config, saved *credentials.ProxmoxCredentials) (wizard.BuiltSteps, error) {
 	builder := wizard.NewStepBuilder()
-	steps.RegisterAll(builder)
+	steps.RegisterAll(builder, wizardCfg.InitialConfig)
 	built, err := wizard.BuildSteps(wizardCfg, builder)
 	if err != nil {
 		return wizard.BuiltSteps{}, err
 	}
 
 	configureWelcomeStep(built, wizardCfg)
-	configureDemoVersionFetcher(built)
 
 	if wizardCfg.InitialConfig != nil {
-		if os.Getenv(wizardDemoEnv) == "" {
-			initializeStepsFromConfig(built, wizardCfg.InitialConfig, wizardCfg.ConfigExists)
-		}
-		// Demo mode skips seeding the fields but still edits this config, so
-		// the resources totals read it in every mode, as the review does.
+		initializeStepsFromConfig(built, wizardCfg.InitialConfig, wizardCfg.ConfigExists)
+		steps.SeedCredentials(built, saved)
 		if state, ok := built.States[wizard.StepTypeResources].(*steps.ResourcesStepState); ok {
 			state.Cfg = wizardCfg.InitialConfig
 		}
@@ -105,28 +89,6 @@ func configureWelcomeStep(built wizard.BuiltSteps, wizardCfg wizard.Config) {
 			} else {
 				ws.SetConfigExists(wizardCfg.ConfigExists)
 			}
-			break
-		}
-	}
-}
-
-// configureDemoVersionFetcher injects a deterministic release-catalog
-// fixture under OKDCTL_WIZARD_DEMO, bypassing the network for demo
-// recordings and screenshots; OKDCTL_DEMO_RELEASES=fail additionally forces
-// the distribution step's error state.
-func configureDemoVersionFetcher(built wizard.BuiltSteps) {
-	if os.Getenv(wizardDemoEnv) == "" {
-		return
-	}
-
-	var fetcher steps.VersionFetcher = steps.StaticVersionFetcher{Series: steps.DemoReleaseSeries()}
-	if os.Getenv(wizardDemoReleasesEnv) == "fail" {
-		fetcher = steps.StaticVersionFetcher{Err: errors.New("demo: releases unavailable")}
-	}
-
-	for _, step := range built.Steps {
-		if ds, ok := step.(*steps.DistributionStep); ok {
-			ds.SetVersionFetcher(fetcher)
 			break
 		}
 	}

@@ -1,5 +1,5 @@
-// Package errtypes defines okdctl's typed error hierarchy; exitCodeFor
-// (cli/root.go) maps each type to an exit code (Config=2, Network=3, Cluster=4, Auth=5, Usage=64).
+// Package errtypes defines okdctl's typed error hierarchy; Describe resolves
+// an error chain to one Kind and Kind.ExitCode is its exit code.
 package errtypes
 
 import (
@@ -8,7 +8,7 @@ import (
 )
 
 // ErrConfigMissing is wrapped in ConfigError when the config file is missing;
-// exitCodeFor maps it to 66 (EX_NOINPUT).
+// the cli maps it to 66 (EX_NOINPUT) ahead of any Kind.
 var ErrConfigMissing = errors.New("config file not found")
 
 // HintAppender lets an error type carry a next-step hint without changing its
@@ -124,7 +124,7 @@ func (e *AuthError) WithHint(hint string) error {
 	return &c
 }
 
-// UsageError wraps a command-line flag-parse failure (exitCodeFor: 64, EX_USAGE).
+// UsageError wraps a command-line flag-parse failure (exit 64, EX_USAGE).
 // SetFlagErrorFunc returns this instead of calling os.Exit so Execute's
 // deferred logFileCloser.Close() still runs.
 type UsageError struct {
@@ -150,7 +150,7 @@ func (e *UsageError) WithHint(hint string) error {
 // classification; KindUnknown covers untyped errors (exit 1).
 type Kind int
 
-// Kind values, in exitCodeFor's documented precedence order.
+// Kind values, in Describe's precedence order.
 const (
 	KindUnknown Kind = iota
 	KindConfig
@@ -179,8 +179,8 @@ func (k Kind) Label() string {
 }
 
 // ExitCode returns the BSD-sysexits code for the category tier (Config=2,
-// Network=3, Cluster=4, Auth=5, Usage=64, Unknown=1). It excludes the
-// ErrConfigMissing sentinel (66); exitCodeFor checks that first.
+// Network=3, Cluster=4, Auth=5, Usage=64, Unknown=1); the ErrConfigMissing
+// sentinel (66) is the caller's check.
 func (k Kind) ExitCode() int {
 	switch k {
 	case KindConfig:
@@ -208,9 +208,9 @@ type Display struct {
 }
 
 // Describe decomposes err into Display parts, walking the Unwrap chain in
-// exitCodeFor's precedence order (Config > Network > Cluster > Auth > Usage).
-// ok is false for an unknown category; the caller should then render
-// Kind.Label() ("error") with err.Error().
+// precedence order (Config > Network > Cluster > Auth > Usage) whatever the
+// wrap order. ok is false for an unknown category; the caller should then
+// render Kind.Label() ("error") with err.Error().
 func Describe(err error) (Display, bool) {
 	var cfg *ConfigError
 	if errors.As(err, &cfg) {

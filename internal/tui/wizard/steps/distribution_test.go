@@ -1,6 +1,7 @@
 package steps
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -48,13 +49,10 @@ func TestDistributionStep_GetMinorFromOptionID(t *testing.T) {
 
 func TestDistributionStep_SetVersionFetcher_UsesFixture(t *testing.T) {
 	s := NewDistributionStep()
-	s.SetVersionFetcher(StaticVersionFetcher{Series: DemoReleaseSeries()})
-	// fetchVersions runs synchronously for the fixture — no network round
-	// trip — so calling it directly, bypassing Init's spinner-tick batch,
-	// is sufficient to exercise the seam.
+	s.SetVersionFetcher(StaticVersionFetcher{Series: fixtureReleaseSeries()})
 	msg := s.fetchVersions()
 	loaded, ok := msg.(versionsLoadedMsg)
-	if !ok || loaded.err != nil || len(loaded.series) != len(DemoReleaseSeries()) {
+	if !ok || loaded.err != nil || len(loaded.series) != len(fixtureReleaseSeries()) {
 		t.Fatalf("fetchVersions = %#v", msg)
 	}
 }
@@ -70,15 +68,11 @@ func TestDistributionStep_SetVersionFetcher_UsesFixtureError(t *testing.T) {
 	}
 }
 
-// TestDistributionStep_ConfiguredPatchAnchorsCursor pins bug 3's defect
-// half: a config carrying a patch version (not a series ID) must, once the
-// catalog loads, expand its series and land the cursor on that exact patch
-// row with a "current" chip — not silently sit on the newest series.
 func TestDistributionStep_ConfiguredPatchAnchorsCursor(t *testing.T) {
 	s := NewDistributionStep()
 	s.SetSelectedVersion("4.19.4-okd-scos.3")
 
-	step, _ := s.Update(versionsLoadedMsg{series: DemoReleaseSeries()})
+	step, _ := s.Update(versionsLoadedMsg{series: fixtureReleaseSeries()})
 	s = step.(*DistributionStep)
 
 	if got := s.versionSelector.Selected().ID; got != "4.19.4-okd-scos.3" {
@@ -92,13 +86,10 @@ func TestDistributionStep_ConfiguredPatchAnchorsCursor(t *testing.T) {
 	}
 }
 
-// TestDistributionStep_EnterEnterKeepsConfiguredVersion pins the routine
-// that used to bump 4.19.x to the newest series: with a configured patch
-// loaded, pressing enter must complete with that patch untouched.
 func TestDistributionStep_EnterEnterKeepsConfiguredVersion(t *testing.T) {
 	s := NewDistributionStep()
 	s.SetSelectedVersion("4.19.4-okd-scos.3")
-	step, _ := s.Update(versionsLoadedMsg{series: DemoReleaseSeries()})
+	step, _ := s.Update(versionsLoadedMsg{series: fixtureReleaseSeries()})
 	s = step.(*DistributionStep)
 
 	step, _ = s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -115,12 +106,9 @@ func TestDistributionStep_EnterEnterKeepsConfiguredVersion(t *testing.T) {
 	}
 }
 
-// TestDistributionStep_EnterOnCollapsedSeriesConfirms pins bug 3's UX half:
-// the footer promises "enter confirm", so enter on a collapsed series row
-// completes the step with that series' latest instead of expanding it.
 func TestDistributionStep_EnterOnCollapsedSeriesConfirms(t *testing.T) {
 	s := NewDistributionStep()
-	step, _ := s.Update(versionsLoadedMsg{series: DemoReleaseSeries()})
+	step, _ := s.Update(versionsLoadedMsg{series: fixtureReleaseSeries()})
 	s = step.(*DistributionStep)
 
 	step, cmd := s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -139,7 +127,7 @@ func TestDistributionStep_EnterOnCollapsedSeriesConfirms(t *testing.T) {
 
 func TestDistributionStep_FreshRunCarriesNoCurrentChip(t *testing.T) {
 	s := NewDistributionStep()
-	step, _ := s.Update(versionsLoadedMsg{series: DemoReleaseSeries()})
+	step, _ := s.Update(versionsLoadedMsg{series: fixtureReleaseSeries()})
 	s = step.(*DistributionStep)
 
 	if view := s.View(80, 30); strings.Contains(view, "current") {
@@ -147,12 +135,10 @@ func TestDistributionStep_FreshRunCarriesNoCurrentChip(t *testing.T) {
 	}
 }
 
-// loadedDistributionStep returns a step showing the demo catalog with the
-// newest minor expanded into its patch dropdown.
 func loadedDistributionStep(t *testing.T) *DistributionStep {
 	t.Helper()
 	s := NewDistributionStep()
-	step, _ := s.Update(versionsLoadedMsg{series: DemoReleaseSeries()})
+	step, _ := s.Update(versionsLoadedMsg{series: fixtureReleaseSeries()})
 	s = step.(*DistributionStep)
 	step, _ = s.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	return step.(*DistributionStep)
@@ -185,8 +171,6 @@ func TestDistributionStep_NavigationInDropdownEmitsFocusChanged(t *testing.T) {
 	}
 }
 
-// containsFocusChanged runs cmd, flattening batches, and reports whether any
-// resulting message is a wizard.FocusChangedMsg.
 func containsFocusChanged(cmd tea.Cmd) bool {
 	if cmd == nil {
 		return false
@@ -204,8 +188,6 @@ func containsFocusChanged(cmd tea.Cmd) bool {
 	return false
 }
 
-// firstErrorSetMsg runs cmd, flattening batches, and returns the first
-// resulting wizard.ErrorSetMsg it finds.
 func firstErrorSetMsg(cmd tea.Cmd) (wizard.ErrorSetMsg, bool) {
 	if cmd == nil {
 		return wizard.ErrorSetMsg{}, false
@@ -238,10 +220,6 @@ func TestDistributionStep_ErrorStateRendersEmptyState(t *testing.T) {
 	}
 }
 
-// TestDistributionStep_ErrorStateDetailsLabeledOnce pins the R4 fix for the
-// error phase: the raw fetch error renders under a "details:" label, and the
-// retry/back keys appear only in the footer's ShortHelp ribbon, not a second
-// time inline in the step's own EmptyState hint.
 func TestDistributionStep_ErrorStateDetailsLabeledOnce(t *testing.T) {
 	s := NewDistributionStep()
 	s.SetVersionFetcher(StaticVersionFetcher{Err: errors.New("dial tcp: connection refused")})
@@ -294,7 +272,7 @@ func TestDistributionStep_ShortHelpNeverEmpty(t *testing.T) {
 		t.Error("ShortHelp() after retry (back to loading) is empty")
 	}
 
-	s.SetVersionFetcher(StaticVersionFetcher{Series: DemoReleaseSeries()})
+	s.SetVersionFetcher(StaticVersionFetcher{Series: fixtureReleaseSeries()})
 	step, _ = s.Update(s.fetchVersions())
 	s = step.(*DistributionStep)
 	if len(s.ShortHelp()) == 0 {
@@ -318,10 +296,6 @@ func TestDistributionStep_EnterOnEmptyListReportsError(t *testing.T) {
 	}
 }
 
-// midListSeriesWithManyPatches builds 5 minor series (indices 0..4) where
-// the middle one (index 2) carries patchCount patch versions — enough,
-// once expanded, to exceed the dropdown's floor and expose any
-// undercounted before/after chrome in applyDropdownBudget.
 func midListSeriesWithManyPatches(patchCount int) []releases.OKDReleaseSeries {
 	series := make([]releases.OKDReleaseSeries, 5)
 	for i := range series {
@@ -348,10 +322,6 @@ func TestDistributionStep_MidListExpansionRespectsContentHeight(t *testing.T) {
 	step, _ := s.Update(s.fetchVersions())
 	s = step.(*DistributionStep)
 
-	// Expand the mid-list series (2 collapsed rows before it, 2 after) —
-	// the case where the expanded row's own title+description, plus its
-	// connector to the last collapsed row above it, must be charged
-	// against the budget or the dropdown overflows contentHeight.
 	s.expandedMinor = series[2].Minor
 	s.updateVersionSelector()
 
@@ -375,15 +345,11 @@ func TestDistributionStep_MidListExpansionRespectsContentHeight(t *testing.T) {
 	}
 }
 
-// TestDistributionStep_CatalogAbsentVersionInjectsCurrentRow extends the
-// bug-1 ruling to the version selector: a configured version older than the
-// fetched release window anchors a synthetic, selectable row instead of
-// anchoring nothing, and enter confirms the configured version verbatim.
 func TestDistributionStep_CatalogAbsentVersionInjectsCurrentRow(t *testing.T) {
 	s := NewDistributionStep()
 	s.SetSelectedVersion("4.19.1-okd-scos.9")
 
-	step, _ := s.Update(versionsLoadedMsg{series: DemoReleaseSeries()})
+	step, _ := s.Update(versionsLoadedMsg{series: fixtureReleaseSeries()})
 	s = step.(*DistributionStep)
 
 	if got := s.versionSelector.Selected().ID; got != "4.19.1-okd-scos.9" {
@@ -414,13 +380,10 @@ func TestDistributionStep_CatalogAbsentVersionInjectsCurrentRow(t *testing.T) {
 	}
 }
 
-// TestDistributionStep_CatalogPresentVersionInjectsNothing keeps the
-// synthetic row a last resort: an in-catalog version anchors its real patch
-// row only.
 func TestDistributionStep_CatalogPresentVersionInjectsNothing(t *testing.T) {
 	s := NewDistributionStep()
 	s.SetSelectedVersion("4.19.4-okd-scos.3")
-	step, _ := s.Update(versionsLoadedMsg{series: DemoReleaseSeries()})
+	step, _ := s.Update(versionsLoadedMsg{series: fixtureReleaseSeries()})
 	s = step.(*DistributionStep)
 
 	if view := tuitest.StripANSI(s.View(90, 30)); strings.Contains(view, "not in the fetched catalog") {
@@ -428,10 +391,6 @@ func TestDistributionStep_CatalogPresentVersionInjectsNothing(t *testing.T) {
 	}
 }
 
-// TestDistributionStep_StaleSuccessCannotOverwriteNewer pins the request-
-// identity contract: fake request A is issued, a newer request B is issued
-// before A replies (the back-then-re-enter case), B's reply lands first,
-// and A's now-stale successful reply must not overwrite it.
 func TestDistributionStep_StaleSuccessCannotOverwriteNewer(t *testing.T) {
 	s := NewDistributionStep()
 
@@ -445,7 +404,7 @@ func TestDistributionStep_StaleSuccessCannotOverwriteNewer(t *testing.T) {
 	}
 
 	seriesA := []releases.OKDReleaseSeries{{Major: 4, Minor: 10, Latest: releases.OKDVersion{Version: "4.10.0"}}}
-	seriesB := DemoReleaseSeries()
+	seriesB := fixtureReleaseSeries()
 
 	step, _ := s.Update(versionsLoadedMsg{generation: genB, series: seriesB})
 	s = step.(*DistributionStep)
@@ -460,9 +419,6 @@ func TestDistributionStep_StaleSuccessCannotOverwriteNewer(t *testing.T) {
 	}
 }
 
-// TestDistributionStep_StaleErrorCannotOverwriteNewer repeats the above with
-// A returning an error instead of a success: the stale failure must not
-// replace B's good, newer result.
 func TestDistributionStep_StaleErrorCannotOverwriteNewer(t *testing.T) {
 	s := NewDistributionStep()
 
@@ -472,7 +428,7 @@ func TestDistributionStep_StaleErrorCannotOverwriteNewer(t *testing.T) {
 	s.Init() // re-entry while A is still in flight
 	genB := s.generation
 
-	seriesB := DemoReleaseSeries()
+	seriesB := fixtureReleaseSeries()
 	step, _ := s.Update(versionsLoadedMsg{generation: genB, series: seriesB})
 	s = step.(*DistributionStep)
 	step, _ = s.Update(versionsLoadedMsg{generation: genA, err: errors.New("dial tcp: connection refused")})
@@ -489,12 +445,9 @@ func TestDistributionStep_StaleErrorCannotOverwriteNewer(t *testing.T) {
 	}
 }
 
-// TestDistributionStep_ReentryAfterSuccessReusesCachedCatalog pins the
-// reuse-on-re-entry decision: once the catalog has loaded, going back and
-// re-entering the step must not re-issue the release fetch.
 func TestDistributionStep_ReentryAfterSuccessReusesCachedCatalog(t *testing.T) {
 	s := NewDistributionStep()
-	s.SetVersionFetcher(StaticVersionFetcher{Series: DemoReleaseSeries()})
+	s.SetVersionFetcher(StaticVersionFetcher{Series: fixtureReleaseSeries()})
 
 	cmd := s.Init()
 	if cmd == nil {
@@ -514,9 +467,6 @@ func TestDistributionStep_ReentryAfterSuccessReusesCachedCatalog(t *testing.T) {
 	}
 }
 
-// TestDistributionStep_ReentryAfterErrorRefetches pins the other half of the
-// reuse decision: a failed attempt is never cached, so re-entering after an
-// error automatically retries instead of leaving the step stuck.
 func TestDistributionStep_ReentryAfterErrorRefetches(t *testing.T) {
 	s := NewDistributionStep()
 	s.SetVersionFetcher(StaticVersionFetcher{Err: errors.New("dial tcp: connection refused")})
@@ -528,7 +478,7 @@ func TestDistributionStep_ReentryAfterErrorRefetches(t *testing.T) {
 		t.Fatalf("phase after failed load = %v, want phaseVersionError", s.phase)
 	}
 
-	s.SetVersionFetcher(StaticVersionFetcher{Series: DemoReleaseSeries()})
+	s.SetVersionFetcher(StaticVersionFetcher{Series: fixtureReleaseSeries()})
 	cmd = s.Init() // re-entry
 	if cmd == nil {
 		t.Fatal("re-entry after an error must retry, not get stuck")
@@ -540,18 +490,13 @@ func TestDistributionStep_ReentryAfterErrorRefetches(t *testing.T) {
 	}
 }
 
-// TestDistributionStep_OverlayHelp pins which phase feeds the "?" overlay's
-// footer-silent "r" entry: nil while loading (the key does nothing yet),
-// {r refresh} in the select phase (the new footer-silent binding), and nil
-// in the error phase too — ShortHelp already advertises "r retry" there, so
-// OverlayHelp must contribute nothing or the overlay would list "r" twice.
 func TestDistributionStep_OverlayHelp(t *testing.T) {
 	s := NewDistributionStep()
 	if got := s.OverlayHelp(); got != nil {
 		t.Fatalf("OverlayHelp() while loading = %+v, want nil", got)
 	}
 
-	s.SetVersionFetcher(StaticVersionFetcher{Series: DemoReleaseSeries()})
+	s.SetVersionFetcher(StaticVersionFetcher{Series: fixtureReleaseSeries()})
 	cmd := s.Init()
 	step, _ := s.Update(cmd())
 	s = step.(*DistributionStep)
@@ -570,13 +515,9 @@ func TestDistributionStep_OverlayHelp(t *testing.T) {
 	}
 }
 
-// TestDistributionStep_HelpOverlay_RefreshDiscoverable renders the "?"
-// overlay through the full wizard.Model pipeline to prove the select
-// phase's "r refresh" binding — real but footer-silent — is actually
-// discoverable there.
 func TestDistributionStep_HelpOverlay_RefreshDiscoverable(t *testing.T) {
 	s := NewDistributionStep()
-	s.SetVersionFetcher(StaticVersionFetcher{Series: DemoReleaseSeries()})
+	s.SetVersionFetcher(StaticVersionFetcher{Series: fixtureReleaseSeries()})
 	cmd := s.Init()
 	step, _ := s.Update(cmd())
 	s = step.(*DistributionStep)
@@ -592,10 +533,6 @@ func TestDistributionStep_HelpOverlay_RefreshDiscoverable(t *testing.T) {
 	}
 }
 
-// overlayScreenSection returns the open overlay's "screen" group alone,
-// excluding the footer ribbon beneath the panel (which echoes the step's
-// own ShortHelp bindings and would otherwise double-count anything they
-// share with the overlay).
 func overlayScreenSection(t *testing.T, frame string) string {
 	t.Helper()
 	start := strings.Index(frame, "screen")
@@ -606,10 +543,6 @@ func overlayScreenSection(t *testing.T, frame string) string {
 	return frame[start:end]
 }
 
-// TestDistributionStep_HelpOverlay_ErrorPhaseListsRetryOnce guards the reuse
-// decision's other half: the error phase's pre-existing, footer-visible "r
-// retry" must still appear exactly once in the overlay, never doubled by
-// the new overlay-only entry (which must stay silent in this phase).
 func TestDistributionStep_HelpOverlay_ErrorPhaseListsRetryOnce(t *testing.T) {
 	s := NewDistributionStep()
 	s.SetVersionFetcher(StaticVersionFetcher{Err: errors.New("dial tcp: connection refused")})
@@ -629,5 +562,30 @@ func TestDistributionStep_HelpOverlay_ErrorPhaseListsRetryOnce(t *testing.T) {
 	}
 	if strings.Contains(screen, "refresh") {
 		t.Fatalf("error-phase overlay must not also advertise \"refresh\":\n%s", frame)
+	}
+}
+
+type ctxRecordingFetcher struct{ ctx context.Context }
+
+func (f *ctxRecordingFetcher) FetchVersions(ctx context.Context) ([]releases.OKDReleaseSeries, error) {
+	f.ctx = ctx
+	return nil, ctx.Err()
+}
+
+func TestDistributionStep_FetchRunsUnderTheVisitContext(t *testing.T) {
+	s := NewDistributionStep()
+	fetcher := &ctxRecordingFetcher{}
+	s.SetVersionFetcher(fetcher)
+	ctx, cancel := context.WithCancel(context.Background())
+	s.SetVisitContext(ctx)
+
+	cmd := s.startFetch()
+	cancel()
+	msg, ok := cmd().(versionsLoadedMsg)
+	if !ok || !errors.Is(msg.err, context.Canceled) {
+		t.Fatalf("fetch after the visit was cancelled = %#v, want a cancelled fetch", msg)
+	}
+	if fetcher.ctx == nil || fetcher.ctx.Err() == nil {
+		t.Fatal("the fetcher ran under a context the visit does not own")
 	}
 }

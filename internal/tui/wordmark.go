@@ -23,8 +23,8 @@ var wordmarkGlyphs = map[rune][WordmarkRows]string{
 	'Y': {"██   ██ ", " ██ ██  ", "  ███   ", "   ██   ", "   ██   "},
 }
 
-// Wordmark renders supported letters as a scaled, gradient-colored bitmap.
-// Unsupported runes are skipped, so callers must use letters with a bitmap.
+// Wordmark renders text as a scaled, gradient-colored bitmap. Runes without
+// a bitmap are skipped.
 func Wordmark(text string, gradient []color.Color, scale int) string {
 	scale = max(scale, 1)
 	letters := []rune(text)
@@ -63,7 +63,6 @@ func WordmarkWidth(text string, scale int) int {
 	return w
 }
 
-// stretchCells repeats each glyph cell to scale the wordmark horizontally.
 func stretchCells(row string, scale int) string {
 	if scale == 1 {
 		return row

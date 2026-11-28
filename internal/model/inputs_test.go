@@ -11,6 +11,10 @@ func testInputs(t *testing.T, cfg *config.Config) Inputs {
 	t.Helper()
 	return Inputs{
 		Inventory:  mustBuild(t, cfg),
+		Day1:       []string{"lab-master0", "lab-master1", "lab-master2", "lab-worker0", "lab-worker1"},
+		Domain:     cfg.Cluster.Domain,
+		Network:    cfg.Networking,
+		VLAN:       cfg.Provider.Proxmox.VLAN,
 		Release:    "4.20.0",
 		PullSecret: []byte(`{"auths":{}}`),
 		SSHKey:     []byte("ssh-ed25519 AAAA"),
@@ -48,12 +52,26 @@ func TestInputsHash_Sensitivity(t *testing.T) {
 		{name: "api vip", change: true, cfg: func(c *config.Config) { c.Networking.APIVIP = "192.168.1.157" }},
 		{name: "ingress vip", change: true, cfg: func(c *config.Config) { c.Networking.IngressVIP = "192.168.1.157" }},
 		{name: "release", change: true, in: func(in *Inputs) { in.Release = "4.21.0" }},
+		{name: "domain", change: true, cfg: func(c *config.Config) { c.Cluster.Domain = "other.local" }},
+		{name: "machine cidr", change: true, cfg: func(c *config.Config) { c.Networking.MachineCIDR = "192.168.0.0/16" }},
+		{name: "gateway", change: true, cfg: func(c *config.Config) { c.Networking.Gateway = "192.168.1.2" }},
+		{name: "dns", change: true, cfg: func(c *config.Config) { c.Networking.DNS = []string{"192.168.1.1", "1.1.1.1"} }},
+		{name: "ntp", change: true, cfg: func(c *config.Config) { c.Networking.NTP = []string{"pool.ntp.org"} }},
+		{name: "vlan", change: true, cfg: func(c *config.Config) { c.Provider.Proxmox.VLAN = 12 }},
+		{name: "pod cidr", change: true, cfg: func(c *config.Config) { c.Networking.PodCIDR = "10.132.0.0/14" }},
+		{name: "service cidr", change: true, cfg: func(c *config.Config) { c.Networking.ServiceCIDR = "172.31.0.0/16" }},
+		{name: "host prefix", change: true, cfg: func(c *config.Config) { c.Networking.HostPrefix = 24 }},
 		{name: "manifest byte", change: true, in: func(in *Inputs) { in.ExtraManifests["98-a.yaml"] = []byte("a: 2\n") }},
 		{name: "pull secret", change: true, in: func(in *Inputs) { in.PullSecret = []byte(`{"auths":{"x":{}}}`) }},
 		{name: "ssh key", change: true, in: func(in *Inputs) { in.SSHKey = []byte("ssh-ed25519 BBBB") }},
-		{name: "worker count", cfg: func(c *config.Config) { c.Workers.Count = 3 }},
-		{name: "worker address", cfg: func(c *config.Config) {
+		{name: "worker address", change: true, cfg: func(c *config.Config) {
 			c.Nodes = map[string]config.NodeOverride{"lab-worker0": {IP: "192.168.1.200"}}
+		}},
+		{name: "worker added after day 1", cfg: func(c *config.Config) { c.Workers.Count = 3 }},
+		{name: "day-1 worker removed", change: true, cfg: func(c *config.Config) { c.Workers.Count = 1 }},
+		{name: "later worker address", cfg: func(c *config.Config) {
+			c.Workers.Count = 3
+			c.Nodes = map[string]config.NodeOverride{"lab-worker2": {IP: "192.168.1.200"}}
 		}},
 		{name: "memory", cfg: func(c *config.Config) { c.Workers.MemoryMiB = 65536 }},
 		{name: "cpu", cfg: func(c *config.Config) { c.ControlPlane.CPU = 2 }},
@@ -77,5 +95,13 @@ func TestInputsHash_Sensitivity(t *testing.T) {
 				t.Errorf("hash changed = %v; want %v", changed, tc.change)
 			}
 		})
+	}
+}
+
+func TestInputsHash_Golden(t *testing.T) {
+	in := testInputs(t, testConfig(2))
+	const want = "c88ee73e015cc2d88d68ff59160adedf9ebd80ee4237ce05c446df486a006205"
+	if got := in.Hash(); got != want {
+		t.Errorf("Hash = %s; want %s (a change here stales every record: bump the record schema version)", got, want)
 	}
 }

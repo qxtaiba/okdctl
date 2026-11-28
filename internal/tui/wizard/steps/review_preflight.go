@@ -24,8 +24,8 @@ type reviewCheck struct {
 	notApplicable bool
 }
 
-// reviewPreflight checks the two input files, runs cfg.Validate() and, with
-// a discovery snapshot, the chosen hosts' capacity.
+// reviewPreflight checks the input files, runs cfg.Validate() and, with a
+// snapshot, the chosen hosts' capacity.
 func reviewPreflight(cfg *config.Config, capacity ...*WizardCapacitySnapshot) []reviewCheck {
 	if cfg == nil {
 		return nil
@@ -60,8 +60,6 @@ func reviewConfigCheck(cfg *config.Config) reviewCheck {
 	}
 }
 
-// reviewCapacityCheck sums each chosen host's demand from the model's
-// inventory against the discovered capacity.
 func reviewCapacityCheck(cfg *config.Config, snapshot *WizardCapacitySnapshot) reviewCheck {
 	if cfg.Provider.Type != config.ProviderProxmox {
 		return reviewCheck{label: labelSelectedCapacity, status: "not applicable", notApplicable: true}
@@ -70,24 +68,13 @@ func reviewCapacityCheck(cfg *config.Config, snapshot *WizardCapacitySnapshot) r
 	if len(nodes) == 0 {
 		return reviewCheck{label: labelSelectedCapacity, status: statusNotChecked}
 	}
-	inv, err := model.Build(cfg, "")
+	inv, err := model.Build(cfg, model.PreviewInfraID)
 	if err != nil {
 		return reviewCheck{label: labelSelectedCapacity, status: statusNotChecked, detail: err.Error()}
 	}
-	type demand struct{ cpu, memoryMiB int }
-	use := make(map[string]*demand)
-	for i := range inv.Nodes {
-		n := &inv.Nodes[i]
-		d := use[n.Host]
-		if d == nil {
-			d = &demand{}
-			use[n.Host] = d
-		}
-		d.cpu += n.CPU
-		d.memoryMiB += n.MemoryMiB
-	}
+	use := demandByHost(inv.Nodes, nil)
 	rows := make([]string, 0, len(use))
-	warning, unknown := false, false
+	warning := false
 	for i := range nodes {
 		node := &nodes[i]
 		d, assigned := use[node.Name]
@@ -95,24 +82,14 @@ func reviewCapacityCheck(cfg *config.Config, snapshot *WizardCapacitySnapshot) r
 			continue
 		}
 		delete(use, node.Name)
-		cpu, memory := "?", "?"
-		if node.CPUsKnown {
-			cpu = fmt.Sprint(node.CPUs)
-		}
-		if node.MemKnown {
-			memory = fmt.Sprintf("%d GB", node.MemGB)
-		}
-		over := (node.CPUsKnown && d.cpu > node.CPUs) || (node.MemKnown && d.memoryMiB > node.MemGB*1024)
 		state := "fits"
 		switch {
 		case node.Status != proxmoxStatusOnline:
 			state, warning = "offline", true
-		case over:
+		case node.exceeds(d):
 			state, warning = "over capacity", true
-		case !node.CPUsKnown || !node.MemKnown:
-			state, unknown = "capacity unknown", true
 		}
-		rows = append(rows, fmt.Sprintf("%s %s · %dc/%d GB → %sc/%s", tui.SanitizeTerminalEscapes(node.Name), state, d.cpu, d.memoryMiB/1024, cpu, memory))
+		rows = append(rows, fmt.Sprintf("%s %s · %dc/%d GB → %dc/%d GB", tui.SanitizeTerminalEscapes(node.Name), state, d.cpu, d.memoryMiB/1024, node.CPUs, node.MemGB))
 	}
 	for host := range use {
 		rows = append(rows, tui.SanitizeTerminalEscapes(host)+" unavailable")
@@ -121,7 +98,7 @@ func reviewCapacityCheck(cfg *config.Config, snapshot *WizardCapacitySnapshot) r
 	slices.Sort(rows)
 	return reviewCheck{
 		label: labelSelectedCapacity, status: strings.Join(rows, "; "),
-		passed: !warning && !unknown, warning: warning,
+		passed: !warning, warning: warning,
 	}
 }
 
@@ -165,7 +142,7 @@ func renderReviewPreflight(checks []reviewCheck, width int) string {
 		}
 	}
 	var b strings.Builder
-	header := fmt.Sprintf("PREFLIGHT · %d passed · %d warnings · %d failed · %d not checked", passed, warnings, failed, unchecked)
+	header := fmt.Sprintf("CHECKS · %d passed · %d warnings · %d failed · %d not checked", passed, warnings, failed, unchecked)
 	b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText()).Render(tui.Truncate(header, width)))
 	b.WriteString("\n")
 	for _, check := range checks {

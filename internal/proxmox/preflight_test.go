@@ -3,9 +3,11 @@ package proxmox
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/netip"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -27,6 +29,8 @@ type fakeDriver struct {
 	vms      []VMSummary
 	configs  map[int]VMConfig
 	errs     map[string]error
+
+	configReads int
 }
 
 func (f *fakeDriver) Permissions(context.Context) (Permissions, error) {
@@ -62,18 +66,23 @@ func (f *fakeDriver) Bridges(_ context.Context, node string) ([]Bridge, error) {
 }
 
 func (f *fakeDriver) VMConfig(_ context.Context, ref VMRef) (VMConfig, error) {
+	f.configReads++
 	if err := f.errs["config"]; err != nil && ref.VMID == 200 {
 		return VMConfig{}, err
+	}
+	if i := slices.IndexFunc(f.vms, func(vm VMSummary) bool { return vm.VMID == ref.VMID }); i >= 0 && f.vms[i].Type != "qemu" {
+		return VMConfig{}, ErrNotFound // the qemu config path knows no containers
 	}
 	return f.configs[ref.VMID], nil
 }
 
 type fakePinger struct {
 	alive                 map[netip.Addr]bool
+	errs                  map[netip.Addr]error
 	inflight, maxInflight *atomic.Int32
 }
 
-func (p fakePinger) Alive(_ context.Context, addr netip.Addr) bool {
+func (p fakePinger) Alive(_ context.Context, addr netip.Addr) (bool, error) {
 	if p.inflight != nil {
 		n := p.inflight.Add(1)
 		for old := p.maxInflight.Load(); n > old && !p.maxInflight.CompareAndSwap(old, n); old = p.maxInflight.Load() {
@@ -81,7 +90,7 @@ func (p fakePinger) Alive(_ context.Context, addr netip.Addr) bool {
 		time.Sleep(30 * time.Millisecond)
 		p.inflight.Add(-1)
 	}
-	return p.alive[addr]
+	return p.alive[addr], p.errs[addr]
 }
 
 func goodStorages() []StorageInfo {
@@ -95,7 +104,7 @@ func goodDriver() *fakeDriver {
 	flags := []string{"fpu", "avx2", "bmi2", "fma", "movbe", "sse4_2"}
 	return &fakeDriver{
 		perms: Permissions{
-			"/": {"Sys.Audit": true, "Sys.Console": true, "Sys.Modify": true},
+			"/": {"Sys.Audit": true, "Sys.Console": true},
 			"/vms": {
 				"VM.Allocate": true, "VM.Audit": true, "VM.PowerMgmt": true,
 				"VM.Config.CDROM": true, "VM.Config.CPU": true, "VM.Config.Disk": true, "VM.Config.HWType": true,
@@ -116,8 +125,8 @@ func goodDriver() *fakeDriver {
 			"pve2": {{Name: "vmbr0", VLANAware: true, Active: true}},
 		},
 		vms: []VMSummary{
-			{VMRef: VMRef{Node: "pve1", VMID: 100}, Name: "web", Status: "running", MaxMemMiB: 8192},
-			{VMRef: VMRef{Node: "pve2", VMID: 200}, Name: "db", Status: "stopped", MaxMemMiB: 16384},
+			{VMRef: VMRef{Node: "pve1", VMID: 100}, Type: "qemu", Name: "web", Status: "running", MaxMemMiB: 8192},
+			{VMRef: VMRef{Node: "pve2", VMID: 200}, Type: "qemu", Name: "db", Status: "stopped", MaxMemMiB: 16384},
 		},
 		configs: map[int]VMConfig{
 			100: {MAC: "BC:24:11:AA:BB:01", MACs: []string{"BC:24:11:AA:BB:01"}},
@@ -133,13 +142,12 @@ func goodInput() PreflightInput {
 		Pool: "okd", HA: true, Tag: "okd-grappleberry",
 		VMIDs: []int{101, 102, 103},
 		MACs:  []string{"BC:24:11:00:00:01", "BC:24:11:00:00:02", "BC:24:11:00:00:03"},
-		Addresses: []netip.Addr{
-			netip.MustParseAddr("10.0.0.10"), netip.MustParseAddr("10.0.0.11"),
-			netip.MustParseAddr("10.0.0.5"), netip.MustParseAddr("10.0.0.6"),
+		NodeAddresses: map[netip.Addr]int{
+			netip.MustParseAddr("10.0.0.10"): 101, netip.MustParseAddr("10.0.0.11"): 102, netip.MustParseAddr("10.0.0.12"): 103,
 		},
+		VIPs:            []netip.Addr{netip.MustParseAddr("10.0.0.5"), netip.MustParseAddr("10.0.0.6")},
 		MemoryMiBByNode: map[string]int{"pve1": 32768, "pve2": 32768},
 		ISOBytes:        2 * gibBytes,
-		CPUModel:        "host",
 	}
 }
 
@@ -153,22 +161,54 @@ func TestPreflight(t *testing.T) {
 		{
 			name:   "permissions missing privilege",
 			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) { delete(d.perms["/vms"], "VM.PowerMgmt") },
-			want:   []Finding{{"permissions", "fail", "missing privilege VM.PowerMgmt on /vms"}},
+			want:   []Finding{{"permissions", "fail", "missing privilege VM.PowerMgmt on /vms or /pool/okd"}},
 		},
 		{
-			name: "permissions ancestor lacks datastore allocate",
+			name: "permissions missing privilege without a pool",
+			mutate: func(d *fakeDriver, in *PreflightInput, _ *fakePinger) {
+				delete(d.perms["/vms"], "VM.PowerMgmt")
+				in.Pool = ""
+			},
+			want: []Finding{{"permissions", "fail", "missing privilege VM.PowerMgmt on /vms"}},
+		},
+		{
+			name: "permissions vm privilege granted on the pool",
+			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) {
+				delete(d.perms["/vms"], "VM.PowerMgmt")
+				d.perms["/pool/okd"]["VM.PowerMgmt"] = false
+			},
+		},
+		{
+			name: "permissions nearest propagating ancestor replaces the root grant",
 			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) {
 				delete(d.perms["/storage"], "Datastore.Allocate")
+				d.perms["/"]["Datastore.Allocate"] = true
 			},
 			want: []Finding{{"permissions", "fail", "missing privilege Datastore.Allocate on /storage/local"}},
 		},
 		{
-			name: "permissions exact path beats ancestor",
+			name: "permissions non-propagating ancestor is skipped for the one above",
+			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) {
+				for priv := range d.perms["/storage"] {
+					d.perms["/storage"][priv] = false
+					d.perms["/"][priv] = true
+				}
+			},
+		},
+		{
+			name: "permissions ancestor grant without propagate stops there",
+			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) {
+				d.perms["/storage"]["Datastore.Allocate"] = false
+			},
+			want: []Finding{{"permissions", "fail", "missing privilege Datastore.Allocate on /storage/local"}},
+		},
+		{
+			name: "permissions exact path grant counts whatever its propagate flag",
 			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) {
 				delete(d.perms["/"], "Sys.Audit")
-				d.perms["/nodes/pve1"] = map[string]bool{"Sys.Audit": true}
+				d.perms["/nodes/pve1"] = map[string]bool{"Sys.Audit": false}
+				d.perms["/nodes/pve2"] = map[string]bool{"Sys.Audit": false}
 			},
-			want: []Finding{{"permissions", "fail", "missing privilege Sys.Audit on /nodes/pve2"}},
 		},
 		{
 			name: "permissions conditional privileges skipped",
@@ -183,15 +223,46 @@ func TestPreflight(t *testing.T) {
 			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) {
 				d.perms["/pool/okd"] = map[string]bool{"Pool.Audit": true}
 			},
-			want: []Finding{{"permissions", "fail", "missing privilege Pool.Allocate on /pool/okd"}},
+			want: []Finding{{"permissions", "fail", "missing privilege Pool.Allocate or Permissions.Modify on /pool/okd"}},
 		},
 		{
-			name: "permissions tagging needs sys.modify whatever the tag",
-			mutate: func(d *fakeDriver, in *PreflightInput, _ *fakePinger) {
-				delete(d.perms["/"], "Sys.Modify")
-				in.Tag = ""
+			name: "permissions pool accepts permissions.modify",
+			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) {
+				d.perms["/pool/okd"] = map[string]bool{"Permissions.Modify": true}
 			},
-			want: []Finding{{"permissions", "fail", "missing privilege Sys.Modify on /"}},
+		},
+		{
+			name: "permissions vm grant on /vms must propagate to the vmid",
+			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) {
+				d.perms["/vms"]["VM.PowerMgmt"] = false
+			},
+			want: []Finding{{"permissions", "fail", "missing privilege VM.PowerMgmt on /vms or /pool/okd"}},
+		},
+		{
+			name: "permissions vm grants on the vmids themselves count whatever their propagate flag",
+			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) {
+				for _, id := range []string{"101", "102", "103"} {
+					d.perms["/vms/"+id] = map[string]bool{}
+					for priv := range d.perms["/vms"] {
+						d.perms["/vms/"+id][priv] = false
+					}
+				}
+				delete(d.perms, "/vms")
+			},
+		},
+		{
+			name: "permissions vlan checks the tagged sdn path",
+			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) {
+				d.perms["/sdn/zones/localnetwork/vmbr0"]["SDN.Use"] = false
+			},
+			want: []Finding{{"permissions", "fail", "missing privilege SDN.Use on /sdn/zones/localnetwork/vmbr0/100"}},
+		},
+		{
+			name: "permissions sdn grant on the tag alone suffices",
+			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) {
+				delete(d.perms, "/sdn/zones/localnetwork/vmbr0")
+				d.perms["/sdn/zones/localnetwork/vmbr0/100"] = map[string]bool{"SDN.Use": false}
+			},
 		},
 		{
 			name: "permissions single storage reports each privilege once",
@@ -224,6 +295,18 @@ func TestPreflight(t *testing.T) {
 			want:   []Finding{{"cpu-flags", "fail", "node pve2 lacks cpu flags bmi2, movbe"}},
 		},
 		{
+			name:   "cpu flags unknown when the node status was not readable",
+			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) { d.nodes[1].CPUFlags = nil },
+			want:   []Finding{{"cpu-flags", "fail", "node pve2: status not readable"}},
+		},
+		{
+			name: "placement node offline",
+			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) {
+				d.nodes[1].Status, d.nodes[1].CPUFlags = "offline", nil
+			},
+			want: []Finding{{"cpu-flags", "fail", "node pve2 is offline"}},
+		},
+		{
 			name:   "placement node not in cluster",
 			mutate: func(_ *fakeDriver, in *PreflightInput, _ *fakePinger) { in.Nodes = append(in.Nodes, "pve3") },
 			want: []Finding{
@@ -254,6 +337,13 @@ func TestPreflight(t *testing.T) {
 			want: []Finding{{"memory", "warn", "node pve1: planned 4096 MiB + running 53249 MiB + 8192 MiB reserve exceeds 65536 MiB"}},
 		},
 		{
+			name: "memory skips a node whose total is unknown",
+			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) {
+				d.nodes[1].MemTotalMiB, d.nodes[1].CPUFlags = 0, nil
+			},
+			want: []Finding{{"cpu-flags", "fail", "node pve2: status not readable"}},
+		},
+		{
 			name:   "memory exactly fits",
 			mutate: func(_ *fakeDriver, in *PreflightInput, _ *fakePinger) { in.MemoryMiBByNode["pve1"] = 49152 },
 		},
@@ -282,6 +372,14 @@ func TestPreflight(t *testing.T) {
 				{"vmid-collision", "fail", `vmid 100 already used by "web" on node pve1`},
 				{"vmid-collision", "fail", `vmid 200 already used by "db" on node pve2`},
 			},
+		},
+		{
+			name: "vmid collision with a container",
+			mutate: func(d *fakeDriver, in *PreflightInput, _ *fakePinger) {
+				d.vms = append(d.vms, VMSummary{VMRef: VMRef{Node: "pve1", VMID: 300}, Type: "lxc", Name: "dns", Status: "running", MaxMemMiB: 512})
+				in.VMIDs = append(in.VMIDs, 300)
+			},
+			want: []Finding{{"vmid-collision", "fail", `vmid 300 already used by "dns" on node pve1`}},
 		},
 		{
 			name: "vmid collision skips the cluster's own vms",
@@ -350,6 +448,42 @@ func TestPreflight(t *testing.T) {
 			},
 		},
 		{
+			name: "addresses of the cluster's own running vms are skipped",
+			mutate: func(d *fakeDriver, _ *PreflightInput, p *fakePinger) {
+				d.vms[0].VMID, d.vms[0].Tags = 101, []string{"okd-grappleberry"}
+				p.alive[netip.MustParseAddr("10.0.0.10")] = true
+				p.alive[netip.MustParseAddr("10.0.0.5")] = true
+				p.alive[netip.MustParseAddr("10.0.0.11")] = true
+			},
+			want: []Finding{{"address-in-use", "fail", "address 10.0.0.11 answers ping"}},
+		},
+		{
+			name: "addresses of the cluster's own stopped vms still count",
+			mutate: func(d *fakeDriver, _ *PreflightInput, p *fakePinger) {
+				d.vms[0].VMID, d.vms[0].Tags, d.vms[0].Status = 101, []string{"okd-grappleberry"}, "stopped"
+				p.alive[netip.MustParseAddr("10.0.0.10")] = true
+				p.alive[netip.MustParseAddr("10.0.0.5")] = true
+			},
+			want: []Finding{
+				{"address-in-use", "fail", "address 10.0.0.5 answers ping"},
+				{"address-in-use", "fail", "address 10.0.0.10 answers ping"},
+			},
+		},
+		{
+			name: "address check inconclusive warns per cause",
+			mutate: func(_ *fakeDriver, _ *PreflightInput, p *fakePinger) {
+				p.alive[netip.MustParseAddr("10.0.0.6")] = true
+				p.errs[netip.MustParseAddr("10.0.0.11")] = errors.New("ping: executable file not found")
+				p.errs[netip.MustParseAddr("10.0.0.5")] = errors.New("ping: executable file not found")
+				p.errs[netip.MustParseAddr("10.0.0.10")] = errors.New("ping exit 2: connect: Network is unreachable")
+			},
+			want: []Finding{
+				{"address-in-use", "fail", "address 10.0.0.6 answers ping"},
+				{"address-in-use", "warn", "address check inconclusive for 10.0.0.5, 10.0.0.11: ping: executable file not found"},
+				{"address-in-use", "warn", "address check inconclusive for 10.0.0.10: ping exit 2: connect: Network is unreachable"},
+			},
+		},
+		{
 			name:   "storage missing",
 			mutate: func(_ *fakeDriver, in *PreflightInput, _ *fakePinger) { in.Storage = "nfs" },
 			want: []Finding{
@@ -375,7 +509,7 @@ func TestPreflight(t *testing.T) {
 			name:   "bridge missing",
 			mutate: func(_ *fakeDriver, in *PreflightInput, _ *fakePinger) { in.Bridge = "vmbr1" },
 			want: []Finding{
-				{"permissions", "fail", "missing privilege SDN.Use on /sdn/zones/localnetwork/vmbr1"},
+				{"permissions", "fail", "missing privilege SDN.Use on /sdn/zones/localnetwork/vmbr1/100"},
 				{"bridge", "fail", "bridge vmbr1 not found on node pve1"},
 				{"bridge", "fail", "bridge vmbr1 not found on node pve2"},
 			},
@@ -400,7 +534,7 @@ func TestPreflight(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			d, in, p := goodDriver(), goodInput(), fakePinger{alive: map[netip.Addr]bool{}}
+			d, in, p := goodDriver(), goodInput(), fakePinger{alive: map[netip.Addr]bool{}, errs: map[netip.Addr]error{}}
 			tc.mutate(d, &in, &p)
 			got, err := Preflight(context.Background(), d, p, in)
 			if err != nil {
@@ -451,6 +585,54 @@ func TestFixtureNodeHasRequiredCPUFlags(t *testing.T) {
 	}
 }
 
+type cancellingDriver struct {
+	*fakeDriver
+	at     string
+	cancel context.CancelFunc
+}
+
+func (d cancellingDriver) ListVMs(ctx context.Context) ([]VMSummary, error) {
+	if d.at == "listvms" {
+		d.cancel()
+	}
+	return d.fakeDriver.ListVMs(ctx)
+}
+
+func (d cancellingDriver) VMConfig(ctx context.Context, ref VMRef) (VMConfig, error) {
+	if d.at == "config" {
+		d.cancel()
+	}
+	return d.fakeDriver.VMConfig(ctx, ref)
+}
+
+type cancellingPinger struct{ cancel context.CancelFunc }
+
+func (p cancellingPinger) Alive(ctx context.Context, _ netip.Addr) (bool, error) {
+	p.cancel()
+	return false, ctx.Err()
+}
+
+func TestPreflightReturnsCancellation(t *testing.T) {
+	for _, at := range []string{"listvms", "config", "ping"} {
+		t.Run(at, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			d := cancellingDriver{fakeDriver: goodDriver(), at: at, cancel: cancel}
+			var ping Pinger = fakePinger{}
+			if at == "ping" {
+				ping = cancellingPinger{cancel}
+			}
+			got, err := Preflight(ctx, d, ping, goodInput())
+			if !errors.Is(err, context.Canceled) || got != nil {
+				t.Fatalf("Preflight = %+v, %v; want nil, context.Canceled", got, err)
+			}
+			if at == "config" && d.configReads != 1 {
+				t.Fatalf("read %d vm configs after cancel, want the loop to stop at 1", d.configReads)
+			}
+		})
+	}
+}
+
 func TestPreflightDependencyErrors(t *testing.T) {
 	for _, key := range []string{"permissions", "version", "nodes", "listvms"} {
 		t.Run(key, func(t *testing.T) {
@@ -472,36 +654,27 @@ func TestExecPinger(t *testing.T) {
 		}
 		return p
 	}
-	addr := netip.MustParseAddr("10.0.0.5")
-	ctx := context.Background()
-	ex := executor.New()
+	_, noReply := pingFlavour(runtime.GOOS)
+	exitNoReply := fmt.Sprintf("exit %d\n", noReply)
 	cases := []struct {
-		name string
-		bin  string
-		want bool
+		name    string
+		bin     string
+		alive   bool
+		wantErr string
 	}{
-		{"up", write("up", "exit 0\n"), true},
-		{"down", write("down", "exit 1\n"), false},
-		{"missing", filepath.Join(dir, "nope"), false},
+		{name: "up", bin: write("up", "exit 0\n"), alive: true},
+		{name: "no reply", bin: write("down", exitNoReply)},
+		{name: "missing", bin: filepath.Join(dir, "nope"), wantErr: "nope"},
+		{name: "other exit", bin: write("other", "echo usage >&2\nexit 64\n"), wantErr: "ping exit 64: usage"},
+		{name: "unreachable", bin: write("unreach", "echo 'ping: sendto: No route to host' >&2\n"+exitNoReply), wantErr: "No route to host"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			p := execPinger{ex: ex, bin: tc.bin}
-			if got := p.Alive(ctx, addr); got != tc.want {
-				t.Fatalf("Alive = %v, want %v", got, tc.want)
+			p := execPinger{ex: executor.New(), bin: tc.bin}
+			alive, err := p.Alive(context.Background(), netip.MustParseAddr("10.0.0.5"))
+			if alive != tc.alive || (err != nil) != (tc.wantErr != "") || (err != nil && !strings.Contains(err.Error(), tc.wantErr)) {
+				t.Fatalf("Alive = %v, %v; want %v, error containing %q", alive, err, tc.alive, tc.wantErr)
 			}
 		})
-	}
-	if ExecPinger(ex).(execPinger).bin != "ping" {
-		t.Fatal("ExecPinger must run ping")
-	}
-}
-
-func TestPingWait(t *testing.T) {
-	if got := pingWait("darwin"); got != "1000" {
-		t.Fatalf("darwin: %q", got)
-	}
-	if got := pingWait("linux"); got != "1" {
-		t.Fatalf("linux: %q", got)
 	}
 }

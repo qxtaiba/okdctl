@@ -55,16 +55,8 @@ func TestHelpFitsEightyColumnsAndIsPlain(t *testing.T) {
 	}
 }
 
-// Regression guard: SetHelpFunc's noColor gate (help.go) forces plain output
-// for --help the way versionText does for --version (see
-// TestVersionFlagRespectsNoColor); TestHelpFitsEightyColumnsAndIsPlain forces
-// a plain profile before Execute, so it wouldn't catch that gate being
-// deleted.
 func TestHelpRespectsNoColor(t *testing.T) {
-	// registered before t.Setenv so LIFO cleanup restores CLICOLOR_FORCE
-	// first and only then re-detects the profile with a clean environment;
-	// the reverse order leaves the package profile forced-colourful for
-	// later tests
+	// registered before t.Setenv so LIFO cleanup unsets CLICOLOR_FORCE first
 	t.Cleanup(func() { tui.SetColorProfileFor(&bytes.Buffer{}) })
 	t.Setenv("CLICOLOR_FORCE", "1") // forces color even for a non-TTY writer
 
@@ -118,10 +110,6 @@ func TestNoCobraGroups(t *testing.T) {
 	}
 }
 
-// Pins that the usage template's dropped "Additional help topics" branch
-// (cobra's HasHelpSubCommands) is currently a no-op: if a future command ever
-// registers as an additional-help-topic command, it would silently vanish
-// from --help under this template.
 func TestNoAdditionalHelpTopicCommands(t *testing.T) {
 	var walk func(c *cobra.Command)
 	walk = func(c *cobra.Command) {

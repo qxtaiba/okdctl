@@ -35,7 +35,6 @@ func TestNodes(t *testing.T) {
 		CPUs:        32,
 		CPUModel:    "AMD Ryzen 9 7950X 16-Core Processor",
 		CPUFlags:    strings.Fields("fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpb cat_l3 cdp_l3 hw_pstate ssbd mba ibrs ibpb stibp vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl"),
-		PVEVersion:  "pve-manager/9.0.10/abcdef0123456789",
 	}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Nodes() = %+v, want %+v", got, want)
@@ -65,6 +64,29 @@ func TestNodesSkipsStatusOfOfflineNode(t *testing.T) {
 	if !f.called("GET /nodes/pve/status") {
 		t.Fatal("Nodes() did not query /nodes/pve/status for the online node")
 	}
+}
+
+func TestNodesKeepsTheListingRowWhenStatusIsForbidden(t *testing.T) {
+	f := newFakeAPI(t, map[string]http.HandlerFunc{
+		"/nodes": jsonHandler(http.StatusOK, `{"data":[
+			{"node":"pve","status":"online","maxmem":68719476736,"mem":21474836480,"maxcpu":16},
+			{"node":"pve2","status":"online","maxmem":34359738368,"mem":1073741824,"maxcpu":8}]}`),
+		"/nodes/pve2/status": jsonHandler(http.StatusForbidden, `{"data":null}`),
+	})
+	got, err := f.driver(t).Nodes(t.Context())
+	if err != nil {
+		t.Fatalf("Nodes(): %v", err)
+	}
+	want := NodeInfo{Name: "pve2", Status: "online", MemTotalMiB: 32768, MemUsedMiB: 1024, CPUs: 8}
+	if len(got) != 2 || !reflect.DeepEqual(got[1], want) {
+		t.Fatalf("Nodes() = %+v, want pve plus %+v", got, want)
+	}
+	t.Run("other status errors still abort", func(t *testing.T) {
+		f.overrides["/nodes/pve2/status"] = jsonHandler(http.StatusInternalServerError, `{"data":null}`)
+		if _, err := f.driver(t).Nodes(t.Context()); err == nil {
+			t.Fatal("Nodes() swallowed a 500 on the status read")
+		}
+	})
 }
 
 func TestStorages(t *testing.T) {
@@ -118,11 +140,12 @@ func TestListVMs(t *testing.T) {
 		t.Fatalf("ListVMs(): %v", err)
 	}
 	want := []VMSummary{
-		{VMRef: VMRef{Node: "pve", VMID: 100}, Name: "grappleberry-bootstrap", Status: "running", Tags: []string{"grappleberry", "okd"}, Pool: "okd", MaxMemMiB: 16384, MaxCPU: 4},
-		{VMRef: VMRef{Node: "pve", VMID: 101}, Name: "grappleberry-master-0", Status: "running", Tags: []string{"grappleberry"}, Pool: "okd", MaxMemMiB: 16384, MaxCPU: 4},
-		{VMRef: VMRef{Node: "pve", VMID: 200}, Name: "lab-9f3a1c-worker-0", Status: "stopped", Tags: []string{"lab-9f3a1c"}, MaxMemMiB: 8192, MaxCPU: 2},
-		{VMRef: VMRef{Node: "pve", VMID: 201}, Name: "lab-9f3a1cx-worker-0", Status: "stopped", Tags: []string{"lab-9f3a1cx"}, MaxMemMiB: 8192, MaxCPU: 2},
-		{VMRef: VMRef{Node: "pve", VMID: 9000}, Name: "fcos-template", Status: "stopped", MaxMemMiB: 2048, MaxCPU: 1},
+		{VMRef: VMRef{Node: "pve", VMID: 100}, Type: "qemu", Name: "grappleberry-bootstrap", Status: "running", Tags: []string{"grappleberry", "okd"}, Pool: "okd", MaxMemMiB: 16384, MaxCPU: 4},
+		{VMRef: VMRef{Node: "pve", VMID: 101}, Type: "qemu", Name: "grappleberry-master-0", Status: "running", Tags: []string{"grappleberry"}, Pool: "okd", MaxMemMiB: 16384, MaxCPU: 4},
+		{VMRef: VMRef{Node: "pve", VMID: 200}, Type: "qemu", Name: "lab-9f3a1c-worker-0", Status: "stopped", Tags: []string{"lab-9f3a1c"}, MaxMemMiB: 8192, MaxCPU: 2},
+		{VMRef: VMRef{Node: "pve", VMID: 201}, Type: "qemu", Name: "lab-9f3a1cx-worker-0", Status: "stopped", Tags: []string{"lab-9f3a1cx"}, MaxMemMiB: 8192, MaxCPU: 2},
+		{VMRef: VMRef{Node: "pve", VMID: 300}, Type: "lxc", Name: "dns", Status: "running", Tags: []string{"okd"}, MaxMemMiB: 512, MaxCPU: 1},
+		{VMRef: VMRef{Node: "pve", VMID: 9000}, Type: "qemu", Name: "fcos-template", Status: "stopped", MaxMemMiB: 2048, MaxCPU: 1},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("ListVMs() = %+v, want %+v", got, want)
@@ -152,6 +175,7 @@ func TestPermissions(t *testing.T) {
 		"/nodes/pve":     {"Sys.Audit": true, "Sys.Console": true},
 		"/storage/local": {"Datastore.AllocateSpace": true, "Datastore.AllocateTemplate": true, "Datastore.Audit": true},
 		"/vms":           {"VM.Allocate": true, "VM.Audit": true, "VM.Config.Disk": true, "VM.PowerMgmt": true},
+		"/vms/100":       {"VM.Audit": false, "VM.PowerMgmt": false},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Permissions() = %v, want %v", got, want)

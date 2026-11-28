@@ -1,6 +1,7 @@
 package proxmox
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -11,6 +12,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
 var ref101 = VMRef{Node: "pve", VMID: 101}
@@ -43,7 +46,7 @@ func taggedConfig(tags string) http.HandlerFunc {
 }
 
 func TestCreateVM(t *testing.T) {
-	const config105 = "GET /nodes/pve/qemu/105/config"
+	const config105 = "GET /nodes/pve/qemu/105/config?current=1"
 
 	t.Run("new vmid posts the spec", func(t *testing.T) {
 		f := newFakeAPI(t, map[string]http.HandlerFunc{config105: missingConfig(105)})
@@ -92,6 +95,40 @@ func TestCreateVM(t *testing.T) {
 		}
 	})
 
+	t.Run("existing vmid with our tag on another node names it", func(t *testing.T) {
+		f := newFakeAPI(t, nil)
+		_, err := f.driver(t).CreateVM(t.Context(), "pve2", newSpec(101, "grappleberry"))
+		if err == nil || !strings.Contains(err.Error(), "on node pve") {
+			t.Fatalf("CreateVM() error = %v, want it to name node pve", err)
+		}
+		if f.called("POST /nodes/pve2/qemu") {
+			t.Fatal("CreateVM() posted a second VM for a vmid living on another node")
+		}
+	})
+
+	t.Run("vmid locked by an in-flight create is reported as such", func(t *testing.T) {
+		f := newFakeAPI(t, map[string]http.HandlerFunc{config105: jsonHandler(http.StatusOK, `{"data":{"lock":"create","digest":"d"}}`)})
+		_, err := f.driver(t).CreateVM(t.Context(), "pve", newSpec(105, "grappleberry"))
+		if err == nil || !strings.Contains(err.Error(), "being created") {
+			t.Fatalf("CreateVM() error = %v, want it to say vm 105 is being created", err)
+		}
+		if f.called("POST /nodes/pve/qemu") {
+			t.Fatal("CreateVM() posted over a VM being created")
+		}
+	})
+
+	t.Run("vmid listed with a create lock is reported as such", func(t *testing.T) {
+		row := `{"id":"qemu/105","lock":"create","name":"grappleberry-worker-0","node":"pve","tags":"grappleberry","type":"qemu","vmid":105}`
+		f := newFakeAPI(t, map[string]http.HandlerFunc{"GET /cluster/resources?type=vm": jsonHandler(http.StatusOK, `{"data":[`+row+`]}`)})
+		_, err := f.driver(t).CreateVM(t.Context(), "pve", newSpec(105, "grappleberry"))
+		if err == nil || !strings.Contains(err.Error(), "being created") {
+			t.Fatalf("CreateVM() error = %v, want it to say vm 105 is being created", err)
+		}
+		if f.called("POST /nodes/pve/qemu") {
+			t.Fatal("CreateVM() posted over a VM being created")
+		}
+	})
+
 	t.Run("vmid unlisted but tagged on the node is a no-op", func(t *testing.T) {
 		f := newFakeAPI(t, map[string]http.HandlerFunc{config105: taggedConfig("grappleberry;okd")})
 		task, err := f.driver(t).CreateVM(t.Context(), "pve", newSpec(105, "grappleberry"))
@@ -116,8 +153,12 @@ func TestCreateVM(t *testing.T) {
 			t.Fatal("CreateVM() posted over a foreign VM")
 		}
 	})
+}
 
-	t.Run("post refused as already existing is a no-op once tagged", func(t *testing.T) {
+func TestCreateVMPostRefused(t *testing.T) {
+	const config105 = "GET /nodes/pve/qemu/105/config?current=1"
+
+	t.Run("already existing is a no-op once tagged", func(t *testing.T) {
 		var reads atomic.Int32
 		f := newFakeAPI(t, map[string]http.HandlerFunc{
 			config105: func(w http.ResponseWriter, r *http.Request) {
@@ -141,7 +182,7 @@ func TestCreateVM(t *testing.T) {
 		}
 	})
 
-	t.Run("post refused as already existing stays an error when foreign", func(t *testing.T) {
+	t.Run("already existing stays an error when foreign", func(t *testing.T) {
 		var reads atomic.Int32
 		f := newFakeAPI(t, map[string]http.HandlerFunc{
 			config105: func(w http.ResponseWriter, r *http.Request) {
@@ -249,6 +290,16 @@ func TestDeleteVM(t *testing.T) {
 		task, err := f.driver(t).DeleteVM(t.Context(), VMRef{Node: "pve2", VMID: 200})
 		if err == nil || !strings.Contains(err.Error(), "on node pve") || task != (Task{}) {
 			t.Fatalf("DeleteVM() = %+v, %v; want an error naming node pve", task, err)
+		}
+	})
+
+	t.Run("stale same-node listing row is already deleted", func(t *testing.T) {
+		f := newFakeAPI(t, map[string]http.HandlerFunc{
+			"DELETE /nodes/pve/qemu/101?purge=1&destroy-unreferenced-disks=1": missingConfig(101),
+		})
+		task, err := f.driver(t).DeleteVM(t.Context(), ref101)
+		if err != nil || task != (Task{}) {
+			t.Fatalf("DeleteVM() = %+v, %v; want zero Task and nil error", task, err)
 		}
 	})
 
@@ -434,7 +485,9 @@ func TestWaitTask(t *testing.T) {
 		}
 	})
 
-	t.Run("transient errors are retried", func(t *testing.T) {
+	t.Run("transient errors are retried and warned once", func(t *testing.T) {
+		var logs bytes.Buffer
+		t.Cleanup(logutil.Redirect(&logs))
 		h, polls := taskStatusHandler("running", "OK")
 		var calls atomic.Int32
 		f := newFakeAPI(t, map[string]http.HandlerFunc{key: func(w http.ResponseWriter, r *http.Request) {
@@ -450,6 +503,9 @@ func TestWaitTask(t *testing.T) {
 		if got := polls.Load(); got != 2 {
 			t.Fatalf("polled %d times after the retries, want 2", got)
 		}
+		if got := strings.Count(logs.String(), "level=WARN"); got != 1 {
+			t.Fatalf("logged %d warnings for two identical poll failures, want 1:\n%s", got, logs.String())
+		}
 	})
 
 	t.Run("persistent errors surface after bounded retries", func(t *testing.T) {
@@ -464,6 +520,33 @@ func TestWaitTask(t *testing.T) {
 		}
 		if got := calls.Load(); got != 1+waitTaskRetries {
 			t.Fatalf("polled %d times, want %d", got, 1+waitTaskRetries)
+		}
+	})
+
+	t.Run("null status is retried", func(t *testing.T) {
+		h, polls := taskStatusHandler("running", "OK")
+		var calls atomic.Int32
+		f := newFakeAPI(t, map[string]http.HandlerFunc{key: func(w http.ResponseWriter, r *http.Request) {
+			if calls.Add(1) == 1 {
+				jsonHandler(http.StatusOK, `{"data":null}`)(w, r)
+				return
+			}
+			h(w, r)
+		}})
+		if err := fastDriver(t, f).WaitTask(t.Context(), shutdown); err != nil {
+			t.Fatalf("WaitTask(): %v", err)
+		}
+		if got := polls.Load(); got != 2 {
+			t.Fatalf("polled %d times after the null reply, want 2", got)
+		}
+	})
+
+	t.Run("persistent null status is not a task failure", func(t *testing.T) {
+		f := newFakeAPI(t, map[string]http.HandlerFunc{key: jsonHandler(http.StatusOK, `{"data":null}`)})
+		err := fastDriver(t, f).WaitTask(t.Context(), shutdown)
+		var failed *TaskFailed
+		if err == nil || errors.As(err, &failed) || err.Error() == "" {
+			t.Fatalf("WaitTask() error = %v (%T), want a non-empty error that is not *TaskFailed", err, err)
 		}
 	})
 

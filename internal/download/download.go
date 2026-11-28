@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -19,16 +20,13 @@ import (
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
-// DefaultTimeout bounds a Fetch call when WithTimeout is unset; aliases httputil.TimeoutDownload.
-const DefaultTimeout = httputil.TimeoutDownload
+// responseHeaderTimeout bounds dial, TLS and headers per attempt; the body answers to ctx alone.
+var responseHeaderTimeout = 30 * time.Second
 
 type dlConfig struct {
 	url              string
 	outputPath       string
 	expectedChecksum string
-	description      string
-	timeout          time.Duration
-	overwrite        bool
 	logger           *slog.Logger
 }
 
@@ -39,15 +37,6 @@ type FetchOption func(*dlConfig)
 func WithFetchChecksum(sum string) FetchOption {
 	return func(c *dlConfig) { c.expectedChecksum = sum }
 }
-
-// WithDescription sets the human-readable name used in log and error messages.
-func WithDescription(d string) FetchOption { return func(c *dlConfig) { c.description = d } }
-
-// WithTimeout overrides the per-fetch HTTP timeout (default: DefaultTimeout).
-func WithTimeout(d time.Duration) FetchOption { return func(c *dlConfig) { c.timeout = d } }
-
-// WithOverwrite forces a re-download even when a file with a matching checksum exists.
-func WithOverwrite(v bool) FetchOption { return func(c *dlConfig) { c.overwrite = v } }
 
 // WithLogger injects a structured logger; nil falls back to logutil.NopLogger.
 func WithLogger(l *slog.Logger) FetchOption {
@@ -98,14 +87,7 @@ func Fetch(ctx context.Context, url, dst string, opts ...FetchOption) error {
 	for _, o := range opts {
 		o(cfg)
 	}
-	if cfg.timeout == 0 {
-		cfg.timeout = DefaultTimeout
-	}
-	if cfg.description == "" {
-		cfg.description = filepath.Base(dst)
-	}
-
-	if !cfg.overwrite && canSkipDownload(ctx, cfg) {
+	if canSkipDownload(ctx, cfg) {
 		return nil
 	}
 
@@ -116,14 +98,17 @@ func Fetch(ctx context.Context, url, dst string, opts ...FetchOption) error {
 	filename := filepath.Base(dst)
 	cfg.logger.Info("download: fetching", "file", filename)
 
-	client := httputil.New(cfg.timeout)
+	transport := newTransport()
+	defer transport.CloseIdleConnections()
+	client := httputil.New(0)
+	client.Transport = transport
 
 	attempts, err := retryDownload(ctx, func() error {
 		return fetchToFile(ctx, client, cfg)
 	})
 	if err != nil {
 		cfg.logger.Warn("download: giving up after retries", "file", filename, "attempts", attempts, "err", err)
-		return &errtypes.NetworkError{Msg: fmt.Sprintf("download failed for %s", cfg.description), Err: err}
+		return &errtypes.NetworkError{Msg: "download " + filename, Err: err}
 	}
 
 	if err := verifyDownloadedFile(ctx, dst, cfg.expectedChecksum, cfg.logger); err != nil {
@@ -131,6 +116,14 @@ func Fetch(ctx context.Context, url, dst string, opts ...FetchOption) error {
 		return err
 	}
 	return nil
+}
+
+func newTransport() *http.Transport {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.DialContext = (&net.Dialer{Timeout: responseHeaderTimeout}).DialContext
+	transport.TLSHandshakeTimeout = responseHeaderTimeout
+	transport.ResponseHeaderTimeout = responseHeaderTimeout
+	return transport
 }
 
 // fetchToFile runs one attempt; a mid-attempt failure removes the partial file
@@ -158,8 +151,8 @@ func fetchToFile(ctx context.Context, client *http.Client, cfg *dlConfig) error 
 	}
 
 	// 0o600 is tightened only for transit; consumers set their own final mode.
-	// O_NOFOLLOW rejects a symlink here — the open runs as root under sudo
-	// re-exec, so following one would write attacker content elsewhere.
+	// O_NOFOLLOW refuses a symlink planted at dst, so a fetch can never be
+	// steered into overwriting another file.
 	outFile, err := os.OpenFile(cfg.outputPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC|syscall.O_NOFOLLOW, 0o600)
 	if err != nil {
 		return fmt.Errorf("create output file: %w", err)

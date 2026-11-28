@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -45,10 +45,11 @@ func storagePath(node, storage, rest string) string {
 	return nodePath(node, "storage/"+url.PathEscape(storage)+"/"+rest)
 }
 
-// UploadISO streams path to the node's storage without buffering the file;
-// the request bypasses go-proxmox because its uploader ranges a map and so
-// emits the multipart fields in random order (luthermonson/go-proxmox#352).
-func (d *driver) UploadISO(ctx context.Context, node, storage, path, sha256 string) (Task, error) {
+// UploadISO streams path to the node's storage as the volume name without
+// buffering the file; the request bypasses go-proxmox because
+// Client.UploadReader takes no ctx and Storage.upload needs a *Storage
+// handle, so cancellation would never reach the upload.
+func (d *driver) UploadISO(ctx context.Context, node, storage, path, name, sha256 string) (Task, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return Task{}, fmt.Errorf("upload iso: %w", err)
@@ -59,7 +60,7 @@ func (d *driver) UploadISO(ctx context.Context, node, storage, path, sha256 stri
 		return Task{}, fmt.Errorf("upload iso: %w", err)
 	}
 
-	head, tail, contentType, err := isoMultipart(filepath.Base(path), sha256)
+	head, tail, contentType, err := isoMultipart(name, sha256)
 	if err != nil {
 		return Task{}, fmt.Errorf("upload iso: %w", err)
 	}
@@ -84,7 +85,9 @@ func (d *driver) UploadISO(ctx context.Context, node, storage, path, sha256 stri
 	case res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden:
 		return Task{}, fmt.Errorf("upload iso: %w", ErrPermission)
 	case res.StatusCode >= http.StatusMultipleChoices:
-		return Task{}, fmt.Errorf("upload iso: %w", mapAPIError(errors.New(res.Status)))
+		// A 400's body carries the per-parameter detail the status line lacks.
+		body, _ := io.ReadAll(io.LimitReader(res.Body, errorBodyLimit))
+		return Task{}, fmt.Errorf("upload iso: %w", mapAPIError(errors.New(statusWithMessage(res.Status, body))))
 	}
 	var envelope struct {
 		Data string `json:"data"`
@@ -115,4 +118,34 @@ func isoMultipart(filename, sha256 string) (head, tail []byte, contentType strin
 	}
 	all := buf.Bytes()
 	return all[:split], all[split:], w.FormDataContentType(), nil
+}
+
+// errorBodyLimit bounds how much of a failed reply's body is read for its message.
+const errorBodyLimit = 64 << 10
+
+// statusWithMessage appends PVE's JSON message to a status line that does not already carry it.
+func statusWithMessage(status string, body []byte) string {
+	if msg := pveMessage(body); msg != "" && !strings.Contains(status, msg) {
+		return status + ": " + msg
+	}
+	return status
+}
+
+// pveMessage joins the envelope's message with its per-parameter errors, which a 400 carries.
+func pveMessage(body []byte) string {
+	var envelope struct {
+		Message string          `json:"message"`
+		Errors  json.RawMessage `json:"errors"`
+	}
+	if json.Unmarshal(body, &envelope) != nil {
+		return ""
+	}
+	msg, errs := strings.TrimSpace(envelope.Message), strings.TrimSpace(string(envelope.Errors))
+	switch {
+	case msg == "":
+		return errs
+	case errs == "":
+		return msg
+	}
+	return msg + " " + errs
 }

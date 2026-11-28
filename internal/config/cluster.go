@@ -162,11 +162,11 @@ func (l *LifecycleConfig) UnmarshalJSON(data []byte) error {
 	if err := dec.Decode(&w); err != nil {
 		return err
 	}
-	timeout, err := parseDuration("lifecycle.before_next_node.timeout", w.BeforeNextNode.Timeout)
+	timeout, err := parseDuration(FieldLifecycleHookTimeout, w.BeforeNextNode.Timeout)
 	if err != nil {
 		return err
 	}
-	drain, err := parseDuration("lifecycle.drain_timeout", w.DrainTimeout)
+	drain, err := parseDuration(FieldLifecycleDrainTimeout, w.DrainTimeout)
 	if err != nil {
 		return err
 	}

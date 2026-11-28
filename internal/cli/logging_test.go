@@ -12,6 +12,7 @@ import (
 
 	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 func TestOpenLogFileRefusesSymlink(t *testing.T) {
@@ -52,8 +53,6 @@ func TestOpenLogFileAcceptsRegularFile(t *testing.T) {
 	_ = f.Close()
 }
 
-// resetLoggingState snapshots and restores logging globals so file-sink tests
-// don't bleed into each other.
 func resetLoggingState(t *testing.T) {
 	t.Helper()
 	prevLogFile, prevFormat, prevLevel := logFile, logFormat, logLevel
@@ -96,8 +95,8 @@ func TestConfigureLogging_DefaultSinkRedacts(t *testing.T) {
 	if err := configureLogging(initCmd); err != nil {
 		t.Fatalf("configureLogging: %v", err)
 	}
-	if runLogPath == "" || filepath.Base(runLogPath) != logutil.DefaultLogFileName {
-		t.Fatalf("runLogPath = %q, want <workspace>/%s", runLogPath, logutil.DefaultLogFileName)
+	if runLogPath == "" || filepath.Base(runLogPath) != workspace.LogFile {
+		t.Fatalf("runLogPath = %q, want <workspace>/%s", runLogPath, workspace.LogFile)
 	}
 	if logFileCloser == nil {
 		t.Fatal("logFileCloser not set for default sink")
@@ -121,7 +120,6 @@ func TestConfigureLogging_DefaultSinkRedacts(t *testing.T) {
 	}
 }
 
-// stderr is piped under go test, so configureLogging auto-selects json here.
 func TestConfigureLogging_InitMilestonesSurviveNonTTY(t *testing.T) {
 	resetLoggingState(t)
 	dir := t.TempDir()
@@ -147,6 +145,22 @@ func TestConfigureLogging_InitMilestonesSurviveNonTTY(t *testing.T) {
 	}
 }
 
+func TestConfigureLogging_DefaultSinkFollowsOutputFile(t *testing.T) {
+	resetLoggingState(t)
+	t.Chdir(t.TempDir())
+	target := t.TempDir()
+	orig := initOutputFile
+	initOutputFile = filepath.Join(target, "okdctl.yaml")
+	t.Cleanup(func() { initOutputFile = orig })
+
+	if err := configureLogging(initCmd); err != nil {
+		t.Fatalf("configureLogging: %v", err)
+	}
+	if want := workspace.LogPath(target); runLogPath != want {
+		t.Fatalf("runLogPath = %q, want %q beside --output-file", runLogPath, want)
+	}
+}
+
 func TestConfigureLogging_LogFilePrecedence(t *testing.T) {
 	resetLoggingState(t)
 	dir := t.TempDir()
@@ -162,7 +176,7 @@ func TestConfigureLogging_LogFilePrecedence(t *testing.T) {
 	if _, err := os.Stat(logFile); err != nil {
 		t.Fatalf("--log-file target not created: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, logutil.DefaultLogFileName)); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, workspace.LogFile)); !os.IsNotExist(err) {
 		t.Fatalf("default sink created despite --log-file: stat err = %v", err)
 	}
 }
@@ -178,23 +192,11 @@ func TestConfigureLogging_NoDefaultSinkForReadOnlyCmds(t *testing.T) {
 	if runLogPath != "" || logFileCloser != nil {
 		t.Fatalf("file sink active for version: runLogPath=%q closer=%v", runLogPath, logFileCloser)
 	}
-	if _, err := os.Stat(filepath.Join(dir, logutil.DefaultLogFileName)); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, workspace.LogFile)); !os.IsNotExist(err) {
 		t.Fatalf("okdctl.log created for a read-only command: stat err = %v", err)
 	}
 }
 
-// TestLogFailureToSinkCarriesRunIDAndRespectsQuiet exercises
-// logFailureToSink — the path announceFailure takes when it prints the
-// pretty box straight to stderr instead of going through the logutil
-// facade, so a boxed failure on a TTY still reaches the persistent sink.
-// Secret redaction itself is covered at the logutil.RedactHandler layer
-// (internal/logutil/redact_test.go); this only pins logFailureToSink's own
-// contract — the failure lands with run_id attached, and --quiet (which
-// only raises the effective level to error, per effectiveLogLevel) does
-// NOT swallow it, since it's an Error-level write itself — quiet must
-// never hide the one thing it's reporting. The sink is always text (see
-// ringSlog's and buildSinkLogger's own "never mix text and json in one
-// physical okdctl.log" invariant), not whatever --log-format chose.
 func TestLogFailureToSinkCarriesRunIDAndSurvivesQuiet(t *testing.T) {
 	oldSink, oldLevel := runLogSink, logLevel
 	oldQuiet, oldVerbose := logQuiet, logVerbose

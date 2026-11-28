@@ -15,22 +15,32 @@ func vmPath(ref VMRef, rest string) string {
 	return nodePath(ref.Node, "qemu/"+strconv.Itoa(ref.VMID)+rest)
 }
 
+const lockCreate = "create"
+
 func haSID(ref VMRef) string {
 	return "vm:" + strconv.Itoa(ref.VMID)
 }
 
-// CreateVM is idempotent by VMID: a VM already carrying spec.Tag yields a
-// zero Task and any other existing VM is an error, so a create whose
-// WaitTask timed out can be retried. The cluster listing catches a VMID on
-// another node; the target node's config catches one pvestatd has not
-// published yet.
+// CreateVM is idempotent by VMID: a VM already carrying spec.Tag on node
+// yields a zero Task, so a create whose WaitTask timed out can be retried,
+// while one on another node, one still locked by its own create, or any
+// other VM is an error. The cluster listing catches a VMID on another node
+// and carries the lock; the target node's config catches one pvestatd has
+// not published yet.
 func (d *driver) CreateVM(ctx context.Context, node string, spec VMSpec) (Task, error) { //nolint:gocritic // hugeParam: Driver passes specs by value
 	vms, err := d.ListVMs(ctx)
 	if err != nil {
 		return Task{}, fmt.Errorf("create vm %d: %w", spec.VMID, err)
 	}
 	if i := slices.IndexFunc(vms, func(vm VMSummary) bool { return vm.VMID == spec.VMID }); i >= 0 {
-		return Task{}, existingVM(&spec, vms[i].Node, vms[i].Name, vms[i].Tags)
+		vm := vms[i]
+		if vm.Lock == lockCreate {
+			return Task{}, creatingErr(&spec, vm.Node)
+		}
+		if err := existingVM(&spec, vm.Node, vm.Name, vm.Tags); err != nil || vm.Node == node {
+			return Task{}, err
+		}
+		return Task{}, fmt.Errorf("create vm %d: vm %q is on node %s, not %s", spec.VMID, vm.Name, vm.Node, node)
 	}
 	ref := VMRef{Node: node, VMID: spec.VMID}
 	if exists, err := d.vmExists(ctx, ref, &spec); exists || err != nil {
@@ -53,8 +63,14 @@ func (d *driver) vmExists(ctx context.Context, ref VMRef, spec *VMSpec) (bool, e
 		return false, nil
 	case err != nil:
 		return false, fmt.Errorf("create vm %d: %w", spec.VMID, err)
+	case cfg.Lock == lockCreate:
+		return true, creatingErr(spec, ref.Node)
 	}
 	return true, existingVM(spec, ref.Node, cfg.Name, cfg.Tags)
+}
+
+func creatingErr(spec *VMSpec, node string) error {
+	return fmt.Errorf("create vm %d: vm is being created on %s", spec.VMID, node)
 }
 
 func existingVM(spec *VMSpec, node, name string, tags []string) error {
@@ -65,9 +81,11 @@ func existingVM(spec *VMSpec, node, name string, tags []string) error {
 		spec.VMID, name, node, strings.Join(tags, ";"))
 }
 
+// VMConfig reads the running configuration (current=1); the values PVE has
+// queued for the next power cycle are VMPending's.
 func (d *driver) VMConfig(ctx context.Context, ref VMRef) (VMConfig, error) {
 	var raw map[string]any
-	path := vmPath(ref, "/config")
+	path := vmPath(ref, "/config?current=1")
 	if err := d.get(ctx, path, &raw); err != nil {
 		return VMConfig{}, err
 	}
@@ -138,8 +156,10 @@ func (d *driver) DetachISO(ctx context.Context, ref VMRef) (Task, error) {
 	return d.task(ctx, http.MethodPost, ref.Node, vmPath(ref, "/config"), form)
 }
 
-// DeleteVM is idempotent: a VM PVE no longer has anywhere yields a zero Task,
-// while one that moved off ref.Node is an error naming its node.
+// DeleteVM purges whatever VM holds ref.VMID, so the caller must take ref
+// from a listing filtered on the cluster's tag. It is idempotent: a VM PVE
+// no longer has anywhere yields a zero Task, while one that moved off
+// ref.Node is an error naming its node.
 func (d *driver) DeleteVM(ctx context.Context, ref VMRef) (Task, error) {
 	task, err := d.task(ctx, http.MethodDelete, ref.Node, vmPath(ref, "?purge=1&destroy-unreferenced-disks=1"), nil)
 	if !errors.Is(err, ErrNotFound) {
@@ -149,7 +169,8 @@ func (d *driver) DeleteVM(ctx context.Context, ref VMRef) (Task, error) {
 	if listErr != nil {
 		return Task{}, fmt.Errorf("delete vm %d: %w", ref.VMID, errors.Join(err, listErr))
 	}
-	if i := slices.IndexFunc(vms, func(vm VMSummary) bool { return vm.VMID == ref.VMID }); i >= 0 {
+	// The listing lags pvestatd by a few seconds, so a row still on ref.Node is the VM just deleted.
+	if i := slices.IndexFunc(vms, func(vm VMSummary) bool { return vm.VMID == ref.VMID }); i >= 0 && vms[i].Node != ref.Node {
 		return Task{}, fmt.Errorf("delete vm %d: not on %s, it is on node %s", ref.VMID, ref.Node, vms[i].Node)
 	}
 	return Task{}, nil

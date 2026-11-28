@@ -2,6 +2,7 @@ package proxmox
 
 import (
 	"context"
+	"errors"
 	"net/url"
 	"slices"
 	"strings"
@@ -35,11 +36,11 @@ func (d *driver) Permissions(ctx context.Context) (Permissions, error) {
 	}
 	perms := make(Permissions, len(raw))
 	for path, privs := range raw {
-		granted := make(map[string]bool, len(privs))
+		propagate := make(map[string]bool, len(privs))
 		for priv, v := range privs {
-			granted[priv] = v != 0
+			propagate[priv] = v != 0
 		}
-		perms[path] = granted
+		perms[path] = propagate
 	}
 	return perms, nil
 }
@@ -53,8 +54,7 @@ type nodeRow struct {
 }
 
 type nodeStatus struct {
-	PVEVersion string `json:"pveversion"`
-	CPUInfo    struct {
+	CPUInfo struct {
 		Model string `json:"model"`
 		CPUs  num    `json:"cpus"`
 		Flags string `json:"flags"`
@@ -65,8 +65,9 @@ type nodeStatus struct {
 	} `json:"memory"`
 }
 
-// Nodes reads /nodes/{node}/status only for online nodes; an offline node
-// keeps the coarser figures the /nodes listing carries.
+// Nodes reads /nodes/{node}/status only for online nodes; an offline node,
+// or one the token lacks Sys.Audit on, keeps the coarser figures the /nodes
+// listing carries and no CPU flags.
 func (d *driver) Nodes(ctx context.Context) ([]NodeInfo, error) {
 	var rows []nodeRow
 	if err := d.get(ctx, "/nodes", &rows); err != nil {
@@ -82,21 +83,27 @@ func (d *driver) Nodes(ctx context.Context) ([]NodeInfo, error) {
 			CPUs:        int(r.MaxCPU), //nolint:gosec // G115: CPU counts are small
 		}
 		if r.Status == nodeStatusOnline {
-			var st nodeStatus
-			if err := d.get(ctx, nodePath(r.Node, "status"), &st); err != nil {
+			if err := d.nodeStatus(ctx, &info); err != nil && !errors.Is(err, ErrPermission) {
 				return nil, err
 			}
-			info.MemTotalMiB = bytesToMiB(uint64(st.Memory.Total))
-			info.MemUsedMiB = bytesToMiB(uint64(st.Memory.Used))
-			info.CPUs = int(st.CPUInfo.CPUs) //nolint:gosec // G115: CPU counts are small
-			info.CPUModel = st.CPUInfo.Model
-			info.CPUFlags = strings.Fields(st.CPUInfo.Flags)
-			info.PVEVersion = st.PVEVersion
 		}
 		nodes = append(nodes, info)
 	}
 	slices.SortFunc(nodes, func(a, b NodeInfo) int { return strings.Compare(a.Name, b.Name) })
 	return nodes, nil
+}
+
+func (d *driver) nodeStatus(ctx context.Context, info *NodeInfo) error {
+	var st nodeStatus
+	if err := d.get(ctx, nodePath(info.Name, "status"), &st); err != nil {
+		return err
+	}
+	info.MemTotalMiB = bytesToMiB(uint64(st.Memory.Total))
+	info.MemUsedMiB = bytesToMiB(uint64(st.Memory.Used))
+	info.CPUs = int(st.CPUInfo.CPUs) //nolint:gosec // G115: CPU counts are small
+	info.CPUModel = st.CPUInfo.Model
+	info.CPUFlags = strings.Fields(st.CPUInfo.Flags)
+	return nil
 }
 
 type storageRow struct {
@@ -155,28 +162,29 @@ type resourceRow struct {
 	Node   string `json:"node"`
 	Name   string `json:"name"`
 	Status string `json:"status"`
+	Lock   string `json:"lock"`
 	Tags   string `json:"tags"`
 	Pool   string `json:"pool"`
 	MaxMem num    `json:"maxmem"`
 	MaxCPU num    `json:"maxcpu"`
 }
 
-// ListVMs returns qemu guests only (templates included, containers
-// dropped), sorted by VMID, with Tags split on ';' into whole tokens.
+// ListVMs returns every guest, containers and templates included, sorted
+// by VMID, with Tags split on ';' into whole tokens.
 func (d *driver) ListVMs(ctx context.Context) ([]VMSummary, error) {
 	var rows []resourceRow
 	if err := d.get(ctx, "/cluster/resources?type=vm", &rows); err != nil {
 		return nil, err
 	}
 	vms := make([]VMSummary, 0, len(rows))
-	for _, r := range rows {
-		if r.Type != resourceTypeQEMU {
-			continue
-		}
+	for i := range rows {
+		r := &rows[i]
 		vms = append(vms, VMSummary{
 			VMRef:     VMRef{Node: r.Node, VMID: int(r.VMID)}, //nolint:gosec // G115: vmids are small positive integers
+			Type:      r.Type,
 			Name:      r.Name,
 			Status:    r.Status,
+			Lock:      r.Lock,
 			Tags:      splitList(r.Tags, ';'),
 			Pool:      r.Pool,
 			MaxMemMiB: bytesToMiB(uint64(r.MaxMem)),

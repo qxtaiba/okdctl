@@ -1,35 +1,12 @@
 package render
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
-
-// presented wraps an error already rendered as a rich box; Unwrap keeps
-// errors.As reaching the underlying errtypes value.
-type presented struct{ err error }
-
-// Presented marks err as already surfaced by a command-owned box; nil in, nil out.
-func Presented(err error) error {
-	if err == nil {
-		return nil
-	}
-	return &presented{err: err}
-}
-
-func (p *presented) Error() string { return p.err.Error() }
-func (p *presented) Unwrap() error { return p.err }
-
-// IsPresented reports whether err (or anything it wraps) was already rendered
-// by a command-owned box.
-func IsPresented(err error) bool {
-	var p *presented
-	return errors.As(err, &p)
-}
 
 // ErrorSummary renders err in the deploy-summary boxed chrome, using
 // errtypes.Describe (never re-parsed Error() text) for the kind and hint,

@@ -18,30 +18,27 @@ type versionsLoadedMsg struct {
 	err        error
 }
 
-// fetchVersions runs the release fetch synchronously, tagged with the
-// step's current generation; startFetch is the production path that bumps
-// the generation and wraps this fetch in a tea.Cmd closed over immutable
-// snapshots, so it is safe to run on bubbletea's own command goroutine.
+// fetchVersions runs the release fetch synchronously under the visit.
 func (s *DistributionStep) fetchVersions() tea.Msg {
-	return doFetchVersions(s.versionFetcher, s.generation)
+	return doFetchVersions(s.Context(), s.versionFetcher, s.generation)
 }
 
-// startFetch resets the step into the loading phase and issues a
-// generation-tagged release fetch over a snapshotted fetcher, so the
-// returned tea.Cmd never touches s once it is handed to bubbletea.
+// startFetch issues a generation-tagged fetch bounded by the visit, closed
+// over snapshots so the tea.Cmd never touches s.
 func (s *DistributionStep) startFetch() tea.Cmd {
 	s.phase = phaseVersionLoading
 	s.loadError = nil
 	s.generation++
 	generation := s.generation
 	fetcher := s.versionFetcher
+	parent := s.Context()
 	return func() tea.Msg {
-		return doFetchVersions(fetcher, generation)
+		return doFetchVersions(parent, fetcher, generation)
 	}
 }
 
-func doFetchVersions(fetcher VersionFetcher, generation uint64) tea.Msg {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func doFetchVersions(parent context.Context, fetcher VersionFetcher, generation uint64) tea.Msg {
+	ctx, cancel := context.WithTimeout(parent, 30*time.Second)
 	defer cancel()
 
 	series, err := fetcher.FetchVersions(ctx)
@@ -51,10 +48,8 @@ func doFetchVersions(fetcher VersionFetcher, generation uint64) tea.Msg {
 func (s *DistributionStep) updateVersionSelector() {
 	var options []components.Option
 
-	// The bug-1 ruling, extended to the version selector: a configured
-	// version the fetched window no longer offers leads the list as a
-	// selectable row instead of anchoring nothing, and enter confirms it
-	// byte-identical.
+	// A configured version the catalog no longer offers leads the list as a
+	// selectable row, and enter confirms it byte-identical.
 	if s.injectsCurrentVersion() {
 		options = append(options, components.Option{
 			ID:          s.currentVersion,
@@ -120,9 +115,7 @@ func (s *DistributionStep) updateVersionSelector() {
 	s.versionSelector.SetSelectedByID(s.selectedVersion)
 }
 
-// seriesHasCurrent reports whether the loaded config's current version is
-// one of series' patch releases, so a collapsed row can carry the chip its
-// hidden patch would.
+// seriesHasCurrent lets a collapsed row carry the chip its hidden patch would.
 func (s *DistributionStep) seriesHasCurrent(series *releases.OKDReleaseSeries) bool {
 	if s.currentVersion == "" {
 		return false
@@ -135,9 +128,8 @@ func (s *DistributionStep) seriesHasCurrent(series *releases.OKDReleaseSeries) b
 	return false
 }
 
-// injectsCurrentVersion reports whether the configured current version needs
-// a synthetic row: non-empty, not a series id, and absent from every fetched
-// series.
+// injectsCurrentVersion reports a configured version absent from every
+// fetched series.
 func (s *DistributionStep) injectsCurrentVersion() bool {
 	if s.currentVersion == "" || strings.HasPrefix(s.currentVersion, "minor:") || len(s.okdSeries) == 0 {
 		return false

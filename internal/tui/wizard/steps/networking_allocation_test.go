@@ -104,3 +104,33 @@ func TestNetworkingWithoutASessionConfigOmitsAllocationPreview(t *testing.T) {
 		}
 	}
 }
+
+func networkingValues(start string) map[string]string {
+	values := previewValues(start)
+	values[config.FieldNetworkingGateway] = "192.168.1.1"
+	values[config.FieldNetworkingDNS] = "192.168.1.1"
+	return values
+}
+
+func TestNetworkingCrossFieldsFollowConfigValidate(t *testing.T) {
+	for name, tc := range map[string]struct{ start, wantLabel string }{
+		"vip on a master":     {"192.168.1.157", "api vip"},
+		"range leaves cidr":   {"192.168.1.250", "node ip start"},
+		"master on broadcast": {"192.168.1.253", "node ip start"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := networkingValidate(networkingValues(tc.start), config.DefaultConfig())
+			if err == nil || !strings.HasPrefix(err.Error(), tc.wantLabel) {
+				t.Fatalf("networkingValidate = %v, want an error on %s", err, tc.wantLabel)
+			}
+		})
+	}
+	if err := networkingValidate(networkingValues("192.168.1.150"), config.DefaultConfig()); err != nil {
+		t.Fatalf("a layout config.Validate accepts was refused: %v", err)
+	}
+	cfg := config.DefaultConfig()
+	cfg.Workers.Count = 100
+	if err := networkingValidate(networkingValues("192.168.1.150"), cfg); err == nil {
+		t.Fatal("the session's worker count was ignored: 100 workers from .160 leave the /24")
+	}
+}

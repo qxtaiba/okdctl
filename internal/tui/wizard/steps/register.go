@@ -1,11 +1,15 @@
 package steps
 
-import "github.com/qxtaiba/okdctl/internal/tui/wizard"
+import (
+	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/credentials"
+	"github.com/qxtaiba/okdctl/internal/tui/wizard"
+)
 
-// RegisterAll registers every configure-wizard step factory on b in the
-// order wizard.DefaultConfig lists them.
-func RegisterAll(b *wizard.StepBuilder) {
-	capacity := &WizardCapacitySnapshot{}
+// RegisterAll registers every configure step factory on b over the session
+// config cfg.
+func RegisterAll(b *wizard.StepBuilder, cfg *config.Config) {
+	capacity := &WizardCapacitySnapshot{cfg: cfg}
 	var proxmox *wizard.DataDrivenStep
 	secrets := func() wizard.Secrets {
 		if proxmox == nil {
@@ -21,17 +25,37 @@ func RegisterAll(b *wizard.StepBuilder) {
 		return proxmox, nil
 	})
 	b.Register(wizard.StepTypeNodePlacement, func() (wizard.WizardStep, wizard.StepState) {
-		return NewNodePlacementStep().withCapacity(capacity).withSecrets(secrets), nil
+		return NewNodePlacementStep().withConfig(cfg).withCapacity(capacity).withSecrets(secrets), nil
 	})
 	b.Register(wizard.StepTypeNetworking, func() (wizard.WizardStep, wizard.StepState) { return NewNetworkingStep(capacity), nil })
-	b.Register(wizard.StepTypeResources, func() (wizard.WizardStep, wizard.StepState) { return NewResourcesStep(capacity) })
+	b.Register(wizard.StepTypeResources, func() (wizard.WizardStep, wizard.StepState) {
+		step, state := NewResourcesStep(capacity)
+		state.Cfg = cfg
+		return step, state
+	})
 	b.Register(wizard.StepTypeFiles, func() (wizard.WizardStep, wizard.StepState) { return NewFilesStep(), nil })
 	b.Register(wizard.StepTypeAdvanced, func() (wizard.WizardStep, wizard.StepState) { return NewAdvancedStep(), nil })
 	b.Register(wizard.StepTypeReview, func() (wizard.WizardStep, wizard.StepState) { return NewReviewStep(), capacity })
 }
 
-// configurePhases groups every configure-wizard step into the header trail's
-// four phases.
+// SeedCredentials seeds the proxmox step's TLS toggle and node placement's
+// discovery from the sidecar init loaded; saved must outlive the flow.
+func SeedCredentials(built wizard.BuiltSteps, saved *credentials.ProxmoxCredentials) {
+	if saved == nil {
+		return
+	}
+	for _, step := range built.Steps {
+		switch s := step.(type) {
+		case *wizard.DataDrivenStep:
+			if s.ID() == wizard.StepIDProxmox && saved.Insecure {
+				s.SetValue(fieldInsecure, valYes)
+			}
+		case *NodePlacementStep:
+			s.saved = saved
+		}
+	}
+}
+
 func configurePhases() []wizard.Stage {
 	return []wizard.Stage{
 		{Label: "connect", Steps: []wizard.StepID{wizard.StepIDWelcome, wizard.StepIDDistribution, wizard.StepIDProxmox}},
@@ -41,7 +65,7 @@ func configurePhases() []wizard.Stage {
 	}
 }
 
-// Chrome returns the configure wizard's header chrome with the phase trail.
+// Chrome returns the configure wizard's chrome with the phase trail.
 func Chrome() wizard.FlowChrome {
 	chrome := wizard.DefaultChrome()
 	chrome.Trail = wizard.StagesTrail(configurePhases())

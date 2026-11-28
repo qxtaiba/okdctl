@@ -11,23 +11,20 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-// KeyHint is a single key/help pair a field contributes to the step's footer
-// while it holds focus.
+// KeyHint is a key/help pair a focused field contributes to the footer.
 type KeyHint struct {
 	Key  string
 	Help string
 }
 
-// KeyHinter is implemented by fields whose interaction keys are shown in the
-// step's footer ribbon rather than inline in the field's own label.
+// KeyHinter is implemented by fields whose keys show in the footer ribbon.
 type KeyHinter interface {
 	KeyHints() []KeyHint
 }
 
-// MultiSelectField renders a checklist of chips in the shared field box;
-// Value/SetValue use a comma-separated format. Space toggles the current
-// chip; left/right/h/l/j/k move the cursor — up/down are reserved by
-// DataDrivenStep for navigation, same constraint as SelectField's left/right.
+// MultiSelectField renders a checklist of chips; Value and SetValue use a
+// comma-separated format, space toggles and left/right move, since up/down
+// belong to the form.
 type MultiSelectField struct {
 	Label   string
 	Help    string
@@ -37,17 +34,15 @@ type MultiSelectField struct {
 	cursor   int
 	focused  bool
 	width    int
-	// baseLen is how many options the constructor supplied; entries past it
-	// were injected by SetValue for loaded values the list does not offer,
-	// rendered as extra checked chips labeled (current).
+	// baseLen counts the constructor's options; later entries were injected by
+	// SetValue as "(current)" chips
 	baseLen int
-	// loaded is SetValue's exact argument, echoed by Value until the first
-	// toggle edits the selection, so an untouched field round-trips its
-	// config value byte-identical whatever order it listed entries in.
+	// loaded echoes SetValue's exact argument until the first toggle, so an
+	// untouched field round-trips byte-identical
 	loaded string
 }
 
-// NewMultiSelectField returns a multi-select field with options unchecked.
+// NewMultiSelectField returns a field with options unchecked.
 func NewMultiSelectField(label string, options []string) *MultiSelectField {
 	return &MultiSelectField{
 		Label:    label,
@@ -57,8 +52,8 @@ func NewMultiSelectField(label string, options []string) *MultiSelectField {
 	}
 }
 
-// Value returns the loaded value verbatim while the selection is untouched,
-// then a comma-separated list of the selected options in option order.
+// Value returns the loaded value verbatim while untouched, then the selected
+// options in option order.
 func (f *MultiSelectField) Value() string {
 	if f.loaded != "" {
 		return f.loaded
@@ -72,10 +67,8 @@ func (f *MultiSelectField) Value() string {
 	return strings.Join(parts, ",")
 }
 
-// SetValue marks each option present in the comma-separated value as
-// selected. An entry the option list does not offer is never dropped: it
-// joins the list as an extra checked chip labeled (current), so a valid
-// loaded config round-trips instead of being silently pruned to the catalog.
+// SetValue checks each listed option; an entry the list does not offer joins
+// it as a checked "(current)" chip rather than being pruned.
 func (f *MultiSelectField) SetValue(value string) {
 	f.Options = f.Options[:f.baseLen]
 	f.selected = make([]bool, len(f.Options))
@@ -105,33 +98,33 @@ func (f *MultiSelectField) SetValue(value string) {
 	}
 }
 
-// Focus gives the field keyboard focus.
+// Focus gives the field focus.
 func (f *MultiSelectField) Focus() tea.Cmd {
 	f.focused = true
 	return nil
 }
 
-// Blur removes keyboard focus from the field.
+// Blur removes focus.
 func (f *MultiSelectField) Blur() {
 	f.focused = false
 }
 
-// SetWidth records the width available to the field's box and help row.
+// SetWidth records the available width.
 func (f *MultiSelectField) SetWidth(width int) {
 	f.width = width
 }
 
-// Check always returns nil — any non-empty selection is valid.
+// Check always returns nil; the step checks the pool as a whole.
 func (f *MultiSelectField) Check() error {
 	return nil
 }
 
-// Validate always returns nil — any non-empty selection is valid.
+// Validate always returns nil.
 func (f *MultiSelectField) Validate() error {
 	return f.Check()
 }
 
-// KeyHints returns the field's footer hints, shown while it holds focus.
+// KeyHints returns the field's footer hints.
 func (f *MultiSelectField) KeyHints() []KeyHint {
 	return []KeyHint{
 		{Key: "space", Help: "toggle"},
@@ -139,8 +132,7 @@ func (f *MultiSelectField) KeyHints() []KeyHint {
 	}
 }
 
-// Update handles left/right/h/l/j/k cursor movement and space to toggle the
-// chip under the cursor.
+// Update moves the cursor on left/right and h/l/j/k and toggles on space.
 func (f *MultiSelectField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 	if !f.focused || len(f.Options) == 0 {
 		return f, nil
@@ -161,7 +153,6 @@ func (f *MultiSelectField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("space"))):
 			if f.cursor >= 0 && f.cursor < len(f.selected) {
 				f.selected[f.cursor] = !f.selected[f.cursor]
-				// The selection is edited: Value regenerates from it now.
 				f.loaded = ""
 			}
 		}
@@ -170,8 +161,7 @@ func (f *MultiSelectField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 	return f, nil
 }
 
-// View renders the label and a bordered box of chips, wrapped to the box's
-// inner width, with the cursor preceding the current chip.
+// View renders the label and a box of chips wrapped to its inner width.
 func (f *MultiSelectField) View() string {
 	label := labelStyle.Render(f.Label)
 
@@ -186,15 +176,11 @@ func (f *MultiSelectField) View() string {
 	return out
 }
 
-// chipCoreWidth is the width of every chip's cursor ("> " or "  ") plus
-// checkbox ("[✓]" or "[ ]") plus the space before the option name.
+// chipCoreWidth is the cursor, checkbox and spacing around a chip's name.
 const chipCoreWidth = 2 + 3 + 1
 
-// chipsContent renders every option as a cursor+checkbox+name chip, wrapping
-// at chip boundaries to a new row whenever the next chip would push the row
-// past innerWidth; a chip that alone would exceed innerWidth has its name
-// ellipsized to fit one row, since fieldBox's own lipgloss Width() re-wraps
-// (mid-word) any content line it receives that is still too wide.
+// chipsContent wraps chips at chip boundaries, ellipsizing a name that alone
+// exceeds innerWidth, since fieldBox would otherwise re-wrap mid-word.
 func (f *MultiSelectField) chipsContent(innerWidth int) string {
 	checkedStyle := lipgloss.NewStyle().Foreground(tui.ColorSuccess())
 	uncheckedStyle := lipgloss.NewStyle().Foreground(tui.ColorTextFaint())
@@ -243,8 +229,7 @@ func (f *MultiSelectField) chipsContent(innerWidth int) string {
 	return strings.Join(rows, "\n")
 }
 
-// ellipsize rune-safely clips s to fit within maxWidth visible columns,
-// appending "…" when it clips.
+// ellipsize clips s to maxWidth columns with "…".
 func ellipsize(s string, maxWidth int) string {
 	if maxWidth <= 0 {
 		return ""

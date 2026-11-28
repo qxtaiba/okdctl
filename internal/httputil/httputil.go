@@ -8,29 +8,29 @@ import (
 	"time"
 )
 
-// Standard request timeouts tiered by expected response size;
-// download.DefaultTimeout aliases TimeoutDownload, so this package owns
-// the download-tier value.
-const (
-	TimeoutShort    = 10 * time.Second // API calls, connectivity checks
-	TimeoutDownload = 5 * time.Minute  // File downloads
-)
+// TimeoutShort bounds whole API calls and connectivity checks.
+const TimeoutShort = 10 * time.Second
+
+// TimeoutResponseHeader bounds dial, TLS handshake and response headers
+// on NewOptionalInsecure's transport, matching internal/download; the
+// body answers to ctx alone so uploads and long polls stay unbounded.
+const TimeoutResponseHeader = 30 * time.Second
 
 // New returns an *http.Client configured with the given request timeout.
 func New(timeout time.Duration) *http.Client {
 	return &http.Client{Timeout: timeout, CheckRedirect: capRedirects}
 }
 
-// NewOptionalInsecure skips TLS verification only when insecure is true —
-// the operator-opt-in path for go-proxmox API clients.
+// NewOptionalInsecure clones http.DefaultTransport (proxy, dial timeout)
+// and skips TLS verification only when insecure is true, the operator
+// opt-in for Proxmox API clients. A zero timeout leaves the whole request
+// unbounded, which is safe because the transport times out a silent peer.
 func NewOptionalInsecure(insecure bool, timeout time.Duration) *http.Client {
-	return &http.Client{
-		Timeout:       timeout,
-		CheckRedirect: capRedirects,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: insecure}, //nolint:gosec // caller opts in
-		},
-	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: insecure} //nolint:gosec // caller opts in
+	transport.TLSHandshakeTimeout = TimeoutResponseHeader
+	transport.ResponseHeaderTimeout = TimeoutResponseHeader
+	return &http.Client{Timeout: timeout, CheckRedirect: capRedirects, Transport: transport}
 }
 
 var (

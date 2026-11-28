@@ -10,9 +10,9 @@
   │                        ██    ██ ██  ██  ██   ██ ██         ██    ██          │extras                                  │                        │  
   │                         ██████  ██   ██ ██████   ██████    ██    ███████     │  add-ons, files, advanced settings     │                        │  
   │                                                                              │review                                  │                        │  
-  │                                           ▸ get started                      │  confirm changes, deploy               │                        │  
+  │                                           ▸ get started                      │  confirm changes, save                 │                        │  
   │                                             quit                             │                                        │                        │  
-  │                                                                              │writes okdctl.yaml, ready to deploy     │                        │  
+  │                                                                              │writes okdctl.yaml                      │                        │  
   │                                                                              ╰────────────────────────────────────────╯                        │  
   │                                                                                                                                                │  
   │                                                                                                                                                │  

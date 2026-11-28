@@ -24,10 +24,13 @@ import (
 	"github.com/qxtaiba/okdctl/internal/render"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/version"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // cfgFile is cobra-managed state from --config; passing it as a param would fight cobra's pattern.
 var cfgFile string
+
+const defaultConfigFile = workspace.ConfigFile
 
 var (
 	logLevel   string
@@ -67,8 +70,9 @@ var rootCmd = &cobra.Command{
 	Use:   "okdctl",
 	Short: "Run OKD clusters on Proxmox VE",
 	Long: `okdctl defines, installs and operates one OKD cluster on Proxmox VE from
-a single configuration file. This release defines a cluster with okdctl init;
-installing it (okdctl up) returns in a later release.`,
+a single configuration file. This release defines a cluster with okdctl init
+and checks the host with okdctl doctor; installing the cluster is not yet
+available.`,
 	Example: `  okdctl init
   okdctl doctor
   okdctl config validate
@@ -76,6 +80,8 @@ installing it (okdctl up) returns in a later release.`,
 	Version:       version.Version,
 	SilenceUsage:  true,
 	SilenceErrors: true,
+	Args:          cobra.NoArgs,
+	RunE:          showHelp,
 	PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 		if err := configureLogging(cmd); err != nil {
 			return err
@@ -88,6 +94,10 @@ installing it (okdctl up) returns in a later release.`,
 		return nil
 	},
 }
+
+// showHelp is the RunE of the root and every command group: a non-runnable
+// command skips Args, so an unknown subcommand would print help and exit 0.
+func showHelp(cmd *cobra.Command, _ []string) error { return cmd.Help() }
 
 // Execute wires the default slog logger, runs the cobra tree, flushes the log
 // file, and exits with execute()'s code.
@@ -186,11 +196,21 @@ func execute() (code int) {
 		if sigCode, handled := signalExitCode(&caughtSig, err); handled {
 			return sigCode
 		}
-		announceFailure(err)
-		return exitCodeFor(err)
+		return failureExit(err)
 	}
 
 	return 0
+}
+
+// failureExit announces err and returns its exit code. cobra raises unknown
+// command and flag errors before PersistentPreRunE, so logging is configured
+// here when it has not been, and the piped-stderr json switch covers them too.
+func failureExit(err error) int {
+	if !loggingConfigured {
+		_ = configureLogging(rootCmd)
+	}
+	announceFailure(err)
+	return exitCodeFor(err)
 }
 
 // secondSignalGrace bounds how long a second real signal waits for the
@@ -248,7 +268,7 @@ func signalLoop(sigCh <-chan os.Signal, cancel context.CancelFunc, caughtSig *at
 func announceFailure(err error) {
 	stderrTTY := term.IsTerminal(int(os.Stderr.Fd()))
 	stdoutTTY := term.IsTerminal(int(os.Stdout.Fd()))
-	if shouldRenderErrorBox(stderrTTY, stdoutTTY, logFormat, err) {
+	if shouldRenderErrorBox(stderrTTY, stdoutTTY, logFormat) {
 		logFailureToSink(err)
 		fmt.Fprintln(os.Stderr, render.ErrorSummary(err, exitCodeFor(err), logutil.RunID()))
 		return
@@ -276,14 +296,10 @@ func logFailureToSink(err error) {
 }
 
 // shouldRenderErrorBox reports whether announceFailure draws the boxed
-// ErrorSummary instead of the flat "command failed" log line: both stderr
-// and stdout TTY-shaped, not json, and err isn't already self-presented.
-// NO_COLOR/--no-color is deliberately NOT part of this gate (contrast the
-// progressBars derivation in logging.go, which does fold colorOff in) — box
-// drawing is structure, not color, so the box still renders under NO_COLOR,
-// just Downsampled to ANSI-free by the color profile configureLogging set.
-func shouldRenderErrorBox(stderrTTY, stdoutTTY bool, format string, err error) bool {
-	return stderrTTY && stdoutTTY && format != tui.FormatJSON && !render.IsPresented(err)
+// ErrorSummary instead of the flat "command failed" log line. NO_COLOR is
+// deliberately not part of the gate: box drawing is structure, not color.
+func shouldRenderErrorBox(stderrTTY, stdoutTTY bool, format string) bool {
+	return stderrTTY && stdoutTTY && format != tui.FormatJSON
 }
 
 // signalExitCode reports the exit code for a caught signal (130 SIGINT, 143
@@ -303,9 +319,8 @@ func signalExitCode(caughtSig *atomic.Value, err error) (int, bool) {
 	return 130, true
 }
 
-// exitCodeFor maps err to the documented BSD-sysexits code. Precedence is
-// sentinel > Config(2) > Network(3) > Cluster(4) > Auth(5) > Usage(64)
-// regardless of wrap order.
+// exitCodeFor maps err to its BSD-sysexits code: 66 for a missing config
+// file, else the Kind errtypes.Describe resolves, else 1.
 func exitCodeFor(err error) int {
 	if err == nil {
 		return 0
@@ -313,27 +328,8 @@ func exitCodeFor(err error) int {
 	if errors.Is(err, errtypes.ErrConfigMissing) {
 		return 66
 	}
-	var cfgErr *errtypes.ConfigError
-	if errors.As(err, &cfgErr) {
-		return 2
-	}
-	var netErr *errtypes.NetworkError
-	if errors.As(err, &netErr) {
-		return 3
-	}
-	var clusterErr *errtypes.ClusterError
-	if errors.As(err, &clusterErr) {
-		return 4
-	}
-	var authErr *errtypes.AuthError
-	if errors.As(err, &authErr) {
-		return 5
-	}
-	var usageErr *errtypes.UsageError
-	// 64 = EX_USAGE (BSD sysexits.h); returned via UsageError so deferred
-	// closes run before process exit
-	if errors.As(err, &usageErr) {
-		return 64
+	if d, ok := errtypes.Describe(err); ok {
+		return d.Kind.ExitCode()
 	}
 	return 1
 }
@@ -373,8 +369,8 @@ func versionText() string {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVarP(&cfgFile, flagConfig, flagConfigShort, "okdctl.yaml", "configuration file")
-	rootCmd.PersistentFlags().BoolVar(&noColor, flagNoColor, false, "disable colour and progress output (same as NO_COLOR=1)")
+	rootCmd.PersistentFlags().StringVarP(&cfgFile, flagConfig, flagConfigShort, defaultConfigFile, "configuration file")
+	rootCmd.PersistentFlags().BoolVar(&noColor, flagNoColor, false, "disable colour output (same as NO_COLOR=1)")
 	rootCmd.PersistentFlags().BoolVar(&noMotion, flagNoMotion, false, "disable TUI animation (same as OKDCTL_NO_MOTION=1; NO_COLOR alone reduces it)")
 	rootCmd.PersistentFlags().StringVar(&logLevel, flagLogLevel, "info", "log verbosity (debug, info, warn, error)")
 	_ = rootCmd.RegisterFlagCompletionFunc(flagLogLevel,

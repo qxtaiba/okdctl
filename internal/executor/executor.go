@@ -1,5 +1,5 @@
-// Package executor wraps os/exec with context-aware execution, tail capture
-// of stdout/stderr and structured command tracing.
+// Package executor wraps os/exec with an env allowlist, graceful SIGTERM
+// cancellation and streamed or tail-captured child output.
 package executor
 
 import (
@@ -49,36 +49,21 @@ func New(opts ...Option) *Executor {
 	return e
 }
 
-// defaultEnvAllowlist passes tooling/provider namespaces to subprocesses and
-// drops the rest so unrelated tokens never reach a child; buildEnv further
-// strips secret-keyed entries.
+// defaultEnvAllowlist is what a child (openshift-install, oc, ping) needs
+// from the parent environment; everything else, tokens included, stays out.
 var defaultEnvAllowlist = envAllowlist{
 	exact: map[string]bool{
-		"PATH": true, "HOME": true, "USER": true, "LOGNAME": true, "SHELL": true,
+		"PATH": true, "HOME": true, "USER": true,
 		"LANG": true, "LANGUAGE": true, "LC_ALL": true, "LC_CTYPE": true, "LC_MESSAGES": true,
-		"TERM": true, "TZ": true, "HOSTNAME": true,
+		"TERM": true, "TZ": true,
 		"TMPDIR": true, "TMP": true, "TEMP": true,
-		"SSH_AUTH_SOCK": true, "SSH_AGENT_PID": true,
-		"HTTP_PROXY": true, "HTTPS_PROXY": true, "NO_PROXY": true,
+		"SSH_AUTH_SOCK": true,
+		"HTTP_PROXY":    true, "HTTPS_PROXY": true, "NO_PROXY": true,
 		"http_proxy": true, "https_proxy": true, "no_proxy": true,
-		"SUDO_USER": true, "SUDO_UID": true, "SUDO_GID": true,
-		"COLORTERM": true, "NO_COLOR": true, "FORCE_COLOR": true,
-		"PAGER": true, "EDITOR": true,
 		"XDG_CONFIG_HOME": true, "XDG_DATA_HOME": true,
 		"XDG_CACHE_HOME": true, "XDG_RUNTIME_DIR": true,
-		"DBUS_SESSION_BUS_ADDRESS": true,
-		// GIT_/GITHUB_/GH_ prefixes are excluded — GITHUB_TOKEN/GH_TOKEN/
-		// GIT_ASKPASS carry credentials no subprocess here needs.
-		"GIT_SSH_COMMAND": true, "GIT_TERMINAL_PROMPT": true,
 	},
-	prefixes: []string{
-		"KUBE",       // KUBECONFIG, KUBE_*
-		"OC_",        // openshift-client
-		"TF_",        // terraform TF_VAR_*, TF_LOG, TF_PLUGIN_*
-		"TERRAFORM_", // terraform built-ins
-		"PROXMOX_",   // bpg/proxmox provider + PROXMOX_VE_*
-		"HELM_",
-	},
+	prefixes: []string{"KUBE"}, // KUBECONFIG, KUBE_*
 }
 
 type envAllowlist struct {
@@ -115,9 +100,8 @@ func (e *Executor) buildEnv() []string {
 	return append(base, e.env...)
 }
 
-// dropSecretKeyed strips logutil.KeyIsSecret entries: PROXMOX_/TF_ are
-// allowlisted for plumbing, not for broadcasting PROXMOX_VE_PASSWORD-style
-// credentials to every shellout — those need explicit WithEnv(creds.Env()).
+// dropSecretKeyed strips logutil.KeyIsSecret entries the KUBE prefix would
+// let through; a credential a child needs arrives by WithEnv.
 func dropSecretKeyed(env []string) []string {
 	out := env[:0]
 	for _, kv := range env {
@@ -164,19 +148,9 @@ func (e *ExitError) Redacted() any {
 	}{e.Command, e.ExitCode}
 }
 
-// NewExitError returns ctx.Err() when ctx is already cancelled, so
-// errors.Is(_, context.Canceled) propagates for cli/root.go's SIGINT/SIGTERM
-// exit-code mapping.
-func NewExitError(ctx context.Context, cmd string, code int, stderr string) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	return &ExitError{Command: cmd, ExitCode: code, Stderr: stderr}
-}
-
 // Run executes a command and returns its result; *Result is always
 // non-nil, even on error, so callers can read ExitCode/Stderr without a
-// nil guard.
+// nil guard. A child cut short by ctx returns ctx's error, not its exit.
 func (e *Executor) Run(ctx context.Context, name string, args ...string) (*Result, error) {
 	return e.run(ctx, nil, name, args...)
 }
@@ -215,27 +189,9 @@ func splitExitError(err error, result *Result) error {
 }
 
 func (e *Executor) run(ctx context.Context, stdin io.Reader, name string, args ...string) (*Result, error) {
-	start := time.Now()
-	cmd := e.newCmd(ctx, name, args...)
-
-	rout := newRingWriter(maxCapturedLines)
-	rerr := newRingWriter(maxCapturedLines)
-	cmd.Stdin = stdin
-	cmd.Stdout = rout
-	cmd.Stderr = rerr
-
-	e.logger.Debug("exec: started", "cmd", name, "argc", len(args))
-
-	err := cmd.Run()
-
-	result := &Result{
-		Stdout:    rout.tail(),
-		Stderr:    rerr.tail(),
-		Duration:  time.Since(start),
-		Truncated: rout.dropped,
+	p, err := e.start(ctx, stdin, nil, name, args...)
+	if err != nil {
+		return &Result{}, err
 	}
-	retErr := splitExitError(err, result)
-
-	e.logger.Debug("exec: completed", "cmd", name, "exit", result.ExitCode, "duration", result.Duration)
-	return result, retErr
+	return p.Wait()
 }

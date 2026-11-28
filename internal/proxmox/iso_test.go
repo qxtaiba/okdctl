@@ -27,7 +27,7 @@ func TestUploadISO(t *testing.T) {
 	t.Run("posts ordered multipart with explicit content length", func(t *testing.T) {
 		f := newFakeAPI(t, nil)
 		path := writeISO(t, "iso-bytes")
-		task, err := f.driver(t).UploadISO(t.Context(), "pve", "local", path, fakeSHA256)
+		task, err := f.driver(t).UploadISO(t.Context(), "pve", "local", path, "okd-9f3a1c-agent.iso", fakeSHA256)
 		if err != nil {
 			t.Fatalf("UploadISO(): %v", err)
 		}
@@ -70,8 +70,8 @@ func TestUploadISO(t *testing.T) {
 		if !reflect.DeepEqual(values, wantValues) {
 			t.Fatalf("part values = %v, want %v", values, wantValues)
 		}
-		if filename != "grappleberry-worker.iso" {
-			t.Fatalf("file part name = %q, want grappleberry-worker.iso", filename)
+		if filename != "okd-9f3a1c-agent.iso" {
+			t.Fatalf("file part name = %q, want the given volume name, not the local basename", filename)
 		}
 	})
 
@@ -79,7 +79,7 @@ func TestUploadISO(t *testing.T) {
 		f := newFakeAPI(t, map[string]http.HandlerFunc{
 			"/nodes/pve/storage/local/upload": jsonHandler(http.StatusForbidden, `{"data":null}`),
 		})
-		_, err := f.driver(t).UploadISO(t.Context(), "pve", "local", writeISO(t, "x"), fakeSHA256)
+		_, err := f.driver(t).UploadISO(t.Context(), "pve", "local", writeISO(t, "x"), "okd-9f3a1c-agent.iso", fakeSHA256)
 		if !errors.Is(err, ErrPermission) {
 			t.Fatalf("UploadISO() error = %v, want ErrPermission", err)
 		}
@@ -89,7 +89,7 @@ func TestUploadISO(t *testing.T) {
 		f := newFakeAPI(t, map[string]http.HandlerFunc{
 			"/nodes/pve/storage/local/upload": pveErrorHandler("storage 'local' does not exist"),
 		})
-		_, err := f.driver(t).UploadISO(t.Context(), "pve", "local", writeISO(t, "x"), fakeSHA256)
+		_, err := f.driver(t).UploadISO(t.Context(), "pve", "local", writeISO(t, "x"), "okd-9f3a1c-agent.iso", fakeSHA256)
 		if !errors.Is(err, ErrNotFound) || !strings.Contains(err.Error(), "storage 'local' does not exist") {
 			t.Fatalf("UploadISO() error = %v, want ErrNotFound carrying the pve message", err)
 		}
@@ -99,15 +99,26 @@ func TestUploadISO(t *testing.T) {
 		f := newFakeAPI(t, map[string]http.HandlerFunc{
 			"/nodes/pve/storage/local/upload": pveErrorHandler("checksum mismatch"),
 		})
-		_, err := f.driver(t).UploadISO(t.Context(), "pve", "local", writeISO(t, "x"), fakeSHA256)
+		_, err := f.driver(t).UploadISO(t.Context(), "pve", "local", writeISO(t, "x"), "okd-9f3a1c-agent.iso", fakeSHA256)
 		if err == nil || !strings.Contains(err.Error(), "checksum mismatch") {
 			t.Fatalf("UploadISO() error = %v, want the pve message", err)
 		}
 	})
 
+	t.Run("bad request keeps the parameter detail", func(t *testing.T) {
+		f := newFakeAPI(t, map[string]http.HandlerFunc{
+			"/nodes/pve/storage/local/upload": jsonHandler(http.StatusBadRequest,
+				`{"data":null,"message":"Parameter verification failed.","errors":{"checksum":"value does not match the regex pattern"}}`),
+		})
+		_, err := f.driver(t).UploadISO(t.Context(), "pve", "local", writeISO(t, "x"), "okd-9f3a1c-agent.iso", fakeSHA256)
+		if err == nil || !strings.Contains(err.Error(), "Parameter verification failed") || !strings.Contains(err.Error(), "checksum") {
+			t.Fatalf("UploadISO() error = %v, want the message and the failing parameter", err)
+		}
+	})
+
 	t.Run("missing file never reaches the api", func(t *testing.T) {
 		f := newFakeAPI(t, nil)
-		_, err := f.driver(t).UploadISO(t.Context(), "pve", "local", filepath.Join(t.TempDir(), "nope.iso"), fakeSHA256)
+		_, err := f.driver(t).UploadISO(t.Context(), "pve", "local", filepath.Join(t.TempDir(), "nope.iso"), "okd-9f3a1c-agent.iso", fakeSHA256)
 		if !errors.Is(err, os.ErrNotExist) {
 			t.Fatalf("UploadISO() error = %v, want os.ErrNotExist", err)
 		}

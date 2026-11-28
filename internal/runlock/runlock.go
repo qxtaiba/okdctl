@@ -9,16 +9,13 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
-	"github.com/qxtaiba/okdctl/internal/system"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
-
-const lockFile = ".okdctl.lock"
 
 // Lock holds the open file descriptor whose flock protects the project root.
 // Call Release when the protected operation completes.
@@ -32,11 +29,10 @@ type Lock struct {
 // slog.Default(); callers bypassing cli.Execute must install
 // logutil.RedactHandler first.
 func Acquire(projectRoot, verb string) (*Lock, error) {
-	path := filepath.Join(projectRoot, lockFile)
+	path := workspace.LockPath(projectRoot)
 
-	// Refuse a symlink at the lock path (O_NOFOLLOW closes the lstat->open
-	// TOCTOU race) — Acquire runs as root under sudo re-exec, so a pre-sudo
-	// attacker could otherwise redirect the root-owned write via a symlink.
+	// Refuse a symlink at the lock path; O_NOFOLLOW closes the lstat->open
+	// race so the diagnostics never land in a redirected file.
 	if info, err := os.Lstat(path); err == nil {
 		if info.Mode()&os.ModeSymlink != 0 {
 			return nil, &errtypes.ConfigError{
@@ -85,21 +81,7 @@ func Acquire(projectRoot, verb string) (*Lock, error) {
 	_ = f.Truncate(0)
 	_, _ = fmt.Fprintf(f, "PID=%d VERB=%s TIME=%s HOST=%s\n", os.Getpid(), verb, time.Now().UTC().Format(time.RFC3339), host)
 
-	if err := chownToSudoInvoker(path); err != nil {
-		slog.Warn("runlock: chown lockfile to invoking user failed", "path", path, "err", err)
-	}
-
 	return &Lock{f: f}, nil
-}
-
-// chownToSudoInvoker hands the root-created lockfile back to the invoking
-// user so --dry-run (non-root) can reopen it; the euid guard skips this
-// when SUDO_UID/SUDO_GID leak into a non-root env, which would EPERM.
-func chownToSudoInvoker(path string) error {
-	if os.Geteuid() != 0 {
-		return nil
-	}
-	return system.ChownToInvokingUser(path)
 }
 
 // crossHostHint flags a HOST= mismatch as a likely NFSv3 cross-host stale

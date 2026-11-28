@@ -8,7 +8,6 @@ import (
 	"github.com/charmbracelet/colorprofile"
 )
 
-// Regression guard: box helpers used to leak 24-bit escapes under NO_COLOR/pipes.
 func TestBoxRespectsNoColorProfile(t *testing.T) {
 	SetColorProfileFor(&bytes.Buffer{}) // a buffer is never a TTY
 	t.Cleanup(func() { SetColorProfileFor(&bytes.Buffer{}) })
@@ -36,8 +35,6 @@ func TestDownsampleStripsUnderNoColor(t *testing.T) {
 	}
 }
 
-// Regression guard: colorprofile.Detect parses NO_COLOR with strconv.ParseBool,
-// so a non-boolean value like "yes" left color enabled before detect() special-cased it.
 func TestNoColorAnyValueForcesAscii(t *testing.T) {
 	t.Setenv("NO_COLOR", "yes")
 	t.Setenv("CLICOLOR_FORCE", "1")

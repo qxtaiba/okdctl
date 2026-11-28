@@ -10,40 +10,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 )
 
-func seedMarkerFile(t *testing.T, dir, relPath, content string) {
-	t.Helper()
-	path := filepath.Join(dir, filepath.FromSlash(relPath))
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestHasPrimaryMarker(t *testing.T) {
-	cases := []struct {
-		name string
-		seed string // relative path to create; empty seeds nothing
-		want bool
-	}{
-		{"config file", "okdctl.yaml", true},
-		{"env file", "okdctl.env", true},
-		{"none", "", false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			dir := t.TempDir()
-			if tc.seed != "" {
-				seedMarkerFile(t, dir, tc.seed, "")
-			}
-			if got := hasPrimaryMarker(dir); got != tc.want {
-				t.Errorf("hasPrimaryMarker = %v, want %v", got, tc.want)
-			}
-		})
-	}
-}
-
 func TestLoadConfigFailureCarriesCause(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root bypasses the config permission gate")

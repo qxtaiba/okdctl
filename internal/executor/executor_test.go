@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
@@ -18,13 +20,13 @@ func TestBuildEnv_AllowlistFilters(t *testing.T) {
 	t.Setenv("PATH", "/usr/bin:/bin")
 	t.Setenv("HOME", "/tmp/home")
 	t.Setenv("KUBECONFIG", "/tmp/kube")
-	t.Setenv("KUBE_PS1", "on")                  // prefix match
-	t.Setenv("TF_VAR_region", "us-east-1")      // prefix match
-	t.Setenv("PROXMOX_VE_ENDPOINT", "pve:8006") // prefix match, non-secret
-	t.Setenv("PROXMOX_VE_PASSWORD", "hunter")   // prefix match, secret-keyed
-	t.Setenv("AWS_SECRET_ACCESS_KEY", "nope")   // not in allowlist
-	t.Setenv("SECRET_API_KEY", "nope")          // not in allowlist
-	t.Setenv("OKDCTL_INTERNAL_TOKEN", "nope")   // not in allowlist
+	t.Setenv("KUBE_PS1", "on")
+	t.Setenv("TF_VAR_region", "us-east-1")
+	t.Setenv("PROXMOX_VE_ENDPOINT", "pve:8006")
+	t.Setenv("PROXMOX_VE_PASSWORD", "hunter")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "nope")
+	t.Setenv("SECRET_API_KEY", "nope")
+	t.Setenv("OKDCTL_INTERNAL_TOKEN", "nope")
 
 	e := New()
 	env := e.buildEnv()
@@ -35,8 +37,6 @@ func TestBuildEnv_AllowlistFilters(t *testing.T) {
 		"HOME=/tmp/home",
 		"KUBECONFIG=/tmp/kube",
 		"KUBE_PS1=on",
-		"TF_VAR_region=us-east-1",
-		"PROXMOX_VE_ENDPOINT=pve:8006",
 	}
 	for _, want := range mustContain {
 		if !strings.Contains(joined, "\x00"+want+"\x00") {
@@ -49,6 +49,8 @@ func TestBuildEnv_AllowlistFilters(t *testing.T) {
 		"SECRET_API_KEY=",
 		"OKDCTL_INTERNAL_TOKEN=",
 		"PROXMOX_VE_PASSWORD=",
+		"PROXMOX_VE_ENDPOINT=",
+		"TF_VAR_region=",
 	}
 	for _, forbid := range mustNotContain {
 		if strings.Contains(joined, "\x00"+forbid) {
@@ -58,23 +60,18 @@ func TestBuildEnv_AllowlistFilters(t *testing.T) {
 }
 
 func TestBuildEnv_SecretKeyedDroppedFromParentButNotWithEnv(t *testing.T) {
-	t.Setenv("PROXMOX_VE_PASSWORD", "from-parent")
-	t.Setenv("PROXMOX_VE_API_TOKEN", "from-parent")
-	t.Setenv("TF_VAR_db_password", "from-parent")
+	t.Setenv("KUBE_API_TOKEN", "from-parent")
+	t.Setenv("KUBE_PASSWORD", "from-parent")
 
-	e := New(WithEnv([]string{"PROXMOX_VE_PASSWORD=from-caller"}))
+	e := New(WithEnv([]string{"KUBE_API_TOKEN=from-caller"}))
 	joined := "\n" + strings.Join(e.buildEnv(), "\n") + "\n"
 
-	for _, forbid := range []string{
-		"\nPROXMOX_VE_PASSWORD=from-parent\n",
-		"\nPROXMOX_VE_API_TOKEN=from-parent\n",
-		"\nTF_VAR_db_password=from-parent\n",
-	} {
+	for _, forbid := range []string{"\nKUBE_API_TOKEN=from-parent\n", "\nKUBE_PASSWORD=from-parent\n"} {
 		if strings.Contains(joined, forbid) {
 			t.Errorf("parent secret %q leaked into subprocess env:\n%s", strings.TrimSpace(forbid), joined)
 		}
 	}
-	if !strings.Contains(joined, "\nPROXMOX_VE_PASSWORD=from-caller\n") {
+	if !strings.Contains(joined, "\nKUBE_API_TOKEN=from-caller\n") {
 		t.Errorf("WithEnv-supplied credential missing from env:\n%s", joined)
 	}
 }
@@ -109,11 +106,14 @@ func TestAllowlist_ExactAndPrefix(t *testing.T) {
 		{"PATH", true},
 		{"KUBECONFIG", true},
 		{"KUBE_PS1", true},
-		{"TF_VAR_thing", true},
-		{"PROXMOX_VE_API_TOKEN", true},
-		{"OC_EDITOR", true},
-		{"HELM_CACHE_HOME", true},
-		{"GIT_SSH_COMMAND", true},
+		{"HTTPS_PROXY", true},
+		{"XDG_CONFIG_HOME", true},
+		{"TF_VAR_thing", false},
+		{"PROXMOX_VE_API_TOKEN", false},
+		{"OC_EDITOR", false},
+		{"HELM_CACHE_HOME", false},
+		{"GIT_SSH_COMMAND", false},
+		{"SUDO_USER", false},
 		{"GITHUB_TOKEN", false},
 		{"GH_TOKEN", false},
 		{"AWS_SECRET_ACCESS_KEY", false},
@@ -166,6 +166,19 @@ func TestRun(t *testing.T) {
 		}
 	})
 
+	t.Run("ctx cancelled mid-run returns the context error", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+		result, err := New().Run(ctx, "sh", "-c", "sleep 10")
+		if result == nil {
+			t.Fatal("result must be non-nil on error")
+		}
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Errorf("err = %v (exit %d); want context.DeadlineExceeded", err, result.ExitCode)
+		}
+	})
+
 	t.Run("cancelled ctx returns the context error", func(t *testing.T) {
 		t.Parallel()
 		ctx, cancel := context.WithCancel(context.Background())
@@ -173,32 +186,6 @@ func TestRun(t *testing.T) {
 		result, err := New().Run(ctx, "sh", "-c", "sleep 10")
 		if result == nil {
 			t.Fatal("result must be non-nil on error")
-		}
-		if !errors.Is(err, context.Canceled) {
-			t.Errorf("err = %v; want context.Canceled", err)
-		}
-	})
-}
-
-func TestNewExitError(t *testing.T) {
-	t.Run("live ctx yields ExitError", func(t *testing.T) {
-		err := NewExitError(context.Background(), "sh", 3, "oops")
-		var exitErr *ExitError
-		if !errors.As(err, &exitErr) {
-			t.Fatalf("err type = %T; want *ExitError", err)
-		}
-		if exitErr.ExitCode != 3 || exitErr.Command != "sh" || exitErr.Stderr != "oops" {
-			t.Errorf("ExitError = %+v", *exitErr)
-		}
-	})
-
-	t.Run("cancelled ctx wins over the exit code", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
-		err := NewExitError(ctx, "sh", 3, "oops")
-		var exitErr *ExitError
-		if errors.As(err, &exitErr) {
-			t.Errorf("got *ExitError on ctx cancel; want context error, got: %v", err)
 		}
 		if !errors.Is(err, context.Canceled) {
 			t.Errorf("err = %v; want context.Canceled", err)
@@ -324,6 +311,72 @@ func TestResult_TruncatedOnRingPath(t *testing.T) {
 		}
 		if !result.Truncated {
 			t.Errorf("Truncated = false for 201 lines; want true")
+		}
+	})
+}
+
+func TestStart(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("needs POSIX sh")
+	}
+
+	t.Run("delivers lines while the child runs and keeps the cancel identity", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		var got []Line
+		p, err := New().Start(ctx, func(l Line) {
+			got = append(got, l)
+			if l.Text == "ready" {
+				cancel()
+			}
+		}, "sh", "-c", "echo ready; exec sleep 10")
+		if err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+		result, err := p.Wait()
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Wait err = %v; want context.Canceled", err)
+		}
+		if len(got) != 1 || got[0] != (Line{Text: "ready"}) {
+			t.Errorf("lines = %+v; want only the ready line, delivered before the child was cancelled", got)
+		}
+		if result.Stdout != "ready" {
+			t.Errorf("Stdout = %q; want the tail kept alongside the stream", result.Stdout)
+		}
+	})
+
+	t.Run("flags stderr and flushes a trailing partial line", func(t *testing.T) {
+		t.Parallel()
+		var got []Line
+		p, err := New().Start(context.Background(), func(l Line) { got = append(got, l) },
+			"sh", "-c", "echo err >&2; printf 'a\\nb'")
+		if err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+		result, err := p.Wait()
+		if err != nil || result.ExitCode != 0 {
+			t.Fatalf("Wait = %+v, %v; want clean exit", result, err)
+		}
+		want := []Line{{Text: "err", Stderr: true}, {Text: "a"}, {Text: "b"}}
+		if len(got) != len(want) {
+			t.Fatalf("lines = %+v; want %+v", got, want)
+		}
+		for _, w := range want {
+			if !slices.Contains(got, w) {
+				t.Errorf("lines = %+v; missing %+v", got, w)
+			}
+		}
+		if result.Stderr != "err" || result.Stdout != "a\nb" {
+			t.Errorf("tails = %q / %q; want err / a\\nb", result.Stderr, result.Stdout)
+		}
+	})
+
+	t.Run("missing binary fails at Start", func(t *testing.T) {
+		t.Parallel()
+		p, err := New().Start(context.Background(), nil, "okdctl-no-such-binary")
+		if err == nil || p != nil {
+			t.Fatalf("Start = %v, %v; want nil proc and an error", p, err)
 		}
 	})
 }

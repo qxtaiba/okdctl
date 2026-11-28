@@ -20,9 +20,8 @@ func LF(key string, value any) LogField {
 }
 
 var (
-	facade             atomic.Pointer[slog.Logger]
-	progressBarsActive atomic.Bool
-	runID              atomic.Pointer[string]
+	facade atomic.Pointer[slog.Logger]
+	runID  atomic.Pointer[string]
 )
 
 func init() {
@@ -77,19 +76,6 @@ func Warn(msg string, fields ...LogField) { facade.Load().Warn(msg, fieldsToArgs
 
 // Error logs at ERROR through the RedactHandler-wrapped facade logger.
 func Error(msg string, fields ...LogField) { facade.Load().Error(msg, fieldsToArgs(fields)...) }
-
-// ProgressBarsEnabled reports whether progress bars should be rendered.
-// False when stdout is not a TTY or when JSON log format is active;
-// tui.ConfigureLoggers owns the value.
-func ProgressBarsEnabled() bool {
-	return progressBarsActive.Load()
-}
-
-// SetProgressBarsEnabled records the progress-bar gate. Production caller:
-// tui.ConfigureLoggers, once during cobra PersistentPreRunE.
-func SetProgressBarsEnabled(enabled bool) {
-	progressBarsActive.Store(enabled)
-}
 
 // SetRunID records the correlation ID returned by RunID. It does not touch
 // any sink; tui.SetRunID is the production entry point, which also rebinds

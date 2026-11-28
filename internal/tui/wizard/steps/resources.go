@@ -2,6 +2,7 @@ package steps
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -18,15 +19,15 @@ const (
 	pairKeyWorkerResources       = "worker_resources"
 )
 
-// ResourcesStepState pairs the resources step with the Config it edits so the
-// footer totals read the same config the review does.
+// ResourcesStepState pairs the resources step with the Config its footer
+// totals read.
 type ResourcesStepState struct {
 	Step     *wizard.DataDrivenStep
 	Cfg      *config.Config
 	Capacity *WizardCapacitySnapshot
 }
 
-// IsWizardStepState marks ResourcesStepState as a valid wizard.StepState.
+// IsWizardStepState marks ResourcesStepState as a wizard.StepState.
 func (s *ResourcesStepState) IsWizardStepState() {}
 
 // ResourcesStepDefinition declares the control-plane and worker sizing fields.
@@ -37,51 +38,14 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 	Description:  "size the three control-plane nodes and the worker pool",
 	Sections: []wizard.SectionDefinition{
 		{
-			Title: roleLabelControlPlane,
-			Note:  "always three nodes",
-			Fields: []wizard.FieldDefinition{
-				{
-					Key:       fieldCPCPU,
-					Label:     labelCPU,
-					Default:   "4",
-					Help:      "okd minimum: 4 vcpus",
-					Width:     wizard.FieldWidthNumber,
-					Required:  true,
-					PairKey:   pairKeyControlPlaneResources,
-					Validate:  minInt(4, "vcpu"),
-					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.ControlPlane.CPU = v }),
-					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.ControlPlane.CPU }),
-				},
-				{
-					Key:       fieldCPMemory,
-					Label:     labelMemory,
-					Default:   "16384",
-					Help:      "okd minimum: 16384 mib (16 gib)",
-					Width:     wizard.FieldWidthNumber,
-					Required:  true,
-					PairKey:   pairKeyControlPlaneResources,
-					Validate:  minInt(16384, "mib"),
-					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.ControlPlane.MemoryMiB = v }),
-					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.ControlPlane.MemoryMiB }),
-				},
-				{
-					Key:       fieldCPRootDisk,
-					Label:     labelRootDisk,
-					Default:   "120",
-					Help:      "okd minimum: 100 gib",
-					Width:     wizard.FieldWidthNumber,
-					Required:  true,
-					PairKey:   pairKeyControlPlaneResources,
-					Validate:  minInt(100, "gib"),
-					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.ControlPlane.Disks = setDiskSize(c.ControlPlane.Disks, 0, v) }),
-					ConfigGet: wizard.GetInt(func(c *config.Config) int { return diskSize(c.ControlPlane.Disks, 0) }),
-				},
-			},
+			Title:  roleLabelControlPlane,
+			Note:   "always three nodes",
+			Fields: sizingFields(config.RoleMaster, [3]string{fieldCPCPU, fieldCPMemory, fieldCPRootDisk}, pairKeyControlPlaneResources, "4", func(c *config.Config) *config.NodeDefaults { return &c.ControlPlane }),
 		},
 		{
 			Title: roleLabelWorkers,
-			Fields: []wizard.FieldDefinition{
-				{
+			Fields: slices.Concat(
+				[]wizard.FieldDefinition{{
 					Key:       fieldWorkerCount,
 					Label:     "count",
 					Default:   "2",
@@ -91,44 +55,9 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					Validate:  minInt(0, ""),
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Workers.Count = v }),
 					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Workers.Count }),
-				},
-				{
-					Key:       fieldWorkerCPU,
-					Label:     labelCPU,
-					Default:   "8",
-					Help:      "okd minimum: 2 vcpus",
-					Width:     wizard.FieldWidthNumber,
-					Required:  true,
-					PairKey:   pairKeyWorkerResources,
-					Validate:  minInt(2, "vcpu"),
-					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Workers.CPU = v }),
-					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Workers.CPU }),
-				},
-				{
-					Key:       fieldWorkerMemory,
-					Label:     labelMemory,
-					Default:   "16384",
-					Help:      "okd minimum: 8192 mib (8 gib)",
-					Width:     wizard.FieldWidthNumber,
-					Required:  true,
-					PairKey:   pairKeyWorkerResources,
-					Validate:  minInt(8192, "mib"),
-					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Workers.MemoryMiB = v }),
-					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Workers.MemoryMiB }),
-				},
-				{
-					Key:       fieldWorkerRootDisk,
-					Label:     labelRootDisk,
-					Default:   "120",
-					Help:      "okd minimum: 100 gib",
-					Width:     wizard.FieldWidthNumber,
-					Required:  true,
-					PairKey:   pairKeyWorkerResources,
-					Validate:  minInt(100, "gib"),
-					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Workers.Disks = setDiskSize(c.Workers.Disks, 0, v) }),
-					ConfigGet: wizard.GetInt(func(c *config.Config) int { return diskSize(c.Workers.Disks, 0) }),
-				},
-				{
+				}},
+				sizingFields(config.RoleWorker, [3]string{fieldWorkerCPU, fieldWorkerMemory, fieldWorkerRootDisk}, pairKeyWorkerResources, "8", func(c *config.Config) *config.NodeDefaults { return &c.Workers.NodeDefaults }),
+				[]wizard.FieldDefinition{{
 					Key:       fieldWorkerDataDisk,
 					Label:     "data disk (gib)",
 					Default:   "500",
@@ -138,14 +67,64 @@ var ResourcesStepDefinition = wizard.StepDefinition{
 					Validate:  minInt(0, "gib"),
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Workers.Disks = setDiskSize(c.Workers.Disks, 1, v) }),
 					ConfigGet: wizard.GetInt(func(c *config.Config) int { return diskSize(c.Workers.Disks, 1) }),
-				},
-			},
+				}},
+			),
 		},
+	},
+	Apply: func(_ *wizard.DataDrivenStep, cfg *config.Config) error {
+		if _, defaults, err := placementInventory(cfg); err == nil {
+			pruneStaleHostOverrides(cfg, defaults)
+		}
+		return nil
 	},
 }
 
-// setDiskSize sizes disks[i], growing the list as needed; a zero size on a
-// non-root index drops that disk and the ones after it.
+// sizingFields declares a role's cpu, memory and root-disk fields, floored
+// at config.FloorFor(role) and bound to the NodeDefaults that of returns.
+func sizingFields(role config.Role, keys [3]string, pairKey, cpuDefault string, of func(*config.Config) *config.NodeDefaults) []wizard.FieldDefinition {
+	floor := config.FloorFor(role)
+	return []wizard.FieldDefinition{
+		{
+			Key:       keys[0],
+			Label:     labelCPU,
+			Default:   cpuDefault,
+			Help:      fmt.Sprintf("okd minimum: %d vcpus", floor.CPU),
+			Width:     wizard.FieldWidthNumber,
+			Required:  true,
+			PairKey:   pairKey,
+			Validate:  minInt(floor.CPU, "vcpu"),
+			ConfigSet: wizard.SetInt(func(c *config.Config, v int) { of(c).CPU = v }),
+			ConfigGet: wizard.GetInt(func(c *config.Config) int { return of(c).CPU }),
+		},
+		{
+			Key:       keys[1],
+			Label:     labelMemory,
+			Default:   "16384",
+			Help:      fmt.Sprintf("okd minimum: %d mib (%d gib)", floor.MemoryMiB, floor.MemoryMiB/1024),
+			Width:     wizard.FieldWidthNumber,
+			Required:  true,
+			PairKey:   pairKey,
+			Validate:  minInt(floor.MemoryMiB, "mib"),
+			ConfigSet: wizard.SetInt(func(c *config.Config, v int) { of(c).MemoryMiB = v }),
+			ConfigGet: wizard.GetInt(func(c *config.Config) int { return of(c).MemoryMiB }),
+		},
+		{
+			Key:       keys[2],
+			Label:     labelRootDisk,
+			Default:   "120",
+			Help:      fmt.Sprintf("okd minimum: %d gib", floor.RootGiB),
+			Width:     wizard.FieldWidthNumber,
+			Required:  true,
+			PairKey:   pairKey,
+			Validate:  minInt(floor.RootGiB, "gib"),
+			ConfigSet: wizard.SetInt(func(c *config.Config, v int) { d := of(c); d.Disks = setDiskSize(d.Disks, 0, v) }),
+			ConfigGet: wizard.GetInt(func(c *config.Config) int { return diskSize(of(c).Disks, 0) }),
+		},
+	}
+}
+
+// setDiskSize sizes disks[i], growing the list; a zero size on a non-root
+// index drops that disk and the ones after it.
 func setDiskSize(disks []config.DiskSpec, i, size int) []config.DiskSpec {
 	if size == 0 && i > 0 {
 		if len(disks) > i {
@@ -167,7 +146,7 @@ func diskSize(disks []config.DiskSpec, i int) int {
 	return 0
 }
 
-// NewResourcesStep returns the resources wizard step and its state.
+// NewResourcesStep returns the resources step and its state.
 func NewResourcesStep(capacity *WizardCapacitySnapshot) (*wizard.DataDrivenStep, *ResourcesStepState) {
 	step := wizard.NewDataDrivenStep(&ResourcesStepDefinition)
 	state := &ResourcesStepState{Step: step, Capacity: capacity}
@@ -175,19 +154,6 @@ func NewResourcesStep(capacity *WizardCapacitySnapshot) (*wizard.DataDrivenStep,
 		return renderResourceFooter(s, state, width)
 	})
 	return step, state
-}
-
-// inventoryTotals sums vcpu, memory and disk over every node of inv.
-func inventoryTotals(inv *model.Inventory) (cpu, memoryMiB, diskGiB int) {
-	for i := range inv.Nodes {
-		n := &inv.Nodes[i]
-		cpu += n.CPU
-		memoryMiB += n.MemoryMiB
-		for _, d := range n.Disks {
-			diskGiB += d.SizeGiB
-		}
-	}
-	return cpu, memoryMiB, diskGiB
 }
 
 // renderResourceFooter totals the as-typed sizing through model.Build on a
@@ -199,24 +165,20 @@ func renderResourceFooter(step *wizard.DataDrivenStep, state *ResourcesStepState
 	overlay := *state.Cfg
 	overlay.ControlPlane.Disks = slices.Clone(overlay.ControlPlane.Disks)
 	overlay.Workers.Disks = slices.Clone(overlay.Workers.Disks)
-	if err := step.Apply(&overlay); err != nil {
+	overlay.Nodes = maps.Clone(overlay.Nodes)
+	if !step.IsComplete() || step.Apply(&overlay) != nil {
 		return tui.Truncate("resource totals pending · enter valid values", width)
 	}
-	inv, err := model.Build(&overlay, "")
+	inv, err := model.Build(&overlay, model.PreviewInfraID)
 	if err != nil {
 		return tui.Truncate("resource totals pending · enter valid values", width)
 	}
-	cpu, memoryMiB, diskGiB := inventoryTotals(&inv)
-	label := fmt.Sprintf("%d vcpu · %d gb ram · %d gb disk", cpu, memoryMiB/1024, diskGiB)
+	total := inventoryDemand(inv.Nodes)
+	label := fmt.Sprintf("%d vcpu · %d gb ram · %d gb disk", total.cpu, total.memoryMiB/1024, total.diskGiB)
 	capacity := state.Capacity.OnlineTotals()
-	over := (capacity.CPUsKnown && cpu > capacity.CPUs) ||
-		(capacity.MemoryKnown && memoryMiB > capacity.MemoryGB*1024)
-	if over {
+	if capacity.overCPU(&total) || capacity.overMemory(&total) {
 		label = tui.Truncate(label+fmt.Sprintf(" · exceeds online capacity (%dc/%dg)", capacity.CPUs, capacity.MemoryGB), width)
 		return lipgloss.NewStyle().Foreground(tui.ColorWarning()).Bold(true).Render(label)
-	}
-	if state.Capacity != nil && state.Capacity.discovery != nil && (!capacity.CPUsKnown || !capacity.MemoryKnown) {
-		label += " · online capacity unknown"
 	}
 	return lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true).Render(strings.TrimSpace(tui.Truncate(label, width)))
 }

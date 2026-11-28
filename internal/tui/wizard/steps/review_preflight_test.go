@@ -51,7 +51,7 @@ func TestReviewPreflightValidConfigPasses(t *testing.T) {
 			t.Errorf("%s = %+v, want passed", check.label, check)
 		}
 	}
-	if rendered := renderReviewPreflight(checks, 80); !strings.Contains(rendered, "3 passed · 0 warnings · 0 failed · 0 not checked") {
+	if rendered := renderReviewPreflight(checks, 80); !strings.Contains(rendered, "CHECKS · 3 passed · 0 warnings · 0 failed · 0 not checked") {
 		t.Errorf("rendered header = %q", rendered)
 	}
 }

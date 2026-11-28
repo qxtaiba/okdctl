@@ -8,13 +8,9 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-// helpOverlayGlobalKeys are the KeyHint.Key values RenderHelpOverlay always
-// buckets under "global" regardless of which step contributed them — they
-// describe the wizard's own chrome (back, quit, scroll, the overlay
-// itself), not the active step's fields. Mirrors wizard.HelpEsc,
-// wizard.HelpCtrlC, wizard.HelpQuestion, and the footer's "pgup/pgdn" scroll
-// hint; components cannot import the wizard package (which already imports
-// components), so the literals are duplicated here deliberately.
+// helpOverlayGlobalKeys are bucketed under "global" whichever step
+// contributed them; the literals mirror the wizard package's, which cannot
+// be imported from here.
 var helpOverlayGlobalKeys = map[string]bool{
 	"esc":       true,
 	"ctrl+c":    true,
@@ -22,17 +18,13 @@ var helpOverlayGlobalKeys = map[string]bool{
 	"?":         true,
 }
 
-// helpOverlayVimKeys are the KeyHint.Key values bucketed under the overlay's
-// "vim" section: the footer-silent scroll vocabulary the wizard binds on
-// every scrollable pane.
+// helpOverlayVimKeys are bucketed under the overlay's "vim" section.
 var helpOverlayVimKeys = map[string]bool{
 	"j/k":      true,
 	"ctrl+d/u": true,
 	"gg/G":     true,
 }
 
-// The overlay styles are assigned by rebuildHelpOverlayStyles (via
-// RebuildStyles) so the background flip reaches them.
 var (
 	helpOverlayTitleStyle   lipgloss.Style
 	helpOverlaySectionStyle lipgloss.Style
@@ -52,12 +44,8 @@ func rebuildHelpOverlayStyles() {
 		Padding(0, 1)
 }
 
-// RenderHelpOverlay renders every binding in bindings — grouped into a
-// "screen" section (the active step's own keys), a "vim" section (the
-// footer-silent scroll vocabulary, per helpOverlayVimKeys), and a "global"
-// section (back/quit/scroll/the overlay itself, per helpOverlayGlobalKeys)
-// — as a centered panel sized to exactly width×height, wrapping the screen
-// section into two columns once one would overflow height.
+// RenderHelpOverlay renders bindings as a centered panel exactly
+// width×height, grouped into screen, vim and global sections.
 func RenderHelpOverlay(bindings []KeyHint, width, height int) string {
 	screen, vim, global := partitionHelpBindings(bindings)
 
@@ -84,15 +72,9 @@ func partitionHelpBindings(bindings []KeyHint) (screen, vim, global []KeyHint) {
 	return screen, vim, global
 }
 
-// renderHelpOverlayBody lays out the title, the "screen" section (packed
-// into two columns once it would otherwise overflow height), the "vim" and
-// "global" sections (one labeled ribbon line each — both are always short),
-// and a closing hint, joined as one block no taller than height. If the
-// screen section still doesn't fit its budget — renderHelpColumns sizes to
-// it by construction, but this is the backstop if that arithmetic ever
-// drifts — rows are dropped from the screen section alone: head (the title)
-// and tail (the vim/global ribbons, which carry ctrl+c/?, plus the closing
-// hint) always survive intact, never the other way around.
+// renderHelpOverlayBody lays out the title, the screen section in up to two
+// columns, the vim and global ribbons and a closing hint within height,
+// dropping screen rows first so the ribbons carrying ctrl+c and "?" survive.
 func renderHelpOverlayBody(screen, vim, global []KeyHint, width, height int) string {
 	title := helpOverlayTitleStyle.Render("key bindings")
 	hint := helpOverlayHintStyle.Render("esc or ? closes")
@@ -130,12 +112,8 @@ func renderHelpOverlayBody(screen, vim, global []KeyHint, width, height int) str
 	return strings.Join(lines, "\n")
 }
 
-// renderHelpColumns renders items two per row (key/help pairs, left column
-// padded to align) once one row per item would need more than maxRows,
-// otherwise one per row. The left column sizes to its own widest entry
-// rather than a blind half-split, so a long help string doesn't get clipped
-// just because it landed on the left; only a panel too narrow for both
-// columns' content clips anything, and only the overflowing side.
+// renderHelpColumns renders items two per row once one per row would exceed
+// maxRows, sizing the left column to its own widest entry.
 func renderHelpColumns(items []KeyHint, width, maxRows int) []string {
 	if len(items) == 0 {
 		return nil
@@ -170,7 +148,6 @@ func renderHelpColumns(items []KeyHint, width, maxRows int) []string {
 	return lines
 }
 
-// widestCell returns the render width of items' widest "key help" cell.
 func widestCell(items []KeyHint) int {
 	w := 0
 	for _, it := range items {
@@ -181,14 +158,11 @@ func widestCell(items []KeyHint) int {
 	return w
 }
 
-// helpSectionLabelWidth aligns the vim and global ribbons on one label
-// column ("global" is the widest label).
+// helpSectionLabelWidth aligns the vim and global ribbons on one column.
 const helpSectionLabelWidth = 6
 
-// renderHelpSectionLines renders one ribbon section — "label  key desc •
-// key desc • ..." — packing items greedily onto as few lines as width
-// allows, continuations indented under the ribbon column so every binding
-// stays listed however narrow the panel.
+// renderHelpSectionLines packs items greedily onto as few lines as width
+// allows, indenting continuations under the ribbon column.
 func renderHelpSectionLines(label string, items []KeyHint, width int) []string {
 	sep := " " + tui.IconBullet + " "
 	prefix := padCell(helpOverlaySectionStyle.Render(label), helpSectionLabelWidth) + "  "
@@ -233,8 +207,7 @@ func formatHelpBinding(b KeyHint) string {
 	return helpOverlayKeyStyle.Render(b.Key) + " " + helpStyle.Render(b.Help)
 }
 
-// clipCell clips s (already rendered, possibly styled) to at most width
-// columns, ANSI-safely; s narrower than width is returned unchanged.
+// clipCell clips rendered s to width columns, ANSI-safely.
 func clipCell(s string, width int) string {
 	if lipgloss.Width(s) > width {
 		return lipgloss.NewStyle().MaxWidth(width).Inline(true).Render(s)
@@ -242,8 +215,7 @@ func clipCell(s string, width int) string {
 	return s
 }
 
-// padCell right-pads s to exactly width columns, clipping first if it's
-// already too wide.
+// padCell right-pads s to exactly width columns, clipping first.
 func padCell(s string, width int) string {
 	s = clipCell(s, width)
 	if w := lipgloss.Width(s); w < width {
@@ -252,11 +224,7 @@ func padCell(s string, width int) string {
 	return s
 }
 
-// clampWidth is a defensive backstop for width only — renderHelpOverlayBody
-// already keeps row count within height by construction (trimming the
-// screen section first, see its doc), so there's nothing to protect there;
-// this just clips any row wider than width rather than trusting the
-// border/padding math above never drifts.
+// clampWidth clips any row wider than width; height is held by construction.
 func clampWidth(block string, width int) string {
 	lines := strings.Split(block, "\n")
 	for i, l := range lines {

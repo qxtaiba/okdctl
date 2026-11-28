@@ -26,6 +26,8 @@ var releasesCmd = &cobra.Command{
 	Aliases: []string{"release"},
 	Short:   "Query available OKD versions",
 	Long:    "List and inspect OKD releases resolved from the GitHub releases feed.",
+	Args:    cobra.NoArgs,
+	RunE:    showHelp,
 }
 
 var releasesListCmd = &cobra.Command{
@@ -46,8 +48,9 @@ var releasesShowCmd = &cobra.Command{
 	Use:   "show <version>",
 	Short: "Show release info for a single OKD version",
 	Long: `Print metadata for a single OKD release identified by its full GitHub tag
-(e.g. "4.21.3-okd-scos.0"). The version list is resolved from the disk cache;
-use --channel=all with 'releases list' to discover pre-release tags.`,
+(e.g. "4.21.3-okd-scos.0"). The version list comes from the same 1-hour disk
+cache 'releases list' fills, refreshed from GitHub when it is stale; use
+'releases list --channel all' to discover pre-release tags.`,
 	Example: "  okdctl releases show 4.21.3-okd-scos.0",
 	Args:    cobra.ExactArgs(1),
 	ValidArgsFunction: func(cmd *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {

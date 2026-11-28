@@ -58,6 +58,12 @@ func TestClientFactories(t *testing.T) {
 			if tr.TLSClientConfig.InsecureSkipVerify != tc.wantInsecure {
 				t.Errorf("InsecureSkipVerify = %v, want %v", tr.TLSClientConfig.InsecureSkipVerify, tc.wantInsecure)
 			}
+			if tr.ResponseHeaderTimeout != TimeoutResponseHeader || tr.TLSHandshakeTimeout != TimeoutResponseHeader {
+				t.Errorf("header/handshake timeouts = %v/%v, want %v", tr.ResponseHeaderTimeout, tr.TLSHandshakeTimeout, TimeoutResponseHeader)
+			}
+			if tr.Proxy == nil || tr.DialContext == nil {
+				t.Error("transport is not a DefaultTransport clone: proxy or dial timeout missing")
+			}
 		})
 	}
 }

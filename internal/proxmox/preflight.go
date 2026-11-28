@@ -16,7 +16,8 @@ import (
 )
 
 // PreflightInput is the planned cluster footprint Preflight checks the
-// Proxmox cluster against; Addresses carries every node address and both VIPs.
+// Proxmox cluster against; NodeAddresses maps each node address to the VMID
+// that will hold it, so a running VM of the Tag'd cluster may answer on its own.
 type PreflightInput struct {
 	Nodes           []string
 	Storage         string
@@ -28,10 +29,10 @@ type PreflightInput struct {
 	Tag             string
 	VMIDs           []int
 	MACs            []string
-	Addresses       []netip.Addr
+	NodeAddresses   map[netip.Addr]int
+	VIPs            []netip.Addr
 	MemoryMiBByNode map[string]int
 	ISOBytes        int64
-	CPUModel        string
 }
 
 // Finding is one preflight result; Severity is "fail" or "warn".
@@ -41,14 +42,16 @@ type Finding struct {
 	Message  string
 }
 
-// Pinger reports whether an address answers on the network.
+// Pinger reports whether an address answers on the network; an error means
+// the probe was inconclusive (no ping binary, no route), not unanswered.
 type Pinger interface {
-	Alive(ctx context.Context, addr netip.Addr) bool
+	Alive(ctx context.Context, addr netip.Addr) (bool, error)
 }
 
+// SeverityFail and SeverityWarn are the two Finding.Severity values.
 const (
-	severityFail = "fail"
-	severityWarn = "warn"
+	SeverityFail = "fail"
+	SeverityWarn = "warn"
 
 	memoryReserveMiB = 8192
 	pingConcurrency  = 8
@@ -62,10 +65,10 @@ var (
 		"VM.Config.Memory", "VM.Config.Network", "VM.Config.Options", "VM.PowerMgmt", "VM.Audit",
 	}
 	checkSeverity = map[string]string{
-		"permissions": severityFail, "version": severityFail, "cpu-flags": severityFail,
-		"memory": severityWarn, "iso-space": severityFail, "vmid-collision": severityFail,
-		"mac-collision": severityFail, "address-in-use": severityFail,
-		"storage-content": severityFail, "bridge": severityFail,
+		"permissions": SeverityFail, "version": SeverityFail, "cpu-flags": SeverityFail,
+		"memory": SeverityWarn, "iso-space": SeverityFail, "vmid-collision": SeverityFail,
+		"mac-collision": SeverityFail, "address-in-use": SeverityFail,
+		"storage-content": SeverityFail, "bridge": SeverityFail,
 	}
 )
 
@@ -76,7 +79,7 @@ func (f *findings) add(check, format string, args ...any) {
 }
 
 func (f *findings) warn(check, format string, args ...any) {
-	f.emit(check, severityWarn, format, args...)
+	f.emit(check, SeverityWarn, format, args...)
 }
 
 func (f *findings) emit(check, sev, format string, args ...any) {
@@ -100,7 +103,8 @@ type preflightState struct {
 }
 
 // Preflight runs every check against the cluster and returns the findings
-// in check order; it errors only when an inventory call every check needs fails.
+// in check order; it errors only when an inventory call every check needs
+// fails or ctx ends, so cancellation never reads as a finding.
 //
 //nolint:gocritic // hugeParam: the brief fixes the by-value signature
 func Preflight(ctx context.Context, d Driver, ping Pinger, in PreflightInput) ([]Finding, error) {
@@ -119,6 +123,9 @@ func Preflight(ctx context.Context, d Driver, ping Pinger, in PreflightInput) ([
 	st.checkAddresses(ctx, ping, &out)
 	st.checkStorageContent(&out)
 	st.checkBridge(&out)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -147,37 +154,49 @@ func (st *preflightState) gather(ctx context.Context, d Driver) error {
 		inv.bridges, inv.bridgesErr = d.Bridges(ctx, node)
 		st.perNode[node] = inv
 	}
-	return nil
+	return ctx.Err()
 }
 
-type privReq struct{ path, priv string }
+// privReq is one privilege PVE checks before a create: on path, or on alt
+// when PVE also accepts the pool's grant; or is a second privilege PVE takes
+// in place of priv on the same path.
+type privReq struct{ path, alt, priv, or string }
+
+const vmsPath = "/vms"
 
 func (st *preflightState) requiredPrivileges() []privReq {
 	in := st.in
 	var reqs []privReq
+	var pool string
+	if in.Pool != "" {
+		pool = "/pool/" + in.Pool
+	}
 	for _, p := range vmPrivileges {
-		reqs = append(reqs, privReq{"/vms", p})
+		// check_vm_perm accepts a VM privilege on the pool the VM is created into.
+		reqs = append(reqs, privReq{path: vmsPath, alt: pool, priv: p})
+	}
+	sdn := "/sdn/zones/localnetwork/" + in.Bridge
+	if in.VLAN != 0 {
+		sdn += "/" + strconv.Itoa(in.VLAN) // check_vnet_access checks the tag's own path
 	}
 	reqs = append(reqs,
-		privReq{"/storage/" + in.Storage, "Datastore.AllocateSpace"},
-		privReq{"/storage/" + in.Storage, "Datastore.Audit"},
-		privReq{"/storage/" + in.ISOStorage, "Datastore.AllocateTemplate"},
-		privReq{"/storage/" + in.ISOStorage, "Datastore.Allocate"},
-		privReq{"/storage/" + in.ISOStorage, "Datastore.Audit"},
-		privReq{"/sdn/zones/localnetwork/" + in.Bridge, "SDN.Use"},
+		privReq{path: "/storage/" + in.Storage, priv: "Datastore.AllocateSpace"},
+		privReq{path: "/storage/" + in.Storage, priv: "Datastore.Audit"},
+		privReq{path: "/storage/" + in.ISOStorage, priv: "Datastore.AllocateTemplate"},
+		privReq{path: "/storage/" + in.ISOStorage, priv: "Datastore.Allocate"},
+		privReq{path: "/storage/" + in.ISOStorage, priv: "Datastore.Audit"},
+		privReq{path: sdn, priv: "SDN.Use"},
 	)
 	for _, n := range in.Nodes {
-		reqs = append(reqs, privReq{"/nodes/" + n, "Sys.Audit"})
+		reqs = append(reqs, privReq{path: "/nodes/" + n, priv: "Sys.Audit"})
 	}
 	if in.HA {
-		reqs = append(reqs, privReq{"/", "Sys.Console"})
+		reqs = append(reqs, privReq{path: "/", priv: "Sys.Console"})
 	}
-	if in.Pool != "" {
-		// create_vm with pool= calls check_perm_modify, which wants
-		// Permissions.Modify or Pool.Allocate on the pool.
-		reqs = append(reqs, privReq{"/pool/" + in.Pool, "Pool.Allocate"})
+	if pool != "" {
+		// create_vm with pool= calls check_perm_modify.
+		reqs = append(reqs, privReq{path: pool, priv: "Pool.Allocate", or: "Permissions.Modify"})
 	}
-	reqs = append(reqs, privReq{"/", "Sys.Modify"})
 	seen := make(map[privReq]bool, len(reqs))
 	return slices.DeleteFunc(reqs, func(r privReq) bool {
 		dup := seen[r]
@@ -186,30 +205,72 @@ func (st *preflightState) requiredPrivileges() []privReq {
 	})
 }
 
+// held mirrors PVE: a VM privilege is checked on /vms/<vmid>, so a /vms
+// grant counts only when it propagates.
+func (st *preflightState) held(r privReq) bool {
+	paths := []string{r.path}
+	if r.path == vmsPath && len(st.in.VMIDs) > 0 {
+		paths = paths[:0]
+		for _, id := range st.in.VMIDs {
+			paths = append(paths, vmsPath+"/"+strconv.Itoa(id))
+		}
+	}
+	for _, p := range paths {
+		ok := st.perms.granted(p, r.priv) ||
+			(r.or != "" && st.perms.granted(p, r.or)) ||
+			(r.alt != "" && st.perms.granted(r.alt, r.priv))
+		if !ok {
+			return false
+		}
+	}
+	return true
+}
+
 func (st *preflightState) checkPermissions(out *findings) {
 	for _, r := range st.requiredPrivileges() {
-		if !st.perms.granted(r.path, r.priv) {
-			out.add("permissions", "missing privilege %s on %s", r.priv, r.path)
+		if st.held(r) {
+			continue
 		}
+		what, where := r.priv, r.path
+		if r.or != "" {
+			what += " or " + r.or
+		}
+		if r.alt != "" {
+			where += " or " + r.alt
+		}
+		out.add("permissions", "missing privilege %s on %s", what, where)
 	}
 }
 
-// granted walks from path to "/" because PVE ACLs propagate downwards and
-// /access/permissions lists only the paths that carry an entry.
+// granted follows PVE's roles(): a privilege listed on the path itself is
+// held whatever its propagate flag; below a listed path the nearest ancestor
+// carrying any propagating entry decides alone, since its roles replace what
+// it would inherit, and an ancestor with none is skipped.
 func (p Permissions) granted(path, priv string) bool {
-	for {
-		if p[path][priv] {
-			return true
-		}
-		if path == "/" || path == "" {
-			return false
-		}
+	if privs, ok := p[path]; ok {
+		_, held := privs[priv]
+		return held
+	}
+	for path != "/" {
 		if i := strings.LastIndex(path, "/"); i > 0 {
 			path = path[:i]
 		} else {
 			path = "/"
 		}
+		if privs := p[path]; anyGranted(privs) {
+			return privs[priv]
+		}
 	}
+	return false
+}
+
+func anyGranted(privs map[string]bool) bool {
+	for _, ok := range privs {
+		if ok {
+			return true
+		}
+	}
+	return false
 }
 
 func (st *preflightState) checkVersion(out *findings) {
@@ -223,8 +284,15 @@ func (st *preflightState) checkVersion(out *findings) {
 func (st *preflightState) checkCPUFlags(out *findings) {
 	for _, name := range st.in.Nodes {
 		node, ok := st.nodes[name]
-		if !ok {
+		switch {
+		case !ok:
 			out.add("cpu-flags", "node %s not in cluster", name)
+			continue
+		case node.Status != nodeStatusOnline:
+			out.add("cpu-flags", "node %s is %s", name, node.Status)
+			continue
+		case len(node.CPUFlags) == 0:
+			out.add("cpu-flags", "node %s: status not readable", name)
 			continue
 		}
 		var missing []string
@@ -248,11 +316,12 @@ func (st *preflightState) owned(tags []string) bool {
 func (st *preflightState) checkMemory(out *findings) {
 	for _, name := range slices.Sorted(maps.Keys(st.in.MemoryMiBByNode)) {
 		node, ok := st.nodes[name]
-		if !ok {
-			continue
+		if !ok || node.MemTotalMiB == 0 {
+			continue // an unreadable or offline status is the cpu-flags check's finding
 		}
 		running, owned := 0, 0
-		for _, vm := range st.vms {
+		for i := range st.vms {
+			vm := &st.vms[i]
 			switch {
 			case vm.Node != name || vm.Status != "running":
 			case st.owned(vm.Tags):
@@ -298,7 +367,8 @@ func (st *preflightState) checkISOSpace(out *findings) {
 }
 
 func (st *preflightState) checkVMIDCollision(out *findings) {
-	for _, vm := range st.vms {
+	for i := range st.vms {
+		vm := &st.vms[i]
 		if !st.owned(vm.Tags) && slices.Contains(st.in.VMIDs, vm.VMID) {
 			out.add("vmid-collision", "vmid %d already used by %q on node %s", vm.VMID, vm.Name, vm.Node)
 		}
@@ -313,8 +383,12 @@ func (st *preflightState) checkMACCollision(ctx context.Context, d Driver, out *
 	for _, mac := range st.in.MACs {
 		planned[strings.ToLower(mac)] = mac
 	}
-	for _, vm := range st.vms {
-		if st.owned(vm.Tags) {
+	for i := range st.vms {
+		vm := &st.vms[i]
+		if ctx.Err() != nil {
+			return
+		}
+		if vm.Type != resourceTypeQEMU || st.owned(vm.Tags) {
 			continue
 		}
 		cfg, err := d.VMConfig(ctx, vm.VMRef)
@@ -334,20 +408,55 @@ func (st *preflightState) checkAddresses(ctx context.Context, ping Pinger, out *
 	if ping == nil {
 		return
 	}
-	addrs := slices.Clone(st.in.Addresses)
-	slices.SortFunc(addrs, netip.Addr.Compare)
+	addrs := st.unownedAddresses()
 	alive := make([]bool, len(addrs))
+	errs := make([]error, len(addrs))
 	var g errgroup.Group
 	g.SetLimit(pingConcurrency)
 	for i, a := range addrs {
-		g.Go(func() error { alive[i] = ping.Alive(ctx, a); return nil })
+		g.Go(func() error { alive[i], errs[i] = ping.Alive(ctx, a); return nil })
 	}
-	_ = g.Wait() // Alive reports no error, so nothing to collect
+	_ = g.Wait() // Alive's error is a finding, not a failure, so nothing to collect
+	inconclusive := map[string][]string{}
+	var causes []string
 	for i, a := range addrs {
-		if alive[i] {
+		switch {
+		case errs[i] != nil:
+			cause := errs[i].Error()
+			if _, seen := inconclusive[cause]; !seen {
+				causes = append(causes, cause)
+			}
+			inconclusive[cause] = append(inconclusive[cause], a.String())
+		case alive[i]:
 			out.add("address-in-use", "address %s answers ping", a)
 		}
 	}
+	for _, cause := range causes {
+		out.warn("address-in-use", "address check inconclusive for %s: %s", strings.Join(inconclusive[cause], ", "), cause)
+	}
+}
+
+// unownedAddresses drops the addresses the cluster's own running VMs hold:
+// a node address while its VM runs, the VIPs while any of them does.
+func (st *preflightState) unownedAddresses() []netip.Addr {
+	running := map[int]bool{}
+	for i := range st.vms {
+		vm := &st.vms[i]
+		if vm.Status == "running" && st.owned(vm.Tags) {
+			running[vm.VMID] = true
+		}
+	}
+	addrs := make([]netip.Addr, 0, len(st.in.NodeAddresses)+len(st.in.VIPs))
+	for a, vmid := range st.in.NodeAddresses {
+		if !running[vmid] {
+			addrs = append(addrs, a)
+		}
+	}
+	if len(running) == 0 {
+		addrs = append(addrs, st.in.VIPs...)
+	}
+	slices.SortFunc(addrs, netip.Addr.Compare)
+	return addrs
 }
 
 func (st *preflightState) checkStorageContent(out *findings) {
@@ -400,19 +509,37 @@ type execPinger struct {
 }
 
 // ExecPinger returns a Pinger that runs `ping -c 1 -W <wait> <addr>` through
-// ex; a non-zero exit or a missing ping binary both read as not alive.
+// ex; only the platform's no-reply exit reads as not alive, anything else
+// (missing binary, no route, another exit) is inconclusive.
 func ExecPinger(ex *executor.Executor) Pinger {
 	return execPinger{ex: ex, bin: "ping"}
 }
 
-func (p execPinger) Alive(ctx context.Context, addr netip.Addr) bool {
-	res, err := p.ex.Run(ctx, p.bin, "-c", "1", "-W", pingWait(runtime.GOOS), addr.String())
-	return err == nil && res.ExitCode == 0
+func (p execPinger) Alive(ctx context.Context, addr netip.Addr) (bool, error) {
+	wait, noReply := pingFlavour(runtime.GOOS)
+	res, err := p.ex.Run(ctx, p.bin, "-c", "1", "-W", wait, addr.String())
+	stderr := strings.TrimSpace(res.Stderr)
+	switch {
+	case err != nil:
+		return false, fmt.Errorf("ping: %w", err)
+	case res.ExitCode == 0:
+		return true, nil
+	case res.ExitCode == noReply && !routeError(stderr):
+		return false, nil
+	}
+	return false, fmt.Errorf("ping exit %d: %s", res.ExitCode, stderr)
 }
 
-func pingWait(goos string) string {
+// routeError spots the sendto failures ping reports under the no-reply exit.
+func routeError(stderr string) bool {
+	return strings.Contains(stderr, "No route to host") || strings.Contains(stderr, "unreachable")
+}
+
+// pingFlavour returns the -W value and the no-reply exit code: macOS ping
+// takes milliseconds and exits 2, iputils takes seconds and exits 1.
+func pingFlavour(goos string) (wait string, noReply int) {
 	if goos == "darwin" {
-		return "1000" // macOS ping takes -W in milliseconds, iputils in seconds
+		return "1000", 2
 	}
-	return "1"
+	return "1", 1
 }

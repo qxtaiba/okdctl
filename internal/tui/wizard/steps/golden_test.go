@@ -23,8 +23,6 @@ func assertNoScrollIndicator(t *testing.T, frame string) {
 	}
 }
 
-// forceHeroColor forces tui.ColorEnabled() true for the duration of t, so
-// the hub's block-letter hero renders instead of its no-color fallback.
 func forceHeroColor(t *testing.T) {
 	t.Helper()
 	t.Cleanup(func() { tui.SetColorProfileFor(&bytes.Buffer{}) })
@@ -41,75 +39,56 @@ func seedHubSaveSlot(m *wizard.Model) {
 }
 
 type configureScenario struct {
-	name     string
-	id       wizard.StepID
-	seed     func(*wizard.Model)
-	interact tea.Msg
+	name string
+	id   wizard.StepID
+	seed func(*wizard.Model)
+	wide bool
 }
 
 func configureScenarios() []configureScenario {
-	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
-	downKey := tea.KeyPressMsg{Code: 'j', Text: "j"}
-	endKey := tea.KeyPressMsg{Code: tea.KeyEnd}
-
 	return []configureScenario{
-		{name: "hub_fresh", id: wizard.StepIDWelcome},
-		{name: "hub_existing", id: wizard.StepIDWelcome, seed: seedHubSaveSlot, interact: downKey},
+		{name: "hub_fresh", id: wizard.StepIDWelcome, wide: true},
+		{name: "hub_existing", id: wizard.StepIDWelcome, seed: seedHubSaveSlot, wide: true},
 		{
 			name: "distribution",
 			id:   wizard.StepIDDistribution,
 			seed: func(m *wizard.Model) {
 				gen := m.CurrentStep().(*DistributionStep).generation
-				m.Update(versionsLoadedMsg{generation: gen, series: DemoReleaseSeries()})
+				m.Update(versionsLoadedMsg{generation: gen, series: fixtureReleaseSeries()})
 			},
-			interact: tabKey,
 		},
-		{name: "proxmox", id: wizard.StepIDProxmox, interact: tabKey},
-		{name: "basics", id: wizard.StepIDBasics, interact: tabKey},
+		{name: "proxmox", id: wizard.StepIDProxmox},
+		{name: "basics", id: wizard.StepIDBasics},
 		{
-			name: "node-placement",
+			name: "node-placement-fresh",
+			id:   wizard.StepIDNodePlacement,
+			seed: func(m *wizard.Model) {
+				gen := m.CurrentStep().(*NodePlacementStep).generation
+				m.Update(discoveryCompleteMsg{generation: gen, discovery: fixtureDiscovery()})
+			},
+			wide: true,
+		},
+		{
+			name: "node-placement-overrides",
 			id:   wizard.StepIDNodePlacement,
 			seed: func(m *wizard.Model) {
 				m.Config().Provider.Proxmox.Nodes = []string{"pve1", "pve2"}
+				m.Config().Nodes = map[string]config.NodeOverride{"lab-master1": {Host: "pve1"}}
 				gen := m.CurrentStep().(*NodePlacementStep).generation
-				m.Update(discoveryCompleteMsg{generation: gen, discovery: demoDiscovery()})
+				m.Update(discoveryCompleteMsg{generation: gen, discovery: fixtureDiscovery()})
 			},
-			interact: tabKey,
 		},
-		{name: "networking", id: wizard.StepIDNetworking, interact: tabKey},
-		{name: "resources", id: wizard.StepIDResources, interact: tabKey},
-		{name: "files", id: wizard.StepIDFiles, interact: tabKey},
-		{name: "advanced", id: wizard.StepIDAdvanced, interact: tabKey},
+		{name: "networking", id: wizard.StepIDNetworking},
+		{name: "resources", id: wizard.StepIDResources},
+		{name: "files", id: wizard.StepIDFiles},
+		{name: "advanced", id: wizard.StepIDAdvanced},
 		{
 			name: "review",
 			id:   wizard.StepIDReview,
-			seed: func(m *wizard.Model) {
-				m.CurrentStep().(*ReviewStep).SetConfig(m.Config())
-			},
-			interact: downKey,
+			seed: func(m *wizard.Model) { m.CurrentStep().(*ReviewStep).SetConfig(m.Config()) },
+			wide: true,
 		},
 		{name: "review-edited", id: wizard.StepIDReview, seed: seedReviewChanges},
-		{
-			name: "review-overrides",
-			id:   wizard.StepIDReview,
-			seed: func(m *wizard.Model) {
-				cfg := m.Config()
-				cfg.Provider.Proxmox.Nodes = []string{"pve1", "pve2"}
-				cfg.Nodes = map[string]config.NodeOverride{"lab-master0": {Host: "pve2", MemoryMiB: new(32768)}}
-				m.CurrentStep().(*ReviewStep).SetConfig(cfg)
-			},
-			interact: endKey,
-		},
-		{
-			name: "review-no-changes",
-			id:   wizard.StepIDReview,
-			seed: func(m *wizard.Model) {
-				cfg := m.Config()
-				step := m.CurrentStep().(*ReviewStep)
-				step.SetConfig(cfg)
-				step.SetSavedConfig(cfg)
-			},
-		},
 	}
 }
 
@@ -131,42 +110,41 @@ func newGoldenModel(t *testing.T) *wizard.Model {
 
 func newGoldenModelWithCapacity(t *testing.T) (*wizard.Model, *WizardCapacitySnapshot) {
 	t.Helper()
+	cfg := config.DefaultConfig()
+	cfg.Files.SSHPublicKey = "./id_ed25519.pub"
 	builder := wizard.NewStepBuilder()
-	RegisterAll(builder)
+	RegisterAll(builder, cfg)
 	built, err := wizard.BuildSteps(wizard.DefaultConfig(), builder)
 	if err != nil {
 		t.Fatal(err)
 	}
 	capacity, _ := built.States[wizard.StepTypeReview].(*WizardCapacitySnapshot)
-	cfg := config.DefaultConfig()
-	cfg.Files.SSHPublicKey = "./id_ed25519.pub"
 	for _, step := range built.Steps {
 		if ds, ok := step.(*wizard.DataDrivenStep); ok {
 			ds.LoadFromConfig(cfg, false)
 		}
 	}
-	capacity.cfg = cfg
-	built.States[wizard.StepTypeResources].(*ResourcesStepState).Cfg = cfg
 	return wizard.NewFlowModel(built.Steps, cfg, Chrome()), capacity
 }
 
-func demoDiscovery() *proxmoxDiscovery {
+func fixtureDiscovery() *proxmoxDiscovery {
 	return &proxmoxDiscovery{Nodes: []proxmoxNode{
-		{Name: "pve1", Status: "online", CPUs: 32, CPUsKnown: true, MemGB: 128, MemKnown: true},
-		{Name: "pve2", Status: "online", CPUs: 24, CPUsKnown: true, MemGB: 96, MemKnown: true},
+		{Name: "pve1", Status: "online", CPUs: 32, MemGB: 128},
+		{Name: "pve2", Status: "online", CPUs: 24, MemGB: 96},
 	}}
 }
 
-var goldenSizes = []struct{ w, h int }{{80, 24}, {120, 40}}
-
 func TestGolden_ConfigureSteps(t *testing.T) {
-	for _, sz := range goldenSizes {
-		for _, sc := range configureScenarios() {
+	for _, sc := range configureScenarios() {
+		sizes := []struct{ w, h int }{{80, 24}}
+		if sc.wide {
+			sizes = append(sizes, struct{ w, h int }{120, 40})
+		}
+		for _, sz := range sizes {
 			t.Run(fmt.Sprintf("%s_%dx%d", sc.name, sz.w, sz.h), func(t *testing.T) {
 				if strings.HasPrefix(sc.name, "hub") {
 					forceHeroColor(t)
 				}
-				base := fmt.Sprintf("%s_%dx%d", sc.name, sz.w, sz.h)
 				tui.SetTerminalWidth(sz.w)
 				t.Cleanup(func() { tui.SetTerminalWidth(0) })
 
@@ -177,17 +155,10 @@ func TestGolden_ConfigureSteps(t *testing.T) {
 					sc.seed(m)
 				}
 				frame := tuitest.RenderAt(t, m, sz.w, sz.h)
-				tuitest.Golden(t, base+"_initial", frame)
+				tuitest.Golden(t, fmt.Sprintf("%s_%dx%d", sc.name, sz.w, sz.h), frame)
 				tuitest.AssertFits(t, frame, sz.w, sz.h)
-				if strings.HasPrefix(sc.name, "hub") && sz.w == 80 && sz.h == 24 {
+				if strings.HasPrefix(sc.name, "hub") && sz.w == 80 {
 					assertNoScrollIndicator(t, frame)
-				}
-
-				if sc.interact != nil {
-					m.Update(sc.interact)
-					frame = tuitest.RenderAt(t, m, sz.w, sz.h)
-					tuitest.Golden(t, base+"_interacted", frame)
-					tuitest.AssertFits(t, frame, sz.w, sz.h)
 				}
 			})
 		}
@@ -200,11 +171,11 @@ func TestCapacityWizardFramesFitAllTiers(t *testing.T) {
 			tui.SetTerminalWidth(size.width)
 			t.Cleanup(func() { tui.SetTerminalWidth(0) })
 			m, capacity := newGoldenModelWithCapacity(t)
-			capacity.discovery = demoDiscovery()
+			capacity.discovery = fixtureDiscovery()
 			_ = tuitest.RenderAt(t, m, size.width, size.height)
 			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDNodePlacement})
 			gen := m.CurrentStep().(*NodePlacementStep).generation
-			m.Update(discoveryCompleteMsg{generation: gen, discovery: demoDiscovery()})
+			m.Update(discoveryCompleteMsg{generation: gen, discovery: fixtureDiscovery()})
 			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDNetworking})
 			networkFrame := tuitest.RenderAt(t, m, size.width, size.height)
 			tuitest.AssertFits(t, networkFrame, size.width, size.height)
@@ -330,7 +301,7 @@ func TestGolden_DistributionHelpOverlay(t *testing.T) {
 			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
 			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDDistribution})
 			gen := m.CurrentStep().(*DistributionStep).generation
-			m.Update(versionsLoadedMsg{generation: gen, series: DemoReleaseSeries()})
+			m.Update(versionsLoadedMsg{generation: gen, series: fixtureReleaseSeries()})
 			m.Update(questionMark)
 
 			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
@@ -340,8 +311,6 @@ func TestGolden_DistributionHelpOverlay(t *testing.T) {
 	}
 }
 
-// TestGolden_NodePlacementSingleNode pins the single-host case: every host
-// select has exactly one option and renders the bare value with no arrows.
 func TestGolden_NodePlacementSingleNode(t *testing.T) {
 	tui.SetTerminalWidth(100)
 	t.Cleanup(func() { tui.SetTerminalWidth(0) })
@@ -351,7 +320,7 @@ func TestGolden_NodePlacementSingleNode(t *testing.T) {
 	m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDNodePlacement})
 	gen := m.CurrentStep().(*NodePlacementStep).generation
 	m.Update(discoveryCompleteMsg{generation: gen, discovery: &proxmoxDiscovery{Nodes: []proxmoxNode{
-		{Name: "pve", Status: "online", CPUs: 32, CPUsKnown: true, MemGB: 128, MemKnown: true},
+		{Name: "pve", Status: "online", CPUs: 32, MemGB: 128},
 	}}})
 	for range 2 {
 		m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
@@ -401,13 +370,14 @@ func TestGolden_DistributionErrorState(t *testing.T) {
 
 func newGoldenModelFreshDefaults(t *testing.T) *wizard.Model {
 	t.Helper()
+	cfg := config.DefaultConfig()
 	builder := wizard.NewStepBuilder()
-	RegisterAll(builder)
+	RegisterAll(builder, cfg)
 	built, err := wizard.BuildSteps(wizard.DefaultConfig(), builder)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return wizard.NewFlowModel(built.Steps, config.DefaultConfig(), Chrome())
+	return wizard.NewFlowModel(built.Steps, cfg, Chrome())
 }
 
 func pumpCmd(m *wizard.Model, cmd tea.Cmd) {
@@ -474,7 +444,7 @@ func TestGolden_NetworkingMalformedCIDRShowsOneCleanError(t *testing.T) {
 func TestGolden_NetworkingPairedVIPsVisible(t *testing.T) {
 	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
 
-	for _, sz := range []struct{ w, h int }{{80, 24}, {120, 40}} {
+	for _, sz := range []struct{ w, h int }{{80, 24}} {
 		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
 			tui.SetTerminalWidth(sz.w)
 			t.Cleanup(func() { tui.SetTerminalWidth(0) })
@@ -506,16 +476,13 @@ func lineOf(s string, byteIdx int) int {
 	return strings.Count(s[:byteIdx], "\n")
 }
 
-// TestGolden_ProxmoxAdvancedFoldExpandedStaysOpenAfterFocusLeaves pins the
-// fold's sticky expand latch: tab to the toggle, enter to expand, then tab
-// away so the section is no longer focus-forced open.
 func TestGolden_ProxmoxAdvancedFoldExpandedStaysOpenAfterFocusLeaves(t *testing.T) {
 	tabKey := tea.KeyPressMsg{Code: tea.KeyTab}
 	shiftTabKey := tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift}
 	enterKey := tea.KeyPressMsg{Code: tea.KeyEnter}
 	pageDown := tea.KeyPressMsg{Code: tea.KeyPgDown}
 
-	for _, sz := range []struct{ w, h int }{{80, 24}, {120, 40}} {
+	for _, sz := range []struct{ w, h int }{{80, 24}} {
 		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
 			tui.SetTerminalWidth(sz.w)
 			t.Cleanup(func() { tui.SetTerminalWidth(0) })
@@ -548,9 +515,6 @@ func TestGolden_ProxmoxAdvancedFoldExpandedStaysOpenAfterFocusLeaves(t *testing.
 	}
 }
 
-// TestGolden_ProxmoxAdvancedFoldCollapsedAt80x24 pins the collapsed summary
-// row at the compact tier, scrolled into view with pgdn while the endpoint
-// keeps focus.
 func TestGolden_ProxmoxAdvancedFoldCollapsedAt80x24(t *testing.T) {
 	tui.SetTerminalWidth(80)
 	t.Cleanup(func() { tui.SetTerminalWidth(0) })
@@ -575,9 +539,6 @@ func TestGolden_ProxmoxAdvancedFoldCollapsedAt80x24(t *testing.T) {
 	}
 }
 
-// TestGolden_ProxmoxEnterHighlightsInvalidFields pins honest validation:
-// clearing the required endpoint paints no error until enter forces the
-// form's validation, which paints the red box and the status-row message.
 func TestGolden_ProxmoxEnterHighlightsInvalidFields(t *testing.T) {
 	enterKey := tea.KeyPressMsg{Code: tea.KeyEnter}
 

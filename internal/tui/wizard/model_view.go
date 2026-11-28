@@ -14,15 +14,12 @@ import (
 
 const tooSmallNotice = "okdctl needs at least 60×20 — resize the terminal"
 
-// tooSmall reports whether the terminal is below the floor the wizard chrome needs to render.
 func (m *Model) tooSmall() bool {
 	return m.width < minTerminalWidth || m.height < minTerminalHeight
 }
 
-// tooSmallContent renders tooSmallNotice clamped to width×height: the one
-// message telling the operator to resize must itself fit however small the
-// terminal actually is, down to 1×1 — a wrapped-but-unclamped notice would
-// otherwise be the one thing that overflows a terminal too small to show it.
+// tooSmallContent clamps the resize notice to width×height so the one
+// message about a too-small terminal never overflows it.
 func tooSmallContent(width, height int) string {
 	width, height = max(width, 1), max(height, 1)
 	style := lipgloss.NewStyle().Foreground(tui.ColorTextDim())
@@ -39,11 +36,10 @@ func tooSmallContent(width, height int) string {
 	return style.Render("\n  " + strings.Join(lines, "\n  "))
 }
 
-// View implements tea.Model, rendering header, viewport, status row, and
-// footer into a bordered box drawn at exactly the terminal width.
+// View renders header, viewport, status row and footer into a bordered box
+// exactly the terminal width.
 func (m *Model) View() tea.View {
-	// ReportFocus is away mode's wire: BlurMsg drops the shared clock to
-	// 1Hz, FocusMsg plays the catch-up sweep.
+	// ReportFocus is away mode's wire.
 	v := tea.View{AltScreen: true, ReportFocus: true}
 	v.WindowTitle = "okdctl · " + m.headerTitle()
 
@@ -62,7 +58,6 @@ func (m *Model) View() tea.View {
 	}
 
 	body := m.viewport.View()
-	// The overlay is a modal moment: it replaces the whole body region.
 	if m.helpOpen {
 		body = m.renderHelpOverlay()
 	}
@@ -79,22 +74,18 @@ func (m *Model) View() tea.View {
 	content.WriteString("\n")
 	content.WriteString(m.renderFooter())
 
-	// lipgloss v2 Width(N) counts the border inside N — pass contentWidth+2 or
-	// full-width lines clip by 2 chars.
+	// lipgloss v2 Width(N) counts the border inside N.
 	bordered := WizardBorderStyle.
 		Width(m.contentWidth() + wizardBorderHorizontal).
 		Render(content.String())
 
-	// Width(m.width) restores the outer padding around the frame so every
-	// row spans the terminal exactly, the way AltScreen repaints expect.
+	// Width(m.width) restores the outer padding so every row spans the terminal.
 	v.Content = OuterContainerStyle.Width(m.width).Render(bordered)
 	return v
 }
 
-// contentWidth is the inner content area every header/status/footer helper
-// sizes itself to: the terminal width minus the outer padding and the frame
-// border — the frame always spans the terminal, whatever the tier; the
-// readable measure is bodyWidth's business, inside the frame.
+// contentWidth is the frame's inner width: the terminal minus outer padding
+// and border, whatever the tier.
 func (m *Model) contentWidth() int {
 	width := m.width - outerHorizontalPadding - wizardBorderHorizontal
 	if width < minTerminalWidth-6 {
@@ -103,9 +94,8 @@ func (m *Model) contentWidth() int {
 	return width
 }
 
-// bodyWidth is the width a step's own content renders at: the whole frame
-// for a step that owns the full width (frameWidthOwner), and the capped form
-// measure otherwise.
+// bodyWidth is the width a step renders at: the whole frame for a
+// frameWidthOwner, the capped form measure otherwise.
 func (m *Model) bodyWidth() int {
 	if s, ok := m.CurrentStep().(frameWidthOwner); ok && s.OwnsFrameWidth() {
 		return m.contentWidth()
@@ -117,7 +107,7 @@ func (m *Model) bodyWidth() int {
 	return width
 }
 
-// statusRow is always exactly one row so the frame never grows; blank when clear.
+// statusRow is always exactly one row so the frame never grows.
 func (m *Model) statusRow() string {
 	width := m.contentWidth()
 	if m.discardPending {
@@ -127,16 +117,12 @@ func (m *Model) statusRow() string {
 	if m.err == nil {
 		return ""
 	}
-	// Padding is inert under Inline (lipgloss v2 skips it), so the 2-space
-	// inset — matching the body's viewport inset — is prepended literally.
-	// truncateTitle, not MaxWidth: a silent clip amputates exactly the
-	// "— fix" suffix every error carries.
+	// Padding is inert under Inline, so the inset is literal; truncateTitle,
+	// not MaxWidth, so the "— fix" suffix is never silently clipped.
 	style := lipgloss.NewStyle().Foreground(tui.ColorError()).Inline(true)
 	return "  " + style.Render(truncateTitle(tui.IconError+" "+m.err.Error(), width-2))
 }
 
-// contentDimensions sizes a ResizableStep: bodyWidth by the same
-// fixed-overhead height the viewport uses.
 func (m *Model) contentDimensions() (width, height int) {
 	width = m.bodyWidth()
 	height = m.height - m.layoutOverhead()
@@ -146,7 +132,6 @@ func (m *Model) contentDimensions() (width, height int) {
 	return width, height
 }
 
-// viewportDimensions sizes the scrollable viewport itself to bodyWidth.
 func (m *Model) viewportDimensions() (width, height int) {
 	contentWidth := m.bodyWidth()
 
@@ -204,11 +189,9 @@ func (m *Model) syncViewportContent() {
 	m.viewport.SetContent(padded)
 }
 
-// padContent insets each step line into a width-wide content column and
-// records the viewport row each one starts on: the column width wraps an
-// over-wide line into several rows, which would otherwise desynchronise a
-// step's LineSpan indices from the viewport's. Rendering line by line matches
-// rendering the whole block.
+// padContent insets each step line into a width-wide column and records the
+// viewport row each starts on, since an over-wide line wraps into several
+// rows.
 func padContent(content string, width int) (padded string, rows []int) {
 	style := lipgloss.NewStyle().
 		PaddingLeft(2).
@@ -228,9 +211,7 @@ func padContent(content string, width int) (padded string, rows []int) {
 	return strings.Join(out, "\n"), rows
 }
 
-// renderHeader draws the two-row header: brand (+ tagline on the first
-// visible step) on row one, the step's display title and the progress
-// trail on row two.
+// renderHeader draws the brand row and the title-plus-trail row.
 func (m *Model) renderHeader() string {
 	if m.headerRows() == 0 {
 		return ""
@@ -256,8 +237,7 @@ func (m *Model) renderHeader() string {
 	return HeaderStyle.Width(width).Render(brand + "\n" + row2)
 }
 
-// headerRows is the number of rows renderHeader draws: none at all on a step
-// that renders the wordmark itself, the full three otherwise.
+// headerRows is zero on a step that renders the wordmark itself.
 func (m *Model) headerRows() int {
 	if h, ok := m.CurrentStep().(heroRenderer); ok && h.RendersHero() {
 		return 0
@@ -265,15 +245,12 @@ func (m *Model) headerRows() int {
 	return headerHeight
 }
 
-// layoutOverhead is the frame's non-body row budget for the active step:
-// fixedLayoutOverhead, less whatever header rows a hero step drops, so the
-// reclaimed rows become viewport instead of blank frame.
+// layoutOverhead is fixedLayoutOverhead less the header rows a hero step
+// drops, which become viewport.
 func (m *Model) layoutOverhead() int {
 	return fixedLayoutOverhead - (headerHeight - m.headerRows())
 }
 
-// renderTrail renders the header's right-hand progress indicator: the
-// chrome's Trail hook if set, otherwise the default dot ribbon.
 func (m *Model) renderTrail() string {
 	p := m.progressInfo()
 	if m.chrome.Trail != nil {
@@ -285,8 +262,7 @@ func (m *Model) renderTrail() string {
 		StepIndicatorStyle.Render(" of "+strconv.Itoa(p.Total))
 }
 
-// headerTitle returns the current step's DisplayTitle(), falling back to
-// its Title() when DisplayTitle is unimplemented or empty.
+// headerTitle returns DisplayTitle(), falling back to Title().
 func (m *Model) headerTitle() string {
 	if len(m.steps) == 0 || m.currentStep < 0 || m.currentStep >= len(m.steps) {
 		return ""
@@ -300,16 +276,11 @@ func (m *Model) headerTitle() string {
 	return step.Title()
 }
 
-// renderStepTitle styles a step's DisplayTitle for the rare caller measuring
-// or rendering it outside the persistent header row (headerTitle/renderHeader
-// already show it there for every step); most steps never need this since
-// their title lives in the header, not inline in the scrollable body.
 func (m *Model) renderStepTitle(title string) string {
 	return lipgloss.NewStyle().Foreground(tui.ColorText()).Bold(true).Render(title)
 }
 
-// progressInfo reports the current step's position among visible steps for
-// FlowChrome.Trail hooks.
+// progressInfo reports the step's position among visible steps.
 func (m *Model) progressInfo() ProgressInfo {
 	visibleIDs := make([]StepID, 0, len(m.steps))
 	var currentID StepID
@@ -330,8 +301,8 @@ func (m *Model) progressInfo() ProgressInfo {
 	}
 }
 
-// truncateTitle rune-safely clips s to fit within maxWidth visible columns,
-// appending "…" when it clips — lipgloss's own MaxWidth truncates silently.
+// truncateTitle clips s to maxWidth with "…"; lipgloss's MaxWidth truncates
+// silently.
 func truncateTitle(s string, maxWidth int) string {
 	if maxWidth <= 0 {
 		return ""
@@ -349,8 +320,7 @@ func truncateTitle(s string, maxWidth int) string {
 	return "…"
 }
 
-// renderFooter draws the two-row footer: the scroll-indicator rule on top,
-// the help ribbon (or a step's PinnedFooter row) beneath it.
+// renderFooter draws the scroll-indicator rule and the help row.
 func (m *Model) renderFooter() string {
 	return m.renderFooterRule() + "\n" + m.renderHelpRow()
 }
@@ -364,11 +334,8 @@ func defaultKeyBindings() []KeyBinding {
 	}
 }
 
-// footerBindings returns the current step's ShortHelp() bindings (falling
-// back to defaultKeyBindings when the step has none), plus a pgup/pgdn hint
-// whenever the viewport content overflows its height, plus a trailing "?
-// help" hint — always visible, since it's the wizard's guaranteed discovery
-// path for whatever else the footer ribbon has no room to show.
+// footerBindings returns the step's ShortHelp (or the defaults), a pgup/pgdn
+// hint when the viewport overflows, and the always-visible "? help" hint.
 func (m *Model) footerBindings() []KeyBinding {
 	bindings := defaultKeyBindings()
 	if len(m.steps) > 0 && m.currentStep >= 0 && m.currentStep < len(m.steps) {
@@ -382,10 +349,8 @@ func (m *Model) footerBindings() []KeyBinding {
 	return append(bindings, KeyBinding{Key: HelpQuestion, Help: HelpOverlay})
 }
 
-// renderHelpOverlay renders the full, untruncated key-binding list — the
-// same bindings footerBindings feeds the ribbon, plus the active step's own
-// footer-silent extras (OverlayHelpProvider) and the wizard's footer-silent
-// vim/jump vocabulary — over the body region, sized to exactly replace it.
+// renderHelpOverlay renders the untruncated bindings, the step's
+// OverlayHelpProvider extras and the vim/jump vocabulary over the body.
 func (m *Model) renderHelpOverlay() string {
 	width, height := m.viewportDimensions()
 
@@ -394,8 +359,6 @@ func (m *Model) renderHelpOverlay() string {
 	for i, b := range bindings {
 		hints[i] = components.KeyHint{Key: b.Key, Help: b.Help}
 	}
-	// A step's own footer-silent bindings (OverlayHelpProvider) surface only
-	// here, alongside its ShortHelp entries in the same screen section.
 	if len(m.steps) > 0 && m.currentStep >= 0 && m.currentStep < len(m.steps) {
 		if h, ok := m.steps[m.currentStep].(OverlayHelpProvider); ok {
 			for _, b := range h.OverlayHelp() {
@@ -403,8 +366,6 @@ func (m *Model) renderHelpOverlay() string {
 			}
 		}
 	}
-	// The footer-silent vim vocabulary surfaces only here, under its own
-	// overlay group.
 	hints = append(hints,
 		components.KeyHint{Key: "ctrl+d/u", Help: "half page"},
 		components.KeyHint{Key: "gg/G", Help: "top/bottom"},
@@ -413,9 +374,8 @@ func (m *Model) renderHelpOverlay() string {
 	return components.RenderHelpOverlay(hints, width, height)
 }
 
-// renderHelpRow draws the footer's help row: a step's PinnedFooter text at
-// the left (when implemented) with the key-binding ribbon right-aligned in
-// the remaining width, or just the ribbon on its own otherwise.
+// renderHelpRow draws a step's PinnedFooter at the left with the ribbon
+// right-aligned in the remaining width.
 func (m *Model) renderHelpRow() string {
 	width := m.contentWidth()
 	innerWidth := width - 4 // FooterStyle Padding(0, 2) on both sides
@@ -439,12 +399,9 @@ func (m *Model) renderHelpRow() string {
 	return FooterStyle.Width(width).Render(row)
 }
 
-// renderFooterRule draws the footer's top row: a "─" rule with the scroll
-// indicator centred in it when the viewport overflows, plus the context
-// badge pinned to the right. The row never exceeds the content width: the
-// badge is ellipsized to half the row, the indicator degrades to bare
-// arrows, then to a plain rule, and the badge is dropped before it would
-// wrap the frame.
+// renderFooterRule draws the "─" rule with the scroll indicator centred and
+// the context badge at the right, degrading badge then indicator so the row
+// never exceeds the content width.
 func (m *Model) renderFooterRule() string {
 	width := m.contentWidth()
 	lineStyle := lipgloss.NewStyle().Foreground(tui.ColorRule())
@@ -475,13 +432,11 @@ func (m *Model) renderFooterRule() string {
 	return lineStyle.Render(strings.Repeat("─", max(avail, 0))) + badgeStyled
 }
 
-// centreInRuleReserve is the room centreInRule needs around an indicator:
-// a 3-column rule floor and one space on each side.
+// centreInRuleReserve is the rule floor plus one space each side.
 const centreInRuleReserve = 8
 
-// centreInRule centres ind within avail columns of "─" rule, keeping the
-// two sides within one column of each other; callers must ensure ind fits
-// (its width plus centreInRuleReserve at most avail) or the row overflows.
+// centreInRule centres ind within avail columns of rule; the caller must
+// ensure ind plus centreInRuleReserve fits avail.
 func (m *Model) centreInRule(ind string, avail int) string {
 	lineStyle := lipgloss.NewStyle().Foreground(tui.ColorRule())
 	indWidth := lipgloss.Width(ind)
@@ -492,10 +447,9 @@ func (m *Model) centreInRule(ind string, avail int) string {
 	return lineStyle.Render(strings.Repeat("─", left)) + " " + ind + " " + lineStyle.Render(strings.Repeat("─", right))
 }
 
-// scrollIndicator returns the footer's scroll-state arrows and message
-// separately — so renderFooterRule can drop the message alone on a tight
-// fit — and whether the viewport currently overflows its height; it returns
-// ("", "", false) when the content fits without scrolling.
+// scrollIndicator returns the footer's arrows and message separately so a
+// tight fit can drop the message alone; scrollable is false when the
+// content fits.
 func (m *Model) scrollIndicator() (arrows, message string, scrollable bool) {
 	if m.viewport.TotalLineCount() <= m.viewport.Height() {
 		return "", "", false

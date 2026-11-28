@@ -2,7 +2,6 @@ package steps
 
 import (
 	"errors"
-	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -11,6 +10,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/qxtaiba/okdctl/internal/config"
+	"github.com/qxtaiba/okdctl/internal/credentials"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/tuitest"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
@@ -98,8 +98,8 @@ func TestNodePlacementApplyWritesThePoolAndReplacesItsDefaults(t *testing.T) {
 	if _, overridden := cfg.Nodes["lab-master0"]; overridden {
 		t.Errorf("pve2 is lab-master0's default on the new pool; no override expected: %+v", cfg.Nodes)
 	}
-	if got := cfg.Nodes["lab-master1"].Host; got != "pve2" {
-		t.Errorf("lab-master1 kept pve2 from the old pool, so it needs an override on the new one; got %q", got)
+	if _, overridden := cfg.Nodes["lab-master1"]; overridden {
+		t.Errorf("an untouched host must follow the new pool's placement, not pin the old one: %+v", cfg.Nodes)
 	}
 }
 
@@ -152,8 +152,8 @@ func TestNodePlacementDemandFollowsSelection(t *testing.T) {
 	s := NewNodePlacementStep()
 	s.cfg = cfg
 	disc := &proxmoxDiscovery{Nodes: []proxmoxNode{
-		{Name: "pve1", Status: "online", CPUs: 4, CPUsKnown: true, MemGB: 8, MemKnown: true},
-		{Name: "pve2", Status: "offline", CPUs: 64, CPUsKnown: true, MemGB: 256, MemKnown: true},
+		{Name: "pve1", Status: "online", CPUs: 4, MemGB: 8},
+		{Name: "pve2", Status: "offline", CPUs: 64, MemGB: 256},
 	}}
 	step, _ := s.Update(discoveryCompleteMsg{discovery: disc})
 	s = step.(*NodePlacementStep)
@@ -185,7 +185,7 @@ func TestNodePlacementAssignmentDemandElidesVisiblyAtNarrowWidth(t *testing.T) {
 	s.cfg = cfg
 	nodes := make([]proxmoxNode, len(hosts))
 	for i, h := range hosts {
-		nodes[i] = proxmoxNode{Name: h, Status: "online", CPUs: 8, CPUsKnown: true, MemGB: 16, MemKnown: true}
+		nodes[i] = proxmoxNode{Name: h, Status: "online", CPUs: 8, MemGB: 16}
 	}
 	step, _ := s.Update(discoveryCompleteMsg{discovery: &proxmoxDiscovery{Nodes: nodes}})
 	s = step.(*NodePlacementStep)
@@ -289,13 +289,12 @@ func TestNodePlacementStep_ShouldShow(t *testing.T) {
 }
 
 func TestNodePlacementCredentialsPreferTheTypedToken(t *testing.T) {
-	t.Setenv("PROXMOX_VE_API_TOKEN", "env@pam!okdctl=env")
-	t.Setenv("PROXMOX_VE_INSECURE", "")
 	s := NewNodePlacementStep()
 	s.cfg = newPlacementConfig()
+	s.saved = &credentials.ProxmoxCredentials{APIToken: []byte("env@pam!okdctl=env")}
 
 	if creds := s.credentials(); string(creds.APIToken) != "env@pam!okdctl=env" || creds.Insecure {
-		t.Fatalf("without typed secrets creds = %+v, want the environment's token", creds.Redacted())
+		t.Fatalf("without typed secrets creds = %+v, want the saved token", creds.Redacted())
 	}
 
 	s.withSecrets(func() wizard.Secrets {
@@ -306,48 +305,41 @@ func TestNodePlacementCredentialsPreferTheTypedToken(t *testing.T) {
 	})
 	creds := s.credentials()
 	if string(creds.APIToken) != "typed@pam!okdctl=typed" || !creds.Insecure || creds.Endpoint != s.cfg.Provider.Proxmox.Endpoint {
-		t.Fatalf("creds = %+v / %q, want the typed token, insecure and the config endpoint", creds.Redacted(), creds.APIToken)
+		t.Fatalf("creds = %+v, want the typed token, insecure and the config endpoint", creds.Redacted())
 	}
 }
 
 func TestNodePlacementCredentialsTypedToggleWins(t *testing.T) {
-	t.Setenv("PROXMOX_VE_API_TOKEN", "env@pam!okdctl=env")
-	t.Setenv("PROXMOX_VE_INSECURE", "true")
 	s := NewNodePlacementStep()
 	s.cfg = newPlacementConfig()
+	s.saved = &credentials.ProxmoxCredentials{APIToken: []byte("env@pam!okdctl=env"), Insecure: true}
 	s.withSecrets(func() wizard.Secrets { return wizard.Secrets{ProxmoxInsecure: false} })
 
 	if creds := s.credentials(); creds.Insecure || string(creds.APIToken) != "env@pam!okdctl=env" {
-		t.Fatalf("creds = %+v; want the toggle typed off to win over PROXMOX_VE_INSECURE", creds.Redacted())
+		t.Fatalf("creds = %+v; want the toggle typed off to win over the saved flag", creds.Redacted())
 	}
 }
 
-func TestGolden_NodePlacementUnknownCapacity(t *testing.T) {
-	for _, sz := range []struct{ w, h int }{{80, 24}, {180, 48}} {
-		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
-			tui.SetTerminalWidth(sz.w)
-			t.Cleanup(func() { tui.SetTerminalWidth(0) })
+func TestSeedCredentialsReachesBothSteps(t *testing.T) {
+	t.Setenv("PROXMOX_VE_API_TOKEN", "")
+	proxmox := NewProxmoxStep()
+	placement := NewNodePlacementStep()
+	placement.cfg = newPlacementConfig()
+	placement.withSecrets(func() wizard.Secrets { return proxmox.Secrets() })
+	saved := &credentials.ProxmoxCredentials{APIToken: []byte("file@pam!okdctl=file"), Insecure: true}
 
-			m := newGoldenModel(t)
-			_ = tuitest.RenderAt(t, m, sz.w, sz.h)
-			m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDNodePlacement})
-			m.Config().Provider.Proxmox.Nodes = []string{"pve1"}
-			gen := m.CurrentStep().(*NodePlacementStep).generation
-			m.Update(discoveryCompleteMsg{generation: gen, discovery: &proxmoxDiscovery{Nodes: []proxmoxNode{{Name: "pve1", Status: "online"}}}})
-			for range 2 {
-				m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
-				m.Update(wizard.FocusChangedMsg{})
-			}
+	SeedCredentials(wizard.BuiltSteps{Steps: []wizard.WizardStep{proxmox, placement}}, saved)
 
-			frame := tuitest.RenderAt(t, m, sz.w, sz.h)
-			tuitest.Golden(t, fmt.Sprintf("node-placement-unknown-capacity_%dx%d", sz.w, sz.h), frame)
-			tuitest.AssertFits(t, frame, sz.w, sz.h)
-
-			plain := tuitest.StripANSI(frame)
-			if !strings.Contains(plain, "pve1 — ?c/?g") {
-				t.Errorf("view is missing the unknown-capacity option:\n%s", plain)
-			}
-		})
+	if got := proxmox.Value(fieldInsecure); got != valYes {
+		t.Fatalf("insecure field = %q, want %q from the sidecar", got, valYes)
+	}
+	creds := placement.credentials()
+	if string(creds.APIToken) != "file@pam!okdctl=file" || !creds.Insecure {
+		t.Fatalf("creds with a blank typed token = %+v, want the sidecar's token and flag", creds.Redacted())
+	}
+	creds.Zeroize()
+	if !saved.IsValid() {
+		t.Fatal("zeroizing the discovery copy wiped the saved sidecar")
 	}
 }
 
@@ -366,7 +358,7 @@ func TestNodePlacementStep_StaleDiscoveryRepliesCannotOverwriteNewer(t *testing.
 			t.Fatal("re-entry must issue a new generation")
 		}
 
-		discB := demoDiscovery()
+		discB := fixtureDiscovery()
 		step, _ := s.Update(discoveryCompleteMsg{generation: genB, discovery: discB})
 		s = step.(*NodePlacementStep)
 		stale.generation = genA
@@ -385,7 +377,7 @@ func TestNodePlacementStep_ReentryAfterSuccessRebuildsWithoutRefetching(t *testi
 	if cmd := s.Init(); cmd == nil {
 		t.Fatal("first Init() must fetch")
 	}
-	step, _ := s.Update(discoveryCompleteMsg{generation: s.generation, discovery: demoDiscovery()})
+	step, _ := s.Update(discoveryCompleteMsg{generation: s.generation, discovery: fixtureDiscovery()})
 	s = step.(*NodePlacementStep)
 	gen := s.generation
 
@@ -411,7 +403,7 @@ func TestNodePlacementStep_ReentryAfterErrorRefetches(t *testing.T) {
 	if cmd := s.Init(); cmd == nil || s.generation == genA {
 		t.Fatal("re-entry after an error must retry with a new generation")
 	}
-	step, _ = s.Update(discoveryCompleteMsg{generation: s.generation, discovery: demoDiscovery()})
+	step, _ = s.Update(discoveryCompleteMsg{generation: s.generation, discovery: fixtureDiscovery()})
 	s = step.(*NodePlacementStep)
 	if s.discoveryErr != nil {
 		t.Fatalf("discoveryErr = %v after the retry succeeded, want nil", s.discoveryErr)
@@ -422,7 +414,7 @@ func TestNodePlacementStep_RefreshKeyRefetchesDiscovery(t *testing.T) {
 	s := NewNodePlacementStep()
 	s.cfg = newPlacementConfig()
 	s.Init()
-	step, _ := s.Update(discoveryCompleteMsg{generation: s.generation, discovery: demoDiscovery()})
+	step, _ := s.Update(discoveryCompleteMsg{generation: s.generation, discovery: fixtureDiscovery()})
 	s = step.(*NodePlacementStep)
 	genBefore := s.generation
 
@@ -445,7 +437,7 @@ func TestNodePlacementStep_OverlayHelp(t *testing.T) {
 	}
 
 	want := wizard.KeyBinding{Key: "r", Help: "refresh"}
-	for name, msg := range map[string]discoveryCompleteMsg{"success": {discovery: demoDiscovery()}, "network error": {err: errors.New("connection refused")}} {
+	for name, msg := range map[string]discoveryCompleteMsg{"success": {discovery: fixtureDiscovery()}, "network error": {err: errors.New("connection refused")}} {
 		s := NewNodePlacementStep()
 		s.cfg = newPlacementConfig()
 		step, _ := s.Update(msg)
@@ -465,7 +457,7 @@ func TestNodePlacementStep_HelpOverlayListsRefreshOnlyOncePlacing(t *testing.T) 
 			s := NewNodePlacementStep()
 			s.cfg = newPlacementConfig()
 			if tc.discovered {
-				step, _ := s.Update(discoveryCompleteMsg{discovery: demoDiscovery()})
+				step, _ := s.Update(discoveryCompleteMsg{discovery: fixtureDiscovery()})
 				s = step.(*NodePlacementStep)
 			}
 			m := wizard.NewModel([]wizard.WizardStep{s}, s.cfg)
@@ -485,7 +477,7 @@ func TestNodePlacementStep_SanitizesHostileProxmoxText(t *testing.T) {
 	t.Run("node names", func(t *testing.T) {
 		s := NewNodePlacementStep()
 		s.cfg = newPlacementConfig()
-		disc := &proxmoxDiscovery{Nodes: []proxmoxNode{{Name: "pve1" + payload, Status: "online", CPUsKnown: true, CPUs: 4, MemKnown: true, MemGB: 8}}}
+		disc := &proxmoxDiscovery{Nodes: []proxmoxNode{{Name: "pve1" + payload, Status: "online", CPUs: 4, MemGB: 8}}}
 		step, _ := s.Update(discoveryCompleteMsg{discovery: disc})
 		s = step.(*NodePlacementStep)
 
@@ -517,7 +509,7 @@ func TestReviewJumpToProxmoxKeepsThePoolNodePlacementChose(t *testing.T) {
 
 	m.Update(wizard.JumpToStepMsg{StepID: wizard.StepIDNodePlacement})
 	placement := m.CurrentStep().(*NodePlacementStep)
-	m.Update(discoveryCompleteMsg{generation: placement.generation, discovery: demoDiscovery()})
+	m.Update(discoveryCompleteMsg{generation: placement.generation, discovery: fixtureDiscovery()})
 	placement.poolField.SetValue("pve1,pve2")
 	_, cmd := m.Update(enter)
 	pumpCmd(m, cmd)
@@ -550,5 +542,154 @@ func TestNodePlacementTypedNodesJoinThePoolWithoutDiscovery(t *testing.T) {
 	}
 	if got := cfg.Provider.Proxmox.Nodes; !slices.Equal(got, []string{"pve", "pve9"}) {
 		t.Fatalf("pool after typing a node = %v, want [pve pve9]", got)
+	}
+}
+
+func TestNodePlacementTypingIntoAddNodesNeverRefetchesOrScrolls(t *testing.T) {
+	s := NewNodePlacementStep()
+	s.cfg = newPlacementConfig()
+	s.Init()
+	step, _ := s.Update(discoveryCompleteMsg{generation: s.generation, discovery: fixtureDiscovery()})
+	s = step.(*NodePlacementStep)
+	m := wizard.NewModel([]wizard.WizardStep{s}, s.cfg)
+	tuitest.RenderAt(t, m, 100, 30)
+	m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	gen := s.generation
+
+	for _, r := range "rack1?gG" {
+		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	if got := s.addField.Value(); got != "rack1?gG" {
+		t.Fatalf("add nodes = %q, want every typed rune kept", got)
+	}
+	if s.generation != gen {
+		t.Fatal("typing r into add nodes re-issued discovery")
+	}
+	if !s.ConsumesTextInput() {
+		t.Fatal("ConsumesTextInput() = false while add nodes holds focus")
+	}
+}
+
+func TestNodePlacementFreshInitSpreadsAcrossTheDiscoveredPool(t *testing.T) {
+	cfg := config.DefaultConfig()
+	s := NewNodePlacementStep()
+	s.cfg = cfg
+	step, _ := s.Update(discoveryCompleteMsg{discovery: fixtureDiscovery()})
+	s = step.(*NodePlacementStep)
+
+	if got := s.poolField.Value(); got != "pve1,pve2" {
+		t.Fatalf("pool offered on a fresh run = %q, want every discovered host and no placeholder", got)
+	}
+	want := map[string]string{"lab-master0": "pve1", "lab-master1": "pve2", "lab-master2": "pve1", "lab-worker0": "pve2", "lab-worker1": "pve1"}
+	for name, host := range want {
+		field := s.hostFields[name]
+		if got := field.Value(); got != host || !field.IsDefault() {
+			t.Errorf("%s = %q (default %v), want the model's %q tagged default", name, got, field.IsDefault(), host)
+		}
+	}
+	if err := s.Apply(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Nodes) != 0 || !slices.Equal(cfg.Provider.Proxmox.Nodes, []string{"pve1", "pve2"}) {
+		t.Fatalf("an untouched fresh placement wrote overrides %+v on pool %v", cfg.Nodes, cfg.Provider.Proxmox.Nodes)
+	}
+}
+
+func TestNodePlacementKeepsAConfiguredPoolThatDiscoveryStillOffers(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Provider.Proxmox.Nodes = []string{"pve2", "pve9"}
+	s := NewNodePlacementStep()
+	s.cfg = cfg
+	step, _ := s.Update(discoveryCompleteMsg{discovery: fixtureDiscovery()})
+	s = step.(*NodePlacementStep)
+
+	if got := s.poolField.Value(); got != "pve2,pve9" {
+		t.Fatalf("pool = %q, want the configured pool kept", got)
+	}
+	if got := s.hostFields["lab-master1"].Value(); got != "pve9" {
+		t.Fatalf("lab-master1 = %q, want the configured pool's pve9 selectable as its default", got)
+	}
+}
+
+func TestNodePlacementShouldShowIsPure(t *testing.T) {
+	s := NewNodePlacementStep()
+	other := newPlacementConfig()
+	if !s.ShouldShow(other) || s.cfg != nil {
+		t.Fatalf("ShouldShow(proxmox) = false or recorded cfg %p, want true and no mutation", s.cfg)
+	}
+	if s.ShouldShow(&config.Config{Provider: config.ProviderConfig{Type: "aws"}}) {
+		t.Fatal("ShouldShow(non-proxmox provider) = true, want false")
+	}
+}
+
+func TestRegisterAllSeedsTheSessionConfigIntoEveryConsumer(t *testing.T) {
+	cfg := newPlacementConfig()
+	builder := wizard.NewStepBuilder()
+	RegisterAll(builder, cfg)
+	built, err := wizard.BuildSteps(wizard.DefaultConfig(), builder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	capacity := built.States[wizard.StepTypeReview].(*WizardCapacitySnapshot)
+	resources := built.States[wizard.StepTypeResources].(*ResourcesStepState)
+	var placement *NodePlacementStep
+	for _, step := range built.Steps {
+		if p, ok := step.(*NodePlacementStep); ok {
+			placement = p
+		}
+	}
+	if capacity.cfg != cfg || resources.Cfg != cfg || placement.cfg != cfg {
+		t.Fatalf("session config not shared: capacity=%p resources=%p placement=%p want %p", capacity.cfg, resources.Cfg, placement.cfg, cfg)
+	}
+}
+
+func TestNodePlacementApplyPrunesHostOverridesTheConfigNoLongerProduces(t *testing.T) {
+	for name, mutate := range map[string]func(*config.Config){
+		"renamed cluster": func(cfg *config.Config) { cfg.Cluster.Name = "prod" },
+		"no workers":      func(cfg *config.Config) { cfg.Workers.Count = 0 },
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg := newPlacementConfig()
+			cfg.Nodes = map[string]config.NodeOverride{"lab-worker1": {Host: "pve3"}, "lab-master0": {CPU: new(8)}}
+			s := NewNodePlacementStep()
+			s.cfg = cfg
+			s.buildInnerStep(nil, placementHosts)
+			mutate(cfg)
+
+			if err := s.Apply(cfg); err != nil {
+				t.Fatal(err)
+			}
+			if _, stale := cfg.Nodes["lab-worker1"]; stale {
+				t.Errorf("stale host override survived: %+v", cfg.Nodes)
+			}
+			if o, kept := cfg.Nodes["lab-master0"]; name == "no workers" && (!kept || o.CPU == nil) {
+				t.Errorf("a non-host override on a produced node was dropped: %+v", cfg.Nodes)
+			}
+		})
+	}
+}
+
+func TestNodePlacementApplyRefusesAnEmptyPool(t *testing.T) {
+	cfg := newPlacementConfig()
+	s := NewNodePlacementStep()
+	s.cfg = cfg
+	s.phase = phasePlacing
+	s.buildInnerStep(nil, placementHosts)
+	s.SetFocused(true)
+	s.poolField.SetValue("")
+
+	_, cmd := s.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	errMsg, ok := firstErrorSetMsg(cmd)
+	if !ok || !strings.Contains(errMsg.Error.Error(), "pool") {
+		t.Fatalf("enter with no pool chip checked = %#v, want an ErrorSetMsg about the pool", cmd)
+	}
+	if got := s.inner.FocusedField(); got != s.poolField {
+		t.Fatalf("focus after refusal = %v, want the pool field", got)
+	}
+	if err := s.Apply(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Provider.Proxmox.Nodes) != 0 {
+		t.Fatalf("Apply kept the previous pool %v while the screen showed none", cfg.Provider.Proxmox.Nodes)
 	}
 }

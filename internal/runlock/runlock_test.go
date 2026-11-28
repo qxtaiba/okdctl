@@ -12,7 +12,6 @@ import (
 	"github.com/qxtaiba/okdctl/internal/runlock"
 )
 
-// hostnameOrUnknown mirrors the lock body's os.Hostname fallback.
 func hostnameOrUnknown() string {
 	host, _ := os.Hostname()
 	if host == "" {

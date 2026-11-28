@@ -31,7 +31,6 @@ func TestErrorSummaryKindHeadlineAndHint(t *testing.T) {
 	}
 }
 
-// Locks that "; " in a message with no structured hint stays whole, not fabricated into one.
 func TestErrorSummaryHintlessKeepsWholeMessage(t *testing.T) {
 	const semicolonMsg = "node drained (2 pods evicted; 1 pending) before removal"
 	cases := []struct {
@@ -56,21 +55,6 @@ func TestErrorSummaryHintlessKeepsWholeMessage(t *testing.T) {
 	}
 }
 
-func TestPresentedMarkerRoundTrips(t *testing.T) {
-	base := &errtypes.ClusterError{Msg: "boom"}
-	wrapped := Presented(base)
-	if !IsPresented(wrapped) {
-		t.Fatal("IsPresented should report true for a Presented error")
-	}
-	var ce *errtypes.ClusterError
-	if !errors.As(wrapped, &ce) {
-		t.Fatal("errors.As must still reach the underlying errtypes value through Presented")
-	}
-	if Presented(nil) != nil {
-		t.Fatal("Presented(nil) must be nil")
-	}
-}
-
 func TestErrorBodyChipHasTwoSpaceGap(t *testing.T) {
 	summary := ErrorSummary(&errtypes.ConfigError{Msg: "boom"}, 1, "R")
 	if !strings.Contains(summary, "✗  config error") {
@@ -78,12 +62,6 @@ func TestErrorBodyChipHasTwoSpaceGap(t *testing.T) {
 	}
 }
 
-// TestErrorSummaryWrappedHintNeverTouchesTheRightBorder guards the T8 nit. A
-// single unbroken "word" longer than the wrap width hard-splits (see
-// TestWrapTextHardSplitsLongToken) into lines that fill the wrap budget
-// exactly — the worst case for a right-edge gutter — so every wrapped hint
-// row this produces must still leave at least one blank column before the
-// closing "│", never land flush against it the way message/kind rows can.
 func TestErrorSummaryWrappedHintNeverTouchesTheRightBorder(t *testing.T) {
 	tui.SetTerminalWidth(70)
 	t.Cleanup(func() { tui.SetTerminalWidth(0) })
@@ -126,12 +104,6 @@ func TestErrorSummaryGoldenAtWidths(t *testing.T) {
 	}
 }
 
-// TestErrorSummarySanitizesHostileBackendText proves a backend error whose
-// Error() text carries an OSC 0 sequence (sets the window title) never
-// reaches the rendered error box as a live escape: describeError's fallback
-// for an untyped error is the one generic sink every CLI command failure
-// flows through (ErrorSummary -> describeError), so this exercises it
-// directly rather than one of its many callers.
 func TestErrorSummarySanitizesHostileBackendText(t *testing.T) {
 	const payload = "\x1b]0;pwned\x07"
 	err := errors.New("connection refused" + payload + " while contacting proxmox")

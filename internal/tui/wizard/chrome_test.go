@@ -20,8 +20,6 @@ func (s *nopStep) View(_, _ int) string                 { return "body" }
 
 var nopStepSeq int
 
-// newNopStep returns a step with a fresh StepID each call, so multi-step
-// test models can route JumpToStepMsg unambiguously.
 func newNopStep() *nopStep {
 	nopStepSeq++
 	id := StepID(fmt.Sprintf("nop-%d", nopStepSeq))
@@ -112,7 +110,6 @@ func TestStagesTrail_HiddenStepExcludedFromDotCountAndPosition(t *testing.T) {
 	stages := []Stage{{Label: "cluster", Steps: []StepID{"a", "b", "c", "d"}}}
 	trail := StagesTrail(stages)
 
-	// b is hidden: only a, c, d are visible, and c is now the second of three.
 	got := trail(ProgressInfo{CurrentID: "c", VisibleIDs: []StepID{"a", "c", "d"}})
 	want := "cluster " + tui.IconSuccess + tui.IconActive + tui.IconPending
 	if stripped := tuitest.StripANSI(got); stripped != want {
@@ -134,16 +131,12 @@ func TestStagesTrail_MultiStepStageWithOnlyOneVisibleRendersBareLabel(t *testing
 	stages := []Stage{{Label: "connect", Steps: []StepID{"a", "b", "c"}}}
 	trail := StagesTrail(stages)
 
-	// b and c are hidden this run: only a is visible, so the stage has no
-	// ribbon to show even though it lists 3 steps.
 	got := trail(ProgressInfo{CurrentID: "a", VisibleIDs: []StepID{"a"}})
 	if stripped := tuitest.StripANSI(got); stripped != "connect" {
 		t.Fatalf("trail = %q, want %q", stripped, "connect")
 	}
 }
 
-// heroNopStep renders the product wordmark itself, so the frame must drop its
-// own header rather than printing a second identity above it.
 type heroNopStep struct{ nopStep }
 
 func (s *heroNopStep) RendersHero() bool { return true }

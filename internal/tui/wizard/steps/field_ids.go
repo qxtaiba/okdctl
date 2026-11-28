@@ -26,7 +26,6 @@ const (
 )
 
 const (
-	labelDeploy           = "deploy"
 	labelCluster          = "cluster"
 	labelCPU              = "cpu"
 	labelVLAN             = "vlan"

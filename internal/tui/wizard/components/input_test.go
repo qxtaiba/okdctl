@@ -52,9 +52,6 @@ func TestInputField_ErrorBorderWinsOverFocus(t *testing.T) {
 	}
 }
 
-// TestInputField_RequiredErrorNamesFix pins the R4 fix for the wizard's
-// most-triggered error: a blank required field must say what to do, AND
-// which field, not a generic "this field is required".
 func TestInputField_RequiredErrorNamesFix(t *testing.T) {
 	f := NewInputField("cluster name", "")
 	f.Required = true
@@ -65,9 +62,6 @@ func TestInputField_RequiredErrorNamesFix(t *testing.T) {
 	}
 }
 
-// TestInputField_RequiredErrorFallsBackWithoutLabel covers the defensive
-// branch: a Required field constructed without a label must not render
-// "is required" with an empty subject.
 func TestInputField_RequiredErrorFallsBackWithoutLabel(t *testing.T) {
 	f := NewInputField("", "")
 	f.Required = true
@@ -178,14 +172,6 @@ func TestInputField_PlaceholderStyleDiffersFromDefaultValueStyle(t *testing.T) {
 	defaultField.SetDefault("main")
 	defaultRow := strings.Split(defaultField.View(), "\n")[2]
 
-	// Un-stripped: the placeholder's hint text renders italic (a standalone
-	// SGR 3 parameter — "\x1b[3;" preceding a combined code, or a lone
-	// "\x1b[3m") on top of its own dimmer color, while an unmodified
-	// default's text carries no italic — the two must never collapse into
-	// the same look, or an empty box reads as already-filled until a
-	// submit-time validation error. (Checking for "\x1b[3" alone would
-	// false-positive on the unrelated 256/24-bit color codes "38"/"3" + a
-	// digit that both rows also carry.)
 	hasItalic := func(row string) bool {
 		return strings.Contains(row, "\x1b[3;") || strings.Contains(row, "\x1b[3m")
 	}
@@ -196,9 +182,6 @@ func TestInputField_PlaceholderStyleDiffersFromDefaultValueStyle(t *testing.T) {
 		t.Fatalf("default-value row unexpectedly carries an italic SGR code: %q", defaultRow)
 	}
 
-	// Stripped, the two must still read as clearly different: the
-	// placeholder shows its hint text, the default shows its real value
-	// plus the " default" tag.
 	strippedPlaceholder := tuitest.StripANSI(placeholderField.View())
 	strippedDefault := tuitest.StripANSI(defaultField.View())
 	if !strings.Contains(strippedPlaceholder, "ssh://git@example.com/org/repo.git") {
@@ -222,9 +205,6 @@ func TestInputField_DisabledDimsBorderBeyondUnfocused(t *testing.T) {
 	enabledRows := strings.Split(enabled.View(), "\n")
 	disabledRows := strings.Split(disabled.View(), "\n")
 
-	// The border row must differ (a dimmer color) from the ordinary
-	// unfocused state, or a disabled field looks identical to any other
-	// blurred field — the whole point is a visibly different affordance.
 	if enabledRows[1] == disabledRows[1] {
 		t.Fatalf("disabled top-border row is identical to an ordinary unfocused field: %q", disabledRows[1])
 	}
@@ -296,9 +276,6 @@ func TestInputField_DefaultTypeToReplace(t *testing.T) {
 	}
 }
 
-// TestInputField_DefaultPasteToReplace pins bracketed paste to the same
-// contract as typing: a paste over an unmodified default replaces the text
-// and drops the default tag instead of merging into it.
 func TestInputField_DefaultPasteToReplace(t *testing.T) {
 	f := NewInputField("username", "")
 	f.SetDefault("root@pam")
@@ -329,10 +306,6 @@ func TestInputField_PasteClearsStaleError(t *testing.T) {
 	}
 }
 
-// TestInputField_PasteRejectsEmbeddedNewline pins the reconciliation-audit
-// defect where a pasted multi-line secret (e.g. an SSH key) was forwarded
-// straight to bubbles' textinput, which silently collapses embedded
-// newlines into spaces and accepts the mangled result with no error.
 func TestInputField_PasteRejectsEmbeddedNewline(t *testing.T) {
 	f := NewInputField("ssh key", "")
 	f.SetValue("original-value")
@@ -354,8 +327,6 @@ func TestInputField_PasteRejectsEmbeddedNewline(t *testing.T) {
 	}
 }
 
-// TestInputField_PasteRejectsControlByte covers a pasted path carrying a
-// stray control byte, the other half of the audit's reproduction.
 func TestInputField_PasteRejectsControlByte(t *testing.T) {
 	f := NewInputField("path", "")
 	f.SetValue("original-value")
@@ -371,9 +342,6 @@ func TestInputField_PasteRejectsControlByte(t *testing.T) {
 	}
 }
 
-// TestInputField_PasteRejectionClearsOnNextValidPaste proves a rejection is
-// not sticky: a following well-formed paste is accepted and clears the
-// rejection error, matching the field's existing error-clear-on-edit rule.
 func TestInputField_PasteRejectionClearsOnNextValidPaste(t *testing.T) {
 	f := NewInputField("ssh key", "")
 	_ = f.Focus()
@@ -407,11 +375,6 @@ func TestInputField_DefaultArrowKeepsText(t *testing.T) {
 	}
 }
 
-// TestInputField_DefaultTagFitsAtPathWidthNarrowAvail pins the
-// secretstore_op_connect_host regression: a Path-width (64) field with a
-// default must reserve room for the " default" tag out of its available
-// width, so box+tag join into exactly avail columns instead of overflowing
-// it by the tag's width.
 func TestInputField_DefaultTagFitsAtPathWidthNarrowAvail(t *testing.T) {
 	f := NewInputField("connect host", "")
 	f.SetBoxWidth(64) // wizard.FieldWidthPath
@@ -428,14 +391,6 @@ func TestInputField_DefaultTagFitsAtPathWidthNarrowAvail(t *testing.T) {
 	}
 }
 
-// TestInputField_BoxWidthStableAcrossDefaultTagDrop pins geometry
-// stability: a field that has ever carried a default reserves the tag's
-// room for its whole life (hasDefault, permanent), so the box itself never
-// widens when the user's first keystroke drops the (now-cleared) default
-// tag — only isDefault clears; boxOuterWidth must not. A reserve keyed off
-// isDefault instead would pass TestInputField_DefaultTagFitsAtPathWidthNarrowAvail
-// but fail here: the box would jump from 62 to 70 wide the instant the tag
-// drops.
 func TestInputField_BoxWidthStableAcrossDefaultTagDrop(t *testing.T) {
 	f := NewInputField("connect host", "")
 	f.SetBoxWidth(64)
@@ -470,8 +425,6 @@ func TestInputField_SetValueClearsDefaultTag(t *testing.T) {
 	}
 }
 
-// ansiPrefix renders "x" in fg and returns the ANSI escape sequence that
-// precedes it, so a test can assert a rendered row was styled with fg.
 func ansiPrefix(t *testing.T, fg color.Color) string {
 	t.Helper()
 	rendered := lipgloss.NewStyle().Foreground(fg).Render("x")
@@ -509,9 +462,6 @@ func TestInputGroup_FieldViewsEmptyGroup(t *testing.T) {
 	}
 }
 
-// sgrStatesOf returns the accumulated SGR state preceding each visible rune
-// of needle within row, so a test can assert a run of text renders in one
-// uniform style.
 func sgrStatesOf(t *testing.T, row, needle string) []string {
 	t.Helper()
 

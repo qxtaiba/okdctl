@@ -227,14 +227,6 @@ func scrubStderrText(s string) string {
 	return jwtScrubRe.ReplaceAllString(s, Redacted)
 }
 
-// ScrubSecrets masks credential-shaped values in s with the same shape-based
-// coverage as scrubStderrText. Exported for writer-side scrubbing of streamed
-// subprocess output (the install log) that never passes through
-// RedactHandler.
-func ScrubSecrets(s string) string {
-	return scrubStderrText(s)
-}
-
 // Redacted scrubs credential shapes (see stderrScrubRe/jwtScrubRe), then caps
 // output to a 200-byte head/tail excerpt past 400 chars — scrubbing before
 // truncation so a window cut can't split a key and leak its value. Guarantee:
@@ -248,10 +240,8 @@ func (s RedactableStderr) Redacted() any {
 	return r[:half] + " … [truncated] … " + r[len(r)-half:]
 }
 
-// KeyIsSecret reports whether key looks like it names a credential — a
-// case-insensitive substring match against the denylist fragments. Exported
-// so redactConfig in cli/config.go can share the same rule without
-// duplicating the fragment list.
+// KeyIsSecret reports whether key names a credential, by case-insensitive
+// substring match against the denylist fragments.
 func KeyIsSecret(key string) bool {
 	if key == "" {
 		return false

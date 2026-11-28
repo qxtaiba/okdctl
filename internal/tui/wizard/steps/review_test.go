@@ -1,6 +1,8 @@
 package steps
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -119,8 +121,8 @@ func TestReviewStep_PreflightChecksSelectedHostCapacity(t *testing.T) {
 		"lab-worker0": {Host: "pve2"}, "lab-worker1": {Host: "missing"},
 	}
 	snapshot := &WizardCapacitySnapshot{discovery: &proxmoxDiscovery{Nodes: []proxmoxNode{
-		{Name: "pve1", Status: "online", CPUs: 8, CPUsKnown: true, MemGB: 32, MemKnown: true},
-		{Name: "pve2", Status: "online", CPUs: 24, CPUsKnown: true, MemGB: 96, MemKnown: true},
+		{Name: "pve1", Status: "online", CPUs: 8, MemGB: 32},
+		{Name: "pve2", Status: "online", CPUs: 24, MemGB: 96},
 	}}}
 	s := NewReviewStep()
 	s.SetConfig(cfg)
@@ -211,15 +213,11 @@ func TestReviewStep_ActionsLiveInTheFooterOnly(t *testing.T) {
 		t.Errorf("PinnedFooter() before SetConfig = %q, want empty", got)
 	}
 	s.SetConfig(reviewTestConfig())
-	footer := s.PinnedFooter(80)
-	if !strings.Contains(footer, "deploy now") || !strings.Contains(footer, "save and exit") {
-		t.Errorf("PinnedFooter() = %q, want both actions", footer)
+	if footer := s.PinnedFooter(80); !strings.Contains(footer, "save and exit") || strings.Contains(footer, "deploy") {
+		t.Errorf("PinnedFooter() = %q, want the save action alone", footer)
 	}
-	if out := s.View(100, 100); strings.Contains(out, "deploy now") || strings.Contains(out, "save and exit") {
-		t.Error("View() body still renders the action radio, want it pinned to the footer only")
-	}
-	if got := s.GetSelectedAction(); got != wizard.ActionDeploy {
-		t.Errorf("GetSelectedAction() = %q, want deploy by default", got)
+	if out := s.View(100, 100); strings.Contains(out, "save and exit") {
+		t.Error("View() body still renders the action, want it pinned to the footer only")
 	}
 }
 
@@ -233,8 +231,44 @@ func TestReviewActionsVisibleAfterSummaryWraps(t *testing.T) {
 	for _, size := range [][2]int{{120, 40}, {80, 24}} {
 		m.Update(tea.WindowSizeMsg{Width: size[0], Height: size[1]})
 		out := m.View().Content
-		if !strings.Contains(out, "deploy now") || !strings.Contains(out, "save and exit") {
-			t.Fatalf("review actions hidden at %v: %s", size, out)
+		if !strings.Contains(out, "save and exit") {
+			t.Fatalf("review action hidden at %v: %s", size, out)
 		}
+	}
+}
+
+func readableReviewConfig(t *testing.T) *config.Config {
+	t.Helper()
+	dir := t.TempDir()
+	cfg := reviewTestConfig()
+	for _, f := range []struct {
+		name string
+		dst  *string
+	}{{"pull-secret.json", &cfg.Files.PullSecret}, {"id.pub", &cfg.Files.SSHPublicKey}} {
+		path := filepath.Join(dir, f.name)
+		if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		*f.dst = path
+	}
+	return cfg
+}
+
+func TestReviewStep_EnterRefusesWhileAPreflightCheckFails(t *testing.T) {
+	enter := tea.KeyPressMsg{Code: tea.KeyEnter}
+	cfg := readableReviewConfig(t)
+	s := NewReviewStep()
+	s.SetConfig(cfg)
+	_, cmd := s.Update(enter)
+	if _, ok := cmd().(wizard.StepCompleteMsg); !ok {
+		t.Fatalf("enter on a passing preflight produced %#v, want StepCompleteMsg", cmd())
+	}
+
+	cfg.Cluster.Name = ".lab"
+	s.SetFocused(true)
+	_, cmd = s.Update(enter)
+	errMsg, ok := cmd().(wizard.ErrorSetMsg)
+	if !ok || !strings.Contains(errMsg.Error.Error(), "configuration") {
+		t.Fatalf("enter on a failing preflight produced %#v, want ErrorSetMsg naming the configuration check", cmd())
 	}
 }

@@ -63,8 +63,6 @@ func TestStderrSlog_NonSecretsPassThrough(t *testing.T) {
 	}
 }
 
-// resetLoggersAfter rebuilds the package-level loggers once t ends, so a
-// repeated in-process run does not inherit the previous run_id binding.
 func resetLoggersAfter(t *testing.T) {
 	t.Helper()
 	t.Cleanup(func() {

@@ -10,12 +10,11 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-// OptionStyle categorises a Selector option so the renderer can apply a
-// consistent color and badge treatment.
+// OptionStyle picks an option's color and badge treatment.
 type OptionStyle int
 
-// OptionStyle values map from releases.ReleaseType via
-// distribution_loader.go::releaseTypeToOptionStyle; getTitleStyle renders the color.
+// OptionStyle values; distribution_loader.go maps releases.ReleaseType
+// onto them.
 const (
 	OptionStyleDefault OptionStyle = iota
 	OptionStyleLatestStable
@@ -43,29 +42,22 @@ type Selector struct {
 	focused              bool
 	dropdownScrollOffset int
 
-	// maxVisible is the dropdown's per-render row budget; zero means unset,
-	// in which case dropdownBudget falls back to maxDropdownVisible.
+	// maxVisible is the dropdown row budget; zero means maxDropdownVisible
 	maxVisible int
 
-	// selectedSpan is the line range the selection occupied in the last View;
-	// spanKnown is false until the selector has rendered at least once.
+	// selectedSpan is the selection's line range from the last View
 	selectedSpan struct{ start, end int }
 	spanKnown    bool
 
-	// cachedStyles caches option render styles; cachedGeneration pins it to
-	// the stylesGeneration it was built from, since every theme role rebinds
-	// on the background flip — getOptionStyles rebuilds once
-	// stylesGeneration has moved on, instead of assuming the cache is
-	// forever valid.
+	// cachedStyles is rebuilt once stylesGeneration moves past cachedGeneration
 	cachedStyles     *optionStyles
 	cachedGeneration int
 
-	// DropdownHeader is a dim, non-selectable line shown above the dropdown's
-	// option rows, or nothing when empty.
+	// DropdownHeader is a dim, non-selectable line above the dropdown rows
 	DropdownHeader string
 }
 
-// NewSelector builds a Selector starting focused on the first option.
+// NewSelector builds a Selector focused on the first option.
 func NewSelector(options []Option) *Selector {
 	return &Selector{
 		options:  options,
@@ -74,8 +66,7 @@ func NewSelector(options []Option) *Selector {
 	}
 }
 
-// SetOptions replaces the option list and clamps the selection index to the
-// new slice length.
+// SetOptions replaces the options and clamps the selection.
 func (s *Selector) SetOptions(options []Option) {
 	s.options = options
 	s.dropdownScrollOffset = 0
@@ -87,8 +78,7 @@ func (s *Selector) SetOptions(options []Option) {
 	}
 }
 
-// Selected returns the currently highlighted Option, or the zero value when
-// the option list is empty.
+// Selected returns the highlighted Option, or the zero value when empty.
 func (s *Selector) Selected() Option {
 	if s.selected >= 0 && s.selected < len(s.options) {
 		return s.options[s.selected]
@@ -96,12 +86,12 @@ func (s *Selector) Selected() Option {
 	return Option{}
 }
 
-// SelectedIndex returns the current selection's index in the option list.
+// SelectedIndex returns the selection's index.
 func (s *Selector) SelectedIndex() int {
 	return s.selected
 }
 
-// SetSelectedByID moves selection to the first matching ID; unknown IDs are ignored.
+// SetSelectedByID selects the first matching ID; unknown IDs are ignored.
 func (s *Selector) SetSelectedByID(id string) {
 	for i, opt := range s.options {
 		if opt.ID == id {
@@ -111,17 +101,18 @@ func (s *Selector) SetSelectedByID(id string) {
 	}
 }
 
-// SetFocused toggles keyboard focus on the selector.
+// SetFocused toggles keyboard focus.
 func (s *Selector) SetFocused(focused bool) {
 	s.focused = focused
 }
 
-// SetDropdownBudget sets the dropdown's visible-row budget, clamped to a floor of maxDropdownVisible.
+// SetDropdownBudget sets the dropdown's row budget, floored at
+// maxDropdownVisible.
 func (s *Selector) SetDropdownBudget(rows int) {
 	s.maxVisible = max(rows, maxDropdownVisible)
 }
 
-// Update handles up/down and j/k key presses to move the selection.
+// Update moves the selection on up/down and j/k.
 func (s *Selector) Update(msg tea.Msg) (*Selector, tea.Cmd) {
 	if !s.focused {
 		return s, nil
@@ -180,9 +171,8 @@ func (s *Selector) getTitleStyle(style OptionStyle) lipgloss.Style {
 	}
 }
 
-// SelectedSpan returns the inclusive line range the selected option occupied
-// in the last View, dropdown entries included, or ok=false when the selector
-// has not rendered or has no options.
+// SelectedSpan returns the selected option's inclusive line range from the
+// last View, or ok=false before the first render.
 func (s *Selector) SelectedSpan() (start, end int, ok bool) {
 	if !s.spanKnown {
 		return 0, 0, false
@@ -190,15 +180,13 @@ func (s *Selector) SelectedSpan() (start, end int, ok bool) {
 	return s.selectedSpan.start, s.selectedSpan.end, true
 }
 
-// FocusBounds reports the selected option's rendered rows, satisfying the
-// FocusedBounds interface via the span SelectedSpan already tracks live
-// during the last View.
+// FocusBounds reports the selected option's rows for the FocusedBounds
+// interface.
 func (s *Selector) FocusBounds(_ int) (top, bottom int, ok bool) {
 	return s.SelectedSpan()
 }
 
-// View renders the selector as a vertical list with top-of-list options
-// above the scrollable dropdown region.
+// View renders the top-of-list options above the scrollable dropdown.
 func (s *Selector) View() string {
 	var lines []string
 
@@ -285,8 +273,7 @@ func (s *Selector) renderOptionWithPrefix(opt *Option, selected, showConnector b
 	return strings.Join(result, "\n")
 }
 
-// CompactSelector is a lightweight Selector variant that renders a simple
-// radio-style list without dropdown scrolling.
+// CompactSelector is a radio-style list without dropdown scrolling.
 type CompactSelector struct {
 	options  []string
 	selected int
@@ -294,7 +281,7 @@ type CompactSelector struct {
 	noWrap   bool
 }
 
-// NewCompactSelector builds a CompactSelector starting focused on index 0.
+// NewCompactSelector builds a CompactSelector focused on index 0.
 func NewCompactSelector(options []string) *CompactSelector {
 	return &CompactSelector{
 		options:  options,
@@ -303,12 +290,12 @@ func NewCompactSelector(options []string) *CompactSelector {
 	}
 }
 
-// SelectedIndex returns the current selection's index.
+// SelectedIndex returns the selection's index.
 func (s *CompactSelector) SelectedIndex() int {
 	return s.selected
 }
 
-// Select moves the pointer to index i, clamped to the option list.
+// Select moves the pointer to i, clamped to the options.
 func (s *CompactSelector) Select(i int) {
 	if len(s.options) == 0 {
 		return
@@ -316,17 +303,17 @@ func (s *CompactSelector) Select(i int) {
 	s.selected = min(max(i, 0), len(s.options)-1)
 }
 
-// SetFocused toggles keyboard focus on the selector.
+// SetFocused toggles keyboard focus.
 func (s *CompactSelector) SetFocused(focused bool) {
 	s.focused = focused
 }
 
-// SetWrap controls whether up/down wraps past the list ends (wraps by default).
+// SetWrap controls whether up/down wraps past the ends (on by default).
 func (s *CompactSelector) SetWrap(wrap bool) {
 	s.noWrap = !wrap
 }
 
-// Update handles up/down and j/k key presses to move the selection.
+// Update moves the selection on up/down and j/k.
 func (s *CompactSelector) Update(msg tea.Msg) (*CompactSelector, tea.Cmd) {
 	if !s.focused {
 		return s, nil
@@ -354,7 +341,7 @@ func (s *CompactSelector) Update(msg tea.Msg) (*CompactSelector, tea.Cmd) {
 	return s, nil
 }
 
-// View renders the options as a vertical radio-style list, one per line.
+// View renders the options as a vertical radio list.
 func (s *CompactSelector) View() string {
 	var lines []string
 
@@ -374,11 +361,8 @@ func (s *CompactSelector) View() string {
 	return strings.Join(lines, "\n")
 }
 
-// ViewPointer renders the options one per line as a verb menu: the selection
-// carries a tui.IconCaretRight pointer and every other row is indented to
-// match, so the labels share one left column. Rows are padded to the widest
-// label's own width — the block is a rectangle, so a caller centering it keeps
-// that column intact instead of centering each row on its own.
+// ViewPointer renders a verb menu: the selection carries a pointer and every
+// row is padded to one rectangle so a caller can centre the block.
 func (s *CompactSelector) ViewPointer() string {
 	selectedStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true)
 	unselectedStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim())
@@ -402,7 +386,7 @@ func (s *CompactSelector) ViewPointer() string {
 	return strings.Join(lines, "\n")
 }
 
-// ViewInline renders the options as a single horizontal row of bulleted radios.
+// ViewInline renders the options as one row of bulleted radios.
 func (s *CompactSelector) ViewInline() string {
 	selectedStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Bold(true)
 	unselectedStyle := lipgloss.NewStyle().Foreground(tui.ColorTextDim())
@@ -419,7 +403,8 @@ func (s *CompactSelector) ViewInline() string {
 	return strings.Join(parts, "   ")
 }
 
-// ArrowsAsVertical remaps a left/right key press to its up/down equivalent so a component built for vertical navigation can drive a horizontally-rendered selector.
+// ArrowsAsVertical remaps left/right to up/down so a vertical component can
+// drive a horizontally rendered selector.
 func ArrowsAsVertical(msg tea.KeyPressMsg) tea.KeyPressMsg {
 	switch msg.Code {
 	case tea.KeyLeft:

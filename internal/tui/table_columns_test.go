@@ -43,8 +43,6 @@ func TestColumnTableWeightDistributesSurplus(t *testing.T) {
 		[]RowGroup{{Rows: [][]string{{"aa", "bb"}}}},
 		TableOptions{PlainHeader: true, Width: 20},
 	)
-	// natural: A=2, B=2, gap 2 → 6 columns; the 14-column surplus goes to
-	// the sole weighted column, so the full line reaches exactly Width.
 	if got := lipgloss.Width(lines[0]); got != 20 {
 		t.Errorf("header width = %d, want the weighted column stretched to Width 20", got)
 	}

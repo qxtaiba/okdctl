@@ -17,6 +17,7 @@ import (
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/steps"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 const fixtureAPIToken = "root@pam!ci=s3cret-token-bytes"
@@ -26,28 +27,33 @@ func resetInitState(t *testing.T) {
 	savedOutputFile, savedMinimal := initOutputFile, initMinimal
 	t.Cleanup(func() {
 		initOutputFile, initMinimal = savedOutputFile, savedMinimal
+		initOutputFlag.Changed = false
 		runWizardFn = runWizardWithMode
 		initCmd.SetOut(nil)
 	})
 	initOutputFile, initMinimal = "okdctl.yaml", false
+	initOutputFlag.Changed = false
 	initCmd.SetContext(context.Background())
 	initCmd.SetOut(io.Discard)
 	t.Chdir(t.TempDir())
 }
 
 type wizardCapture struct {
-	called       bool
-	cfg          *config.Config
-	configExists bool
+	called        bool
+	cfg           *config.Config
+	configExists  bool
+	savedToken    string
+	savedInsecure bool
 }
 
 func stubWizard(t *testing.T, res *wizard.Result, verb steps.HubVerb, err error) *wizardCapture {
 	t.Helper()
 	rec := &wizardCapture{}
-	runWizardFn = func(_ *cobra.Command, cfg *config.Config, exists bool) (hubOutcome, error) {
+	runWizardFn = func(_ *cobra.Command, cfg *config.Config, exists bool, saved *credentials.ProxmoxCredentials) (hubOutcome, error) {
 		rec.called = true
 		rec.cfg = cfg
 		rec.configExists = exists
+		rec.savedToken, rec.savedInsecure = string(saved.APIToken), saved.Insecure
 		return hubOutcome{Result: *res, Verb: verb}, err
 	}
 	return rec
@@ -85,6 +91,57 @@ func TestRunInit_MinimalWritesWithoutTheWizard(t *testing.T) {
 	var ce *errtypes.ConfigError
 	if !errors.As(err, &ce) || !strings.Contains(err.Error(), "already exists") {
 		t.Fatalf("a second --minimal must refuse to overwrite, got %v", err)
+	}
+}
+
+func TestRunInit_MinimalLocksBesideOutputFile(t *testing.T) {
+	resetInitState(t)
+	initMinimal = true
+	target := t.TempDir()
+	initOutputFile = filepath.Join(target, "okdctl.yaml")
+
+	if err := runInit(initCmd, nil); err != nil {
+		t.Fatalf("runInit --minimal: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(target, ".okdctl.lock")); err != nil {
+		t.Errorf("lock must land in the --output-file directory: %v", err)
+	}
+	if _, err := os.Stat(".okdctl.lock"); !os.IsNotExist(err) {
+		t.Errorf("lock landed in cwd, stat err %v", err)
+	}
+}
+
+func TestInitTarget_ExplicitOutputFileWinsOverConfig(t *testing.T) {
+	resetInitState(t)
+	savedCfg := cfgFile
+	t.Cleanup(func() { cfgFile = savedCfg })
+	cfgFile = "other.yaml"
+
+	if got := initTarget(); got != "other.yaml" {
+		t.Fatalf("initTarget() with only --config = %q, want other.yaml", got)
+	}
+	if err := initCmd.Flags().Set(flagOutputFile, defaultConfigFile); err != nil {
+		t.Fatal(err)
+	}
+	if got := initTarget(); got != defaultConfigFile {
+		t.Fatalf("initTarget() with an explicit --output-file = %q, want %s", got, defaultConfigFile)
+	}
+}
+
+func TestRunInit_MinimalCreatesTheWorkspaceDirectoryAndSaysSo(t *testing.T) {
+	resetInitState(t)
+	logged := installLogBuffer(t)
+	initMinimal = true
+	initOutputFile = filepath.Join(t.TempDir(), "new", "okdctl.yaml")
+
+	if err := runInit(initCmd, nil); err != nil {
+		t.Fatalf("runInit --minimal into a missing directory: %v", err)
+	}
+	if _, err := os.Stat(initOutputFile); err != nil {
+		t.Fatalf("config not written: %v", err)
+	}
+	if got := logged.String(); !strings.Contains(got, "configuration saved") || !strings.Contains(got, initOutputFile) {
+		t.Fatalf("log = %q, want the saved path reported", got)
 	}
 }
 
@@ -142,18 +199,22 @@ func TestWriteCredentialsEnv(t *testing.T) {
 			var secrets wizard.Secrets
 			secrets.ProxmoxToken.Set(tc.typedToken)
 			secrets.ProxmoxInsecure = tc.toggle
-			configPath := filepath.Join(t.TempDir(), "okdctl.yaml")
+			root := t.TempDir()
+			configPath, envPath := filepath.Join(root, workspace.ConfigFile), workspace.EnvPath(root)
 			if tc.fileToken != "" {
 				saved := &credentials.ProxmoxCredentials{APIToken: []byte(tc.fileToken), Insecure: tc.envInsecure == "true"}
-				if err := credentials.WriteEnvFile(credentials.EnvFilePath(configPath), saved); err != nil {
+				if err := credentials.WriteEnvFile(envPath, saved); err != nil {
 					t.Fatal(err)
 				}
 			}
 
-			envPath := credentials.EnvFilePath(configPath)
 			before, _ := os.ReadFile(envPath)
+			seeded, err := credentials.Load(envPath, "")
+			if err != nil {
+				t.Fatal(err)
+			}
 
-			if err := writeCredentialsEnv(&secrets, configPath); err != nil {
+			if err := writeCredentialsEnv(&secrets, configPath, seeded); err != nil {
 				t.Fatalf("writeCredentialsEnv: %v", err)
 			}
 			fi, err := os.Stat(envPath)
@@ -210,6 +271,25 @@ func TestRunInit_ExistingConfigSeedsWizard(t *testing.T) {
 	}
 }
 
+func TestRunInit_SavedSidecarSeedsTheWizard(t *testing.T) {
+	resetInitState(t)
+	seedInitConfig(t)
+	t.Setenv("PROXMOX_VE_API_TOKEN", "")
+	t.Setenv("PROXMOX_VE_INSECURE", "")
+	saved := &credentials.ProxmoxCredentials{APIToken: []byte(fixtureAPIToken), Insecure: true}
+	if err := credentials.WriteEnvFile("okdctl.env", saved); err != nil {
+		t.Fatalf("seed sidecar: %v", err)
+	}
+	rec := stubWizard(t, &wizard.Result{Outcome: wizard.OutcomeCancelled}, steps.HubVerbEditConfig, nil)
+
+	if err := runInit(initCmd, nil); err != nil {
+		t.Fatalf("runInit: %v", err)
+	}
+	if rec.savedToken != fixtureAPIToken || !rec.savedInsecure {
+		t.Fatalf("wizard seeded with token %q insecure=%v; want the sidecar's values", rec.savedToken, rec.savedInsecure)
+	}
+}
+
 func TestRunInit_RejectedConfigIsRefused(t *testing.T) {
 	cases := map[string]struct{ seed, want string }{
 		"schema v2":    {"schemaVersion: v2\ncluster:\n  name: old\n", "okdctl.yaml is schema v2; this release reads v3 only"},
@@ -245,8 +325,8 @@ func TestRunInit_WizardErrorIsConfigError(t *testing.T) {
 
 	err := runInit(initCmd, nil)
 	var ce *errtypes.ConfigError
-	if !errors.As(err, &ce) || !strings.Contains(err.Error(), "wizard failed") {
-		t.Fatalf("want a ConfigError naming the wizard, got %T: %v", err, err)
+	if !errors.As(err, &ce) || !strings.Contains(err.Error(), "wizard failed: tty exploded") {
+		t.Fatalf("want a ConfigError naming the wizard and its cause, got %T: %v", err, err)
 	}
 }
 
@@ -254,7 +334,7 @@ func TestRunInit_SaveAndExitPersistsConfigAndSidecar(t *testing.T) {
 	resetInitState(t)
 	wizardCfg := config.DefaultConfig()
 	wizardCfg.Cluster.Name = "wizarded"
-	res := wizard.Result{Outcome: wizard.OutcomeCompleted, Config: wizardCfg, Action: wizard.ActionExit}
+	res := wizard.Result{Outcome: wizard.OutcomeCompleted, Config: wizardCfg}
 	res.Secrets.ProxmoxToken.Set(fixtureAPIToken)
 	res.Secrets.ProxmoxInsecure = true
 	stubWizard(t, &res, steps.HubVerbGetStarted, nil)
@@ -290,6 +370,22 @@ func TestRunInit_SaveAndExitPersistsConfigAndSidecar(t *testing.T) {
 	}
 }
 
+func TestRunInit_InvalidWizardConfigIsNotSaved(t *testing.T) {
+	resetInitState(t)
+	bad := config.DefaultConfig()
+	bad.Cluster.Name = "Bad_Name"
+	stubWizard(t, &wizard.Result{Outcome: wizard.OutcomeCompleted, Config: bad}, steps.HubVerbGetStarted, nil)
+
+	err := runInit(initCmd, nil)
+	var ce *errtypes.ConfigError
+	if !errors.As(err, &ce) || !strings.Contains(err.Error(), "validation failed") {
+		t.Fatalf("err = %T %v, want a ConfigError naming validation", err, err)
+	}
+	if _, statErr := os.Stat("okdctl.yaml"); !os.IsNotExist(statErr) {
+		t.Errorf("an invalid config was written, stat err %v", statErr)
+	}
+}
+
 func TestRunInit_HubQuitVerbChangesNothing(t *testing.T) {
 	resetInitState(t)
 	stubWizard(t, &wizard.Result{Outcome: wizard.OutcomeCompleted}, steps.HubVerbQuit, nil)
@@ -302,46 +398,22 @@ func TestRunInit_HubQuitVerbChangesNothing(t *testing.T) {
 	}
 }
 
-func TestRunInit_DeployNowSavesThenHandsOffToUp(t *testing.T) {
+func TestRunInit_CompletedFlowSavesConfigWithoutHandoff(t *testing.T) {
 	resetInitState(t)
 	var out bytes.Buffer
 	initCmd.SetOut(&out)
-	stubWizard(t, &wizard.Result{Outcome: wizard.OutcomeCompleted, Config: config.DefaultConfig(), Action: wizard.ActionDeploy}, steps.HubVerbGetStarted, nil)
+	stubWizard(t, &wizard.Result{Outcome: wizard.OutcomeCompleted, Config: config.DefaultConfig()}, steps.HubVerbGetStarted, nil)
 
 	if err := runInit(initCmd, nil); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
-	if got := out.String(); got != "run: okdctl up\n" {
-		t.Errorf("stdout = %q, want the up handoff line alone", got)
+	if got := out.String(); strings.Contains(got, "later release") || strings.Contains(got, "okdctl up") {
+		t.Errorf("stdout = %q, want no handoff to a command that does not exist", got)
 	}
 	if _, err := os.Stat("okdctl.yaml"); err != nil {
-		t.Errorf("the config must be saved before the handoff line: %v", err)
+		t.Errorf("the config must be saved: %v", err)
 	}
 	if _, err := os.Stat("okdctl.env"); !os.IsNotExist(err) {
 		t.Errorf("no token typed means no sidecar, got stat err %v", err)
-	}
-}
-
-func TestRunInit_HubVerbsPrintHandoffsAndChangeNothing(t *testing.T) {
-	for verb, want := range map[steps.HubVerb]string{
-		steps.HubVerbDeploy:        "run: okdctl up",
-		steps.HubVerbDestroy:       "destroy returns in a later release",
-		steps.HubVerbClusterStatus: "cluster status returns in a later release",
-		steps.HubVerbManageNodes:   "node management returns in a later release",
-	} {
-		t.Run(want, func(t *testing.T) {
-			resetInitState(t)
-			seedInitConfig(t)
-			var out bytes.Buffer
-			initCmd.SetOut(&out)
-			stubWizard(t, &wizard.Result{Outcome: wizard.OutcomeCompleted}, verb, nil)
-
-			if err := runInit(initCmd, nil); err != nil {
-				t.Fatalf("runInit: %v", err)
-			}
-			if !strings.Contains(out.String(), want) {
-				t.Errorf("stdout = %q, want %q", out.String(), want)
-			}
-		})
 	}
 }

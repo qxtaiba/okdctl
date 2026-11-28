@@ -34,11 +34,13 @@ type VMStatus struct {
 	HA        bool
 }
 
-// VMSummary is one row of GET /cluster/resources?type=vm.
+// VMSummary is one row of GET /cluster/resources?type=vm; Type is "qemu" or "lxc".
 type VMSummary struct {
 	VMRef
+	Type      string
 	Name      string
 	Status    string
+	Lock      string
 	Tags      []string
 	Pool      string
 	MaxMemMiB int
@@ -79,11 +81,13 @@ type VMPatch struct {
 	Delete    []string
 }
 
-// VMConfig is a VM's normalised configuration; a zero field means PVE has the
-// key unset except for Cores, Sockets, MemoryMiB and Balloon, which carry
-// PVE's defaults, and Digest is the optimistic-lock token UpdateVM requires.
+// VMConfig is a VM's normalised running configuration; a zero field means
+// PVE has the key unset except for Cores, Sockets, MemoryMiB and Balloon,
+// which carry PVE's defaults, and Digest is the optimistic-lock token
+// UpdateVM requires.
 type VMConfig struct {
 	Name         string
+	Lock         string
 	Cores        int
 	Sockets      int
 	CPUType      string
@@ -155,7 +159,6 @@ type NodeInfo struct {
 	CPUs        int
 	CPUModel    string
 	CPUFlags    []string
-	PVEVersion  string
 }
 
 // StorageInfo is a node's view of one storage pool.
@@ -189,7 +192,8 @@ type HASpec struct {
 	Group string
 }
 
-// Permissions maps an ACL path to the privileges granted on it.
+// Permissions maps each ACL path the token has an entry on to the privileges
+// effective there; the bool is PVE's propagate flag, so presence alone is the grant.
 type Permissions map[string]map[string]bool
 
 // Driver is the Proxmox VE API surface okdctl provisions through; every
@@ -215,7 +219,7 @@ type Driver interface {
 	Reset(ctx context.Context, ref VMRef) (Task, error)
 	Status(ctx context.Context, ref VMRef) (VMStatus, error)
 	WaitTask(ctx context.Context, task Task) error
-	UploadISO(ctx context.Context, node, storage, path, sha256 string) (Task, error)
+	UploadISO(ctx context.Context, node, storage, path, name, sha256 string) (Task, error)
 	ListISOs(ctx context.Context, node, storage string) ([]Volume, error)
 	DeleteVolume(ctx context.Context, node, storage, volid string) (Task, error)
 	SetHA(ctx context.Context, ref VMRef, spec HASpec) error

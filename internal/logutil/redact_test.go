@@ -267,7 +267,6 @@ func TestRedactHandler_NilURLPassesThrough(t *testing.T) {
 	}
 }
 
-// Covers the plain-string path, which never reaches redactAny's *url.URL case.
 func TestRedactHandler_URLStringUserinfoStripped(t *testing.T) {
 	cases := []struct {
 		name string
@@ -380,7 +379,6 @@ func TestRedactableArgv_HandlerDispatch(t *testing.T) {
 	}
 }
 
-// redactor implements Redacted() any for redactAny's dispatch test.
 type redactor struct{ public string }
 
 func (r redactor) Redacted() any { return r.public }
@@ -395,7 +393,6 @@ func TestRedactHandler_RedactedInterfaceHonored(t *testing.T) {
 	}
 }
 
-// credStub mirrors ProxmoxCredentials: a secret field plus Redacted() any that omits it.
 type credStub struct {
 	Endpoint string
 	Password string

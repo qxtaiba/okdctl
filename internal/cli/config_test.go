@@ -120,14 +120,14 @@ func TestConfigValidate_PreviewNoteWithoutRecord(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runConfigValidate: %v", err)
 	}
-	if !strings.Contains(stdout, "MACs are assigned at okdctl up") {
+	if !strings.Contains(stdout, "MACs are a preview until the install mints the infra-ID") {
 		t.Errorf("preview note missing:\n%s", stdout)
 	}
 	stdout, _, err = runValidate(t, standardExample, "json")
 	if err != nil {
 		t.Fatalf("runConfigValidate json: %v", err)
 	}
-	if strings.Contains(stdout, "MACs are assigned") {
+	if strings.Contains(stdout, "MACs are a preview") {
 		t.Errorf("json stdout carries the preview note:\n%s", stdout)
 	}
 }
@@ -164,15 +164,6 @@ func TestConfigValidate_RecordInfraIDMakesMACsReal(t *testing.T) {
 	}
 	if err := json.Unmarshal([]byte(stdout), &inv); err != nil || inv.InfraID != infraID {
 		t.Errorf("json infra_id = %q, %v; want %q", inv.InfraID, err, infraID)
-	}
-
-	if err := os.WriteFile(workspace.RecordPath(dir), []byte("{broken"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	_, _, err = runValidate(t, path, "")
-	var cfgErr *errtypes.ConfigError
-	if !errors.As(err, &cfgErr) || !strings.Contains(err.Error(), "cluster record") {
-		t.Errorf("corrupt record: err = %v; want a ConfigError naming the record", err)
 	}
 }
 

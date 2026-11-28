@@ -10,34 +10,23 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-// Foldable is implemented by a Collapsible section's first field, letting
-// MultiSectionForm read the fold's sticky user latch and tell it which
-// chrome to draw this render without mutating that latch.
+// Foldable is implemented by a Collapsible section's first field, exposing
+// the sticky user latch apart from the per-render display state.
 type Foldable interface {
 	FormField
-	// Expanded reports whether the fold's sticky user latch is open — set
-	// only by the field's own enter handling, never by the form.
+	// Expanded reports the sticky user latch, set only by the field itself
 	Expanded() bool
-	// SetDisplayExpanded tells the fold which chrome to draw this render:
-	// open when the section is rendering in full for any reason (the
-	// sticky latch, a focused field inside, or a validation error inside),
-	// closed otherwise.
+	// SetDisplayExpanded picks this render's chrome without touching the latch
 	SetDisplayExpanded(open bool)
 }
 
-// FoldToggleField is the one-line, always-present control a Collapsible
-// section's View renders in place of its own section head — a summary row
-// naming the fold and (via Summary) echoing non-sensitive facts about the
-// fields it hides while collapsed, a bare heading row while the section
-// renders in full — with enter (via EnterConsumer) flipping its sticky
-// expand latch independently of the form's own per-render display state
-// (SetDisplayExpanded), so a focus- or error-forced expansion never
-// mutates the latch itself.
+// FoldToggleField is the one-line control a Collapsible section renders in
+// place of its head; enter flips its sticky latch while the form's display
+// state (SetDisplayExpanded) tracks focus and errors separately.
 type FoldToggleField struct {
 	Label string
-	// Summary, when set, supplies the facts a collapsed row echoes beside
-	// the label; called fresh each render so it reflects sibling fields'
-	// live values. Never return a fact whose Value is credential material.
+	// Summary supplies the collapsed row's facts each render; never return
+	// credential material
 	Summary func() []tui.FactRow
 
 	expanded        bool
@@ -46,48 +35,45 @@ type FoldToggleField struct {
 	width           int
 }
 
-// NewFoldToggleField returns a fold toggle labeled label, collapsed by
-// default, echoing summary (if non-nil) while collapsed.
+// NewFoldToggleField returns a collapsed fold toggle echoing summary.
 func NewFoldToggleField(label string, summary func() []tui.FactRow) *FoldToggleField {
 	return &FoldToggleField{Label: label, Summary: summary}
 }
 
-// Value never carries a config binding — the fold is a rendering control.
+// Value is always empty; the fold carries no binding.
 func (f *FoldToggleField) Value() string { return "" }
 
-// SetValue is a no-op — the fold carries no bindable value.
+// SetValue is a no-op.
 func (f *FoldToggleField) SetValue(string) {}
 
-// Focus gives the fold keyboard focus so enter can toggle it.
+// Focus gives the fold focus so enter can toggle it.
 func (f *FoldToggleField) Focus() tea.Cmd {
 	f.focused = true
 	return nil
 }
 
-// Blur removes focus from the fold.
+// Blur removes focus.
 func (f *FoldToggleField) Blur() { f.focused = false }
 
-// SetWidth records the width available to the fold's row.
+// SetWidth records the available width.
 func (f *FoldToggleField) SetWidth(width int) { f.width = width }
 
-// Check always returns nil — the fold itself is never invalid.
+// Check always returns nil.
 func (f *FoldToggleField) Check() error { return nil }
 
-// Validate always returns nil — the fold itself is never invalid.
+// Validate always returns nil.
 func (f *FoldToggleField) Validate() error { return nil }
 
-// ConsumesEnter always reports true: enter toggles the fold rather than
-// submitting the step, whether or not the fold is currently expanded.
+// ConsumesEnter always reports true: enter toggles the fold, never submits.
 func (f *FoldToggleField) ConsumesEnter() bool { return true }
 
-// Expanded reports whether the fold's sticky user latch is open.
+// Expanded reports whether the sticky latch is open.
 func (f *FoldToggleField) Expanded() bool { return f.expanded }
 
-// SetDisplayExpanded tells the fold which chrome to draw this render,
-// independent of the sticky latch Expanded reports.
+// SetDisplayExpanded picks this render's chrome independently of the latch.
 func (f *FoldToggleField) SetDisplayExpanded(open bool) { f.displayExpanded = open }
 
-// KeyHints returns the fold's footer hint, naming the action enter performs next.
+// KeyHints names the action enter performs next.
 func (f *FoldToggleField) KeyHints() []KeyHint {
 	if f.expanded {
 		return []KeyHint{{Key: "enter", Help: "collapse"}}
@@ -95,7 +81,7 @@ func (f *FoldToggleField) KeyHints() []KeyHint {
 	return []KeyHint{{Key: "enter", Help: "expand"}}
 }
 
-// Update flips the sticky expand latch on enter while focused.
+// Update flips the sticky latch on enter while focused.
 func (f *FoldToggleField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 	if !f.focused {
 		return f, nil
@@ -106,8 +92,8 @@ func (f *FoldToggleField) Update(msg tea.Msg) (FormField, tea.Cmd) {
 	return f, nil
 }
 
-// View renders a one-line triangle-plus-label row, appending Summary's
-// facts (colon-joined) while the section is rendering collapsed.
+// View renders the triangle-plus-label row with Summary's facts while
+// collapsed.
 func (f *FoldToggleField) View() string {
 	icon := lipgloss.NewStyle().Foreground(tui.ColorPrimary()).Render(tui.IconCaretRight)
 	label := labelStyle.Render(f.Label)

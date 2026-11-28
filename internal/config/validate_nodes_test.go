@@ -73,6 +73,11 @@ func TestValidateNodes(t *testing.T) {
 			finding{"nodes.lab-worker0.ip", "outside machine_cidr 192.168.1.0/24"},
 		},
 		{
+			"override ip is broadcast",
+			func(c *Config) { c.Nodes = map[string]NodeOverride{"lab-worker0": {IP: "192.168.1.255"}} },
+			finding{"nodes.lab-worker0.ip", "192.168.1.255 is the broadcast address of machine_cidr 192.168.1.0/24"},
+		},
+		{
 			"two overrides share an ip",
 			func(c *Config) {
 				c.Nodes = map[string]NodeOverride{"lab-worker0": {IP: "192.168.1.170"}, "lab-worker1": {IP: "192.168.1.170"}}

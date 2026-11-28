@@ -26,7 +26,7 @@ func TestReviewDiffBaselineRequiresAnExistingConfig(t *testing.T) {
 			wizardCfg := wizard.DefaultConfig()
 			wizardCfg.InitialConfig = cfg
 			wizardCfg.ConfigExists = tc.configExists
-			built, err := buildWizardStepsWithState(wizardCfg)
+			built, err := buildWizardStepsWithState(wizardCfg, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -50,13 +50,12 @@ func TestReviewDiffBaselineRequiresAnExistingConfig(t *testing.T) {
 }
 
 func TestWizardAssemblySeedsConfiguredOrder(t *testing.T) {
-	t.Setenv(wizardDemoEnv, "")
 	cfg := config.DefaultConfig()
 	cfg.Cluster.Name = "seeded-cluster"
 	spec := wizard.DefaultConfig()
 	spec.InitialConfig = cfg
 	spec.ConfigExists = true
-	built, err := buildWizardStepsWithState(spec)
+	built, err := buildWizardStepsWithState(spec, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,55 +81,50 @@ func TestWizardAssemblySeedsConfiguredOrder(t *testing.T) {
 
 func TestWizardAssemblyResourcesAndReviewTotalsAgree(t *testing.T) {
 	totals := regexp.MustCompile(`(\d+) vcpu\D+(\d+) gb ram\D+(\d+) gb disk`)
-	for _, tc := range []struct{ name, demo string }{{"interactive", ""}, {"demo mode", "1"}} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv(wizardDemoEnv, tc.demo)
-			cfg := config.DefaultConfig()
-			spec := wizard.DefaultConfig()
-			spec.InitialConfig = cfg
-			spec.ConfigExists = true
-			built, err := buildWizardStepsWithState(spec)
-			if err != nil {
-				t.Fatal(err)
-			}
+	cfg := config.DefaultConfig()
+	spec := wizard.DefaultConfig()
+	spec.InitialConfig = cfg
+	spec.ConfigExists = true
+	built, err := buildWizardStepsWithState(spec, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-			var footer, review string
-			for _, step := range built.Steps {
-				switch s := step.(type) {
-				case *wizard.DataDrivenStep:
-					if s.ID() == wizard.StepIDResources {
-						footer = tuitest.StripANSI(s.PinnedFooter(120))
-					}
-				case *steps.ReviewStep:
-					review = tuitest.StripANSI(s.View(120, 100))
-				}
+	var footer, review string
+	for _, step := range built.Steps {
+		switch s := step.(type) {
+		case *wizard.DataDrivenStep:
+			if s.ID() == wizard.StepIDResources {
+				footer = tuitest.StripANSI(s.PinnedFooter(120))
 			}
+		case *steps.ReviewStep:
+			review = tuitest.StripANSI(s.View(120, 100))
+		}
+	}
 
-			got, want := totals.FindStringSubmatch(footer), totals.FindStringSubmatch(review)
-			if got == nil || want == nil {
-				t.Fatalf("totals missing: resources footer %q, review:\n%s", footer, review)
-			}
-			if !slices.Equal(got[1:], want[1:]) {
-				t.Errorf("resources footer totals %v, review totals %v (vcpu, gb ram, gb disk)", got[1:], want[1:])
-			}
-		})
+	got, want := totals.FindStringSubmatch(footer), totals.FindStringSubmatch(review)
+	if got == nil || want == nil {
+		t.Fatalf("totals missing: resources footer %q, review:\n%s", footer, review)
+	}
+	if !slices.Equal(got[1:], want[1:]) {
+		t.Errorf("resources footer totals %v, review totals %v (vcpu, gb ram, gb disk)", got[1:], want[1:])
 	}
 }
 
 func TestWizardAssemblyRejectsUnknownAndDuplicateSteps(t *testing.T) {
 	for _, kinds := range [][]wizard.StepConfig{{{Type: "unknown"}}, {{Type: wizard.StepTypeBasics}, {Type: wizard.StepTypeBasics}}} {
-		if _, err := buildWizardStepsWithState(wizard.Config{Steps: kinds}); err == nil {
+		if _, err := buildWizardStepsWithState(wizard.Config{Steps: kinds}, nil); err == nil {
 			t.Fatalf("accepted invalid assembly: %v", kinds)
 		}
 	}
 }
 
 func TestSessionVerb(t *testing.T) {
-	deployHighlighted := func() *steps.WelcomeStep {
+	editHighlighted := func() *steps.WelcomeStep {
 		hub := steps.NewWelcomeStep()
 		hub.SetExistingConfig(config.DefaultConfig())
-		if hub.SelectedVerb() != steps.HubVerbDeploy {
-			t.Fatalf("hub highlights %v; want the deploy row", hub.SelectedVerb())
+		if hub.SelectedVerb() != steps.HubVerbEditConfig {
+			t.Fatalf("hub highlights %v; want the edit row", hub.SelectedVerb())
 		}
 		return hub
 	}
@@ -141,8 +135,8 @@ func TestSessionVerb(t *testing.T) {
 		exit wizard.StepID
 		want steps.HubVerb
 	}{
-		{"hub ended the session on its highlighted verb", deployHighlighted(), wizard.StepIDWelcome, steps.HubVerbDeploy},
-		{"review ended the session under a stale deploy highlight", deployHighlighted(), wizard.StepIDReview, steps.HubVerbGetStarted},
+		{"hub ended the session on its highlighted verb", editHighlighted(), wizard.StepIDWelcome, steps.HubVerbEditConfig},
+		{"review ended the session under a stale edit highlight", editHighlighted(), wizard.StepIDReview, steps.HubVerbGetStarted},
 		{"no hub in the flow", nil, wizard.StepIDReview, steps.HubVerbGetStarted},
 	}
 	for _, c := range cases {

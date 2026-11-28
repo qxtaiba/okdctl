@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/qxtaiba/okdctl/internal/config"
 	"github.com/qxtaiba/okdctl/internal/credentials"
@@ -16,10 +18,12 @@ import (
 	"github.com/qxtaiba/okdctl/internal/runlock"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard/steps"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 var (
 	initOutputFile string
+	initOutputFlag *pflag.Flag
 	initMinimal    bool
 )
 
@@ -31,7 +35,7 @@ var initCmd = &cobra.Command{
 	Short: "Define a cluster and write okdctl.yaml",
 	Long: `Define an OKD cluster through the interactive wizard and write it to
 okdctl.yaml; the Proxmox API token goes to okdctl.env beside it. Installing
-the cluster (okdctl up) returns in a later release.`,
+the cluster is not yet available.`,
 	Example: `  okdctl init
   okdctl init --output-file my-cluster.yaml
   okdctl init --minimal   # write the minimal three-node config without the wizard`,
@@ -40,21 +44,17 @@ the cluster (okdctl up) returns in a later release.`,
 }
 
 func init() {
-	initCmd.Flags().StringVar(&initOutputFile, flagOutputFile, "okdctl.yaml", "config file to write (reused if present; overrides --config)")
+	initCmd.Flags().StringVar(&initOutputFile, flagOutputFile, defaultConfigFile, "config file to write (reused if present; overrides --config)")
+	initOutputFlag = initCmd.Flags().Lookup(flagOutputFile)
 	initCmd.Flags().BoolVar(&initMinimal, "minimal", false, "write the minimal three-node configuration without the wizard")
 }
 
-// upHandoff is printed where the install would start.
-const upHandoff = "run: okdctl up"
-
 func runInit(cmd *cobra.Command, _ []string) error {
 	out := cmd.OutOrStdout()
-	root, err := resolveWorkspaceRoot()
+	initOutputFile = initTarget()
+	root, err := initRoot()
 	if err != nil {
 		return err
-	}
-	if !cmd.Flags().Changed(flagOutputFile) && cmd.Root().PersistentFlags().Changed(flagConfig) {
-		initOutputFile = cfgFile
 	}
 	if initMinimal {
 		return withProjectLock(root, cmdNameInit, func() error { return writeMinimalConfig(initOutputFile, out) })
@@ -64,56 +64,55 @@ func runInit(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	// A saved token lets node placement discover the cluster without retyping it.
-	if err := credentials.LoadEnvFile(credentials.EnvFilePath(initOutputFile)); err != nil {
+	saved, err := credentials.Load(workspace.EnvPath(root), cfg.Provider.Proxmox.Endpoint)
+	if err != nil {
 		return err
 	}
-	outcome, err := runWizardFn(cmd, cfg, configExists)
+	defer saved.Zeroize()
+	outcome, err := runWizardFn(cmd, cfg, configExists, saved)
 	if err != nil {
-		return (&errtypes.ConfigError{Msg: "wizard failed", Err: err}).
+		// bubbletea and TTY errors carry no credential, so the cause may sit in Msg.
+		return (&errtypes.ConfigError{Msg: "wizard failed: " + err.Error(), Err: err}).
 			WithHint("try again, or use --minimal to write a configuration without the wizard")
 	}
 	if outcome.Result.Outcome == wizard.OutcomeCancelled {
 		logutil.Info("wizard cancelled, no changes made")
 		return nil
 	}
-	if runHubVerb(outcome.Verb, out) {
+	if outcome.Verb == steps.HubVerbQuit {
+		logutil.Info("no changes made")
 		return nil
 	}
 
 	result := &outcome.Result
 	defer result.Secrets.ProxmoxToken.Zeroize()
-	if err := withProjectLock(root, cmdNameInit, func() error { return persistWizardConfig(result, initOutputFile, out) }); err != nil {
+	if err := withProjectLock(root, cmdNameInit, func() error { return persistWizardConfig(result, initOutputFile, saved, out) }); err != nil {
 		return err
 	}
-	switch result.Action {
-	case wizard.ActionDeploy:
-		fmt.Fprintln(out, upHandoff)
-	case wizard.ActionExit:
-		fmt.Fprintln(out)
-		logutil.Info("configuration saved", logutil.LF("path", initOutputFile))
-	}
+	fmt.Fprintln(out)
+	logutil.Info("configuration saved", logutil.LF("path", initOutputFile))
 	return nil
 }
 
-// runHubVerb prints the handoff line for a hub verb that never walks the
-// configure flow, reporting whether verb was one of them.
-func runHubVerb(verb steps.HubVerb, out io.Writer) bool {
-	switch verb {
-	case steps.HubVerbDeploy:
-		fmt.Fprintln(out, upHandoff)
-	case steps.HubVerbDestroy:
-		fmt.Fprintln(out, "destroy returns in a later release")
-	case steps.HubVerbClusterStatus:
-		fmt.Fprintln(out, "cluster status returns in a later release")
-	case steps.HubVerbManageNodes:
-		fmt.Fprintln(out, "node management returns in a later release")
-	case steps.HubVerbQuit:
-		logutil.Info("no changes made")
-	default:
-		return false
+// initTarget is the file init writes: --output-file when given, else --config.
+func initTarget() string {
+	if !initOutputFlag.Changed && cfgFile != defaultConfigFile {
+		return cfgFile
 	}
-	return true
+	return initOutputFile
+}
+
+// initRoot resolves the workspace init writes into and creates it, so the
+// log sink and the lock open before the config lands in a new directory.
+func initRoot() (string, error) {
+	root, err := workspaceRoot(initTarget())
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		return "", &errtypes.ConfigError{Msg: "create workspace " + root, Err: err}
+	}
+	return root, nil
 }
 
 // loadInitConfig returns the on-disk config, or the compiled-in defaults
@@ -139,7 +138,11 @@ func writeMinimalConfig(path string, w io.Writer) error {
 		return (&errtypes.ConfigError{Msg: path + " already exists"}).
 			WithHint("remove it, or pass --output-file to write elsewhere")
 	}
-	return saveConfig(config.MinimalConfig(), path, w)
+	if err := saveConfig(config.MinimalConfig(), path, w); err != nil {
+		return err
+	}
+	logutil.Info("configuration saved", logutil.LF("path", path))
+	return nil
 }
 
 // withProjectLock serializes shared-file writes against concurrent okdctl
@@ -153,16 +156,17 @@ func withProjectLock(projectRoot, verb string, fn func() error) error {
 	return fn()
 }
 
-func persistWizardConfig(result *wizard.Result, path string, w io.Writer) error {
+func persistWizardConfig(result *wizard.Result, path string, seeded *credentials.ProxmoxCredentials, w io.Writer) error {
 	if err := saveConfig(result.Config, path, w); err != nil {
 		return err
 	}
-	return writeCredentialsEnv(&result.Secrets, path)
+	return writeCredentialsEnv(&result.Secrets, path, seeded)
 }
 
 func saveConfig(cfg *config.Config, path string, w io.Writer) error {
 	if result := validateConfig(cfg, w); !result.IsValid() {
-		logutil.Warn("configuration has validation warnings but will still be saved")
+		return (&errtypes.ConfigError{Msg: "config validation failed, nothing written", Err: result}).
+			WithHint("review the errors listed above and run okdctl init again")
 	}
 	if err := config.NewLoader().Save(cfg, path); err != nil {
 		return fmt.Errorf("save configuration: %w", err)
@@ -171,17 +175,15 @@ func saveConfig(cfg *config.Config, path string, w io.Writer) error {
 }
 
 // writeCredentialsEnv rewrites the sidecar when a token was typed or the TLS
-// toggle moved from the value the wizard was seeded with; an untouched
+// toggle moved from seeded, the value the wizard opened with; an untouched
 // session leaves the file alone. Only the sidecar's own token is carried
 // forward: a shell export that differs from it never reaches the file.
-func writeCredentialsEnv(secrets *wizard.Secrets, configPath string) error {
-	seeded := credentials.GetProxmoxCredentials(nil)
-	defer seeded.Zeroize()
+func writeCredentialsEnv(secrets *wizard.Secrets, configPath string, seeded *credentials.ProxmoxCredentials) error {
 	typed := !secrets.ProxmoxToken.IsEmpty()
 	if !typed && secrets.ProxmoxInsecure == seeded.Insecure {
 		return nil
 	}
-	envPath := credentials.EnvFilePath(configPath)
+	envPath := workspace.EnvPath(filepath.Dir(configPath))
 	creds, err := credentials.ReadEnvFile(envPath)
 	if err != nil {
 		return fmt.Errorf("read credentials: %w", err)

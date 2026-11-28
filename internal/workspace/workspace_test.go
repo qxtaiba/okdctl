@@ -13,6 +13,9 @@ func TestLayoutContract(t *testing.T) {
 		fn   func(string) string
 		want string
 	}{
+		{"EnvPath", workspace.EnvPath, "/proj/okdctl.env"},
+		{"LogPath", workspace.LogPath, "/proj/okdctl.log"},
+		{"LockPath", workspace.LockPath, "/proj/.okdctl.lock"},
 		{"ClusterDir", workspace.ClusterDir, "/proj/cluster"},
 		{"RecordPath", workspace.RecordPath, "/proj/cluster/record.json"},
 		{"AuthDir", workspace.AuthDir, "/proj/cluster/auth"},

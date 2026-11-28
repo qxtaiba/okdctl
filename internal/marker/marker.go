@@ -8,19 +8,18 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"time"
 
-	"github.com/qxtaiba/okdctl/internal/logutil"
 	"github.com/qxtaiba/okdctl/internal/system"
 )
 
-// Envelope is the header common to every marker payload. Concrete payload
-// types embed it; File.Write stamps it and File.Read validates SchemaVersion.
+// ErrSchemaVersion reports a marker written under another schema version.
+var ErrSchemaVersion = errors.New("unsupported schema_version")
+
+// Envelope is the header every marker payload embeds; File.Write stamps it
+// and File.Read checks SchemaVersion.
 type Envelope struct {
-	SchemaVersion string    `json:"schema_version"`
-	RunID         string    `json:"run_id"`
-	Timestamp     time.Time `json:"timestamp"`
-	ClusterName   string    `json:"cluster_name,omitempty"`
+	SchemaVersion string `json:"schema_version"`
+	ClusterName   string `json:"cluster_name,omitempty"`
 }
 
 func (e *Envelope) envelope() *Envelope { return e }
@@ -34,14 +33,11 @@ type File struct {
 	Version string
 }
 
-// Write stamps the payload's envelope (current schema version, run id,
-// cluster name, UTC timestamp) and atomically writes it at mode 0600.
-func (f File) Write(path string, p Payload, runID, clusterName string) error {
+// Write stamps the payload's envelope and atomically writes it at mode 0600.
+func (f File) Write(path string, p Payload, clusterName string) error {
 	e := p.envelope()
 	e.SchemaVersion = f.Version
-	e.RunID = runID
 	e.ClusterName = clusterName
-	e.Timestamp = time.Now().UTC()
 	data, err := json.Marshal(p)
 	if err != nil {
 		return fmt.Errorf("marshal %s marker: %w", f.Label, err)
@@ -49,35 +45,18 @@ func (f File) Write(path string, p Payload, runID, clusterName string) error {
 	return system.AtomicWrite(path, data, 0o600)
 }
 
-// Read decodes the marker at path into p. A missing file and an
-// unrecognized schema version both read as found=false with a nil error;
-// unreadable or unparseable files return an error.
-func (f File) Read(path string, p Payload) (bool, error) {
+// Read decodes the marker at path into p; a missing file wraps
+// os.ErrNotExist and another schema version wraps ErrSchemaVersion.
+func (f File) Read(path string, p Payload) error {
 	data, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
-	}
 	if err != nil {
-		return false, fmt.Errorf("read %s marker: %w", f.Label, err)
+		return fmt.Errorf("read %s marker: %w", f.Label, err)
 	}
 	if err := json.Unmarshal(data, p); err != nil {
-		return false, fmt.Errorf("parse %s marker: %w", f.Label, err)
+		return fmt.Errorf("parse %s marker %s: %w", f.Label, path, err)
 	}
-	version := p.envelope().SchemaVersion
-	if version == f.Version {
-		return true, nil
-	}
-	logutil.Warn("ignoring marker with unknown schema_version",
-		logutil.LF("marker", f.Label),
-		logutil.LF("schema_version", version),
-		logutil.LF("expected", f.Version))
-	return false, nil
-}
-
-// Clear removes the marker; a missing file is success.
-func (f File) Clear(path string) error {
-	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("remove %s marker: %w", f.Label, err)
+	if version := p.envelope().SchemaVersion; version != f.Version {
+		return fmt.Errorf("%s marker %s: %w %q, want %q", f.Label, path, ErrSchemaVersion, version, f.Version)
 	}
 	return nil
 }

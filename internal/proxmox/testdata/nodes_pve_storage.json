@@ -1,4 +1,4 @@
 {"data":[
 {"active":1,"avail":85899345920,"content":"iso,vztmpl","enabled":1,"shared":0,"storage":"local","total":107374182400,"type":"dir","used":21474836480,"used_fraction":0.2},
-{"active":1,"avail":"429496729600","content":"images,rootdir","enabled":1,"shared":0,"storage":"local-lvm","total":"536870912000","type":"lvmthin","used":107374182400,"used_fraction":0.2}
+{"active":1,"avail":429496729600,"content":"images,rootdir","enabled":1,"shared":0,"storage":"local-lvm","total":536870912000,"type":"lvmthin","used":107374182400,"used_fraction":0.2}
 ]}

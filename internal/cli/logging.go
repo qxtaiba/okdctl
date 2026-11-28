@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"slices"
 	"syscall"
 
@@ -13,8 +12,8 @@ import (
 	"golang.org/x/term"
 
 	"github.com/qxtaiba/okdctl/internal/logutil"
-	"github.com/qxtaiba/okdctl/internal/system"
 	"github.com/qxtaiba/okdctl/internal/tui"
+	"github.com/qxtaiba/okdctl/internal/workspace"
 )
 
 // logFileCloser holds the open log-file handle for Execute to close; nil when
@@ -23,6 +22,10 @@ var logFileCloser io.Closer
 
 // runLogPath is the active file sink's path ("" if none); execute() prints it on failure.
 var runLogPath string
+
+// loggingConfigured records that configureLogging installed the handlers, so
+// a failure cobra raises before PersistentPreRunE can still configure them.
+var loggingConfigured bool
 
 // runLogSink aliases logFileCloser as a writer (do not close separately);
 // init routes log output here while the wizard owns the terminal.
@@ -41,8 +44,8 @@ func wantsDefaultLogSink(cmd *cobra.Command) bool {
 	return false
 }
 
-// openLogFile lstats to refuse a symlink then opens O_NOFOLLOW, closing a
-// pre-sudo TOCTOU race on root-authored log lines.
+// openLogFile lstats to refuse a symlink then opens O_NOFOLLOW, so log lines
+// never land in a redirected file.
 func openLogFile(path string) (*os.File, error) {
 	if info, err := os.Lstat(path); err == nil {
 		if info.Mode()&os.ModeSymlink != 0 {
@@ -54,22 +57,15 @@ func openLogFile(path string) (*os.File, error) {
 	return os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND|syscall.O_NOFOLLOW, 0o600)
 }
 
-// openDefaultLogSink opens <workspace>/okdctl.log and chowns it via the open fd
-// (TOCTOU-safe), closing the sink on chown failure instead of leaving a
-// root-owned log.
 func openDefaultLogSink() (string, *os.File, error) {
-	root, err := resolveWorkspaceRoot()
+	root, err := initRoot()
 	if err != nil {
 		return "", nil, err
 	}
-	path := filepath.Join(root, logutil.DefaultLogFileName)
+	path := workspace.LogPath(root)
 	f, err := openLogFile(path)
 	if err != nil {
 		return "", nil, err
-	}
-	if err := system.ChownFileToInvokingUser(f); err != nil {
-		_ = f.Close()
-		return "", nil, fmt.Errorf("chown log file to invoking user: %w", err)
 	}
 	return path, f, nil
 }
@@ -102,19 +98,15 @@ func configureLogging(cmd *cobra.Command) error {
 	effectiveLevel := effectiveLogLevel()
 
 	stderrIsTTY := term.IsTerminal(int(os.Stderr.Fd()))
-	stdoutIsTTY := term.IsTerminal(int(os.Stdout.Fd()))
-	// --no-color or NO_COLOR (no-color.org, any value) disables progress bars
-	// regardless of TTY; FORCE_COLOR only affects colorprofile styling, not
-	// this gate.
+	// --no-color or NO_COLOR (no-color.org, any value) forces colour off;
+	// FORCE_COLOR only affects colorprofile styling.
 	colorOff := noColor || os.Getenv("NO_COLOR") != ""
 
 	// auto-switch to json when stderr is piped and --log-format wasn't set
-	// explicitly, mirroring the progress-bar TTY gate
+	// explicitly
 	if !cmd.Root().PersistentFlags().Changed(flagLogFormat) && !stderrIsTTY {
 		logFormat = tui.FormatJSON
 	}
-
-	progressBars := stderrIsTTY && stdoutIsTTY && logFormat != tui.FormatJSON && !colorOff
 
 	tui.SetMotion(tui.ResolveMotion(noMotion, noColor, os.Getenv))
 
@@ -128,11 +120,10 @@ func configureLogging(cmd *cobra.Command) error {
 	}
 
 	if err := tui.ConfigureLoggers(tui.LoggerConfig{
-		Level:        effectiveLevel,
-		Format:       logFormat,
-		Stderr:       os.Stderr,
-		Sink:         sinkW,
-		ProgressBars: progressBars,
+		Level:  effectiveLevel,
+		Format: logFormat,
+		Stderr: os.Stderr,
+		Sink:   sinkW,
 	}); err != nil {
 		return err
 	}
@@ -144,6 +135,7 @@ func configureLogging(cmd *cobra.Command) error {
 	if logFormat == tui.FormatJSON && !logVerbose && !wantsDefaultLogSink(cmd) {
 		tui.SuppressInfo()
 	}
+	loggingConfigured = true
 	return nil
 }
 

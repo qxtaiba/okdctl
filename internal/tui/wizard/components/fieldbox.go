@@ -6,12 +6,8 @@ import (
 	"github.com/qxtaiba/okdctl/internal/tui"
 )
 
-// fieldBox renders content in a rounded-border box exactly outer columns
-// wide; the border colors red on hasErr, purple on focused, and slate
-// otherwise — an error border always wins over a focus border, and a
-// disabled field (its current value has no effect, e.g. a drain timeout
-// while skip-drain is selected) always wins over both, since there is
-// nothing left to flag or focus toward.
+// fieldBox renders content in a rounded box exactly outer columns wide; a
+// disabled border wins over error, which wins over focus.
 func fieldBox(content string, outer int, focused, hasErr, disabled bool) string {
 	border := tui.ColorSubtle()
 	switch {
@@ -30,23 +26,15 @@ func fieldBox(content string, outer int, focused, hasErr, disabled bool) string 
 		Render(content)
 }
 
-// defaultTagReserve is the on-screen width of the " default" tag (a
-// leading space plus "default"'s 7 characters) that InputField and
-// SelectField join beside their box. Both types reserve this much room out
-// of their box's available width for the field's entire life once it has
-// ever carried a default value — not just while the tag is still visible —
-// so the box never resizes when the user's first edit drops the tag.
+// defaultTagReserve is the " default" tag's width, reserved for a field's
+// whole life once it has carried a default so the box never resizes.
 const defaultTagReserve = 8
 
-// DefaultTagReserve mirrors defaultTagReserve for a caller outside the
-// package that must reserve the same room — the wizard's field pairing
-// keeps a paired column's box width even with its sibling's by reserving
-// this much in both halves whenever either one carries a default tag.
+// DefaultTagReserve lets the wizard's field pairing reserve the same room in
+// both halves of a pair.
 const DefaultTagReserve = defaultTagReserve
 
-// All four are assigned by RebuildStyles: under the dual-polarity Theme
-// every role rebinds on the background flip, so an init-captured color
-// would freeze its dark value.
+// Assigned by RebuildStyles: every role rebinds on the background flip.
 var (
 	labelStyle lipgloss.Style
 	errStyle   lipgloss.Style
@@ -54,16 +42,12 @@ var (
 	tagStyle   lipgloss.Style
 )
 
-// stylesGeneration counts RebuildStyles calls; a per-instance style cache
-// elsewhere in the package (e.g. Selector.cachedStyles) records the
-// generation it was built at and rebuilds once this counter moves past it,
-// instead of assuming tui.Color* never changes after init.
+// stylesGeneration lets per-instance caches such as Selector.cachedStyles
+// rebuild after a theme swap.
 var stylesGeneration int
 
-// RebuildStyles assigns every themed style in the package from the active
-// resolved Theme and advances stylesGeneration so per-instance caches
-// elsewhere in the package invalidate; call at init and whenever the theme
-// swaps (the wizard's BackgroundColorMsg site).
+// RebuildStyles assigns every themed style from the active Theme and
+// advances stylesGeneration; call at init and after every theme swap.
 func RebuildStyles() {
 	labelStyle = lipgloss.NewStyle().Foreground(tui.ColorTextSoft())
 	errStyle = lipgloss.NewStyle().Foreground(tui.ColorError())

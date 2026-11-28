@@ -17,7 +17,9 @@ var kubeconfigOutput string
 var kubeconfigCmd = &cobra.Command{
 	Use:   "kubeconfig",
 	Short: "Print or export the cluster kubeconfig",
-	Long:  "Print the cluster kubeconfig to stdout or write it to a file.",
+	Long: `Print the cluster kubeconfig to stdout or write it to a file. The file is
+read from cluster/auth/kubeconfig under the workspace, the directory that
+holds okdctl.yaml. The install step, which writes it, is not yet available.`,
 	Example: `  okdctl kubeconfig                       # print to stdout
   okdctl kubeconfig --output-file ~/.kube/okd.cfg    # write to file`,
 	Args: cobra.NoArgs,
@@ -30,18 +32,14 @@ func init() {
 }
 
 func runKubeconfig(cmd *cobra.Command, _ []string) error {
-	projectRoot, err := resolveProjectRootOrDie()
+	root, err := workspaceRoot(cfgFile)
 	if err != nil {
 		return err
 	}
-
-	src := workspace.KubeconfigPath(projectRoot)
-
+	src := workspace.KubeconfigPath(root)
 	if !system.FileExists(src) {
-		return &errtypes.ConfigError{
-			Msg: fmt.Sprintf("kubeconfig not found at %s; run `okdctl up` first", src),
-			Err: errtypes.ErrConfigMissing,
-		}
+		return (&errtypes.ConfigError{Msg: "kubeconfig not found at " + src, Err: errtypes.ErrConfigMissing}).
+			WithHint("installing a cluster, which writes it, is not yet available")
 	}
 
 	data, err := os.ReadFile(src)

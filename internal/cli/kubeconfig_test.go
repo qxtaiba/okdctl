@@ -12,9 +12,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func seedKubeconfigWorkspace(t *testing.T) []byte {
+func seedKubeconfigWorkspace(t *testing.T) (root string, want []byte) {
 	t.Helper()
-	root := t.TempDir()
+	root = t.TempDir()
 	t.Chdir(root)
 	if err := os.WriteFile(filepath.Join(root, "okdctl.yaml"), []byte(""), 0o600); err != nil {
 		t.Fatal(err)
@@ -23,11 +23,11 @@ func seedKubeconfigWorkspace(t *testing.T) []byte {
 	if err := os.MkdirAll(authDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	want := []byte("apiVersion: v1\nkind: Config\nusers:\n- name: admin\n")
+	want = []byte("apiVersion: v1\nkind: Config\nusers:\n- name: admin\n")
 	if err := os.WriteFile(workspace.KubeconfigPath(root), want, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	return want
+	return root, want
 }
 
 func setKubeconfigOutput(t *testing.T, output string) {
@@ -38,7 +38,7 @@ func setKubeconfigOutput(t *testing.T, output string) {
 }
 
 func TestRunKubeconfig_OutputFilePerms(t *testing.T) {
-	want := seedKubeconfigWorkspace(t)
+	_, want := seedKubeconfigWorkspace(t)
 	dest := filepath.Join(t.TempDir(), "sub", "okd.kubeconfig")
 	setKubeconfigOutput(t, dest)
 
@@ -70,7 +70,7 @@ func TestRunKubeconfig_OutputFilePerms(t *testing.T) {
 }
 
 func TestRunKubeconfig_StdoutDefault(t *testing.T) {
-	want := seedKubeconfigWorkspace(t)
+	_, want := seedKubeconfigWorkspace(t)
 	setKubeconfigOutput(t, "-")
 
 	cmd := &cobra.Command{}
@@ -85,6 +85,26 @@ func TestRunKubeconfig_StdoutDefault(t *testing.T) {
 	}
 	if _, err := os.Stat("-"); !os.IsNotExist(err) {
 		t.Error("a literal '-' file must not be created")
+	}
+}
+
+func TestRunKubeconfig_FollowsConfigFlagFromAnotherDirectory(t *testing.T) {
+	root, want := seedKubeconfigWorkspace(t)
+	t.Chdir(t.TempDir())
+	orig := cfgFile
+	cfgFile = filepath.Join(root, "okdctl.yaml")
+	t.Cleanup(func() { cfgFile = orig })
+	setKubeconfigOutput(t, "-")
+
+	cmd := &cobra.Command{}
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+
+	if err := runKubeconfig(cmd, nil); err != nil {
+		t.Fatalf("runKubeconfig: %v", err)
+	}
+	if !bytes.Equal(stdout.Bytes(), want) {
+		t.Errorf("stdout = %q, want the kubeconfig bytes from the --config workspace", stdout.String())
 	}
 }
 

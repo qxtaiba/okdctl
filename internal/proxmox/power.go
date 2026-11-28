@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
 const (
@@ -63,8 +65,8 @@ func (d *driver) Status(ctx context.Context, ref VMRef) (VMStatus, error) {
 
 // WaitTask polls the task until it stops; a zero Task is already done, and a
 // task ending with anything but OK or WARNINGS: n fails with *TaskFailed. A
-// poll error other than permission or not-found is retried on the next tick
-// up to waitTaskRetries times in a row.
+// poll error other than permission or not-found is warned once and retried
+// on the next tick up to waitTaskRetries times in a row.
 func (d *driver) WaitTask(ctx context.Context, task Task) error {
 	if task.UPID == "" {
 		return nil
@@ -72,6 +74,7 @@ func (d *driver) WaitTask(ctx context.Context, task Task) error {
 	path := nodePath(task.Node, "tasks/"+url.PathEscape(task.UPID)+"/status")
 	ticker := time.NewTicker(d.pollInterval)
 	defer ticker.Stop()
+	warn := logutil.NewDedupWarner(logutil.SimpleLogger())
 	failures := 0
 	for {
 		var st struct {
@@ -79,9 +82,13 @@ func (d *driver) WaitTask(ctx context.Context, task Task) error {
 			ExitStatus string `json:"exitstatus"`
 		}
 		err := d.get(ctx, path, &st)
+		if err == nil && st.Status == "" {
+			err = fmt.Errorf("get %s: empty task status", path)
+		}
 		switch {
 		case err == nil:
 			failures = 0
+			warn.Reset()
 		case ctx.Err() != nil, errors.Is(err, ErrPermission), errors.Is(err, ErrNotFound):
 			return err
 		default:
@@ -89,6 +96,7 @@ func (d *driver) WaitTask(ctx context.Context, task Task) error {
 			if failures > waitTaskRetries {
 				return err
 			}
+			warn.Warn(err.Error(), "task poll failed, retrying", "upid", task.UPID, "err", err)
 		}
 		if err == nil && st.Status != taskRunning {
 			// PVE's own upid_status_is_error also counts "WARNINGS: n" as success.

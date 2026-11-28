@@ -265,3 +265,25 @@ func TestTypingATokenArmsTheDiscardQuestion(t *testing.T) {
 		t.Error("ctrl+c after typing a token must ask before quitting")
 	}
 }
+
+type earlyExitStep struct{ fakeStep }
+
+func (s *earlyExitStep) ShouldExitEarly() bool { return true }
+
+func TestHubExitAfterEditsAsksBeforeDiscarding(t *testing.T) {
+	hub := &earlyExitStep{fakeStep{id: StepIDWelcome}}
+	m := NewModel([]WizardStep{hub, &fakeStep{id: StepIDBasics}}, config.DefaultConfig())
+	tuitest.RenderAt(t, m, 100, 30)
+	m.Config().Cluster.Name = "edited"
+
+	m = update(t, m, StepCompleteMsg{StepID: StepIDWelcome})
+
+	if m.quitting || m.Result().Outcome != OutcomeUnset {
+		t.Fatalf("the hub left with unsaved edits: quitting=%v outcome=%v", m.quitting, m.Result().Outcome)
+	}
+	if !showsDiscardPrompt(m) {
+		t.Fatalf("no discard prompt after the hub verb:\n%s", tuitest.StripANSI(m.View().Content))
+	}
+	mm, cmd := m.Update(tea.KeyPressMsg{Code: 'y', Text: "y"})
+	assertCancelled(t, mm.(*Model), cmd)
+}

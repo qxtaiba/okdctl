@@ -1,18 +1,9 @@
 package wizard
 
-// Help-text labels shared across wizard keymaps so footer wording stays consistent.
-//
-// The enter-key label follows one rule across every step's ShortHelp:
-// HelpContinue ("continue") on a form step — one that collects values across
-// one or more fields before the wizard can advance, e.g. a DataDrivenStep or
-// ParamsStep; HelpConfirm ("confirm") on a decision or summary step — one
-// where enter commits a single already-made choice or a review, e.g. picking
-// one item from a list (OpStep, TargetStep, DistributionStep) or the final
-// review/type-to-confirm gates; and HelpStart ("start") nowhere but the
-// welcome hub, which begins the wizard rather than advancing or confirming
-// anything. Every step's ShortHelp must also include HelpCtrlC — the
-// essentials system needs the binding present in the slice to render it, even
-// though the keystroke itself is handled globally regardless.
+// Help labels shared across step keymaps. The enter label is HelpContinue on
+// a form step, HelpConfirm on a decision or summary step and HelpStart on
+// the hub alone; every ShortHelp must include HelpCtrlC for the essentials
+// reserve to render it.
 const (
 	HelpNavigate  = "navigate"
 	HelpEnter     = "enter"

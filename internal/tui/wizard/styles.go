@@ -9,13 +9,11 @@ import (
 )
 
 // OuterContainerStyle carries no theme role, so it alone may build at init;
-// every themed style below is assigned by rebuildWizardStyles — under the
-// dual-polarity Theme every role rebinds on the background flip, so an
-// init-captured color would freeze its dark value.
+// every themed style rebinds on the background flip.
 var OuterContainerStyle = lipgloss.NewStyle().
 	Padding(1, 2)
 
-// Frame, header, help-ribbon, and step-dot styles; all assigned by
+// Frame, header, help-ribbon and step-dot styles, assigned by
 // rebuildWizardStyles.
 var (
 	WizardBorderStyle lipgloss.Style
@@ -37,8 +35,7 @@ var (
 )
 
 // rebuildWizardStyles assigns every themed wizard style from the active
-// resolved Theme; call at init and whenever the theme swaps (the wizard's
-// BackgroundColorMsg site).
+// Theme; call at init and after every theme swap.
 func rebuildWizardStyles() {
 	WizardBorderStyle = lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -105,8 +102,8 @@ func init() {
 	rebuildWizardStyles()
 }
 
-// RenderStepProgress renders the step dots — ✓ completed, ● current, ○
-// pending — so state never rides on color alone.
+// RenderStepProgress renders ✓/●/○ step dots, so state never rides on color
+// alone.
 func RenderStepProgress(current, total int) string {
 	var parts []string
 	for i := range total {
@@ -123,22 +120,17 @@ func RenderStepProgress(current, total int) string {
 	return strings.Join(parts, connector)
 }
 
-// helpEssentialKeys marks the ribbon entries RenderHelpRibbon reserves
-// before doing anything else: the quit binding and the help-overlay hint
-// are the wizard's only guaranteed escape hatches (ctrl+c always quits,
-// "?" always lists everything else, including whatever the ribbon itself
-// had no room for), so truncation eats into the other items first —
-// wherever these two appear in items, they always render, trailing in that
-// relative order.
+// helpEssentialKeys are reserved before anything else: ctrl+c and "?" are
+// the wizard's only guaranteed escape hatches, so truncation eats the other
+// items first.
 var helpEssentialKeys = map[string]bool{
 	HelpCtrlC:    true,
 	HelpQuestion: true,
 }
 
 // RenderHelpRibbon joins items as "key desc • key desc" within width,
-// reserving helpEssentialKeys first so truncation only ever drops the rest,
-// front to back, and appending "…" once they still don't all fit; the
-// result never wraps.
+// dropping non-essential items front to back and appending "…"; the result
+// never wraps.
 func RenderHelpRibbon(items []KeyBinding, width int) string {
 	sep := HelpSeparatorStyle.Render(" • ")
 	more := HelpSeparatorStyle.Render(" …")
@@ -155,12 +147,8 @@ func RenderHelpRibbon(items []KeyBinding, width int) string {
 	essentialStr := joinHelpPieces(essential, sep)
 	essentialWidth := lipgloss.Width(essentialStr)
 
-	// The essentials alone might not fit width at all — a step's own
-	// PinnedFooter can claim nearly the whole row (e.g. preview's action
-	// selector with several blockers), leaving the ribbon only a handful
-	// of columns. Degrade honestly instead of falling through to the
-	// bare MaxWidth clip below, which would cut mid-word with no
-	// indication anything was cut ("ctrl+c quit" -> "ctr").
+	// A step's PinnedFooter can leave the ribbon a handful of columns; degrade
+	// honestly rather than clip mid-word.
 	if essentialWidth > width {
 		return renderEssentialsDegraded(essential, width)
 	}
@@ -195,9 +183,7 @@ func RenderHelpRibbon(items []KeyBinding, width int) string {
 	}
 
 	out := b.String()
-	// Only mark the drop when something from rest actually rendered before
-	// it: with nothing to append "more" after, the marker would only eat
-	// into the width reserved for the essential items themselves.
+	// Only mark the drop when something from rest rendered before it.
 	if dropped && used > 0 {
 		out += more
 	}
@@ -211,15 +197,10 @@ func RenderHelpRibbon(items []KeyBinding, width int) string {
 	return lipgloss.NewStyle().MaxWidth(width).Inline(true).Render(out)
 }
 
-// helpRibbonFloorWidth is the point below which a truncated essential list
-// still has no room for any of its own text — only the ellipsis marker fits.
 const helpRibbonFloorWidth = 6
 
-// renderEssentialsDegraded renders essential when it doesn't fit width at
-// all: below helpRibbonFloorWidth, just the "…" marker; otherwise the
-// essentials as plain text, rune-truncated with a trailing "…" via
-// tui.Truncate — never the bare, unmarked clip lipgloss's own MaxWidth
-// would produce on ANSI-styled text.
+// renderEssentialsDegraded renders essential when it does not fit width:
+// the "…" marker alone below helpRibbonFloorWidth, else plain truncated text.
 func renderEssentialsDegraded(essential []KeyBinding, width int) string {
 	if width < helpRibbonFloorWidth {
 		return lipgloss.NewStyle().MaxWidth(width).Inline(true).Render(HelpSeparatorStyle.Render("…"))
@@ -236,8 +217,6 @@ func renderEssentialsDegraded(essential []KeyBinding, width int) string {
 	return HelpTextStyle.Render(tui.Truncate(plain.String(), width))
 }
 
-// joinHelpPieces renders items as "key desc • key desc" with no width
-// limit — the caller has already reserved the room these need.
 func joinHelpPieces(items []KeyBinding, sep string) string {
 	var b strings.Builder
 	for i, it := range items {

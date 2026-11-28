@@ -14,17 +14,13 @@ func (m *Model) handleResize(msg tea.WindowSizeMsg) {
 	m.sizeCurrentStep()
 	m.resizeViewport()
 	m.syncViewportContent()
-	// Deliberately does not re-scroll to the focused field: a resize must
-	// resync content/height without fighting a scroll position the operator
-	// (or a test) just set deliberately — e.g. 'G'/'gg'/pgup/pgdn — which a
-	// forced autoScrollToField here would silently overwrite on every
-	// WindowSizeMsg, including a same-size one a render helper re-sends.
+	// Deliberately no re-scroll: a resize must not overwrite a scroll position
+	// the operator just set, and render helpers re-send same-size resizes.
 }
 
-// sizeCurrentStep hands the active step the terminal's own dimensions and then
-// the content box it renders into: a TerminalSizer's layout decision is stated
-// in terminal columns and rows, which the frame's width caps flatten out of the
-// content box.
+// sizeCurrentStep hands the step the terminal dimensions, then the content
+// box; a TerminalSizer's gate is stated in terminal columns the frame's caps
+// flatten.
 func (m *Model) sizeCurrentStep() {
 	if len(m.steps) == 0 || m.currentStep < 0 || m.currentStep >= len(m.steps) {
 		return
@@ -39,11 +35,8 @@ func (m *Model) sizeCurrentStep() {
 	}
 }
 
-// resizeViewport re-fits the scrollable viewport to the active step's body
-// width and the frame's fixed height budget, constructing it on first call.
-// Called on every step transition as well as every terminal resize: a
-// frameWidthOwner step changes the body width without the terminal changing at
-// all.
+// resizeViewport re-fits the viewport to the body width and height budget;
+// a frameWidthOwner changes the body width without a terminal resize.
 func (m *Model) resizeViewport() {
 	width, height := m.viewportDimensions()
 	if !m.ready {
@@ -55,10 +48,9 @@ func (m *Model) resizeViewport() {
 	m.viewport.SetHeight(height)
 }
 
-// handleScrollKey scrolls the viewport on page/home/end keys — plus the
-// footer-silent vim vocabulary (ctrl+d/u, gg/G) — and reports whether it
-// consumed msg; home/end and every vim key fall through to a focused text
-// input, and every other step keeps its own keys.
+// handleScrollKey scrolls on page/home/end and the vim keys, reporting
+// whether it consumed msg; home/end and the vim keys fall through to a
+// focused text input.
 func (m *Model) handleScrollKey(msg tea.KeyPressMsg) bool {
 	if !m.ready {
 		return false
@@ -87,11 +79,8 @@ func (m *Model) handleScrollKey(msg tea.KeyPressMsg) bool {
 	return true
 }
 
-// handleVimScrollKey handles the footer-silent vim vocabulary: ctrl+d/u
-// mirror the half-page keys and gg/G jump to the ends, every key falling
-// through while a text input is focused. handled reports whether msg was a
-// vim key at all; consumed whether it acted (or, for a lone g, armed the gg
-// chord).
+// handleVimScrollKey handles ctrl+d/u and gg/G; handled reports a vim key,
+// consumed whether it acted or armed the gg chord.
 func (m *Model) handleVimScrollKey(msg tea.KeyPressMsg) (handled, consumed bool) {
 	pendingG := m.pendingG
 	m.pendingG = false
@@ -125,17 +114,15 @@ func (m *Model) handleVimScrollKey(msg tea.KeyPressMsg) (handled, consumed bool)
 	return true, true
 }
 
-// scrollToFocusedField scrolls the viewport so the active step's focused
-// field sits entirely on screen; a field taller than the viewport is pinned
-// to its first row.
+// scrollToFocusedField brings the focused field's span on screen, pinning a
+// field taller than the viewport to its first row.
 func (m *Model) scrollToFocusedField() {
 	if len(m.steps) == 0 || m.currentStep < 0 || m.currentStep >= len(m.steps) {
 		return
 	}
 	step := m.steps[m.currentStep]
-	// contentRows maps the step's own View lines; a centered step's content is
-	// shifted by PaddingTop before it is measured, so the spans would not line
-	// up. No centered step provides spans today.
+	// A centered step's content is shifted by PaddingTop before measuring, so
+	// its spans would not line up.
 	if c, ok := step.(centerable); ok && c.IsCentered() {
 		return
 	}
@@ -160,8 +147,8 @@ func (m *Model) scrollToFocusedField() {
 	}
 }
 
-// viewportSpan maps a step-View line span onto the viewport rows it occupies
-// after content padding wrapped any over-wide lines.
+// viewportSpan maps a View line span onto the viewport rows it occupies
+// after wrapping.
 func (m *Model) viewportSpan(span LineSpan) (start, end int) {
 	rows := m.contentRows
 	if len(rows) < 2 {
@@ -173,10 +160,7 @@ func (m *Model) viewportSpan(span LineSpan) (start, end int) {
 	return start, max(end, start)
 }
 
-// autoScrollToField scrolls by the focused field's exact pixel bounds
-// (FocusedBounds) rather than scrollToFocusedField's line-span mapping —
-// kept alongside it since not every focusable (e.g. lifecycle's
-// components.Input/Selector-backed fields) implements SpanProvider.
+// autoScrollToField scrolls by FocusedBounds for steps without SpanProvider.
 func (m *Model) autoScrollToField(_, _ int) {
 	step := m.CurrentStep()
 	bounded, ok := step.(FocusedBounds)
@@ -209,20 +193,18 @@ func (m *Model) goToNextStep() (tea.Model, tea.Cmd) {
 			}
 		}
 
-		if ee, ok := m.steps[m.currentStep].(earlyExiter); ok {
-			if ee.ShouldExitEarly() {
-				action := ActionExit
-				if ag, ok := m.steps[m.currentStep].(actionGetter); ok {
-					action = ag.GetSelectedAction()
-				}
-				m.result = Result{
-					Outcome:  OutcomeCompleted,
-					Config:   m.config,
-					Action:   action,
-					ExitStep: m.steps[m.currentStep].ID(),
-				}
-				return m, tea.Quit
+		if ee, ok := m.steps[m.currentStep].(earlyExiter); ok && ee.ShouldExitEarly() {
+			// Leaving through the hub would otherwise drop an edit session silently.
+			if !m.saved.matches(m.config, m.steps) {
+				m.discardPending = true
+				return m, nil
 			}
+			m.result = Result{
+				Outcome:  OutcomeCompleted,
+				Config:   m.config,
+				ExitStep: m.steps[m.currentStep].ID(),
+			}
+			return m, tea.Quit
 		}
 
 		if f, ok := m.steps[m.currentStep].(FocusableStep); ok {
@@ -243,19 +225,13 @@ func (m *Model) goToNextStep() (tea.Model, tea.Cmd) {
 	}
 
 	if nextStep >= len(m.steps) {
-		action := ActionExit
 		var exitStep StepID
 		if len(m.steps) > 0 {
-			currentStep := m.steps[m.currentStep]
-			exitStep = currentStep.ID()
-			if ag, ok := currentStep.(actionGetter); ok {
-				action = ag.GetSelectedAction()
-			}
+			exitStep = m.steps[m.currentStep].ID()
 		}
 		m.result = Result{
 			Outcome:  OutcomeCompleted,
 			Config:   m.config,
-			Action:   action,
 			ExitStep: exitStep,
 		}
 		return m, tea.Quit
@@ -269,10 +245,17 @@ func (m *Model) goToPreviousStep() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if len(m.steps) > 0 && m.currentStep < len(m.steps) {
-		if f, ok := m.steps[m.currentStep].(FocusableStep); ok {
-			f.SetFocused(false)
+	// A jumped-to step has already written every keystroke into the config, so
+	// leaving it invalid would hand review a config it cannot save.
+	if v, ok := m.steps[m.currentStep].(interface{ Validate() error }); ok && m.returnToReview {
+		if err := v.Validate(); err != nil {
+			m.setError(err)
+			return m, nil
 		}
+	}
+
+	if f, ok := m.steps[m.currentStep].(FocusableStep); ok {
+		f.SetFocused(false)
 	}
 
 	if m.returnToReview {
@@ -288,16 +271,14 @@ func (m *Model) goToPreviousStep() (tea.Model, tea.Cmd) {
 	}
 
 	if prevStep < 0 {
-		// Every earlier step is hidden; landing on a screen ShouldShow hides
-		// would strand the user, so stay put.
+		// Every earlier step is hidden; stay put rather than land on one.
 		return m, nil
 	}
 
 	return m.focusStep(prevStep)
 }
 
-// jumpToReview clears returnToReview and focuses the review step directly,
-// skipping intermediate steps.
+// jumpToReview focuses the review step directly.
 func (m *Model) jumpToReview() (tea.Model, tea.Cmd) {
 	m.returnToReview = false
 
@@ -309,8 +290,7 @@ func (m *Model) jumpToReview() (tea.Model, tea.Cmd) {
 	return m.focusStep(idx)
 }
 
-// jumpToStep applies/blurs the current step, focuses id, and arms
-// returnToReview so confirm/back returns here.
+// jumpToStep applies the current step, focuses id and arms returnToReview.
 func (m *Model) jumpToStep(id StepID) (tea.Model, tea.Cmd) {
 	idx := m.indexOfStepByID(id)
 	if idx < 0 || !stepShouldShow(m.steps[idx], m.config) {
@@ -343,13 +323,9 @@ func (m *Model) indexOfStepByID(id StepID) int {
 	return -1
 }
 
-// focusStep is the shared tail of every step transition: resize, focus, refresh
-// jump targets, resync viewport. It is also the single point every
-// navigation-mutating message (StepCompleteMsg, StepBackMsg, JumpToStepMsg)
-// funnels through, so it closes the help overlay first — the overlay gates
-// only tea.KeyPressMsg, so one of those messages can otherwise arrive
-// asynchronously while it is open and move the current step underneath it,
-// leaving it rendering bindings for a step the user never navigated to.
+// focusStep is the shared tail of every transition. It closes the help
+// overlay first: a navigation message can arrive while the overlay is open
+// and move the step underneath it.
 func (m *Model) focusStep(idx int) (tea.Model, tea.Cmd) {
 	m.helpOpen = false
 	m.currentStep = idx
@@ -359,12 +335,8 @@ func (m *Model) focusStep(idx int) (tea.Model, tea.Cmd) {
 	if f, ok := m.steps[idx].(FocusableStep); ok {
 		f.SetFocused(true)
 	}
-	// Init() is called unconditionally on every entry, including
-	// re-entry while a step's own prior fetch is still in flight: a step
-	// with an async fetch owns its own request identity (a generation
-	// counter bumped per issue) and its own reuse-vs-refetch call, so a
-	// superseded reply is simply discarded rather than clobbering newer
-	// state, and re-entry never needs to be gated here.
+	// Init runs on every entry; a step with an async fetch owns its generation
+	// counter and discards superseded replies, so re-entry needs no gate here.
 	cmd := m.ownCommand(m.steps[idx].Init())
 
 	m.syncJumpTargets()
@@ -379,8 +351,8 @@ func (m *Model) focusStep(idx int) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// syncJumpTargets refreshes the review step's digit-jump table, compacting out
-// hidden (ShouldShow false) targets.
+// syncJumpTargets refreshes the review step's digit table, skipping hidden
+// steps.
 func (m *Model) syncJumpTargets() {
 	rj, ok := m.steps[m.currentStep].(ReviewJumper)
 	if !ok {
@@ -391,7 +363,6 @@ func (m *Model) syncJumpTargets() {
 	targets := make([]JumpTarget, 0, len(order))
 	digit := 1
 	for _, id := range order {
-		// Digits are single keystrokes; nine is the practical ceiling.
 		if digit > 9 {
 			break
 		}

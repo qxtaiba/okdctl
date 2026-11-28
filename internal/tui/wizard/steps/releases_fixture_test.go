@@ -1,0 +1,32 @@
+package steps
+
+import (
+	"time"
+
+	"github.com/qxtaiba/okdctl/internal/releases"
+)
+
+func fixtureDate(year int, month time.Month) time.Time {
+	return time.Date(year, month, 1, 0, 0, 0, 0, time.UTC)
+}
+
+func fixtureReleaseSeries() []releases.OKDReleaseSeries {
+	series420 := []releases.OKDVersion{
+		{Version: "4.20.1-okd-scos.7", Tag: "4.20.1-okd-scos.7", ReleaseDate: fixtureDate(2026, time.August), Stable: true, Latest: true, Type: releases.ReleaseTypeLatestStable},
+		{Version: "4.20.0-okd-scos.5", Tag: "4.20.0-okd-scos.5", ReleaseDate: fixtureDate(2026, time.June), Stable: true, Type: releases.ReleaseTypeStable},
+	}
+	series419 := []releases.OKDVersion{
+		{Version: "4.19.4-okd-scos.3", Tag: "4.19.4-okd-scos.3", ReleaseDate: fixtureDate(2026, time.April), Stable: true, Latest: true, Type: releases.ReleaseTypeStable},
+		{Version: "4.19.3-okd-scos.2", Tag: "4.19.3-okd-scos.2", ReleaseDate: fixtureDate(2026, time.February), Stable: true, Type: releases.ReleaseTypeStable},
+	}
+	series418 := []releases.OKDVersion{
+		{Version: "4.18.7-okd-scos.9", Tag: "4.18.7-okd-scos.9", ReleaseDate: fixtureDate(2025, time.December), Stable: true, Latest: true, Type: releases.ReleaseTypeLTS},
+		{Version: "4.18.6-okd-scos.8", Tag: "4.18.6-okd-scos.8", ReleaseDate: fixtureDate(2025, time.October), Stable: true, Type: releases.ReleaseTypeLTS},
+	}
+
+	return []releases.OKDReleaseSeries{
+		{Major: 4, Minor: 20, Versions: series420, Latest: series420[0]},
+		{Major: 4, Minor: 19, Versions: series419, Latest: series419[0]},
+		{Major: 4, Minor: 18, Versions: series418, Latest: series418[0]},
+	}
+}

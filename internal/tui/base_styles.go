@@ -1,12 +1,10 @@
-// Package tui provides shared terminal UI primitives (lipgloss styles,
-// color themes, icons, layouts, and print helpers) used by the CLI output
-// and the bubbletea wizard.
+// Package tui provides the shared terminal UI primitives (styles, themes,
+// icons, layouts) behind the CLI output and the wizard.
 package tui
 
 import "charm.land/lipgloss/v2"
 
-// Base text styles used across TUI output; rebuildStyles assigns them from
-// the active resolved Theme — derived caches, not a second source of truth.
+// Base text styles, rebuilt from the active Theme by rebuildStyles.
 var (
 	TitleStyle      lipgloss.Style
 	TextStyle       lipgloss.Style
@@ -18,8 +16,6 @@ var (
 	HighlightStyle  lipgloss.Style
 )
 
-// rebuildStyles assigns TitleStyle through HighlightStyle from the active
-// resolved Theme; UseTheme calls it after every theme swap.
 func rebuildStyles() {
 	TitleStyle = lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary())
 	TextStyle = lipgloss.NewStyle()

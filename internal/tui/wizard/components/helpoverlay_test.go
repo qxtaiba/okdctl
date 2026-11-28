@@ -39,8 +39,6 @@ func TestRenderHelpOverlay_GroupsScreenThenGlobal(t *testing.T) {
 		t.Fatalf("expected \"screen\" before \"global\":\n%s", out)
 	}
 
-	// esc/ctrl+c/? are wizard-level bindings — they belong under "global"
-	// regardless of the order they were passed in, not under "screen".
 	screenSection := out[:globalIdx]
 	if strings.Contains(screenSection, "quit") || strings.Contains(screenSection, "back") {
 		t.Fatalf("global-only bindings leaked into the screen section:\n%s", out)
@@ -59,10 +57,6 @@ func TestRenderHelpOverlay_SizedExactly(t *testing.T) {
 	}
 }
 
-// TestRenderHelpOverlay_ListsAllBindingsEvenWhenRibbonTruncates pins the
-// discovery-path guarantee this overlay exists for: at a width narrow
-// enough that RenderHelpRibbon has to drop items, RenderHelpOverlay (given
-// the same bindings and a reasonable height) still lists every one.
 func TestRenderHelpOverlay_ListsAllBindingsEvenWhenRibbonTruncates(t *testing.T) {
 	bindings := []KeyHint{
 		{Key: "↑↓", Help: "navigate rows"},
@@ -94,9 +88,6 @@ func TestRenderHelpOverlay_TwoColumnsWhenOneWouldOverflowHeight(t *testing.T) {
 	}
 	many = append(many, KeyHint{Key: "esc", Help: "back"}, KeyHint{Key: "ctrl+c", Help: "quit"}, KeyHint{Key: "?", Help: "help"})
 
-	// height=16 leaves a screen budget of 6 rows (16 - 2 border - 3 head -
-	// 5 tail) for 12 screen items — one column (12 rows) cannot fit, so this
-	// only passes if the two-column path actually engages.
 	const height = 16
 	out := RenderHelpOverlay(many, 80, height)
 	tuitest.AssertFits(t, out, 80, height)
@@ -113,8 +104,6 @@ func TestRenderHelpOverlay_TwoColumnsWhenOneWouldOverflowHeight(t *testing.T) {
 		t.Fatalf("expected exactly %d rows, got %d", height, len(rows))
 	}
 	strippedRows := strings.Split(strings.TrimRight(stripped, "\n"), "\n")
-	// At least one row must carry two bindings side by side — proof one
-	// column alone didn't just get silently clamped down to fewer rows.
 	foundTwoPerRow := false
 	for _, r := range strippedRows {
 		hits := 0
@@ -147,13 +136,6 @@ func TestRenderHelpOverlay_NoScreenSectionWhenAllGlobal(t *testing.T) {
 	}
 }
 
-// TestRenderHelpOverlay_ClampProtectsGlobalAndHintOverScreenRows forces the
-// screen section to overflow its row budget even after two-column packing
-// (30 screen items, a height that only leaves room for 10 of the 15 packed
-// rows) and pins that the drop comes out of the SCREEN section, never the
-// global section or the closing hint — the reverse of clampWidth's
-// predecessor, which trimmed from the tail (global + hint) and so lost the
-// overlay's own escape hatches first when it fired.
 func TestRenderHelpOverlay_ClampProtectsGlobalAndHintOverScreenRows(t *testing.T) {
 	var screen []KeyHint
 	for i := range 30 {

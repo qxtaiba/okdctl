@@ -1,8 +1,9 @@
 package steps
 
 import (
+	"net/url"
+
 	"github.com/qxtaiba/okdctl/internal/config"
-	"github.com/qxtaiba/okdctl/internal/credentials"
 	"github.com/qxtaiba/okdctl/internal/tui"
 	"github.com/qxtaiba/okdctl/internal/tui/wizard"
 )
@@ -25,7 +26,8 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 	Description:  "connect to proxmox and pick where the vms live",
 	Sections: []wizard.SectionDefinition{
 		{
-			Title: "connection",
+			Title:   "connection",
+			Warning: plainHTTPWarning,
 			Fields: []wizard.FieldDefinition{
 				{
 					Key:         config.FieldProxmoxEndpoint,
@@ -34,7 +36,7 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 					Placeholder: "https://192.168.1.100:8006",
 					Help:        "proxmox api url with scheme and host, e.g. https://192.168.1.100:8006",
 					Required:    true,
-					Validate:    validateEndpoint,
+					Validate:    config.CheckEndpoint,
 					ConfigSet:   proxmoxSet(func(p *config.ProxmoxConfig, v string) { p.Endpoint = v }),
 					ConfigGet:   proxmoxGet(func(p *config.ProxmoxConfig) string { return p.Endpoint }),
 				},
@@ -51,8 +53,6 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 					Help:    "skip tls certificate verification — yes only for self-signed certs; saved to okdctl.env as PROXMOX_VE_INSECURE",
 					Type:    wizard.FieldTypeSelect,
 					Options: []string{valNo, valYes},
-					// seeded from PROXMOX_VE_INSECURE, which init loads before the wizard
-					ConfigGet: getBool(func(*config.Config) bool { return credentials.GetProxmoxCredentials(nil).Insecure }),
 				},
 			},
 		},
@@ -111,7 +111,7 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 					Help:      "vlan tag for the vm nics — 0 is untagged, else 1-4094",
 					Width:     wizard.FieldWidthNumber,
 					Required:  true,
-					Validate:  intRange(0, 4094),
+					Validate:  intRange(0, config.MaxVLAN),
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Provider.Proxmox.VLAN = v }),
 					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Provider.Proxmox.VLAN }),
 				},
@@ -150,7 +150,7 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 					Help:      "first vm id — masters take base+10..12 and workers base+100 onward, e.g. 6000",
 					Width:     wizard.FieldWidthNumber,
 					Required:  true,
-					Validate:  minInt(100, ""),
+					Validate:  minInt(config.MinVMIDBase, ""),
 					ConfigSet: wizard.SetInt(func(c *config.Config, v int) { c.Provider.Proxmox.VMIDBase = v }),
 					ConfigGet: wizard.GetInt(func(c *config.Config) int { return c.Provider.Proxmox.VMIDBase }),
 				},
@@ -167,6 +167,15 @@ var ProxmoxStepDefinition = wizard.StepDefinition{
 		secrets.ProxmoxInsecure = s.Value(fieldInsecure) == valYes
 		return secrets
 	},
+}
+
+// plainHTTPWarning flags an http endpoint, which sends the api token in
+// cleartext.
+func plainHTTPWarning(values map[string]string) string {
+	if u, err := url.Parse(values[config.FieldProxmoxEndpoint]); err == nil && u.Scheme == "http" {
+		return "plain http sends the api token in cleartext — use https unless a trusted proxy terminates tls"
+	}
+	return ""
 }
 
 // NewProxmoxStep returns the Proxmox wizard step.

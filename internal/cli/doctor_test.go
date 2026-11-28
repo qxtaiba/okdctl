@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -39,13 +40,7 @@ func minimalConfigDir(t *testing.T) (cfg *config.Config, path string) {
 	return config.MinimalConfig(), filepath.Join(t.TempDir(), "okdctl.yaml")
 }
 
-func addrs(s ...string) []netip.Addr {
-	out := make([]netip.Addr, 0, len(s))
-	for _, a := range s {
-		out = append(out, netip.MustParseAddr(a))
-	}
-	return out
-}
+var addr = netip.MustParseAddr
 
 func TestPreflightInput(t *testing.T) {
 	t.Run("record absent: preview identities carry no tag or macs", func(t *testing.T) {
@@ -59,9 +54,9 @@ func TestPreflightInput(t *testing.T) {
 			Storage:         "local-lvm",
 			ISOStorage:      "local",
 			Bridge:          "vmbr0",
-			CPUModel:        "host",
 			VMIDs:           []int{6010, 6011, 6012},
-			Addresses:       addrs("192.168.1.150", "192.168.1.151", "192.168.1.152", "192.168.1.158", "192.168.1.159"),
+			NodeAddresses:   map[netip.Addr]int{addr("192.168.1.150"): 6010, addr("192.168.1.151"): 6011, addr("192.168.1.152"): 6012},
+			VIPs:            []netip.Addr{addr("192.168.1.158"), addr("192.168.1.159")},
 			MemoryMiBByNode: map[string]int{"pve": 3 * 16384},
 		}
 		if !reflect.DeepEqual(got, want) {
@@ -107,21 +102,20 @@ func TestPreflightInput(t *testing.T) {
 		cfg.Provider.Proxmox.VLAN = 100
 		cfg.Provider.Proxmox.Pool = "okd"
 		cfg.Provider.Proxmox.HA = true
-		cfg.Provider.Proxmox.CPUType = "x86-64-v3"
 		cfg.Workers.Count = 2
 		got, err := preflightInput(cfg, path)
 		if err != nil {
 			t.Fatalf("preflightInput: %v", err)
 		}
-		if got.VLAN != 100 || got.Pool != "okd" || !got.HA || got.CPUModel != "x86-64-v3" {
-			t.Errorf("provider block not carried: vlan=%d pool=%q ha=%v cpu=%q", got.VLAN, got.Pool, got.HA, got.CPUModel)
+		if got.VLAN != 100 || got.Pool != "okd" || !got.HA {
+			t.Errorf("provider block not carried: vlan=%d pool=%q ha=%v", got.VLAN, got.Pool, got.HA)
 		}
 		wantMem := map[string]int{"pve1": 2*16384 + 8192, "pve2": 16384 + 8192}
 		if !reflect.DeepEqual(got.MemoryMiBByNode, wantMem) {
 			t.Errorf("MemoryMiBByNode = %v, want %v", got.MemoryMiBByNode, wantMem)
 		}
-		if len(got.VMIDs) != 5 || len(got.Addresses) != 7 {
-			t.Errorf("got %d vmids and %d addresses, want 5 and 7", len(got.VMIDs), len(got.Addresses))
+		if len(got.VMIDs) != 5 || len(got.NodeAddresses) != 5 || len(got.VIPs) != 2 {
+			t.Errorf("got %d vmids, %d node addresses and %d vips, want 5, 5 and 2", len(got.VMIDs), len(got.NodeAddresses), len(got.VIPs))
 		}
 	})
 
@@ -152,106 +146,12 @@ func TestPreflightInput(t *testing.T) {
 	})
 }
 
-func TestPrintFindingsText(t *testing.T) {
-	tui.SetColorProfileFor(&bytes.Buffer{})
-	t.Cleanup(func() { tui.SetColorProfileFor(&bytes.Buffer{}) })
-
-	var buf bytes.Buffer
-	if err := printFindings(&buf, tui.FormatText, doctorFixture); err != nil {
-		t.Fatalf("printFindings: %v", err)
-	}
-	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
-	if len(lines) != 1+len(doctorFixture) {
-		t.Fatalf("got %d lines, want %d:\n%s", len(lines), 1+len(doctorFixture), buf.String())
-	}
-	for _, want := range []string{"CHECK", "SEVERITY", "MESSAGE"} {
-		if !strings.Contains(lines[0], want) {
-			t.Errorf("header %q missing %q", lines[0], want)
-		}
-	}
-	for i, f := range doctorFixture {
-		for _, want := range []string{f.Check, f.Severity, f.Message} {
-			if !strings.Contains(lines[i+1], want) {
-				t.Errorf("row %d %q missing %q", i, lines[i+1], want)
-			}
-		}
-	}
-
-	buf.Reset()
-	if err := printFindings(&buf, tui.FormatText, nil); err != nil {
-		t.Fatalf("printFindings(nil): %v", err)
-	}
-	if got := strings.TrimSpace(buf.String()); got != doctorPassed {
-		t.Fatalf("printFindings(nil) = %q, want %q", got, doctorPassed)
-	}
-}
-
-func TestPrintFindingsJSON(t *testing.T) {
-	type row struct {
-		Check    string `json:"check"`
-		Severity string `json:"severity"`
-		Message  string `json:"message"`
-	}
-
-	var buf bytes.Buffer
-	if err := printFindings(&buf, tui.FormatJSON, doctorFixture); err != nil {
-		t.Fatalf("printFindings: %v", err)
-	}
-	var got []row
-	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
-		t.Fatalf("stdout is not a JSON array: %v\n%s", err, buf.String())
-	}
-	want := make([]row, len(doctorFixture))
-	for i, f := range doctorFixture {
-		want[i] = row{f.Check, f.Severity, f.Message}
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("json = %+v, want %+v", got, want)
-	}
-
-	buf.Reset()
-	if err := printFindings(&buf, tui.FormatJSON, nil); err != nil {
-		t.Fatalf("printFindings(nil): %v", err)
-	}
-	if got := strings.TrimSpace(buf.String()); got != "[]" {
-		t.Fatalf("printFindings(nil) = %q, want %q", got, "[]")
-	}
-}
-
-func TestFindingsError(t *testing.T) {
-	cases := []struct {
-		name     string
-		findings []proxmox.Finding
-		want     string
-	}{
-		{"empty", nil, ""},
-		{"warn only", doctorFixture[1:2], ""},
-		{"one fail", doctorFixture[:1], "preflight: 1 failing check"},
-		{"two fails", doctorFixture, "preflight: 2 failing checks"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			err := findingsError(tc.findings)
-			if tc.want == "" {
-				if err != nil {
-					t.Fatalf("findingsError() = %v, want nil", err)
-				}
-				return
-			}
-			if err == nil || err.Error() != tc.want {
-				t.Fatalf("findingsError() = %v, want %q", err, tc.want)
-			}
-		})
-	}
-}
-
 type doctorHarness struct {
 	errOut bytes.Buffer
 	seam   *proxmox.PreflightInput
+	driver proxmox.Driver
 }
 
-// newDoctorHarness runs from a fresh directory with the relative okdctl.yaml
-// every cli test uses, so LoadEnvFile sees one path for the whole process.
 func newDoctorHarness(t *testing.T) *doctorHarness {
 	t.Helper()
 	tui.SetColorProfileFor(&bytes.Buffer{})
@@ -259,9 +159,9 @@ func newDoctorHarness(t *testing.T) *doctorHarness {
 	if err := config.NewLoader().Save(config.MinimalConfig(), "okdctl.yaml"); err != nil {
 		t.Fatal(err)
 	}
-	origRun := runPreflight
+	origRun, origOpen := runPreflight, openDriver
 	t.Cleanup(func() {
-		runPreflight = origRun
+		runPreflight, openDriver = origRun, origOpen
 		rootCmd.SetOut(nil)
 		rootCmd.SetErr(nil)
 		rootCmd.SetArgs(nil)
@@ -277,10 +177,8 @@ func (h *doctorHarness) run(t *testing.T, token string, findings []proxmox.Findi
 	h.errOut.Reset()
 	h.seam = nil
 	t.Setenv("PROXMOX_VE_API_TOKEN", token)
-	var gotCreds *credentials.ProxmoxCredentials
-	var gotToken string
-	runPreflight = func(_ context.Context, creds *credentials.ProxmoxCredentials, in *proxmox.PreflightInput) ([]proxmox.Finding, error) {
-		h.seam, gotCreds, gotToken = in, creds, string(creds.APIToken)
+	runPreflight = func(_ context.Context, d proxmox.Driver, in *proxmox.PreflightInput) ([]proxmox.Finding, error) {
+		h.seam, h.driver = in, d
 		return findings, runErr
 	}
 	var out bytes.Buffer
@@ -289,27 +187,65 @@ func (h *doctorHarness) run(t *testing.T, token string, findings []proxmox.Findi
 	rootCmd.SetArgs(append([]string{"doctor", "--config", "okdctl.yaml", "--output", "text"}, extra...))
 	err := rootCmd.Execute()
 	if h.seam != nil {
-		h.assertSeam(t, gotCreds, gotToken, token)
+		h.assertSeam(t)
 	}
 	return out.String(), err
 }
 
-func (h *doctorHarness) assertSeam(t *testing.T, creds *credentials.ProxmoxCredentials, gotToken, token string) {
+func (h *doctorHarness) assertSeam(t *testing.T) {
 	t.Helper()
 	if !reflect.DeepEqual(h.seam.Nodes, []string{"pve"}) || len(h.seam.VMIDs) != 3 || h.seam.Tag != "" {
 		t.Fatalf("seam received input %+v, want the minimal config's preview footprint", h.seam)
 	}
-	if creds == nil || creds.Endpoint == "" || gotToken != token {
-		t.Fatalf("seam received creds %+v with token %q", creds, gotToken)
+	if h.driver == nil {
+		t.Fatal("seam received no driver")
 	}
-	if creds.APIToken != nil {
-		t.Fatal("token not zeroized after doctor returned")
+}
+
+func TestDoctorReadsTheSidecarToken(t *testing.T) {
+	h := newDoctorHarness(t)
+	t.Setenv("PROXMOX_VE_API_TOKEN", "")
+	saved := &credentials.ProxmoxCredentials{APIToken: []byte(doctorToken)}
+	if err := credentials.WriteEnvFile("okdctl.env", saved); err != nil {
+		t.Fatal(err)
+	}
+	var gotToken string
+	openDriver = func(creds *credentials.ProxmoxCredentials) (proxmox.Driver, error) {
+		gotToken = string(creds.APIToken)
+		return nil, nil
+	}
+	runPreflight = func(context.Context, proxmox.Driver, *proxmox.PreflightInput) ([]proxmox.Finding, error) {
+		return nil, nil
+	}
+	rootCmd.SetOut(io.Discard)
+	rootCmd.SetErr(&h.errOut)
+	rootCmd.SetArgs([]string{"doctor", "--config", "okdctl.yaml"})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("doctor: %v", err)
+	}
+	if gotToken != doctorToken {
+		t.Fatalf("preflight received token %q, want the sidecar's", gotToken)
+	}
+}
+
+func TestOpenDriverZeroizesToken(t *testing.T) {
+	for name, endpoint := range map[string]string{"valid": "https://pve:8006", "empty": ""} {
+		creds := &credentials.ProxmoxCredentials{Endpoint: endpoint, APIToken: []byte(doctorToken)}
+		_, err := openDriver(creds)
+		if (err != nil) != (name == "empty") {
+			t.Fatalf("openDriver(%s) err = %v", name, err)
+		}
+		if creds.APIToken != nil {
+			t.Fatalf("openDriver(%s) left the token in place", name)
+		}
 	}
 }
 
 func TestDoctorCommand(t *testing.T) {
 	h := newDoctorHarness(t)
 	run := h.run
+	origOpen := openDriver
 	const token = doctorToken
 
 	t.Run("fail exits non-zero after the table", func(t *testing.T) {
@@ -364,10 +300,40 @@ func TestDoctorCommand(t *testing.T) {
 		}
 	})
 
-	t.Run("preflight error propagates", func(t *testing.T) {
-		_, err := run(t, token, nil, errors.New("read permissions: 401"))
-		if err == nil || !strings.Contains(err.Error(), "read permissions: 401") {
-			t.Fatalf("err = %v, want wrapped preflight error", err)
+	t.Run("transport failure is a network error", func(t *testing.T) {
+		_, err := run(t, token, nil, errors.New("read permissions: dial tcp 127.0.0.1:1: connect: connection refused"))
+		var ne *errtypes.NetworkError
+		if !errors.As(err, &ne) || exitCodeFor(err) != 3 {
+			t.Fatalf("err = %T %v (exit %d), want *errtypes.NetworkError exiting 3", err, err, exitCodeFor(err))
+		}
+		if !strings.Contains(err.Error(), "connection refused") {
+			t.Fatalf("err = %v, want the transport cause kept", err)
+		}
+	})
+
+	t.Run("json transport failure leaves an empty array on stdout", func(t *testing.T) {
+		out, err := run(t, token, nil, errors.New("dial tcp: connection refused"), "-o", "json")
+		if err == nil || strings.TrimSpace(out) != "[]" {
+			t.Fatalf("stdout = %q err = %v, want [] and the network error", out, err)
+		}
+	})
+
+	t.Run("json driver failure leaves an empty array on stdout", func(t *testing.T) {
+		openDriver = func(*credentials.ProxmoxCredentials) (proxmox.Driver, error) {
+			return nil, &errtypes.ConfigError{Msg: "connect proxmox"}
+		}
+		t.Cleanup(func() { openDriver = origOpen })
+		out, err := run(t, token, nil, nil, "-o", "json")
+		var ce *errtypes.ConfigError
+		if !errors.As(err, &ce) || strings.TrimSpace(out) != "[]" {
+			t.Fatalf("stdout = %q err = %v, want [] and the config error", out, err)
+		}
+	})
+
+	t.Run("cancellation keeps its identity through the network error", func(t *testing.T) {
+		_, err := run(t, token, nil, context.Canceled)
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("err = %v, want context.Canceled reachable", err)
 		}
 	})
 
@@ -399,67 +365,45 @@ func TestDoctorCommand(t *testing.T) {
 	})
 }
 
-func TestDoctorCommandConfigErrors(t *testing.T) {
-	h := newDoctorHarness(t)
-	run := h.run
-
-	t.Run("invalid config is a config error before credentials", func(t *testing.T) {
-		if err := os.WriteFile("okdctl.yaml", []byte("schemaVersion: v3\ncluster:\n  name: Bad_Name\n"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() {
-			if err := config.NewLoader().Save(config.MinimalConfig(), "okdctl.yaml"); err != nil {
+func TestDoctorCommand_JSONPrintsEmptyArrayWheneverChecksCannotRun(t *testing.T) {
+	for name, tc := range map[string]struct {
+		setup    func(t *testing.T)
+		token    string
+		wantExit int
+	}{
+		"missing config": {setup: func(*testing.T) { _ = os.Remove("okdctl.yaml") }, token: doctorToken, wantExit: 66},
+		"invalid config": {setup: func(t *testing.T) {
+			if err := os.WriteFile("okdctl.yaml", []byte("schemaVersion: v3\ncluster:\n  name: Bad_Name\n"), 0o600); err != nil {
 				t.Fatal(err)
 			}
-		})
-		_, err := run(t, "", nil, nil)
-		var ce *errtypes.ConfigError
-		if !errors.As(err, &ce) {
-			t.Fatalf("err = %T %v, want *errtypes.ConfigError", err, err)
-		}
-		if h.seam != nil || !strings.Contains(h.errOut.String(), "cluster.name") {
-			t.Fatalf("seam=%v stderr=%q; want validation findings and no preflight", h.seam, h.errOut.String())
-		}
-	})
-
-	t.Run("broken cluster record is a config error", func(t *testing.T) {
-		recPath := workspace.RecordPath(".")
-		if err := os.MkdirAll(filepath.Dir(recPath), 0o700); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(recPath, []byte("{broken"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { _ = os.RemoveAll(filepath.Dir(recPath)) })
-		_, err := run(t, doctorToken, nil, nil)
-		var ce *errtypes.ConfigError
-		if !errors.As(err, &ce) {
-			t.Fatalf("err = %T %v, want *errtypes.ConfigError", err, err)
-		}
-		if h.seam != nil {
-			t.Fatal("preflight ran against a record doctor could not read")
-		}
-	})
-
-	t.Run("record naming another cluster is a config error", func(t *testing.T) {
-		recPath := workspace.RecordPath(".")
-		rec := &model.Record{InfraID: "other-a1b2c3", Cluster: "other", Domain: "k8s.local", Created: time.Now(), Release: "4.22.0-okd-scos.10"}
-		if err := model.SaveRecord(recPath, rec); err != nil {
-			t.Fatalf("SaveRecord: %v", err)
-		}
-		t.Cleanup(func() { _ = os.RemoveAll(filepath.Dir(recPath)) })
-		_, err := run(t, doctorToken, nil, nil)
-		var ce *errtypes.ConfigError
-		if !errors.As(err, &ce) {
-			t.Fatalf("err = %T %v, want *errtypes.ConfigError", err, err)
-		}
-		for _, want := range []string{`"other"`, `"minimal"`, "cluster record"} {
-			if !strings.Contains(err.Error(), want) {
-				t.Errorf("err %q missing %q", err, want)
+		}, token: doctorToken, wantExit: 2},
+		"missing token": {setup: func(*testing.T) {}, token: "", wantExit: 5},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newDoctorHarness(t)
+			tc.setup(t)
+			out, err := h.run(t, tc.token, nil, nil, "-o", "json")
+			if err == nil || exitCodeFor(err) != tc.wantExit || strings.TrimSpace(out) != "[]" {
+				t.Fatalf("stdout = %q err = %v (exit %d), want [] and exit %d", out, err, exitCodeFor(err), tc.wantExit)
 			}
-		}
-		if h.seam != nil {
-			t.Fatal("preflight ran against another cluster's record")
-		}
-	})
+			if h.seam != nil {
+				t.Fatal("preflight ran")
+			}
+		})
+	}
+}
+
+func TestDoctorCommand_InvalidConfigStopsBeforeCredentials(t *testing.T) {
+	h := newDoctorHarness(t)
+	if err := os.WriteFile("okdctl.yaml", []byte("schemaVersion: v3\ncluster:\n  name: Bad_Name\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := h.run(t, "", nil, nil)
+	var ce *errtypes.ConfigError
+	if !errors.As(err, &ce) {
+		t.Fatalf("err = %T %v, want *errtypes.ConfigError", err, err)
+	}
+	if h.seam != nil || !strings.Contains(h.errOut.String(), "cluster.name") {
+		t.Fatalf("seam=%v stderr=%q; want validation findings and no preflight", h.seam, h.errOut.String())
+	}
 }

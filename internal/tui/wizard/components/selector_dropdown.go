@@ -12,9 +12,6 @@ const (
 	maxDropdownVisible  = 5
 )
 
-// dropdownBudget returns the effective visible-row budget: maxVisible when
-// set, or the maxDropdownVisible floor for a Selector that never called
-// SetDropdownBudget.
 func (s *Selector) dropdownBudget() int {
 	if s.maxVisible == 0 {
 		return maxDropdownVisible
@@ -22,9 +19,8 @@ func (s *Selector) dropdownBudget() int {
 	return s.maxVisible
 }
 
-// moveUp moves selection up by one option, wrapping to the last option from
-// the first; a dropdown's first patch flows straight into the parent minor
-// above it rather than trapping the cursor inside the dropdown.
+// moveUp wraps from the first option to the last; the dropdown's first
+// patch flows into the parent above rather than trapping the cursor.
 func (s *Selector) moveUp() {
 	if len(s.options) == 0 {
 		return
@@ -44,9 +40,8 @@ func (s *Selector) moveUp() {
 	}
 }
 
-// moveDown moves selection down by one option, wrapping to the first option
-// from the last; a dropdown's last patch flows straight into the next
-// parent below it rather than trapping the cursor inside the dropdown.
+// moveDown wraps from the last option to the first; the dropdown's last
+// patch flows into the next parent below.
 func (s *Selector) moveDown() {
 	if len(s.options) == 0 {
 		return
@@ -79,13 +74,9 @@ func (s *Selector) adjustDropdownScroll() {
 	s.clampDropdownOffset(dropdownStart, dropdownEnd, s.dropdownBudget())
 }
 
-// clampDropdownOffset re-clamps the scroll offset so the current selection
-// (when it sits inside [start,end]) stays within the visible window, and
-// the window itself stays within [0, itemCount-budget]; called on every
-// render as well as every cursor move, since a budget that grows or shrinks
-// between renders (a resize) can otherwise strand the offset either
-// direction — past where a larger budget would show everything, or past
-// the selection when a smaller budget no longer reaches it.
+// clampDropdownOffset keeps the selection inside the visible window and the
+// window inside the list on every render, since a resized budget can
+// strand the offset either way.
 func (s *Selector) clampDropdownOffset(start, end, budget int) {
 	if s.selected >= start && s.selected <= end {
 		posInDropdown := s.selected - start
@@ -119,9 +110,8 @@ func (s *Selector) getDropdownBounds() (start, end int) {
 	return start, end
 }
 
-// renderDropdownRegion renders the dropdown's border and visible options,
-// returning the index within lines of the selected option, or -1 when the
-// selection sits outside the visible window.
+// renderDropdownRegion renders the dropdown border and visible options,
+// returning the selected option's index within lines, or -1 when off-screen.
 func (s *Selector) renderDropdownRegion(start, end int, scrollStyle, borderStyle *lipgloss.Style) (lines []string, selectedRow int) {
 	selectedRow = -1
 
@@ -136,11 +126,8 @@ func (s *Selector) renderDropdownRegion(start, end int, scrollStyle, borderStyle
 
 	dropdownPrefix := borderStyle.Render("  │ ")
 
-	// Render the body (header + visible rows) before either border line, so
-	// the border can close on the right at the body's own widest row
-	// instead of a fixed dash count that has no relation to the table it
-	// brackets — dropdownBorderWidth (a 20-column stub) is only the floor
-	// for a short/empty body, not a target.
+	// The body renders before the borders so the border closes at the body's
+	// widest row; dropdownBorderWidth is only the floor for a short body.
 	var body []string
 	if s.DropdownHeader != "" {
 		body = append(body, dropdownPrefix+"  "+s.DropdownHeader)
@@ -162,10 +149,8 @@ func (s *Selector) renderDropdownRegion(start, end int, scrollStyle, borderStyle
 			bodyWidth = w
 		}
 	}
-	// "  │ " (the dropdownPrefix) costs 4 columns of bodyWidth that the
-	// border's own "  ╭"/"  ╰" corner already accounts for; one extra gap
-	// column keeps the widest row off the right wall, matching fieldBox's
-	// one-column padding.
+	// The prefix costs 4 columns the corner already accounts for; one gap
+	// column keeps the widest row off the wall.
 	inner := max(bodyWidth-4, dropdownBorderWidth) + 2
 	boxWidth := inner + 4 // two-space lead, corner, dashes, corner
 
@@ -179,8 +164,6 @@ func (s *Selector) renderDropdownRegion(start, end int, scrollStyle, borderStyle
 	topBorder += strings.Repeat("─", topDashes) + "╮"
 	lines = append(lines, borderStyle.Render(topBorder))
 
-	// Each body entry is a block (title, description, connector rows);
-	// every line inside it gets padded to the wall column.
 	wall := borderStyle.Render("│")
 	for _, block := range body {
 		walled := strings.Split(block, "\n")
