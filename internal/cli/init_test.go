@@ -199,7 +199,7 @@ func TestWriteCredentialsEnv(t *testing.T) {
 			secrets.ProxmoxToken.Set(tc.typedToken)
 			secrets.ProxmoxInsecure = tc.toggle
 			root := t.TempDir()
-			configPath, envPath := workspace.ConfigPath(root), workspace.EnvPath(root)
+			configPath, envPath := filepath.Join(root, workspace.ConfigFile), workspace.EnvPath(root)
 			if tc.fileToken != "" {
 				saved := &credentials.ProxmoxCredentials{APIToken: []byte(tc.fileToken), Insecure: tc.envInsecure == "true"}
 				if err := credentials.WriteEnvFile(envPath, saved); err != nil {

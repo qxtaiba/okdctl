@@ -21,11 +21,6 @@ const (
 	LockFile       = ".okdctl.lock"
 )
 
-// ConfigPath returns the cluster configuration every command loads.
-func ConfigPath(root string) string {
-	return filepath.Join(root, ConfigFile)
-}
-
 // EnvPath returns the 0600 credentials sidecar beside the configuration.
 func EnvPath(root string) string {
 	return filepath.Join(root, EnvFile)

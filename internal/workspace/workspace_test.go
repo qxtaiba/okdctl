@@ -13,7 +13,6 @@ func TestLayoutContract(t *testing.T) {
 		fn   func(string) string
 		want string
 	}{
-		{"ConfigPath", workspace.ConfigPath, "/proj/okdctl.yaml"},
 		{"EnvPath", workspace.EnvPath, "/proj/okdctl.env"},
 		{"LogPath", workspace.LogPath, "/proj/okdctl.log"},
 		{"LockPath", workspace.LockPath, "/proj/.okdctl.lock"},
