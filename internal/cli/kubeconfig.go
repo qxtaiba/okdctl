@@ -39,7 +39,7 @@ func runKubeconfig(cmd *cobra.Command, _ []string) error {
 	src := workspace.KubeconfigPath(root)
 	if !system.FileExists(src) {
 		return (&errtypes.ConfigError{Msg: "kubeconfig not found at " + src, Err: errtypes.ErrConfigMissing}).
-			WithHint("installing a cluster, which writes it, returns in a later release")
+			WithHint("installing a cluster, which writes it, is not yet available")
 	}
 
 	data, err := os.ReadFile(src)

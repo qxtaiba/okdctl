@@ -18,14 +18,9 @@ import (
 type HubVerb int
 
 // The hub's verbs: edit config and quit over an existing configuration, get
-// started and quit on a blank slate. The others return with the commands
-// that back them.
+// started and quit on a blank slate.
 const (
-	HubVerbDeploy HubVerb = iota
-	HubVerbEditConfig
-	HubVerbManageNodes
-	HubVerbClusterStatus
-	HubVerbDestroy
+	HubVerbEditConfig HubVerb = iota
 	HubVerbGetStarted
 	HubVerbQuit
 )

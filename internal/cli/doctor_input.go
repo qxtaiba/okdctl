@@ -23,7 +23,7 @@ func preflightInput(cfg *config.Config, configPath string) (proxmox.PreflightInp
 		return proxmox.PreflightInput{}, &errtypes.ConfigError{Msg: "derive node inventory: " + err.Error(), Err: err}
 	}
 	px := &cfg.Provider.Proxmox
-	// ISOBytes stays 0: okdctl up builds the agent ISO after doctor runs.
+	// ISOBytes stays 0: the install builds the agent ISO after doctor runs.
 	in := proxmox.PreflightInput{
 		Nodes:           px.Nodes,
 		Storage:         px.Storage,

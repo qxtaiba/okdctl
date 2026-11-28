@@ -21,7 +21,7 @@ import (
 
 var configValidateOutput string
 
-const previewMACNote = "MACs are assigned at okdctl up; the ones above are a preview."
+const previewMACNote = "MACs are a preview until the install mints the infra-ID."
 
 var configCmd = &cobra.Command{
 	Use:   "config",

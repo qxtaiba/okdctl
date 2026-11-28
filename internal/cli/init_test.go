@@ -329,7 +329,7 @@ func TestRunInit_SaveAndExitPersistsConfigAndSidecar(t *testing.T) {
 	resetInitState(t)
 	wizardCfg := config.DefaultConfig()
 	wizardCfg.Cluster.Name = "wizarded"
-	res := wizard.Result{Outcome: wizard.OutcomeCompleted, Config: wizardCfg, Action: wizard.ActionExit}
+	res := wizard.Result{Outcome: wizard.OutcomeCompleted, Config: wizardCfg}
 	res.Secrets.ProxmoxToken.Set(fixtureAPIToken)
 	res.Secrets.ProxmoxInsecure = true
 	stubWizard(t, &res, steps.HubVerbGetStarted, nil)
@@ -369,7 +369,7 @@ func TestRunInit_InvalidWizardConfigIsNotSaved(t *testing.T) {
 	resetInitState(t)
 	bad := config.DefaultConfig()
 	bad.Cluster.Name = "Bad_Name"
-	stubWizard(t, &wizard.Result{Outcome: wizard.OutcomeCompleted, Config: bad, Action: wizard.ActionDeploy}, steps.HubVerbGetStarted, nil)
+	stubWizard(t, &wizard.Result{Outcome: wizard.OutcomeCompleted, Config: bad}, steps.HubVerbGetStarted, nil)
 
 	err := runInit(initCmd, nil)
 	var ce *errtypes.ConfigError
@@ -393,46 +393,23 @@ func TestRunInit_HubQuitVerbChangesNothing(t *testing.T) {
 	}
 }
 
-func TestRunInit_DeployNowSavesThenPrintsHandoff(t *testing.T) {
+func TestRunInit_CompletedFlowSavesConfigWithoutHandoff(t *testing.T) {
 	resetInitState(t)
 	var out bytes.Buffer
 	initCmd.SetOut(&out)
-	stubWizard(t, &wizard.Result{Outcome: wizard.OutcomeCompleted, Config: config.DefaultConfig(), Action: wizard.ActionDeploy}, steps.HubVerbGetStarted, nil)
+	stubWizard(t, &wizard.Result{Outcome: wizard.OutcomeCompleted, Config: config.DefaultConfig()}, steps.HubVerbGetStarted, nil)
 
 	if err := runInit(initCmd, nil); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
-	if got := out.String(); got != upHandoff+"\n" {
-		t.Errorf("stdout = %q, want the handoff line alone", got)
+	if got := out.String(); strings.Contains(got, "later release") || strings.Contains(got, "okdctl up") {
+		t.Errorf("stdout = %q, want no handoff to a command that does not exist", got)
 	}
 	if _, err := os.Stat("okdctl.yaml"); err != nil {
-		t.Errorf("the config must be saved before the handoff line: %v", err)
+		t.Errorf("the config must be saved: %v", err)
 	}
 	if _, err := os.Stat("okdctl.env"); !os.IsNotExist(err) {
 		t.Errorf("no token typed means no sidecar, got stat err %v", err)
 	}
 }
 
-func TestRunInit_HubVerbsPrintHandoffsAndChangeNothing(t *testing.T) {
-	for verb, want := range map[steps.HubVerb]string{
-		steps.HubVerbDeploy:        upHandoff,
-		steps.HubVerbDestroy:       "destroy returns in a later release",
-		steps.HubVerbClusterStatus: "cluster status returns in a later release",
-		steps.HubVerbManageNodes:   "node management returns in a later release",
-	} {
-		t.Run(want, func(t *testing.T) {
-			resetInitState(t)
-			seedInitConfig(t)
-			var out bytes.Buffer
-			initCmd.SetOut(&out)
-			stubWizard(t, &wizard.Result{Outcome: wizard.OutcomeCompleted}, verb, nil)
-
-			if err := runInit(initCmd, nil); err != nil {
-				t.Fatalf("runInit: %v", err)
-			}
-			if !strings.Contains(out.String(), want) {
-				t.Errorf("stdout = %q, want %q", out.String(), want)
-			}
-		})
-	}
-}

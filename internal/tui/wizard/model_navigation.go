@@ -202,7 +202,6 @@ func (m *Model) goToNextStep() (tea.Model, tea.Cmd) {
 			m.result = Result{
 				Outcome:  OutcomeCompleted,
 				Config:   m.config,
-				Action:   ActionExit,
 				ExitStep: m.steps[m.currentStep].ID(),
 			}
 			return m, tea.Quit
@@ -233,7 +232,6 @@ func (m *Model) goToNextStep() (tea.Model, tea.Cmd) {
 		m.result = Result{
 			Outcome:  OutcomeCompleted,
 			Config:   m.config,
-			Action:   ActionExit,
 			ExitStep: exitStep,
 		}
 		return m, tea.Quit

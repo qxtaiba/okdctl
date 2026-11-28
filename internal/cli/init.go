@@ -49,9 +49,6 @@ func init() {
 	initCmd.Flags().BoolVar(&initMinimal, "minimal", false, "write the minimal three-node configuration without the wizard")
 }
 
-// upHandoff is printed where the install would start.
-const upHandoff = "configuration saved; installing it returns in a later release"
-
 func runInit(cmd *cobra.Command, _ []string) error {
 	out := cmd.OutOrStdout()
 	initOutputFile = initTarget()
@@ -81,7 +78,8 @@ func runInit(cmd *cobra.Command, _ []string) error {
 		logutil.Info("wizard cancelled, no changes made")
 		return nil
 	}
-	if runHubVerb(outcome.Verb, out) {
+	if outcome.Verb == steps.HubVerbQuit {
+		logutil.Info("no changes made")
 		return nil
 	}
 
@@ -90,13 +88,8 @@ func runInit(cmd *cobra.Command, _ []string) error {
 	if err := withProjectLock(root, cmdNameInit, func() error { return persistWizardConfig(result, initOutputFile, saved, out) }); err != nil {
 		return err
 	}
-	switch result.Action {
-	case wizard.ActionDeploy:
-		fmt.Fprintln(out, upHandoff)
-	case wizard.ActionExit:
-		fmt.Fprintln(out)
-		logutil.Info("configuration saved", logutil.LF("path", initOutputFile))
-	}
+	fmt.Fprintln(out)
+	logutil.Info("configuration saved", logutil.LF("path", initOutputFile))
 	return nil
 }
 
@@ -119,26 +112,6 @@ func initRoot() (string, error) {
 		return "", &errtypes.ConfigError{Msg: "create workspace " + root, Err: err}
 	}
 	return root, nil
-}
-
-// runHubVerb prints the handoff line for a hub verb that never walks the
-// configure flow, reporting whether verb was one of them.
-func runHubVerb(verb steps.HubVerb, out io.Writer) bool {
-	switch verb {
-	case steps.HubVerbDeploy:
-		fmt.Fprintln(out, upHandoff)
-	case steps.HubVerbDestroy:
-		fmt.Fprintln(out, "destroy returns in a later release")
-	case steps.HubVerbClusterStatus:
-		fmt.Fprintln(out, "cluster status returns in a later release")
-	case steps.HubVerbManageNodes:
-		fmt.Fprintln(out, "node management returns in a later release")
-	case steps.HubVerbQuit:
-		logutil.Info("no changes made")
-	default:
-		return false
-	}
-	return true
 }
 
 // loadInitConfig returns the on-disk config, or the compiled-in defaults

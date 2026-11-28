@@ -178,7 +178,7 @@ func TestHubQuitCompletesTheStepAndExitsTheFlow(t *testing.T) {
 	pumpCmd(m, cmd)
 
 	res := m.Result()
-	if res.Outcome != wizard.OutcomeCompleted || res.Action != wizard.ActionExit || res.ExitStep != wizard.StepIDWelcome {
+	if res.Outcome != wizard.OutcomeCompleted || res.ExitStep != wizard.StepIDWelcome {
 		t.Fatalf("result = %+v; want a completed exit from welcome", res)
 	}
 }

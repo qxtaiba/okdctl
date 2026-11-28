@@ -120,14 +120,14 @@ func TestConfigValidate_PreviewNoteWithoutRecord(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runConfigValidate: %v", err)
 	}
-	if !strings.Contains(stdout, "MACs are assigned at okdctl up") {
+	if !strings.Contains(stdout, "MACs are a preview until the install mints the infra-ID") {
 		t.Errorf("preview note missing:\n%s", stdout)
 	}
 	stdout, _, err = runValidate(t, standardExample, "json")
 	if err != nil {
 		t.Fatalf("runConfigValidate json: %v", err)
 	}
-	if strings.Contains(stdout, "MACs are assigned") {
+	if strings.Contains(stdout, "MACs are a preview") {
 		t.Errorf("json stdout carries the preview note:\n%s", stdout)
 	}
 }

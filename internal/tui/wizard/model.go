@@ -124,7 +124,6 @@ type Result struct {
 	Outcome Outcome
 	Config  *config.Config
 	Secrets Secrets
-	Action  Action
 	// ExitStep is the step that completed the flow; empty when cancelled
 	ExitStep StepID
 }
@@ -137,16 +136,6 @@ const (
 	OutcomeUnset Outcome = iota
 	OutcomeCompleted
 	OutcomeCancelled
-)
-
-// Action names how a completed flow wants to continue; every screen ends on
-// ActionExit until an install command exists to hand off to.
-type Action string
-
-// Terminal actions.
-const (
-	ActionDeploy Action = "deploy"
-	ActionExit   Action = "exit"
 )
 
 // KeyMap binds the wizard-level keys; the Vim* bindings are footer-silent
