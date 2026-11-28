@@ -24,9 +24,9 @@ const PreviewInfraID = "preview"
 
 var recordFile = marker.File{Label: "cluster record", Version: "1"}
 
-// Record is the on-disk identity of a cluster, written once at define time;
-// Nodes names the day-1 nodes, masters then workers, so a worker added
-// later is told apart from an original.
+// Record is the on-disk identity of a cluster, written by up before its first
+// Proxmox write; Nodes names the day-1 nodes, masters then workers, so a
+// worker added later is told apart from an original.
 type Record struct {
 	InfraID    string    `json:"infra_id"`
 	Cluster    string    `json:"cluster"`
