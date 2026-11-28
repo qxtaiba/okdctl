@@ -3,7 +3,7 @@
   │ O K D C T L                                                              │  
   │ review your configuration            connect · cluster · extras · review │  
   │──────────────────────────────────────────────────────────────────────────│  
-  │  PREFLIGHT · 1 passed · 0 warnings · 2 failed · 0 not checked            │  
+  │  CHECKS · 1 passed · 0 warnings · 2 failed · 0 not checked               │  
   │  ✗ pull secret · unavailable · ./pull-secret.json                        │  
   │  ✗ ssh public key · unavailable · ./id_ed25519.pub                       │  
   │  ✓ configuration · valid                                                 │  

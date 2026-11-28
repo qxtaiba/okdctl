@@ -142,7 +142,7 @@ func renderReviewPreflight(checks []reviewCheck, width int) string {
 		}
 	}
 	var b strings.Builder
-	header := fmt.Sprintf("PREFLIGHT · %d passed · %d warnings · %d failed · %d not checked", passed, warnings, failed, unchecked)
+	header := fmt.Sprintf("CHECKS · %d passed · %d warnings · %d failed · %d not checked", passed, warnings, failed, unchecked)
 	b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText()).Render(tui.Truncate(header, width)))
 	b.WriteString("\n")
 	for _, check := range checks {
