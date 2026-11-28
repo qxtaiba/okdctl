@@ -1,5 +1,4 @@
-// Package main is the okdctl binary entry point; root-rejection policy lives in
-// internal/cli (ensureRoot).
+// Package main is the okdctl binary entry point.
 package main
 
 import "github.com/qxtaiba/okdctl/internal/cli"
