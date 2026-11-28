@@ -2,11 +2,13 @@ package credentials
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
@@ -27,6 +29,8 @@ func TestLoad(t *testing.T) {
 		{"empty export does not shadow the file", "PROXMOX_VE_API_TOKEN=" + fileToken + "\n", "", "", fileToken, false, false},
 		{"missing file reads the environment only", "", envToken, "true", envToken, true, false},
 		{"missing file and no export is invalid", "", "", "", "", false, false},
+		{"a truthy spelling other than true switches verification off", "PROXMOX_VE_API_TOKEN=" + fileToken + "\n", "", "1", fileToken, true, false},
+		{"a falsy spelling other than false switches verification on", "PROXMOX_VE_API_TOKEN=" + fileToken + "\nPROXMOX_VE_INSECURE=true\n", "", "0", fileToken, false, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -61,18 +65,28 @@ func TestLoad(t *testing.T) {
 	}
 }
 
+func TestLoad_UnparsableInsecureIsConfigError(t *testing.T) {
+	t.Setenv(envProxmoxAPIToken, "")
+	t.Setenv(envProxmoxInsecure, "yes please")
+	_, err := Load(filepath.Join(t.TempDir(), "okdctl.env"), "https://pve:8006")
+	var ce *errtypes.ConfigError
+	if !errors.As(err, &ce) || !strings.Contains(err.Error(), envProxmoxInsecure) {
+		t.Fatalf("Load = %T %v, want a ConfigError naming %s", err, err, envProxmoxInsecure)
+	}
+}
+
 func TestFromEnv(t *testing.T) {
 	t.Setenv(envProxmoxAPIToken, "root@pam!okdctl=secret")
 	t.Setenv(envProxmoxInsecure, "true")
-	creds := fromEnv("https://pve:8006")
-	if string(creds.APIToken) != "root@pam!okdctl=secret" || !creds.Insecure || creds.Endpoint != "https://pve:8006" {
-		t.Fatalf("creds = %+v, want the environment's token and flag", creds.Redacted())
+	creds, err := fromEnv("https://pve:8006")
+	if err != nil || string(creds.APIToken) != "root@pam!okdctl=secret" || !creds.Insecure || creds.Endpoint != "https://pve:8006" {
+		t.Fatalf("creds = %+v err = %v, want the environment's token and flag", creds.Redacted(), err)
 	}
 
 	t.Setenv(envProxmoxAPIToken, "")
 	t.Setenv(envProxmoxInsecure, "false")
-	if creds := fromEnv(""); creds.IsValid() || creds.Insecure {
-		t.Fatalf("creds = %+v, want no token and tls verification on", creds.Redacted())
+	if creds, err := fromEnv(""); err != nil || creds.IsValid() || creds.Insecure {
+		t.Fatalf("creds = %+v err = %v, want no token and tls verification on", creds.Redacted(), err)
 	}
 }
 

@@ -6,7 +6,9 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"strconv"
 
+	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
 )
 
@@ -59,12 +61,19 @@ func (c ProxmoxCredentials) GoString() string {
 	return c.String()
 }
 
-func fromEnv(endpoint string) *ProxmoxCredentials {
-	creds := &ProxmoxCredentials{Endpoint: endpoint, Insecure: os.Getenv(envProxmoxInsecure) == "true"}
+func fromEnv(endpoint string) (*ProxmoxCredentials, error) {
+	creds := &ProxmoxCredentials{Endpoint: endpoint}
+	if v := os.Getenv(envProxmoxInsecure); v != "" {
+		insecure, err := strconv.ParseBool(v)
+		if err != nil {
+			return nil, &errtypes.ConfigError{Msg: envProxmoxInsecure + " is not a boolean", Err: err}
+		}
+		creds.Insecure = insecure
+	}
 	if token := os.Getenv(envProxmoxAPIToken); token != "" {
 		creds.APIToken = []byte(token)
 	}
-	return creds
+	return creds, nil
 }
 
 // Load returns the sidecar at envPath overlaid by the environment: a
@@ -76,7 +85,11 @@ func Load(envPath, endpoint string) (*ProxmoxCredentials, error) {
 		return nil, err
 	}
 	creds.Endpoint = endpoint
-	env := fromEnv(endpoint)
+	env, err := fromEnv(endpoint)
+	if err != nil {
+		creds.Zeroize()
+		return nil, err
+	}
 	if os.Getenv(envProxmoxInsecure) != "" {
 		creds.Insecure = env.Insecure
 	}
