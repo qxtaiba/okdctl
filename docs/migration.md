@@ -51,7 +51,8 @@ Keys new in v3 with no v2 source: `networking.ingress_vip`,
 `<cluster>-master<i>` / `<cluster>-worker<i>`), `lifecycle.before_next_node`,
 `lifecycle.drain_timeout`, `handoff.enabled` and
 `defaults.disable_redhat_catalogs`. The shipped examples under
-`configs/examples/` show every one of them with its default.
+`configs/examples/` show each of them; `nodes` is empty by default and
+`standard.yaml` shows one override.
 
 ## Keys with no v3 counterpart
 
