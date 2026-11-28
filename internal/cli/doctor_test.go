@@ -54,7 +54,6 @@ func TestPreflightInput(t *testing.T) {
 			Storage:         "local-lvm",
 			ISOStorage:      "local",
 			Bridge:          "vmbr0",
-			CPUModel:        "host",
 			VMIDs:           []int{6010, 6011, 6012},
 			NodeAddresses:   map[netip.Addr]int{addr("192.168.1.150"): 6010, addr("192.168.1.151"): 6011, addr("192.168.1.152"): 6012},
 			VIPs:            []netip.Addr{addr("192.168.1.158"), addr("192.168.1.159")},
@@ -103,14 +102,13 @@ func TestPreflightInput(t *testing.T) {
 		cfg.Provider.Proxmox.VLAN = 100
 		cfg.Provider.Proxmox.Pool = "okd"
 		cfg.Provider.Proxmox.HA = true
-		cfg.Provider.Proxmox.CPUType = "x86-64-v3"
 		cfg.Workers.Count = 2
 		got, err := preflightInput(cfg, path)
 		if err != nil {
 			t.Fatalf("preflightInput: %v", err)
 		}
-		if got.VLAN != 100 || got.Pool != "okd" || !got.HA || got.CPUModel != "x86-64-v3" {
-			t.Errorf("provider block not carried: vlan=%d pool=%q ha=%v cpu=%q", got.VLAN, got.Pool, got.HA, got.CPUModel)
+		if got.VLAN != 100 || got.Pool != "okd" || !got.HA {
+			t.Errorf("provider block not carried: vlan=%d pool=%q ha=%v", got.VLAN, got.Pool, got.HA)
 		}
 		wantMem := map[string]int{"pve1": 2*16384 + 8192, "pve2": 16384 + 8192}
 		if !reflect.DeepEqual(got.MemoryMiBByNode, wantMem) {

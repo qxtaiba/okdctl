@@ -148,7 +148,6 @@ func goodInput() PreflightInput {
 		VIPs:            []netip.Addr{netip.MustParseAddr("10.0.0.5"), netip.MustParseAddr("10.0.0.6")},
 		MemoryMiBByNode: map[string]int{"pve1": 32768, "pve2": 32768},
 		ISOBytes:        2 * gibBytes,
-		CPUModel:        "host",
 	}
 }
 

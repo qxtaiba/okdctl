@@ -33,7 +33,6 @@ type PreflightInput struct {
 	VIPs            []netip.Addr
 	MemoryMiBByNode map[string]int
 	ISOBytes        int64
-	CPUModel        string
 }
 
 // Finding is one preflight result; Severity is "fail" or "warn".

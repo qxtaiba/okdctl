@@ -32,7 +32,6 @@ func preflightInput(cfg *config.Config, configPath string) (proxmox.PreflightInp
 		VLAN:            px.VLAN,
 		Pool:            px.Pool,
 		HA:              px.HA,
-		CPUModel:        px.CPUType,
 		VMIDs:           make([]int, 0, len(inv.Nodes)),
 		NodeAddresses:   make(map[netip.Addr]int, len(inv.Nodes)),
 		VIPs:            []netip.Addr{inv.APIVIP, inv.IngressVIP},
