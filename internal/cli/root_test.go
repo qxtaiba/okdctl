@@ -391,28 +391,46 @@ func TestUnknownCommandIsUsageErrorWithHelpHint(t *testing.T) {
 	var out bytes.Buffer
 	rootCmd.SetOut(&out)
 	rootCmd.SetErr(&out)
-	rootCmd.SetArgs([]string{"up"})
 	t.Cleanup(func() {
 		rootCmd.SetOut(nil)
 		rootCmd.SetErr(nil)
 		rootCmd.SetArgs(nil)
 	})
 
-	err := rootCmd.Execute()
-	var usageErr *errtypes.UsageError
-	if !errors.As(err, &usageErr) || exitCodeFor(err) != 64 {
-		t.Fatalf("okdctl up: err = %T %v (exit %d), want a UsageError exiting 64", err, err, exitCodeFor(err))
-	}
-	if d, _ := errtypes.Describe(err); !strings.Contains(d.Hint, "okdctl --help") || !strings.Contains(d.Message, `"up"`) {
-		t.Fatalf("Describe = %+v, want the unknown command named and the --help hint", d)
+	for _, tc := range []struct {
+		args     []string
+		wantHint string
+	}{
+		{[]string{"up"}, "okdctl --help"},
+		{[]string{"config", "frob"}, "okdctl config --help"},
+		{[]string{"releases", "frob"}, "okdctl releases --help"},
+		{[]string{"release", "frob"}, "okdctl releases --help"},
+	} {
+		out.Reset()
+		rootCmd.SetArgs(tc.args)
+		err := rootCmd.Execute()
+		var usageErr *errtypes.UsageError
+		if !errors.As(err, &usageErr) || exitCodeFor(err) != 64 {
+			t.Fatalf("okdctl %s: err = %T %v (exit %d), want a UsageError exiting 64", strings.Join(tc.args, " "), err, err, exitCodeFor(err))
+		}
+		unknown := fmt.Sprintf("%q", tc.args[len(tc.args)-1])
+		if d, _ := errtypes.Describe(err); !strings.Contains(d.Hint, tc.wantHint) || !strings.Contains(d.Message, unknown) {
+			t.Fatalf("okdctl %s: Describe = %+v, want %s named and the %q hint", strings.Join(tc.args, " "), d, unknown, tc.wantHint)
+		}
+		if out.Len() != 0 {
+			t.Fatalf("okdctl %s printed %q, want nothing on an unknown command", strings.Join(tc.args, " "), out.String())
+		}
 	}
 
-	out.Reset()
-	rootCmd.SetArgs([]string{})
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("bare okdctl: %v", err)
-	}
-	if !strings.Contains(out.String(), "okdctl [command]") || strings.Contains(out.String(), "okdctl [flags]") {
-		t.Fatalf("bare okdctl must print help with the single [command] usage line, got:\n%s", out.String())
+	for _, args := range [][]string{{}, {"config"}, {"releases"}} {
+		out.Reset()
+		rootCmd.SetArgs(args)
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("bare okdctl %s: %v", strings.Join(args, " "), err)
+		}
+		path := strings.TrimSpace("okdctl " + strings.Join(args, " "))
+		if !strings.Contains(out.String(), path+" [command]") || strings.Contains(out.String(), path+" [flags]") {
+			t.Fatalf("bare %s must print help with the single [command] usage line, got:\n%s", path, out.String())
+		}
 	}
 }

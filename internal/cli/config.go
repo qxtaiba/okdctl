@@ -27,6 +27,8 @@ var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Inspect okdctl configuration",
 	Long:  "Show and validate the resolved okdctl configuration; start with 'config show' to see the active values.",
+	Args:  cobra.NoArgs,
+	RunE:  showHelp,
 }
 
 var configShowCmd = &cobra.Command{

@@ -80,10 +80,8 @@ available.`,
 	Version:       version.Version,
 	SilenceUsage:  true,
 	SilenceErrors: true,
-	// Runnable so cobra validates Args: a bare root short-circuits to help
-	// before NoArgs runs and an unknown command would exit 0 with the help text.
-	Args: cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
+	Args:          cobra.NoArgs,
+	RunE:          showHelp,
 	PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 		if err := configureLogging(cmd); err != nil {
 			return err
@@ -96,6 +94,10 @@ available.`,
 		return nil
 	},
 }
+
+// showHelp is the RunE of the root and every command group: a non-runnable
+// command skips Args, so an unknown subcommand would print help and exit 0.
+func showHelp(cmd *cobra.Command, _ []string) error { return cmd.Help() }
 
 // Execute wires the default slog logger, runs the cobra tree, flushes the log
 // file, and exits with execute()'s code.

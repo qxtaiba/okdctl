@@ -26,6 +26,8 @@ var releasesCmd = &cobra.Command{
 	Aliases: []string{"release"},
 	Short:   "Query available OKD versions",
 	Long:    "List and inspect OKD releases resolved from the GitHub releases feed.",
+	Args:    cobra.NoArgs,
+	RunE:    showHelp,
 }
 
 var releasesListCmd = &cobra.Command{
