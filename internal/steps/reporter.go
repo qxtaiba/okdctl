@@ -8,9 +8,8 @@ import (
 
 // Reporter receives the step stream Orchestrator emits for the plain logger
 // or the TUI: StepStarted then StepFinished for a step that runs, StepFinished
-// alone for a skipped one, and StepProgress for a step's own lines in between.
-// StepProgress is called from the step's goroutines, so implementations must
-// be safe for concurrent use.
+// alone for a skipped one, and StepProgress for the lines the orchestrator
+// forwards from a step's runner in between, serially from Run's goroutine.
 type Reporter interface {
 	StepStarted(id StepID, name string)
 	StepProgress(id StepID, line string)
