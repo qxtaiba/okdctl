@@ -70,33 +70,42 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 	if err := validateOutputFormat(doctorOutput); err != nil {
 		return err
 	}
-	cfg, err := loadConfig(cfgFile)
-	if err != nil {
-		return err
-	}
-	if result := validateConfig(cfg, cmd.ErrOrStderr()); !result.IsValid() {
-		return (&errtypes.ConfigError{Msg: "config validation failed", Err: result}).WithHint("review the errors listed above")
-	}
-	in, err := preflightInput(cfg, cfgFile)
-	if err != nil {
-		return err
-	}
-	creds, err := doctorCredentials(cfg, cfgFile)
-	if err != nil {
-		return err
-	}
-	d, err := openDriver(creds)
+	findings, err := doctorFindings(cmd)
 	if err != nil {
 		return noFindings(cmd, err)
-	}
-	findings, err := runPreflight(cmd.Context(), d, &in)
-	if err != nil {
-		return noFindings(cmd, preflightError(err))
 	}
 	if err := printFindings(cmd.OutOrStdout(), doctorOutput, findings); err != nil {
 		return err
 	}
 	return findingsError(findings)
+}
+
+// doctorFindings runs the checks; any error means they could not run.
+func doctorFindings(cmd *cobra.Command) ([]proxmox.Finding, error) {
+	cfg, err := loadConfig(cfgFile)
+	if err != nil {
+		return nil, err
+	}
+	if result := validateConfig(cfg, cmd.ErrOrStderr()); !result.IsValid() {
+		return nil, (&errtypes.ConfigError{Msg: "config validation failed", Err: result}).WithHint("review the errors listed above")
+	}
+	in, err := preflightInput(cfg, cfgFile)
+	if err != nil {
+		return nil, err
+	}
+	creds, err := doctorCredentials(cfg, cfgFile)
+	if err != nil {
+		return nil, err
+	}
+	d, err := openDriver(creds)
+	if err != nil {
+		return nil, err
+	}
+	findings, err := runPreflight(cmd.Context(), d, &in)
+	if err != nil {
+		return nil, preflightError(err)
+	}
+	return findings, nil
 }
 
 // noFindings returns err after printing the empty array a json consumer

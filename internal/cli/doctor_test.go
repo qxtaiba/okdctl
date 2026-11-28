@@ -367,6 +367,34 @@ func TestDoctorCommand(t *testing.T) {
 	})
 }
 
+func TestDoctorCommand_JSONPrintsEmptyArrayWheneverChecksCannotRun(t *testing.T) {
+	for name, tc := range map[string]struct {
+		setup    func(t *testing.T)
+		token    string
+		wantExit int
+	}{
+		"missing config": {setup: func(t *testing.T) { _ = os.Remove("okdctl.yaml") }, token: doctorToken, wantExit: 66},
+		"invalid config": {setup: func(t *testing.T) {
+			if err := os.WriteFile("okdctl.yaml", []byte("schemaVersion: v3\ncluster:\n  name: Bad_Name\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}, token: doctorToken, wantExit: 2},
+		"missing token": {setup: func(*testing.T) {}, token: "", wantExit: 5},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newDoctorHarness(t)
+			tc.setup(t)
+			out, err := h.run(t, tc.token, nil, nil, "-o", "json")
+			if err == nil || exitCodeFor(err) != tc.wantExit || strings.TrimSpace(out) != "[]" {
+				t.Fatalf("stdout = %q err = %v (exit %d), want [] and exit %d", out, err, exitCodeFor(err), tc.wantExit)
+			}
+			if h.seam != nil {
+				t.Fatal("preflight ran")
+			}
+		})
+	}
+}
+
 func TestDoctorCommand_InvalidConfigStopsBeforeCredentials(t *testing.T) {
 	h := newDoctorHarness(t)
 	if err := os.WriteFile("okdctl.yaml", []byte("schemaVersion: v3\ncluster:\n  name: Bad_Name\n"), 0o600); err != nil {
