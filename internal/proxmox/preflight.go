@@ -158,7 +158,12 @@ func (st *preflightState) gather(ctx context.Context, d Driver) error {
 	return ctx.Err()
 }
 
-type privReq struct{ path, alt, priv string }
+// privReq is one privilege PVE checks before a create: on path, or on alt
+// when PVE also accepts the pool's grant; or is a second privilege PVE takes
+// in place of priv on the same path.
+type privReq struct{ path, alt, priv, or string }
+
+const vmsPath = "/vms"
 
 func (st *preflightState) requiredPrivileges() []privReq {
 	in := st.in
@@ -169,30 +174,29 @@ func (st *preflightState) requiredPrivileges() []privReq {
 	}
 	for _, p := range vmPrivileges {
 		// check_vm_perm accepts a VM privilege on the pool the VM is created into.
-		reqs = append(reqs, privReq{"/vms", pool, p})
+		reqs = append(reqs, privReq{path: vmsPath, alt: pool, priv: p})
 	}
 	sdn := "/sdn/zones/localnetwork/" + in.Bridge
 	if in.VLAN != 0 {
 		sdn += "/" + strconv.Itoa(in.VLAN) // check_vnet_access checks the tag's own path
 	}
 	reqs = append(reqs,
-		privReq{"/storage/" + in.Storage, "", "Datastore.AllocateSpace"},
-		privReq{"/storage/" + in.Storage, "", "Datastore.Audit"},
-		privReq{"/storage/" + in.ISOStorage, "", "Datastore.AllocateTemplate"},
-		privReq{"/storage/" + in.ISOStorage, "", "Datastore.Allocate"},
-		privReq{"/storage/" + in.ISOStorage, "", "Datastore.Audit"},
-		privReq{sdn, "", "SDN.Use"},
+		privReq{path: "/storage/" + in.Storage, priv: "Datastore.AllocateSpace"},
+		privReq{path: "/storage/" + in.Storage, priv: "Datastore.Audit"},
+		privReq{path: "/storage/" + in.ISOStorage, priv: "Datastore.AllocateTemplate"},
+		privReq{path: "/storage/" + in.ISOStorage, priv: "Datastore.Allocate"},
+		privReq{path: "/storage/" + in.ISOStorage, priv: "Datastore.Audit"},
+		privReq{path: sdn, priv: "SDN.Use"},
 	)
 	for _, n := range in.Nodes {
-		reqs = append(reqs, privReq{"/nodes/" + n, "", "Sys.Audit"})
+		reqs = append(reqs, privReq{path: "/nodes/" + n, priv: "Sys.Audit"})
 	}
 	if in.HA {
-		reqs = append(reqs, privReq{"/", "", "Sys.Console"})
+		reqs = append(reqs, privReq{path: "/", priv: "Sys.Console"})
 	}
 	if pool != "" {
-		// create_vm with pool= calls check_perm_modify, which wants
-		// Permissions.Modify or Pool.Allocate on the pool.
-		reqs = append(reqs, privReq{pool, "", "Pool.Allocate"})
+		// create_vm with pool= calls check_perm_modify.
+		reqs = append(reqs, privReq{path: pool, priv: "Pool.Allocate", or: "Permissions.Modify"})
 	}
 	seen := make(map[privReq]bool, len(reqs))
 	return slices.DeleteFunc(reqs, func(r privReq) bool {
@@ -202,16 +206,40 @@ func (st *preflightState) requiredPrivileges() []privReq {
 	})
 }
 
+// held mirrors PVE: a VM privilege is checked on /vms/<vmid>, so a /vms
+// grant counts only when it propagates.
+func (st *preflightState) held(r privReq) bool {
+	paths := []string{r.path}
+	if r.path == vmsPath && len(st.in.VMIDs) > 0 {
+		paths = paths[:0]
+		for _, id := range st.in.VMIDs {
+			paths = append(paths, vmsPath+"/"+strconv.Itoa(id))
+		}
+	}
+	for _, p := range paths {
+		ok := st.perms.granted(p, r.priv) ||
+			(r.or != "" && st.perms.granted(p, r.or)) ||
+			(r.alt != "" && st.perms.granted(r.alt, r.priv))
+		if !ok {
+			return false
+		}
+	}
+	return true
+}
+
 func (st *preflightState) checkPermissions(out *findings) {
 	for _, r := range st.requiredPrivileges() {
-		if st.perms.granted(r.path, r.priv) || (r.alt != "" && st.perms.granted(r.alt, r.priv)) {
+		if st.held(r) {
 			continue
 		}
-		where := r.path
+		what, where := r.priv, r.path
+		if r.or != "" {
+			what += " or " + r.or
+		}
 		if r.alt != "" {
 			where += " or " + r.alt
 		}
-		out.add("permissions", "missing privilege %s on %s", r.priv, where)
+		out.add("permissions", "missing privilege %s on %s", what, where)
 	}
 }
 

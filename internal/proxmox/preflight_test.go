@@ -224,7 +224,32 @@ func TestPreflight(t *testing.T) {
 			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) {
 				d.perms["/pool/okd"] = map[string]bool{"Pool.Audit": true}
 			},
-			want: []Finding{{"permissions", "fail", "missing privilege Pool.Allocate on /pool/okd"}},
+			want: []Finding{{"permissions", "fail", "missing privilege Pool.Allocate or Permissions.Modify on /pool/okd"}},
+		},
+		{
+			name: "permissions pool accepts permissions.modify",
+			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) {
+				d.perms["/pool/okd"] = map[string]bool{"Permissions.Modify": true}
+			},
+		},
+		{
+			name: "permissions vm grant on /vms must propagate to the vmid",
+			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) {
+				d.perms["/vms"]["VM.PowerMgmt"] = false
+			},
+			want: []Finding{{"permissions", "fail", "missing privilege VM.PowerMgmt on /vms or /pool/okd"}},
+		},
+		{
+			name: "permissions vm grants on the vmids themselves count whatever their propagate flag",
+			mutate: func(d *fakeDriver, _ *PreflightInput, _ *fakePinger) {
+				for _, id := range []string{"101", "102", "103"} {
+					d.perms["/vms/"+id] = map[string]bool{}
+					for priv := range d.perms["/vms"] {
+						d.perms["/vms/"+id][priv] = false
+					}
+				}
+				delete(d.perms, "/vms")
+			},
 		},
 		{
 			name: "permissions vlan checks the tagged sdn path",
