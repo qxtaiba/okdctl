@@ -27,6 +27,7 @@ func resetInitState(t *testing.T) {
 	savedOutputFile, savedMinimal := initOutputFile, initMinimal
 	t.Cleanup(func() {
 		initOutputFile, initMinimal = savedOutputFile, savedMinimal
+		initOutputFlag.Changed = false
 		runWizardFn = runWizardWithMode
 		initCmd.SetOut(nil)
 	})
@@ -416,4 +417,3 @@ func TestRunInit_CompletedFlowSavesConfigWithoutHandoff(t *testing.T) {
 		t.Errorf("no token typed means no sidecar, got stat err %v", err)
 	}
 }
-
