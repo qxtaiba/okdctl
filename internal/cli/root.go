@@ -196,11 +196,21 @@ func execute() (code int) {
 		if sigCode, handled := signalExitCode(&caughtSig, err); handled {
 			return sigCode
 		}
-		announceFailure(err)
-		return exitCodeFor(err)
+		return failureExit(err)
 	}
 
 	return 0
+}
+
+// failureExit announces err and returns its exit code. cobra raises unknown
+// command and flag errors before PersistentPreRunE, so logging is configured
+// here when it has not been, and the piped-stderr json switch covers them too.
+func failureExit(err error) int {
+	if !loggingConfigured {
+		_ = configureLogging(rootCmd)
+	}
+	announceFailure(err)
+	return exitCodeFor(err)
 }
 
 // secondSignalGrace bounds how long a second real signal waits for the

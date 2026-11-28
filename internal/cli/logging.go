@@ -23,6 +23,10 @@ var logFileCloser io.Closer
 // runLogPath is the active file sink's path ("" if none); execute() prints it on failure.
 var runLogPath string
 
+// loggingConfigured records that configureLogging installed the handlers, so
+// a failure cobra raises before PersistentPreRunE can still configure them.
+var loggingConfigured bool
+
 // runLogSink aliases logFileCloser as a writer (do not close separately);
 // init routes log output here while the wizard owns the terminal.
 var runLogSink io.Writer
@@ -131,6 +135,7 @@ func configureLogging(cmd *cobra.Command) error {
 	if logFormat == tui.FormatJSON && !logVerbose && !wantsDefaultLogSink(cmd) {
 		tui.SuppressInfo()
 	}
+	loggingConfigured = true
 	return nil
 }
 

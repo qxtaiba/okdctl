@@ -15,6 +15,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"golang.org/x/term"
 
 	"github.com/qxtaiba/okdctl/internal/errtypes"
 	"github.com/qxtaiba/okdctl/internal/logutil"
@@ -321,6 +322,23 @@ func installLogBuffer(t *testing.T) *bytes.Buffer {
 	logutil.InstallHandler(slog.NewTextHandler(&buf, nil))
 	t.Cleanup(func() { logutil.InstallHandler(slog.NewTextHandler(os.Stderr, nil)) })
 	return &buf
+}
+
+func TestFailureExitConfiguresLoggingForPreRunErrors(t *testing.T) {
+	if term.IsTerminal(int(os.Stderr.Fd())) {
+		t.Skip("the json switch needs a piped stderr")
+	}
+	loggingConfigured, logFormat = false, tui.FormatText
+	t.Cleanup(func() {
+		loggingConfigured, logFormat = false, tui.FormatText
+		logutil.InstallHandler(slog.NewTextHandler(os.Stderr, nil))
+	})
+
+	code := failureExit(&errtypes.UsageError{Msg: "unknown flag: --bogus"})
+
+	if code != 64 || !loggingConfigured || logFormat != tui.FormatJSON {
+		t.Fatalf("code=%d configured=%v format=%q, want 64, logging configured and json on a piped stderr", code, loggingConfigured, logFormat)
+	}
 }
 
 func TestFlagErrorFuncReturnsUsageErrorWithHelpHint(t *testing.T) {
